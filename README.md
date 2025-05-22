@@ -44,7 +44,7 @@ In general, avoid using two registers from the same file (e.g. `ra1` and `ra2` o
   - The `unif` register holds the queue of uniforms, which you will provide when you launch the kernel. The workflow is straightforward - if you have  a 4-element unif array, say [1, 0x\<some address>, 12, 56], then you can do 
 `mov ra1, unif; mov ra2, unif; mov ra3, unif; mov ra4, unif;` and `ra1` will be a 16-wide "uniform" vector with each value holding `4`,`ra2` will be a 16-wide "uniform" vector with each value holding `0x\<some address>`, etc. 
   - The `vr_setup/vr_addr/vr_wait/vw_setup/vw_addr/vw_wait/vpm` registers manage DMA loads/stores and VPM loads/stores (see below for more info). 
-  - The `elem_num` register gives the index in the 16-wide vector - equivalently, it's a 16-wide vector that holds (0, 1, 2, ..., 15), and the `qpu_num` register holds which qpu your code is running on 
+  - The `elem_num` register gives the index in the 16-wide vector - equivalently, it's a 16-wide vector register that holds (0, 1, 2, ..., 15). The `qpu_num` register holds which qpu your code is running on 
   - Several others we haven't, including for synchronization, interrupts, and unary operators
 
 [Directives](https://www.maazl.de/project/vc4asm/doc/directives.html): Useful for constants, custom macros, etc. 
@@ -176,7 +176,7 @@ Checkoff: Your kernel should calculate the same values as the CPU implementation
 
 The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter-code is described below, but you're absolutely free to design your own and adapt the code as such.
 
-Parallelization scheme: We parallelize the columns using the 16-wide SIMD execution and we parallelize the rows by the number of QPUs. Equivalently, index i in the SIMD vector is responsible for computing every column n where n % 16 = i, and QPU j is responsible for computing every row m where m % NUM_QPUS = j. Note that this requires that the resolution be divisible by 16 and NUM_QPUS - it would be better to handle cases that don't divide nicely. In C-like code, this looks like:
+Parallelization scheme: We parallelize the columns using the 16-wide SIMD execution and we parallelize the rows by the number of QPUs. Concretely, index i in each QPU's SIMD vector is responsible for computing every column n where n % 16 = i, and QPU j is responsible for computing every row m where m % NUM_QPUS = j. Here, we use j as a uniform we define ourselves when launching the kernel; it's also possible to do this using the `qpu_num` register, but much more difficult because we don't know how the scheduler will alocate QPUs. On the other hand, i can easily be pulled directly from the `elem_num` register. Note that this scheme requires that the resolution be divisible by 16 and NUM_QPUS - it would be better to handle cases that don't divide nicely. In C-like code, our scheme looks like:
 ```
 for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
   for (int j = MY_VECTOR_INDEX; j < WIDTH; j += 16) {
