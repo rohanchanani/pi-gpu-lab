@@ -135,7 +135,7 @@ for (unsigned q = 0; q < num_qpus; q++) {
 // Busy wait polling
 while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
 ```
-For each QPU, we take write the GPU base address of its corresponding 1D uniform array to the V3D_SRQUA register and the GPU base address of our code to the V3D_SRQPC register (technically you can have different code for each QPU the way we have different uniforms, but doesn't really make much sense). Then, we poll the status register for the number of qpus done executing until it matches the number we launched. All of this is outlined in the docs (page 90-92 of the [manual](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf)).
+For each QPU, we write the GPU base address of its corresponding 1D uniform array to the V3D_SRQUA register and the GPU base address of our code to the V3D_SRQPC register (technically you can have different code for each QPU the way we have different uniforms, but doesn't really make much sense). Then, we poll the status register for the number of qpus done executing until it matches the number we launched. All of this is outlined in the docs (page 90-92 of the [manual](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf)).
 
 ### Writing QPU Kernels
 This is where things get fun. In order to run code on the GPU, you have to actually have code to run, which means writing bare-metal GPU kernels; unlike all the CS149 posers, real performance engineers write their kernels in machine code.
