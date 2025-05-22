@@ -159,7 +159,7 @@ To write our data, we start by configuring a VPM store in the `vw_setup` registe
 After the VPM writes are complete, the program then prepares a DMA write using the `vw_setup` register once again, only this time using the `vdw_setup_0` macro. Here, the macro invocation `vdw_setup_0(4, 16, dma_h32(0,0))` corresponds to 'write 4 rows of the VPM, each of them 16 wide, horizontal 32-bit starting at VPM coord 0,0'. Because we're writing to physical memory, we also have to specify the `vw_addr` register, which in this case is just the uniform we provided when we launched the kernel. Finally, we do a `mov -, vw_wait` to kick of the DMA write.  And that's it! A complete hello-world program on the GPU, and we're only ... about 2,700 words into the README. 
 
 #### Running deadbeef
-Running `bash.sh` will reassemble the qasm and then run make. You can also just run make. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`. 
+Running `bash run.sh` will reassemble the qasm and then run make. You can also just run make. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`. 
 
 ## Part 1: Parallel Add
 
