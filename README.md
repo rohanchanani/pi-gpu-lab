@@ -172,6 +172,7 @@ Checkoff: Your kernel should calculate the same values as the CPU implementation
 <img src="./images/mandelbrot.png" width="70%">
 <figcaption><i>who knew the Pi could produce something so beautiful</i></figcaption>
 </figure>
+<br>
 
 The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter-code is described below, but you're absolutely free to design your own and adapt the code as such.
 
