@@ -118,7 +118,7 @@ ptr->... = ...
 ```
 Once we have allocated our `struct GPU` as shown above, we can start filling it in. 
 - The input/output buffers should be filled specific to your program - with deadbeef, we initially memset the output to 0xffff.... to confirm we've actually changed something when we run the code. 
-- We `memcpy` the assembled code array from `vc4asm` into the `code` array. - The `unif` array is also initialized specific to your program - for deadbeef, our only uniform is the GPU address of the output array, which we can get by adding the GPU base to the address of ptr->output. 
+- We `memcpy` the assembled code array from `vc4asm` into the `code` array. - The `unif` array is also initialized specific to your program - for deadbeef, our only uniform is the GPU address of the output array, which we can get by adding the GPU base to the CPU address of `ptr->output`. 
 - Similarly, our single entry in `unif_ptr` is defined as `GPU_BASE + (uint32_t)&gpu->unif[0]`
 - mail[0] is `GPU_BASE + (uint32_t)&gpu->code`, and mail[1] is `GPU_BASE + (uint32_t)&gpu->unif`. 
 - The `handle` is the same we got from `mem_alloc`.
