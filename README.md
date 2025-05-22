@@ -125,7 +125,7 @@ Once we have allocated our `struct GPU` as shown above, we can start filling it 
 
 ### GPU Execution
 
-There's technically a mailbox call to execute code on the GPU, but we couldn't figure out how to get that to work (please let us know if you do!). Instead, to get the code to run we had to directly write to the GPU control registers as you would any of other hardware peripherals we've worked on. After clearing the V3D caches/interrupts, we execute as follows:
+There's technically a mailbox call to execute code on the GPU, but we couldn't figure out how to get that to work (please let us know if you do!). Instead, to get the code to run we had to directly write to the GPU control registers as you would any of the other hardware peripherals we've worked on. After clearing the V3D caches/interrupts, we execute as follows:
 ```
 // Launch shader(s)
 for (unsigned q = 0; q < num_qpus; q++) {
