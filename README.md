@@ -84,7 +84,7 @@ struct GPU
 - The `mail` array: The first word of the `mail` array is the GPU address of the `code` array, and the second word is the GPU address of the base of the 2D `unif` array. 
 - `handle`: The handle is what's returned by the mailbox `mem_alloc` call to allocate memory on the GPU.
 
-Below is the struct GPU we use for the Deadbeef program:  
+Below is the completed `struct GPU` we use for the Deadbeef program:  
 ```c
 struct GPU
 {
