@@ -2,9 +2,11 @@
 
 ![Image](./images/videocore.png)
 
-## Errata
+## Errata and Notes
 
 The QPU Assembler has a weird bug where it executes 3 instructions after any branch instruction. We like to leave these as `nop`s, but if you can do something more clever with them, feel free to do so.
+
+Make sure to use `./run.sh` instead of `make` for this lab, as we have to compile the QASM shaders as well!
 
 ## Useful Links
 
@@ -196,11 +198,13 @@ After the VPM writes are complete, the program then prepares a DMA write using t
 
 #### Running deadbeef
 
-Running `bash run.sh` will reassemble the qasm and then run make. You can also just run make. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
+Running `./run.sh` will reassemble the qasm and then run `make`. You can also just run `make` for this part. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
 
 ## Part 1: Parallel Add
 
 The first program you'll implement is a SIMD vector add of `A+B=C` on a single QPU. `parallel-add.c` and `parallel-add.h` have a lot of the boiler-plate for executing QPU code we described above - you have the input `A` and `B` arrays and the output `C` arrays in the `struct GPU` and their addresses in the uniform array - you can decide any other uniforms you need. The kernel is in `parallel-add.qasm` - we've added a skeleton if you'd like, but this would also be great to Daniel-mode directly from the deadbeef example and vc4asm docs.
+
+We have included `staffaddshader.h` which contains a correctly compiled `staff-parallel-add.o`. Your code should pass on the first try if you just run `make`. Make sure to switch it to `addshader.h` and run `./run.sh` to compile and run your own shader!
 
 ### Checkoff
 
@@ -244,11 +248,11 @@ for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
 
 because each 16-wide vector is computed in lockstep fashion.
 
-For this one, all the code is in mandelbrot.qasm - fill in the TODOs to complete the kernel.
+For this one, all the code is in `mandelbrot.qasm` - fill in the TODOs to complete the kernel.
 
 ### Checkoff
 
-When you do `bash run.sh` with `2-mandelbrot.c` in your progs, you should get an `output.pgm` file on your pi SD card. When you open it on your computer, you should see the Mandelbrot fractal at the resolution you defined (probably don't go bigger than 1024 for the resolution). With larger resolutions, you may want to comment out the CPU example because it takes so long (not a problem with the GPU :)).
+When you do `./run.sh` with `2-mandelbrot.c` in your progs, you should get an `output.pgm` file on your pi SD card. When you open it on your computer, you should see the Mandelbrot fractal at the resolution you defined (probably don't go bigger than 1024 for the resolution). With larger resolutions, you may want to comment out the CPU example because it takes so long (not a problem with the GPU :)).
 
 ## Useful Links
 

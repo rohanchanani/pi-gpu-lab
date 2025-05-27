@@ -17,7 +17,7 @@
 	PROGRAM BUFFERS (esp. input/output arrays)
 	CODE BUFFER (your assembled qasm kernel)
 	UNIF[NUM_QPUS][NUM_UNIFS] (a 2D array where each inner array is the 
-										 array of uniforms for the corresponding QPU)
+		array of uniforms for the corresponding QPU)
 	UNIF_PTR[NUM_QPUS] (The addresses to the base of the 1D UNIF array for each QPU)
 	MAIL[2] (GPU CODE ADDR, GPU UNIF BASE ADDR)
 	HANDLE (Provided by the mailbox for GPU-allocated code)
