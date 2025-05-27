@@ -8,70 +8,109 @@ mov   ra3, unif # NUM_QPU
 mov   ra4, unif # QPU_NUM
 mov   ra5, unif # ADDRESS
 
-mov ra10, ra4           # i = QPU_NUM
+mov ra10, ra4       # i = QPU_NUM
 mov r1, ra0
-shl ra6, r1, 1          # width,height = 2*RESOLUTION
+shl ra6, r1, 1      # width,height = 2*RESOLUTION
 
-:row_loop               # We'll use a nested 2D loop like the CPU example
+:row_loop           # We'll use a nested 2D loop like the CPU example
 
-mov ra11, 0             # j_base = 0
+mov ra11, 0         # j_base = 0
 
-shl r1, ra0, 3          # bytes_per_row = 2*RESOLUTION*sizeof(uint32_t) = 8*RESOLUTION
+shl r1, ra0, 3      # bytes_per_row = 2*RESOLUTION*sizeof(uint32_t) = 8*RESOLUTION
 
 mov r2, ra10
-mul24 ra12, r1, r2      # row_base_address = i * bytes_per_row 
+mul24 ra12, r1, r2  # row_base_address = i * bytes_per_row 
 
-itof r1, ra10           # (float) i
+itof r1, ra10       # (float) i
+itof r2, -1         #(float) -1
+fmul r1, r1, ra1    #i * 1/RESOLUTION
+fadd rb9, r1, r2    #y = -1 + i*1/resolution
 
-# TODO: Use r1 (i) to determine the float y value you'll compute (see CPU example)
-
-# rb9 = y, rb8 = x
+# y is rb9, x is in rb8.
 
 :column_loop
 
-    # TODO: Use j_base and the elem_num register to determine the float x value you'll compute
-    # Recall that we have a 16-wide vector, and ra11 (j_base) holds the leftmost col index in the row.
-    # Use j_base and the elem_num register to figure out the exact j in the output array, then follow the 
-    # CPU example to determine the corresponding float x example
+    mov r0, ra11            # j_base 
+    add r0, r0, elem_num    # j = j_base + elem_num
+
+    itof r1, r1         #(float) j
+    itof r2, -1         #(float) -1
+    fmul r1, r1, ra1    #x = j*1/RESOLUTION
+    fadd rb8, r1, r2    #x = -1 + j*1/RESOLUTION
+    
+    
+    # THIS CALCULATES RESULT = i * WIDTH + j.
+    # USE FOR DEBUGGING PURPOSES
+    # YOU SHOULD EVENTUALLY REPLACE WITH MANDELBROT CALCULATION
+
+    mov r1, ra10        # i
+    mov r2, ra6         # WIDTH i.e. 2*RESOLUTION
+    mul24 r1, r1, r2    #RESULT = i * WIDTH  
+    add r1, r1, r0      #RESULT += j 
 	
+    mov rb7, r1
 
-    # Initialize u, v, u2, v2 to 0 (all floats)
-    itof r1, 0
-    mov rb0, r1     # u
-    mov rb1, r1     # v
-    mov rb2, r1     # u2
-    mov rb3, r1     # v2
-      
-    mov ra7, ra2    # Convert max iters into a function
-    
-    mov rb7, 0      # THIS WILL EVENTUALLY BE OUR OUTPUT VALUE
+#TODO: UNCOMMENT BELOW AND COMPLETE THE MANDELBROT CALCULATION
+#RB7 SHOULD HAVE 1 IF DIVERGED, AND 0 IF CONVERGED (or reversed)   
+#OUR CODE WRITES WHATEVER IS IN RB7 TO OUTPUT array
+#YOU CAN PRINT THIS OR WRITE IT TO A PGM IN YOUR C CODE TO DEBUG 
 
-:inner_loop
+#    # Initialize u, v, u2, v2 to 0 (all floats)
+#    itof r1, 0
+#    mov rb0, r1     # u
+#    mov rb1, r1     # v
+#    mov rb2, r1     # u2
+#    mov rb3, r1     # v2
+#      
+#    mov ra7, ra2    # Move max iters into a counter
+#    mov rb7, 0      # THIS WILL EVENTUALLY BE OUR OUTPUT VALUE
+#    
+#
+#
+#
+#:inner_loop
+#
+#    # TODO: MODEL THE CPU EXAMPLE TO UPDATE U,V, U2, V2 correctly
+#    #LOOK AT LINES 76-103 in 2-mandelbrot.c for reference
+#    #THE VARIABLES ARE/SHOULD BE IN THE FOLLOWING REGISTERS:
+#    
+#    #x: rb8
+#    #y: rb9
 
-    # TODO: MODEL THE CPU EXAMPLE TO UPDATE U,V, U2, V2 correctly
-    
-    # TODO: CHECK FOR DIVERGENCE (u^2+v^2>4), AND USE CONDITION CODE
-   
-    # ADD SOME INSTRUCTION THAT SET FLAGS IF DIVERGED
-
-    # TODO: ADD THE CONDITION CODE THAT MATCHES YOUR INSTRUCTION
-    mov.<condition for diverged> rb7, 1
-
-    # IF ALL LANES HAVE DIVERGED, WE CAN ESCAPE THE LOOP
-    brr.all<condition for diverged> -, :exit
-    nop
-    nop
-    nop
-
-    # UPDATE OUR MAX ITERS COUNTER
-    sub.setf ra7, ra7, 1
-    brr.anynz -, :inner_loop
-    nop
-    nop
-    nop
-
-    :exit
-
+#    #u: rb0
+#    #v: rb1
+#    #u2: rb2
+#    #v2: rb3
+#
+#    #iters: ra7 (counts backward from max iters)
+#
+#    #result: rb7 ()
+#
+#    # TODO: CHECK FOR DIVERGENCE (u^2+v^2>4), AND USE CONDITION CODE
+#   
+#    # ADD SOME INSTRUCTION THAT SETS FLAGS IF DIVERGED
+#    sub.setf <register>, <register>
+#
+#    # TODO: ADD THE CONDITION CODE THAT MATCHES YOUR INSTRUCTION
+#    mov.<condition for diverged> rb7, 1
+#
+#    # IF ALL LANES HAVE DIVERGED, WE CAN ESCAPE THE LOOP
+#    brr.all<condition for diverged> -, :exit
+#    nop
+#    nop
+#    nop
+#
+#    # UPDATE OUR MAX ITERS COUNTER
+#    # Compute counter--, and restart if counter > 0
+#
+#    sub.setf ra7, ra7, 1
+#    brr.anynz -, :inner_loop
+#    nop
+#    nop
+#    nop
+#
+#    :exit
+#
     # WRITE OUR 16-wide vector out to VPM, in the row for our QPU.
 
     mov r2, vpm_setup(1, 1, h32(0))     # WRITING 1 ROW, STARTING FROM UPPER LEFT

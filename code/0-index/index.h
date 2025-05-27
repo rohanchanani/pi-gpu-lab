@@ -8,7 +8,7 @@
 #define GPU_BASE 0x40000000
 
 #define WIDTH 64
-#define HEIGHT 64
+#define HEIGHT 32
 #define NUM_QPUS 8
 
 //TODO: CHANGE THE NUMBER OF UNIFS TO MATCH YOUR KERNEL. OURS HAS 6, yours doesn't have to

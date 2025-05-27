@@ -7,9 +7,6 @@ mov   ra2, unif #NUM_QPU
 mov   ra3, unif #QPU_NUM
 mov   ra4, unif #ADDRESS
 
-    #-----------------------------------------------------
-    # 1) DMA read of A
-    #-----------------------------------------------------
 
 mov ra10, ra3 #i = QPU_NUM
 

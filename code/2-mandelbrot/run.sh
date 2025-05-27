@@ -3,7 +3,7 @@
 
 # VC4ASM
 echo "ASSEMBLING QASM"
-out=$( vc4asm -c mandelbrotshader.c -h mandelbrotshader.h staff-mandelbrot.qasm 2>&1 )
+out=$( vc4asm -c mandelbrotshader.c -h mandelbrotshader.h mandelbrot.qasm 2>&1 )
 exit_code=$?
 
 if [[ -n $out ]]; then

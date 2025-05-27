@@ -2,7 +2,7 @@ LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
 
 COMMON_SRC := mailbox.c
 
-PROGS := staff-2-mandelbrot.c
+PROGS := 2-mandelbrot.c
 
 # PROGS := tests/3-test-fire.c
 

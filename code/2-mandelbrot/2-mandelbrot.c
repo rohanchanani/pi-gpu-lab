@@ -9,7 +9,6 @@ void notmain(void)
 	memcpy((void *)gpu->code, mandelbrotshader, sizeof gpu->code);
 
 	// Initialize the uniforms - now we have multiple qpus
-	// Some uniforms to consider: Resolution, max iters, num_qpus, i, anything else
 	for (int i = 0; i < NUM_QPUS; i++)
 	{
 		gpu->unif[i][0] = RESOLUTION;
@@ -29,6 +28,34 @@ void notmain(void)
 			gpu->output[i][j] = 0;
 		}
 	}
+
+//USE THIS FOR DEBUGGING PURPOSES - CHANGE TO 0 TO RUN PROPERLY
+#if 1
+	printk("Running code on GPU...\n");
+
+	int debug_time = timer_get_usec();
+	int debug_iret = gpu_execute(gpu);
+	int debug_end_time = timer_get_usec();
+	printk("DONE!\n");
+	int debug_gpu_time = debug_end_time - debug_time;
+
+	printk("Time taken on GPU: %d us\n", debug_gpu_time);	
+
+	//We are computing i*WIDTH + j at each i, j
+
+	for (int i=0; i<2*RESOLUTION; i++) {
+		for (int j=0; j<2*RESOLUTION; j++) {
+			if (gpu->output[i][j] != i*2*RESOLUTION + j) {
+				printk("ERROR: gpu->output[%d][%d] = %d\n", i, j, gpu->output[i][j]);
+			} else if (i * 4 % (2*RESOLUTION) == 0 && j * 4 % (2*RESOLUTION) == 0) {
+				printk("CORRECT: gpu->output[%d][%d] = %d (%d * %d + %d)\n", i, j, gpu->output[i][j], i, 2*RESOLUTION, j);
+			}
+		}
+	}
+
+	gpu_release(gpu);
+	clean_reboot();
+#endif
 
 	// GPU execution
 	printk("Running code on GPU...\n");
@@ -113,7 +140,7 @@ void notmain(void)
 
 	pi_dirent_t root = fat32_get_root(&fs);
 
-	char *hello_name = "OOUTPUT.PGM";
+	char *hello_name = "OUTPUT.PGM";
 	fat32_delete(&fs, &root, hello_name);
 	fat32_create(&fs, &root, hello_name, 0);
 	trace("CREATED\n");

@@ -6,7 +6,7 @@
 
 The QPU Assembler has a weird bug where it executes 3 instructions after any branch instruction. We like to leave these as `nop`s, but if you can do something more clever with them, feel free to do so.
 
-Make sure to use `./run.sh` instead of `make` for this lab, as we have to compile the QASM shaders as well!
+Make sure to use `bash run.sh` instead of `make` for this lab, as we have to compile the QASM shaders as well!
 
 ## Useful Links
 
@@ -37,7 +37,7 @@ Within each QPU, we also have access to SIMD parallelism, which basically lets u
 
 ## Guide to the Docs
 
-Before we go deeper, a quick cheat sheet to the docs for the Pi GPU. You can ignore most of this on a first pass, and come back to it when something you read later needs further explanation.
+Before we go deeper, a quick cheat sheet to the docs for the Pi GPU. You can ignore most of this on a first pass, and come back to it when something you read later needs further explanation. We've also placed a shortened cheatsheet right above part 1 for quick reference.
 
 ### [VideoCore IV 3D Architecture Reference Guide](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf)
 
@@ -59,7 +59,7 @@ There's a lot of information here, but pretty much everything you need to know i
 
 This is what we'll use to actually write QPU kernels that we can launch ourselves. Follow the build instructions carefully to install it, and make sure all your qasm files have the required include.
 
-[Build Instructions](https://maazl.de/project/vc4asm/doc/index.html#build): Make sure you have `.include "../share/vc4inc/vc4.qinc"` at the top of your qasm files.
+[Build Instructions](https://maazl.de/project/vc4asm/doc/index.html#build): Make sure you have `.include "../share/vc4inc/vc4.qinc"` at the top of your qasm files. `vc4asm` is also available via homebrew on mac: `brew install vc4asm`
 [Assembler](https://maazl.de/project/vc4asm/doc/index.html#vc4asm): To assemble a kernel titled `kernel.qasm`, run `vc4asm -c kernel.c -h kernel.h kernel.qasm`, add `#include "kernel.h"` to the file where you launch the kernel, and add `kernel.c` to your `COMMON_SRC` in the Makefile.
 [Expressions and Operators](https://www.maazl.de/project/vc4asm/doc/expressions.html): The syntax is pretty similar to ARM assembly. Some key things to notice:
 
@@ -192,19 +192,78 @@ The [vc4asm docs](https://maazl.de/project/vc4asm/doc/vc4.qinc.html#VPM) on thes
 
 To write our data, we start by configuring a VPM store in the `vw_setup` register. The program is going to store 4 16-wide horizontal vectors 1 at a time, and it would like to write the first starting at (y,x) coord (0,0), the second starting at (1,0), the third at (2,0), and the 4th and (3,0). To do so, it does: `mov vw_setup, vpm_setup(4, 1, h32(0))`, which corresponds to write 4 rows, increment by 1 after each write, and write horizontal 32-bit vectors starting at y value 0. It then carries out the writes, by treating the `vpm` register like any other register (`ldi vpm, 0xdeadbeef` just writes `0xdeadbeef` to the `vpm`). After each write, the program executes a `mov -, vw_wait` to ensure the write completes, then writes out the following 3 values. Recall that each of these writes is a 16-wide vector.
 
-Note: You can validly write as many bytes to the `vpm` register as you have listed in the `vpm_setup` macro (exactly 4 in this case). It's helpful to think of it as a queue in which you prelist the operation done on each write or read from the register.
+Note: You can validly write as many items to the `vpm` register as you have listed in the `vpm_setup` macro (exactly 4 in this case). It's helpful to think of it as a queue in which you prelist the operation done on each write or read from the register.
 
 After the VPM writes are complete, the program then prepares a DMA write using the `vw_setup` register once again, only this time using the `vdw_setup_0` macro. Here, the macro invocation `vdw_setup_0(4, 16, dma_h32(0,0))` corresponds to 'write 4 rows of the VPM, each of which are 16-wide horizontal 32-bit vectors, starting at VPM coord 0,0'. Because we're writing to physical memory, we also have to specify the `vw_addr` register, which in this case is just the uniform we provided when we launched the kernel (the GPU base address of the output array). Finally, we do a `mov -, vw_wait` to kick of the DMA write. And that's it! A complete hello-world program on the GPU, and we're only ... about 2,700 words into the README.
 
 #### Running deadbeef
 
-Running `./run.sh` will reassemble the qasm and then run `make`. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
+Running `bash run.sh` will reassemble the qasm and then run `make`. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
+
+## Part 0: 2D Index with Multiple QPUs
+
+The second example uses multiple QPUs to fill a 2D array such that `output[i][j] = i * width + j` at each index. To do so, we use the following parallelization scheme.
+
+Parallelization scheme: We parallelize the columns using the 16-wide SIMD execution, and we parallelize the rows by the number of QPUs. Concretely, index j in each QPU's SIMD vector is responsible for computing every column n where n % 16 = j, and QPU i is responsible for computing every row m where m % NUM_QPUS = i. Here, we use i as a uniform we define ourselves when launching the kernel; it's also possible to do this using the `qpu_num` register, but much more difficult because we don't know how the scheduler will allocate QPUs. On the other hand, j can easily be pulled directly from the `elem_num` register. Note that this scheme requires that the width be divisible by 16 and the height by NUM_QPUS - it would be better to handle cases that don't divide nicely. In C-like code, our scheme looks like:
+
+```c
+for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
+  for (int j = MY_VECTOR_INDEX; j < WIDTH; j += 16) {
+    compute(Output[i][j]);
+  }
+}
+```
+
+Note that with SIMD, the inner loop is more accurately described as:
+
+```c
+for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
+  for (int j_base = 0; j_base < WIDTH; j_base += 16) {
+    compute(Output[i][j_base...j_base+15]);
+  }
+}
+```
+
+because each 16-wide vector is computed in lockstep fashion. We can visualize the scheme as follows:
+
+![parellel](./images/parallel.png)
+
+We strongly recommend reading the kernel carefully and understanding how the code corresponds to the image above - the easiest way to implement Part 2 is using this parallelization scheme.
+
+## DOCS QUICK REFERENCE
+
+#### [VideoCore IV 3D Architecture Reference Guide](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf)
+
+
+- Introduction p. 12
+- Architecture overview p. 13-25
+
+- VPM and VCD p. 53-56
+  Describes the VPM, which is the intermediate memory buffer in between physical memory and QPU registers. Memory flow is GPU registers <-> VPM <-> physical memory where the VPM/physical memory flow is done by DMA.
+- VPM/VCD Registers p. 57-59
+  Describes how to configure the registers to set up loads and stores in the aforementioned memory flow. vc4asm has very helpful macros for this, but sometimes you need more fine-grained control.
+- V3D Registers p. 82-84
+  The only ones we really care about are the ones written to in the QPU_EXECUTE_DIRECT function in our mailbox, and we still aren't 100% sure on why we have to write to these specifically. We couldn't get the mailbox execute QPU function to work, so we did it through the registers directly.
+- QPU Scheduler registers p. 89-91
+  The important ones are program address, uniforms address, uniforms length, and user program request control/status. All you provide is an address to start executing code and an array of uniforms, and the scheduler runs the program and updates status.
+
+#### [vc4asm Assembler for the QPU](https://maazl.de/project/vc4asm/doc/index.html)
+
+[Build Instructions](https://maazl.de/project/vc4asm/doc/index.html#build): Make sure you have `.include "../share/vc4inc/vc4.qinc"` at the top of your qasm files.`vc4asm` is also available via homebrew on mac: `brew install vc4asm`
+[Assembler](https://maazl.de/project/vc4asm/doc/index.html#vc4asm): To assemble a kernel titled `kernel.qasm`, run `vc4asm -c kernel.c -h kernel.h kernel.qasm`, add `#include "kernel.h"` to the file where you launch the kernel, and add `kernel.c` to your `COMMON_SRC` in the Makefile.
+[Expressions and Operators](https://www.maazl.de/project/vc4asm/doc/expressions.html): Describes registers (accumulators, memory registers, and special registers) and Operators.
+
+[Directives](https://www.maazl.de/project/vc4asm/doc/directives.html): Useful for constants, custom macros, etc.
+
+[Instructions](https://www.maazl.de/project/vc4asm/doc/instructions.html): Pretty digestible instruction set. Of note: condition codes, branches
+
+[vc4.qinc](https://maazl.de/project/vc4asm/doc/vc4.qinc.html): This explains how to actually use VPM/VCD macros - you will absolutely need this to configure memory movement operations.
 
 ## Part 1: Parallel Add
 
 The first program you'll implement is a SIMD vector add of `A+B=C` on a single QPU. `parallel-add.c` and `parallel-add.h` have a lot of the boiler-plate for executing QPU code we described above - you have the input `A` and `B` arrays and the output `C` arrays in the `struct GPU` and their addresses in the uniform array - you can decide any other uniforms you need. The kernel is in `parallel-add.qasm` - we've added a skeleton if you'd like, but this would also be great to Daniel-mode directly from the deadbeef example and vc4asm docs.
 
-We have included `staffaddshader.h` which contains a correctly compiled `staff-parallel-add.o`. Your code should pass on the first try if you just run `make`. Make sure to switch it to `addshader.h` and run `./run.sh` to compile and run your own shader!
+We have included `staffaddshader.h` which contains a correctly compiled `staff-parallel-add.o`. Your code should pass on the first try if you just run `make`. Make sure to switch it to `addshader.h` and run `bash run.sh` to compile and run your own shader!
 
 ### Checkoff
 
@@ -218,7 +277,7 @@ Your kernel should calculate the same values as the CPU implementation, with a m
 </figure>
 <br>
 
-The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. 
+The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated, and ChatGPT gives a useful response to "mandlebrot formula for dummys" (special thanks to Chat JoePT for the recommendation).
 
 Here's a basic description of the algorithm. To see if a point $x, y$ is part of the Mandelbrot set, we can use the following :
 
@@ -240,36 +299,13 @@ $$
 or we reach a maximum number of iterations. If the point does not diverge, i.e., stays bounded for all iterations, it's considered part of the Mandelbrot set.
 
 
-For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter code is described below, but you're absolutely free to design your own and adapt the code as such.
+For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The starter code completes the same calculation as 0-index - for each `output[i][j]`, it computes `output[i][j] = i * WIDTH + j` where `WIDTH = 2*RESOLUTION`. This allows us to start from a known, working state, where we know that we're calculating and writing to each index correctly. Your job is to replace `i * WIDTH + j` with the calculation of the correct Mandelbrot point for `output[i][j]`. In the starter code, you'll see that the floating point `x` and `y` values corresponding to `j` and `i` are calculated in registers `rb8` and `rb9` respectively - these are what you'll apply the above formula to in the code's `:inner_loop` to determine divergence. 
 
-
-Parallelization scheme: We parallelize the columns using the 16-wide SIMD execution and we parallelize the rows by the number of QPUs. Concretely, index i in each QPU's SIMD vector is responsible for computing every column n where n % 16 = i, and QPU j is responsible for computing every row m where m % NUM_QPUS = j. Here, we use j as a uniform we define ourselves when launching the kernel; it's also possible to do this using the `qpu_num` register, but much more difficult because we don't know how the scheduler will allocate QPUs. On the other hand, i can easily be pulled directly from the `elem_num` register. Note that this scheme requires that the resolution be divisible by 16 and NUM_QPUS - it would be better to handle cases that don't divide nicely. In C-like code, our scheme looks like:
-
-```c
-for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
-  for (int j = MY_VECTOR_INDEX; j < WIDTH; j += 16) {
-    compute(Output[i][j]);
-  }
-}
-```
-
-Note that with SIMD, the inner loop is more accurately described as:
-
-```c
-for (int i = MY_QPU_NUM; i < HEIGHT; i += NUM_QPUS) {
-  for (int j_base = 0; j_base < WIDTH; j_base += 16) {
-    compute(Output[i][j_base...j_base+15]);
-  }
-}
-```
-
-because each 16-wide vector is computed in lockstep fashion.
-
-For this one, all the code is in `mandelbrot.qasm` - fill in the TODOs to complete the kernel.
+For this one, all the code is in `mandelbrot.qasm` - fill in the TODOs to complete the kernel. Make sure you (eventually) get rid of the dummy `i * WIDTH + j` calculation, although you can use it for debugging purposes as long as you need.
 
 ### Checkoff
 
-When you do `./run.sh` with `2-mandelbrot.c` in your progs, you should get an `output.pgm` file on your pi SD card. When you open it on your computer, you should see the Mandelbrot fractal at the resolution you defined (probably don't go bigger than 1024 for the resolution). With larger resolutions, you may want to comment out the CPU example because it takes so long (not a problem with the GPU :)).
+When you do `bash run.sh` with `2-mandelbrot.c` in your progs, you should get an `output.pgm` file on your pi SD card. When you open it on your computer, you should see the Mandelbrot fractal at the resolution you defined (probably don't go bigger than 1024 for the resolution). With larger resolutions, you may want to comment out the CPU example because it takes so long (not a problem with the GPU :)).
 
 ## Useful Links
 

@@ -8,6 +8,7 @@ objs
 *.o
 
 
+
 deadbeef.c
 deadbeef.h
 
@@ -18,6 +19,15 @@ addshader.h
 mandelbrotshader.c
 mandelbrotshader.h
 
+indexshader.c
+indexshader.h
+
+!staff*.bin
+!staff*.o
+!staffaddshader.h
+
+staff/
+2-mandelbrot copy/
 
 
 

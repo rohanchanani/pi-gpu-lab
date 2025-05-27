@@ -9,8 +9,8 @@
 #define GPU_MEM_FLG 0xC // cached=0xC; direct=0x4
 #define GPU_BASE 0x40000000
 
-#define RESOLUTION 2048
-#define MAX_ITERS 256
+#define RESOLUTION 64
+#define MAX_ITERS 100
 #define NUM_QPUS 8 
 
 //TODO: CHANGE THE NUMBER OF UNIFS TO MATCH YOUR KERNEL. OURS HAS 6, yours doesn't have to
@@ -32,6 +32,6 @@ static int int_to_ascii(int val, char *buf);
 char *buildPGM(int *outSize, int HEIGHT, int WIDTH, const unsigned char input_image[HEIGHT][WIDTH]);
 float float_recip(float value);
 uint32_t hex_recip(float value);
-int gpu_prepare(volatile struct GPU **gpu);
+void gpu_prepare(volatile struct GPU **gpu);
 uint32_t gpu_execute(volatile struct GPU *gpu);
 void gpu_release(volatile struct GPU *gpu);

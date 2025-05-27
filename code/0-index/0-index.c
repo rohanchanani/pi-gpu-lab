@@ -34,6 +34,8 @@ void notmain(void)
 
 	printk("Time taken on GPU: %d us\n", gpu_time);	
 
+	//We are computing i*WIDTH + j at each i, j
+
 	for (int i=0; i<HEIGHT; i++) {
 		for (int j=0; j<WIDTH; j++) {
 			if (gpu->output[i][j] != i*WIDTH + j) {
