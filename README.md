@@ -220,7 +220,24 @@ Your kernel should calculate the same values as the CPU implementation, with a m
 
 The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. 
 
+Here's a basic description of the algorithm. To see if a point $x, y$ is part of the Mandelbrot set, we can use the following :
 
+$$
+\begin{aligned}
+u_0 &= 0 \\
+v_0 &= 0 \\
+u_{n+1} &= u_n^2 - v_n^2 + x \\
+v_{n+1} &= 2 u_n v_n + y
+\end{aligned}
+$$
+
+We continue until either:
+
+$$
+u_n^2 + v_n^2 \geq 4
+$$
+
+or we reach a maximum number of iterations. If the point does not diverge, i.e., stays bounded for all iterations, it's considered part of the Mandelbrot set.
 
 
 For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter code is described below, but you're absolutely free to design your own and adapt the code as such.
