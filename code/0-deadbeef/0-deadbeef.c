@@ -35,7 +35,7 @@ struct GPU
 /*
 	Sets up the GPU memory
 */
-int gpu_prepare(
+void gpu_prepare(
 	volatile struct GPU **gpu)
 {
 	unsigned handle, vc;
@@ -44,14 +44,14 @@ int gpu_prepare(
 
 	//Makes a mailbox call to turn on GPU, checks for failure
 	if (qpu_enable(1))
-		return -2;
+		panic("Failed to enable GPU");
 
 	//Makes a mailbox call to allocate a page-aligned struct GPU in GPU bus memory
 	handle = mem_alloc(sizeof(struct GPU), 4096, GPU_MEM_FLG);
 	if (!handle)
 	{
 		qpu_enable(0);
-		return -3;
+		panic("Failed to allocate GPU memory");
 	}
 
 	//Makes a mailbox call to convert the handle to a GPU bus address we have exclusvie access to
@@ -64,7 +64,7 @@ int gpu_prepare(
 		mem_free(handle);
 		mem_unlock(handle);
 		qpu_enable(0);
-		return -4;
+		panic("Failed to convert handle to GPU bus address");
 	}
 
 	//Now initialize values (will be seen by CPU and GPU)
@@ -75,7 +75,7 @@ int gpu_prepare(
 	ptr->mail[1] = GPU_BASE+(uint32_t)&ptr->unif;
 
 	*gpu = ptr;
-	return 0;
+	return;
 }
 
 unsigned gpu_execute(volatile struct GPU *gpu)
@@ -106,9 +106,7 @@ void notmain(void)
 
 	//After prep, gpu points to a struct GPU allocated on the GPU (address offset by 0x40000000)
 	volatile struct GPU *gpu;
-	int ret = gpu_prepare(&gpu);
-	if (ret < 0)
-		return;
+	gpu_prepare(&gpu);
 
 	memcpy((void *)gpu->code, deadbeef, sizeof gpu->code);
 
