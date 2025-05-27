@@ -4,13 +4,12 @@
 #include "parallel-add.h"
 #include "mailbox.h"
 
-//TODO: SWAP THESE
+// TODO: SWAP THESE
 
-//#include "addshader.h"
+// #include "addshader.h"
 #include "staffaddshader.h"
 
-
-int add_gpu_prepare(
+void add_gpu_prepare(
 	volatile struct addGPU **gpu)
 {
 	uint32_t handle, vc;
@@ -18,14 +17,14 @@ int add_gpu_prepare(
 
 	/* TURN ON THE QPU */
 	if (qpu_enable(1))
-		return -2;
+		panic("Failed to enable GPU");
 
 	/* ALLOCATE MEMORY FOR THE STRUCT QPU */
 	handle = mem_alloc(sizeof(struct addGPU), 4096, GPU_MEM_FLG);
 	if (!handle)
 	{
 		qpu_enable(0);
-		return -3;
+		panic("Failed to allocate GPU memory");
 	}
 
 	/* CLAIM THE BUS ADDRESS OF THE MEMORY */
@@ -38,7 +37,7 @@ int add_gpu_prepare(
 		mem_free(handle);
 		mem_unlock(handle);
 		qpu_enable(0);
-		return -4;
+		panic("Failed to convert handle to GPU bus address");
 	}
 
 	/* INITIALIZE STRUCT QPU FIELDS*/
@@ -47,7 +46,7 @@ int add_gpu_prepare(
 	ptr->mail[1] = GPU_BASE + (uint32_t)&ptr->unif;
 
 	*gpu = ptr;
-	return 0;
+	return;
 }
 
 /* SEND THE CODE AND UNIFS TO THE GPU (see docs p. 89-91)*/
@@ -56,8 +55,7 @@ uint32_t add_gpu_execute(volatile struct addGPU *gpu)
 	return gpu_fft_base_exec_direct(
 		(uint32_t)gpu->mail[0],
 		(uint32_t *)gpu->unif_ptr,
-		1
-	);
+		1);
 }
 
 /* RELEASE MEMORY AND TURN OFF QPU */
@@ -69,12 +67,10 @@ void vec_add_release(volatile struct addGPU *gpu)
 	qpu_enable(0);
 }
 
-// TODO: SET UP THE UNIFORMS FOR YOUR KERNEL 
+// TODO: SET UP THE UNIFORMS FOR YOUR KERNEL
 void vec_add_init(volatile struct addGPU **gpu, int n)
 {
-	int ret = add_gpu_prepare(gpu);
-	if (ret < 0)
-		return;
+	add_gpu_prepare(gpu);
 
 	volatile struct addGPU *ptr = *gpu;
 	memcpy((void *)ptr->code, addshader, sizeof ptr->code);
@@ -96,4 +92,3 @@ int vec_add_exec(volatile struct addGPU *gpu)
 
 	return end_time - start_time;
 }
-
