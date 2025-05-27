@@ -2,6 +2,21 @@
 
 ![Image](./images/videocore.png)
 
+## Errata
+
+The QPU Assembler has a weird bug where it executes 3 instructions after any branch instruction. We like to leave these as `nop`s, but if you can do something more clever with them, feel free to do so.
+
+## Useful Links
+
+- [VideoCore IV 3D Architecture Reference Guide](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf) - Main documentation for the VideoCore IV GPU
+- [vc4asm Assembler Documentation](https://maazl.de/project/vc4asm/doc/index.html) - Documentation for the QPU assembler
+  - [Build Instructions](https://maazl.de/project/vc4asm/doc/index.html#build)
+  - [Assembler Usage](https://maazl.de/project/vc4asm/doc/index.html#vc4asm)
+  - [Expressions and Operators](https://www.maazl.de/project/vc4asm/doc/expressions.html)
+  - [Macros (SUPER USEFUL)](https://maazl.de/project/vc4asm/doc/vc4.qinc.html)
+- [Mandelbrot Wikipedia Page](https://en.wikipedia.org/wiki/Mandelbrot_set)
+
+
 ## Introduction
 
 The Raspberry Pi uses the VideoCore IV GPU, also made by Broadcom. This was surprisingly well documented, all in this document: [VideoCore IV 3D Architecture Reference Guide](./docs/VideoCore%20IV%203D%20Architecture%20Reference%20Guide.pdf). To best take advantage of the GPU, we need to understand how it works. To start, here's a high-level overview of the VideoCore IV's architecture:
@@ -199,7 +214,13 @@ Your kernel should calculate the same values as the CPU implementation, with a m
 </figure>
 <br>
 
-The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter code is described below, but you're absolutely free to design your own and adapt the code as such.
+The final program we'll implement is a Mandelbrot kernel. Calculating which points are in the Mandelbrot set is very computationally intensive, but each point is calculated completely independent of all others, so it's an excellent candidate for GPU acceleration. The [Wikipedia](https://en.wikipedia.org/wiki/Mandelbrot_set) is a helpful reference if you're unfamiliar with how Mandelbrot is calculated. 
+
+
+
+
+For this kernel, we'll be using multiple QPUs, and the additional necessary boilerplate is included in the starter code. The parallelization scheme used by the starter code is described below, but you're absolutely free to design your own and adapt the code as such.
+
 
 Parallelization scheme: We parallelize the columns using the 16-wide SIMD execution and we parallelize the rows by the number of QPUs. Concretely, index i in each QPU's SIMD vector is responsible for computing every column n where n % 16 = i, and QPU j is responsible for computing every row m where m % NUM_QPUS = j. Here, we use j as a uniform we define ourselves when launching the kernel; it's also possible to do this using the `qpu_num` register, but much more difficult because we don't know how the scheduler will allocate QPUs. On the other hand, i can easily be pulled directly from the `elem_num` register. Note that this scheme requires that the resolution be divisible by 16 and NUM_QPUS - it would be better to handle cases that don't divide nicely. In C-like code, our scheme looks like:
 
