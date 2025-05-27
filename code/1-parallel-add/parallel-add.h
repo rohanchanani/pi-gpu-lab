@@ -1,6 +1,6 @@
-//TODO: SWAP THESE
+// TODO: SWAP THESE
 #include "staffaddshader.h"
-//#include "addshader.h"
+// #include "addshader.h"
 
 #include "rpi.h"
 #include <stdint.h>
@@ -8,12 +8,13 @@
 #define GPU_MEM_FLG 0xC // cached=0xC; direct=0x4
 #define GPU_BASE 0x40000000
 
-//FEEL FREE TO CHANGE THIS VALUE AND SEE HOW SPEEDUP CHANGES - WILL NEED TO BE DIVISIBLE BY 16 (good extension is write a kernel that doesn't need this)
+// FEEL FREE TO CHANGE THIS VALUE AND SEE HOW SPEEDUP CHANGES - WILL NEED TO BE
+// DIVISIBLE BY 16 (good extension is write a kernel that doesn't need this)
 #define N 1048576
-//TODO: AFTER YOU DECIDE WHAT YOUR UNIFORMS SHOULD BE, SET THIS CONSTANT (Ours is 4, yours doesn't have to be)
-//ALSO MAKE SURE YOU SWAP SHADER HEADER FILES (ABOVE)
+// TODO: AFTER YOU DECIDE WHAT YOUR UNIFORMS SHOULD BE, SET THIS CONSTANT
+// (Ours is 4, yours doesn't have to be)
+// ALSO MAKE SURE YOU SWAP SHADER HEADER FILES (ABOVE)
 #define NUM_UNIFS 4
-
 
 struct addGPU
 {

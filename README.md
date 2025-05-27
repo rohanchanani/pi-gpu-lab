@@ -198,7 +198,7 @@ After the VPM writes are complete, the program then prepares a DMA write using t
 
 #### Running deadbeef
 
-Running `./run.sh` will reassemble the qasm and then run `make`. You can also just run `make` for this part. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
+Running `./run.sh` will reassemble the qasm and then run `make`. After the GPU executes, you should see the memory update to the constants we write in `deadbeef.qasm`.
 
 ## Part 1: Parallel Add
 

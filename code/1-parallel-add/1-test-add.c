@@ -29,7 +29,7 @@ void test_add(void)
     {
         if (add_gpu->C[i] != (32 + i) + (64 + i))
         {
-            printk("Add Iteration %d: %d + %d = %d. INCORRECT\n", i, add_gpu->A[i], add_gpu->B[i], add_gpu->C[i]);
+            panic("Add Iteration %d: %d + %d = %d. INCORRECT", i, add_gpu->A[i], add_gpu->B[i], add_gpu->C[i]);
         }
         else if (i*16 % N == 0)
         {

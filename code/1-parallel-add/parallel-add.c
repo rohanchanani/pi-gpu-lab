@@ -4,11 +4,10 @@
 #include "parallel-add.h"
 #include "mailbox.h"
 
-//TODO: SWAP THESE
+// TODO: SWAP THESE
 
-//#include "addshader.h"
+// #include "addshader.h"
 #include "staffaddshader.h"
-
 
 void add_gpu_prepare(
 	volatile struct addGPU **gpu)
@@ -56,8 +55,7 @@ uint32_t add_gpu_execute(volatile struct addGPU *gpu)
 	return gpu_fft_base_exec_direct(
 		(uint32_t)gpu->mail[0],
 		(uint32_t *)gpu->unif_ptr,
-		1
-	);
+		1);
 }
 
 /* RELEASE MEMORY AND TURN OFF QPU */
@@ -69,7 +67,7 @@ void vec_add_release(volatile struct addGPU *gpu)
 	qpu_enable(0);
 }
 
-// TODO: SET UP THE UNIFORMS FOR YOUR KERNEL 
+// TODO: SET UP THE UNIFORMS FOR YOUR KERNEL
 void vec_add_init(volatile struct addGPU **gpu, int n)
 {
 	add_gpu_prepare(gpu);
@@ -94,4 +92,3 @@ int vec_add_exec(volatile struct addGPU *gpu)
 
 	return end_time - start_time;
 }
-

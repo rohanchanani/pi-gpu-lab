@@ -52,9 +52,11 @@ uint32_t mailbox_read(uint8_t channel)
 int mbox_property(uint32_t *msg)
 {
 	// Check alignment.
-	if ((uint32_t)msg & 0xF) return 0;
+	if ((uint32_t)msg & 0xF)
+		return 0;
 	mailbox_write(8, (uint32_t)msg);
-	while (mailbox_read(8) != (uint32_t)msg);
+	while (mailbox_read(8) != (uint32_t)msg)
+		;
 
 	return (msg[1] == 0x80000000);
 }
@@ -155,7 +157,7 @@ unsigned gpu_fft_base_exec_direct(
 	uint32_t unifs[],
 	int num_qpus)
 {
-	//printk("RUNNING WITH %d\n QPUS", num_qpus);
+	// printk("RUNNING WITH %d\n QPUS", num_qpus);
 	PUT32(V3D_DBCFG, 0); // Disallow IRQ
 
 	PUT32(V3D_DBQITE, 0);  // Disable IRQ
@@ -170,12 +172,12 @@ unsigned gpu_fft_base_exec_direct(
 	{ // Launch shader(s)
 
 		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
-		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+		PUT32(V3D_SRQPC, (uint32_t)code);	  // Set the program counter
 	}
 
-
 	// Busy wait polling
-	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus)
+		;
 
 	return 0;
 }
