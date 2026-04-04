@@ -1,24 +1,17 @@
 LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
 
-COMMON_SRC := mailbox.c
+export OPT_LEVEL := -O3
 
-PROGS := 0-index.c
+COMMON_SRC := mailbox.c saxpy.c saxpyshader.c
 
-# PROGS := tests/3-test-fire.c
-
-COMMON_SRC += indexshader.c index-helpers.c
+PROGS := 3-test-saxpy.c
 
 STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
 STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
 
-# uncomment if you want it to automatically run.
 RUN=1
 
 BOOTLOADER = pi-install
 EXCLUDE ?= grep -v simple_boot
 GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
 include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
-
-checkoff:
-	make -f ./Makefile PROGS="$(wildcard tests/[0123]-*.c)" check
-	# make -f ./Makefile PROGS="$(ALL)" check

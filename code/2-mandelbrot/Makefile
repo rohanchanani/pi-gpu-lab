@@ -15,7 +15,7 @@ STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
 # uncomment if you want it to automatically run.
 RUN=1
 
-BOOTLOADER = my-install
+BOOTLOADER = pi-install
 EXCLUDE ?= grep -v simple_boot
 GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
 include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust

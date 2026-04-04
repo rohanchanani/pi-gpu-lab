@@ -1,17 +1,17 @@
 objs/index-helpers.o: index-helpers.c index.h \
- /home/rohan-chanani/Downloads/new//libpi/include/rpi.h \
- /home/rohan-chanani/Downloads/new//libpi/libc/demand.h \
- /home/rohan-chanani/Downloads/new//libpi/include/gpio.h \
- /home/rohan-chanani/Downloads/new//libpi/include/rpi-constants.h \
- /home/rohan-chanani/Downloads/new//libpi/include/your-prototypes.h \
- /home/rohan-chanani/Downloads/new//libpi/libc/rpi-rand.h mailbox.h \
- indexshader.h
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/rpi.h \
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/libc/demand.h \
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/gpio.h \
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/rpi-constants.h \
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/your-prototypes.h \
+ /Users/rohanchanani/Downloads/cs240lx-25spr/libpi/libc/rpi-rand.h \
+ mailbox.h indexshader.h
 index.h:
-/home/rohan-chanani/Downloads/new//libpi/include/rpi.h:
-/home/rohan-chanani/Downloads/new//libpi/libc/demand.h:
-/home/rohan-chanani/Downloads/new//libpi/include/gpio.h:
-/home/rohan-chanani/Downloads/new//libpi/include/rpi-constants.h:
-/home/rohan-chanani/Downloads/new//libpi/include/your-prototypes.h:
-/home/rohan-chanani/Downloads/new//libpi/libc/rpi-rand.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/rpi.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/libc/demand.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/gpio.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/rpi-constants.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include/your-prototypes.h:
+/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/libc/rpi-rand.h:
 mailbox.h:
 indexshader.h:

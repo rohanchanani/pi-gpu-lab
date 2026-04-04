@@ -53,7 +53,7 @@ COMMON_SRC += pi-sd.c mbr-helpers.c fat32-helpers.c fat32-lfn-helpers.c external
 # external-code/bzt-sd.c 
 
 TTYUSB = 
-BOOTLOADER = my-install
+BOOTLOADER = pi-install
 RUN = 1
 
 EXCLUDE ?= grep -v simple_boot

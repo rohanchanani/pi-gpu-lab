@@ -6,6 +6,7 @@ objs
 *.d
 *.elf
 *.o
+compile_commands.json
 .idea/
 
 
@@ -29,7 +30,6 @@ indexshader.h
 
 staff/
 2-mandelbrot copy/
-
 
 
 
