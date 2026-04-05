@@ -59,12 +59,14 @@ Representation:
 
 Responsibilities:
 - low-level target operations
-- explicit target-side memory operations
+- explicit staged target-side memory operations
 - backend-oriented control flow
 - target-specific attributes and constraints
 - later: hooks for hazards, scheduling boundaries, and special resource usage
 
-The `vc4` dialect is intended to be the final structured IR before text emission.
+The `vc4` dialect is intended to be the final structured IR before text
+emission. Early on, it should make staged memory movement through backend
+resources such as VPM visible without trying to model the full machine.
 
 ### 4. Emission layer
 Purpose:

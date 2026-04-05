@@ -10,6 +10,22 @@ tiny CUDA subset
 -> custom `vc4` dialect
 -> `vc4asm`
 
+## VC4 dialect seed
+
+The `vc4` dialect is the target-facing structured IR that sits after the
+width-16 vector stage. It is intentionally tiny right now, but it is no longer
+just a generic target marker: the seed dialect is meant to expose staged memory
+movement and simple backend arithmetic after vectorization.
+
+The current seed focuses on a very small set of general backend concepts:
+- uniform values
+- DMA movement into or out of VPM
+- VPM reads
+- simple arithmetic over staged vec16 data
+
+This keeps the post-vectorization boundary inspectable without adding real
+hardware scheduling, register allocation, or `vc4asm` emission yet.
+
 ## Current priorities
 - establish MLIR infrastructure
 - define a minimal custom `vc4` dialect
