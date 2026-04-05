@@ -11,14 +11,17 @@ Create an extensible compiler foundation that can reach the first end-to-end gen
 2. `docs/project-scope.md`
 3. `docs/architecture.md`
 4. `docs/task-board.md`
+5. `docs/vc4asm-notes.md`
+6. `docs/reference-links.md`
 
 ## Ground rules
 - Prefer small, reversible steps over broad speculative design.
 - Do not broaden language scope without updating `docs/project-scope.md`.
 - Keep the distinction explicit between:
-    - CUDA-subset frontend semantics
-    - VC4-native backend lowering
+  - CUDA-subset frontend semantics
+  - VC4-native backend lowering
 - Preserve existing low-level/manual VC4 materials in this repo.
+- Treat `third_party/VC4C` as reference-only prior art unless explicitly asked to modify it.
 - For nontrivial changes, update docs and tests in the same change.
 - Avoid large refactors unless they clearly simplify the architecture.
 
@@ -51,11 +54,30 @@ Do not skip directly to target-specific assembly unless the task is explicitly a
 - do not assume full CUDA semantics
 - do not implement `__shared__`, barriers, or advanced CUDA features unless they are in scope in `docs/project-scope.md`
 
+## vc4asm / backend guidance
+- For vc4asm-related backend work, read `docs/vc4asm-notes.md` first.
+- Use `docs/reference-links.md` for authoritative assembler references.
+- Keep the `vc4` dialect above raw assembler directives, macros, and bitfield encodings unless the task is specifically about emission.
+- Model machine structure first:
+  - uniforms
+  - staged DMA load/store
+  - VPM reads/writes
+  - arithmetic
+  - later: control flow / scheduling
+- Do not mirror raw `vc4asm` syntax too early.
+
+## VC4C guidance
+- `third_party/VC4C` is reference-only prior art.
+- Use it to study backend lowering, runtime conventions, and VC4-specific implementation ideas.
+- Do not copy structure blindly.
+- Do not modify it unless explicitly asked.
+
 ## Early-stage coding preferences
-- hardcoded or toy frontend inputs are acceptable
-- parser work is lower priority than IR design and lowering structure
-- pseudo-assembly / text dumps are acceptable intermediate milestones
-- first milestone is correctness and architecture clarity, not optimization
+- Hardcoded or toy frontend inputs are acceptable.
+- Parser work is lower priority than IR design and lowering structure.
+- Pseudo-assembly / text dumps are acceptable intermediate milestones.
+- First milestone is correctness and architecture clarity, not optimization.
+- Prefer backend concepts generalized around machine structure, not around the current kernel.
 
 ## What to avoid right now
 - full CUDA parser
@@ -63,3 +85,5 @@ Do not skip directly to target-specific assembly unless the task is explicitly a
 - broad optimizer work
 - premature support for atomics, synchronization, or advanced memory semantics
 - oversized target dialect design
+- raw vc4asm emission details in the dialect
+- schedule/register/delay-slot modeling before the staged backend IR is clear
