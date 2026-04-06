@@ -1,8 +1,11 @@
 import os
 
 import lit.formats
-from lit.llvm import llvm_config
+import lit.llvm
 from lit.llvm.subst import ToolSubst
+
+lit.llvm.initialize(lit_config, config)
+llvm_config = lit.llvm.llvm_config
 
 config.name = "VC4"
 config.test_format = lit.formats.ShTest(not llvm_config.use_lit_shell)
@@ -14,7 +17,6 @@ llvm_config.with_system_environment(["HOME", "INCLUDE", "LIB", "PATH", "TMP", "T
 llvm_config.use_default_substitutions()
 
 config.substitutions.append(("%PATH%", config.environment["PATH"]))
-config.substitutions.append(("%shlibext", config.llvm_shlib_ext))
 
 llvm_config.with_environment("PATH", config.llvm_tools_dir, append_path=True)
 
