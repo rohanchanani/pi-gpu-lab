@@ -1,0 +1,8 @@
+@LIT_SITE_CFG_IN_HEADER@
+
+config.vc4_obj_root = "@VC4_BINARY_DIR@"
+config.vc4_src_root = "@VC4_SOURCE_DIR@"
+config.vc4_tools_dir = "@VC4_BINARY_DIR@/bin"
+config.llvm_tools_dir = "@LLVM_TOOLS_BINARY_DIR@"
+
+lit_config.load_config(config, "@CMAKE_CURRENT_SOURCE_DIR@/lit.cfg.py")
