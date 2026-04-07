@@ -1,3 +1,4 @@
+// Translation smoke test for staged-memory VC4 ops plus vector compute.
 // RUN: vc4-translate --mlir-to-vc4asm %s | FileCheck %s
 
 module {

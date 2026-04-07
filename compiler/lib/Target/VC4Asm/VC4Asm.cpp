@@ -1,16 +1,20 @@
 #include "vc4/Target/VC4Asm/VC4Asm.h"
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/raw_ostream.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/InitAllDialects.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/OperationSupport.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Tools/mlir-translate/Translation.h"
 #include "vc4/Dialect/VC4/VC4Dialect.h"
 #include "vc4/Dialect/VC4/VC4Ops.h"
@@ -30,7 +34,16 @@ public:
   }
 
 private:
-  enum class SectionKind { None, Uniforms, DMALoadStore, VPM, Compute };
+  enum class SectionKind {
+    None,
+    Builtins,
+    Uniforms,
+    ScalarSetup,
+    ControlFlow,
+    DMALoadStore,
+    VPM,
+    Compute
+  };
 
   LogicalResult emitTopLevel(Operation *op) {
     if (auto module = dyn_cast<ModuleOp>(op))
@@ -42,9 +55,23 @@ private:
     for (Operation &op : block) {
       if (isa<ModuleOp>(op))
         continue;
+      if (auto gpuModule = dyn_cast<gpu::GPUModuleOp>(op)) {
+        output << "; gpu.module @" << gpuModule.getName() << "\n";
+        if (failed(emitBlock(gpuModule.getBodyRegion().front())))
+          return failure();
+        output << "\n";
+        continue;
+      }
       if (auto func = dyn_cast<func::FuncOp>(op)) {
         output << "; function @" << func.getName() << "\n";
         if (failed(emitBlock(func.getBody().front())))
+          return failure();
+        output << "\n";
+        continue;
+      }
+      if (auto gpuFunc = dyn_cast<gpu::GPUFuncOp>(op)) {
+        output << "; gpu.func @" << gpuFunc.getName() << "\n";
+        if (failed(emitBlock(gpuFunc.getBody().front())))
           return failure();
         output << "\n";
         continue;
@@ -58,6 +85,18 @@ private:
   LogicalResult emitOp(Operation &op) {
     if (auto constant = dyn_cast<arith::ConstantOp>(op))
       return recordConstant(constant);
+    if (auto muli = dyn_cast<arith::MulIOp>(op))
+      return emitMulI(muli);
+    if (auto remui = dyn_cast<arith::RemUIOp>(op))
+      return emitRemUI(remui);
+    if (auto cmpi = dyn_cast<arith::CmpIOp>(op))
+      return emitCmpI(cmpi);
+    if (auto assertOp = dyn_cast<cf::AssertOp>(op))
+      return emitAssert(assertOp);
+    if (auto forOp = dyn_cast<scf::ForOp>(op))
+      return emitFor(forOp);
+    if (auto getBuiltin = dyn_cast<GetBuiltinOp>(op))
+      return emitGetBuiltin(getBuiltin);
     if (auto getUniform = dyn_cast<GetUniformOp>(op))
       return emitGetUniform(getUniform);
     if (auto dmaLoad = dyn_cast<DmaLoadOp>(op))
@@ -74,6 +113,10 @@ private:
       return emitFAdd(fadd);
     if (auto func = dyn_cast<func::FuncOp>(op))
       return emitBlock(func.getBody().front());
+    if (auto gpuFunc = dyn_cast<gpu::GPUFuncOp>(op))
+      return emitBlock(gpuFunc.getBody().front());
+    if (isa<gpu::ReturnOp>(op) || isa<scf::YieldOp>(op))
+      return success();
     return op.emitError("unsupported op for mlir-to-vc4asm translation");
   }
 
@@ -82,6 +125,63 @@ private:
     if (!integer)
       return op.emitError("only integer arith.constant is supported by mlir-to-vc4asm");
     constantValues[op.getResult()] = integer.getInt();
+    return success();
+  }
+
+  LogicalResult emitMulI(arith::MulIOp op) {
+    switchSection(SectionKind::ScalarSetup, "; Scalar/index setup");
+    std::string symbol = getValueSymbol(op.getResult());
+    output << "; " << symbol << " = arith.muli " << formatIndexValue(op.getLhs())
+           << ", " << formatIndexValue(op.getRhs()) << "\n";
+    return success();
+  }
+
+  LogicalResult emitRemUI(arith::RemUIOp op) {
+    switchSection(SectionKind::ScalarSetup, "; Scalar/index setup");
+    std::string symbol = getValueSymbol(op.getResult());
+    output << "; " << symbol << " = arith.remui " << formatIndexValue(op.getLhs())
+           << ", " << formatIndexValue(op.getRhs()) << "\n";
+    return success();
+  }
+
+  LogicalResult emitCmpI(arith::CmpIOp op) {
+    switchSection(SectionKind::ScalarSetup, "; Scalar/index setup");
+    std::string symbol = getValueSymbol(op.getResult());
+    output << "; " << symbol << " = arith.cmpi " << stringifyCmpIPredicate(op.getPredicate())
+           << ", " << formatIndexValue(op.getLhs()) << ", "
+           << formatIndexValue(op.getRhs()) << "\n";
+    return success();
+  }
+
+  LogicalResult emitAssert(cf::AssertOp op) {
+    switchSection(SectionKind::ControlFlow, "; Control");
+    output << "; cf.assert " << getValueSymbol(op.getArg()) << ", \""
+           << op.getMsg() << "\"\n";
+    return success();
+  }
+
+  LogicalResult emitFor(scf::ForOp op) {
+    switchSection(SectionKind::ControlFlow, "; Control");
+    std::string ivName = (llvm::Twine("iv") + llvm::Twine(nextLoopId++)).str();
+    valueSymbols[op.getInductionVar()] = ivName;
+    output << "; scf.for " << ivName << " = " << formatIndexValue(op.getLowerBound())
+           << " to " << formatIndexValue(op.getUpperBound()) << " step "
+           << formatIndexValue(op.getStep()) << "\n";
+    if (failed(emitBlock(op.getRegion().front())))
+      return failure();
+    output << "; end scf.for " << ivName << "\n\n";
+    return success();
+  }
+
+  LogicalResult emitGetBuiltin(GetBuiltinOp op) {
+    switchSection(SectionKind::Builtins, "; Execution builtins");
+    std::string symbol = getValueSymbol(op.getResult());
+    BuiltinKind kind = op.getBuiltinKind();
+    StringRef builtinName = stringifyBuiltinKind(kind);
+    output << "; " << symbol << " = vc4.get_builtin " << builtinName << " : index\n";
+    output << "mov " << symbol << ", "
+           << (kind == BuiltinKind::qpu_id ? "qpu_id" : "num_qpus")
+           << "    ; schematic: physical execution builtin read\n\n";
     return success();
   }
 
@@ -189,6 +289,9 @@ private:
     std::string symbol;
     if (auto blockArg = dyn_cast<BlockArgument>(value)) {
       symbol = (llvm::Twine("arg") + llvm::Twine(blockArg.getArgNumber())).str();
+    } else if (auto definingBuiltin = value.getDefiningOp<GetBuiltinOp>()) {
+      symbol = (llvm::Twine("builtin_") +
+                llvm::Twine(stringifyBuiltinKind(definingBuiltin.getBuiltinKind()))).str();
     } else if (auto definingUniform = value.getDefiningOp<GetUniformOp>()) {
       symbol = (llvm::Twine("uniform_") + llvm::Twine(definingUniform.getIndex())).str();
     } else {
@@ -202,6 +305,7 @@ private:
   llvm::raw_ostream &output;
   SectionKind currentSection = SectionKind::None;
   int nextTemporaryId = 0;
+  int nextLoopId = 0;
   llvm::DenseMap<Value, int64_t> constantValues;
   llvm::DenseMap<Value, std::string> valueSymbols;
 };

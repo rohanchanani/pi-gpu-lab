@@ -1,6 +1,9 @@
 #ifndef VC4_DIALECT_VC4_VC4OPS_H
 #define VC4_DIALECT_VC4_VC4OPS_H
 
+#include <optional>
+
+#include "llvm/ADT/StringRef.h"
 #include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/OpDefinition.h"
@@ -8,6 +11,14 @@
 #include "vc4/Dialect/VC4/VC4Dialect.h"
 
 namespace mlir::vc4 {
+
+enum class BuiltinKind {
+  qpu_id,
+  num_qpus,
+};
+
+llvm::StringRef stringifyBuiltinKind(BuiltinKind kind);
+std::optional<BuiltinKind> symbolizeBuiltinKind(llvm::StringRef kind);
 
 struct UniformResource : public SideEffects::Resource::Base<UniformResource> {
   StringRef getName() final { return "VC4::Uniforms"; }

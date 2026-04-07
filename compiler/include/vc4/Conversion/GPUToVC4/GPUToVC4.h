@@ -8,7 +8,7 @@ class Pass;
 
 namespace vc4 {
 
-std::unique_ptr<Pass> createConvertGPUToVC4Pass();
+std::unique_ptr<Pass> createLowerGPUSaxpyToVC4Pass();
 void registerGPUToVC4Passes();
 
 } // namespace vc4

@@ -16,6 +16,22 @@ def VC4_Vec16F32 : Type<
           "::llvm::cast<::mlir::VectorType>($_self).getElementType().isF32()">,
     "vector<16xf32>">;
 
+def VC4_GetBuiltinOp : VC4_Op<"get_builtin", [Pure]> {
+  let summary = "Read a physical VC4 execution builtin";
+  let description = [{
+    Reads a physical execution builtin such as the current QPU id or the launch
+    width in QPUs. These are target-side execution facts, not user kernel
+    arguments.
+  }];
+  let arguments = (ins StrAttr:$kind);
+  let results = (outs Index:$result);
+  let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+  let extraClassDeclaration = [{
+    ::mlir::vc4::BuiltinKind getBuiltinKind();
+  }];
+}
+
 def VC4_GetUniformOp : VC4_Op<"get_uniform", [
     MemoryEffects<[MemRead<VC4_UniformResource>]>]> {
   let summary = "Read a kernel uniform by slot";

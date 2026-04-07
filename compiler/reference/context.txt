@@ -1,0 +1,838 @@
+# compiler/reference/saxpy context
+
+This file captures the current file structure of compiler/reference/saxpy and the raw contents of the current .c, .h, and .qasm source artifacts in that directory.
+
+## FILE STRUCTURE
+
+- compiler/reference/saxpy/3-test-saxpy.c
+- compiler/reference/saxpy/mailbox.c
+- compiler/reference/saxpy/mailbox.h
+- compiler/reference/saxpy/saxpy.qasm
+- compiler/reference/saxpy/saxpy_launch.c
+- compiler/reference/saxpy/saxpy_launch.h
+- compiler/reference/saxpy/saxpyshader.c
+- compiler/reference/saxpy/saxpyshader.h
+
+## RAW FILE CONTENTS
+
+### FILE: compiler/reference/saxpy/3-test-saxpy.c
+
+```text
+#include "rpi.h"
+#include "saxpy_launch.h"
+
+#define N 32768
+#define SAXPY_EPSILON 0.0001f
+
+static float absf(float value)
+{
+    return value < 0.0f ? -value : value;
+}
+
+static void fill_inputs(float *x, float *y, float *y_initial)
+{
+    for (int i = 0; i < N; i++)
+    {
+        x[i] = ((float)(i % 97) * 0.125f) - 3.0f;
+        y[i] = ((float)(i % 53) * 0.25f) + 1.0f;
+        y_initial[i] = y[i];
+    }
+}
+
+static void run_cpu_reference(
+    float alpha,
+    const float *x,
+    const float *y_initial,
+    float *expected,
+    int *cpu_time_usec)
+{
+    int start_time = timer_get_usec();
+    for (int i = 0; i < N; i++)
+        expected[i] = alpha * x[i] + y_initial[i];
+    int end_time = timer_get_usec();
+
+    *cpu_time_usec = end_time - start_time;
+}
+
+static void verify_results(
+    const float *y,
+    const float *expected,
+    int *mismatch_count,
+    float *max_abs_diff)
+{
+    *mismatch_count = 0;
+    *max_abs_diff = 0.0f;
+
+    for (int i = 0; i < N; i++)
+    {
+        float diff = y[i] - expected[i];
+        float abs_diff = absf(diff);
+        if (abs_diff > *max_abs_diff)
+            *max_abs_diff = abs_diff;
+
+        if (abs_diff > SAXPY_EPSILON)
+        {
+            if (*mismatch_count < 8)
+            {
+                printk("ERROR: i=%d gpu=%f cpu=%f diff=%f\n",
+                    i, y[i], expected[i], diff);
+            }
+            (*mismatch_count)++;
+        }
+    }
+}
+
+void notmain(void)
+{
+    struct vc4_runtime rt;
+    static float x[N];
+    static float y[N];
+    static float y_initial[N];
+    static float expected[N];
+    const float alpha = 2.5f;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    fill_inputs(x, y, y_initial);
+
+    printk("Running GPU SAXPY...\n");
+    int gpu_start = timer_get_usec();
+    if (saxpy_launch(&rt, x, y, alpha, N) < 0)
+        panic("SAXPY launch failed");
+    int gpu_end = timer_get_usec();
+    int gpu_time = gpu_end - gpu_start;
+
+    int cpu_time = 0;
+    run_cpu_reference(alpha, x, y_initial, expected, &cpu_time);
+
+    int mismatches = 0;
+    float max_abs_diff = 0.0f;
+    verify_results(y, expected, &mismatches, &max_abs_diff);
+
+    printk("SAXPY alpha=%f N=%d qpus=%d lanes=%d\n",
+        alpha, N, vc4_runtime_active_qpus(&rt), vc4_runtime_lane_width());
+    printk("CPU Time: %d us\n", cpu_time);
+    printk("GPU Time: %d us\n", gpu_time);
+    if (gpu_time > 0)
+        printk("Speedup: %f\n", (float)cpu_time / (float)gpu_time);
+    else
+        printk("Speedup: INF\n");
+
+    printk("Sample results:\n");
+    for (int i = 0; i < 4; i++)
+    {
+        printk("i=%d x=%f y_gpu=%f y_cpu=%f\n",
+            i, x[i], y[i], expected[i]);
+    }
+
+    if (mismatches)
+        panic("SAXPY verification failed: mismatches=%d max_abs_diff=%f",
+            mismatches, max_abs_diff);
+
+    printk("SUCCESS: SAXPY verified. max_abs_diff=%f\n", max_abs_diff);
+    vc4_runtime_shutdown(&rt);
+}
+
+```
+
+### FILE: compiler/reference/saxpy/mailbox.c
+
+```text
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+	// Wait until mailbox is not full.
+	while (MAILBOX_STATUS & MAILBOX_FULL)
+	{
+	}
+	// Lower 4 bits are used for channel.
+	MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+	uint32_t data;
+	while (1)
+	{
+		data = MAILBOX_READ;
+		if ((data & 0xF) == channel)
+			return data & ~0xF;
+	}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+	// Check alignment.
+	if ((uint32_t)msg & 0xF) return 0;
+	mailbox_write(8, (uint32_t)msg);
+	while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000e,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+	uint32_t code,
+	uint32_t unifs[],
+	int num_qpus)
+{
+	//printk("RUNNING WITH %d\n QPUS", num_qpus);
+	PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+	if (!rt)
+		return -1;
+	if (qpu_enable(1))
+		return -1;
+	rt->isInitialized = 1;
+	rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+	return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+	if (!rt || !rt->isInitialized)
+		return;
+	qpu_enable(0);
+	rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+	return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+	if (!rt)
+		return 0;
+	return rt->active_qpus;
+}
+
+```
+
+### FILE: compiler/reference/saxpy/mailbox.h
+
+```text
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+ * Bare-metal Mailbox Interface for Raspberry Pi
+ *
+ * This header defines the functions for interacting with the GPU's mailbox
+ * property interface in a bare-metal environment.
+ *
+ * Functions:
+ *   - mailbox_write(): Write a message to the mailbox.
+ *   - mailbox_read():  Read a message from the mailbox.
+ *   - mailbox_call():  Send a property message and wait for the response.
+ *
+ *   - mem_alloc():     Allocate GPU memory.
+ *   - mem_free():      Free GPU memory.
+ *   - mem_lock():      Lock allocated GPU memory and return its bus address.
+ *   - mem_unlock():    Unlock GPU memory.
+ *
+ *   - qpu_enable():    Enable (or disable) the QPU.
+ *   - execute_qpu():   Execute QPU code.
+ *
+ * All property messages are sent on mailbox channel 8.
+ *
+ * Note: Ensure that the mailbox message buffers are 16-byte aligned.
+ */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+ * 'msg' must be 16-byte aligned.
+ * Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+ */
+int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+ *
+ * mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+ *             and 'flags'. Returns a nonzero handle on success.
+ *
+ * mem_free:   Releases the GPU memory associated with the given handle.
+ *
+ * mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+ *             Returns the bus address on success.
+ *
+ * mem_unlock: Unlocks the previously locked GPU memory.
+ */
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+uint32_t mem_free(uint32_t handle);
+uint32_t mem_lock(uint32_t handle);
+uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+ *
+ * qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+	VC4_RUNTIME_LANE_WIDTH = 16,
+	VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+	int isInitialized;
+	/* Generic runtime launch policy for the current session. */
+	uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+```
+
+### FILE: compiler/reference/saxpy/saxpy.qasm
+
+```text
+.include "../share/vc4inc/vc4.qinc"
+
+# Compiler reference kernel for the current gpu->vc4 SAXPY slice.
+#
+# This is the intended concrete lowering target for:
+#   gpu.func @saxpy(%x: memref<?xf32>, %y: memref<?xf32>, %a: f32, %n: index)
+#
+# Physical uniform stream order for one launched QPU:
+#   ra0 = x base address
+#   ra1 = y base address
+#   ra2 = alpha (one scalar f32 word; uniform reads are lane-broadcast)
+#   ra3 = n element count
+#   ra4 = qpu_id
+#   ra5 = num_qpus
+#
+# These are consumed sequentially with repeated mov ..., unif. Even though
+# qpu_id and num_qpus are physically carried in the uniform stream, they remain
+# execution builtins conceptually in the compiler IR.
+mov ra0, unif
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+
+# Realize the abstract staged rows used by the current lowering:
+#   row 0 -> physical row (2 * qpu_id)
+#   row 1 -> physical row (2 * qpu_id + 1)
+shl r3, ra4, 1
+mov ra6, r3
+add ra7, r3, 1
+
+# Lowered execution model:
+#   base   = qpu_id * 16
+#   stride = num_qpus * 16
+#
+# DMA addresses are byte-addressed, so multiply the element quantities by 4.
+shl r0, ra4, 6
+mov ra8, r0
+
+shl r3, ra5, 6
+mov rb20, r3
+
+shl r1, ra3, 2
+mov ra9, r1
+
+mov r0, ra8
+add ra10, ra0, r0
+add ra11, ra1, r0
+
+# If this QPU's initial chunk base is already >= n, do no work.
+mov r1, ra9
+sub.setf r1, ra8, r1
+brr.anync -, :end
+nop
+nop
+nop
+
+:loop
+    # Stage 16 x values into the physical row for abstract row 0.
+    mov r2, vdr_setup_0(0, 16, 1, vdr_h32(1, 0, 0))
+    shl r1, ra6, 4
+    add vr_setup, r2, r1
+    mov vr_addr, ra10
+    mov -, vr_wait
+
+    # Stage 16 y values into the physical row for abstract row 1.
+    mov r2, vdr_setup_0(0, 16, 1, vdr_h32(1, 0, 0))
+    shl r1, ra7, 4
+    add vr_setup, r2, r1
+    mov vr_addr, ra11
+    mov -, vr_wait
+
+    # Read the staged vectors back from VPM.
+    mov r2, vpm_setup(1, 1, h32(0))
+
+    add vr_setup, r2, ra6
+    mov r0, vpm
+    mov -, vw_wait
+
+    add vr_setup, r2, ra7
+    mov r1, vpm
+    mov -, vw_wait
+
+    # y = alpha * x + y
+    fmul r2, r0, ra2
+    fadd r2, r2, r1
+
+    # Stage the result back into the physical row for abstract row 1.
+    mov r3, vpm_setup(1, 1, h32(0))
+    add vw_setup, r3, ra7
+    mov vpm, r2
+    mov -, vw_wait
+
+    # DMA the result vector back to y.
+    shl r1, ra7, 7
+    mov r2, vdw_setup_0(1, 16, dma_h32(0, 0))
+    add vw_setup, r2, r1
+    mov vw_addr, ra11
+    mov -, vw_wait
+
+    add ra8, ra8, rb20
+    add ra10, ra10, rb20
+    add ra11, ra11, rb20
+
+    # Loop while the next chunk base is still < n.
+    mov r1, ra9
+    sub.setf r1, ra8, r1
+    brr.anyc -, :loop
+    nop
+    nop
+    nop
+
+:end
+thrend
+mov interrupt, 1
+nop
+nop
+
+```
+
+### FILE: compiler/reference/saxpy/saxpy_launch.c
+
+```text
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "saxpy_launch.h"
+#include "saxpyshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define NUM_UNIFS 6
+
+struct saxpy_launch_state
+{
+    uint32_t code[sizeof(saxpyshader) / sizeof(uint32_t)];
+    uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];
+    uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];
+    uint32_t handle;
+    float payload[];
+};
+
+static uint32_t float_as_u32(float value)
+{
+    union
+    {
+        float f;
+        uint32_t u;
+    } bits;
+
+    bits.f = value;
+    return bits.u;
+}
+
+static size_t saxpy_launch_state_size(uint32_t n)
+{
+    return offsetof(struct saxpy_launch_state, payload) + (size_t)2 * n * sizeof(float);
+}
+
+static float *saxpy_x_ptr(volatile struct saxpy_launch_state *state)
+{
+    return (float *)state->payload;
+}
+
+static float *saxpy_y_ptr(volatile struct saxpy_launch_state *state, uint32_t n)
+{
+    return (float *)state->payload + n;
+}
+
+int saxpy_launch(struct vc4_runtime *rt, float *x, float *y, float a, uint32_t n)
+{
+    uint32_t laneWidth = vc4_runtime_lane_width();
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+
+    if (!rt || !rt->isInitialized)
+        return -1;
+    if (!x || !y)
+        return -1;
+    if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)
+        return -1;
+    if (n % laneWidth != 0)
+        return -1;
+
+    size_t allocSize = saxpy_launch_state_size(n);
+    uint32_t handle = mem_alloc(allocSize, 4096, GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct saxpy_launch_state *state =
+        (volatile struct saxpy_launch_state *)(vc - GPU_BASE);
+    if (!state)
+    {
+        mem_unlock(handle);
+        mem_free(handle);
+        return -1;
+    }
+
+    state->handle = handle;
+    memcpy((void *)state->code, saxpyshader, sizeof state->code);
+
+    float *gpuX = saxpy_x_ptr(state);
+    float *gpuY = saxpy_y_ptr(state, n);
+    memcpy(gpuX, x, n * sizeof(float));
+    memcpy(gpuY, y, n * sizeof(float));
+
+    uint32_t gpuXAddr = GPU_BASE + (uint32_t)gpuX;
+    uint32_t gpuYAddr = GPU_BASE + (uint32_t)gpuY;
+
+    for (uint32_t qpu = 0; qpu < activeQpus; qpu++)
+    {
+        /*
+         * Launch policy comes from the generic runtime. The kernel-specific
+         * launcher is responsible for packing one semantic payload per active
+         * QPU in the documented ABI order.
+         *
+         * Physical uniform stream order per QPU:
+         *   [0] x
+         *   [1] y
+         *   [2] a
+         *   [3] n
+         *   [4] qpu_id
+         *   [5] num_qpus
+         *
+         * qpu_id and num_qpus remain conceptual builtins in the compiler IR even
+         * though they are physically carried through this uniform stream suffix.
+         */
+        state->unif[qpu][0] = gpuXAddr;
+        state->unif[qpu][1] = gpuYAddr;
+        state->unif[qpu][2] = float_as_u32(a);
+        state->unif[qpu][3] = n;
+        state->unif[qpu][4] = qpu;
+        state->unif[qpu][5] = activeQpus;
+        state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu];
+    }
+
+    gpu_fft_base_exec_direct((uint32_t)state->code, (uint32_t *)state->unif_ptr, activeQpus);
+    memcpy(y, gpuY, n * sizeof(float));
+
+    mem_unlock(handle);
+    mem_free(handle);
+    return 0;
+}
+
+```
+
+### FILE: compiler/reference/saxpy/saxpy_launch.h
+
+```text
+#ifndef SAXPY_LAUNCH_H
+#define SAXPY_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+/*
+ * Compiler-owned launcher interface for the current narrow SAXPY slice.
+ *
+ * Public contract:
+ *   int saxpy_launch(struct vc4_runtime *rt, float *x, float *y, float a, uint32_t n);
+ *
+ * This interface exposes only semantic kernel arguments plus a runtime handle.
+ * It does not expose qpu_id, num_qpus, uniform packing, or other ABI internals.
+ * Launch policy such as the active QPU count comes from the generic runtime.
+ */
+int saxpy_launch(struct vc4_runtime *rt, float *x, float *y, float a, uint32_t n);
+
+#endif
+
+```
+
+### FILE: compiler/reference/saxpy/saxpyshader.c
+
+```text
+#include "saxpyshader.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef _MSC_VER
+__declspec(align(8))
+#elif defined(__GNUC__)
+__attribute__((aligned(8)))
+#endif
+uint32_t saxpyshader[130] = {
+0x15827d80, 0x10020027,
+0x15827d80, 0x10020067,
+0x15827d80, 0x100200a7,
+0x15827d80, 0x100200e7,
+0x15827d80, 0x10020127,
+0x15827d80, 0x10020167,
+0x11101dc0, 0xd00208e7,
+0x159e76c0, 0x100201a7,
+0x0c9c17c0, 0xd00201e7,
+0x11106dc0, 0xd0020827,
+0x159e7000, 0x10020227,
+0x11146dc0, 0xd00208e7,
+0x159e76c0, 0x10021527,
+0x110c2dc0, 0xd0020867,
+0x159e7240, 0x10020267,
+0x15227d80, 0x10020827,
+0x0c027c00, 0x100202a7,
+0x0c067c00, 0x100202e7,
+0x15267d80, 0x10020867,
+0x0d227c40, 0x10022867,
+0x00000128, 0xf0b809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x80011000, 0xe00208a7,
+0x11184dc0, 0xd0020867,
+0x0c9e7440, 0x10020c67,
+0x152a7d80, 0x10020ca7,
+0x15ca7d80, 0x100009e7,
+0x80011000, 0xe00208a7,
+0x111c4dc0, 0xd0020867,
+0x0c9e7440, 0x10020c67,
+0x152e7d80, 0x10020ca7,
+0x15ca7d80, 0x100009e7,
+0x00101a00, 0xe00208a7,
+0x0c1a7580, 0x10020c67,
+0x15c27d80, 0x10020827,
+0x159f2fc0, 0x100009e7,
+0x0c1e7580, 0x10020c67,
+0x15c27d80, 0x10020867,
+0x159f2fc0, 0x100009e7,
+0x200a7006, 0x100049e2,
+0x019e7440, 0x100208a7,
+0x00101a00, 0xe00208e7,
+0x0c1e7780, 0x10021c67,
+0x159e7480, 0x10020c27,
+0x159f2fc0, 0x100009e7,
+0x111c7dc0, 0xd0020867,
+0x80904000, 0xe00208a7,
+0x0c9e7440, 0x10021c67,
+0x152e7d80, 0x10021ca7,
+0x159f2fc0, 0x100009e7,
+0x0c214dc0, 0x10020227,
+0x0c294dc0, 0x100202a7,
+0x0c2d4dc0, 0x100202e7,
+0x15267d80, 0x10020867,
+0x0d227c40, 0x10022867,
+0xfffffed8, 0xf0a809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x300009e7,
+0x00000001, 0xe00209a7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7
+};
+#ifdef __HIGHC__
+#pragma Align_to(8, saxpyshader)
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+```
+
+### FILE: compiler/reference/saxpy/saxpyshader.h
+
+```text
+#ifndef saxpyshader_H
+#define saxpyshader_H
+
+#include <inttypes.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern uint32_t saxpyshader[130];
+
+
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+```
+

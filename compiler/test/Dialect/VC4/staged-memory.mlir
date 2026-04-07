@@ -1,3 +1,4 @@
+// Dialect smoke test for staged-memory VC4 ops plus vector compute.
 // RUN: vc4-opt %s | FileCheck %s
 
 module {
