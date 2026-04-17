@@ -69,10 +69,6 @@ Use the standard standalone MLIR project pattern:
 - generate TableGen headers/sources
 - build one dialect library
 - build `vc4-opt`
-- make lit discovery robust for standalone installs:
-  - honor an explicitly passed `LLVM_EXTERNAL_LIT`
-  - otherwise detect either `llvm-lit` or `lit`
-  - keep manual configure with `-DLLVM_EXTERNAL_LIT=/path/to/lit` supported
 - add a `check-vc4` lit target
 
 Do not vendor LLVM/MLIR into this repo for the first milestone.

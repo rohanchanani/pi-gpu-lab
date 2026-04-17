@@ -40,10 +40,6 @@ Required outcomes:
 
 Implementation guidance:
 - Follow the standard standalone MLIR project pattern.
-- Make lit discovery robust for standalone installs.
-- Honor an explicitly passed `LLVM_EXTERNAL_LIT`.
-- If it is not provided, detect either `llvm-lit` or `lit` in CMake with `find_program`.
-- Do not hardcode a single machine-specific path into tracked source unless it is only a hint and not a requirement.
 - Add only the smallest amount of code needed for the project to configure and build.
 - It is fine if the initial dialect has little or no op surface yet, as long as the registration/build/test scaffolding exists.
 - Prefer a stable directory layout that will support the remaining prompts.
@@ -79,9 +75,6 @@ Your job:
 - inspect the repository
 - identify any mismatches versus the expected state above
 - fix them directly
-- when configuring the build, if lit is not auto-discovered, retry configure with
-  `-DLLVM_EXTERNAL_LIT="$(command -v llvm-lit || command -v lit)"`
-- if the repository still cannot support a working `check-vc4` configuration with either auto-discovery or that explicit override, treat it as a mismatch and fix it
 - run configure/build/tests if possible
 - do not delete consistent later-stage work if it already exists
 - do not invent fragment/TLB/control-list features
