@@ -1,0 +1,12 @@
+This file is not an executable test input and is not authoritative.
+
+Use the actual `.mlir` files under `compiler/test/` as the source of truth for
+the current VC4 backend subset and inspection behavior.
+
+The canonical focused tests for the current Phase 0 backend slice are:
+
+- `compiler/test/Conversion/GPUToVC4/`
+- `compiler/test/Target/VC4Asm/`
+- `compiler/test/Dialect/VC4/`
+
+Do not treat this note as a frozen snapshot of expected IR or inspection output.

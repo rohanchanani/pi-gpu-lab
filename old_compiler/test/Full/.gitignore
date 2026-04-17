@@ -1,0 +1,5 @@
+3-test-saxpy.bin
+3-test-saxpy.list
+objs/
+saxpyshader.c
+saxpyshader.h
