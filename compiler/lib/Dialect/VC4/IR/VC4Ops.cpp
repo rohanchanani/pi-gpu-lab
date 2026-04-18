@@ -1138,5 +1138,49 @@ LogicalResult mlir::vc4::DMAWaitOp::verify() {
   return success();
 }
 
+LogicalResult mlir::vc4::MutexOp::verify() {
+  return verifyStructuredFormOp(getOperation());
+}
+
+LogicalResult mlir::vc4::SemaphoreOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  int64_t id = getIdAttr().getInt();
+  if (id < 0 || id > 15)
+    return emitOpError("semaphore 'id' attribute must be in range [0, 15]");
+  return success();
+}
+
+LogicalResult mlir::vc4::HostInterruptOp::verify() {
+  return verifyStructuredFormOp(getOperation());
+}
+
+LogicalResult mlir::vc4::ThreadSwitchOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  auto func = (*this)->getParentOfType<mlir::vc4::FuncOp>();
+  if (!func || !func.getThreading() ||
+      *func.getThreading() != mlir::vc4::ThreadingMode::threadable) {
+    return emitOpError(
+        "is only legal in functions with threading = threadable");
+  }
+  return success();
+}
+
+LogicalResult mlir::vc4::ProgramEndOp::verify() {
+  return verifyStructuredFormOp(getOperation());
+}
+
+LogicalResult mlir::vc4::AsyncWaitOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (getTokens().empty())
+    return emitOpError("requires at least one async token operand");
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "vc4/Dialect/VC4/IR/VC4Ops.cpp.inc"

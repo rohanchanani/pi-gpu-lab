@@ -51,5 +51,11 @@ def VC4_DMAOrientationAttr
     : VC4_DialectEnumAttr<VC4_DMAOrientation, "dma_orientation">;
 def VC4_DMAElemWidthAttr
     : VC4_DialectEnumAttr<VC4_DMAElemWidth, "dma_elem_width">;
+def VC4_SemaphoreModeAttr
+    : VC4_DialectEnumAttr<VC4_SemaphoreMode, "semaphore_mode">;
+def VC4_MutexModeAttr
+    : VC4_DialectEnumAttr<VC4_MutexMode, "mutex_mode">;
+def VC4_ThreadSwitchModeAttr
+    : VC4_DialectEnumAttr<VC4_ThreadSwitchMode, "thread_switch_mode">;
 
 #endif // VC4_ATTRS_TD

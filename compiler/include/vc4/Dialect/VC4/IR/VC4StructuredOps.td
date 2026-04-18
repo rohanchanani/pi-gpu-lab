@@ -361,4 +361,50 @@ def VC4_DMAWaitOp : VC4_Op<"dma.wait", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
+def VC4_MutexOp : VC4_Op<"mutex", [HasParent<"FuncOp">]> {
+  let summary = "Structured hardware mutex action";
+  let arguments = (ins VC4_MutexModeAttr:$mode);
+  let assemblyFormat = "$mode attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_SemaphoreOp : VC4_Op<"semaphore", [HasParent<"FuncOp">]> {
+  let summary = "Structured hardware semaphore action";
+  let arguments = (ins
+    VC4_SemaphoreModeAttr:$mode,
+    I32Attr:$id
+  );
+  let assemblyFormat = "$mode attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_HostInterruptOp : VC4_Op<"host_interrupt", [HasParent<"FuncOp">]> {
+  let summary = "Structured host interrupt trigger";
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_ThreadSwitchOp : VC4_Op<"thread_switch", [HasParent<"FuncOp">]> {
+  let summary = "Structured cooperative thread switch";
+  let arguments = (ins VC4_ThreadSwitchModeAttr:$mode);
+  let assemblyFormat = "$mode attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_ProgramEndOp : VC4_Op<"program_end", [HasParent<"FuncOp">]> {
+  let summary = "Structured program end signal";
+  let results = (outs);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_AsyncWaitOp : VC4_Op<"async.wait", [HasParent<"FuncOp">]> {
+  let summary = "Structured async token join";
+  let arguments = (ins Variadic<VC4_AsyncTokenType>:$tokens);
+  let results = (outs);
+  let assemblyFormat = "attr-dict ($tokens^ `:` type($tokens))?";
+  let hasVerifier = 1;
+}
+
 #endif // VC4_STRUCTURED_OPS_TD

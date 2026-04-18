@@ -281,4 +281,22 @@ def VC4_DMAElemWidth : VC4_DialectI32Enum<"DMAElemWidth",
       I32EnumAttrCase<"w32", 2>
     ]>;
 
+def VC4_SemaphoreMode : VC4_DialectI32Enum<"SemaphoreMode",
+    "VC4 hardware semaphore mode", [
+      I32EnumAttrCase<"acquire", 0>,
+      I32EnumAttrCase<"release", 1>
+    ]>;
+
+def VC4_MutexMode : VC4_DialectI32Enum<"MutexMode",
+    "VC4 hardware mutex mode", [
+      I32EnumAttrCase<"acquire", 0>,
+      I32EnumAttrCase<"release", 1>
+    ]>;
+
+def VC4_ThreadSwitchMode : VC4_DialectI32Enum<"ThreadSwitchMode",
+    "VC4 hardware thread-switch mode", [
+      I32EnumAttrCase<"thread_switch", 0, "switch">,
+      I32EnumAttrCase<"last_switch", 1>
+    ]>;
+
 #endif // VC4_ENUMS_TD
