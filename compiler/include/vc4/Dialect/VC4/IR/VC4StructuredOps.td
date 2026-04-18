@@ -224,4 +224,35 @@ def VC4_TMUDescriptorOp : VC4_Op<"tmu.descriptor", [
   let hasVerifier = 1;
 }
 
+def VC4_TMURequestOp : VC4_Op<"tmu.request", [HasParent<"FuncOp">]> {
+  let summary = "Structured TMU request enqueue";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    VC4_TMUUnitAttr:$unit
+  );
+  let results = (outs Optional<VC4_AsyncTokenType>:$token);
+  let hasVerifier = 1;
+}
+
+def VC4_TMUReadOp : VC4_Op<"tmu.read", [HasParent<"FuncOp">]> {
+  let summary = "Structured TMU receive readback";
+  let arguments = (ins
+    Optional<VC4_AsyncTokenType>:$token,
+    VC4_TMUUnitAttr:$unit,
+    VC4_TMUReadPartAttr:$part
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4_TMUNoSwapOp : VC4_Op<"tmu.noswap", [HasParent<"FuncOp">]> {
+  let summary = "Structured TMU automatic swap control";
+  let arguments = (ins
+    Optional<AnySignlessInteger>:$value,
+    OptionalAttr<BoolAttr>:$disable
+  );
+  let results = (outs);
+  let hasVerifier = 1;
+}
+
 #endif // VC4_STRUCTURED_OPS_TD

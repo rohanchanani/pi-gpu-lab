@@ -176,6 +176,25 @@ static LogicalResult verifyBinaryALUTypes(Operation *op, bool requireFloat) {
   return success();
 }
 
+static bool haveCompatibleVC4Shapes(TypeRange types) {
+  if (types.empty())
+    return true;
+  Type firstType = types.front();
+  for (Type type : types.drop_front()) {
+    if (!hasSameVC4Shape(firstType, type))
+      return false;
+  }
+  return true;
+}
+
+static std::optional<mlir::vc4::TMUMode> inferTMUModeFromDescriptor(Value value) {
+  if (!value || !isa<mlir::vc4::TMUDescType>(value.getType()))
+    return std::nullopt;
+  if (auto descriptor = value.getDefiningOp<mlir::vc4::TMUDescriptorOp>())
+    return descriptor.getMode();
+  return std::nullopt;
+}
+
 } // namespace
 
 mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
@@ -743,6 +762,147 @@ LogicalResult mlir::vc4::TMUDescriptorOp::verify() {
   }
 
   llvm_unreachable("unhandled vc4.tmu.descriptor mode");
+}
+
+LogicalResult mlir::vc4::TMURequestOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  ValueRange operands = getOperands();
+  if (operands.empty())
+    return emitOpError("requires at least one operand");
+
+  unsigned descriptorCount = llvm::count_if(operands, [](Value operand) {
+    return isa<mlir::vc4::TMUDescType>(operand.getType());
+  });
+  if (descriptorCount > 1)
+    return emitOpError("accepts at most one !vc4.tmu.desc operand");
+
+  bool hasDescriptor =
+      isa<mlir::vc4::TMUDescType>(operands.back().getType());
+  if (descriptorCount == 1 && !hasDescriptor) {
+    return emitOpError("descriptor operand must be the last operand");
+  }
+
+  ValueRange valueOperands =
+      hasDescriptor ? operands.drop_back() : operands;
+  if (valueOperands.empty()) {
+    return emitOpError(
+        "requires at least one address or coordinate operand");
+  }
+
+  auto verifyTextureOperands = [&](unsigned minCount,
+                                   unsigned maxCount) -> LogicalResult {
+    if (valueOperands.size() < minCount || valueOperands.size() > maxCount) {
+      return emitOpError() << "expects between " << minCount << " and "
+                           << maxCount
+                           << " coordinate operands for the selected TMU mode";
+    }
+    TypeRange valueOperandTypes = valueOperands.getTypes();
+    for (Type type : valueOperandTypes) {
+      if (!isVC4StructuredValueType(type)) {
+        return emitOpError("coordinate operands must be i32, f32, "
+                           "vector<16xi32>, or vector<16xf32>");
+      }
+    }
+    if (!haveCompatibleVC4Shapes(valueOperandTypes)) {
+      return emitOpError("coordinate operands must have compatible scalar or "
+                         "16-lane vector shapes");
+    }
+    return success();
+  };
+
+  if (!hasDescriptor) {
+    if (valueOperands.size() != 1) {
+      return emitOpError(
+          "requests without a descriptor are only legal in direct mode and "
+          "require exactly one address operand");
+    }
+    if (!isI32OrVector16I32(valueOperands.front().getType())) {
+      return emitOpError(
+          "direct-mode address operand must be i32 or vector<16xi32>");
+    }
+    return success();
+  }
+
+  std::optional<mlir::vc4::TMUMode> mode =
+      inferTMUModeFromDescriptor(operands.back());
+  if (!mode)
+    return verifyTextureOperands(/*minCount=*/1, /*maxCount=*/4);
+
+  switch (*mode) {
+  case mlir::vc4::TMUMode::direct:
+    if (valueOperands.size() != 1) {
+      return emitOpError(
+          "direct-mode descriptors require exactly one address operand");
+    }
+    if (!isI32OrVector16I32(valueOperands.front().getType())) {
+      return emitOpError(
+          "direct-mode address operand must be i32 or vector<16xi32>");
+    }
+    return success();
+  case mlir::vc4::TMUMode::texture2d:
+    return verifyTextureOperands(/*minCount=*/1, /*maxCount=*/3);
+  case mlir::vc4::TMUMode::cubemap:
+    return verifyTextureOperands(/*minCount=*/3, /*maxCount=*/4);
+  }
+
+  llvm_unreachable("unhandled vc4.tmu.request mode");
+}
+
+LogicalResult mlir::vc4::TMUReadOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (Value token = getToken()) {
+    if (Operation *definingOp = token.getDefiningOp()) {
+      auto request = dyn_cast<mlir::vc4::TMURequestOp>(definingOp);
+      if (!request) {
+        return emitOpError(
+            "token operand must come from vc4.tmu.request or be a block argument");
+      }
+      if (request.getUnit() != getUnit()) {
+        return emitOpError("token unit must match the selected read unit");
+      }
+    }
+  }
+
+  switch (getPart()) {
+  case mlir::vc4::TMUReadPart::raw32:
+    if (!isVC4StructuredValueType(getResult().getType())) {
+      return emitOpError("part = raw32 requires i32, f32, vector<16xi32>, "
+                         "or vector<16xf32> result type");
+    }
+    return success();
+  case mlir::vc4::TMUReadPart::rgba8888:
+  case mlir::vc4::TMUReadPart::rg1616:
+  case mlir::vc4::TMUReadPart::ba1616:
+    if (!isI32OrVector16I32(getResult().getType())) {
+      return emitOpError("packed TMU read parts require i32 or vector<16xi32> "
+                         "result type");
+    }
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.tmu.read part");
+}
+
+LogicalResult mlir::vc4::TMUNoSwapOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  bool hasValue = static_cast<bool>(getValue());
+  bool hasDisableAttr = static_cast<bool>(getDisableAttr());
+  if (hasValue == hasDisableAttr) {
+    return emitOpError(
+        "requires exactly one of a value operand or a 'disable' attribute");
+  }
+
+  if (hasValue && isa<VectorType>(getValue().getType())) {
+    return emitOpError("value operand must be a scalar signless integer");
+  }
+
+  return success();
 }
 
 #define GET_OP_CLASSES
