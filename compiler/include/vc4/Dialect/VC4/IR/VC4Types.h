@@ -1,4 +1,4 @@
-//===- VC4Types.h - VC4 type declarations ----------------------*- C++ -*-===//
+//===- VC4Types.h - VC4 dialect types --------------------------*- C++ -*-===//
 //
 // Part of the LLVM Project, under the Apache License v2.0 with LLVM
 // Exceptions.
@@ -11,6 +11,7 @@
 
 #include "mlir/IR/Types.h"
 
-namespace mlir::vc4 {} // namespace mlir::vc4
+#define GET_TYPEDEF_CLASSES
+#include "vc4/Dialect/VC4/IR/VC4Types.h.inc"
 
 #endif // VC4_DIALECT_VC4_IR_VC4TYPES_H

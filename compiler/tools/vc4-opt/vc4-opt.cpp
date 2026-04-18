@@ -6,7 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vc4/Dialect/VC4/IR/VC4Dialect.h"
+#include "vc4/Dialect/VC4/IR/VC4Ops.h"
 
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"

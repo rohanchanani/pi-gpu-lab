@@ -6,11 +6,20 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "vc4/Dialect/VC4/IR/VC4Dialect.h"
+#include "vc4/Dialect/VC4/IR/VC4Ops.h"
 
 using namespace mlir;
 using namespace mlir::vc4;
 
 #include "vc4/Dialect/VC4/IR/VC4Dialect.cpp.inc"
 
-void VC4Dialect::initialize() {}
+void VC4Dialect::initialize() {
+  addTypes<
+#define GET_TYPEDEF_LIST
+#include "vc4/Dialect/VC4/IR/VC4Types.cpp.inc"
+      >();
+  addOperations<
+#define GET_OP_LIST
+#include "vc4/Dialect/VC4/IR/VC4Ops.cpp.inc"
+      >();
+}
