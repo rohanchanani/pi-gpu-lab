@@ -130,6 +130,16 @@ static LogicalResult verifyStructuredFormOp(Operation *op) {
   return success();
 }
 
+static LogicalResult verifyScheduledFormOp(Operation *op) {
+  auto func = op->getParentOfType<mlir::vc4::FuncOp>();
+  if (!func)
+    return op->emitOpError("must be nested in a vc4.func");
+  if (!func.getForm() ||
+      *func.getForm() != mlir::vc4::FunctionForm::scheduled)
+    return op->emitOpError("is only legal in functions with form = scheduled");
+  return success();
+}
+
 static bool isVC4QPUOp(Operation &op) {
   return op.getName().getStringRef().starts_with("vc4.qpu.");
 }
@@ -300,6 +310,79 @@ static std::optional<mlir::vc4::DMADescKind> inferDMADescKindFromToken(Value tok
   return std::nullopt;
 }
 
+static LogicalResult verifyQPUWriteAddressAttr(Operation *op, StringRef attrName,
+                                               IntegerAttr attr) {
+  if (!attr || !attr.getType().isSignlessInteger(32)) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be signless i32";
+  }
+  int64_t value = attr.getInt();
+  if (value < 0 || value > 63) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be in range [0, 63]";
+  }
+  return success();
+}
+
+static LogicalResult verifyQPUPackAttr(Operation *op, bool pm, Attribute packAttr) {
+  if (!packAttr)
+    return success();
+
+  if (!pm) {
+    if (!isa<mlir::vc4::RegfileAPackModeAttr>(packAttr)) {
+      return op->emitOpError(
+          "pm = false requires 'pack' to use #vc4.regfile_a_pack_mode");
+    }
+    return success();
+  }
+
+  if (!isa<mlir::vc4::MulPackModeAttr>(packAttr)) {
+    return op->emitOpError(
+        "pm = true requires 'pack' to use #vc4.mul_pack_mode");
+  }
+  return success();
+}
+
+static LogicalResult verifyQPULoadImmPayload(Operation *op,
+                                             mlir::vc4::LoadImmMode mode,
+                                             Attribute valueAttr) {
+  switch (mode) {
+  case mlir::vc4::LoadImmMode::splat32: {
+    auto intAttr = dyn_cast<IntegerAttr>(valueAttr);
+    if (!intAttr || !intAttr.getType().isSignlessInteger(32)) {
+      return op->emitOpError(
+          "splat32 mode requires a signless i32 'value' attribute");
+    }
+    return success();
+  }
+  case mlir::vc4::LoadImmMode::per_elem_i2:
+  case mlir::vc4::LoadImmMode::per_elem_u2: {
+    auto valuesAttr = dyn_cast<DenseI32ArrayAttr>(valueAttr);
+    if (!valuesAttr) {
+      return op->emitOpError(
+          "per-element mode requires a dense i32 array 'value' attribute");
+    }
+    if (valuesAttr.asArrayRef().size() != 16)
+      return op->emitOpError("per-element mode requires exactly 16 lane values");
+    int32_t minValue =
+        mode == mlir::vc4::LoadImmMode::per_elem_i2 ? -2 : 0;
+    int32_t maxValue =
+        mode == mlir::vc4::LoadImmMode::per_elem_i2 ? 1 : 3;
+    for (int32_t laneValue : valuesAttr.asArrayRef()) {
+      if (laneValue < minValue || laneValue > maxValue) {
+        return op->emitOpError() << "lane values for mode "
+                                 << mlir::vc4::stringifyLoadImmMode(mode)
+                                 << " must be in range [" << minValue << ", "
+                                 << maxValue << "]";
+      }
+    }
+    return success();
+  }
+  }
+
+  llvm_unreachable("unhandled vc4.qpu.ldi mode");
+}
+
 } // namespace
 
 mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
@@ -401,6 +484,15 @@ LogicalResult mlir::vc4::FuncOp::verify() {
   mlir::vc4::FunctionForm form = *getForm();
   if (isExternal())
     return success();
+
+  if (form == mlir::vc4::FunctionForm::structured) {
+    for (Block &block : getBody()) {
+      if (block.empty() || !block.back().mightHaveTrait<OpTrait::IsTerminator>()) {
+        return emitOpError(
+            "structured functions require every block to end in a terminator");
+      }
+    }
+  }
 
   bool sawError = false;
   getBody().walk([&](Operation *op) {
@@ -1490,6 +1582,45 @@ LogicalResult mlir::vc4::V3DConfigureOp::verify() {
 
 void mlir::vc4::V3DConfigureOp::getEffects(MemoryEffectList &effects) {
   addWriteEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
+LogicalResult mlir::vc4::QPULDIOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  if (failed(verifyQPULoadImmPayload(getOperation(), getMode(), getValueAttr())))
+    return failure();
+  if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+    return failure();
+  return success();
+}
+
+void mlir::vc4::QPUSemaOp::getEffects(MemoryEffectList &effects) {
+  addReadWriteEffects<mlir::vc4::effects::Semaphore>(effects);
+}
+
+LogicalResult mlir::vc4::QPUSemaOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  int64_t id = getIdAttr().getInt();
+  if (id < 0 || id > 15)
+    return emitOpError("'id' attribute must be in range [0, 15]");
+  if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+    return failure();
+  return success();
 }
 
 #define GET_OP_CLASSES

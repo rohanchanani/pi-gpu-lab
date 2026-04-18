@@ -41,7 +41,7 @@ def VC4_ModuleOp : VC4_Op<"module", [
 }
 
 def VC4_FuncOp : VC4_Op<"func", [
-    FunctionOpInterface, IsolatedFromAbove, OpAsmOpInterface
+    FunctionOpInterface, IsolatedFromAbove, OpAsmOpInterface, NoTerminator
   ]> {
   let summary = "VC4 target function";
   let arguments = (ins
@@ -456,6 +456,42 @@ def VC4_V3DConfigureOp : VC4_MemoryEffectOp<"v3d.configure", [HasParent<"FuncOp"
     VC4_V3DConfigureKindAttr:$kind
   );
   let results = (outs);
+  let hasVerifier = 1;
+}
+
+def VC4_QPULDIOp : VC4_Op<"qpu.ldi", [HasParent<"FuncOp">]> {
+  let summary = "Scheduled VC4 load-immediate instruction";
+  let arguments = (ins
+    VC4_LoadImmModeAttr:$mode,
+    AnyAttr:$value,
+    BoolAttr:$pm,
+    OptionalAttr<AnyAttr>:$pack,
+    VC4_CondAttr:$cond_add,
+    VC4_CondAttr:$cond_mul,
+    OptionalAttr<UnitAttr>:$set_flags,
+    OptionalAttr<UnitAttr>:$write_swap,
+    I32Attr:$waddr_add,
+    I32Attr:$waddr_mul
+  );
+  let assemblyFormat = "$mode attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema", [HasParent<"FuncOp">]> {
+  let summary = "Scheduled VC4 semaphore instruction";
+  let arguments = (ins
+    VC4_SemaphoreModeAttr:$mode,
+    I32Attr:$id,
+    BoolAttr:$pm,
+    OptionalAttr<AnyAttr>:$pack,
+    VC4_CondAttr:$cond_add,
+    VC4_CondAttr:$cond_mul,
+    OptionalAttr<UnitAttr>:$set_flags,
+    OptionalAttr<UnitAttr>:$write_swap,
+    I32Attr:$waddr_add,
+    I32Attr:$waddr_mul
+  );
+  let assemblyFormat = "$mode attr-dict";
   let hasVerifier = 1;
 }
 
