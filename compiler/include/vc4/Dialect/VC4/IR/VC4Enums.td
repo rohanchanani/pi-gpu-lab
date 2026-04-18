@@ -299,4 +299,44 @@ def VC4_ThreadSwitchMode : VC4_DialectI32Enum<"ThreadSwitchMode",
       I32EnumAttrCase<"last_switch", 1>
     ]>;
 
+def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
+    "VC4 structured branch condition", [
+      I32EnumAttrCase<"all_z_set", 0>,
+      I32EnumAttrCase<"all_z_clear", 1>,
+      I32EnumAttrCase<"any_z_set", 2>,
+      I32EnumAttrCase<"any_z_clear", 3>,
+      I32EnumAttrCase<"all_n_set", 4>,
+      I32EnumAttrCase<"all_n_clear", 5>,
+      I32EnumAttrCase<"any_n_set", 6>,
+      I32EnumAttrCase<"any_n_clear", 7>,
+      I32EnumAttrCase<"all_c_set", 8>,
+      I32EnumAttrCase<"all_c_clear", 9>,
+      I32EnumAttrCase<"any_c_set", 10>,
+      I32EnumAttrCase<"any_c_clear", 11>,
+      I32EnumAttrCase<"always", 12>
+    ]>;
+
+def VC4_V3DQueryKind : VC4_DialectI32Enum<"V3DQueryKind",
+    "VC4 V3D system query kind", [
+      I32EnumAttrCase<"ident", 0>,
+      I32EnumAttrCase<"queue_status", 1>,
+      I32EnumAttrCase<"perf_counter", 2>,
+      I32EnumAttrCase<"interrupt_status", 3>,
+      I32EnumAttrCase<"error_status", 4>,
+      I32EnumAttrCase<"scratch", 5>
+    ]>;
+
+def VC4_V3DConfigureKind : VC4_DialectI32Enum<"V3DConfigureKind",
+    "VC4 V3D system configure kind", [
+      I32EnumAttrCase<"cache_control", 0>,
+      I32EnumAttrCase<"interrupt_enable", 1>,
+      I32EnumAttrCase<"interrupt_disable", 2>,
+      I32EnumAttrCase<"perf_map", 3>,
+      I32EnumAttrCase<"perf_clear", 4>,
+      I32EnumAttrCase<"perf_enable", 5>,
+      I32EnumAttrCase<"vpm_reservation", 6>,
+      I32EnumAttrCase<"vpm_allocator", 7>,
+      I32EnumAttrCase<"scratch", 8>
+    ]>;
+
 #endif // VC4_ENUMS_TD

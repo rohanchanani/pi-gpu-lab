@@ -57,5 +57,11 @@ def VC4_MutexModeAttr
     : VC4_DialectEnumAttr<VC4_MutexMode, "mutex_mode">;
 def VC4_ThreadSwitchModeAttr
     : VC4_DialectEnumAttr<VC4_ThreadSwitchMode, "thread_switch_mode">;
+def VC4_BranchCondAttr
+    : VC4_DialectEnumAttr<VC4_BranchCond, "branch_cond">;
+def VC4_V3DQueryKindAttr
+    : VC4_DialectEnumAttr<VC4_V3DQueryKind, "v3d_query_kind">;
+def VC4_V3DConfigureKindAttr
+    : VC4_DialectEnumAttr<VC4_V3DConfigureKind, "v3d_configure_kind">;
 
 #endif // VC4_ATTRS_TD

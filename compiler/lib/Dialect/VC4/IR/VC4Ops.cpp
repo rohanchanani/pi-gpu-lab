@@ -9,6 +9,7 @@
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -1180,6 +1181,135 @@ LogicalResult mlir::vc4::AsyncWaitOp::verify() {
   if (getTokens().empty())
     return emitOpError("requires at least one async token operand");
   return success();
+}
+
+LogicalResult mlir::vc4::CFBranchOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  unsigned numSuccessors = getNumSuccessors();
+  if (getCond() == mlir::vc4::BranchCond::always) {
+    if (numSuccessors != 1)
+      return emitOpError("cond = always requires exactly one successor");
+    return success();
+  }
+
+  if (numSuccessors != 2)
+    return emitOpError("conditional branch requires exactly two successors");
+  return success();
+}
+
+mlir::SuccessorOperands mlir::vc4::CFBranchOp::getSuccessorOperands(unsigned index) {
+  assert(index < getNumSuccessors() && "successor index out of range");
+  return mlir::SuccessorOperands(
+      mlir::MutableOperandRange(getOperation(), /*start=*/0, /*length=*/0));
+}
+
+LogicalResult mlir::vc4::EnqueueQPUOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (getNumOperands() != 0 && getNumOperands() != 2) {
+    return emitOpError(
+        "supports either no operands or exactly two operands for uniforms base and length");
+  }
+  if (getNumOperands() == 2) {
+    if (!isScalarSignlessIntegerOrIndex(getOperand(0).getType()) ||
+        !isScalarSignlessIntegerOrIndex(getOperand(1).getType())) {
+      return emitOpError(
+          "uniforms base and length operands must be scalar signless integers or index");
+    }
+  }
+
+  Operation *symbol = SymbolTable::lookupNearestSymbolFrom(getOperation(), getEntryAttr());
+  auto func = dyn_cast_or_null<mlir::vc4::FuncOp>(symbol);
+  if (!func)
+    return emitOpError("referenced 'entry' must resolve to a vc4.func symbol");
+  if (!func.getKernelAttr())
+    return emitOpError("referenced function must be marked with the 'kernel' attribute");
+  return success();
+}
+
+LogicalResult mlir::vc4::ReserveQPUOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  int64_t mask = getMaskAttr().getInt();
+  if (mask < 0 || mask > 0xFFF)
+    return emitOpError("mask attribute must fit the 12-QPU target range [0, 4095]");
+  return success();
+}
+
+LogicalResult mlir::vc4::V3DQueryOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  auto verifyScalarIntLike = [&](Type type, StringRef what) -> LogicalResult {
+    if (!isScalarSignlessIntegerOrIndex(type)) {
+      return emitOpError() << what
+                           << " must be a scalar signless integer or index";
+    }
+    return success();
+  };
+
+  if (getNumResults() != 1)
+    return emitOpError("currently requires exactly one result");
+  if (failed(verifyScalarIntLike(getResult(0).getType(), "result type")))
+    return failure();
+
+  switch (getKind()) {
+  case mlir::vc4::V3DQueryKind::ident:
+  case mlir::vc4::V3DQueryKind::queue_status:
+  case mlir::vc4::V3DQueryKind::interrupt_status:
+  case mlir::vc4::V3DQueryKind::error_status:
+    if (getNumOperands() != 0)
+      return emitOpError("selected query kind does not accept selector operands");
+    return success();
+  case mlir::vc4::V3DQueryKind::perf_counter:
+  case mlir::vc4::V3DQueryKind::scratch:
+    if (getNumOperands() != 1)
+      return emitOpError("selected query kind requires exactly one selector operand");
+    return verifyScalarIntLike(getOperand(0).getType(), "selector operand");
+  }
+
+  llvm_unreachable("unhandled vc4.v3d.query kind");
+}
+
+LogicalResult mlir::vc4::V3DConfigureOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  auto verifyScalarOperands = [&](unsigned expected) -> LogicalResult {
+    if (getNumOperands() != expected) {
+      return emitOpError() << "selected configure kind requires exactly "
+                           << expected << " payload operand"
+                           << (expected == 1 ? "" : "s");
+    }
+    for (Type type : getOperandTypes()) {
+      if (!isScalarSignlessIntegerOrIndex(type)) {
+        return emitOpError(
+            "payload operands must be scalar signless integers or index");
+      }
+    }
+    return success();
+  };
+
+  switch (getKind()) {
+  case mlir::vc4::V3DConfigureKind::cache_control:
+  case mlir::vc4::V3DConfigureKind::interrupt_enable:
+  case mlir::vc4::V3DConfigureKind::interrupt_disable:
+  case mlir::vc4::V3DConfigureKind::perf_enable:
+  case mlir::vc4::V3DConfigureKind::vpm_reservation:
+  case mlir::vc4::V3DConfigureKind::vpm_allocator:
+    return verifyScalarOperands(/*expected=*/1);
+  case mlir::vc4::V3DConfigureKind::perf_map:
+  case mlir::vc4::V3DConfigureKind::scratch:
+    return verifyScalarOperands(/*expected=*/2);
+  case mlir::vc4::V3DConfigureKind::perf_clear:
+    return verifyScalarOperands(/*expected=*/0);
+  }
+
+  llvm_unreachable("unhandled vc4.v3d.configure kind");
 }
 
 #define GET_OP_CLASSES

@@ -8,6 +8,7 @@ include "vc4/Dialect/VC4/IR/VC4Types.td"
 
 include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
@@ -404,6 +405,53 @@ def VC4_AsyncWaitOp : VC4_Op<"async.wait", [HasParent<"FuncOp">]> {
   let arguments = (ins Variadic<VC4_AsyncTokenType>:$tokens);
   let results = (outs);
   let assemblyFormat = "attr-dict ($tokens^ `:` type($tokens))?";
+  let hasVerifier = 1;
+}
+
+def VC4_CFBranchOp : VC4_Op<"cf.branch", [
+    DeclareOpInterfaceMethods<BranchOpInterface>, HasParent<"FuncOp">,
+    Pure, Terminator
+  ]> {
+  let summary = "Structured hardware-facing flag branch";
+  let arguments = (ins VC4_BranchCondAttr:$cond);
+  let successors = (successor VariadicSuccessor<AnySuccessor>:$successors);
+  let hasVerifier = 1;
+}
+
+def VC4_EnqueueQPUOp : VC4_Op<"enqueue_qpu", [HasParent<"FuncOp">]> {
+  let summary = "Structured QPU scheduler enqueue";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    FlatSymbolRefAttr:$entry
+  );
+  let results = (outs Optional<VC4_AsyncTokenType>:$token);
+  let hasVerifier = 1;
+}
+
+def VC4_ReserveQPUOp : VC4_Op<"reserve_qpu", [HasParent<"FuncOp">]> {
+  let summary = "Structured QPU reservation control";
+  let arguments = (ins I32Attr:$mask);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_V3DQueryOp : VC4_Op<"v3d.query", [HasParent<"FuncOp">]> {
+  let summary = "Structured V3D system query";
+  let arguments = (ins
+    Variadic<AnyType>:$selectors,
+    VC4_V3DQueryKindAttr:$kind
+  );
+  let results = (outs Variadic<AnyType>:$results);
+  let hasVerifier = 1;
+}
+
+def VC4_V3DConfigureOp : VC4_Op<"v3d.configure", [HasParent<"FuncOp">]> {
+  let summary = "Structured V3D system configure";
+  let arguments = (ins
+    Variadic<AnyType>:$payloads,
+    VC4_V3DConfigureKindAttr:$kind
+  );
+  let results = (outs);
   let hasVerifier = 1;
 }
 
