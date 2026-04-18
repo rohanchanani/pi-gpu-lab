@@ -8,12 +8,23 @@
 
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 
+#include "mlir/IR/Builders.h"
+#include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
+
 using namespace mlir;
 using namespace mlir::vc4;
+
+#define GET_ATTRDEF_CLASSES
+#include "vc4/Dialect/VC4/IR/VC4AttrDefs.cpp.inc"
 
 #include "vc4/Dialect/VC4/IR/VC4Dialect.cpp.inc"
 
 void VC4Dialect::initialize() {
+  addAttributes<
+#define GET_ATTRDEF_LIST
+#include "vc4/Dialect/VC4/IR/VC4AttrDefs.cpp.inc"
+      >();
   addTypes<
 #define GET_TYPEDEF_LIST
 #include "vc4/Dialect/VC4/IR/VC4Types.cpp.inc"

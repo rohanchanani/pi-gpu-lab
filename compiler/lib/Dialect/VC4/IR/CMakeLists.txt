@@ -5,6 +5,7 @@ add_mlir_dialect_library(VC4Dialect
   VC4Ops.cpp
 
   DEPENDS
+    VC4AttrDefsIncGen
     VC4DialectIncGen
     VC4EnumsIncGen
     VC4TypesIncGen

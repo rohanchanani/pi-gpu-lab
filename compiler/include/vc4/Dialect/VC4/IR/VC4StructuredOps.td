@@ -2,7 +2,8 @@
 #define VC4_STRUCTURED_OPS_TD
 
 include "vc4/Dialect/VC4/IR/VC4Base.td"
-include "vc4/Dialect/VC4/IR/VC4Enums.td"
+include "vc4/Dialect/VC4/IR/VC4Attrs.td"
+include "vc4/Dialect/VC4/IR/VC4OpEnums.td"
 include "vc4/Dialect/VC4/IR/VC4Types.td"
 
 include "mlir/IR/BuiltinTypes.td"
@@ -83,6 +84,84 @@ def VC4_BuiltinOp : VC4_Op<"builtin", [Pure, HasParent<"FuncOp">]> {
   let arguments = (ins VC4_BuiltinKindAttr:$kind);
   let results = (outs AnyType:$result);
   let hasCustomAssemblyFormat = 1;
+  let hasVerifier = 1;
+}
+
+def VC4_UniformReadOp : VC4_Op<"uniform.read", [
+    HasParent<"FuncOp">, MemoryEffects<[MemRead]>
+  ]> {
+  let summary = "Read one element from the uniform stream";
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_UniformSeekOp : VC4_Op<"uniform.seek", [
+    HasParent<"FuncOp">, MemoryEffects<[MemWrite]>
+  ]> {
+  let summary = "Reset or adjust the uniform stream pointer";
+  let arguments = (ins
+    AnySignlessIntegerOrIndex:$offset,
+    DefaultValuedAttr<BoolAttr, "false">:$relative
+  );
+  let assemblyFormat = "$offset attr-dict `:` type($offset)";
+  let hasVerifier = 1;
+}
+
+def VC4_MovOp : VC4_Op<"mov", [
+    Pure, SameOperandsAndResultType, HasParent<"FuncOp">
+  ]> {
+  let summary = "Structured identity move";
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_ReadOp : VC4_Op<"read", [
+    SameOperandsAndResultType, HasParent<"FuncOp">
+  ]> {
+  let summary = "Structured vc4asm-style pseudo read";
+  let arguments = (ins AnyType:$source);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$source attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_ALUAddOp : VC4_Op<"alu.add", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 ADD-pipe operation";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    VC4_AddOpcodeAttr:$op,
+    VC4_CondAttr:$cond,
+    OptionalAttr<UnitAttr>:$set_flags
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$op $operands attr-dict `:` functional-type($operands, results)";
+  let hasVerifier = 1;
+}
+
+def VC4_ALUMulOp : VC4_Op<"alu.mul", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 MUL-pipe operation";
+  let arguments = (ins
+    Variadic<AnyType>:$operands,
+    VC4_MulOpcodeAttr:$op,
+    VC4_CondAttr:$cond,
+    OptionalAttr<UnitAttr>:$set_flags
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$op $operands attr-dict `:` functional-type($operands, results)";
+  let hasVerifier = 1;
+}
+
+def VC4_LoadImmOp : VC4_Op<"load_imm", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 load-immediate materialization";
+  let arguments = (ins
+    VC4_LoadImmModeAttr:$mode,
+    OptionalAttr<AnyAttr>:$value
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
   let hasVerifier = 1;
 }
 

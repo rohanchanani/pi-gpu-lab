@@ -9,8 +9,8 @@
 #ifndef VC4_DIALECT_VC4_IR_VC4OPS_H
 #define VC4_DIALECT_VC4_IR_VC4OPS_H
 
+#include "vc4/Dialect/VC4/IR/VC4Attrs.h"
 #include "vc4/Dialect/VC4/IR/VC4Dialect.h"
-#include "vc4/Dialect/VC4/IR/VC4Enums.h"
 #include "vc4/Dialect/VC4/IR/VC4Types.h"
 
 #include "mlir/IR/BuiltinTypes.h"
@@ -18,6 +18,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/ControlFlowInterfaces.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Interfaces/InferTypeOpInterface.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #define GET_OP_CLASSES

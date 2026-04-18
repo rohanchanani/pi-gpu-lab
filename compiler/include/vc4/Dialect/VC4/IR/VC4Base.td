@@ -10,6 +10,7 @@ def VC4_Dialect : Dialect {
   let description = [{
     Dialect shell for the compute-focused VC4 MLIR target IR.
   }];
+  let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
 }
 
