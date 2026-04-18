@@ -31,3 +31,4 @@ indexshader.h
 staff/
 2-mandelbrot copy/
 old_compiler/build/
+compiler/build*
