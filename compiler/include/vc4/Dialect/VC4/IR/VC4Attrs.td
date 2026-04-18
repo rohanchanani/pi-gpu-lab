@@ -43,5 +43,13 @@ def VC4_VPMLaneModeAttr
     : VC4_DialectEnumAttr<VC4_VPMLaneMode, "vpm_lane_mode">;
 def VC4_VPMElemWidthAttr
     : VC4_DialectEnumAttr<VC4_VPMElemWidth, "vpm_elem_width">;
+def VC4_DMADescKindAttr
+    : VC4_DialectEnumAttr<VC4_DMADescKind, "dma_desc_kind">;
+def VC4_DMABlockModeAttr
+    : VC4_DialectEnumAttr<VC4_DMABlockMode, "dma_block_mode">;
+def VC4_DMAOrientationAttr
+    : VC4_DialectEnumAttr<VC4_DMAOrientation, "dma_orientation">;
+def VC4_DMAElemWidthAttr
+    : VC4_DialectEnumAttr<VC4_DMAElemWidth, "dma_elem_width">;
 
 #endif // VC4_ATTRS_TD

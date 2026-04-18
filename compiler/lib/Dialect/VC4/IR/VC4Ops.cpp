@@ -218,6 +218,15 @@ inferVPMDescKindFromDescriptor(Value value) {
   return std::nullopt;
 }
 
+static std::optional<mlir::vc4::DMADescKind>
+inferDMADescKindFromDescriptor(Value value) {
+  if (!value || !isa<mlir::vc4::DMADescType>(value.getType()))
+    return std::nullopt;
+  if (auto descriptor = value.getDefiningOp<mlir::vc4::DMADescriptorOp>())
+    return descriptor.getKind();
+  return std::nullopt;
+}
+
 } // namespace
 
 mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
@@ -1005,6 +1014,126 @@ LogicalResult mlir::vc4::VPMWriteOp::verify() {
       inferVPMDescKindFromDescriptor(getDescriptor());
   if (kind && *kind != mlir::vc4::VPMDescKind::write)
     return emitOpError("descriptor kind must be <write>");
+
+  return success();
+}
+
+LogicalResult mlir::vc4::DMADescriptorOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "start_offset",
+                                      getStartOffsetAttr())))
+    return failure();
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "mpitch",
+                                      getMpitchAttr())))
+    return failure();
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "vpitch",
+                                      getVpitchAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "nrows", getNrowsAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "rowlen", getRowlenAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "units", getUnitsAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "depth", getDepthAttr())))
+    return failure();
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "vpm_base",
+                                      getVpmBaseAttr())))
+    return failure();
+  if (failed(
+          verifyNonNegativeI32Attr(getOperation(), "stride", getStrideAttr())))
+    return failure();
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "extended_stride",
+                                      getExtendedStrideAttr())))
+    return failure();
+
+  if (auto startOffset = getStartOffsetAttr()) {
+    if (startOffset.getInt() > 3) {
+      return emitOpError(
+          "'start_offset' attribute must be in range [0, 3]");
+    }
+  }
+
+  if (static_cast<bool>(getMpitchAttr()) != static_cast<bool>(getVpitchAttr())) {
+    return emitOpError(
+        "requires 'mpitch' and 'vpitch' to be provided together");
+  }
+  if (static_cast<bool>(getNrowsAttr()) != static_cast<bool>(getRowlenAttr())) {
+    return emitOpError(
+        "requires 'nrows' and 'rowlen' to be provided together");
+  }
+  if (getExtendedStrideAttr() && !getStrideAttr()) {
+    return emitOpError(
+        "'extended_stride' requires the base 'stride' attribute");
+  }
+  if (getUnitsAttr() && getDepthAttr()) {
+    return emitOpError(
+        "must not specify both 'units' and 'depth' in one descriptor");
+  }
+
+  switch (getKind()) {
+  case mlir::vc4::DMADescKind::load:
+  case mlir::vc4::DMADescKind::store:
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.dma.desc kind");
+}
+
+LogicalResult mlir::vc4::DMAStartOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (!isScalarSignlessIntegerOrIndex(getBase().getType())) {
+    return emitOpError("base address must be a scalar signless integer or index");
+  }
+
+  std::optional<mlir::vc4::DMADescKind> kind =
+      inferDMADescKindFromDescriptor(getDescriptor());
+  if (kind && *kind != mlir::vc4::DMADescKind::load &&
+      *kind != mlir::vc4::DMADescKind::store) {
+    return emitOpError("descriptor kind must be <load> or <store>");
+  }
+  return success();
+}
+
+LogicalResult mlir::vc4::DMAStatusOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  Type resultType = getResult().getType();
+  if (!resultType.isSignlessIntOrIndex() || isa<VectorType>(resultType)) {
+    return emitOpError("result type must be a scalar signless integer or index");
+  }
+  return success();
+}
+
+LogicalResult mlir::vc4::DMAWaitOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  bool hasToken = static_cast<bool>(getToken());
+  bool hasKind = static_cast<bool>(getKindAttr());
+  if (hasToken == hasKind) {
+    return emitOpError(
+        "requires exactly one of a token operand or a 'kind' attribute");
+  }
+
+  if (Value token = getToken()) {
+    if (Operation *definingOp = token.getDefiningOp()) {
+      auto start = dyn_cast<mlir::vc4::DMAStartOp>(definingOp);
+      if (!start) {
+        return emitOpError(
+            "token operand must come from vc4.dma.start or be a block argument");
+      }
+    }
+  }
 
   return success();
 }

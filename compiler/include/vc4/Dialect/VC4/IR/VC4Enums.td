@@ -256,4 +256,29 @@ def VC4_VPMElemWidth : VC4_DialectI32Enum<"VPMElemWidth",
       I32EnumAttrCase<"w32", 2>
     ]>;
 
+def VC4_DMADescKind : VC4_DialectI32Enum<"DMADescKind",
+    "VC4 DMA descriptor direction", [
+      I32EnumAttrCase<"load", 0>,
+      I32EnumAttrCase<"store", 1>
+    ]>;
+
+def VC4_DMABlockMode : VC4_DialectI32Enum<"DMABlockMode",
+    "VC4 DMA block layout mode", [
+      I32EnumAttrCase<"row_row", 0>,
+      I32EnumAttrCase<"packed_rows", 1>
+    ]>;
+
+def VC4_DMAOrientation : VC4_DialectI32Enum<"DMAOrientation",
+    "VC4 DMA orientation", [
+      I32EnumAttrCase<"horizontal", 0>,
+      I32EnumAttrCase<"vertical", 1>
+    ]>;
+
+def VC4_DMAElemWidth : VC4_DialectI32Enum<"DMAElemWidth",
+    "VC4 DMA transfer element width", [
+      I32EnumAttrCase<"w8", 0>,
+      I32EnumAttrCase<"w16", 1>,
+      I32EnumAttrCase<"w32", 2>
+    ]>;
+
 #endif // VC4_ENUMS_TD

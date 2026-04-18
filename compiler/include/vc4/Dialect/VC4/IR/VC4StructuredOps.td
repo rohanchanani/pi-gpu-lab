@@ -308,4 +308,57 @@ def VC4_VPMWriteOp : VC4_Op<"vpm.write", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
+def VC4_DMADescriptorOp : VC4_Op<"dma.desc", [
+    Pure, HasParent<"FuncOp">
+  ]> {
+  let summary = "Structured DMA descriptor construction";
+  let arguments = (ins
+    VC4_DMADescKindAttr:$kind,
+    VC4_DMABlockModeAttr:$block_mode,
+    VC4_DMAOrientationAttr:$orientation,
+    VC4_DMAElemWidthAttr:$elem_width,
+    OptionalAttr<I32Attr>:$start_offset,
+    OptionalAttr<I32Attr>:$mpitch,
+    OptionalAttr<I32Attr>:$vpitch,
+    OptionalAttr<I32Attr>:$nrows,
+    OptionalAttr<I32Attr>:$rowlen,
+    OptionalAttr<I32Attr>:$units,
+    OptionalAttr<I32Attr>:$depth,
+    OptionalAttr<I32Attr>:$vpm_base,
+    OptionalAttr<I32Attr>:$stride,
+    OptionalAttr<I32Attr>:$extended_stride
+  );
+  let results = (outs VC4_DMADescType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_DMAStartOp : VC4_Op<"dma.start", [HasParent<"FuncOp">]> {
+  let summary = "Structured DMA start";
+  let arguments = (ins
+    VC4_DMADescType:$descriptor,
+    AnyType:$base
+  );
+  let results = (outs Optional<VC4_AsyncTokenType>:$token);
+  let hasVerifier = 1;
+}
+
+def VC4_DMAStatusOp : VC4_Op<"dma.status", [HasParent<"FuncOp">]> {
+  let summary = "Structured DMA status poll";
+  let arguments = (ins VC4_DMADescKindAttr:$kind);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$kind attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_DMAWaitOp : VC4_Op<"dma.wait", [HasParent<"FuncOp">]> {
+  let summary = "Structured DMA completion wait";
+  let arguments = (ins
+    Optional<VC4_AsyncTokenType>:$token,
+    OptionalAttr<VC4_DMADescKindAttr>:$kind
+  );
+  let results = (outs);
+  let hasVerifier = 1;
+}
+
 #endif // VC4_STRUCTURED_OPS_TD
