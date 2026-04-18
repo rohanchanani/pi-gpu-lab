@@ -20,6 +20,10 @@ include "mlir/Interfaces/SideEffectInterfaces.td"
 class VC4_Op<string mnemonic, list<Trait> traits = []>
     : Op<VC4_Dialect, mnemonic, traits>;
 
+class VC4_MemoryEffectOp<string mnemonic, list<Trait> traits = []>
+    : VC4_Op<mnemonic,
+             [DeclareOpInterfaceMethods<MemoryEffectsOpInterface>] # traits>;
+
 def VC4_ModuleOp : VC4_Op<"module", [
     IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol
   ] # GraphRegionNoTerminator.traits> {
@@ -89,8 +93,8 @@ def VC4_BuiltinOp : VC4_Op<"builtin", [Pure, HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_UniformReadOp : VC4_Op<"uniform.read", [
-    HasParent<"FuncOp">, MemoryEffects<[MemRead]>
+def VC4_UniformReadOp : VC4_MemoryEffectOp<"uniform.read", [
+    HasParent<"FuncOp">
   ]> {
   let summary = "Read one element from the uniform stream";
   let results = (outs AnyType:$result);
@@ -98,8 +102,8 @@ def VC4_UniformReadOp : VC4_Op<"uniform.read", [
   let hasVerifier = 1;
 }
 
-def VC4_UniformSeekOp : VC4_Op<"uniform.seek", [
-    HasParent<"FuncOp">, MemoryEffects<[MemWrite]>
+def VC4_UniformSeekOp : VC4_MemoryEffectOp<"uniform.seek", [
+    HasParent<"FuncOp">
   ]> {
   let summary = "Reset or adjust the uniform stream pointer";
   let arguments = (ins
@@ -225,7 +229,7 @@ def VC4_TMUDescriptorOp : VC4_Op<"tmu.descriptor", [
   let hasVerifier = 1;
 }
 
-def VC4_TMURequestOp : VC4_Op<"tmu.request", [HasParent<"FuncOp">]> {
+def VC4_TMURequestOp : VC4_MemoryEffectOp<"tmu.request", [HasParent<"FuncOp">]> {
   let summary = "Structured TMU request enqueue";
   let arguments = (ins
     Variadic<AnyType>:$operands,
@@ -235,7 +239,7 @@ def VC4_TMURequestOp : VC4_Op<"tmu.request", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_TMUReadOp : VC4_Op<"tmu.read", [HasParent<"FuncOp">]> {
+def VC4_TMUReadOp : VC4_MemoryEffectOp<"tmu.read", [HasParent<"FuncOp">]> {
   let summary = "Structured TMU receive readback";
   let arguments = (ins
     Optional<VC4_AsyncTokenType>:$token,
@@ -246,7 +250,7 @@ def VC4_TMUReadOp : VC4_Op<"tmu.read", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_TMUNoSwapOp : VC4_Op<"tmu.noswap", [HasParent<"FuncOp">]> {
+def VC4_TMUNoSwapOp : VC4_MemoryEffectOp<"tmu.noswap", [HasParent<"FuncOp">]> {
   let summary = "Structured TMU automatic swap control";
   let arguments = (ins
     Optional<AnySignlessInteger>:$value,
@@ -256,7 +260,7 @@ def VC4_TMUNoSwapOp : VC4_Op<"tmu.noswap", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_SFUIssueOp : VC4_Op<"sfu.issue", [HasParent<"FuncOp">]> {
+def VC4_SFUIssueOp : VC4_MemoryEffectOp<"sfu.issue", [HasParent<"FuncOp">]> {
   let summary = "Structured SFU issue";
   let arguments = (ins
     AnyType:$input,
@@ -266,7 +270,7 @@ def VC4_SFUIssueOp : VC4_Op<"sfu.issue", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_SFUReadOp : VC4_Op<"sfu.read", [HasParent<"FuncOp">]> {
+def VC4_SFUReadOp : VC4_MemoryEffectOp<"sfu.read", [HasParent<"FuncOp">]> {
   let summary = "Structured SFU readback";
   let results = (outs AnyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
@@ -291,7 +295,7 @@ def VC4_VPMDescriptorOp : VC4_Op<"vpm.desc", [
   let hasVerifier = 1;
 }
 
-def VC4_VPMReadOp : VC4_Op<"vpm.read", [HasParent<"FuncOp">]> {
+def VC4_VPMReadOp : VC4_MemoryEffectOp<"vpm.read", [HasParent<"FuncOp">]> {
   let summary = "Structured VPM read";
   let arguments = (ins VC4_VPMDescType:$descriptor);
   let results = (outs AnyType:$result);
@@ -299,7 +303,7 @@ def VC4_VPMReadOp : VC4_Op<"vpm.read", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_VPMWriteOp : VC4_Op<"vpm.write", [HasParent<"FuncOp">]> {
+def VC4_VPMWriteOp : VC4_MemoryEffectOp<"vpm.write", [HasParent<"FuncOp">]> {
   let summary = "Structured VPM write";
   let arguments = (ins
     VC4_VPMDescType:$descriptor,
@@ -334,7 +338,7 @@ def VC4_DMADescriptorOp : VC4_Op<"dma.desc", [
   let hasVerifier = 1;
 }
 
-def VC4_DMAStartOp : VC4_Op<"dma.start", [HasParent<"FuncOp">]> {
+def VC4_DMAStartOp : VC4_MemoryEffectOp<"dma.start", [HasParent<"FuncOp">]> {
   let summary = "Structured DMA start";
   let arguments = (ins
     VC4_DMADescType:$descriptor,
@@ -344,7 +348,7 @@ def VC4_DMAStartOp : VC4_Op<"dma.start", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_DMAStatusOp : VC4_Op<"dma.status", [HasParent<"FuncOp">]> {
+def VC4_DMAStatusOp : VC4_MemoryEffectOp<"dma.status", [HasParent<"FuncOp">]> {
   let summary = "Structured DMA status poll";
   let arguments = (ins VC4_DMADescKindAttr:$kind);
   let results = (outs AnyType:$result);
@@ -352,7 +356,7 @@ def VC4_DMAStatusOp : VC4_Op<"dma.status", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_DMAWaitOp : VC4_Op<"dma.wait", [HasParent<"FuncOp">]> {
+def VC4_DMAWaitOp : VC4_MemoryEffectOp<"dma.wait", [HasParent<"FuncOp">]> {
   let summary = "Structured DMA completion wait";
   let arguments = (ins
     Optional<VC4_AsyncTokenType>:$token,
@@ -362,14 +366,14 @@ def VC4_DMAWaitOp : VC4_Op<"dma.wait", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_MutexOp : VC4_Op<"mutex", [HasParent<"FuncOp">]> {
+def VC4_MutexOp : VC4_MemoryEffectOp<"mutex", [HasParent<"FuncOp">]> {
   let summary = "Structured hardware mutex action";
   let arguments = (ins VC4_MutexModeAttr:$mode);
   let assemblyFormat = "$mode attr-dict";
   let hasVerifier = 1;
 }
 
-def VC4_SemaphoreOp : VC4_Op<"semaphore", [HasParent<"FuncOp">]> {
+def VC4_SemaphoreOp : VC4_MemoryEffectOp<"semaphore", [HasParent<"FuncOp">]> {
   let summary = "Structured hardware semaphore action";
   let arguments = (ins
     VC4_SemaphoreModeAttr:$mode,
@@ -379,28 +383,28 @@ def VC4_SemaphoreOp : VC4_Op<"semaphore", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_HostInterruptOp : VC4_Op<"host_interrupt", [HasParent<"FuncOp">]> {
+def VC4_HostInterruptOp : VC4_MemoryEffectOp<"host_interrupt", [HasParent<"FuncOp">]> {
   let summary = "Structured host interrupt trigger";
   let results = (outs);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
 
-def VC4_ThreadSwitchOp : VC4_Op<"thread_switch", [HasParent<"FuncOp">]> {
+def VC4_ThreadSwitchOp : VC4_MemoryEffectOp<"thread_switch", [HasParent<"FuncOp">]> {
   let summary = "Structured cooperative thread switch";
   let arguments = (ins VC4_ThreadSwitchModeAttr:$mode);
   let assemblyFormat = "$mode attr-dict";
   let hasVerifier = 1;
 }
 
-def VC4_ProgramEndOp : VC4_Op<"program_end", [HasParent<"FuncOp">]> {
+def VC4_ProgramEndOp : VC4_MemoryEffectOp<"program_end", [HasParent<"FuncOp">]> {
   let summary = "Structured program end signal";
   let results = (outs);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
 
-def VC4_AsyncWaitOp : VC4_Op<"async.wait", [HasParent<"FuncOp">]> {
+def VC4_AsyncWaitOp : VC4_MemoryEffectOp<"async.wait", [HasParent<"FuncOp">]> {
   let summary = "Structured async token join";
   let arguments = (ins Variadic<VC4_AsyncTokenType>:$tokens);
   let results = (outs);
@@ -418,7 +422,7 @@ def VC4_CFBranchOp : VC4_Op<"cf.branch", [
   let hasVerifier = 1;
 }
 
-def VC4_EnqueueQPUOp : VC4_Op<"enqueue_qpu", [HasParent<"FuncOp">]> {
+def VC4_EnqueueQPUOp : VC4_MemoryEffectOp<"enqueue_qpu", [HasParent<"FuncOp">]> {
   let summary = "Structured QPU scheduler enqueue";
   let arguments = (ins
     Variadic<AnyType>:$operands,
@@ -428,14 +432,14 @@ def VC4_EnqueueQPUOp : VC4_Op<"enqueue_qpu", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_ReserveQPUOp : VC4_Op<"reserve_qpu", [HasParent<"FuncOp">]> {
+def VC4_ReserveQPUOp : VC4_MemoryEffectOp<"reserve_qpu", [HasParent<"FuncOp">]> {
   let summary = "Structured QPU reservation control";
   let arguments = (ins I32Attr:$mask);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
 
-def VC4_V3DQueryOp : VC4_Op<"v3d.query", [HasParent<"FuncOp">]> {
+def VC4_V3DQueryOp : VC4_MemoryEffectOp<"v3d.query", [HasParent<"FuncOp">]> {
   let summary = "Structured V3D system query";
   let arguments = (ins
     Variadic<AnyType>:$selectors,
@@ -445,7 +449,7 @@ def VC4_V3DQueryOp : VC4_Op<"v3d.query", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_V3DConfigureOp : VC4_Op<"v3d.configure", [HasParent<"FuncOp">]> {
+def VC4_V3DConfigureOp : VC4_MemoryEffectOp<"v3d.configure", [HasParent<"FuncOp">]> {
   let summary = "Structured V3D system configure";
   let arguments = (ins
     Variadic<AnyType>:$payloads,

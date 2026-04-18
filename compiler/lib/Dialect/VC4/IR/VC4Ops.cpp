@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Dialect/VC4/IR/VC4SideEffects.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/SymbolTable.h"
@@ -228,6 +229,77 @@ inferDMADescKindFromDescriptor(Value value) {
   return std::nullopt;
 }
 
+using MemoryEffectList = SmallVectorImpl<MemoryEffects::EffectInstance>;
+
+template <typename ResourceT, typename EffectT>
+static void addEffect(MemoryEffectList &effects) {
+  effects.emplace_back(EffectT::get(), ResourceT::get());
+}
+
+template <typename ResourceT>
+static void addReadEffect(MemoryEffectList &effects) {
+  addEffect<ResourceT, MemoryEffects::Read>(effects);
+}
+
+template <typename ResourceT>
+static void addWriteEffect(MemoryEffectList &effects) {
+  addEffect<ResourceT, MemoryEffects::Write>(effects);
+}
+
+template <typename ResourceT>
+static void addReadWriteEffects(MemoryEffectList &effects) {
+  addReadEffect<ResourceT>(effects);
+  addWriteEffect<ResourceT>(effects);
+}
+
+static void addTMURequestEffects(mlir::vc4::TMUUnit unit,
+                                 MemoryEffectList &effects) {
+  switch (unit) {
+  case mlir::vc4::TMUUnit::tmu0:
+    addWriteEffect<mlir::vc4::effects::TMUReq0>(effects);
+    break;
+  case mlir::vc4::TMUUnit::tmu1:
+    addWriteEffect<mlir::vc4::effects::TMUReq1>(effects);
+    break;
+  }
+  addReadEffect<mlir::vc4::effects::MainMemory>(effects);
+}
+
+static void addTMUReadEffects(mlir::vc4::TMUUnit unit, MemoryEffectList &effects) {
+  switch (unit) {
+  case mlir::vc4::TMUUnit::tmu0:
+    addReadEffect<mlir::vc4::effects::TMURcv0>(effects);
+    break;
+  case mlir::vc4::TMUUnit::tmu1:
+    addReadEffect<mlir::vc4::effects::TMURcv1>(effects);
+    break;
+  }
+}
+
+static void addDMAQueueEffects(std::optional<mlir::vc4::DMADescKind> kind,
+                               MemoryEffectList &effects, bool isWrite) {
+  if (!kind || *kind == mlir::vc4::DMADescKind::load) {
+    if (isWrite)
+      addWriteEffect<mlir::vc4::effects::VDR>(effects);
+    else
+      addReadEffect<mlir::vc4::effects::VDR>(effects);
+  }
+  if (!kind || *kind == mlir::vc4::DMADescKind::store) {
+    if (isWrite)
+      addWriteEffect<mlir::vc4::effects::VDW>(effects);
+    else
+      addReadEffect<mlir::vc4::effects::VDW>(effects);
+  }
+}
+
+static std::optional<mlir::vc4::DMADescKind> inferDMADescKindFromToken(Value token) {
+  if (!token || !isa<mlir::vc4::AsyncTokenType>(token.getType()))
+    return std::nullopt;
+  if (auto start = token.getDefiningOp<mlir::vc4::DMAStartOp>())
+    return inferDMADescKindFromDescriptor(start.getDescriptor());
+  return std::nullopt;
+}
+
 } // namespace
 
 mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
@@ -330,30 +402,40 @@ LogicalResult mlir::vc4::FuncOp::verify() {
   if (isExternal())
     return success();
 
-  for (Block &block : getBody()) {
-    for (Operation &op : block) {
-      if (form == mlir::vc4::FunctionForm::structured) {
-        if (isVC4QPUOp(op))
-          return op.emitOpError(
-              "is only legal in functions with form = scheduled");
-        if (!isVC4StructuredOp(op))
-          return op.emitOpError(
-              "is not a legal operation in functions with form = structured");
-        continue;
+  bool sawError = false;
+  getBody().walk([&](Operation *op) {
+    if (sawError)
+      return WalkResult::interrupt();
+
+    if (form == mlir::vc4::FunctionForm::structured) {
+      if (isVC4QPUOp(*op)) {
+        op->emitOpError("is only legal in functions with form = scheduled");
+        sawError = true;
+        return WalkResult::interrupt();
       }
-
-      if (isVC4QPUOp(op))
-        continue;
-
-      if (isVC4StructuredOp(op))
-        return op.emitOpError(
-            "is only legal in functions with form = structured");
-      return op.emitOpError(
-          "is not a legal operation in functions with form = scheduled");
+      if (!isVC4StructuredOp(*op)) {
+        op->emitOpError("is not a legal operation in functions with form = structured");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
     }
-  }
 
-  return success();
+    if (isVC4QPUOp(*op))
+      return WalkResult::advance();
+
+    if (isVC4StructuredOp(*op)) {
+      op->emitOpError("is only legal in functions with form = structured");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+
+    op->emitOpError("is not a legal operation in functions with form = scheduled");
+    sawError = true;
+    return WalkResult::interrupt();
+  });
+
+  return failure(sawError);
 }
 
 LogicalResult mlir::vc4::ReturnOp::verify() {
@@ -389,6 +471,14 @@ LogicalResult mlir::vc4::BuiltinOp::verify() {
   if (!isI32OrVector16I32(getResult().getType()))
     return emitOpError("result type must be i32 or vector<16xi32>");
   return success();
+}
+
+void mlir::vc4::UniformReadOp::getEffects(MemoryEffectList &effects) {
+  addReadEffect<mlir::vc4::effects::UniformStream>(effects);
+}
+
+void mlir::vc4::UniformSeekOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::UniformStream>(effects);
 }
 
 LogicalResult mlir::vc4::UniformReadOp::verify() {
@@ -797,6 +887,10 @@ LogicalResult mlir::vc4::TMUDescriptorOp::verify() {
   llvm_unreachable("unhandled vc4.tmu.descriptor mode");
 }
 
+void mlir::vc4::TMURequestOp::getEffects(MemoryEffectList &effects) {
+  addTMURequestEffects(getUnit(), effects);
+}
+
 LogicalResult mlir::vc4::TMURequestOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -883,6 +977,10 @@ LogicalResult mlir::vc4::TMURequestOp::verify() {
   llvm_unreachable("unhandled vc4.tmu.request mode");
 }
 
+void mlir::vc4::TMUReadOp::getEffects(MemoryEffectList &effects) {
+  addTMUReadEffects(getUnit(), effects);
+}
+
 LogicalResult mlir::vc4::TMUReadOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -920,6 +1018,10 @@ LogicalResult mlir::vc4::TMUReadOp::verify() {
   llvm_unreachable("unhandled vc4.tmu.read part");
 }
 
+void mlir::vc4::TMUNoSwapOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
 LogicalResult mlir::vc4::TMUNoSwapOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -938,6 +1040,10 @@ LogicalResult mlir::vc4::TMUNoSwapOp::verify() {
   return success();
 }
 
+void mlir::vc4::SFUIssueOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::SFU>(effects);
+}
+
 LogicalResult mlir::vc4::SFUIssueOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -947,6 +1053,10 @@ LogicalResult mlir::vc4::SFUIssueOp::verify() {
         "input type must be i32, f32, vector<16xi32>, or vector<16xf32>");
   }
   return success();
+}
+
+void mlir::vc4::SFUReadOp::getEffects(MemoryEffectList &effects) {
+  addReadEffect<mlir::vc4::effects::SFU>(effects);
 }
 
 LogicalResult mlir::vc4::SFUReadOp::verify() {
@@ -985,6 +1095,10 @@ LogicalResult mlir::vc4::VPMDescriptorOp::verify() {
   llvm_unreachable("unhandled vc4.vpm.desc kind");
 }
 
+void mlir::vc4::VPMReadOp::getEffects(MemoryEffectList &effects) {
+  addReadEffect<mlir::vc4::effects::VPMReadFIFO>(effects);
+}
+
 LogicalResult mlir::vc4::VPMReadOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -1000,6 +1114,10 @@ LogicalResult mlir::vc4::VPMReadOp::verify() {
     return emitOpError("descriptor kind must be <read>");
 
   return success();
+}
+
+void mlir::vc4::VPMWriteOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::VPMWriteFIFO>(effects);
 }
 
 LogicalResult mlir::vc4::VPMWriteOp::verify() {
@@ -1087,6 +1205,16 @@ LogicalResult mlir::vc4::DMADescriptorOp::verify() {
   llvm_unreachable("unhandled vc4.dma.desc kind");
 }
 
+void mlir::vc4::DMAStartOp::getEffects(MemoryEffectList &effects) {
+  std::optional<mlir::vc4::DMADescKind> kind =
+      inferDMADescKindFromDescriptor(getDescriptor());
+  addDMAQueueEffects(kind, effects, /*isWrite=*/true);
+  if (!kind || *kind == mlir::vc4::DMADescKind::load)
+    addReadEffect<mlir::vc4::effects::MainMemory>(effects);
+  if (!kind || *kind == mlir::vc4::DMADescKind::store)
+    addWriteEffect<mlir::vc4::effects::MainMemory>(effects);
+}
+
 LogicalResult mlir::vc4::DMAStartOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -1104,6 +1232,10 @@ LogicalResult mlir::vc4::DMAStartOp::verify() {
   return success();
 }
 
+void mlir::vc4::DMAStatusOp::getEffects(MemoryEffectList &effects) {
+  addDMAQueueEffects(getKind(), effects, /*isWrite=*/false);
+}
+
 LogicalResult mlir::vc4::DMAStatusOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -1113,6 +1245,14 @@ LogicalResult mlir::vc4::DMAStatusOp::verify() {
     return emitOpError("result type must be a scalar signless integer or index");
   }
   return success();
+}
+
+void mlir::vc4::DMAWaitOp::getEffects(MemoryEffectList &effects) {
+  std::optional<mlir::vc4::DMADescKind> kind =
+      getKindAttr()
+          ? std::optional<mlir::vc4::DMADescKind>(getKind())
+          : inferDMADescKindFromToken(getToken());
+  addDMAQueueEffects(kind, effects, /*isWrite=*/false);
 }
 
 LogicalResult mlir::vc4::DMAWaitOp::verify() {
@@ -1139,8 +1279,16 @@ LogicalResult mlir::vc4::DMAWaitOp::verify() {
   return success();
 }
 
+void mlir::vc4::MutexOp::getEffects(MemoryEffectList &effects) {
+  addReadWriteEffects<mlir::vc4::effects::Mutex>(effects);
+}
+
 LogicalResult mlir::vc4::MutexOp::verify() {
   return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::SemaphoreOp::getEffects(MemoryEffectList &effects) {
+  addReadWriteEffects<mlir::vc4::effects::Semaphore>(effects);
 }
 
 LogicalResult mlir::vc4::SemaphoreOp::verify() {
@@ -1153,8 +1301,16 @@ LogicalResult mlir::vc4::SemaphoreOp::verify() {
   return success();
 }
 
+void mlir::vc4::HostInterruptOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::HostIRQ>(effects);
+}
+
 LogicalResult mlir::vc4::HostInterruptOp::verify() {
   return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::ThreadSwitchOp::getEffects(MemoryEffectList &effects) {
+  effects.emplace_back(MemoryEffects::Write::get());
 }
 
 LogicalResult mlir::vc4::ThreadSwitchOp::verify() {
@@ -1170,8 +1326,16 @@ LogicalResult mlir::vc4::ThreadSwitchOp::verify() {
   return success();
 }
 
+void mlir::vc4::ProgramEndOp::getEffects(MemoryEffectList &effects) {
+  effects.emplace_back(MemoryEffects::Write::get());
+}
+
 LogicalResult mlir::vc4::ProgramEndOp::verify() {
   return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::AsyncWaitOp::getEffects(MemoryEffectList &effects) {
+  effects.emplace_back(MemoryEffects::Write::get());
 }
 
 LogicalResult mlir::vc4::AsyncWaitOp::verify() {
@@ -1230,6 +1394,10 @@ LogicalResult mlir::vc4::EnqueueQPUOp::verify() {
   return success();
 }
 
+void mlir::vc4::EnqueueQPUOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::QPUScheduler>(effects);
+}
+
 LogicalResult mlir::vc4::ReserveQPUOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -1238,6 +1406,10 @@ LogicalResult mlir::vc4::ReserveQPUOp::verify() {
   if (mask < 0 || mask > 0xFFF)
     return emitOpError("mask attribute must fit the 12-QPU target range [0, 4095]");
   return success();
+}
+
+void mlir::vc4::ReserveQPUOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::QPUScheduler>(effects);
 }
 
 LogicalResult mlir::vc4::V3DQueryOp::verify() {
@@ -1275,6 +1447,10 @@ LogicalResult mlir::vc4::V3DQueryOp::verify() {
   llvm_unreachable("unhandled vc4.v3d.query kind");
 }
 
+void mlir::vc4::V3DQueryOp::getEffects(MemoryEffectList &effects) {
+  addReadEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
 LogicalResult mlir::vc4::V3DConfigureOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
@@ -1310,6 +1486,10 @@ LogicalResult mlir::vc4::V3DConfigureOp::verify() {
   }
 
   llvm_unreachable("unhandled vc4.v3d.configure kind");
+}
+
+void mlir::vc4::V3DConfigureOp::getEffects(MemoryEffectList &effects) {
+  addWriteEffect<mlir::vc4::effects::V3DSystem>(effects);
 }
 
 #define GET_OP_CLASSES
