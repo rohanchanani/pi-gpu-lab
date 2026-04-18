@@ -156,6 +156,31 @@ def VC4_MulPackMode : VC4_DialectI32Enum<"MulPackMode",
       I32EnumAttrCase<"to_8d", 7>
     ]>;
 
+def VC4_QPUSignal : VC4_DialectI32Enum<"QPUSignal",
+    "VC4 scheduled QPU signal field", [
+      I32EnumAttrCase<"bkpt", 0>,
+      I32EnumAttrCase<"none", 1>,
+      I32EnumAttrCase<"thrsw", 2>,
+      I32EnumAttrCase<"thrend", 3>,
+      I32EnumAttrCase<"ldtmu0", 10>,
+      I32EnumAttrCase<"ldtmu1", 11>,
+      I32EnumAttrCase<"small_imm", 13>,
+      I32EnumAttrCase<"load_imm", 14>,
+      I32EnumAttrCase<"branch", 15>
+    ]>;
+
+def VC4_QPUMux : VC4_DialectI32Enum<"QPUMux",
+    "VC4 scheduled QPU source mux", [
+      I32EnumAttrCase<"r0", 0>,
+      I32EnumAttrCase<"r1", 1>,
+      I32EnumAttrCase<"r2", 2>,
+      I32EnumAttrCase<"r3", 3>,
+      I32EnumAttrCase<"r4", 4>,
+      I32EnumAttrCase<"r5", 5>,
+      I32EnumAttrCase<"a", 6>,
+      I32EnumAttrCase<"b", 7>
+    ]>;
+
 def VC4_TMUUnit : VC4_DialectI32Enum<"TMUUnit",
     "VC4 TMU unit selection", [
       I32EnumAttrCase<"tmu0", 0>,

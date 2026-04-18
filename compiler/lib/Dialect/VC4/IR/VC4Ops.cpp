@@ -324,6 +324,47 @@ static LogicalResult verifyQPUWriteAddressAttr(Operation *op, StringRef attrName
   return success();
 }
 
+static LogicalResult verifyQPUReadAddressAttr(Operation *op, StringRef attrName,
+                                              IntegerAttr attr) {
+  if (!attr || !attr.getType().isSignlessInteger(32)) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be signless i32";
+  }
+  int64_t value = attr.getInt();
+  if (value < 0 || value > 31) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be in range [0, 31]";
+  }
+  return success();
+}
+
+static bool isQPUUpperWriteAddress(int64_t value) { return value >= 32; }
+
+static bool isQPUAddPipeActive(mlir::vc4::AddOpcode opcode) {
+  return opcode != mlir::vc4::AddOpcode::nop;
+}
+
+static bool isQPUMulPipeActive(mlir::vc4::MulOpcode opcode) {
+  return opcode != mlir::vc4::MulOpcode::nop;
+}
+
+static LogicalResult verifyQPUBundleWriteConflict(
+    Operation *op, mlir::vc4::AddOpcode addOpcode,
+    mlir::vc4::MulOpcode mulOpcode, IntegerAttr waddrAddAttr,
+    IntegerAttr waddrMulAttr) {
+  if (!isQPUAddPipeActive(addOpcode) || !isQPUMulPipeActive(mulOpcode))
+    return success();
+
+  int64_t waddrAdd = waddrAddAttr.getInt();
+  int64_t waddrMul = waddrMulAttr.getInt();
+  if (waddrAdd != waddrMul || !isQPUUpperWriteAddress(waddrAdd))
+    return success();
+
+  return op->emitOpError(
+      "active ADD and MUL pipelines must not target the same accumulator/I/O "
+      "write address");
+}
+
 static LogicalResult verifyQPUPackAttr(Operation *op, bool pm, Attribute packAttr) {
   if (!packAttr)
     return success();
@@ -339,6 +380,26 @@ static LogicalResult verifyQPUPackAttr(Operation *op, bool pm, Attribute packAtt
   if (!isa<mlir::vc4::MulPackModeAttr>(packAttr)) {
     return op->emitOpError(
         "pm = true requires 'pack' to use #vc4.mul_pack_mode");
+  }
+  return success();
+}
+
+static LogicalResult verifyQPUUnpackAttr(Operation *op, bool pm,
+                                         Attribute unpackAttr) {
+  if (!unpackAttr)
+    return success();
+
+  if (!pm) {
+    if (!isa<mlir::vc4::RegfileAUnpackModeAttr>(unpackAttr)) {
+      return op->emitOpError(
+          "pm = false requires 'unpack' to use #vc4.regfile_a_unpack_mode");
+    }
+    return success();
+  }
+
+  if (!isa<mlir::vc4::R4UnpackModeAttr>(unpackAttr)) {
+    return op->emitOpError(
+        "pm = true requires 'unpack' to use #vc4.r4_unpack_mode");
   }
   return success();
 }
@@ -1620,6 +1681,70 @@ LogicalResult mlir::vc4::QPUSemaOp::verify() {
   if (failed(
           verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
     return failure();
+  return success();
+}
+
+LogicalResult mlir::vc4::QPUBundleOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  bool hasRaddrB = static_cast<bool>(getRaddrBAttr());
+  bool hasSmallImm = static_cast<bool>(getSmallImmAttr());
+  if (hasRaddrB == hasSmallImm) {
+    return emitOpError(
+        "requires exactly one of 'raddr_b' or 'small_imm'");
+  }
+
+  if (failed(verifyQPUUnpackAttr(getOperation(), getPm(), getUnpackAttr())))
+    return failure();
+  if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+    return failure();
+  if (failed(verifyQPUBundleWriteConflict(getOperation(), getOpAdd(), getOpMul(),
+                                          getWaddrAddAttr(), getWaddrMulAttr())))
+    return failure();
+  if (failed(
+          verifyQPUReadAddressAttr(getOperation(), "raddr_a", getRaddrAAttr())))
+    return failure();
+  if (hasRaddrB &&
+      failed(verifyQPUReadAddressAttr(getOperation(), "raddr_b", getRaddrBAttr()))) {
+    return failure();
+  }
+
+  if (hasSmallImm) {
+    int64_t smallImm = getSmallImmAttr().getInt();
+    if (smallImm < 0 || smallImm > 47) {
+      return emitOpError(
+          "'small_imm' attribute must be an encoded selector in range [0, 47]");
+    }
+  }
+
+  switch (getSig()) {
+  case mlir::vc4::QPUSignal::small_imm:
+    if (!hasSmallImm) {
+      return emitOpError(
+          "sig = #vc4.qpu_signal<small_imm> requires a 'small_imm' attribute");
+    }
+    break;
+  case mlir::vc4::QPUSignal::load_imm:
+    return emitOpError(
+        "sig = #vc4.qpu_signal<load_imm> is represented by vc4.qpu.ldi");
+  case mlir::vc4::QPUSignal::branch:
+    return emitOpError(
+        "sig = #vc4.qpu_signal<branch> is represented by vc4.qpu.branch");
+  default:
+    if (hasSmallImm) {
+      return emitOpError(
+          "'small_imm' attribute requires sig = #vc4.qpu_signal<small_imm>");
+    }
+    break;
+  }
+
   return success();
 }
 

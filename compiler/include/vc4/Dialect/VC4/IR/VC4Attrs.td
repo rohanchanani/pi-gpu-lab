@@ -23,6 +23,8 @@ def VC4_R4UnpackModeAttr
     : VC4_DialectEnumAttr<VC4_R4UnpackMode, "r4_unpack_mode">;
 def VC4_MulPackModeAttr
     : VC4_DialectEnumAttr<VC4_MulPackMode, "mul_pack_mode">;
+def VC4_QPUSignalAttr : VC4_DialectEnumAttr<VC4_QPUSignal, "qpu_signal">;
+def VC4_QPUMuxAttr : VC4_DialectEnumAttr<VC4_QPUMux, "qpu_mux">;
 def VC4_TMUUnitAttr : VC4_DialectEnumAttr<VC4_TMUUnit, "tmu_unit">;
 def VC4_TMUModeAttr : VC4_DialectEnumAttr<VC4_TMUMode, "tmu_mode">;
 def VC4_TextureTypeAttr

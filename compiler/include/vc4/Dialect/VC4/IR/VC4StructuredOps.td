@@ -495,4 +495,31 @@ def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
+def VC4_QPUBundleOp : VC4_Op<"qpu.bundle", [HasParent<"FuncOp">]> {
+  let summary = "Scheduled VC4 ALU or small-immediate instruction";
+  let arguments = (ins
+    VC4_QPUSignalAttr:$sig,
+    OptionalAttr<AnyAttr>:$unpack,
+    BoolAttr:$pm,
+    OptionalAttr<AnyAttr>:$pack,
+    VC4_CondAttr:$cond_add,
+    VC4_CondAttr:$cond_mul,
+    OptionalAttr<UnitAttr>:$set_flags,
+    OptionalAttr<UnitAttr>:$write_swap,
+    I32Attr:$waddr_add,
+    I32Attr:$waddr_mul,
+    VC4_AddOpcodeAttr:$op_add,
+    VC4_MulOpcodeAttr:$op_mul,
+    I32Attr:$raddr_a,
+    OptionalAttr<I32Attr>:$raddr_b,
+    OptionalAttr<I32Attr>:$small_imm,
+    VC4_QPUMuxAttr:$add_a,
+    VC4_QPUMuxAttr:$add_b,
+    VC4_QPUMuxAttr:$mul_a,
+    VC4_QPUMuxAttr:$mul_b
+  );
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
 #endif // VC4_STRUCTURED_OPS_TD
