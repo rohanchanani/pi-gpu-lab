@@ -1,5 +1,6 @@
 // RUN: vc4-opt %s --vc4-test-print-effects -o /dev/null | FileCheck %s
 
+// CHECK: vc4.qpu.sema: Read<Semaphore>, Write<Semaphore>
 // CHECK: vc4.uniform.read: Read<UniformStream>
 // CHECK: vc4.uniform.seek: Write<UniformStream>
 // CHECK: vc4.tmu.request: Write<TMUReq0>, Read<MainMemory>
@@ -26,6 +27,17 @@
 vc4.module @side_effects {
   vc4.func @kernel_entry() attributes {kernel, threading = 0 : i32, form = 0 : i32} {
     vc4.return
+  }
+
+  vc4.func @scheduled_main() attributes {threading = 0 : i32, form = 1 : i32} {
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 0 : i32,
+      waddr_mul = 0 : i32
+    }
   }
 
   vc4.func @main(%addr: i32, %coord: f32, %vec: vector<16xi32>, %scalar: f32) attributes {threading = 0 : i32, form = 0 : i32} {
