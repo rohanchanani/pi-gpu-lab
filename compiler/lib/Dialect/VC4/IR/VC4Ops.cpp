@@ -104,6 +104,20 @@ static LogicalResult verifyPositiveI32Attr(Operation *op, StringRef attrName,
   return success();
 }
 
+static LogicalResult verifyNonNegativeI32Attr(Operation *op, StringRef attrName,
+                                              IntegerAttr attr) {
+  if (!attr)
+    return success();
+  if (!attr.getType().isSignlessInteger(32))
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be signless i32";
+  if (attr.getInt() < 0) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be non-negative";
+  }
+  return success();
+}
+
 static LogicalResult verifyStructuredFormOp(Operation *op) {
   auto func = op->getParentOfType<mlir::vc4::FuncOp>();
   if (!func)
@@ -192,6 +206,15 @@ static std::optional<mlir::vc4::TMUMode> inferTMUModeFromDescriptor(Value value)
     return std::nullopt;
   if (auto descriptor = value.getDefiningOp<mlir::vc4::TMUDescriptorOp>())
     return descriptor.getMode();
+  return std::nullopt;
+}
+
+static std::optional<mlir::vc4::VPMDescKind>
+inferVPMDescKindFromDescriptor(Value value) {
+  if (!value || !isa<mlir::vc4::VPMDescType>(value.getType()))
+    return std::nullopt;
+  if (auto descriptor = value.getDefiningOp<mlir::vc4::VPMDescriptorOp>())
+    return descriptor.getKind();
   return std::nullopt;
 }
 
@@ -372,10 +395,10 @@ LogicalResult mlir::vc4::UniformSeekOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
   Type offsetType = getOffset().getType();
-  if (!offsetType.isSignlessIntOrIndex())
-    return emitOpError("operand must be a signless integer or index");
   if (isa<VectorType>(offsetType))
     return emitOpError("operand must be a scalar signless integer or index");
+  if (!offsetType.isSignlessIntOrIndex())
+    return emitOpError("operand must be a signless integer or index");
   return success();
 }
 
@@ -924,6 +947,65 @@ LogicalResult mlir::vc4::SFUReadOp::verify() {
     return emitOpError(
         "result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
   }
+  return success();
+}
+
+LogicalResult mlir::vc4::VPMDescriptorOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (failed(verifyNonNegativeI32Attr(getOperation(), "addr", getAddrAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "num_vectors",
+                                getNumVectorsAttr())))
+    return failure();
+
+  switch (getKind()) {
+  case mlir::vc4::VPMDescKind::read:
+    if (!getNumVectorsAttr())
+      return emitOpError("kind = read requires a 'num_vectors' attribute");
+    return success();
+  case mlir::vc4::VPMDescKind::write:
+    if (getNumVectorsAttr())
+      return emitOpError("kind = write must not carry 'num_vectors'");
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.vpm.desc kind");
+}
+
+LogicalResult mlir::vc4::VPMReadOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (!isVC4StructuredValueType(getResult().getType())) {
+    return emitOpError(
+        "result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+  }
+
+  std::optional<mlir::vc4::VPMDescKind> kind =
+      inferVPMDescKindFromDescriptor(getDescriptor());
+  if (kind && *kind != mlir::vc4::VPMDescKind::read)
+    return emitOpError("descriptor kind must be <read>");
+
+  return success();
+}
+
+LogicalResult mlir::vc4::VPMWriteOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (!isVC4StructuredValueType(getValue().getType())) {
+    return emitOpError(
+        "value type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+  }
+
+  std::optional<mlir::vc4::VPMDescKind> kind =
+      inferVPMDescKindFromDescriptor(getDescriptor());
+  if (kind && *kind != mlir::vc4::VPMDescKind::write)
+    return emitOpError("descriptor kind must be <write>");
+
   return success();
 }
 

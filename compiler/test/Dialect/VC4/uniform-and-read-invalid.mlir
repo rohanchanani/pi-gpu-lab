@@ -1,4 +1,4 @@
-// RUN: not vc4-opt %s --verify-diagnostics
+// RUN: vc4-opt %s --verify-diagnostics
 
 vc4.module @uniform_read_type_error {
   vc4.func @bad_uniform_read() attributes {threading = 0 : i32, form = 0 : i32} {

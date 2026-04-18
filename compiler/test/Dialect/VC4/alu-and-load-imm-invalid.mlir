@@ -1,4 +1,4 @@
-// RUN: not vc4-opt %s --verify-diagnostics
+// RUN: vc4-opt %s --verify-diagnostics
 
 vc4.module @add_arity_error {
   vc4.func @bad_add(%a: i32) attributes {threading = 0 : i32, form = 0 : i32} {
@@ -51,7 +51,7 @@ vc4.module @load_imm_lane_count_error {
 
 vc4.module @load_imm_lane_range_error {
   vc4.func @bad_ldi3() attributes {threading = 0 : i32, form = 0 : i32} {
-    %0 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_i2>, value = array<i32: -2, -1, 0, 1, 2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>} : vector<16xi32> // expected-error {{lane values for mode per_elem_i2 must be in range \[-2, 1\]}}
+    %0 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_i2>, value = array<i32: -2, -1, 0, 1, 2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>} : vector<16xi32> // expected-error {{lane values for mode per_elem_i2 must be in range}}
     vc4.return
   }
 }

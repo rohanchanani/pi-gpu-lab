@@ -35,5 +35,13 @@ def VC4_WrapModeAttr : VC4_DialectEnumAttr<VC4_WrapMode, "wrap_mode">;
 def VC4_TMUReadPartAttr
     : VC4_DialectEnumAttr<VC4_TMUReadPart, "tmu_read_part">;
 def VC4_SFUKindAttr : VC4_DialectEnumAttr<VC4_SFUKind, "sfu_kind">;
+def VC4_VPMDescKindAttr
+    : VC4_DialectEnumAttr<VC4_VPMDescKind, "vpm_desc_kind">;
+def VC4_VPMOrientationAttr
+    : VC4_DialectEnumAttr<VC4_VPMOrientation, "vpm_orientation">;
+def VC4_VPMLaneModeAttr
+    : VC4_DialectEnumAttr<VC4_VPMLaneMode, "vpm_lane_mode">;
+def VC4_VPMElemWidthAttr
+    : VC4_DialectEnumAttr<VC4_VPMElemWidth, "vpm_elem_width">;
 
 #endif // VC4_ATTRS_TD

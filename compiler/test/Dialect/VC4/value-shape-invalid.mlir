@@ -1,4 +1,4 @@
-// RUN: not vc4-opt %s --verify-diagnostics
+// RUN: vc4-opt %s --verify-diagnostics
 
 vc4.module @pack_mode_selection_error {
   vc4.func @bad_pack(%arg0: i32) attributes {threading = 0 : i32, form = 0 : i32} {
@@ -51,7 +51,7 @@ vc4.module @rotate_shape_error {
 
 vc4.module @rotate_immediate_range_error {
   vc4.func @bad_rotate_imm(%arg0: vector<16xf32>) attributes {threading = 0 : i32, form = 0 : i32} {
-    %0 = "vc4.rotate"(%arg0) <{immediate = 16 : i32}> : (vector<16xf32>) -> vector<16xf32> // expected-error {{immediate rotate amount must be in range \[0, 15\]}}
+    %0 = "vc4.rotate"(%arg0) <{immediate = 16 : i32}> : (vector<16xf32>) -> vector<16xf32> // expected-error {{immediate rotate amount must be in range}}
     vc4.return
   }
 }

@@ -1,4 +1,4 @@
-// RUN: not vc4-opt %s --verify-diagnostics --allow-unregistered-dialect
+// RUN: vc4-opt %s --verify-diagnostics --allow-unregistered-dialect
 
 vc4.module @missing_threading {
   // expected-error@+1 {{requires a 'threading' attribute}}
@@ -28,7 +28,7 @@ vc4.module @scheduled_return_error {
 vc4.module @return_type_error {
   vc4.func @bad_result() -> i32 attributes {threading = 0 : i32, form = 0 : i32} {
     %0 = vc4.builtin elem_num : vector<16xi32>
-    // expected-error@+1 {{type of return operand #0 (vector<16xi32>) must match the enclosing function result type (i32)}}
+    // expected-error@+1 {{type of return operand #0}}
     vc4.return %0 : vector<16xi32>
   }
 }

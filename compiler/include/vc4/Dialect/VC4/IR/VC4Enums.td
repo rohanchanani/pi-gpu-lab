@@ -231,4 +231,29 @@ def VC4_SFUKind : VC4_DialectI32Enum<"SFUKind",
       I32EnumAttrCase<"log", 3>
     ]>;
 
+def VC4_VPMDescKind : VC4_DialectI32Enum<"VPMDescKind",
+    "VC4 VPM descriptor direction", [
+      I32EnumAttrCase<"read", 0>,
+      I32EnumAttrCase<"write", 1>
+    ]>;
+
+def VC4_VPMOrientation : VC4_DialectI32Enum<"VPMOrientation",
+    "VC4 VPM block orientation", [
+      I32EnumAttrCase<"horizontal", 0>,
+      I32EnumAttrCase<"vertical", 1>
+    ]>;
+
+def VC4_VPMLaneMode : VC4_DialectI32Enum<"VPMLaneMode",
+    "VC4 VPM lane layout", [
+      I32EnumAttrCase<"packed", 0>,
+      I32EnumAttrCase<"laned", 1>
+    ]>;
+
+def VC4_VPMElemWidth : VC4_DialectI32Enum<"VPMElemWidth",
+    "VC4 VPM element width", [
+      I32EnumAttrCase<"w8", 0>,
+      I32EnumAttrCase<"w16", 1>,
+      I32EnumAttrCase<"w32", 2>
+    ]>;
+
 #endif // VC4_ENUMS_TD

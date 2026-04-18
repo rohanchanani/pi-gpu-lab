@@ -102,7 +102,7 @@ def VC4_UniformSeekOp : VC4_Op<"uniform.seek", [
   ]> {
   let summary = "Reset or adjust the uniform stream pointer";
   let arguments = (ins
-    AnySignlessIntegerOrIndex:$offset,
+    AnyType:$offset,
     DefaultValuedAttr<BoolAttr, "false">:$relative
   );
   let assemblyFormat = "$offset attr-dict `:` type($offset)";
@@ -269,6 +269,42 @@ def VC4_SFUReadOp : VC4_Op<"sfu.read", [HasParent<"FuncOp">]> {
   let summary = "Structured SFU readback";
   let results = (outs AnyType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_VPMDescriptorOp : VC4_Op<"vpm.desc", [
+    Pure, HasParent<"FuncOp">
+  ]> {
+  let summary = "Structured VPM descriptor construction";
+  let arguments = (ins
+    VC4_VPMDescKindAttr:$kind,
+    VC4_VPMOrientationAttr:$orientation,
+    VC4_VPMLaneModeAttr:$lane_mode,
+    VC4_VPMElemWidthAttr:$elem_width,
+    OptionalAttr<I32Attr>:$addr,
+    OptionalAttr<I32Attr>:$stride,
+    OptionalAttr<I32Attr>:$num_vectors
+  );
+  let results = (outs VC4_VPMDescType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_VPMReadOp : VC4_Op<"vpm.read", [HasParent<"FuncOp">]> {
+  let summary = "Structured VPM read";
+  let arguments = (ins VC4_VPMDescType:$descriptor);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$descriptor attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def VC4_VPMWriteOp : VC4_Op<"vpm.write", [HasParent<"FuncOp">]> {
+  let summary = "Structured VPM write";
+  let arguments = (ins
+    VC4_VPMDescType:$descriptor,
+    AnyType:$value
+  );
+  let assemblyFormat = "$descriptor `,` $value attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
 
