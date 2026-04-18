@@ -79,7 +79,7 @@ Do not vendor LLVM/MLIR into this repo for the first milestone.
 
 ## 4. File split recommendation
 
-## 4.1 TableGen files
+### 4.1 TableGen files
 
 Use separate `.td` files by concern:
 
@@ -91,7 +91,7 @@ Use separate `.td` files by concern:
 - `VC4SystemOps.td`: mutex, semaphore, host interrupt, thread ops, enqueue/reserve/query/configure
 - `VC4QPUOps.td`: `vc4.qpu.*` sink ops
 
-## 4.2 C++ files
+### 4.2 C++ files
 
 Keep custom logic localized:
 
@@ -111,18 +111,62 @@ Recommended order:
 1. project scaffold and `vc4-opt`
 2. dialect shell, enums, types
 3. container/function ops
-4. structured arithmetic/uniform ops
-5. TMU/SFU ops
-6. VPM/DMA ops
-7. sync/thread/system ops
-8. side-effect resources and form verifiers
-9. scheduled sink ops
+4. arithmetic/value-shape encoded enums only
+5. uniform + move/pseudo-read ops
+6. ALU ops + `vc4.load_imm`
+7. `vc4.pack` / `vc4.unpack` / `vc4.rotate`
+8. TMU descriptor surface
+9. TMU request/read/noswap
+10. SFU ops
+11. VPM descriptor/read/write
+12. DMA descriptor/start/status/wait
+13. sync/thread ops
+14. structured branch + host/system ops
+15. side-effect resources and form verifiers
+16. sink `vc4.qpu.ldi` + `vc4.qpu.sema`
+17. sink `vc4.qpu.bundle`
+18. sink `vc4.qpu.branch`
+19. final audit
 
-That order reduces circular dependency and keeps the tool parseable throughout development.
+That order is intentionally finer-grained than a purely feature-family order. The goal is to keep the tool parseable,
+keep each prompt small enough to verify in isolation, and avoid contaminating already-verified infrastructure.
 
-## 6. Parser/printer strategy
+## 6. Checkpoint and recovery discipline
 
-Use declarative assembly format for most structured ops.
+After every successful verification prompt:
+
+- commit immediately
+- prefer lightweight tags for important boundaries, especially the first verified state after Prompt 2
+- treat the tagged state as the recovery point for later prompts
+
+If a later prompt causes a previously verified prompt to regress:
+
+- restore to the last verified commit/tag
+- do not debug forward in a contaminated tree
+- reattempt with a smaller prompt or narrower change set
+
+This is especially important once `vc4.func`, `vc4.module`, and their tests have been verified.
+
+## 7. Verified-surface stability rules
+
+Once Prompt 2 verifies successfully, treat the following as stable infrastructure:
+
+- `vc4.module`
+- `vc4.func`
+- `vc4.return`
+- `vc4.builtin`
+- the Prompt 1/2 parser/printer path
+- the Prompt 1/2 tests
+
+Later prompts should add new ops, enums, attrs, verifiers, and tests without rewriting the already verified
+container/function surface.
+
+Do not change the `vc4.func` parser/printer or repurpose old Prompt 1/2 tests unless a later prompt truly
+requires it. If such a change is unavoidable, all earlier tests must still pass unchanged.
+
+## 8. Parser/printer strategy
+
+Use declarative assembly format for most structured ops, but do not overvalue pretty syntax early.
 
 Good candidates for declarative formats:
 
@@ -132,14 +176,7 @@ Good candidates for declarative formats:
 - `vc4.alu.add`
 - `vc4.alu.mul`
 - `vc4.mov`
-- `vc4.load_imm`
-- `vc4.pack`
-- `vc4.unpack`
-- `vc4.rotate`
-- `vc4.tmu.*`
-- `vc4.sfu.*`
-- `vc4.vpm.*`
-- `vc4.dma.*`
+- `vc4.read`
 - `vc4.mutex`
 - `vc4.semaphore`
 - `vc4.thread_switch`
@@ -150,20 +187,47 @@ Good candidates for declarative formats:
 - `vc4.v3d.query`
 - `vc4.v3d.configure`
 
-Use custom assembly for:
+Use custom assembly only where it is clearly justified:
 
 - `vc4.qpu.bundle`
 - `vc4.qpu.branch`
 - `vc4.qpu.ldi`
 - `vc4.qpu.sema`
 
-Those ops are too field-dense for pleasant generic assembly.
+For higher-risk structured ops, generic assembly or conservative declarative assembly is acceptable in the first
+implementation if it keeps the repo stable:
 
-## 7. Verifier boundaries
+- `vc4.load_imm`
+- `vc4.pack`
+- `vc4.unpack`
+- `vc4.rotate`
+- TMU descriptor/request/read ops
+- VPM and DMA descriptor ops
+
+Correct registration, verifier behavior, and testability matter more than aesthetic syntax in milestone one.
+
+## 9. Enum and encoding guidance
+
+When an enum or attr models a real QPU-encoded field, use the hardware encoding values from the spec rather
+than dense placeholder numbering.
+
+This applies in particular to:
+
+- ADD opcodes
+- MUL opcodes
+- condition codes
+- load-immediate modes when directly encoding hardware instruction forms
+- pack/unpack selections
+- signal fields
+- other sink-level fields that correspond directly to instruction bits
+
+If an enum is a structured-dialect convenience rather than a direct encoding, document that clearly in code.
+
+## 10. Verifier boundaries
 
 Keep verifier responsibilities narrow.
 
-### 7.1 Local verifiers should enforce
+### 10.1 Local verifiers should enforce
 
 - enum validity
 - attribute combination legality
@@ -172,7 +236,7 @@ Keep verifier responsibilities narrow.
 - structured vs scheduled op segregation
 - exact 3-delay-slot rule for `vc4.qpu.branch`
 
-### 7.2 Do not over-implement in milestone one
+### 10.2 Do not over-implement in milestone one
 
 Do not try to solve all global scheduling hazards yet.
 
@@ -186,7 +250,7 @@ Examples to defer:
 
 The spec requires the dialect to acknowledge those hazards, not to fully solve them now.
 
-## 8. Side-effect modeling recommendation
+## 11. Side-effect modeling recommendation
 
 Implement `MemoryEffectOpInterface` using custom resources.
 
@@ -205,13 +269,13 @@ Suggested mapping:
 - `vc4.enqueue_qpu` / `vc4.reserve_qpu` -> `QPUScheduler`
 - `vc4.v3d.query` / `vc4.v3d.configure` -> `V3DSystem`
 
-## 9. Testing matrix
+## 12. Testing matrix
 
 Every op family should have:
 
 - one parse/print round-trip test
 - at least one negative verifier test
-- one example using the custom syntax expected by developers
+- one example using the syntax actually implemented in the repo
 
 Add dedicated tests for:
 
@@ -221,7 +285,13 @@ Add dedicated tests for:
 - `vc4.qpu.branch` delay-slot count rules
 - `vc4.qpu.bundle` local encoding legality
 
-## 10. Definition of done
+Testing discipline for later prompts:
+
+- keep Prompt 1/2 tests as regression guards
+- add new tests in new files for new prompt families
+- do not repurpose earlier tests just because a later prompt needs new coverage
+
+## 13. Definition of done
 
 The milestone is done when:
 
@@ -234,12 +304,14 @@ The milestone is done when:
 - tests are present and passing
 - docs still describe the implemented surface accurately
 
-## 11. What to avoid
+## 14. What to avoid
 
 Avoid these common mistakes:
 
 - reintroducing graphics-only fragment/TLB/control-list IR
 - letting structured and scheduled forms coexist in one function
+- rewriting already verified parser/printer infrastructure during later prompts without necessity
 - using raw integer attrs where a clear enum attr is available
+- using dense placeholder enum values for hardware-encoded fields
 - depending on downstream codegen decisions in the dialect layer
 - inventing lowering passes as part of the dialect milestone
