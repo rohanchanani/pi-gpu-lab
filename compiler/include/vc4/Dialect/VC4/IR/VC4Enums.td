@@ -223,4 +223,12 @@ def VC4_TMUReadPart : VC4_DialectI32Enum<"TMUReadPart",
       I32EnumAttrCase<"ba1616", 3>
     ]>;
 
+def VC4_SFUKind : VC4_DialectI32Enum<"SFUKind",
+    "VC4 SFU operation kind", [
+      I32EnumAttrCase<"recip", 0>,
+      I32EnumAttrCase<"recipsqrt", 1>,
+      I32EnumAttrCase<"exp", 2>,
+      I32EnumAttrCase<"log", 3>
+    ]>;
+
 #endif // VC4_ENUMS_TD

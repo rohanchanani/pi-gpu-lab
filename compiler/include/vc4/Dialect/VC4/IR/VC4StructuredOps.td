@@ -255,4 +255,21 @@ def VC4_TMUNoSwapOp : VC4_Op<"tmu.noswap", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
+def VC4_SFUIssueOp : VC4_Op<"sfu.issue", [HasParent<"FuncOp">]> {
+  let summary = "Structured SFU issue";
+  let arguments = (ins
+    AnyType:$input,
+    VC4_SFUKindAttr:$kind
+  );
+  let assemblyFormat = "$kind $input attr-dict `:` type($input)";
+  let hasVerifier = 1;
+}
+
+def VC4_SFUReadOp : VC4_Op<"sfu.read", [HasParent<"FuncOp">]> {
+  let summary = "Structured SFU readback";
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
 #endif // VC4_STRUCTURED_OPS_TD

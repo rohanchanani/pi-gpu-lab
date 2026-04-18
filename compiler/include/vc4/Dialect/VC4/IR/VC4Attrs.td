@@ -34,5 +34,6 @@ def VC4_MinFilterAttr
 def VC4_WrapModeAttr : VC4_DialectEnumAttr<VC4_WrapMode, "wrap_mode">;
 def VC4_TMUReadPartAttr
     : VC4_DialectEnumAttr<VC4_TMUReadPart, "tmu_read_part">;
+def VC4_SFUKindAttr : VC4_DialectEnumAttr<VC4_SFUKind, "sfu_kind">;
 
 #endif // VC4_ATTRS_TD

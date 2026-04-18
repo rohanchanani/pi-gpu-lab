@@ -905,5 +905,27 @@ LogicalResult mlir::vc4::TMUNoSwapOp::verify() {
   return success();
 }
 
+LogicalResult mlir::vc4::SFUIssueOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (!isVC4StructuredValueType(getInput().getType())) {
+    return emitOpError(
+        "input type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+  }
+  return success();
+}
+
+LogicalResult mlir::vc4::SFUReadOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (!isVC4StructuredValueType(getResult().getType())) {
+    return emitOpError(
+        "result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+  }
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "vc4/Dialect/VC4/IR/VC4Ops.cpp.inc"
