@@ -379,6 +379,7 @@ At minimum:
   - `none`
   - `thrsw`
   - `thrend`
+  - `last_thread_switch`
   - `small_imm`
   - `load_imm`
   - `branch`
@@ -387,7 +388,8 @@ At minimum:
 
 Plus any additional compute-relevant signals retained in the compute-focused scope.
 
-Note: compute-focused scope intentionally omits tile-buffer / scoreboard signals from the first milestone.
+Note: compute-focused scope intentionally omits tile-buffer / scoreboard signals from the first milestone, but omitted
+members do not imply renumbering of the retained hardware signal encodings.
 
 ## 8. Traits, interfaces, and side-effect modeling
 

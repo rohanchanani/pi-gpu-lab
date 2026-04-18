@@ -97,21 +97,25 @@ def VC4_Cond : VC4_DialectI32Enum<"Cond",
 
 def VC4_LoadImmMode : VC4_DialectI32Enum<"LoadImmMode",
     "VC4 load-immediate encoding mode", [
-      I32EnumAttrCase<"splat32", 0>,
-      I32EnumAttrCase<"per_elem_i2", 1>,
-      I32EnumAttrCase<"per_elem_u2", 3>
+      // Use the full hardware instruction-form encodings, not dense mode IDs.
+      I32EnumAttrCase<"splat32", 112>,
+      I32EnumAttrCase<"per_elem_i2", 113>,
+      I32EnumAttrCase<"per_elem_u2", 115>
     ]>;
 
+// These unpack enums keep the real field encodings. Splitting regfile-A and r4
+// unpack into separate dialect enums does not imply renumbering the retained
+// hardware values.
 def VC4_RegfileAUnpackMode : VC4_DialectI32Enum<"RegfileAUnpackMode",
     "VC4 regfile-A unpack mode", [
       I32EnumAttrCase<"none", 0>,
-      I32EnumAttrCase<"f16a_or_i16a", 1>,
-      I32EnumAttrCase<"f16b_or_i16b", 2>,
-      I32EnumAttrCase<"replicate_8d", 3>,
-      I32EnumAttrCase<"color8a", 4>,
-      I32EnumAttrCase<"color8b", 5>,
-      I32EnumAttrCase<"color8c", 6>,
-      I32EnumAttrCase<"color8d", 7>
+      I32EnumAttrCase<"f16a_or_i16a", 2>,
+      I32EnumAttrCase<"f16b_or_i16b", 4>,
+      I32EnumAttrCase<"replicate_8d", 6>,
+      I32EnumAttrCase<"color8a", 8>,
+      I32EnumAttrCase<"color8b", 10>,
+      I32EnumAttrCase<"color8c", 12>,
+      I32EnumAttrCase<"color8d", 14>
     ]>;
 
 def VC4_RegfileAPackMode : VC4_DialectI32Enum<"RegfileAPackMode",
@@ -136,32 +140,37 @@ def VC4_RegfileAPackMode : VC4_DialectI32Enum<"RegfileAPackMode",
 
 def VC4_R4UnpackMode : VC4_DialectI32Enum<"R4UnpackMode",
     "VC4 r4 unpack mode", [
-      I32EnumAttrCase<"none", 0>,
-      I32EnumAttrCase<"f16a", 1>,
-      I32EnumAttrCase<"f16b", 2>,
-      I32EnumAttrCase<"replicate_8d", 3>,
-      I32EnumAttrCase<"color8a", 4>,
-      I32EnumAttrCase<"color8b", 5>,
-      I32EnumAttrCase<"color8c", 6>,
-      I32EnumAttrCase<"color8d", 7>
+      I32EnumAttrCase<"none", 1>,
+      I32EnumAttrCase<"f16a", 3>,
+      I32EnumAttrCase<"f16b", 5>,
+      I32EnumAttrCase<"replicate_8d", 7>,
+      I32EnumAttrCase<"color8a", 9>,
+      I32EnumAttrCase<"color8b", 11>,
+      I32EnumAttrCase<"color8c", 13>,
+      I32EnumAttrCase<"color8d", 15>
     ]>;
 
+// Pack values likewise preserve the real encoded field values. The MUL pack
+// cases retain the PM-selected encodings instead of being renumbered to 0..N.
 def VC4_MulPackMode : VC4_DialectI32Enum<"MulPackMode",
     "VC4 mul ALU pack mode", [
-      I32EnumAttrCase<"none", 0>,
-      I32EnumAttrCase<"to_8888", 3>,
-      I32EnumAttrCase<"to_8a", 4>,
-      I32EnumAttrCase<"to_8b", 5>,
-      I32EnumAttrCase<"to_8c", 6>,
-      I32EnumAttrCase<"to_8d", 7>
+      I32EnumAttrCase<"none", 16>,
+      I32EnumAttrCase<"to_8888", 19>,
+      I32EnumAttrCase<"to_8a", 20>,
+      I32EnumAttrCase<"to_8b", 21>,
+      I32EnumAttrCase<"to_8c", 22>,
+      I32EnumAttrCase<"to_8d", 23>
     ]>;
 
+// Compute-focused scope omits fragment/tile-buffer-only signals, but the
+// remaining signal values still use the original hardware numbering.
 def VC4_QPUSignal : VC4_DialectI32Enum<"QPUSignal",
     "VC4 scheduled QPU signal field", [
       I32EnumAttrCase<"bkpt", 0>,
       I32EnumAttrCase<"none", 1>,
       I32EnumAttrCase<"thrsw", 2>,
       I32EnumAttrCase<"thrend", 3>,
+      I32EnumAttrCase<"last_thread_switch", 6>,
       I32EnumAttrCase<"ldtmu0", 10>,
       I32EnumAttrCase<"ldtmu1", 11>,
       I32EnumAttrCase<"small_imm", 13>,
@@ -338,7 +347,7 @@ def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
       I32EnumAttrCase<"all_c_clear", 9>,
       I32EnumAttrCase<"any_c_set", 10>,
       I32EnumAttrCase<"any_c_clear", 11>,
-      I32EnumAttrCase<"always", 12>
+      I32EnumAttrCase<"always", 15>
     ]>;
 
 def VC4_V3DQueryKind : VC4_DialectI32Enum<"V3DQueryKind",
