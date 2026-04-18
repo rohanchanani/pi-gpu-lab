@@ -459,7 +459,7 @@ def VC4_V3DConfigureOp : VC4_MemoryEffectOp<"v3d.configure", [HasParent<"FuncOp"
   let hasVerifier = 1;
 }
 
-def VC4_QPULDIOp : VC4_Op<"qpu.ldi", [HasParent<"FuncOp">]> {
+def VC4_QPULDIOp : VC4_Op<"qpu.ldi"> {
   let summary = "Scheduled VC4 load-immediate instruction";
   let arguments = (ins
     VC4_LoadImmModeAttr:$mode,
@@ -477,7 +477,7 @@ def VC4_QPULDIOp : VC4_Op<"qpu.ldi", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema", [HasParent<"FuncOp">]> {
+def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema"> {
   let summary = "Scheduled VC4 semaphore instruction";
   let arguments = (ins
     VC4_SemaphoreModeAttr:$mode,
@@ -495,7 +495,7 @@ def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
-def VC4_QPUBundleOp : VC4_Op<"qpu.bundle", [HasParent<"FuncOp">]> {
+def VC4_QPUBundleOp : VC4_Op<"qpu.bundle"> {
   let summary = "Scheduled VC4 ALU or small-immediate instruction";
   let arguments = (ins
     VC4_QPUSignalAttr:$sig,
@@ -519,6 +519,23 @@ def VC4_QPUBundleOp : VC4_Op<"qpu.bundle", [HasParent<"FuncOp">]> {
     VC4_QPUMuxAttr:$mul_b
   );
   let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4_QPUBranchOp : VC4_Op<"qpu.branch", GraphRegionNoTerminator.traits> {
+  let summary = "Scheduled VC4 branch instruction with explicit delay slots";
+  let arguments = (ins
+    VC4_BranchCondAttr:$cond,
+    BoolAttr:$relative,
+    BoolAttr:$use_reg,
+    I32Attr:$raddr_a,
+    I32Attr:$immediate,
+    OptionalAttr<UnitAttr>:$write_swap,
+    I32Attr:$waddr_add,
+    I32Attr:$waddr_mul
+  );
+  let regions = (region SizedRegion<1>:$delay_slots);
+  let assemblyFormat = "attr-dict-with-keyword $delay_slots";
   let hasVerifier = 1;
 }
 

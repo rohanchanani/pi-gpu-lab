@@ -1748,5 +1748,43 @@ LogicalResult mlir::vc4::QPUBundleOp::verify() {
   return success();
 }
 
+LogicalResult mlir::vc4::QPUBranchOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  if (failed(
+          verifyQPUReadAddressAttr(getOperation(), "raddr_a", getRaddrAAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+    return failure();
+  if (failed(
+          verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+    return failure();
+
+  if (!getDelaySlots().hasOneBlock())
+    return emitOpError("delay-slot region must contain exactly one block");
+
+  Block &delaySlotBlock = getDelaySlots().front();
+  if (delaySlotBlock.getNumArguments() != 0)
+    return emitOpError("delay-slot region block must not take arguments");
+
+  unsigned delaySlotCount = 0;
+  for (Operation &op : delaySlotBlock) {
+    ++delaySlotCount;
+    if (!isVC4QPUOp(op)) {
+      return op.emitOpError(
+          "is not a legal delay-slot operation; expected a vc4.qpu.* op");
+    }
+  }
+
+  if (delaySlotCount != 3) {
+    return emitOpError() << "delay-slot region must contain exactly 3 "
+                         << "scheduled QPU ops";
+  }
+
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "vc4/Dialect/VC4/IR/VC4Ops.cpp.inc"
