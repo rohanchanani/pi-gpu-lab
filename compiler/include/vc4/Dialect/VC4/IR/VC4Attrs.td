@@ -23,5 +23,16 @@ def VC4_R4UnpackModeAttr
     : VC4_DialectEnumAttr<VC4_R4UnpackMode, "r4_unpack_mode">;
 def VC4_MulPackModeAttr
     : VC4_DialectEnumAttr<VC4_MulPackMode, "mul_pack_mode">;
+def VC4_TMUUnitAttr : VC4_DialectEnumAttr<VC4_TMUUnit, "tmu_unit">;
+def VC4_TMUModeAttr : VC4_DialectEnumAttr<VC4_TMUMode, "tmu_mode">;
+def VC4_TextureTypeAttr
+    : VC4_DialectEnumAttr<VC4_TextureType, "texture_type">;
+def VC4_MagFilterAttr
+    : VC4_DialectEnumAttr<VC4_MagFilter, "mag_filter">;
+def VC4_MinFilterAttr
+    : VC4_DialectEnumAttr<VC4_MinFilter, "min_filter">;
+def VC4_WrapModeAttr : VC4_DialectEnumAttr<VC4_WrapMode, "wrap_mode">;
+def VC4_TMUReadPartAttr
+    : VC4_DialectEnumAttr<VC4_TMUReadPart, "tmu_read_part">;
 
 #endif // VC4_ATTRS_TD

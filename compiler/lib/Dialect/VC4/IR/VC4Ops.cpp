@@ -86,6 +86,24 @@ static bool isVC4FloatValueType(Type type) {
          vectorType.getDimSize(0) == 16 && vectorType.getElementType().isF32();
 }
 
+static bool isScalarSignlessIntegerOrIndex(Type type) {
+  return type.isSignlessIntOrIndex() && !isa<VectorType>(type);
+}
+
+static LogicalResult verifyPositiveI32Attr(Operation *op, StringRef attrName,
+                                           IntegerAttr attr) {
+  if (!attr)
+    return success();
+  if (!attr.getType().isSignlessInteger(32))
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be signless i32";
+  if (attr.getInt() <= 0) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be greater than zero";
+  }
+  return success();
+}
+
 static LogicalResult verifyStructuredFormOp(Operation *op) {
   auto func = op->getParentOfType<mlir::vc4::FuncOp>();
   if (!func)
@@ -504,6 +522,227 @@ LogicalResult mlir::vc4::LoadImmOp::verify() {
   }
 
   llvm_unreachable("unhandled vc4.load_imm mode");
+}
+
+LogicalResult mlir::vc4::PackOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  bool hasRegfileAMode = static_cast<bool>(getRegfileAModeAttr());
+  bool hasMulMode = static_cast<bool>(getMulModeAttr());
+  if (hasRegfileAMode == hasMulMode) {
+    return emitOpError(
+        "requires exactly one of 'regfile_a_mode' or 'mul_mode'");
+  }
+
+  Type inputType = getInput().getType();
+  Type resultType = getResult().getType();
+  if (!hasSameVC4Shape(inputType, resultType)) {
+    return emitOpError("input and result must have compatible scalar or "
+                       "16-lane vector shapes");
+  }
+  if (!isVC4IntValueType(resultType))
+    return emitOpError("result type must be i32 or vector<16xi32>");
+
+  if (hasRegfileAMode) {
+    switch (*getRegfileAMode()) {
+    case mlir::vc4::RegfileAPackMode::none:
+      return emitOpError("regfile_a_mode must not be <none>");
+    case mlir::vc4::RegfileAPackMode::to_16a:
+    case mlir::vc4::RegfileAPackMode::to_16b:
+      if (!isVC4StructuredValueType(inputType)) {
+        return emitOpError(
+            "input type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+      }
+      return success();
+    case mlir::vc4::RegfileAPackMode::sat32:
+    case mlir::vc4::RegfileAPackMode::to_8888:
+    case mlir::vc4::RegfileAPackMode::to_8a:
+    case mlir::vc4::RegfileAPackMode::to_8b:
+    case mlir::vc4::RegfileAPackMode::to_8c:
+    case mlir::vc4::RegfileAPackMode::to_8d:
+    case mlir::vc4::RegfileAPackMode::sat16a:
+    case mlir::vc4::RegfileAPackMode::sat16b:
+    case mlir::vc4::RegfileAPackMode::sat8888:
+    case mlir::vc4::RegfileAPackMode::sat8a:
+    case mlir::vc4::RegfileAPackMode::sat8b:
+    case mlir::vc4::RegfileAPackMode::sat8c:
+    case mlir::vc4::RegfileAPackMode::sat8d:
+      if (!isVC4IntValueType(inputType))
+        return emitOpError("regfile_a_mode requires i32 or vector<16xi32> input");
+      return success();
+    }
+    llvm_unreachable("unhandled vc4.pack regfile_a_mode");
+  }
+
+  switch (*getMulMode()) {
+  case mlir::vc4::MulPackMode::none:
+    return emitOpError("mul_mode must not be <none>");
+  case mlir::vc4::MulPackMode::to_8888:
+  case mlir::vc4::MulPackMode::to_8a:
+  case mlir::vc4::MulPackMode::to_8b:
+  case mlir::vc4::MulPackMode::to_8c:
+  case mlir::vc4::MulPackMode::to_8d:
+    if (!isVC4FloatValueType(inputType))
+      return emitOpError("mul_mode requires f32 or vector<16xf32> input");
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.pack mul_mode");
+}
+
+LogicalResult mlir::vc4::UnpackOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  bool hasRegfileAMode = static_cast<bool>(getRegfileAModeAttr());
+  bool hasR4Mode = static_cast<bool>(getR4ModeAttr());
+  if (hasRegfileAMode == hasR4Mode) {
+    return emitOpError(
+        "requires exactly one of 'regfile_a_mode' or 'r4_mode'");
+  }
+
+  Type inputType = getInput().getType();
+  Type resultType = getResult().getType();
+  if (!hasSameVC4Shape(inputType, resultType)) {
+    return emitOpError("input and result must have compatible scalar or "
+                       "16-lane vector shapes");
+  }
+  if (!isVC4IntValueType(inputType))
+    return emitOpError("input type must be i32 or vector<16xi32>");
+
+  if (hasRegfileAMode) {
+    switch (*getRegfileAMode()) {
+    case mlir::vc4::RegfileAUnpackMode::none:
+      return emitOpError("regfile_a_mode must not be <none>");
+    case mlir::vc4::RegfileAUnpackMode::f16a_or_i16a:
+    case mlir::vc4::RegfileAUnpackMode::f16b_or_i16b:
+    case mlir::vc4::RegfileAUnpackMode::color8a:
+    case mlir::vc4::RegfileAUnpackMode::color8b:
+    case mlir::vc4::RegfileAUnpackMode::color8c:
+    case mlir::vc4::RegfileAUnpackMode::color8d:
+      if (!isVC4StructuredValueType(resultType)) {
+        return emitOpError(
+            "result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+      }
+      return success();
+    case mlir::vc4::RegfileAUnpackMode::replicate_8d:
+      if (!isVC4IntValueType(resultType))
+        return emitOpError("replicate_8d requires i32 or vector<16xi32> result");
+      return success();
+    }
+    llvm_unreachable("unhandled vc4.unpack regfile_a_mode");
+  }
+
+  switch (*getR4Mode()) {
+  case mlir::vc4::R4UnpackMode::none:
+    return emitOpError("r4_mode must not be <none>");
+  case mlir::vc4::R4UnpackMode::f16a:
+  case mlir::vc4::R4UnpackMode::f16b:
+  case mlir::vc4::R4UnpackMode::color8a:
+  case mlir::vc4::R4UnpackMode::color8b:
+  case mlir::vc4::R4UnpackMode::color8c:
+  case mlir::vc4::R4UnpackMode::color8d:
+    if (!isVC4FloatValueType(resultType))
+      return emitOpError("r4_mode requires f32 or vector<16xf32> result");
+    return success();
+  case mlir::vc4::R4UnpackMode::replicate_8d:
+    if (!isVC4IntValueType(resultType))
+      return emitOpError("replicate_8d requires i32 or vector<16xi32> result");
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.unpack r4_mode");
+}
+
+LogicalResult mlir::vc4::RotateOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  Type inputType = getInput().getType();
+  Type resultType = getResult().getType();
+  if (inputType != resultType)
+    return emitOpError("input and result types must match exactly");
+  if (!isVector16Of32BitVC4ValueType(inputType))
+    return emitOpError("input and result type must be vector<16xi32> or vector<16xf32>");
+
+  bool hasAmount = static_cast<bool>(getAmount());
+  bool hasImmediate = static_cast<bool>(getImmediateAttr());
+  if (hasAmount == hasImmediate) {
+    return emitOpError(
+        "requires exactly one of an amount operand or an immediate attribute");
+  }
+
+  if (hasAmount) {
+    if (!isScalarSignlessIntegerOrIndex(getAmount().getType()))
+      return emitOpError("amount operand must be a scalar signless integer or index");
+    return success();
+  }
+
+  auto immediateAttr = getImmediateAttr();
+  if (!immediateAttr.getType().isSignlessInteger(32))
+    return emitOpError("immediate attribute must be signless i32");
+  int64_t value = immediateAttr.getInt();
+  if (value < 0 || value > 15)
+    return emitOpError("immediate rotate amount must be in range [0, 15]");
+  return success();
+}
+
+LogicalResult mlir::vc4::TMUDescriptorOp::verify() {
+  if (failed(verifyStructuredFormOp(getOperation())))
+    return failure();
+
+  if (failed(verifyPositiveI32Attr(getOperation(), "mip_levels",
+                                   getMipLevelsAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "width", getWidthAttr())))
+    return failure();
+  if (failed(
+          verifyPositiveI32Attr(getOperation(), "height", getHeightAttr())))
+    return failure();
+  if (failed(verifyPositiveI32Attr(getOperation(), "cube_map_stride",
+                                   getCubeMapStrideAttr())))
+    return failure();
+
+  if (static_cast<bool>(getWidthAttr()) != static_cast<bool>(getHeightAttr())) {
+    return emitOpError(
+        "requires 'width' and 'height' to be provided together");
+  }
+
+  if (getChildImageFieldsAttr() && getChildImageFieldsAttr().empty()) {
+    return emitOpError("'child_image_fields' attribute must not be empty");
+  }
+  if (getBiasFlagsAttr() && getBiasFlagsAttr().empty()) {
+    return emitOpError("'bias_flags' attribute must not be empty");
+  }
+
+  bool hasTextureOnlyFields = getBaseAttr() || getTextureTypeAttr() ||
+                              getMipLevelsAttr() || getWidthAttr() ||
+                              getHeightAttr() || getMagFilterAttr() ||
+                              getMinFilterAttr() || getWrapSAttr() ||
+                              getWrapTAttr() || getFlipYAttr() ||
+                              getCubeMapStrideAttr() ||
+                              getChildImageFieldsAttr() || getBiasFlagsAttr();
+
+  switch (getMode()) {
+  case mlir::vc4::TMUMode::direct:
+    if (hasTextureOnlyFields) {
+      return emitOpError(
+          "direct mode must not carry texture setup attributes");
+    }
+    return success();
+  case mlir::vc4::TMUMode::texture2d:
+    if (getCubeMapStrideAttr()) {
+      return emitOpError(
+          "'cube_map_stride' is only legal for mode = cubemap");
+    }
+    return success();
+  case mlir::vc4::TMUMode::cubemap:
+    return success();
+  }
+
+  llvm_unreachable("unhandled vc4.tmu.descriptor mode");
 }
 
 #define GET_OP_CLASSES

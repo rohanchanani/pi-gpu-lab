@@ -6,6 +6,7 @@ include "vc4/Dialect/VC4/IR/VC4Attrs.td"
 include "vc4/Dialect/VC4/IR/VC4OpEnums.td"
 include "vc4/Dialect/VC4/IR/VC4Types.td"
 
+include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/OpAsmInterface.td"
 include "mlir/IR/RegionKindInterface.td"
@@ -161,6 +162,64 @@ def VC4_LoadImmOp : VC4_Op<"load_imm", [HasParent<"FuncOp">]> {
     OptionalAttr<AnyAttr>:$value
   );
   let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4_PackOp : VC4_Op<"pack", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 pack operation";
+  let arguments = (ins
+    AnyType:$input,
+    OptionalAttr<VC4_RegfileAPackModeAttr>:$regfile_a_mode,
+    OptionalAttr<VC4_MulPackModeAttr>:$mul_mode
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4_UnpackOp : VC4_Op<"unpack", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 unpack operation";
+  let arguments = (ins
+    AnyType:$input,
+    OptionalAttr<VC4_RegfileAUnpackModeAttr>:$regfile_a_mode,
+    OptionalAttr<VC4_R4UnpackModeAttr>:$r4_mode
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4_RotateOp : VC4_Op<"rotate", [HasParent<"FuncOp">]> {
+  let summary = "Structured VC4 horizontal rotate";
+  let arguments = (ins
+    AnyType:$input,
+    Optional<AnySignlessIntegerOrIndex>:$amount,
+    OptionalAttr<I32Attr>:$immediate
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4_TMUDescriptorOp : VC4_Op<"tmu.descriptor", [
+    Pure, HasParent<"FuncOp">
+  ]> {
+  let summary = "Structured TMU descriptor construction";
+  let arguments = (ins
+    VC4_TMUModeAttr:$mode,
+    OptionalAttr<I32Attr>:$base,
+    OptionalAttr<VC4_TextureTypeAttr>:$texture_type,
+    OptionalAttr<I32Attr>:$mip_levels,
+    OptionalAttr<I32Attr>:$width,
+    OptionalAttr<I32Attr>:$height,
+    OptionalAttr<VC4_MagFilterAttr>:$mag_filter,
+    OptionalAttr<VC4_MinFilterAttr>:$min_filter,
+    OptionalAttr<VC4_WrapModeAttr>:$wrap_s,
+    OptionalAttr<VC4_WrapModeAttr>:$wrap_t,
+    OptionalAttr<BoolAttr>:$flip_y,
+    OptionalAttr<I32Attr>:$cube_map_stride,
+    OptionalAttr<DictionaryAttr>:$child_image_fields,
+    OptionalAttr<DictionaryAttr>:$bias_flags
+  );
+  let results = (outs VC4_TMUDescType:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
   let hasVerifier = 1;
 }

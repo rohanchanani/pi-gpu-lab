@@ -156,4 +156,71 @@ def VC4_MulPackMode : VC4_DialectI32Enum<"MulPackMode",
       I32EnumAttrCase<"to_8d", 7>
     ]>;
 
+def VC4_TMUUnit : VC4_DialectI32Enum<"TMUUnit",
+    "VC4 TMU unit selection", [
+      I32EnumAttrCase<"tmu0", 0>,
+      I32EnumAttrCase<"tmu1", 1>
+    ]>;
+
+def VC4_TMUMode : VC4_DialectI32Enum<"TMUMode",
+    "VC4 TMU descriptor mode", [
+      I32EnumAttrCase<"direct", 0>,
+      I32EnumAttrCase<"texture2d", 1>,
+      I32EnumAttrCase<"cubemap", 2>
+    ]>;
+
+def VC4_TextureType : VC4_DialectI32Enum<"TextureType",
+    "VC4 texture format selection", [
+      I32EnumAttrCase<"rgba8888", 0>,
+      I32EnumAttrCase<"rgbx8888", 1>,
+      I32EnumAttrCase<"rgba4444", 2>,
+      I32EnumAttrCase<"rgba5551", 3>,
+      I32EnumAttrCase<"rgb565", 4>,
+      I32EnumAttrCase<"luminance", 5>,
+      I32EnumAttrCase<"alpha", 6>,
+      I32EnumAttrCase<"lumalpha", 7>,
+      I32EnumAttrCase<"etc1", 8>,
+      I32EnumAttrCase<"s16f", 9>,
+      I32EnumAttrCase<"s8", 10>,
+      I32EnumAttrCase<"s16", 11>,
+      I32EnumAttrCase<"bw1", 12>,
+      I32EnumAttrCase<"a4", 13>,
+      I32EnumAttrCase<"a1", 14>,
+      I32EnumAttrCase<"rgba64", 15>,
+      I32EnumAttrCase<"rgba32r", 16>,
+      I32EnumAttrCase<"yuyv422r", 17>
+    ]>;
+
+def VC4_MagFilter : VC4_DialectI32Enum<"MagFilter",
+    "VC4 TMU magnification filter", [
+      I32EnumAttrCase<"linear", 0>,
+      I32EnumAttrCase<"nearest", 1>
+    ]>;
+
+def VC4_MinFilter : VC4_DialectI32Enum<"MinFilter",
+    "VC4 TMU minification and mip filter", [
+      I32EnumAttrCase<"linear", 0>,
+      I32EnumAttrCase<"nearest", 1>,
+      I32EnumAttrCase<"near_mip_near", 2>,
+      I32EnumAttrCase<"near_mip_lin", 3>,
+      I32EnumAttrCase<"lin_mip_near", 4>,
+      I32EnumAttrCase<"lin_mip_lin", 5>
+    ]>;
+
+def VC4_WrapMode : VC4_DialectI32Enum<"WrapMode",
+    "VC4 TMU wrap mode", [
+      I32EnumAttrCase<"repeat", 0>,
+      I32EnumAttrCase<"clamp", 1>,
+      I32EnumAttrCase<"mirror", 2>,
+      I32EnumAttrCase<"border", 3>
+    ]>;
+
+def VC4_TMUReadPart : VC4_DialectI32Enum<"TMUReadPart",
+    "VC4 TMU receive selection", [
+      I32EnumAttrCase<"raw32", 0>,
+      I32EnumAttrCase<"rgba8888", 1>,
+      I32EnumAttrCase<"rg1616", 2>,
+      I32EnumAttrCase<"ba1616", 3>
+    ]>;
+
 #endif // VC4_ENUMS_TD
