@@ -816,11 +816,16 @@ The following op list is the implementation target for the milestone.
 **Verifier**
 - payload shape must match mode
 - result type must be compatible with the mode
+- `splat32` stays in structured SSA and may produce scalar or 16-lane 32-bit
+  VC4 values: `i32`, `f32`, `vector<16xi32>`, or `vector<16xf32>`
+- per-element modes stay in structured SSA and produce only
+  `vector<16xi32>`
 
 **Representation**
-- direct hardware concept, structured form
+- direct hardware concept modeled as a structured op, not a scheduled sink op
 
 **Expected lifetime**
+- normalization/lowering target only; not direct qasm-emission input
 - often lowers directly to `vc4.qpu.ldi`
 
 ---
@@ -837,15 +842,19 @@ The following op list is the implementation target for the milestone.
 - one of the legal pack mode enums for the chosen path
 
 **Semantics**
-- explicit data packing / narrowing / saturation / color-pack operation
+- explicit data packing / narrowing / saturation / color-pack operation over
+  32-bit VC4 carrier words, not MLIR `i8`/`i16` storage values
 
 **Verifier**
 - source/result type and mode must match one legal hardware pack interpretation
+- the result stays in the carrier-word domain:
+  `i32` or `vector<16xi32>`
 
 **Representation**
 - structured value-shaping op backed by real pack bits
 
 **Expected lifetime**
+- normalization/fusion target only; not direct qasm-emission input
 - usually fuses into low-level instruction fields
 
 ---
@@ -862,15 +871,19 @@ The following op list is the implementation target for the milestone.
 - one of the legal unpack mode enums
 
 **Semantics**
-- explicit unpack / extend / float16 / color conversion operation
+- explicit unpack / extend / float16 / color conversion operation from a
+  32-bit VC4 carrier word, not from MLIR `i8`/`i16` storage values
 
 **Verifier**
 - mode/source/result combination must be legal
+- the input stays in the carrier-word domain:
+  `i32` or `vector<16xi32>`
 
 **Representation**
 - structured value-shaping op backed by real unpack bits
 
 **Expected lifetime**
+- normalization/fusion target only; not direct qasm-emission input
 - usually fuses into low-level instruction fields
 
 ---
@@ -897,9 +910,11 @@ The following op list is the implementation target for the milestone.
 - amount must be representable as VC4 rotate immediate or later legalizable form
 
 **Representation**
-- partly direct hardware, partly structured convenience
+- structured value-shape op that may later lower into sink encodings but is
+  not itself a scheduled sink op
 
 **Expected lifetime**
+- normalization/lowering target only; not direct qasm-emission input
 - fuses or lowers into small-immediate rotate usage
 
 ---

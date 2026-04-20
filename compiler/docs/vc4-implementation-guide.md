@@ -274,6 +274,29 @@ Keep the later codegen boundary explicit and verifier-only.
 - Structured device ops such as uniforms, TMU, VPM, DMA, and value-shape ops
   must be lowered or normalized to scheduled sink ops before qasm emission.
 
+#### Structured value-shape SSA contract
+
+The value-shape family stays on the structured side of the dialect. These ops
+are not sink instructions and are not direct qasm inputs.
+
+- `vc4.load_imm` is a structured constant-materialization op that models the
+  load-immediate instruction family before sink lowering. It may lower fairly
+  directly to `vc4.qpu.ldi`, but it still lives in structured SSA.
+- `vc4.pack` and `vc4.unpack` are structured carrier-word transforms backed by
+  real VC4 pack/unpack semantics. They do not model true MLIR `i8` or `i16`
+  storage values.
+- For `vc4.pack`, the result is a 32-bit carrier word:
+  `i32` or `vector<16xi32>`.
+- For `vc4.unpack`, the input is a 32-bit carrier word:
+  `i32` or `vector<16xi32>`.
+- Scalar forms use one 32-bit carrier word; vector forms use 16 lanes of
+  32-bit carrier words. The dialect should reject narrower integer storage
+  types or unsupported lane counts here.
+- `vc4.rotate` is a structured 16-lane vector operation. It is not itself a
+  sink encoding, even when an immediate rotate amount is present.
+- All of these structured value-shape ops are expected to normalize away,
+  fuse, or lower into sink-level forms before qasm emission.
+
 ### 10.4 Narrow scheduled-hardware verifier
 
 The repo may add a dedicated verifier-only pass named

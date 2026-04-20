@@ -44,6 +44,10 @@ static bool isScalar32BitVC4ValueType(Type type) {
   return type.isSignlessInteger(32) || type.isF32();
 }
 
+// Structured arithmetic/value-shape SSA uses only 32-bit VC4 carrier words:
+// scalar i32/f32 values or 16-lane vectors of those element types.
+// pack/unpack stay in this carrier-word domain instead of materializing true
+// i8/i16 storage types in the IR.
 static bool isVector16Of32BitVC4ValueType(Type type) {
   auto vectorType = dyn_cast<VectorType>(type);
   if (!vectorType || vectorType.getRank() != 1 || vectorType.isScalable())
@@ -887,6 +891,8 @@ LogicalResult mlir::vc4::LoadImmOp::verify() {
   if (failed(verifyStructuredFormOp(getOperation())))
     return failure();
 
+  // Structured vc4.load_imm remains on the SSA side of the dialect even when
+  // it corresponds closely to a later vc4.qpu.ldi sink form.
   Attribute valueAttr = getValueAttr();
   if (!valueAttr)
     return emitOpError("requires a 'value' attribute");
@@ -954,7 +960,8 @@ LogicalResult mlir::vc4::PackOp::verify() {
                        "16-lane vector shapes");
   }
   if (!isVC4IntValueType(resultType))
-    return emitOpError("result type must be i32 or vector<16xi32>");
+    return emitOpError(
+        "result type must be a 32-bit carrier word: i32 or vector<16xi32>");
 
   if (hasRegfileAMode) {
     switch (*getRegfileAMode()) {
@@ -1021,7 +1028,8 @@ LogicalResult mlir::vc4::UnpackOp::verify() {
                        "16-lane vector shapes");
   }
   if (!isVC4IntValueType(inputType))
-    return emitOpError("input type must be i32 or vector<16xi32>");
+    return emitOpError(
+        "input type must be a 32-bit carrier word: i32 or vector<16xi32>");
 
   if (hasRegfileAMode) {
     switch (*getRegfileAMode()) {
@@ -1076,7 +1084,9 @@ LogicalResult mlir::vc4::RotateOp::verify() {
   if (inputType != resultType)
     return emitOpError("input and result types must match exactly");
   if (!isVector16Of32BitVC4ValueType(inputType))
-    return emitOpError("input and result type must be vector<16xi32> or vector<16xf32>");
+    return emitOpError(
+        "structured vc4.rotate requires vector<16xi32> or vector<16xf32> "
+        "input and result types");
 
   bool hasAmount = static_cast<bool>(getAmount());
   bool hasImmediate = static_cast<bool>(getImmediateAttr());

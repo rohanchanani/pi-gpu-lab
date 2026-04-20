@@ -162,6 +162,13 @@ def VC4_ALUMulOp : VC4_Op<"alu.mul", [HasParent<"FuncOp">]> {
   let hasVerifier = 1;
 }
 
+// These value-shape ops stay in structured SSA. They are not scheduled sink
+// ops, and they are expected to normalize away before qasm emission.
+//
+// pack/unpack model carrier-word transforms over 32-bit VC4 values rather than
+// exposing true i8/i16 storage types in the IR. rotate models a structured
+// 16-lane operation that may later lower into sink encodings, but is not
+// itself a sink instruction.
 def VC4_LoadImmOp : VC4_Op<"load_imm", [HasParent<"FuncOp">]> {
   let summary = "Structured VC4 load-immediate materialization";
   let arguments = (ins
