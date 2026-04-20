@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: vc4.module @qpu_ldi_sema {
-// CHECK: vc4.func @scheduled_main() attributes {form = 1 : i32, threading = 0 : i32} {
+// CHECK: vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
 // CHECK: vc4.qpu.ldi <splat32>
 // CHECK-SAME: cond_add = #vc4.cond<always>
 // CHECK-SAME: cond_mul = #vc4.cond<never>
@@ -29,7 +29,7 @@
 // CHECK-SAME: waddr_mul = 6 : i32
 
 vc4.module @qpu_ldi_sema {
-  vc4.func @scheduled_main() attributes {threading = 0 : i32, form = 1 : i32} {
+  vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
     vc4.qpu.ldi <splat32> {
       value = 42 : i32,
       pm = false,

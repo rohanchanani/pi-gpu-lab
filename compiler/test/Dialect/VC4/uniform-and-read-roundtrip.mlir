@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: vc4.module @uniforms {
-// CHECK: vc4.func @main(%[[SEED:.*]]: vector<16xf32>, %[[OFS:.*]]: i32) -> i32 attributes {form = 0 : i32, threading = 0 : i32} {
+// CHECK: vc4.func @main(%[[SEED:.*]]: vector<16xf32>, %[[OFS:.*]]: i32) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
 // CHECK: %[[U0:.*]] = vc4.uniform.read : i32
 // CHECK: vc4.uniform.seek %[[OFS]] : i32
 // CHECK: vc4.uniform.seek %[[OFS]] {relative = true} : i32
@@ -10,7 +10,7 @@
 // CHECK: vc4.return %[[U0]] : i32
 
 vc4.module @uniforms {
-  vc4.func @main(%seed: vector<16xf32>, %ofs: i32) -> i32 attributes {threading = 0 : i32, form = 0 : i32} {
+  vc4.func @main(%seed: vector<16xf32>, %ofs: i32) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
     %u0 = vc4.uniform.read : i32
     vc4.uniform.seek %ofs : i32
     vc4.uniform.seek %ofs {relative = true} : i32

@@ -15,7 +15,7 @@
 
 vc4.module @tmu_request_read {
   vc4.func @main(%addr: i32, %s: f32, %t: f32,
-                 %r: vector<16xf32>, %bias: vector<16xf32>, %flag: i1) attributes {threading = 0 : i32, form = 0 : i32} {
+                 %r: vector<16xf32>, %bias: vector<16xf32>, %flag: i1) attributes {threading = #vc4.threading_mode<single>, form = #vc4.function_form<structured>, domain = #vc4.execution_domain<qpu>} {
     %direct_desc = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
     %tex_desc = vc4.tmu.descriptor {
       mode = #vc4.tmu_mode<texture2d>,

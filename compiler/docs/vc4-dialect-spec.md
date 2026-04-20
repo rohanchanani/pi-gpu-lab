@@ -140,6 +140,7 @@ Recommended attributes:
 - `kernel` unit attr: marks entry-point kernels produced from upstream `gpu.func kernel`
 - `threading` enum attr: `single | threadable`
 - `form` enum attr: `structured | scheduled`
+- `domain` enum attr: `qpu | host`
 - optional target config attrs or metadata as needed later
 
 Use `FunctionOpInterface`.
@@ -173,6 +174,7 @@ The exact C++/ODS naming can vary, but the dialect must expose the following enu
 
 - `VC4ThreadingMode`: `single`, `threadable`
 - `VC4FunctionForm`: `structured`, `scheduled`
+- `VC4ExecutionDomain`: `qpu`, `host`
 
 ## 7.2 Builtin enums
 

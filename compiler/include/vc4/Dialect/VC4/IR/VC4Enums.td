@@ -19,21 +19,28 @@ class VC4_DialectI32Enum<string name, string summary,
 class VC4_EnumAttr<EnumAttrInfo enumInfo, string name>
     : EnumAttr<VC4_Dialect, enumInfo, name> {
   let cppNamespace = "::mlir::vc4";
+  let assemblyFormat = "`<` $value `>`";
 }
 
-def VC4_FunctionForm : VC4_I32Enum<"FunctionForm",
+def VC4_FunctionForm : VC4_DialectI32Enum<"FunctionForm",
     "VC4 function form", [
       I32EnumAttrCase<"structured", 0>,
       I32EnumAttrCase<"scheduled", 1>
     ]>;
 
-def VC4_ThreadingMode : VC4_I32Enum<"ThreadingMode",
+def VC4_ThreadingMode : VC4_DialectI32Enum<"ThreadingMode",
     "VC4 function threading mode", [
       I32EnumAttrCase<"single", 0>,
       I32EnumAttrCase<"threadable", 1>
     ]>;
 
-def VC4_BuiltinKind : VC4_I32Enum<"BuiltinKind",
+def VC4_ExecutionDomain : VC4_DialectI32Enum<"ExecutionDomain",
+    "VC4 function execution domain", [
+      I32EnumAttrCase<"qpu", 0>,
+      I32EnumAttrCase<"host", 1>
+    ]>;
+
+def VC4_BuiltinKind : VC4_DialectI32Enum<"BuiltinKind",
     "VC4 builtin kind", [
       I32EnumAttrCase<"elem_num", 0>,
       I32EnumAttrCase<"qpu_num", 1>

@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: vc4.module @qpu_bundle {
-// CHECK: vc4.func @scheduled_main() attributes {form = 1 : i32, threading = 0 : i32} {
+// CHECK: vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
 // CHECK: vc4.qpu.bundle
 // CHECK-SAME: add_a = #vc4.qpu_mux<a>
 // CHECK-SAME: add_b = #vc4.qpu_mux<b>
@@ -40,7 +40,7 @@
 // CHECK-SAME: write_swap
 
 vc4.module @qpu_bundle {
-  vc4.func @scheduled_main() attributes {threading = 0 : i32, form = 1 : i32} {
+  vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       unpack = #vc4.regfile_a_unpack_mode<f16a_or_i16a>,

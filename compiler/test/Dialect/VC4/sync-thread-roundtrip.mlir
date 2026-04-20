@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: vc4.module @sync_thread_ops {
-// CHECK: vc4.func @threadable_main(%[[ADDR:.*]]: i32) attributes {form = 0 : i32, threading = 1 : i32} {
+// CHECK: vc4.func @threadable_main(%[[ADDR:.*]]: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
 // CHECK: vc4.mutex <acquire>
 // CHECK: vc4.mutex <release>
 // CHECK: vc4.semaphore <acquire> {id = 3 : i32}
@@ -15,12 +15,12 @@
 // CHECK: vc4.async.wait %[[DMA_TOK]], %[[TMU_TOK]] : !vc4.async.token, !vc4.async.token
 // CHECK: vc4.program_end
 // CHECK: vc4.return
-// CHECK: vc4.func @end_only() attributes {form = 0 : i32, threading = 0 : i32} {
+// CHECK: vc4.func @end_only() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
 // CHECK: vc4.program_end
 // CHECK: vc4.return
 
 vc4.module @sync_thread_ops {
-  vc4.func @threadable_main(%addr: i32) attributes {threading = 1 : i32, form = 0 : i32} {
+  vc4.func @threadable_main(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
     vc4.mutex <acquire>
     vc4.mutex <release>
     vc4.semaphore <acquire> {id = 3 : i32}
@@ -42,7 +42,7 @@ vc4.module @sync_thread_ops {
     vc4.return
   }
 
-  vc4.func @end_only() attributes {threading = 0 : i32, form = 0 : i32} {
+  vc4.func @end_only() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
     vc4.program_end
     vc4.return
   }

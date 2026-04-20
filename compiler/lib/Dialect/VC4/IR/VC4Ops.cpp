@@ -149,6 +149,31 @@ static bool isVC4StructuredOp(Operation &op) {
   return name.starts_with("vc4.") && !name.starts_with("vc4.qpu.");
 }
 
+static bool isVC4HostDomainOnlyOp(Operation &op) {
+  StringRef name = op.getName().getStringRef();
+  return name == "vc4.enqueue_qpu" || name == "vc4.reserve_qpu" ||
+         name == "vc4.v3d.query" || name == "vc4.v3d.configure";
+}
+
+static bool isVC4SharedStructuredDomainOp(Operation &op) {
+  StringRef name = op.getName().getStringRef();
+  return name == "vc4.async.wait" || name == "vc4.cf.branch" ||
+         name == "vc4.return";
+}
+
+static bool isVC4QPUDomainOnlyOp(Operation &op) {
+  StringRef name = op.getName().getStringRef();
+  return name == "vc4.builtin" || name == "vc4.mov" || name == "vc4.read" ||
+         name == "vc4.load_imm" || name == "vc4.pack" ||
+         name == "vc4.unpack" || name == "vc4.rotate" ||
+         name == "vc4.mutex" || name == "vc4.semaphore" ||
+         name == "vc4.host_interrupt" || name == "vc4.thread_switch" ||
+         name == "vc4.program_end" || name.starts_with("vc4.uniform.") ||
+         name.starts_with("vc4.alu.") || name.starts_with("vc4.tmu.") ||
+         name.starts_with("vc4.sfu.") || name.starts_with("vc4.vpm.") ||
+         name.starts_with("vc4.dma.") || name.starts_with("vc4.qpu.");
+}
+
 static LogicalResult verifyAllOperandsAndResultAreVC4Values(Operation *op) {
   for (Type operandType : op->getOperandTypes()) {
     if (!isVC4StructuredValueType(operandType)) {
@@ -459,6 +484,7 @@ mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
 mlir::vc4::FuncOp mlir::vc4::FuncOp::create(
     Location location, StringRef name, FunctionType type,
     mlir::vc4::ThreadingMode threading, mlir::vc4::FunctionForm form,
+    mlir::vc4::ExecutionDomain domain,
     ArrayRef<NamedAttribute> attrs) {
   OpBuilder builder(location->getContext());
   OperationState state(location, getOperationName());
@@ -471,6 +497,9 @@ mlir::vc4::FuncOp mlir::vc4::FuncOp::create(
   state.addAttribute("form",
                      mlir::vc4::FunctionFormAttr::get(builder.getContext(),
                                                       form));
+  state.addAttribute("domain",
+                     mlir::vc4::ExecutionDomainAttr::get(builder.getContext(),
+                                                         domain));
   state.attributes.append(attrs.begin(), attrs.end());
   state.addRegion();
   return cast<mlir::vc4::FuncOp>(Operation::create(state));
@@ -541,8 +570,15 @@ LogicalResult mlir::vc4::FuncOp::verify() {
     return emitOpError("requires a 'threading' attribute");
   if (!getFormAttr())
     return emitOpError("requires a 'form' attribute");
+  if (!getDomainAttr())
+    return emitOpError("requires a 'domain' attribute");
 
   mlir::vc4::FunctionForm form = *getForm();
+  mlir::vc4::ExecutionDomain domain = *getDomain();
+  if (getKernelAttr() && domain != mlir::vc4::ExecutionDomain::qpu) {
+    return emitOpError(
+        "the 'kernel' attribute is only legal with domain = #vc4.execution_domain<qpu>");
+  }
   if (isExternal())
     return success();
 
@@ -561,6 +597,20 @@ LogicalResult mlir::vc4::FuncOp::verify() {
       return WalkResult::interrupt();
 
     if (form == mlir::vc4::FunctionForm::structured) {
+      if (domain == mlir::vc4::ExecutionDomain::qpu &&
+          isVC4HostDomainOnlyOp(*op)) {
+        op->emitOpError("is only legal in functions with domain = host");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      if (domain == mlir::vc4::ExecutionDomain::host &&
+          !isVC4HostDomainOnlyOp(*op) && !isVC4SharedStructuredDomainOp(*op) &&
+          (isVC4QPUDomainOnlyOp(*op) || isVC4StructuredOp(*op) ||
+           isVC4QPUOp(*op))) {
+        op->emitOpError("is only legal in functions with domain = qpu");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
       if (isVC4QPUOp(*op)) {
         op->emitOpError("is only legal in functions with form = scheduled");
         sawError = true;
@@ -572,6 +622,12 @@ LogicalResult mlir::vc4::FuncOp::verify() {
         return WalkResult::interrupt();
       }
       return WalkResult::advance();
+    }
+
+    if (domain == mlir::vc4::ExecutionDomain::host && isVC4QPUOp(*op)) {
+      op->emitOpError("is only legal in functions with domain = qpu");
+      sawError = true;
+      return WalkResult::interrupt();
     }
 
     if (isVC4QPUOp(*op))

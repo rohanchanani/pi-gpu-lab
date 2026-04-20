@@ -3,6 +3,7 @@
 
 include "vc4/Dialect/VC4/IR/VC4Base.td"
 include "vc4/Dialect/VC4/IR/VC4Enums.td"
+include "vc4/Dialect/VC4/IR/VC4OpEnums.td"
 
 class VC4_DialectEnumAttr<EnumAttrInfo enumInfo, string name>
     : EnumAttr<VC4_Dialect, enumInfo, name> {

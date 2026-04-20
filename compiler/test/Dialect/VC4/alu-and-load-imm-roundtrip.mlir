@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: vc4.module @alu_ops {
-// CHECK: vc4.func @main(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[FA:.*]]: f32, %[[FB:.*]]: f32, %[[VI:.*]]: vector<16xi32>, %[[VF:.*]]: vector<16xf32>) -> i32 attributes {form = 0 : i32, threading = 0 : i32} {
+// CHECK: vc4.func @main(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[FA:.*]]: f32, %[[FB:.*]]: f32, %[[VI:.*]]: vector<16xi32>, %[[VF:.*]]: vector<16xf32>) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
 // CHECK: %[[ADD:.*]] = vc4.alu.add <add> %[[A]], %[[B]] {cond = #vc4.cond<always>} : (i32, i32) -> i32
 // CHECK: %[[ITOF:.*]] = vc4.alu.add <itof> %[[A]] {cond = #vc4.cond<always>} : (i32) -> f32
 // CHECK: %[[FADD:.*]] = vc4.alu.add <fadd> %[[FA]], %[[FB]] {cond = #vc4.cond<zs>, set_flags} : (f32, f32) -> f32
@@ -14,7 +14,7 @@
 // CHECK: vc4.return %[[ADD]] : i32
 
 vc4.module @alu_ops {
-  vc4.func @main(%a: i32, %b: i32, %fa: f32, %fb: f32, %vi: vector<16xi32>, %vf: vector<16xf32>) -> i32 attributes {threading = 0 : i32, form = 0 : i32} {
+  vc4.func @main(%a: i32, %b: i32, %fa: f32, %fb: f32, %vi: vector<16xi32>, %vf: vector<16xf32>) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
     %add = vc4.alu.add <add> %a, %b {cond = #vc4.cond<always>} : (i32, i32) -> i32
     %itof = vc4.alu.add <itof> %a {cond = #vc4.cond<always>} : (i32) -> f32
     %fadd = vc4.alu.add <fadd> %fa, %fb {cond = #vc4.cond<zs>, set_flags} : (f32, f32) -> f32

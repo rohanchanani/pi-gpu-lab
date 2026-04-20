@@ -164,6 +164,9 @@ container/function surface.
 Do not change the `vc4.func` parser/printer or repurpose old Prompt 1/2 tests unless a later prompt truly
 requires it. If such a change is unavoidable, all earlier tests must still pass unchanged.
 
+Function-level hardening should prefer adding enum attrs such as execution-domain
+distinctions and verifier checks over rewriting the core `vc4.func` parser/printer.
+
 ## 8. Parser/printer strategy
 
 Use declarative assembly format for most structured ops, but do not overvalue pretty syntax early.

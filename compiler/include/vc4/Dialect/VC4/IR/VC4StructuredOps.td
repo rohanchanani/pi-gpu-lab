@@ -52,12 +52,14 @@ def VC4_FuncOp : VC4_Op<"func", [
     OptionalAttr<DictArrayAttr>:$res_attrs,
     OptionalAttr<UnitAttr>:$kernel,
     OptionalAttr<VC4_ThreadingModeAttr>:$threading,
-    OptionalAttr<VC4_FunctionFormAttr>:$form
+    OptionalAttr<VC4_FunctionFormAttr>:$form,
+    OptionalAttr<VC4_ExecutionDomainAttr>:$domain
   );
   let regions = (region AnyRegion:$body);
   let extraClassDeclaration = [{
     static FuncOp create(Location location, StringRef name, FunctionType type,
                          ThreadingMode threading, FunctionForm form,
+                         ExecutionDomain domain,
                          ArrayRef<NamedAttribute> attrs = {});
 
     ::mlir::Region *getCallableRegion() {

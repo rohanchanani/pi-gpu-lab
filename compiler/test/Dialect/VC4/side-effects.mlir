@@ -25,11 +25,11 @@
 // CHECK: vc4.v3d.configure: Write<V3DSystem>
 
 vc4.module @side_effects {
-  vc4.func @kernel_entry() attributes {kernel, threading = 0 : i32, form = 0 : i32} {
+  vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>} {
     vc4.return
   }
 
-  vc4.func @scheduled_main() attributes {threading = 0 : i32, form = 1 : i32} {
+  vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
     vc4.qpu.sema <release> {
       id = 2 : i32,
       pm = false,
@@ -40,7 +40,7 @@ vc4.module @side_effects {
     }
   }
 
-  vc4.func @main(%addr: i32, %coord: f32, %vec: vector<16xi32>, %scalar: f32) attributes {threading = 0 : i32, form = 0 : i32} {
+  vc4.func @qpu_main(%addr: i32, %coord: f32, %vec: vector<16xi32>, %scalar: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
     %tex_desc = vc4.tmu.descriptor {
       mode = #vc4.tmu_mode<texture2d>,
       texture_type = #vc4.texture_type<rgba8888>,
@@ -91,10 +91,15 @@ vc4.module @side_effects {
     vc4.mutex <acquire>
     vc4.semaphore <release> {id = 1 : i32}
     vc4.host_interrupt
+    vc4.return
+  }
+
+  vc4.func @host_main(%addr: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
     %qpu_tok = "vc4.enqueue_qpu"(%addr, %addr) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
     vc4.reserve_qpu {mask = 1 : i32}
     %ident = "vc4.v3d.query"() <{kind = #vc4.v3d_query_kind<ident>}> : () -> i32
     "vc4.v3d.configure"(%addr) <{kind = #vc4.v3d_configure_kind<cache_control>}> : (i32) -> ()
+    vc4.async.wait %qpu_tok : !vc4.async.token
     vc4.return
   }
 }
