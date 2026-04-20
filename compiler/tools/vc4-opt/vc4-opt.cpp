@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -52,23 +53,6 @@ static bool isVC4ScheduledQPUDomainFunction(mlir::vc4::FuncOp func) {
          *form == mlir::vc4::FunctionForm::scheduled;
 }
 
-static bool isVC4PhysicalRegfileWriteAddress(int64_t value) {
-  return value >= 0 && value <= 31;
-}
-
-static constexpr int64_t kVC4QPUWriteAddressR5 = 37;
-static constexpr int64_t kVC4QPUSFUWriteAddressMin = 52;
-static constexpr int64_t kVC4QPUSFUWriteAddressMax = 55;
-
-static bool isVC4RegisterAddress14(int64_t value) { return value == 14; }
-
-// In the current scheduled sink subset, uniform reads are represented by
-// raddr_* = 14. VPM/VDR/VDW accesses are represented by peripheral write
-// addresses 48..51.
-static bool isVC4VPMOrDMAWriteAddress(int64_t value) {
-  return value >= 48 && value <= 51;
-}
-
 static bool isVC4BundleAddPipeWriteActive(mlir::vc4::QPUBundleOp op) {
   return op.getOpAdd() != mlir::vc4::AddOpcode::nop;
 }
@@ -87,32 +71,39 @@ static bool isVC4TMULoadSignal(mlir::vc4::QPUSignal signal) {
 }
 
 static bool isVC4SFUWriteAddress(int64_t value) {
-  return value >= kVC4QPUSFUWriteAddressMin &&
-         value <= kVC4QPUSFUWriteAddressMax;
+  return mlir::vc4::isVC4QPUSFUWriteAddress(value);
 }
 
 static bool isVC4AccumulatorR5WriteAddress(int64_t value) {
-  return value == kVC4QPUWriteAddressR5;
+  return mlir::vc4::isVC4QPUR5WriteAddress(value);
 }
 
 static bool scheduledInstructionWritesPhysicalRegfile(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
     return (isVC4BundleAddPipeWriteActive(bundle) &&
-            isVC4PhysicalRegfileWriteAddress(bundle.getWaddrAddAttr().getInt())) ||
+            mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+                bundle.getWaddrAddAttr().getInt())) ||
            (isVC4BundleMulPipeWriteActive(bundle) &&
-            isVC4PhysicalRegfileWriteAddress(bundle.getWaddrMulAttr().getInt()));
+            mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+                bundle.getWaddrMulAttr().getInt()));
   }
   if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-    return isVC4PhysicalRegfileWriteAddress(ldi.getWaddrAddAttr().getInt()) ||
-           isVC4PhysicalRegfileWriteAddress(ldi.getWaddrMulAttr().getInt());
+    return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               ldi.getWaddrAddAttr().getInt()) ||
+           mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               ldi.getWaddrMulAttr().getInt());
   }
   if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
-    return isVC4PhysicalRegfileWriteAddress(sema.getWaddrAddAttr().getInt()) ||
-           isVC4PhysicalRegfileWriteAddress(sema.getWaddrMulAttr().getInt());
+    return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               sema.getWaddrAddAttr().getInt()) ||
+           mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               sema.getWaddrMulAttr().getInt());
   }
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    return isVC4PhysicalRegfileWriteAddress(branch.getWaddrAddAttr().getInt()) ||
-           isVC4PhysicalRegfileWriteAddress(branch.getWaddrMulAttr().getInt());
+    return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               branch.getWaddrAddAttr().getInt()) ||
+           mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+               branch.getWaddrMulAttr().getInt());
   }
   return false;
 }
@@ -122,26 +113,26 @@ scheduledInstructionPhysicalRegfileAWrite(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
     int64_t value = bundle.getWaddrAddAttr().getInt();
     if (isVC4BundleAddPipeWriteActive(bundle) &&
-        isVC4PhysicalRegfileWriteAddress(value)) {
+        mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
       return value;
     }
     return std::nullopt;
   }
   if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
     int64_t value = ldi.getWaddrAddAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
   if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
     int64_t value = sema.getWaddrAddAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
     int64_t value = branch.getWaddrAddAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
@@ -153,26 +144,26 @@ scheduledInstructionPhysicalRegfileBWrite(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
     int64_t value = bundle.getWaddrMulAttr().getInt();
     if (isVC4BundleMulPipeWriteActive(bundle) &&
-        isVC4PhysicalRegfileWriteAddress(value)) {
+        mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
       return value;
     }
     return std::nullopt;
   }
   if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
     int64_t value = ldi.getWaddrMulAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
   if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
     int64_t value = sema.getWaddrMulAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
     int64_t value = branch.getWaddrMulAttr().getInt();
-    if (isVC4PhysicalRegfileWriteAddress(value))
+    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
       return value;
     return std::nullopt;
   }
@@ -181,7 +172,7 @@ scheduledInstructionPhysicalRegfileBWrite(mlir::Operation *op) {
 
 static bool scheduledInstructionReadsPhysicalRegfileA(mlir::Operation *op,
                                                       int64_t value) {
-  if (!isVC4PhysicalRegfileWriteAddress(value))
+  if (!mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
     return false;
 
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
@@ -195,7 +186,7 @@ static bool scheduledInstructionReadsPhysicalRegfileA(mlir::Operation *op,
 
 static bool scheduledInstructionReadsPhysicalRegfileB(mlir::Operation *op,
                                                       int64_t value) {
-  if (!isVC4PhysicalRegfileWriteAddress(value))
+  if (!mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
     return false;
 
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
@@ -260,6 +251,52 @@ static bool scheduledInstructionWritesSFU(mlir::Operation *op) {
   return false;
 }
 
+template <typename Predicate>
+static bool scheduledInstructionReadsRegisterSpaceAddress(mlir::Operation *op,
+                                                          Predicate predicate) {
+  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+    if (predicate(bundle.getRaddrAAttr().getInt()))
+      return true;
+    if (auto raddrB = bundle.getRaddrBAttr())
+      return predicate(raddrB.getInt());
+    return false;
+  }
+  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op))
+    return predicate(branch.getRaddrAAttr().getInt());
+  return false;
+}
+
+template <typename Predicate>
+static bool scheduledInstructionWritesRegisterSpaceAddress(
+    mlir::Operation *op, Predicate predicate) {
+  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+    return (isVC4BundleAddPipeWriteActive(bundle) &&
+            predicate(bundle.getWaddrAddAttr().getInt())) ||
+           (isVC4BundleMulPipeWriteActive(bundle) &&
+            predicate(bundle.getWaddrMulAttr().getInt()));
+  }
+  if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+    return predicate(ldi.getWaddrAddAttr().getInt()) ||
+           predicate(ldi.getWaddrMulAttr().getInt());
+  }
+  if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+    return predicate(sema.getWaddrAddAttr().getInt()) ||
+           predicate(sema.getWaddrMulAttr().getInt());
+  }
+  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+    return predicate(branch.getWaddrAddAttr().getInt()) ||
+           predicate(branch.getWaddrMulAttr().getInt());
+  }
+  return false;
+}
+
+template <typename Predicate>
+static bool scheduledInstructionTouchesRegisterSpaceAddress(
+    mlir::Operation *op, Predicate predicate) {
+  return scheduledInstructionReadsRegisterSpaceAddress(op, predicate) ||
+         scheduledInstructionWritesRegisterSpaceAddress(op, predicate);
+}
+
 // In the current sink IR subset, an r4 read is visible only through the
 // explicit QPU bundle muxes.
 static bool scheduledInstructionReadsR4(mlir::Operation *op) {
@@ -283,60 +320,26 @@ static bool scheduledInstructionTriggersR4WriteEventSubset(mlir::Operation *op) 
   return scheduledInstructionWritesSFU(op);
 }
 
-static bool scheduledInstructionTouchesRegisterAddress14(mlir::Operation *op) {
-  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
-    if (isVC4RegisterAddress14(bundle.getRaddrAAttr().getInt()))
-      return true;
-    if (auto raddrB = bundle.getRaddrBAttr();
-        raddrB && isVC4RegisterAddress14(raddrB.getInt()))
-      return true;
-    return (isVC4BundleAddPipeWriteActive(bundle) &&
-            isVC4RegisterAddress14(bundle.getWaddrAddAttr().getInt())) ||
-           (isVC4BundleMulPipeWriteActive(bundle) &&
-            isVC4RegisterAddress14(bundle.getWaddrMulAttr().getInt()));
-  }
-  if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-    return isVC4RegisterAddress14(ldi.getWaddrAddAttr().getInt()) ||
-           isVC4RegisterAddress14(ldi.getWaddrMulAttr().getInt());
-  }
-  if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
-    return isVC4RegisterAddress14(sema.getWaddrAddAttr().getInt()) ||
-           isVC4RegisterAddress14(sema.getWaddrMulAttr().getInt());
-  }
-  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    return isVC4RegisterAddress14(branch.getRaddrAAttr().getInt()) ||
-           isVC4RegisterAddress14(branch.getWaddrAddAttr().getInt()) ||
-           isVC4RegisterAddress14(branch.getWaddrMulAttr().getInt());
-  }
-  return false;
+static bool scheduledInstructionTouchesPhysicalRegfileAddress14(
+    mlir::Operation *op) {
+  return scheduledInstructionTouchesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUThreadEndHazardPhysicalRegfileAddress);
 }
 
-static bool scheduledInstructionAccessesUniformOrVPMVDW(mlir::Operation *op) {
-  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
-    if (isVC4RegisterAddress14(bundle.getRaddrAAttr().getInt()))
-      return true;
-    if (auto raddrB = bundle.getRaddrBAttr();
-        raddrB && isVC4RegisterAddress14(raddrB.getInt()))
-      return true;
-    return (isVC4BundleAddPipeWriteActive(bundle) &&
-            isVC4VPMOrDMAWriteAddress(bundle.getWaddrAddAttr().getInt())) ||
-           (isVC4BundleMulPipeWriteActive(bundle) &&
-            isVC4VPMOrDMAWriteAddress(bundle.getWaddrMulAttr().getInt()));
-  }
-  if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-    return isVC4VPMOrDMAWriteAddress(ldi.getWaddrAddAttr().getInt()) ||
-           isVC4VPMOrDMAWriteAddress(ldi.getWaddrMulAttr().getInt());
-  }
-  if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
-    return isVC4VPMOrDMAWriteAddress(sema.getWaddrAddAttr().getInt()) ||
-           isVC4VPMOrDMAWriteAddress(sema.getWaddrMulAttr().getInt());
-  }
-  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    return isVC4RegisterAddress14(branch.getRaddrAAttr().getInt()) ||
-           isVC4VPMOrDMAWriteAddress(branch.getWaddrAddAttr().getInt()) ||
-           isVC4VPMOrDMAWriteAddress(branch.getWaddrMulAttr().getInt());
-  }
-  return false;
+static bool scheduledInstructionReadsUniform(mlir::Operation *op) {
+  return scheduledInstructionReadsRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUUniformReadAddress);
+}
+
+static bool scheduledInstructionReadsVarying(mlir::Operation *op) {
+  return scheduledInstructionReadsRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUVaryingReadAddress);
+}
+
+static bool scheduledInstructionTouchesVPMVDRVDWRegisterSpace(
+    mlir::Operation *op) {
+  return scheduledInstructionTouchesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUVPMVDRVDWRegisterSpaceAddress);
 }
 
 static mlir::LogicalResult appendVC4ScheduledInstructionStream(
@@ -569,9 +572,11 @@ struct VC4VerifyEmitContractPass
 // individual op verifiers:
 // - thread-end signal instructions must not write physical regfile A/B
 //   addresses 0..31
-// - a thread-end window must not touch register-space address 14
-// - the same window must not access the uniform read port (raddr_* = 14) or
-//   VPM/VDR/VDW peripheral write destinations (waddr_* = 48..51)
+// - a thread-end window must not touch physical regfile address 14
+// - the same window must not read the uniform register-space address 32
+// - the same window must not read the varying register-space address 35
+// - the same window must not access VPM/VDR/VDW register-space addresses
+//   48..50
 // - last-thread-switch is only legal for threadable functions
 //
 // To make the instruction stream well-defined, the pass requires checked
@@ -640,18 +645,36 @@ struct VC4VerifyScheduledHardwareRulesPass
 
         for (size_t j = i, windowEnd = std::min(i + 3, e); j != windowEnd; ++j) {
           mlir::Operation *windowOp = stream[j];
-          if (scheduledInstructionTouchesRegisterAddress14(windowOp)) {
-            windowOp->emitOpError(
-                "is in the thread-end hazard window and must not read or "
-                "write regfile address 14");
+          if (scheduledInstructionTouchesPhysicalRegfileAddress14(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read or "
+                   "write physical regfile address "
+                << mlir::vc4::kVC4QPUThreadEndHazardPhysicalRegfileAddr;
             sawError = true;
             return mlir::WalkResult::interrupt();
           }
-          if (scheduledInstructionAccessesUniformOrVPMVDW(windowOp)) {
-            windowOp->emitOpError(
-                "is in the thread-end hazard window and must not access "
-                "uniforms or VPM/VDR/VDW register-space addresses (uniform "
-                "read address 14, VPM/VDR/VDW write addresses 48..51)");
+          if (scheduledInstructionReadsUniform(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read "
+                   "uniform register-space address "
+                << mlir::vc4::kVC4QPUUniformRead;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionReadsVarying(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read "
+                   "varying register-space address "
+                << mlir::vc4::kVC4QPUVaryingRead;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionTouchesVPMVDRVDWRegisterSpace(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not access "
+                   "VPM/VDR/VDW register-space addresses "
+                << mlir::vc4::kVC4QPUVPMVDRVDWMin << ".."
+                << mlir::vc4::kVC4QPUVPMVDRVDWMax;
             sawError = true;
             return mlir::WalkResult::interrupt();
           }
