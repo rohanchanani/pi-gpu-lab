@@ -362,6 +362,11 @@ static bool scheduledInstructionWritesTMUParameter(mlir::Operation *op) {
       op, mlir::vc4::isVC4QPUTMUParameterWriteAddress);
 }
 
+static bool scheduledInstructionReadsMutexAcquire(mlir::Operation *op) {
+  return scheduledInstructionReadsRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUMutexAddress);
+}
+
 static mlir::LogicalResult appendVC4ScheduledInstructionStream(
     mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream,
     llvm::StringRef verifierPassArg) {
@@ -978,6 +983,105 @@ struct VC4VerifyScheduledIOSpacingPass
   }
 };
 
+// This verifier-only pass checks a conservative single-slot subset of
+// closely-coupled peripheral accesses that are directly representable in the
+// current compute-focused scheduled sink IR:
+// - TMU read signal on vc4.qpu.bundle (ldtmu0 / ldtmu1)
+// - TMU parameter write (56..63)
+// - SFU write (52..55)
+// - mutex acquire read through a representable sink instruction (raddr = 51)
+// - semaphore access (vc4.qpu.sema)
+// - VPM / VDR / VDW register-space access (48..50)
+//
+// Any flattened scheduled instruction slot that encodes more than one of those
+// access categories is rejected.
+struct VC4VerifyScheduledPeripheralAccessesPass
+    : public mlir::PassWrapper<VC4VerifyScheduledPeripheralAccessesPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
+      VC4VerifyScheduledPeripheralAccessesPass)
+
+  llvm::StringRef getArgument() const final {
+    return "vc4-verify-scheduled-peripheral-accesses";
+  }
+  llvm::StringRef getDescription() const final {
+    return "Verify conservative single-slot scheduled QPU peripheral-access combinations";
+  }
+
+  void runOnOperation() final {
+    bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-peripheral-accesses", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      for (mlir::Operation *op : stream) {
+        bool hasTMUReadSignal = false;
+        if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
+          hasTMUReadSignal = isVC4TMULoadSignal(bundle.getSig());
+
+        bool hasTMUParameterWrite = scheduledInstructionWritesTMUParameter(op);
+        bool hasSFUWrite = scheduledInstructionWritesSFU(op);
+        bool hasMutexAcquireRead = scheduledInstructionReadsMutexAcquire(op);
+        bool hasSemaphoreAccess = llvm::isa<mlir::vc4::QPUSemaOp>(op);
+        bool hasVPMVDRVDWAccess =
+            scheduledInstructionTouchesVPMVDRVDWRegisterSpace(op);
+
+        unsigned accessCount = static_cast<unsigned>(hasTMUReadSignal) +
+                               static_cast<unsigned>(hasTMUParameterWrite) +
+                               static_cast<unsigned>(hasSFUWrite) +
+                               static_cast<unsigned>(hasMutexAcquireRead) +
+                               static_cast<unsigned>(hasSemaphoreAccess) +
+                               static_cast<unsigned>(hasVPMVDRVDWAccess);
+        if (accessCount <= 1)
+          continue;
+
+        auto diag = op->emitOpError(
+            "encodes more than one closely-coupled peripheral access in a "
+            "single scheduled instruction slot (");
+        bool firstCategory = true;
+        auto appendCategory = [&](llvm::StringRef category) {
+          if (!firstCategory)
+            diag << ", ";
+          diag << category;
+          firstCategory = false;
+        };
+
+        if (hasTMUReadSignal)
+          appendCategory("TMU read signal");
+        if (hasTMUParameterWrite)
+          appendCategory("TMU parameter write");
+        if (hasSFUWrite)
+          appendCategory("SFU write");
+        if (hasMutexAcquireRead)
+          appendCategory("mutex acquire read");
+        if (hasSemaphoreAccess)
+          appendCategory("semaphore access");
+        if (hasVPMVDRVDWAccess)
+          appendCategory("VPM/VDR/VDW register-space access");
+        diag << ")";
+
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+  }
+};
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -987,6 +1091,7 @@ int main(int argc, char **argv) {
   mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
   mlir::PassRegistration<VC4VerifyScheduledAdjacentHazardsPass>();
   mlir::PassRegistration<VC4VerifyScheduledIOSpacingPass>();
+  mlir::PassRegistration<VC4VerifyScheduledPeripheralAccessesPass>();
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::vc4::VC4Dialect>();
