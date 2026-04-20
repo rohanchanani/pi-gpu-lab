@@ -34,6 +34,11 @@ static bool isVC4ScheduledSinkFamilyOp(mlir::Operation &op) {
   return op.getName().getStringRef().starts_with("vc4.qpu.");
 }
 
+static bool isVC4ScheduledNonBranchOp(mlir::Operation &op) {
+  return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
+                   mlir::vc4::QPUSemaOp>(op);
+}
+
 static bool isVC4LauncherOrSystemOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::AsyncWaitOp, mlir::vc4::CFBranchOp,
                    mlir::vc4::EnqueueQPUOp, mlir::vc4::ReserveQPUOp,
@@ -389,6 +394,14 @@ static mlir::LogicalResult collectVC4ScheduledInstructionStream(
   return mlir::success();
 }
 
+static mlir::InFlightDiagnostic
+emitInvalidQASMEpilogueDiag(mlir::vc4::FuncOp func) {
+  return func.emitOpError(
+      "is not directly emittable: qasm input requires an explicit thrend plus "
+      "two delay-slot instructions at the end of the flattened scheduled "
+      "instruction stream");
+}
+
 struct VC4TestPrintEffectsPass
     : public mlir::PassWrapper<VC4TestPrintEffectsPass,
                                mlir::OperationPass<mlir::ModuleOp>> {
@@ -518,8 +531,65 @@ struct VC4VerifyEmitContractPass
           sawError = true;
           return mlir::WalkResult::interrupt();
         });
-        return sawError ? mlir::WalkResult::interrupt()
-                        : mlir::WalkResult::advance();
+        if (sawError)
+          return mlir::WalkResult::interrupt();
+
+        llvm::SmallVector<mlir::Operation *> stream;
+        if (mlir::failed(collectVC4ScheduledInstructionStream(
+                func, "--vc4-verify-emit-contract", stream))) {
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        if (stream.size() < 3) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; found only " << stream.size()
+              << " scheduled instruction slot(s)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        size_t epilogueStart = stream.size() - 3;
+        auto finalThreadEnd =
+            llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart]);
+        if (!finalThreadEnd || !isVC4ThreadEndSignal(finalThreadEnd.getSig())) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-3 must be a vc4.qpu.bundle with sig = "
+                 "#vc4.qpu_signal<thrend>";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        for (size_t i = 0; i != epilogueStart; ++i) {
+          if (auto earlierThreadEnd =
+                  llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
+              earlierThreadEnd &&
+              isVC4ThreadEndSignal(earlierThreadEnd.getSig())) {
+            emitInvalidQASMEpilogueDiag(func)
+                << "; found an earlier vc4.qpu.bundle with sig = "
+                   "#vc4.qpu_signal<thrend> before slot N-3";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 1])) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-2 must be a non-branch scheduled op "
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 2])) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-1 must be a non-branch scheduled op "
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        return mlir::WalkResult::advance();
       }
 
       if (*domain == mlir::vc4::ExecutionDomain::host &&
