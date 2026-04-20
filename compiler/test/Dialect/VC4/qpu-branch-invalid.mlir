@@ -77,3 +77,14 @@ vc4.module @branch_block_arguments_error {
     }
   }
 }
+
+vc4.module @branch_raddr_range_error {
+  vc4.func @bad_raddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    // expected-error@+1 {{'raddr_a' attribute must be in range [0, 31]}}
+    vc4.qpu.branch attributes {cond = #vc4.branch_cond<always>, relative = false, use_reg = true, raddr_a = 32 : i32, immediate = 0 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+      vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+      vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+    }
+  }
+}

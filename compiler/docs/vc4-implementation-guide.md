@@ -253,6 +253,25 @@ Examples to defer:
 
 The spec requires the dialect to acknowledge those hazards, not to fully solve them now.
 
+### 10.3 Codegen boundary
+
+Keep the later codegen boundary explicit and verifier-only.
+
+- qasm emission later consumes only `vc4.func` operations with
+  `domain = #vc4.execution_domain<qpu>` and
+  `form = #vc4.function_form<scheduled>`.
+- launcher generation later consumes only `vc4.func` operations with
+  `domain = #vc4.execution_domain<host>` and
+  `form = #vc4.function_form<structured>`.
+- a dedicated verifier-only pass may reject functions that are dialect-legal
+  but not yet legal codegen inputs
+- `domain = #vc4.execution_domain<qpu>`,
+  `form = #vc4.function_form<structured>` functions are not directly emittable.
+- `domain = #vc4.execution_domain<host>`,
+  `form = #vc4.function_form<scheduled>` functions are not directly emittable.
+- Structured device ops such as uniforms, TMU, VPM, DMA, and value-shape ops
+  must be lowered or normalized to scheduled sink ops before qasm emission.
+
 ## 11. Side-effect modeling recommendation
 
 Implement `MemoryEffectOpInterface` using custom resources.

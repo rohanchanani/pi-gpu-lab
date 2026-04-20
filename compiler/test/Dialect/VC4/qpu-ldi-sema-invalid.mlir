@@ -49,3 +49,10 @@ vc4.module @sema_pack_path_error {
     vc4.qpu.sema <acquire> {id = 2 : i32, pm = true, pack = #vc4.regfile_a_pack_mode<to_16a>, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
   }
 }
+
+vc4.module @sema_stall_capable_write_address_error {
+  vc4.func @bad_waddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    // expected-error@+1 {{'waddr_mul' must not target stall-capable peripheral write addresses}}
+    vc4.qpu.sema <release> {id = 2 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 56 : i32}
+  }
+}

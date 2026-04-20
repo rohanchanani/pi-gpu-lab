@@ -349,8 +349,24 @@ static LogicalResult verifyQPUWriteAddressAttr(Operation *op, StringRef attrName
   return success();
 }
 
-static LogicalResult verifyQPUReadAddressAttr(Operation *op, StringRef attrName,
-                                              IntegerAttr attr) {
+static LogicalResult verifyQPUBundleReadAddressAttr(Operation *op,
+                                                    StringRef attrName,
+                                                    IntegerAttr attr) {
+  if (!attr || !attr.getType().isSignlessInteger(32)) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be signless i32";
+  }
+  int64_t value = attr.getInt();
+  if (value < 0 || value > 63) {
+    return op->emitOpError() << "'" << attrName
+                             << "' attribute must be in range [0, 63]";
+  }
+  return success();
+}
+
+static LogicalResult verifyQPUBranchReadAddressAttr(Operation *op,
+                                                    StringRef attrName,
+                                                    IntegerAttr attr) {
   if (!attr || !attr.getType().isSignlessInteger(32)) {
     return op->emitOpError() << "'" << attrName
                              << "' attribute must be signless i32";
@@ -364,6 +380,51 @@ static LogicalResult verifyQPUReadAddressAttr(Operation *op, StringRef attrName,
 }
 
 static bool isQPUUpperWriteAddress(int64_t value) { return value >= 32; }
+
+// Small-immediate selectors use the encoded hardware space directly:
+// 0..47 are immediate integer/float literal selectors,
+// 48 is the rotate-by-r5 selector,
+// 49..63 are immediate rotate selectors.
+static bool isQPUSmallImmLiteralSelector(int64_t value) {
+  return value >= 0 && value <= 47;
+}
+
+static bool isQPUSmallImmRotateByR5Selector(int64_t value) {
+  return value == 48;
+}
+
+static bool isQPUSmallImmImmediateRotateSelector(int64_t value) {
+  return value >= 49 && value <= 63;
+}
+
+static bool isQPUValidSmallImmSelector(int64_t value) {
+  return isQPUSmallImmLiteralSelector(value) ||
+         isQPUSmallImmRotateByR5Selector(value) ||
+         isQPUSmallImmImmediateRotateSelector(value);
+}
+
+// Semaphore instructions must not target closely-coupled peripheral write
+// addresses that can stall the instruction stream.
+static bool isQPUStallCapablePeripheralWriteAddress(int64_t value) {
+  return (value >= 43 && value <= 47) || (value >= 52 && value <= 55) ||
+         (value >= 56 && value <= 63);
+}
+
+static LogicalResult verifyQPUSemaWriteAddressAttr(Operation *op,
+                                                   StringRef attrName,
+                                                   IntegerAttr attr) {
+  if (failed(verifyQPUWriteAddressAttr(op, attrName, attr)))
+    return failure();
+
+  int64_t value = attr.getInt();
+  if (isQPUStallCapablePeripheralWriteAddress(value)) {
+    return op->emitOpError()
+           << "'" << attrName
+           << "' must not target stall-capable peripheral write addresses "
+              "(TLB 43..47, SFU 52..55, TMU 56..63) for vc4.qpu.sema";
+  }
+  return success();
+}
 
 static bool isQPUAddPipeActive(mlir::vc4::AddOpcode opcode) {
   return opcode != mlir::vc4::AddOpcode::nop;
@@ -1732,10 +1793,12 @@ LogicalResult mlir::vc4::QPUSemaOp::verify() {
   if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
     return failure();
   if (failed(
-          verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+          verifyQPUSemaWriteAddressAttr(getOperation(), "waddr_add",
+                                        getWaddrAddAttr())))
     return failure();
   if (failed(
-          verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+          verifyQPUSemaWriteAddressAttr(getOperation(), "waddr_mul",
+                                        getWaddrMulAttr())))
     return failure();
   return success();
 }
@@ -1765,18 +1828,20 @@ LogicalResult mlir::vc4::QPUBundleOp::verify() {
                                           getWaddrAddAttr(), getWaddrMulAttr())))
     return failure();
   if (failed(
-          verifyQPUReadAddressAttr(getOperation(), "raddr_a", getRaddrAAttr())))
+          verifyQPUBundleReadAddressAttr(getOperation(), "raddr_a",
+                                         getRaddrAAttr())))
     return failure();
   if (hasRaddrB &&
-      failed(verifyQPUReadAddressAttr(getOperation(), "raddr_b", getRaddrBAttr()))) {
+      failed(verifyQPUBundleReadAddressAttr(getOperation(), "raddr_b",
+                                            getRaddrBAttr()))) {
     return failure();
   }
 
   if (hasSmallImm) {
     int64_t smallImm = getSmallImmAttr().getInt();
-    if (smallImm < 0 || smallImm > 47) {
+    if (!isQPUValidSmallImmSelector(smallImm)) {
       return emitOpError(
-          "'small_imm' attribute must be an encoded selector in range [0, 47]");
+          "'small_imm' attribute must be an encoded selector in range [0, 63]");
     }
   }
 
@@ -1809,7 +1874,8 @@ LogicalResult mlir::vc4::QPUBranchOp::verify() {
     return failure();
 
   if (failed(
-          verifyQPUReadAddressAttr(getOperation(), "raddr_a", getRaddrAAttr())))
+          verifyQPUBranchReadAddressAttr(getOperation(), "raddr_a",
+                                         getRaddrAAttr())))
     return failure();
   if (failed(
           verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))

@@ -13,8 +13,8 @@
 // CHECK-SAME: op_mul = #vc4.mul_opcode<nop>
 // CHECK-SAME: pack = #vc4.regfile_a_pack_mode<to_16a>
 // CHECK-SAME: pm = false
-// CHECK-SAME: raddr_a = 2 : i32
-// CHECK-SAME: raddr_b = 3 : i32
+// CHECK-SAME: raddr_a = 32 : i32
+// CHECK-SAME: raddr_b = 35 : i32
 // CHECK-SAME: sig = #vc4.qpu_signal<none>
 // CHECK-SAME: unpack = #vc4.regfile_a_unpack_mode<f16a_or_i16a>
 // CHECK-SAME: waddr_add = 1 : i32
@@ -33,7 +33,7 @@
 // CHECK-SAME: raddr_a = 4 : i32
 // CHECK-SAME: set_flags
 // CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
-// CHECK-SAME: small_imm = 7 : i32
+// CHECK-SAME: small_imm = 49 : i32
 // CHECK-SAME: unpack = #vc4.r4_unpack_mode<f16a>
 // CHECK-SAME: waddr_add = 5 : i32
 // CHECK-SAME: waddr_mul = 6 : i32
@@ -52,8 +52,8 @@ vc4.module @qpu_bundle {
       waddr_mul = 2 : i32,
       op_add = #vc4.add_opcode<add>,
       op_mul = #vc4.mul_opcode<nop>,
-      raddr_a = 2 : i32,
-      raddr_b = 3 : i32,
+      raddr_a = 32 : i32,
+      raddr_b = 35 : i32,
       add_a = #vc4.qpu_mux<a>,
       add_b = #vc4.qpu_mux<b>,
       mul_a = #vc4.qpu_mux<r0>,
@@ -74,7 +74,7 @@ vc4.module @qpu_bundle {
       op_add = #vc4.add_opcode<sub>,
       op_mul = #vc4.mul_opcode<fmul>,
       raddr_a = 4 : i32,
-      small_imm = 7 : i32,
+      small_imm = 49 : i32,
       add_a = #vc4.qpu_mux<a>,
       add_b = #vc4.qpu_mux<b>,
       mul_a = #vc4.qpu_mux<r4>,
