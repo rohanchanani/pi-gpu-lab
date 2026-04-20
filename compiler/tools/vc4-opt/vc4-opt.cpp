@@ -347,6 +347,21 @@ static bool scheduledInstructionTouchesVPMVDRVDWRegisterSpace(
       op, mlir::vc4::isVC4QPUVPMVDRVDWRegisterSpaceAddress);
 }
 
+static bool scheduledInstructionWritesUniformsAddress(mlir::Operation *op) {
+  return scheduledInstructionWritesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUUniformsAddress);
+}
+
+static bool scheduledInstructionWritesTMUNoswap(mlir::Operation *op) {
+  return scheduledInstructionWritesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUTMUNoswapAddress);
+}
+
+static bool scheduledInstructionWritesTMUParameter(mlir::Operation *op) {
+  return scheduledInstructionWritesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUTMUParameterWriteAddress);
+}
+
 static mlir::LogicalResult appendVC4ScheduledInstructionStream(
     mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream,
     llvm::StringRef verifierPassArg) {
@@ -870,6 +885,99 @@ struct VC4VerifyScheduledAdjacentHazardsPass
   }
 };
 
+// This verifier-only pass checks only two sink-level IO spacing rules that are
+// directly relevant to compute kernels in the current scheduled subset:
+// - a write to UNIFORMS_ADDRESS (40) must not be followed within the next two
+//   instruction slots by a uniform read (raddr = 32)
+// - after a write to TMU_NOSWAP (36), the first later TMU parameter write
+//   (56..63) must be at least three instruction slots later
+//
+// As with the other scheduled verifiers, the checked instruction stream is
+// defined only for scheduled qpu-domain functions with a single top-level
+// block. The stream is flattened in program order, with a vc4.qpu.branch
+// contributing one instruction slot followed immediately by its explicit
+// delay-slot ops in region order.
+struct VC4VerifyScheduledIOSpacingPass
+    : public mlir::PassWrapper<VC4VerifyScheduledIOSpacingPass,
+                               mlir::OperationPass<mlir::ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VC4VerifyScheduledIOSpacingPass)
+
+  llvm::StringRef getArgument() const final {
+    return "vc4-verify-scheduled-io-spacing";
+  }
+  llvm::StringRef getDescription() const final {
+    return "Verify a narrow subset of scheduled QPU IO spacing rules";
+  }
+
+  void runOnOperation() final {
+    bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-io-spacing", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      for (size_t i = 0, e = stream.size(); i != e; ++i) {
+        mlir::Operation *op = stream[i];
+
+        if (scheduledInstructionWritesUniformsAddress(op)) {
+          for (size_t j = i + 1, windowEnd = std::min(i + 3, e); j != windowEnd;
+               ++j) {
+            mlir::Operation *windowOp = stream[j];
+            if (!scheduledInstructionReadsUniform(windowOp))
+              continue;
+            windowOp->emitOpError()
+                << "reads uniform register-space address "
+                << mlir::vc4::kVC4QPUUniformRead
+                << " within two instruction slots after a write to "
+                   "UNIFORMS_ADDRESS "
+                << mlir::vc4::kVC4QPUUniformsAddress;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        if (!scheduledInstructionWritesTMUNoswap(op))
+          continue;
+
+        for (size_t j = i + 1; j != e; ++j) {
+          mlir::Operation *laterOp = stream[j];
+          if (!scheduledInstructionWritesTMUParameter(laterOp))
+            continue;
+          size_t distance = j - i;
+          if (distance < 3) {
+            laterOp->emitOpError()
+                << "writes TMU parameter register-space addresses "
+                << mlir::vc4::kVC4QPUTMUParameterWriteMin << ".."
+                << mlir::vc4::kVC4QPUTMUParameterWriteMax << " only "
+                << distance
+                << " instruction slot(s) after a write to TMU_NOSWAP "
+                << mlir::vc4::kVC4QPUTMUNoswap
+                << "; the first later TMU parameter write must be at least "
+                   "three instruction slots later";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          break;
+        }
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+  }
+};
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -878,6 +986,7 @@ int main(int argc, char **argv) {
   mlir::PassRegistration<VC4VerifyEmitContractPass>();
   mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
   mlir::PassRegistration<VC4VerifyScheduledAdjacentHazardsPass>();
+  mlir::PassRegistration<VC4VerifyScheduledIOSpacingPass>();
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::vc4::VC4Dialect>();
