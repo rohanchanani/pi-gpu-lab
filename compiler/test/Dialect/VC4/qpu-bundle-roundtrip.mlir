@@ -24,8 +24,8 @@
 // CHECK-SAME: add_b = #vc4.qpu_mux<b>
 // CHECK-SAME: cond_add = #vc4.cond<zs>
 // CHECK-SAME: cond_mul = #vc4.cond<always>
-// CHECK-SAME: mul_a = #vc4.qpu_mux<r4>
-// CHECK-SAME: mul_b = #vc4.qpu_mux<b>
+// CHECK-SAME: mul_a = #vc4.qpu_mux<r2>
+// CHECK-SAME: mul_b = #vc4.qpu_mux<r3>
 // CHECK-SAME: op_add = #vc4.add_opcode<sub>
 // CHECK-SAME: op_mul = #vc4.mul_opcode<fmul>
 // CHECK-SAME: pack = #vc4.mul_pack_mode<to_8a>
@@ -77,8 +77,8 @@ vc4.module @qpu_bundle {
       small_imm = 49 : i32,
       add_a = #vc4.qpu_mux<a>,
       add_b = #vc4.qpu_mux<b>,
-      mul_a = #vc4.qpu_mux<r4>,
-      mul_b = #vc4.qpu_mux<b>
+      mul_a = #vc4.qpu_mux<r2>,
+      mul_b = #vc4.qpu_mux<r3>
     }
   }
 }

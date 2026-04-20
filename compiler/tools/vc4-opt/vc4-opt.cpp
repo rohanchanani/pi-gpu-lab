@@ -70,6 +70,11 @@ static bool isVC4ThreadEndSignal(mlir::vc4::QPUSignal signal) {
   return signal == mlir::vc4::QPUSignal::thrend;
 }
 
+static bool isVC4ThreadSwitchSignal(mlir::vc4::QPUSignal signal) {
+  return signal == mlir::vc4::QPUSignal::thrsw ||
+         signal == mlir::vc4::QPUSignal::last_thread_switch;
+}
+
 static bool isVC4TMULoadSignal(mlir::vc4::QPUSignal signal) {
   return signal == mlir::vc4::QPUSignal::ldtmu0 ||
          signal == mlir::vc4::QPUSignal::ldtmu1;
@@ -81,6 +86,47 @@ static bool isVC4SFUWriteAddress(int64_t value) {
 
 static bool isVC4AccumulatorR5WriteAddress(int64_t value) {
   return mlir::vc4::isVC4QPUR5WriteAddress(value);
+}
+
+static bool isVC4AccumulatorR0ToR3WriteAddress(int64_t value) {
+  return value >= 32 && value <= 35;
+}
+
+static bool isVC4AccumulatorR0ToR3Mux(mlir::vc4::QPUMux mux) {
+  return mux == mlir::vc4::QPUMux::r0 || mux == mlir::vc4::QPUMux::r1 ||
+         mux == mlir::vc4::QPUMux::r2 || mux == mlir::vc4::QPUMux::r3;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+getVC4AccumulatorR0ToR3MuxForWriteAddress(int64_t value) {
+  switch (value) {
+  case 32:
+    return mlir::vc4::QPUMux::r0;
+  case 33:
+    return mlir::vc4::QPUMux::r1;
+  case 34:
+    return mlir::vc4::QPUMux::r2;
+  case 35:
+    return mlir::vc4::QPUMux::r3;
+  default:
+    return std::nullopt;
+  }
+}
+
+static llvm::StringRef
+getVC4AccumulatorR0ToR3Name(mlir::vc4::QPUMux mux) {
+  switch (mux) {
+  case mlir::vc4::QPUMux::r0:
+    return "r0";
+  case mlir::vc4::QPUMux::r1:
+    return "r1";
+  case mlir::vc4::QPUMux::r2:
+    return "r2";
+  case mlir::vc4::QPUMux::r3:
+    return "r3";
+  default:
+    return "<invalid-accumulator>";
+  }
 }
 
 static bool scheduledInstructionWritesPhysicalRegfile(mlir::Operation *op) {
@@ -234,6 +280,76 @@ static bool scheduledInstructionUsesRotateByR5SmallImm(mlir::Operation *op) {
   return false;
 }
 
+static bool isVC4VectorRotateSmallImmSelector(int64_t value) {
+  return value >= 48 && value <= 63;
+}
+
+static bool isVC4VectorRotateBundle(mlir::vc4::QPUBundleOp bundle) {
+  if (bundle.getSig() != mlir::vc4::QPUSignal::small_imm)
+    return false;
+  if (auto smallImm = bundle.getSmallImmAttr())
+    return isVC4VectorRotateSmallImmSelector(smallImm.getInt());
+  return false;
+}
+
+static bool
+scheduledBundleUsesAccumulatorR0ToR3(mlir::vc4::QPUBundleOp bundle,
+                                     mlir::vc4::QPUMux mux) {
+  if (!isVC4AccumulatorR0ToR3Mux(mux))
+    return false;
+  return bundle.getMulA() == mux || bundle.getMulB() == mux;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+scheduledInstructionAccumulatorR0ToR3AddWrite(mlir::Operation *op) {
+  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+    int64_t value = bundle.getWaddrAddAttr().getInt();
+    if (isVC4BundleAddPipeWriteActive(bundle) &&
+        isVC4AccumulatorR0ToR3WriteAddress(value)) {
+      return getVC4AccumulatorR0ToR3MuxForWriteAddress(value);
+    }
+    return std::nullopt;
+  }
+  if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        ldi.getWaddrAddAttr().getInt());
+  }
+  if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        sema.getWaddrAddAttr().getInt());
+  }
+  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        branch.getWaddrAddAttr().getInt());
+  }
+  return std::nullopt;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+scheduledInstructionAccumulatorR0ToR3MulWrite(mlir::Operation *op) {
+  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+    int64_t value = bundle.getWaddrMulAttr().getInt();
+    if (isVC4BundleMulPipeWriteActive(bundle) &&
+        isVC4AccumulatorR0ToR3WriteAddress(value)) {
+      return getVC4AccumulatorR0ToR3MuxForWriteAddress(value);
+    }
+    return std::nullopt;
+  }
+  if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        ldi.getWaddrMulAttr().getInt());
+  }
+  if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        sema.getWaddrMulAttr().getInt());
+  }
+  if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+    return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+        branch.getWaddrMulAttr().getInt());
+  }
+  return std::nullopt;
+}
+
 static bool scheduledInstructionWritesSFU(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
     return (isVC4BundleAddPipeWriteActive(bundle) &&
@@ -345,6 +461,12 @@ static bool scheduledInstructionTouchesVPMVDRVDWRegisterSpace(
     mlir::Operation *op) {
   return scheduledInstructionTouchesRegisterSpaceAddress(
       op, mlir::vc4::isVC4QPUVPMVDRVDWRegisterSpaceAddress);
+}
+
+static bool scheduledInstructionTouchesVPMVDRVDWControlRegisterSpace(
+    mlir::Operation *op) {
+  return scheduledInstructionTouchesRegisterSpaceAddress(
+      op, mlir::vc4::isVC4QPUVPMDMAControlAddress);
 }
 
 static bool scheduledInstructionWritesUniformsAddress(mlir::Operation *op) {
@@ -609,6 +731,22 @@ struct VC4VerifyEmitContractPass
           return mlir::WalkResult::interrupt();
         }
 
+        if (auto trailingThreadEnd =
+                llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 1]);
+            (trailingThreadEnd &&
+             isVC4ThreadEndSignal(trailingThreadEnd.getSig())) ||
+            (llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 2]) &&
+             isVC4ThreadEndSignal(
+                 llvm::cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 2])
+                     .getSig()))) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; only slot N-3 may carry sig = "
+                 "#vc4.qpu_signal<thrend>; slots N-2 and N-1 must be "
+                 "non-branch scheduled ops without another thread-end signal";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
         return mlir::WalkResult::advance();
       }
 
@@ -667,7 +805,9 @@ struct VC4VerifyEmitContractPass
 // - the same window must not read the varying register-space address 35
 // - the same window must not access VPM/VDR/VDW register-space addresses
 //   48..50
-// - last-thread-switch is only legal for threadable functions
+// - thread-switch signals are only legal for threadable functions
+// - the final thread-switch signal in the flattened stream must be
+//   last_thread_switch
 //
 // To make the instruction stream well-defined, the pass requires checked
 // scheduled qpu-domain functions to have a single top-level block. The stream
@@ -705,20 +845,47 @@ struct VC4VerifyScheduledHardwareRulesPass
       }
 
       std::optional<mlir::vc4::ThreadingMode> threading = func.getThreading();
+      std::optional<size_t> lastThreadSwitchIndex;
       for (size_t i = 0, e = stream.size(); i != e; ++i) {
         auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
         if (!bundle)
           continue;
 
-        if (bundle.getSig() == mlir::vc4::QPUSignal::last_thread_switch &&
-            (!threading ||
-             *threading != mlir::vc4::ThreadingMode::threadable)) {
-          bundle.emitOpError()
-              << "sig = #vc4.qpu_signal<last_thread_switch> is only legal in "
-                 "functions with threading = "
-                 "#vc4.threading_mode<threadable>";
-          sawError = true;
-          return mlir::WalkResult::interrupt();
+        if (isVC4ThreadSwitchSignal(bundle.getSig())) {
+          if (!threading ||
+              *threading != mlir::vc4::ThreadingMode::threadable) {
+            if (bundle.getSig() == mlir::vc4::QPUSignal::thrsw) {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<thrsw> is only legal in "
+                     "functions with threading = "
+                     "#vc4.threading_mode<threadable>";
+            } else {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<last_thread_switch> is only legal "
+                     "in functions with threading = "
+                     "#vc4.threading_mode<threadable>";
+            }
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (i + 2 >= e) {
+            if (bundle.getSig() == mlir::vc4::QPUSignal::thrsw) {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<thrsw> requires two following "
+                     "delay-slot instructions in the flattened scheduled "
+                     "instruction stream";
+            } else {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<last_thread_switch> requires two "
+                     "following delay-slot instructions in the flattened "
+                     "scheduled instruction stream";
+            }
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          lastThreadSwitchIndex = i;
         }
 
         if (!isVC4ThreadEndSignal(bundle.getSig()))
@@ -771,6 +938,32 @@ struct VC4VerifyScheduledHardwareRulesPass
         }
       }
 
+      if (lastThreadSwitchIndex) {
+        for (size_t i = 0; i != *lastThreadSwitchIndex; ++i) {
+          auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
+          if (bundle &&
+              bundle.getSig() == mlir::vc4::QPUSignal::last_thread_switch) {
+            bundle.emitOpError()
+                << "sig = #vc4.qpu_signal<last_thread_switch> must be the "
+                   "final thread-switch signal in the flattened scheduled "
+                   "instruction stream";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        auto finalThreadSwitch =
+            llvm::cast<mlir::vc4::QPUBundleOp>(stream[*lastThreadSwitchIndex]);
+        if (finalThreadSwitch.getSig() == mlir::vc4::QPUSignal::thrsw) {
+          finalThreadSwitch.emitOpError()
+              << "the final thread-switch signal in the flattened scheduled "
+                 "instruction stream must be "
+                 "#vc4.qpu_signal<last_thread_switch>";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+      }
+
       return mlir::WalkResult::advance();
     });
 
@@ -783,6 +976,8 @@ struct VC4VerifyScheduledHardwareRulesPass
 // scheduled-hardware subset that the current sink IR can represent directly:
 // - regfile-A write -> next-instruction same regfile-A read
 // - regfile-B write -> next-instruction same regfile-B read
+// - accumulator r0..r3 write -> next-instruction vector rotate using that
+//   same accumulator on the MUL side
 // - r5 write -> next-instruction small_imm = 48 (rotate-by-r5)
 // - SFU write -> next-two-instruction window must not:
 //   - read r4 through a vc4.qpu.bundle source mux
@@ -855,6 +1050,31 @@ struct VC4VerifyScheduledAdjacentHazardsPass
                 "write");
             sawError = true;
             return mlir::WalkResult::interrupt();
+          }
+
+          if (auto nextBundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(next);
+              nextBundle && isVC4VectorRotateBundle(nextBundle)) {
+            auto emitVectorRotateHazard =
+                [&](std::optional<mlir::vc4::QPUMux> writtenAccumulator) {
+                  if (!writtenAccumulator ||
+                      !scheduledBundleUsesAccumulatorR0ToR3(
+                          nextBundle, *writtenAccumulator)) {
+                    return false;
+                  }
+                  nextBundle.emitOpError()
+                      << "does a vector rotate immediately after the previous "
+                         "scheduled instruction wrote accumulator "
+                      << getVC4AccumulatorR0ToR3Name(*writtenAccumulator);
+                  sawError = true;
+                  return true;
+                };
+
+            if (emitVectorRotateHazard(
+                    scheduledInstructionAccumulatorR0ToR3AddWrite(op)) ||
+                emitVectorRotateHazard(
+                    scheduledInstructionAccumulatorR0ToR3MulWrite(op))) {
+              return mlir::WalkResult::interrupt();
+            }
           }
         }
 
@@ -991,7 +1211,7 @@ struct VC4VerifyScheduledIOSpacingPass
 // - SFU write (52..55)
 // - mutex acquire read through a representable sink instruction (raddr = 51)
 // - semaphore access (vc4.qpu.sema)
-// - VPM / VDR / VDW register-space access (48..50)
+// - VPM / VDR / VDW control register-space access (49..50)
 //
 // Any flattened scheduled instruction slot that encodes more than one of those
 // access categories is rejected.
@@ -1033,15 +1253,16 @@ struct VC4VerifyScheduledPeripheralAccessesPass
         bool hasSFUWrite = scheduledInstructionWritesSFU(op);
         bool hasMutexAcquireRead = scheduledInstructionReadsMutexAcquire(op);
         bool hasSemaphoreAccess = llvm::isa<mlir::vc4::QPUSemaOp>(op);
-        bool hasVPMVDRVDWAccess =
-            scheduledInstructionTouchesVPMVDRVDWRegisterSpace(op);
+        bool hasVPMVDRVDWControlAccess =
+            scheduledInstructionTouchesVPMVDRVDWControlRegisterSpace(op);
 
         unsigned accessCount = static_cast<unsigned>(hasTMUReadSignal) +
                                static_cast<unsigned>(hasTMUParameterWrite) +
                                static_cast<unsigned>(hasSFUWrite) +
                                static_cast<unsigned>(hasMutexAcquireRead) +
                                static_cast<unsigned>(hasSemaphoreAccess) +
-                               static_cast<unsigned>(hasVPMVDRVDWAccess);
+                               static_cast<unsigned>(
+                                   hasVPMVDRVDWControlAccess);
         if (accessCount <= 1)
           continue;
 
@@ -1066,8 +1287,8 @@ struct VC4VerifyScheduledPeripheralAccessesPass
           appendCategory("mutex acquire read");
         if (hasSemaphoreAccess)
           appendCategory("semaphore access");
-        if (hasVPMVDRVDWAccess)
-          appendCategory("VPM/VDR/VDW register-space access");
+        if (hasVPMVDRVDWControlAccess)
+          appendCategory("VPM/VDR/VDW control register-space access");
         diag << ")";
 
         sawError = true;

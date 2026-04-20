@@ -4,6 +4,9 @@
 // CHECK: vc4.func @scheduled_adjacent_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
 // CHECK: small_imm = 49 : i32
 // CHECK: waddr_add = 52 : i32
+// CHECK: vc4.func @scheduled_vector_rotate_after_spacer_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 32 : i32
+// CHECK: small_imm = 49 : i32
 
 vc4.module @qpu_scheduled_adjacent_hazards {
   vc4.func @scheduled_adjacent_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
@@ -118,6 +121,51 @@ vc4.module @qpu_scheduled_adjacent_hazards {
       cond_mul = #vc4.cond<never>,
       waddr_add = 45 : i32,
       waddr_mul = 46 : i32
+    }
+  }
+
+  vc4.func @scheduled_vector_rotate_after_spacer_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 40 : i32,
+      op_add = #vc4.add_opcode<add>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 2 : i32,
+      raddr_b = 3 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r2>,
+      mul_b = #vc4.qpu_mux<r3>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 6 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 41 : i32,
+      waddr_mul = 42 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 43 : i32,
+      waddr_mul = 44 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 11 : i32,
+      small_imm = 49 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r2>
     }
   }
 }

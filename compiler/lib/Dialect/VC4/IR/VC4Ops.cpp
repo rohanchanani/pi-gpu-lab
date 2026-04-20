@@ -401,10 +401,20 @@ static bool isQPUSmallImmImmediateRotateSelector(int64_t value) {
   return value >= 49 && value <= 63;
 }
 
+static bool isQPUSmallImmVectorRotateSelector(int64_t value) {
+  return isQPUSmallImmRotateByR5Selector(value) ||
+         isQPUSmallImmImmediateRotateSelector(value);
+}
+
 static bool isQPUValidSmallImmSelector(int64_t value) {
   return isQPUSmallImmLiteralSelector(value) ||
          isQPUSmallImmRotateByR5Selector(value) ||
          isQPUSmallImmImmediateRotateSelector(value);
+}
+
+static bool isQPUAccumulatorMuxR0ToR3(mlir::vc4::QPUMux mux) {
+  return mux == mlir::vc4::QPUMux::r0 || mux == mlir::vc4::QPUMux::r1 ||
+         mux == mlir::vc4::QPUMux::r2 || mux == mlir::vc4::QPUMux::r3;
 }
 
 // Semaphore instructions must not target closely-coupled peripheral write
@@ -1852,6 +1862,13 @@ LogicalResult mlir::vc4::QPUBundleOp::verify() {
     if (!isQPUValidSmallImmSelector(smallImm)) {
       return emitOpError(
           "'small_imm' attribute must be an encoded selector in range [0, 63]");
+    }
+    if (isQPUSmallImmVectorRotateSelector(smallImm) &&
+        (!isQPUAccumulatorMuxR0ToR3(getMulA()) ||
+         !isQPUAccumulatorMuxR0ToR3(getMulB()))) {
+      return emitOpError(
+          "vector-rotate small_imm selectors 48..63 require both MUL inputs "
+          "to come from accumulators r0..r3");
     }
   }
 

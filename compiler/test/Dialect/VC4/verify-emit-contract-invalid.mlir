@@ -302,3 +302,67 @@ vc4.module @qpu_scheduled_stream_too_short_for_epilogue {
     }
   }
 }
+
+// -----
+
+vc4.module @qpu_scheduled_duplicate_thrend_in_tail_delay_slots {
+  // expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; only slot N-3 may carry sig = #vc4.qpu_signal<thrend>; slots N-2 and N-1 must be non-branch scheduled ops without another thread-end signal}}
+  vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 0 : i32,
+      waddr_mul = 1 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrend>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 33 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 2 : i32,
+      raddr_b = 3 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrend>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 4 : i32,
+      raddr_b = 5 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+  }
+}

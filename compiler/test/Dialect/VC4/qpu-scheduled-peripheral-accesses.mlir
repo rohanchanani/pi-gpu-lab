@@ -7,6 +7,8 @@
 // CHECK: waddr_add = 56 : i32
 // CHECK: vc4.func @semaphore_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
 // CHECK: vc4.qpu.sema <release>
+// CHECK: vc4.func @vpm_data_port_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 48 : i32
 // CHECK: vc4.func @mutex_read_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
 // CHECK: raddr_a = 51 : i32
 
@@ -48,6 +50,17 @@ vc4.module @qpu_scheduled_peripheral_accesses {
       cond_add = #vc4.cond<always>,
       cond_mul = #vc4.cond<always>,
       waddr_add = 0 : i32,
+      waddr_mul = 1 : i32
+    }
+  }
+
+  vc4.func @vpm_data_port_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 48 : i32,
       waddr_mul = 1 : i32
     }
   }

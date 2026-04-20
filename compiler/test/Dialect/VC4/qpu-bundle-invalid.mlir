@@ -64,6 +64,13 @@ vc4.module @bundle_small_imm_range_error {
   }
 }
 
+vc4.module @bundle_vector_rotate_requires_accumulator_mul_inputs {
+  vc4.func @bad_vector_rotate() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    // expected-error@+1 {{vector-rotate small_imm selectors 48..63 require both MUL inputs to come from accumulators r0..r3}}
+    vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, small_imm = 49 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r4>, mul_b = #vc4.qpu_mux<r1>}
+  }
+}
+
 vc4.module @bundle_dedicated_signal_error {
   vc4.func @bad_sig() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
     // expected-error@+1 {{sig = #vc4.qpu_signal<load_imm> is represented by vc4.qpu.ldi}}

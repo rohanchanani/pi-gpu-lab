@@ -48,15 +48,15 @@ vc4.module @tmu_parameter_write_and_mutex_read_same_slot {
 
 // -----
 
-vc4.module @semaphore_and_vpm_access_same_slot {
+vc4.module @semaphore_and_vpm_control_access_same_slot {
   vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
-    // expected-error@+1 {{encodes more than one closely-coupled peripheral access in a single scheduled instruction slot (semaphore access, VPM/VDR/VDW register-space access)}}
+    // expected-error@+1 {{encodes more than one closely-coupled peripheral access in a single scheduled instruction slot (semaphore access, VPM/VDR/VDW control register-space access)}}
     vc4.qpu.sema <release> {
       id = 3 : i32,
       pm = false,
       cond_add = #vc4.cond<always>,
       cond_mul = #vc4.cond<always>,
-      waddr_add = 48 : i32,
+      waddr_add = 49 : i32,
       waddr_mul = 1 : i32
     }
   }

@@ -21,6 +21,9 @@ inline constexpr int64_t kVC4QPUVaryingRead = 35;
 inline constexpr int64_t kVC4QPUTMUNoswap = 36;
 inline constexpr int64_t kVC4QPUR5Write = 37;
 inline constexpr int64_t kVC4QPUUniformsAddress = 40;
+inline constexpr int64_t kVC4QPUVPMDataPort = 48;
+inline constexpr int64_t kVC4QPUVPMDMAControlMin = 49;
+inline constexpr int64_t kVC4QPUVPMDMAControlMax = 50;
 inline constexpr int64_t kVC4QPUVPMVDRVDWMin = 48;
 inline constexpr int64_t kVC4QPUVPMVDRVDWMax = 50;
 inline constexpr int64_t kVC4QPUMutex = 51;
@@ -56,6 +59,15 @@ constexpr bool isVC4QPUR5WriteAddress(int64_t value) {
 
 constexpr bool isVC4QPUUniformsAddress(int64_t value) {
   return value == kVC4QPUUniformsAddress;
+}
+
+constexpr bool isVC4QPUVPMDataPortAddress(int64_t value) {
+  return value == kVC4QPUVPMDataPort;
+}
+
+constexpr bool isVC4QPUVPMDMAControlAddress(int64_t value) {
+  return value >= kVC4QPUVPMDMAControlMin &&
+         value <= kVC4QPUVPMDMAControlMax;
 }
 
 constexpr bool isVC4QPUVPMVDRVDWRegisterSpaceAddress(int64_t value) {
