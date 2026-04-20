@@ -245,13 +245,15 @@ Do not try to solve all global scheduling hazards yet.
 
 Examples to defer:
 
-- regfile write/read next-instruction hazard
-- SFU `r4` latency window
+- generic regfile write/read next-instruction analysis beyond the narrow H4C subset
+- SFU `r4` latency analysis beyond the narrow representable H4C subset
 - TMU_NOSWAP placement distance
 - end-of-program trailing hazards
-- vector-rotate dependency hazards
+- vector-rotate dependency analysis beyond the narrow H4C rotate-by-r5 check
 
-The spec requires the dialect to acknowledge those hazards, not to fully solve them now.
+The spec requires the dialect to acknowledge those hazards, not to fully solve
+them now. A verifier-only pass may still check the narrow documented H4C
+subset.
 
 ### 10.3 Codegen boundary
 
@@ -271,6 +273,58 @@ Keep the later codegen boundary explicit and verifier-only.
   `form = #vc4.function_form<scheduled>` functions are not directly emittable.
 - Structured device ops such as uniforms, TMU, VPM, DMA, and value-shape ops
   must be lowered or normalized to scheduled sink ops before qasm emission.
+
+### 10.4 Narrow scheduled-hardware verifier
+
+The repo may add a dedicated verifier-only pass named
+`--vc4-verify-scheduled-hardware-rules` for a small H4B hardening subset.
+
+Implementation constraints:
+
+- run it only on `vc4.func` operations with
+  `domain = #vc4.execution_domain<qpu>` and
+  `form = #vc4.function_form<scheduled>`
+- do not make IR changes; it is a checker, not a transform
+- keep the checked subset concrete and narrow:
+  - thread-end instruction must not write physical regfile A/B addresses `0..31`
+  - thread-end plus the following two instruction slots must not touch
+    register-space address `14`
+  - the same window must not perform uniform reads or VPM/VDR/VDW accesses
+  - `last_thread_switch` is legal only in threadable functions
+
+Do not use this pass as a place to accumulate unrelated scheduling hazards.
+Rules such as SFU latency, TMU_NOSWAP distance, or generic regfile
+read-after-write timing remain out of scope here unless a later prompt asks for
+them explicitly.
+
+### 10.5 Narrow scheduled-adjacent hazard verifier
+
+The repo may add a dedicated verifier-only pass named
+`--vc4-verify-scheduled-adjacent-hazards` for the H4C hardening subset.
+
+Implementation constraints:
+
+- run it only on `vc4.func` operations with
+  `domain = #vc4.execution_domain<qpu>` and
+  `form = #vc4.function_form<scheduled>`
+- do not make IR changes; it is a checker, not a transform
+- flatten the scheduled instruction stream in program order, treating
+  `vc4.qpu.branch` as one instruction slot followed by its explicit delay-slot
+  ops
+- keep the checked subset concrete and narrow:
+  - physical regfile-A write to address `0..31` followed immediately by a read
+    of that same physical regfile-A address
+  - physical regfile-B write to address `0..31` followed immediately by a read
+    of that same physical regfile-B address
+  - `r5` write followed immediately by `small_imm = 48` (rotate-by-r5)
+  - SFU write followed within the next two instruction slots by either:
+    a `vc4.qpu.bundle` read of `r4` through source muxes, or another
+    representable sink-level `r4` write event (`ldtmu0`, `ldtmu1`, or another
+    SFU write)
+
+Do not use this pass as a place to accumulate unrelated scheduling hazards.
+Full SFU latency analysis, generic register-timing analysis, TMU_NOSWAP
+distance rules, and trailing end-of-program checks remain out of scope here.
 
 ## 11. Side-effect modeling recommendation
 
@@ -306,6 +360,10 @@ Add dedicated tests for:
 - `vc4.thread_switch` rejected in `threading = single`
 - `vc4.qpu.branch` delay-slot count rules
 - `vc4.qpu.bundle` local encoding legality
+- `--vc4-verify-scheduled-hardware-rules` accepted and rejected cases matching
+  its documented H4B subset directly
+- `--vc4-verify-scheduled-adjacent-hazards` accepted and rejected cases
+  matching its documented H4C subset directly
 
 Testing discipline for later prompts:
 

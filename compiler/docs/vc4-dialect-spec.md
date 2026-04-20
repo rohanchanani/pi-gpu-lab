@@ -447,6 +447,64 @@ Use three verification layers:
    - per-instruction low-level legality for `vc4.qpu.*`
    - sequence-sensitive hazards may be deferred to later scheduling/legalization passes and do not need to be fully solved in the first milestone
 
+### 8.3.1 Narrow scheduled-hardware verifier pass
+
+The milestone may include a verifier-only pass for a narrow, documented subset
+of cross-instruction scheduled-QPU hazards that do not fit individual op
+verifiers.
+
+If implemented, this pass must:
+
+- use the argument `vc4-verify-scheduled-hardware-rules`
+- inspect only `vc4.func` operations with
+  `domain = #vc4.execution_domain<qpu>` and
+  `form = #vc4.function_form<scheduled>`
+- remain verifier-only and must not rewrite IR
+- check only the following H4B subset in this milestone:
+  - a `vc4.qpu.bundle` with `sig = #vc4.qpu_signal<thrend>` must not write
+    physical regfile A/B addresses `0..31`
+  - the thread-end instruction and the following two scheduled instruction slots
+    must not read or write register-space address `14`
+  - the same three-instruction window must not perform uniform reads or
+    VPM/VDR/VDW accesses
+  - `sig = #vc4.qpu_signal<last_thread_switch>` is legal only in functions with
+    `threading = #vc4.threading_mode<threadable>`
+
+This pass is intentionally narrow. It must not be expanded to unrelated global
+hazards such as SFU latency, TMU placement distance, or generic next-cycle
+register hazards during this milestone.
+
+### 8.3.2 Narrow scheduled-adjacent hazard verifier pass
+
+The milestone may also include a second verifier-only pass for the adjacent
+scheduled-instruction hazards that the current sink IR can represent directly.
+
+If implemented, this pass must:
+
+- use the argument `vc4-verify-scheduled-adjacent-hazards`
+- inspect only `vc4.func` operations with
+  `domain = #vc4.execution_domain<qpu>` and
+  `form = #vc4.function_form<scheduled>`
+- remain verifier-only and must not rewrite IR
+- check only the following H4C subset in this milestone:
+  - a write to physical regfile A address `0..31` must not be followed
+    immediately by a scheduled instruction that reads that same physical
+    regfile-A address
+  - a write to physical regfile B address `0..31` must not be followed
+    immediately by a scheduled instruction that reads that same physical
+    regfile-B address
+  - a write to `r5` must not be followed immediately by a scheduled
+    instruction that uses `small_imm = 48` (rotate-by-r5)
+  - an SFU write must not be followed in the next two scheduled instruction
+    slots by the currently representable sink-level `r4` hazard subset:
+    `vc4.qpu.bundle` reads of `r4` through source muxes, or another
+    representable `r4` write event via `ldtmu0` / `ldtmu1` or another SFU
+    write
+
+This pass is intentionally narrow. It must not be expanded into a full
+schedule-hazard analysis pass for unrelated timing restrictions during this
+milestone.
+
 ## 9. General implementation conventions
 
 ## 9.1 TableGen split
@@ -1754,13 +1812,15 @@ These ops are mandatory in the milestone even though no codegen is implemented y
 
 The following are real hardware restrictions but may be enforced in later legalization/scheduling work instead of local op verifiers:
 
-- no regfile read from a physical regfile location written by the immediately previous instruction
-- SFU `r4` hazard window
+- generic regfile read-after-write hazards beyond the narrow H4C adjacent-pass subset
+- SFU `r4` hazard cases beyond the narrow representable H4C subset
 - TMU_NOSWAP placement distance
 - program-end trailing restrictions
-- vector-rotate hazards involving `r5` or recently written accumulators
+- vector-rotate hazards beyond the narrow H4C rotate-by-r5-after-r5-write check
 
-The sink ops and docs should acknowledge these restrictions, but the first milestone does **not** need a full schedule hazard analysis pass.
+The sink ops and docs should acknowledge these restrictions, but the first
+milestone does **not** need a full schedule hazard analysis pass. A
+verifier-only pass may still enforce the narrow documented H4C subset.
 
 ## 12. Testing requirements
 
