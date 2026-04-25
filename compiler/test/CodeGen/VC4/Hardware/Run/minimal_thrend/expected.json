@@ -1,0 +1,7 @@
+{
+  "name": "minimal_thrend",
+  "status": "PASS",
+  "required": {
+    "completed_qpus": 12
+  }
+}

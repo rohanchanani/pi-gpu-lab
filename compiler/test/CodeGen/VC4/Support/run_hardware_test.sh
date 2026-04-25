@@ -23,6 +23,8 @@
 
 set -euo pipefail
 
+TTY_READ_ZERO_PATTERN='tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]'
+
 usage() {
   cat >&2 <<'USAGE'
 usage:
@@ -31,13 +33,51 @@ usage:
 
 environment:
   VC4_PI_POWER_CYCLE_CMD        default: uhubctl -l 0-1 -a cycle
-  VC4_PI_POWER_CYCLE_SLEEP_SEC  default: 4
+  VC4_PI_POWER_CYCLE_SLEEP_SEC  default: 1
   VC4_SKIP_POWER_CYCLE=1        skip power cycle, for self-test/manual debug only
+  VC4_RUN_SH_MAX_ATTEMPTS       default: 3
 USAGE
 }
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CHECKER="$SCRIPT_DIR/check_vc4_test_result.py"
+
+if [[ ! -f "$CHECKER" ]]; then
+  echo "error: missing VC4 result checker next to runner: $CHECKER" >&2
+  echo "copy this script into compiler/test/CodeGen/VC4/Support/ before running it" >&2
+  exit 1
+fi
+
+power_cycle_if_needed() {
+  local reason=${1:-"power cycling Pi"}
+  local power_cmd=${VC4_PI_POWER_CYCLE_CMD:-"uhubctl -l 0-1 -a cycle"}
+  local power_sleep=${VC4_PI_POWER_CYCLE_SLEEP_SEC:-1}
+
+  if [[ "${VC4_SKIP_POWER_CYCLE:-0}" == "1" ]]; then
+    echo "[vc4-hw] skipping Pi power cycle because VC4_SKIP_POWER_CYCLE=1"
+    return 0
+  fi
+
+  echo "[vc4-hw] $reason: $power_cmd"
+
+  # Run the power-cycle command directly in the shell. Do not wrap this in a
+  # Python subprocess timeout helper: on macOS that wrapper can occasionally
+  # remain stuck after uhubctl has printed its final status, even though the
+  # same uhubctl command completes normally when run directly.
+  set +e
+  eval "$power_cmd"
+  local power_rc=$?
+  set -e
+
+  if [[ $power_rc -ne 0 ]]; then
+    echo "[vc4-hw] power-cycle command failed with status $power_rc" >&2
+    return "$power_rc"
+  fi
+
+  echo "[vc4-hw] sleeping ${power_sleep}s after power cycle"
+  sleep "$power_sleep"
+  return 0
+}
 
 run_one() {
   local test_root=$1
@@ -80,18 +120,7 @@ run_one() {
 
   mkdir -p "$(dirname "$log_path")"
 
-  local power_cmd=${VC4_PI_POWER_CYCLE_CMD:-"uhubctl -l 0-1 -a cycle"}
-  local power_sleep=${VC4_PI_POWER_CYCLE_SLEEP_SEC:-4}
-
-  if [[ "${VC4_SKIP_POWER_CYCLE:-0}" != "1" ]]; then
-    echo "[vc4-hw] power cycling Pi: $power_cmd"
-    # shellcheck disable=SC2086
-    $power_cmd
-    echo "[vc4-hw] sleeping ${power_sleep}s after power cycle"
-    sleep "$power_sleep"
-  else
-    echo "[vc4-hw] skipping Pi power cycle because VC4_SKIP_POWER_CYCLE=1"
-  fi
+  power_cycle_if_needed "power cycling Pi"
 
   echo "[vc4-hw] test root: $test_root"
   echo "[vc4-hw] side: $side"
@@ -100,18 +129,42 @@ run_one() {
   echo "[vc4-hw] log: $log_path"
   echo "[vc4-hw] running hardware test in $side_dir"
 
-  rm -f "$log_path"
-  set +e
-  (
-    cd "$side_dir"
-    export VC4_TEST_ROOT="$test_root"
-    export VC4_TEST_SIDE="$side"
-    export VC4_TEST_INPUT_MLIR="$input_mlir"
-    export VC4_TEST_EXPECTED_JSON="$expected"
-    bash run.sh
-  ) 2>&1 | tee "$log_path"
-  local run_rc=${PIPESTATUS[0]}
-  set -e
+  local max_attempts=${VC4_RUN_SH_MAX_ATTEMPTS:-3}
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || [[ "$max_attempts" -lt 1 ]]; then
+    echo "error: VC4_RUN_SH_MAX_ATTEMPTS must be a positive integer, got: $max_attempts" >&2
+    return 2
+  fi
+
+  local run_rc=0
+  local attempt=1
+  while true; do
+    if [[ "$attempt" -gt 1 ]]; then
+      echo "[vc4-hw] retrying run.sh after transient tty read failure (attempt ${attempt}/${max_attempts})"
+      power_cycle_if_needed "power cycling Pi before retry"
+    fi
+
+    rm -f "$log_path"
+    set +e
+    (
+      cd "$side_dir"
+      export VC4_TEST_ROOT="$test_root"
+      export VC4_TEST_SIDE="$side"
+      export VC4_TEST_INPUT_MLIR="$input_mlir"
+      export VC4_TEST_EXPECTED_JSON="$expected"
+      bash run.sh
+    ) 2>&1 | tee "$log_path"
+    run_rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ $run_rc -ne 0 ]] &&
+       grep -Fq "$TTY_READ_ZERO_PATTERN" "$log_path" &&
+       [[ "$attempt" -lt "$max_attempts" ]]; then
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    break
+  done
 
   if [[ $run_rc -ne 0 ]]; then
     echo "[vc4-hw] run.sh exited with status $run_rc; checking log for diagnostics anyway" >&2

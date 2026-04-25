@@ -1,3 +1,17 @@
 {
-  "implemented_tests": []
+  "implemented_tests": [
+    {
+      "id": "hardware-run-minimal-thrend",
+      "name": "minimal_thrend",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend reference",
+      "requires_hardware": true,
+      "candidate_enabled": false,
+      "notes": "Minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output."
+    }
+  ]
 }
