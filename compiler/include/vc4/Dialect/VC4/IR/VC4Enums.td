@@ -43,7 +43,8 @@ def VC4_ExecutionDomain : VC4_DialectI32Enum<"ExecutionDomain",
 def VC4_BuiltinKind : VC4_DialectI32Enum<"BuiltinKind",
     "VC4 builtin kind", [
       I32EnumAttrCase<"elem_num", 0>,
-      I32EnumAttrCase<"qpu_num", 1>
+      I32EnumAttrCase<"qpu_num", 1>,
+      I32EnumAttrCase<"num_qpus", 2>
     ]>;
 
 // Encodings match the VideoCore IV 3D Architecture Reference Guide QPU

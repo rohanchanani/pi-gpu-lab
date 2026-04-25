@@ -12,6 +12,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Interfaces/FunctionImplementation.h"
+#include "llvm/ADT/SmallSet.h"
 #include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
@@ -73,6 +74,252 @@ static bool hasSameVC4Shape(Type lhs, Type rhs) {
   return lhsVector.getRank() == 1 && rhsVector.getRank() == 1 &&
          !lhsVector.isScalable() && !rhsVector.isScalable() &&
          lhsVector.getDimSize(0) == 16 && rhsVector.getDimSize(0) == 16;
+}
+
+static bool isStringOneOf(StringRef value, ArrayRef<StringRef> allowed) {
+  for (StringRef candidate : allowed) {
+    if (value == candidate)
+      return true;
+  }
+  return false;
+}
+
+static bool isNonEmptyStringAttr(Attribute attr) {
+  auto stringAttr = dyn_cast_or_null<StringAttr>(attr);
+  return stringAttr && !stringAttr.getValue().empty();
+}
+
+static std::optional<int64_t> getSignlessI32AttrValue(DictionaryAttr dict,
+                                                      StringRef name) {
+  auto integerAttr = dyn_cast_or_null<IntegerAttr>(dict.get(name));
+  if (!integerAttr || !integerAttr.getType().isSignlessInteger(32))
+    return std::nullopt;
+  return integerAttr.getInt();
+}
+
+static LogicalResult emitLaunchAbiError(mlir::vc4::FuncOp op,
+                                        Twine message) {
+  return op.emitOpError() << "\"vc4.launch_abi\" " << message;
+}
+
+static LogicalResult verifyLaunchAbiUniformIndex(mlir::vc4::FuncOp op,
+                                                 DictionaryAttr dict,
+                                                 StringRef entryKind,
+                                                 SmallVectorImpl<int64_t>
+                                                     &indices) {
+  std::optional<int64_t> uniformIndex =
+      getSignlessI32AttrValue(dict, "uniform_index");
+  if (!uniformIndex) {
+    return emitLaunchAbiError(op, Twine(entryKind) +
+                                      Twine(" entry requires signless i32 "
+                                            "'uniform_index'"));
+  }
+  if (*uniformIndex < 0) {
+    return emitLaunchAbiError(
+        op, Twine(entryKind) +
+                Twine(" entry requires non-negative 'uniform_index'"));
+  }
+  indices.push_back(*uniformIndex);
+  return success();
+}
+
+static LogicalResult verifyLaunchAbiArg(mlir::vc4::FuncOp op,
+                                        DictionaryAttr arg,
+                                        SmallVectorImpl<int64_t> &indices) {
+  if (!isNonEmptyStringAttr(arg.get("name")))
+    return emitLaunchAbiError(op,
+                              "argument entry requires a non-empty string 'name'");
+
+  auto kindAttr = dyn_cast_or_null<StringAttr>(arg.get("kind"));
+  if (!kindAttr ||
+      !isStringOneOf(kindAttr.getValue(), {"scalar", "buffer"})) {
+    return emitLaunchAbiError(
+        op, "argument entry requires kind = \"scalar\" or \"buffer\"");
+  }
+
+  auto directionAttr = dyn_cast_or_null<StringAttr>(arg.get("direction"));
+  if (!directionAttr)
+    return emitLaunchAbiError(op, "argument entry requires string 'direction'");
+
+  if (kindAttr.getValue() == "scalar") {
+    if (directionAttr.getValue() != "by_value") {
+      return emitLaunchAbiError(
+          op, "scalar argument entry requires direction = \"by_value\"");
+    }
+    auto typeAttr = dyn_cast_or_null<StringAttr>(arg.get("type"));
+    if (!typeAttr ||
+        !isStringOneOf(typeAttr.getValue(), {"i32", "u32", "f32", "index"})) {
+      return emitLaunchAbiError(
+          op, "scalar argument entry requires type = \"i32\", \"u32\", "
+              "\"f32\", or \"index\"");
+    }
+    if (arg.get("elem_type")) {
+      return emitLaunchAbiError(
+          op, "scalar argument entry must not specify 'elem_type'");
+    }
+  } else {
+    if (!isStringOneOf(directionAttr.getValue(), {"in", "out", "inout"})) {
+      return emitLaunchAbiError(
+          op, "buffer argument entry requires direction = \"in\", \"out\", "
+              "or \"inout\"");
+    }
+    auto elemTypeAttr = dyn_cast_or_null<StringAttr>(arg.get("elem_type"));
+    if (!elemTypeAttr ||
+        !isStringOneOf(elemTypeAttr.getValue(),
+                       {"i8", "u8", "i16", "u16", "i32", "u32", "f32"})) {
+      return emitLaunchAbiError(
+          op, "buffer argument entry requires elem_type = \"i8\", \"u8\", "
+              "\"i16\", \"u16\", \"i32\", \"u32\", or \"f32\"");
+    }
+    if (arg.get("type"))
+      return emitLaunchAbiError(op,
+                                "buffer argument entry must not specify 'type'");
+  }
+
+  return verifyLaunchAbiUniformIndex(op, arg, "argument", indices);
+}
+
+static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
+                                            DictionaryAttr builtin,
+                                            SmallVectorImpl<int64_t> &indices) {
+  if (!isNonEmptyStringAttr(builtin.get("name")))
+    return emitLaunchAbiError(op,
+                              "builtin entry requires a non-empty string 'name'");
+
+  auto kindAttr =
+      dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(builtin.get("kind"));
+  if (!kindAttr)
+    return emitLaunchAbiError(op, "builtin entry requires VC4 BuiltinKindAttr "
+                                  "'kind'");
+
+  auto materializationAttr =
+      dyn_cast_or_null<StringAttr>(builtin.get("materialization"));
+  if (!materializationAttr ||
+      !isStringOneOf(materializationAttr.getValue(),
+                     {"uniform_suffix", "register"})) {
+    return emitLaunchAbiError(
+        op, "builtin entry requires materialization = \"uniform_suffix\" or "
+            "\"register\"");
+  }
+
+  mlir::vc4::BuiltinKind kind = kindAttr.getValue();
+  StringRef materialization = materializationAttr.getValue();
+  if (kind == mlir::vc4::BuiltinKind::elem_num) {
+    return emitLaunchAbiError(
+        op, "builtin kind #vc4.builtin_kind<elem_num> must not appear");
+  }
+  if (kind == mlir::vc4::BuiltinKind::num_qpus &&
+      materialization != "uniform_suffix") {
+    return emitLaunchAbiError(
+        op, "builtin kind #vc4.builtin_kind<num_qpus> must use "
+            "materialization = \"uniform_suffix\"");
+  }
+
+  if (materialization == "uniform_suffix")
+    return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
+
+  if (builtin.get("uniform_index")) {
+    return emitLaunchAbiError(
+        op, "register-materialized builtin entry must not specify "
+            "'uniform_index'");
+  }
+  return success();
+}
+
+static LogicalResult verifyLaunchAbiUniformLayout(
+    mlir::vc4::FuncOp op, int64_t uniformWordsPerQPU,
+    ArrayRef<int64_t> indices) {
+  if (static_cast<int64_t>(indices.size()) != uniformWordsPerQPU) {
+    return emitLaunchAbiError(
+        op, "uniform indices must be unique and dense in [0, "
+            "uniform_words_per_qpu)");
+  }
+
+  llvm::SmallSet<int64_t, 8> seen;
+  for (int64_t index : indices) {
+    if (index < 0 || index >= uniformWordsPerQPU ||
+        !seen.insert(index).second) {
+      return emitLaunchAbiError(
+          op, "uniform indices must be unique and dense in [0, "
+              "uniform_words_per_qpu)");
+    }
+  }
+
+  for (int64_t index = 0; index < uniformWordsPerQPU; ++index) {
+    if (!seen.count(index)) {
+      return emitLaunchAbiError(
+          op, "uniform indices must be unique and dense in [0, "
+              "uniform_words_per_qpu)");
+    }
+  }
+  return success();
+}
+
+static LogicalResult verifyLaunchAbi(mlir::vc4::FuncOp op) {
+  Attribute rawAttr = op->getAttr("vc4.launch_abi");
+  if (!rawAttr)
+    return success();
+
+  auto launchAbi = dyn_cast<DictionaryAttr>(rawAttr);
+  if (!launchAbi)
+    return emitLaunchAbiError(op, "requires a dictionary attribute");
+
+  if (!op.getKernelAttr()) {
+    return emitLaunchAbiError(op,
+                              "may appear only on vc4.func with 'kernel'");
+  }
+  if (!op.getDomain() || *op.getDomain() != mlir::vc4::ExecutionDomain::qpu) {
+    return emitLaunchAbiError(
+        op, "requires domain = #vc4.execution_domain<qpu>");
+  }
+
+  if (!isNonEmptyStringAttr(launchAbi.get("public_name"))) {
+    return emitLaunchAbiError(
+        op, "requires a non-empty string 'public_name'");
+  }
+
+  auto tailPolicyAttr =
+      dyn_cast_or_null<StringAttr>(launchAbi.get("tail_policy"));
+  if (!tailPolicyAttr ||
+      !isStringOneOf(tailPolicyAttr.getValue(),
+                     {"exact_multiple", "tail_safe"})) {
+    return emitLaunchAbiError(
+        op, "requires tail_policy = \"exact_multiple\" or \"tail_safe\"");
+  }
+
+  std::optional<int64_t> uniformWordsPerQPU =
+      getSignlessI32AttrValue(launchAbi, "uniform_words_per_qpu");
+  if (!uniformWordsPerQPU || *uniformWordsPerQPU <= 0) {
+    return emitLaunchAbiError(
+        op, "requires a positive signless i32 'uniform_words_per_qpu'");
+  }
+
+  auto argsAttr = dyn_cast_or_null<ArrayAttr>(launchAbi.get("args"));
+  if (!argsAttr)
+    return emitLaunchAbiError(op, "requires array 'args'");
+
+  auto builtinsAttr = dyn_cast_or_null<ArrayAttr>(launchAbi.get("builtins"));
+  if (!builtinsAttr)
+    return emitLaunchAbiError(op, "requires array 'builtins'");
+
+  SmallVector<int64_t> uniformIndices;
+  for (Attribute argAttr : argsAttr) {
+    auto arg = dyn_cast<DictionaryAttr>(argAttr);
+    if (!arg)
+      return emitLaunchAbiError(op, "argument entry must be a dictionary");
+    if (failed(verifyLaunchAbiArg(op, arg, uniformIndices)))
+      return failure();
+  }
+
+  for (Attribute builtinAttr : builtinsAttr) {
+    auto builtin = dyn_cast<DictionaryAttr>(builtinAttr);
+    if (!builtin)
+      return emitLaunchAbiError(op, "builtin entry must be a dictionary");
+    if (failed(verifyLaunchAbiBuiltin(op, builtin, uniformIndices)))
+      return failure();
+  }
+
+  return verifyLaunchAbiUniformLayout(op, *uniformWordsPerQPU, uniformIndices);
 }
 
 static bool isVC4IntValueType(Type type) {
@@ -611,7 +858,7 @@ ParseResult mlir::vc4::BuiltinOp::parse(OpAsmParser &parser,
       mlir::vc4::symbolizeBuiltinKind(kindKeyword);
   if (!kind)
     return parser.emitError(kindLoc)
-           << "expected one of [elem_num, qpu_num] for vc4 builtin kind";
+           << "expected one of [elem_num, qpu_num, num_qpus] for vc4 builtin kind";
 
   if (parser.parseOptionalAttrDict(result.attributes))
     return failure();
@@ -654,6 +901,8 @@ LogicalResult mlir::vc4::FuncOp::verify() {
     return emitOpError(
         "the 'kernel' attribute is only legal with domain = #vc4.execution_domain<qpu>");
   }
+  if (failed(verifyLaunchAbi(*this)))
+    return failure();
   if (isExternal())
     return success();
 
