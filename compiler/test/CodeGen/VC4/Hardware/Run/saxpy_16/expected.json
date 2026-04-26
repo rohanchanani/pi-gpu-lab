@@ -1,0 +1,14 @@
+{
+  "name": "saxpy_16",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0,
+    "active_qpus": 12,
+    "n": 768,
+    "chunks_per_qpu": 4,
+    "checksum": 11592704
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}

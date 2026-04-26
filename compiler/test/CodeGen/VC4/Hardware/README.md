@@ -48,6 +48,31 @@ under the same `expected.json` oracle.
 3. install/run it using the configured Raspberry Pi flow,
 4. stream serial output to stdout.
 
+For tests that invoke `vc4asm`, keep `set -euo pipefail` and use this
+assembler block shape:
+
+```bash
+echo "ASSEMBLING QASM"
+if ! out=$(vc4asm -c <shader-c> -h <shader-h> <kernel>.qasm 2>&1); then
+  echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+  printf '%s\n' "$out"
+  exit 1
+fi
+
+if [[ -n "$out" ]]; then
+  echo "▶ ASSEMBLY PRODUCED UNEXPECTED OUTPUT:"
+  printf '%s\n' "$out"
+  exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+```
+
+Do not remove strict mode to expose assembler diagnostics. A bare
+`out=$(vc4asm ... 2>&1)` assignment can exit silently under `set -e` before
+the captured diagnostics are printed.
+
 It should **not** power-cycle the Pi. The outer runner handles power cycling so
 all tests get the same setup:
 

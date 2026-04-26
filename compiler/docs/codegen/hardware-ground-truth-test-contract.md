@@ -326,6 +326,15 @@ For examples modeled on the known SAXPY reference, `reference/run.sh` should:
 4. boot/run the Pi with `pi-install` or the configured equivalent,
 5. stream serial output to stdout.
 
+When `reference/run.sh` invokes `vc4asm`, it must keep `set -euo pipefail` and
+capture assembler output inside an `if ! out=$(vc4asm ... 2>&1); then`
+conditional. On nonzero assembler exit, print `ASSEMBLY FAILED WITH OUTPUT`,
+print the captured output, and exit nonzero. On zero assembler exit with
+non-empty output, print `ASSEMBLY PRODUCED UNEXPECTED OUTPUT`, print the
+captured output, and exit nonzero. Only after clean assembly should the script
+print `RUNNING MAKE` and run `make`. Do not remove strict mode to expose
+assembler diagnostics.
+
 The reference `run.sh` must not power-cycle the Pi. Power cycling is the job of `Support/run_hardware_test.sh`.
 
 ### 6.1 vc4asm `share/` requirement
@@ -752,6 +761,9 @@ The following are explicitly forbidden by this contract:
 10. Do not let Codex invent large batches of catalog entries without running them.
 11. Do not place an `input.mlir` under `compiler/test` without a `RUN:` line.
 12. Do not rely on machine-local absolute vc4asm include/template paths in checked-in tests.
+13. Do not use a bare `out=$(vc4asm ... 2>&1)` assignment in hardware
+    `run.sh` scripts; use `if ! out=$(vc4asm ... 2>&1); then` under strict
+    mode and reject unexpected assembler output.
 
 ---
 
@@ -777,7 +789,11 @@ test -x compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.sh
 # 5. vc4asm support paths exist if vc4asm -c is used.
 test -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/share/vc4tmpl/template.h
 
-# 6. Local MLIR verification passes.
+# 6. run.sh captures vc4asm diagnostics safely if vc4asm is used.
+python3 compiler/test/CodeGen/VC4/Support/check_hardware_run_sh_assembler_capture.py \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name>
+
+# 7. Local MLIR verification passes.
 compiler/build/bin/vc4-opt \
   compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/input.mlir \
   --vc4-verify-emit-contract \
@@ -787,18 +803,18 @@ compiler/build/bin/vc4-opt \
   --vc4-verify-scheduled-peripheral-accesses \
   -o /dev/null
 
-# 7. Full local lit suite passes.
+# 8. Full local lit suite passes.
 cmake --build compiler/build --target check-vc4
 
-# 8. Run reference side on hardware.
+# 9. Run reference side on hardware.
 compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
   compiler/test/CodeGen/VC4/Hardware/Run/<test-name> \
   reference
 
-# 9. Confirm result line.
+# 10. Confirm result line.
 grep 'VC4_TEST_RESULT' compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.log
 
-# 10. Clean transient build outputs before commit.
+# 11. Clean transient build outputs before commit.
 rm -rf compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/objs
 rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*.elf
 rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*.bin
@@ -807,7 +823,7 @@ rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*shader.c
 rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*shader.h
 rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.log
 
-# 11. Confirm generated files are ignored and not staged.
+# 12. Confirm generated files are ignored and not staged.
 git status --short
 git status --ignored --short compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference | sed -n '1,120p'
 ```

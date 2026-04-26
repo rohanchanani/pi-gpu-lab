@@ -55,6 +55,13 @@ the same `input.mlir`.
    `reference/` contains its own `run.sh`, qasm, launcher C/H, runtime support
    files if needed, harness C, and build files.
 
+   Any `reference/run.sh` that invokes `vc4asm` must keep
+   `set -euo pipefail`, capture assembler output with
+   `if ! out=$(vc4asm ... 2>&1); then`, print captured diagnostics on failure,
+   reject unexpected assembler output on success, and only then print
+   `RUNNING MAKE` and run `make`. Do not remove strict mode to expose
+   assembler diagnostics.
+
 5. **Every hardware run prints a machine-readable result line.**
    The final successful harness output must include a line of the form:
 
