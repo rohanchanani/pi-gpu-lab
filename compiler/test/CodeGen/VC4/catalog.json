@@ -95,6 +95,20 @@
       "requires_hardware": true,
       "candidate_enabled": false,
       "notes": "SFU reciprocal reference test. Exercises SFU_RECIP write/readback through r4 with the required two-instruction r4 dead window before the N+3 read; oracle accepts VC4 SFU approximation with mismatches=0, checksum=195672, and max_abs_diff<=0.0003."
+    },
+    {
+      "id": "hardware-run-qpu-num-register",
+      "name": "qpu_num_register",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "Exploratory hardware-run test that queues 16 QPU user-program requests and records the hardware QPU_NUMBER/qpu_num register observed by each dispatched kernel. The oracle requires 16 completed requests, no pending output slots, and observed values in the architectural 4-bit QPU-number range; it deliberately does not pin scheduler assignment order or observed qpu_mask."
     }
   ]
 }

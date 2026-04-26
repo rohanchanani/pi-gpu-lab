@@ -1,0 +1,10 @@
+{
+  "name": "qpu_num_register",
+  "status": "PASS",
+  "required": {
+    "launches": 16,
+    "completed_requests": 16,
+    "invalid_results": 0,
+    "pending_results": 0
+  }
+}
