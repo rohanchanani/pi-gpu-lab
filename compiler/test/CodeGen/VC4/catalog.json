@@ -82,6 +82,19 @@
       "reference_passed": true,
       "candidate_enabled": false,
       "notes": "Overlapped-TMU SAXPY reference: issues independent TMU0 direct-memory requests for x and y before consuming both results, computes y = alpha * x + y, and stores through VPM/VDW. Candidate side disabled until codegen exists."
+    },
+    {
+      "id": "hardware-run-sfu-recip",
+      "name": "sfu_recip",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip reference",
+      "requires_hardware": true,
+      "candidate_enabled": false,
+      "notes": "SFU reciprocal reference test. Exercises SFU_RECIP write/readback through r4 with the required two-instruction r4 dead window before the N+3 read; oracle accepts VC4 SFU approximation with mismatches=0, checksum=195672, and max_abs_diff<=0.0003."
     }
   ]
 }

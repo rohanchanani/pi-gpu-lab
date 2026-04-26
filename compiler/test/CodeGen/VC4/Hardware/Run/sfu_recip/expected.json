@@ -1,0 +1,13 @@
+{
+  "name": "sfu_recip",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0,
+    "active_qpus": 12,
+    "n": 192,
+    "checksum": 195672
+  },
+  "float_max": {
+    "max_abs_diff": 0.0003
+  }
+}
