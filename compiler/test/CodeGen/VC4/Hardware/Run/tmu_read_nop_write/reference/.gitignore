@@ -1,0 +1,9 @@
+objs/
+*.o
+*.d
+*.elf
+*.bin
+*.list
+*shader.c
+*shader.h
+run.log

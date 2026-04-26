@@ -40,6 +40,20 @@
       "reference_passed": true,
       "candidate_enabled": false,
       "notes": "QPU read-nop-write test: copies one 16-lane u32 vector per active QPU from host input to host output through VDR DMA load, VPM read/write, and VDW DMA store."
+    },
+    {
+      "id": "hardware-run-tmu-read-nop-write",
+      "name": "tmu_read_nop_write",
+      "kind": "hardware-run",
+      "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/input.mlir",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "TMU0 direct-memory read counterpart to read_nop_write; copies one 16-lane u32 vector per active QPU from input to result via TMU read and VPM/VDW store. Reference hardware run passed with mismatches=0, active_qpus=12, words=192, checksum=18528."
     }
   ]
 }
