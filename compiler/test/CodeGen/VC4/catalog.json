@@ -12,6 +12,20 @@
       "requires_hardware": true,
       "candidate_enabled": false,
       "notes": "Minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output."
+    },
+    {
+      "id": "hardware-run-memory-output",
+      "name": "memory_output",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/memory_output reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "QPU memory-output test: each active QPU writes one 16-lane u32 vector through VPM/VDW to host-visible memory."
     }
   ]
 }
