@@ -68,6 +68,20 @@
       "reference_passed": true,
       "candidate_enabled": false,
       "notes": "TMU-backed basic SAXPY golden: direct TMU0 reads for x/y, fmul/fadd arithmetic, VPM/VDW result store. Current scheduled input intentionally serializes each TMU request/read pair; overlapping TMU requests should be covered by a later scheduled-overlap test."
+    },
+    {
+      "id": "hardware-run-saxpy-tmu-overlap",
+      "name": "saxpy_tmu_overlap",
+      "kind": "hardware-run",
+      "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/input.mlir",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "Overlapped-TMU SAXPY reference: issues independent TMU0 direct-memory requests for x and y before consuming both results, computes y = alpha * x + y, and stores through VPM/VDW. Candidate side disabled until codegen exists."
     }
   ]
 }
