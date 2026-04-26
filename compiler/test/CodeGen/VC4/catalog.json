@@ -54,6 +54,20 @@
       "reference_passed": true,
       "candidate_enabled": false,
       "notes": "TMU0 direct-memory read counterpart to read_nop_write; copies one 16-lane u32 vector per active QPU from input to result via TMU read and VPM/VDW store. Reference hardware run passed with mismatches=0, active_qpus=12, words=192, checksum=18528."
+    },
+    {
+      "id": "hardware-run-saxpy-tmu",
+      "name": "saxpy_tmu",
+      "kind": "hardware-run",
+      "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/input.mlir",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "TMU-backed basic SAXPY golden: direct TMU0 reads for x/y, fmul/fadd arithmetic, VPM/VDW result store. Current scheduled input intentionally serializes each TMU request/read pair; overlapping TMU requests should be covered by a later scheduled-overlap test."
     }
   ]
 }
