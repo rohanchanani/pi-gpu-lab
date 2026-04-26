@@ -1,0 +1,10 @@
+{
+  "name": "read_nop_write",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0,
+    "active_qpus": 12,
+    "words": 192,
+    "checksum": 18528
+  }
+}
