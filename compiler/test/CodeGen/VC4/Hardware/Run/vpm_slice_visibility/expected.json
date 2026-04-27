@@ -1,0 +1,13 @@
+{
+  "name": "vpm_slice_visibility",
+  "status": "PASS",
+  "required": {
+    "sanity_mismatches": 0,
+    "same_slice_visibility_pass": 1,
+    "same_slice_collision_pass": 1,
+    "reported_qpu_mismatches": 0,
+    "timeouts": 0,
+    "invalid_topology": 0,
+    "errstat_relevant_changed": 0
+  }
+}
