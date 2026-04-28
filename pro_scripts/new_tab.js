@@ -408,8 +408,6 @@ async function main() {
   const token = randomToken();
 
   const fullPrompt = `
-Use the fastest available model. Do not use a thinking/reasoning mode.
-
 You are generating files for local automation.
 
 Do NOT use ChatGPT's attachment UI, upload UI, microphone, voice mode, dictation, canvas, or special download button.
