@@ -1,0 +1,4 @@
+# TEST_NAME<TAB>SPEC_PATH
+# Add tests here, one per line.
+# Example:
+# matmul_blocked	vc4_test_specs/specs/001_matmul_blocked.txt

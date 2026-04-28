@@ -1,0 +1,33 @@
+TEST_NAME: example_test
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Demonstrate the locked spec-file format for the VC4 bundle autorunner.
+
+WHY_THIS_TEST_NOW:
+Explain why this test is the next incremental hardware/codegen concept.
+
+SEMANTICS:
+Describe the exact kernel semantics.
+
+PUBLIC_LAUNCH_API:
+Describe the semantic public launcher API expected in example_test_launch.h.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Describe max sizes, one-allocation setup, resident blocks, active QPUs, VPM rows, semaphore IDs, and repeated launches.
+
+QPU_KERNEL_SHAPE:
+Describe logical warp/lane mapping, uniforms, TMU/VPM/VDW paths, barriers, mutex use, and tails.
+
+TEST_CASES:
+List deterministic cases and edge cases.
+
+EXPECTED_OUTPUT:
+List expected diagnostic lines and the final VC4_TEST_RESULT fields.
+
+EXPECTED_JSON_ORACLE:
+List stable exact fields and float tolerances. Do not include timing.
+
+NON_GOALS:
+List what this test intentionally does not prove.
+
+SPECIAL_NOTES:
+Add any hardware hazards, qasm syntax concerns, or known-good reference style notes.
