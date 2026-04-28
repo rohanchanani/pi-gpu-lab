@@ -33,3 +33,4 @@ staff/
 old_compiler/build/
 compiler/build*
 compiler/context.txt
+*__pycache__/
