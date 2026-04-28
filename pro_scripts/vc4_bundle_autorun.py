@@ -167,6 +167,28 @@ def run_command(
         timed_out = False
         try:
             exit_code = proc.wait(timeout=timeout_sec)
+        except KeyboardInterrupt:
+            log.write(f"\n[INTERRUPT] stage={stage} received KeyboardInterrupt; terminating child process group\n")
+            log.flush()
+            if os.name != "nt":
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                if os.name != "nt":
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                else:
+                    proc.kill()
+                proc.wait()
+            raise
         except subprocess.TimeoutExpired:
             timed_out = True
             log.write(f"\n[TIMEOUT] stage={stage} timeout_sec={timeout_sec}\n")

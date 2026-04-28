@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const { chromium } = require("playwright");
+const childProcess = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -25,14 +26,19 @@ function parseArgs(argv) {
   return args;
 }
 
+function boolArg(args, name, defaultValue = false) {
+  if (!(name in args)) return defaultValue;
+  return /^(1|true|yes|y)$/i.test(String(args[name] || ""));
+}
+
 function intArg(args, name, defaultValue) {
-  const raw = args[name];
-  if (raw === undefined || raw === null || raw === "") return defaultValue;
-  const value = Number.parseInt(String(raw), 10);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new Error(`Invalid integer argument --${name}: ${raw}`);
+  if (!(name in args)) return defaultValue;
+  const raw = String(args[name]);
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`Invalid positive integer for --${name}: ${raw}`);
   }
-  return value;
+  return parsed;
 }
 
 function requireArg(args, name) {
@@ -75,7 +81,7 @@ function readPromptFile(promptFile) {
 }
 
 function parseKv(header, key) {
-  const re = new RegExp(`(?:^|\\s)${escapeRegExp(key)}=(?:"([^"]*)"|'([^']*)'|(\\S+))`);
+  const re = new RegExp(`(?:^|\\s)${escapeRegExp(key)}=(?:\"([^\"]*)\"|'([^']*)'|(\\S+))`);
   const m = String(header || "").match(re);
   if (!m) return null;
   return stripOuterQuotes(m[1] ?? m[2] ?? m[3] ?? "");
@@ -249,7 +255,7 @@ async function findPromptBox(page, timeout = 10000) {
   throw new Error("Could not find ChatGPT prompt box on the selected tab.");
 }
 
-async function findExistingChatGptPage(browser, promptTimeoutMs = 120000) {
+async function findExistingChatGptPage(browser, pageTimeoutMs) {
   const candidates = await listChatGptPages(browser);
 
   if (candidates.length === 0) {
@@ -265,8 +271,8 @@ async function findExistingChatGptPage(browser, promptTimeoutMs = 120000) {
       if (page.isClosed()) continue;
 
       await page.bringToFront();
-      await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      await findPromptBox(page, Math.min(promptTimeoutMs, 30000));
+      await page.waitForLoadState("domcontentloaded", { timeout: Math.min(pageTimeoutMs, 15000) }).catch(() => {});
+      await findPromptBox(page, Math.min(pageTimeoutMs, 15000));
 
       console.log(`Using existing ChatGPT tab: ${candidate.title || "(untitled)"}`);
       console.log(`URL: ${candidate.url}`);
@@ -304,12 +310,11 @@ async function lastAssistantText(page) {
   return "";
 }
 
-async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs = 20 * 60 * 1000) {
+async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs) {
   let previous = "";
   let stableCount = 0;
   let lastNonEmpty = "";
-  const start = Date.now();
-  const deadline = start + responseTimeoutMs;
+  const deadline = Date.now() + responseTimeoutMs;
 
   while (Date.now() < deadline) {
     await page.waitForTimeout(1000);
@@ -321,7 +326,7 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs 
 
     if (count > beforeCount) {
       current = await loc.nth(count - 1).innerText().catch(() => "");
-     } else if (Date.now() - start > 20000) {
+    } else if (Date.now() + 20000 < deadline) {
       current = await lastAssistantText(page);
     }
 
@@ -341,14 +346,99 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs 
   return lastNonEmpty;
 }
 
-async function fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs = 120000) {
+function copyToClipboard(text) {
+  const input = String(text || "");
+  let cmd = null;
+  let args = [];
+
+  if (process.platform === "darwin") {
+    cmd = "pbcopy";
+  } else if (process.platform === "win32") {
+    cmd = "clip";
+  } else {
+    const candidates = [
+      ["wl-copy", []],
+      ["xclip", ["-selection", "clipboard"]],
+      ["xsel", ["--clipboard", "--input"]],
+    ];
+    for (const candidate of candidates) {
+      const probe = childProcess.spawnSync(candidate[0], ["--version"], { encoding: "utf8" });
+      if (probe.status === 0 || probe.status === 1 || probe.error === undefined) {
+        cmd = candidate[0];
+        args = candidate[1];
+        break;
+      }
+    }
+  }
+
+  if (!cmd) return false;
+
+  const result = childProcess.spawnSync(cmd, args, {
+    input,
+    encoding: "utf8",
+    maxBuffer: Math.max(1024 * 1024, input.length * 2),
+  });
+
+  return result.status === 0;
+}
+
+async function promptBoxTextLength(page) {
+  return await page.evaluate(() => {
+    const candidates = [
+      document.querySelector('[data-testid="prompt-textarea"]'),
+      document.querySelector('#prompt-textarea'),
+      document.querySelector('.ProseMirror[contenteditable="true"]'),
+      document.activeElement,
+    ].filter(Boolean);
+
+    for (const el of candidates) {
+      if (el instanceof HTMLTextAreaElement || el instanceof HTMLInputElement) {
+        if (el.value) return el.value.length;
+      }
+      const text = (el.innerText || el.textContent || "");
+      if (text.length) return text.length;
+    }
+    return 0;
+  }).catch(() => 0);
+}
+
+async function pastePromptBox(page, promptBox, fullPrompt, promptTimeoutMs) {
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  const copied = copyToClipboard(fullPrompt);
+  if (!copied) return false;
+
+  console.log(`Pasting prompt via clipboard (${fullPrompt.length} characters).`);
+  await promptBox.click({ timeout: Math.min(promptTimeoutMs, 10000) });
+  await page.keyboard.press(`${mod}+A`);
+  await page.keyboard.press("Backspace");
+  await page.waitForTimeout(150);
+  await page.keyboard.press(`${mod}+V`);
+
+  const deadline = Date.now() + Math.min(promptTimeoutMs, 30000);
+  while (Date.now() < deadline) {
+    const len = await promptBoxTextLength(page);
+    if (len > 0) {
+      console.log(`Prompt appears in composer (${len} visible characters reported).`);
+      return true;
+    }
+    await page.waitForTimeout(250);
+  }
+
+  return false;
+}
+
+async function fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs) {
+  if (!boolArg(parseArgs(process.argv), "no-clipboard", false)) {
+    if (await pastePromptBox(page, promptBox, fullPrompt, promptTimeoutMs)) return;
+    console.log("Clipboard paste did not appear to populate the composer; falling back to Playwright fill/insertText.");
+  }
+
   try {
-    await promptBox.fill(fullPrompt, { timeout: promptTimeoutMs });
+    await promptBox.fill(fullPrompt, { timeout: Math.min(promptTimeoutMs, 5000) });
     return;
   } catch (_) {}
 
-  await promptBox.scrollIntoViewIfNeeded({ timeout: Math.min(promptTimeoutMs, 30000) }).catch(() => {});
-  await promptBox.click({ timeout: Math.min(promptTimeoutMs, 30000), force: true });
+  await promptBox.click({ timeout: Math.min(promptTimeoutMs, 10000) });
 
   const mod = process.platform === "darwin" ? "Meta" : "Control";
   await page.keyboard.press(`${mod}+A`);
@@ -356,35 +446,43 @@ async function fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs = 1200
   await page.keyboard.insertText(fullPrompt);
 }
 
-async function submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs = 120000) {
-  await fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs);
-  await page.waitForTimeout(700);
-
+async function clickSendButton(page, promptTimeoutMs) {
   const sendSelectors = [
     'button[data-testid="send-button"]',
+    'button[data-testid="composer-submit-button"]',
     'button[aria-label="Send prompt"]',
     'button[aria-label="Send message"]',
   ];
 
-  for (const selector of sendSelectors) {
-    const loc = page.locator(selector).last();
-    const count = await loc.count().catch(() => 0);
-    if (count === 0) continue;
+  const deadline = Date.now() + Math.min(promptTimeoutMs, 60000);
+  while (Date.now() < deadline) {
+    for (const selector of sendSelectors) {
+      const loc = page.locator(selector).last();
+      const count = await loc.count().catch(() => 0);
+      if (count === 0) continue;
 
-    try {
-      await loc.waitFor({ state: "visible", timeout: Math.min(promptTimeoutMs, 30000) });
-
-      for (let i = 0; i < 10; i++) {
+      try {
+        await loc.waitFor({ state: "visible", timeout: 1000 });
         const disabled = await loc.isDisabled().catch(() => true);
         if (!disabled) {
-          await loc.click({ timeout: Math.min(promptTimeoutMs, 30000) });
-          return;
+          await loc.click({ timeout: 5000 });
+          return true;
         }
-        await page.waitForTimeout(500);
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
+    await page.waitForTimeout(500);
   }
 
+  return false;
+}
+
+async function submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs) {
+  await fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs);
+  await page.waitForTimeout(700);
+
+  if (await clickSendButton(page, promptTimeoutMs)) return;
+
+  console.log("Send button was not found/enabled; pressing Enter as fallback.");
   await page.keyboard.press("Enter");
 }
 
@@ -402,33 +500,6 @@ async function denyMicIfPossible(browser) {
       } catch (_) {}
     }
   } catch (_) {}
-}
-
-async function dismissBlockingOverlays(page) {
-  const labels = [
-    "Continue",
-    "Accept",
-    "Accept all",
-    "Got it",
-    "OK",
-    "Okay",
-    "Not now",
-    "Maybe later",
-    "Dismiss",
-    "Close",
-  ];
-
-  for (const label of labels) {
-    const loc = page.getByRole("button", { name: label }).last();
-    const count = await loc.count().catch(() => 0);
-    if (count === 0) continue;
-    try {
-      if (await loc.isVisible({ timeout: 500 }).catch(() => false)) {
-        await loc.click({ timeout: 1000 }).catch(() => {});
-        await page.waitForTimeout(300);
-      }
-    } catch (_) {}
-  }
 }
 
 async function dumpDebugState(page, metaDir) {
@@ -492,7 +563,7 @@ async function main() {
 
   const connectTimeoutMs = intArg(args, "connect-timeout-ms", 120000);
   const pageTimeoutMs = intArg(args, "page-timeout-ms", 120000);
-  const promptTimeoutMs = intArg(args, "prompt-timeout-ms", 120000);
+  const promptTimeoutMs = intArg(args, "prompt-timeout-ms", 30000);
   const responseTimeoutMs = intArg(args, "response-timeout-ms", 20 * 60 * 1000);
 
   mkdirp(outDir);
@@ -535,16 +606,14 @@ ${userPrompt}
   try {
     await denyMicIfPossible(browser);
 
-    const page = await findExistingChatGptPage(browser, promptTimeoutMs);
+    const page = await findExistingChatGptPage(browser, pageTimeoutMs);
     const context = page.context();
-    context.setDefaultTimeout(pageTimeoutMs);
-    context.setDefaultNavigationTimeout(pageTimeoutMs);
+    context.setDefaultTimeout(Math.min(pageTimeoutMs, 60000));
 
     await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
     await page.bringToFront();
 
-    await dismissBlockingOverlays(page);
-    const promptBox = await findPromptBox(page, promptTimeoutMs);
+    const promptBox = await findPromptBox(page, Math.min(pageTimeoutMs, 60000));
     const beforeCount = await assistantCount(page);
 
     await submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs);
