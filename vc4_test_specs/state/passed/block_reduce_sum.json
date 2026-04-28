@@ -1,0 +1,10 @@
+{
+  "name": "block_reduce_sum",
+  "status": "passed",
+  "completed_utc": "2026-04-28T10:16:27.643897+00:00",
+  "attempts_used": 2,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/block_reduce_sum/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=block_reduce_sum status=PASS cases=6 total_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_values_per_block=192 full_block_pass=1 tail_pass=1 multi_block_pass=1 checksum_accum=-131072 max_abs_diff=0.0 runtime_allocations=1 runtime_launches=6 runtime_tile_waves=8 timeouts=0 errstat_relevant_changed=0 srqcs_after_last_wave=0x40400 elapsed_usec=84380"
+}

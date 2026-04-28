@@ -1,0 +1,23 @@
+{
+"name": "block_reduce_sum",
+"status": "PASS",
+"required": {
+"cases": 6,
+"total_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_values_per_block": 192,
+"full_block_pass": 1,
+"tail_pass": 1,
+"multi_block_pass": 1,
+"runtime_allocations": 1,
+"runtime_launches": 6,
+"timeouts": 0,
+"errstat_relevant_changed": 0
+},
+"float_max": {
+"max_abs_diff": 0.0005
+}
+}
+
