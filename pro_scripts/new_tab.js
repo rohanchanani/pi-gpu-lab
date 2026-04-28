@@ -12,10 +12,8 @@ function parseArgs(argv) {
   for (let i = 2; i < argv.length; i++) {
     const key = argv[i];
     if (!key.startsWith("--")) continue;
-
     const name = key.slice(2);
     const next = argv[i + 1];
-
     if (!next || next.startsWith("--")) {
       args[name] = "true";
     } else {
@@ -31,28 +29,21 @@ function boolArg(args, name) {
 }
 
 function intArg(args, name, defaultValue) {
-  const raw = args[name];
-  if (raw === undefined || raw === null || raw === "") return defaultValue;
-  const n = Number(raw);
+  if (args[name] === undefined) return defaultValue;
+  const n = Number(args[name]);
   if (!Number.isFinite(n) || n <= 0) {
-    throw new Error(`Invalid positive integer for --${name}: ${raw}`);
+    throw new Error(`Invalid integer argument --${name}: ${args[name]}`);
   }
   return Math.floor(n);
 }
 
 function requireArg(args, name) {
-  if (!args[name]) {
-    throw new Error(`Missing required argument: --${name}`);
-  }
+  if (!args[name]) throw new Error(`Missing required argument: --${name}`);
   return args[name];
 }
 
 function mkdirp(p) {
   fs.mkdirSync(p, { recursive: true });
-}
-
-function randomToken() {
-  return `gptweb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function escapeRegExp(s) {
@@ -61,11 +52,9 @@ function escapeRegExp(s) {
 
 function stripOuterQuotes(s) {
   const t = String(s || "").trim();
-  if (
-    (t.startsWith('"') && t.endsWith('"')) ||
-    (t.startsWith("'") && t.endsWith("'")) ||
-    (t.startsWith("`") && t.endsWith("`"))
-  ) {
+  if ((t.startsWith('"') && t.endsWith('"')) ||
+      (t.startsWith("'") && t.endsWith("'")) ||
+      (t.startsWith("`") && t.endsWith("`"))) {
     return t.slice(1, -1);
   }
   return t;
@@ -73,14 +62,12 @@ function stripOuterQuotes(s) {
 
 function readPromptFile(promptFile) {
   const p = path.resolve(promptFile);
-  if (!fs.existsSync(p)) {
-    throw new Error(`Prompt file does not exist: ${p}`);
-  }
+  if (!fs.existsSync(p)) throw new Error(`Prompt file does not exist: ${p}`);
   return fs.readFileSync(p, "utf8");
 }
 
 function parseKv(header, key) {
-  const re = new RegExp(`(?:^|\\s)${escapeRegExp(key)}=(?:"([^"]*)"|'([^']*)'|(\\S+))`);
+  const re = new RegExp(`(?:^|\\s)${escapeRegExp(key)}=(?:\"([^\"]*)\"|'([^']*)'|(\\S+))`);
   const m = String(header || "").match(re);
   if (!m) return null;
   return stripOuterQuotes(m[1] ?? m[2] ?? m[3] ?? "");
@@ -104,9 +91,8 @@ function normalizeRelativePath(rawPath) {
 function parseHeaderPath(header) {
   const pathFromKv = parseKv(header, "path");
   if (pathFromKv) return normalizeRelativePath(pathFromKv);
-
   let h = String(header || "").trim();
-  h = h.replace(/(?:^|\s)token=(?:"[^"]*"|'[^']*'|\S+)/g, "").trim();
+  h = h.replace(/(?:^|\s)token=(?:\"[^\"]*\"|'[^']*'|\S+)/g, "").trim();
   h = h.replace(/^path=/, "").trim();
   return normalizeRelativePath(h);
 }
@@ -115,7 +101,6 @@ function parseFileBlocks(answer, expectedToken) {
   const files = [];
   const text = String(answer || "");
   const re = /^BEGIN_GPTWEB_FILE([^\r\n]*)\r?\n([\s\S]*?)^END_GPTWEB_FILE([^\r\n]*)(?:\r?\n|$)/gm;
-
   let m;
   while ((m = re.exec(text)) !== null) {
     const header = String(m[1] || "").trim();
@@ -124,19 +109,18 @@ function parseFileBlocks(answer, expectedToken) {
     const headerToken = parseKv(header, "token");
     const footerToken = parseKv(footer, "token");
 
+    // The god prompt requires token=abc123.  The wrapper also uses abc123.
+    // Accept missing tokens and abc123; reject other explicit tokens.
     if (expectedToken) {
       if (headerToken && headerToken !== expectedToken) continue;
       if (footerToken && footerToken !== expectedToken) continue;
     }
 
-    let relPath;
     try {
-      relPath = parseHeaderPath(header);
+      files.push({ relPath: parseHeaderPath(header), content, header });
     } catch (err) {
       files.push({ error: err.message, header, skipped: true });
-      continue;
     }
-    files.push({ relPath, content, header });
   }
   return files;
 }
@@ -145,13 +129,11 @@ function writeGeneratedFiles(parsedFiles, outDir) {
   const written = [];
   const skipped = [];
   const root = path.resolve(outDir);
-
   for (const f of parsedFiles) {
     if (f.skipped) {
       skipped.push(f);
       continue;
     }
-
     try {
       const relPath = normalizeRelativePath(f.relPath);
       const dest = path.resolve(root, relPath);
@@ -167,32 +149,6 @@ function writeGeneratedFiles(parsedFiles, outDir) {
     }
   }
   return { written, skipped };
-}
-
-async function findPromptBox(page, timeoutMs) {
-  const candidates = [
-    '[data-testid="prompt-textarea"]',
-    '#prompt-textarea',
-    'div[contenteditable="true"][id="prompt-textarea"]',
-    '.ProseMirror[contenteditable="true"]',
-    'textarea[placeholder*="Message"]',
-    'textarea',
-    'div[contenteditable="true"]',
-    '[contenteditable="true"]',
-  ];
-
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    for (const selector of candidates) {
-      const loc = page.locator(selector).last();
-      try {
-        await loc.waitFor({ state: "visible", timeout: Math.min(2500, Math.max(500, deadline - Date.now())) });
-        return loc;
-      } catch (_) {}
-    }
-    await page.waitForTimeout(250);
-  }
-  throw new Error("Could not find ChatGPT prompt box.");
 }
 
 function isChatGptUrl(url) {
@@ -213,25 +169,227 @@ async function listChatGptPages(browser) {
   return pages;
 }
 
-async function findExistingChatGptPage(browser, pageTimeoutMs, promptTimeoutMs) {
-  const candidates = await listChatGptPages(browser);
-  if (candidates.length === 0) {
-    throw new Error(`No open ChatGPT tab found. Open https://chatgpt.com/ in Chrome running at ${CDP_URL}, then rerun.`);
-  }
+async function findPromptBox(page, timeout = 30000) {
+  const candidates = [
+    '[data-testid="prompt-textarea"]',
+    '#prompt-textarea',
+    'div[contenteditable="true"][id="prompt-textarea"]',
+    '.ProseMirror[contenteditable="true"]',
+    'textarea[placeholder*="Message"]',
+    'textarea',
+    'div[contenteditable="true"]',
+    '[contenteditable="true"]',
+  ];
 
-  for (const candidate of candidates.slice().reverse()) {
-    const page = candidate.page;
+  const perCandidate = Math.max(1000, Math.floor(timeout / candidates.length));
+  for (const selector of candidates) {
+    const loc = page.locator(selector).last();
     try {
-      if (page.isClosed()) continue;
-      await page.bringToFront();
-      await page.waitForLoadState("domcontentloaded", { timeout: Math.min(10000, pageTimeoutMs) }).catch(() => {});
-      await findPromptBox(page, Math.min(promptTimeoutMs, 30000));
-      console.log(`Using existing ChatGPT tab: ${candidate.title || "(untitled)"}`);
-      console.log(`URL: ${candidate.url}`);
-      return page;
+      await loc.waitFor({ state: "visible", timeout: perCandidate });
+      return loc;
     } catch (_) {}
   }
-  throw new Error("Found ChatGPT tab(s), but none had a visible prompt box. Make sure you are logged in and the tab is ready.");
+
+  throw new Error("Could not find ChatGPT prompt box.");
+}
+
+async function focusPromptBox(page, promptBox) {
+  await page.bringToFront().catch(() => {});
+  await promptBox.scrollIntoViewIfNeeded().catch(() => {});
+  await promptBox.click({ timeout: 15000, force: true }).catch(async () => {
+    await page.mouse.click(700, 930);
+  });
+  await page.waitForTimeout(250);
+
+  await page.evaluate(() => {
+    const selectors = [
+      '[data-testid="prompt-textarea"]',
+      '#prompt-textarea',
+      '.ProseMirror[contenteditable="true"]',
+      'textarea[placeholder*="Message"]',
+      'textarea',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+    ];
+    for (const selector of selectors) {
+      const els = Array.from(document.querySelectorAll(selector));
+      for (const el of els.reverse()) {
+        const rect = el.getBoundingClientRect();
+        const visible = rect.width > 0 && rect.height > 0;
+        if (!visible) continue;
+        el.focus();
+        if (el.isContentEditable) {
+          try {
+            const selection = window.getSelection();
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            range.collapse(false);
+            selection.removeAllRanges();
+            selection.addRange(range);
+          } catch (_) {}
+        }
+        return true;
+      }
+    }
+    return false;
+  }).catch(() => {});
+  await page.waitForTimeout(250);
+}
+
+async function clearComposer(page) {
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.press(`${mod}+A`).catch(() => {});
+  await page.keyboard.press("Backspace").catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+function putSystemClipboard(text) {
+  if (process.platform === "darwin") {
+    const proc = childProcess.spawnSync("/usr/bin/pbcopy", [], {
+      input: text,
+      encoding: "utf8",
+      maxBuffer: Math.max(1024 * 1024, Buffer.byteLength(text, "utf8") + 1024),
+    });
+    if (proc.status !== 0) {
+      throw new Error(`pbcopy failed: ${(proc.stderr || "").toString()}`);
+    }
+    return;
+  }
+
+  // Linux fallback: xclip or wl-copy if installed.
+  for (const cmd of ["wl-copy", "xclip"]) {
+    const exists = childProcess.spawnSync("/bin/sh", ["-lc", `command -v ${cmd}`], { encoding: "utf8" });
+    if (exists.status !== 0) continue;
+    const args = cmd === "xclip" ? ["-selection", "clipboard"] : [];
+    const proc = childProcess.spawnSync(cmd, args, { input: text, encoding: "utf8" });
+    if (proc.status === 0) return;
+  }
+
+  throw new Error("No supported system clipboard command found; install wl-copy or xclip.");
+}
+
+function runOsa(scriptLines) {
+  const args = [];
+  for (const line of scriptLines) args.push("-e", line);
+  return childProcess.spawnSync("/usr/bin/osascript", args, {
+    encoding: "utf8",
+    timeout: 10000,
+  });
+}
+
+async function nativePlainPaste(page, fullPrompt) {
+  putSystemClipboard(fullPrompt);
+
+  if (process.platform === "darwin") {
+    const appCandidates = [];
+    if (process.env.GPT_WEB_BROWSER_APP) appCandidates.push(process.env.GPT_WEB_BROWSER_APP);
+    appCandidates.push("Google Chrome", "Chromium", "Google Chrome Canary");
+
+    for (const app of appCandidates) {
+      const proc = runOsa([
+        `tell application ${JSON.stringify(app)} to activate`,
+        "delay 0.25",
+        'tell application "System Events" to keystroke "v" using {command down, shift down}',
+      ]);
+      if (proc.status === 0) return true;
+      console.log(`Native paste attempt via ${app} failed: ${(proc.stderr || "").trim()}`);
+    }
+
+    const proc = runOsa([
+      'tell application "System Events" to keystroke "v" using {command down, shift down}',
+    ]);
+    if (proc.status === 0) return true;
+    console.log(`Native paste attempt without app activation failed: ${(proc.stderr || "").trim()}`);
+  }
+
+  // Playwright fallback.  Keep this as plain-text paste (Shift+Paste), not normal paste.
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+  await page.keyboard.down(mod);
+  await page.keyboard.down("Shift");
+  await page.keyboard.press("V");
+  await page.keyboard.up("Shift");
+  await page.keyboard.up(mod);
+  return true;
+}
+
+async function composerTextLength(page) {
+  return await page.evaluate(() => {
+    const selectors = [
+      '[data-testid="prompt-textarea"]',
+      '#prompt-textarea',
+      '.ProseMirror[contenteditable="true"]',
+      'textarea[placeholder*="Message"]',
+      'textarea',
+      'div[contenteditable="true"]',
+      '[contenteditable="true"]',
+    ];
+    let best = 0;
+    for (const selector of selectors) {
+      for (const el of Array.from(document.querySelectorAll(selector))) {
+        const rect = el.getBoundingClientRect();
+        const visible = rect.width > 0 && rect.height > 0;
+        if (!visible) continue;
+        const value = el.value || el.innerText || el.textContent || "";
+        if (value.length > best) best = value.length;
+      }
+    }
+    return best;
+  }).catch(() => 0);
+}
+
+async function findEnabledSendButton(page) {
+  const selectors = [
+    'button[data-testid="send-button"]',
+    'button[aria-label="Send prompt"]',
+    'button[aria-label="Send message"]',
+    'button[aria-label="Send"]',
+  ];
+
+  for (const selector of selectors) {
+    const loc = page.locator(selector);
+    const count = await loc.count().catch(() => 0);
+    for (let i = count - 1; i >= 0; i--) {
+      const button = loc.nth(i);
+      const visible = await button.isVisible().catch(() => false);
+      if (!visible) continue;
+      const disabled = await button.isDisabled().catch(() => true);
+      if (!disabled) return button;
+    }
+  }
+  return null;
+}
+
+async function waitForPromptReady(page, timeoutMs, expectedLength) {
+  const start = Date.now();
+  let lastLog = 0;
+  while (Date.now() - start < timeoutMs) {
+    const send = await findEnabledSendButton(page);
+    const len = await composerTextLength(page);
+    if (send) {
+      console.log(`Prompt is ready to send; observed composer length=${len}.`);
+      return send;
+    }
+
+    if (Date.now() - lastLog > 5000) {
+      console.log(
+        `Waiting for ChatGPT composer/send button after plain-text paste; composer length=${len}, expected approx=${expectedLength}.`
+      );
+      lastLog = Date.now();
+    }
+    await page.waitForTimeout(1000);
+  }
+  throw new Error("Plain-text paste did not enable ChatGPT send button before timeout.");
+}
+
+async function submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs) {
+  console.log(`Pasting prompt as plain text with native Cmd+Shift+V (${fullPrompt.length} characters).`);
+  await focusPromptBox(page, promptBox);
+  await clearComposer(page);
+  await focusPromptBox(page, promptBox);
+  await nativePlainPaste(page, fullPrompt);
+
+  const sendButton = await waitForPromptReady(page, promptTimeoutMs, fullPrompt.length);
+  await sendButton.click({ timeout: 15000 });
 }
 
 async function assistantCount(page) {
@@ -258,23 +416,19 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs)
   let previous = "";
   let stableCount = 0;
   let lastNonEmpty = "";
-  const deadline = Date.now() + responseTimeoutMs;
-
-  while (Date.now() < deadline) {
+  const start = Date.now();
+  while (Date.now() - start < responseTimeoutMs) {
     await page.waitForTimeout(1000);
     const loc = page.locator('[data-message-author-role="assistant"]');
     const count = await loc.count().catch(() => 0);
     let current = "";
-
     if (count > beforeCount) {
       current = await loc.nth(count - 1).innerText().catch(() => "");
-    } else if (Date.now() > deadline - Math.min(30000, responseTimeoutMs / 4)) {
+    } else if (Date.now() - start > 20000) {
       current = await lastAssistantText(page);
     }
-
     current = current.trim();
     if (current) lastNonEmpty = current;
-
     if (current && current === previous) {
       stableCount++;
       if (stableCount >= 5) return current;
@@ -284,138 +438,6 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs)
     }
   }
   return lastNonEmpty;
-}
-
-function setSystemClipboardText(text) {
-  if (process.platform === "darwin") {
-    const result = childProcess.spawnSync("/usr/bin/pbcopy", [], {
-      input: text,
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024,
-    });
-    if (result.status === 0) return true;
-    throw new Error(`pbcopy failed: ${(result.stderr || result.error || "").toString().trim()}`);
-  }
-
-  const candidates = [
-    ["wl-copy", []],
-    ["xclip", ["-selection", "clipboard"]],
-    ["xsel", ["--clipboard", "--input"]],
-  ];
-  for (const [cmd, argv] of candidates) {
-    const result = childProcess.spawnSync(cmd, argv, {
-      input: text,
-      encoding: "utf8",
-      maxBuffer: 1024 * 1024,
-    });
-    if (result.status === 0) return true;
-  }
-  return false;
-}
-
-async function grantClipboardPermissions(context) {
-  for (const origin of ["https://chatgpt.com", "https://chat.openai.com"]) {
-    try {
-      await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin });
-    } catch (_) {}
-  }
-}
-
-async function setBrowserClipboardText(page, text) {
-  await grantClipboardPermissions(page.context());
-  return await page.evaluate(async (value) => {
-    await navigator.clipboard.writeText(value);
-    return true;
-  }, text).catch(() => false);
-}
-
-async function promptBoxState(promptBox) {
-  return await promptBox.evaluate((el) => {
-    const text = "value" in el ? String(el.value || "") : String(el.innerText || el.textContent || "");
-    return { length: text.length, prefix: text.slice(0, 80), suffix: text.slice(Math.max(0, text.length - 80)) };
-  }).catch(() => ({ length: 0, prefix: "", suffix: "" }));
-}
-
-async function enabledSendButton(page) {
-  const selectors = [
-    'button[data-testid="send-button"]',
-    'button[aria-label="Send prompt"]',
-    'button[aria-label="Send message"]',
-    'button[type="submit"]',
-  ];
-
-  for (const selector of selectors) {
-    const loc = page.locator(selector).last();
-    const count = await loc.count().catch(() => 0);
-    if (count === 0) continue;
-    const visible = await loc.isVisible().catch(() => false);
-    if (!visible) continue;
-    const disabled = await loc.isDisabled().catch(() => true);
-    if (!disabled) return loc;
-  }
-  return null;
-}
-
-async function focusAndClearComposer(page, promptBox) {
-  const mod = process.platform === "darwin" ? "Meta" : "Control";
-  await promptBox.scrollIntoViewIfNeeded().catch(() => {});
-  await promptBox.click({ timeout: 15000, force: true });
-  await page.waitForTimeout(250);
-  await page.keyboard.press(`${mod}+A`);
-  await page.keyboard.press("Backspace");
-  await page.waitForTimeout(300);
-}
-
-async function pastePlainTextPrompt(page, fullPrompt, promptTimeoutMs) {
-  let promptBox = await findPromptBox(page, promptTimeoutMs);
-  await focusAndClearComposer(page, promptBox);
-
-  let clipboardOk = false;
-  try {
-    clipboardOk = setSystemClipboardText(fullPrompt);
-  } catch (err) {
-    console.log(`System clipboard setup failed: ${err.message}`);
-  }
-  if (!clipboardOk) clipboardOk = await setBrowserClipboardText(page, fullPrompt);
-  if (!clipboardOk) throw new Error("Could not write prompt to system or browser clipboard.");
-
-  const mod = process.platform === "darwin" ? "Meta" : "Control";
-  console.log(`Pasting prompt as plain text with ${mod}+Shift+V (${fullPrompt.length} characters).`);
-  await page.keyboard.press(`${mod}+Shift+V`);
-
-  const deadline = Date.now() + promptTimeoutMs;
-  let lastState = { length: 0 };
-  let lastLog = 0;
-
-  while (Date.now() < deadline) {
-    promptBox = await findPromptBox(page, Math.min(5000, Math.max(1000, deadline - Date.now()))).catch(() => promptBox);
-    lastState = await promptBoxState(promptBox);
-    const send = await enabledSendButton(page);
-    if (send) {
-      console.log(`Prompt is ready to send; observed composer length=${lastState.length}.`);
-      return send;
-    }
-
-    const now = Date.now();
-    if (now - lastLog > 5000) {
-      console.log(`Waiting for ChatGPT composer/send button after plain-text paste; composer length=${lastState.length}.`);
-      lastLog = now;
-    }
-    await page.waitForTimeout(500);
-  }
-
-  throw new Error(`Plain-text paste did not make the send button ready; final observed composer length=${lastState.length}.`);
-}
-
-async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
-  const send = await pastePlainTextPrompt(page, fullPrompt, promptTimeoutMs);
-  try {
-    await send.click({ timeout: 15000 });
-    return;
-  } catch (err) {
-    console.log(`Send button click failed (${err.message}); pressing Enter as fallback.`);
-  }
-  await page.keyboard.press("Enter");
 }
 
 async function denyMicIfPossible(browser) {
@@ -434,41 +456,56 @@ async function denyMicIfPossible(browser) {
 }
 
 async function dumpDebugState(page, metaDir) {
+  mkdirp(metaDir);
   await page.screenshot({ path: path.join(metaDir, "after-generation.png"), fullPage: true }).catch(() => {});
-
   const candidates = await page.evaluate(() => {
-    const els = [...document.querySelectorAll("a, button, textarea, [contenteditable='true']")];
+    const els = [...document.querySelectorAll("a, button, textarea, div[contenteditable='true'], [data-testid]")];
     return els.map((el, i) => {
       const rect = el.getBoundingClientRect();
       return {
         i,
         tag: el.tagName.toLowerCase(),
-        text: (el.innerText || el.textContent || el.value || "").trim().slice(0, 250),
+        text: (el.innerText || el.textContent || "").trim().slice(0, 250),
         aria: el.getAttribute("aria-label") || "",
-        title: el.getAttribute("title") || "",
-        href: el.getAttribute("href") || "",
-        download: el.getAttribute("download") || "",
-        testid: el.getAttribute("data-testid") || "",
         id: el.getAttribute("id") || "",
+        role: el.getAttribute("role") || "",
+        testid: el.getAttribute("data-testid") || "",
         className: String(el.getAttribute("class") || "").slice(0, 250),
+        disabled: !!el.disabled,
         visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
         rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
       };
     });
   }).catch(() => []);
-
   fs.writeFileSync(path.join(metaDir, "click-candidates.json"), JSON.stringify(candidates, null, 2), "utf8");
 }
 
-async function disconnectBrowser(browser) {
-  if (browser && typeof browser.disconnect === "function") {
-    await browser.disconnect().catch(() => {});
-  } else if (browser) {
-    await browser.close().catch(() => {});
+async function findExistingChatGptPage(browser, pageTimeoutMs) {
+  const candidates = await listChatGptPages(browser);
+  if (candidates.length === 0) {
+    throw new Error(`No open ChatGPT tab found. Open https://chatgpt.com/ in Chrome running at ${CDP_URL}, then rerun.`);
   }
+  for (const candidate of candidates.slice().reverse()) {
+    const page = candidate.page;
+    try {
+      if (page.isClosed()) continue;
+      await page.bringToFront();
+      await page.waitForLoadState("domcontentloaded", { timeout: Math.min(pageTimeoutMs, 10000) }).catch(() => {});
+      await findPromptBox(page, Math.min(pageTimeoutMs, 30000));
+      console.log(`Using existing ChatGPT tab: ${candidate.title || "(untitled)"}`);
+      console.log(`URL: ${candidate.url}`);
+      return page;
+    } catch (_) {}
+  }
+  throw new Error("Found ChatGPT tab(s), but none had a visible prompt box. Make sure you are logged in and the tab is ready.");
 }
 
-function buildFullPrompt(userPrompt, token) {
+async function disconnectBrowser(browser) {
+  if (browser && typeof browser.disconnect === "function") await browser.disconnect().catch(() => {});
+  else if (browser) await browser.close().catch(() => {});
+}
+
+function buildWrappedPrompt(userPrompt, token) {
   return `
 You are generating files for local automation.
 
@@ -499,41 +536,7 @@ ${userPrompt}
 `.trim();
 }
 
-async function writeAnswerAndFiles(page, metaDir, outDir, promptFile, token, mode, extraManifest) {
-  const answer = extraManifest.answer || "";
-  const answerPath = path.join(metaDir, "answer.md");
-  fs.writeFileSync(answerPath, answer || "", "utf8");
-
-  const parsedFiles = parseFileBlocks(answer || "", token);
-  const { written, skipped } = writeGeneratedFiles(parsedFiles, outDir);
-
-  await dumpDebugState(page, metaDir);
-
-  const manifest = {
-    ok: written.length > 0,
-    mode,
-    promptFile: path.resolve(promptFile),
-    outDir,
-    metaDir,
-    answerPath,
-    token,
-    files: written,
-    skipped,
-    parsedBlockCount: parsedFiles.length,
-    ...extraManifest,
-    note:
-      written.length === 0
-        ? "No files were written. Check .gpt-web-run/answer.md and .gpt-web-run/after-generation.png."
-        : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
-  };
-  delete manifest.answer;
-
-  fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
-  console.log(JSON.stringify(manifest, null, 2));
-  if (written.length === 0) process.exitCode = 2;
-}
-
-async function main() {
+async function run(mode) {
   const args = parseArgs(process.argv);
   const promptFile = requireArg(args, "prompt-file");
   const outDir = path.resolve(requireArg(args, "out"));
@@ -544,48 +547,86 @@ async function main() {
   const pageTimeoutMs = intArg(args, "page-timeout-ms", 120000);
   const promptTimeoutMs = intArg(args, "prompt-timeout-ms", 120000);
   const responseTimeoutMs = intArg(args, "response-timeout-ms", 1200000);
+  const token = args.token || "abc123";
 
   mkdirp(outDir);
   mkdirp(metaDir);
 
   const userPrompt = readPromptFile(promptFile);
-  const token = randomToken();
-  const fullPrompt = buildFullPrompt(userPrompt, token);
+  const fullPrompt = buildWrappedPrompt(userPrompt, token);
 
   const browser = await chromium.connectOverCDP(CDP_URL, { timeout: connectTimeoutMs });
   let page = null;
 
   try {
     await denyMicIfPossible(browser);
-    const context = browser.contexts()[0];
+    let context = browser.contexts()[0];
     if (!context) throw new Error(`No existing Chrome context found at ${CDP_URL}`);
     context.setDefaultTimeout(pageTimeoutMs);
 
-    page = await context.newPage();
+    if (mode === "new") {
+      page = await context.newPage();
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
+      await page.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: pageTimeoutMs });
+      await page.waitForTimeout(4000);
+      console.log("Opened new ChatGPT tab.");
+    } else {
+      page = await findExistingChatGptPage(browser, pageTimeoutMs);
+    }
+
     await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
-    await page.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: pageTimeoutMs });
-    await page.waitForLoadState("domcontentloaded", { timeout: pageTimeoutMs }).catch(() => {});
-    await page.waitForTimeout(2500);
+    await page.bringToFront();
 
-    await findPromptBox(page, promptTimeoutMs);
+    const promptBox = await findPromptBox(page, pageTimeoutMs);
     const beforeCount = await assistantCount(page);
-    await submitPrompt(page, fullPrompt, promptTimeoutMs);
 
-    console.log("Prompt submitted in new ChatGPT tab. Waiting for response to settle...");
+    await submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs);
+
+    console.log(mode === "new"
+      ? "Prompt submitted in new ChatGPT tab. Waiting for response to settle..."
+      : "Prompt submitted into existing ChatGPT tab. Waiting for response to settle...");
+
     const answer = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
+    const answerPath = path.join(metaDir, "answer.md");
+    fs.writeFileSync(answerPath, answer || "", "utf8");
 
-    await writeAnswerAndFiles(page, metaDir, outDir, promptFile, token, "new-chatgpt-tab-gptweb-file-parser", {
-      answer,
+    const parsedFiles = parseFileBlocks(answer || "", token);
+    const { written, skipped } = writeGeneratedFiles(parsedFiles, outDir);
+
+    await dumpDebugState(page, metaDir);
+
+    const manifest = {
+      ok: written.length > 0,
+      mode: mode === "new" ? "new-chatgpt-tab-gptweb-file-parser" : "existing-chatgpt-tab-gptweb-file-parser",
+      promptFile: path.resolve(promptFile),
+      outDir,
+      metaDir,
+      answerPath,
+      token,
+      files: written,
+      skipped,
+      parsedBlockCount: parsedFiles.length,
       keptChatGptTabOpen: !closeTab,
       chatGptTabUrl: page.url(),
-    });
+      note: written.length === 0
+        ? "No files were written. Check .gpt-web-run/answer.md and .gpt-web-run/after-generation.png."
+        : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
+    };
+
+    fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+    console.log(JSON.stringify(manifest, null, 2));
+    if (written.length === 0) process.exitCode = 2;
+  } catch (err) {
+    if (page) await dumpDebugState(page, metaDir).catch(() => {});
+    throw err;
   } finally {
     if (closeTab && page) await page.close().catch(() => {});
     await disconnectBrowser(browser);
   }
 }
 
-main().catch((err) => {
+const mode = process.env.GPT_WEB_MODE || (path.basename(process.argv[1]).startsWith("new_") ? "new" : "current");
+run(mode).catch((err) => {
   console.error(err);
   process.exit(1);
 });
