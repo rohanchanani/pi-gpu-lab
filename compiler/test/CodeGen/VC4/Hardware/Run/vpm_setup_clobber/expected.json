@@ -1,0 +1,16 @@
+{
+"name": "vpm_setup_clobber",
+"status": "PASS",
+"required": {
+"representative_pairs": 18,
+"pairs_run": 18,
+"valid_pairs": 18,
+"qpu_mismatches": 0,
+"timeouts": 0,
+"invalid_topology": 0,
+"errstat_relevant_changed": 0,
+"runtime_allocations": 1,
+"runtime_launches": 18
+}
+}
+

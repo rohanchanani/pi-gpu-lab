@@ -1,0 +1,10 @@
+{
+  "name": "vpm_setup_clobber",
+  "status": "passed",
+  "completed_utc": "2026-04-28T09:38:15.964508+00:00",
+  "attempts_used": 4,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/vpm_setup_clobber/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=vpm_setup_clobber status=PASS representative_pairs=18 pairs_run=18 valid_pairs=18 setup_clobber_count=0 no_clobber_count=18 both_count=0 other_count=0 qpu_mismatches=0 timeouts=0 invalid_topology=0 errstat_relevant_changed=0 runtime_allocations=1 runtime_launches=18 conclusion_id=1 elapsed_usec=426729"
+}
