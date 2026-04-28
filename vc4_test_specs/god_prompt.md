@@ -1,3 +1,19635 @@
+File tree for selected VC4 dialect and hardware context files
+
+compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td
+compiler/include/vc4/Dialect/VC4/IR/VC4Base.td
+compiler/include/vc4/Dialect/VC4/IR/VC4Dialect.td
+compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td
+compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td
+compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td
+compiler/include/vc4/Dialect/VC4/IR/VC4Types.td
+compiler/lib/Dialect/VC4/IR/VC4Ops.cpp
+compiler/tools/vc4-opt/vc4-opt.cpp
+compiler/test/Dialect/VC4/alu-and-load-imm-invalid.mlir
+compiler/test/Dialect/VC4/alu-and-load-imm-roundtrip.mlir
+compiler/test/Dialect/VC4/dma-invalid.mlir
+compiler/test/Dialect/VC4/dma-roundtrip.mlir
+compiler/test/Dialect/VC4/function-form-segregation-invalid.mlir
+compiler/test/Dialect/VC4/invalid.mlir
+compiler/test/Dialect/VC4/launch-abi-invalid.mlir
+compiler/test/Dialect/VC4/launch-abi-roundtrip.mlir
+compiler/test/Dialect/VC4/module-func-roundtrip.mlir
+compiler/test/Dialect/VC4/qpu-branch-invalid.mlir
+compiler/test/Dialect/VC4/qpu-branch-roundtrip.mlir
+compiler/test/Dialect/VC4/qpu-bundle-invalid.mlir
+compiler/test/Dialect/VC4/qpu-bundle-roundtrip.mlir
+compiler/test/Dialect/VC4/qpu-ldi-sema-invalid.mlir
+compiler/test/Dialect/VC4/qpu-ldi-sema-roundtrip.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-adjacent-hazards-invalid.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-adjacent-hazards.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-hardware-rules-invalid.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-hardware-rules.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-io-spacing-invalid.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-io-spacing.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-peripheral-accesses-invalid.mlir
+compiler/test/Dialect/VC4/qpu-scheduled-peripheral-accesses.mlir
+compiler/test/Dialect/VC4/sfu-invalid.mlir
+compiler/test/Dialect/VC4/sfu-roundtrip.mlir
+compiler/test/Dialect/VC4/side-effects.mlir
+compiler/test/Dialect/VC4/structured-system-invalid.mlir
+compiler/test/Dialect/VC4/structured-system-roundtrip.mlir
+compiler/test/Dialect/VC4/sync-thread-invalid.mlir
+compiler/test/Dialect/VC4/sync-thread-roundtrip.mlir
+compiler/test/Dialect/VC4/tmu-descriptor-invalid.mlir
+compiler/test/Dialect/VC4/tmu-descriptor-roundtrip.mlir
+compiler/test/Dialect/VC4/tmu-request-read-invalid.mlir
+compiler/test/Dialect/VC4/tmu-request-read-roundtrip.mlir
+compiler/test/Dialect/VC4/types-roundtrip.mlir
+compiler/test/Dialect/VC4/uniform-and-read-invalid.mlir
+compiler/test/Dialect/VC4/uniform-and-read-roundtrip.mlir
+compiler/test/Dialect/VC4/value-shape-invalid.mlir
+compiler/test/Dialect/VC4/value-shape-roundtrip.mlir
+compiler/test/Dialect/VC4/verify-emit-contract-invalid.mlir
+compiler/test/Dialect/VC4/verify-emit-contract.mlir
+compiler/test/Dialect/VC4/vpm-invalid.mlir
+compiler/test/Dialect/VC4/vpm-roundtrip.mlir
+compiler/docs/codegen/hardware-ground-truth-test-contract.md
+compiler/docs/codegen/vc4_cuda_mapping_guide.md
+compiler/test/CodeGen/VC4/catalog.json
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/3-test-saxpy_full.c
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/Makefile
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.c
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.h
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full.qasm
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.c
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/expected.json
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/3-test-matmul_naive.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/Makefile
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/mailbox.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/mailbox.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive.qasm
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive_launch.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive_launch.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/expected.json
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/3-test-qpu_barrier_syncthreads.c
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/Makefile
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.c
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.h
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads.qasm
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.c
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.h
+compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/input.mlir
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/expected.json
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/3-test-vpm_slice_visibility.c
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/Makefile
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.c
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.h
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility.qasm
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.c
+compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/expected.json
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/3-test-matmul_blocked.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/Makefile
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/mailbox.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/mailbox.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked.qasm
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked_launch.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked_launch.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blockedshader.c
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blockedshader.h
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/run.sh
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4inc/vc4.qinc
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.c
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.h
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template2.h
+
+Contents
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td =====
+#ifndef VC4_ATTRS_TD
+#define VC4_ATTRS_TD
+
+include "vc4/Dialect/VC4/IR/VC4Base.td"
+include "vc4/Dialect/VC4/IR/VC4Enums.td"
+include "vc4/Dialect/VC4/IR/VC4OpEnums.td"
+
+class VC4_DialectEnumAttr<EnumAttrInfo enumInfo, string name>
+: EnumAttr<VC4_Dialect, enumInfo, name> {
+let cppNamespace = "::mlir::vc4";
+let assemblyFormat = "`<` $value `>`";
+}
+
+def VC4_AddOpcodeAttr : VC4_DialectEnumAttr<VC4_AddOpcode, "add_opcode">;
+def VC4_MulOpcodeAttr : VC4_DialectEnumAttr<VC4_MulOpcode, "mul_opcode">;
+def VC4_CondAttr : VC4_DialectEnumAttr<VC4_Cond, "cond">;
+def VC4_LoadImmModeAttr
+: VC4_DialectEnumAttr<VC4_LoadImmMode, "load_imm_mode">;
+def VC4_RegfileAPackModeAttr
+: VC4_DialectEnumAttr<VC4_RegfileAPackMode, "regfile_a_pack_mode">;
+def VC4_RegfileAUnpackModeAttr
+: VC4_DialectEnumAttr<VC4_RegfileAUnpackMode, "regfile_a_unpack_mode">;
+def VC4_R4UnpackModeAttr
+: VC4_DialectEnumAttr<VC4_R4UnpackMode, "r4_unpack_mode">;
+def VC4_MulPackModeAttr
+: VC4_DialectEnumAttr<VC4_MulPackMode, "mul_pack_mode">;
+def VC4_QPUSignalAttr : VC4_DialectEnumAttr<VC4_QPUSignal, "qpu_signal">;
+def VC4_QPUMuxAttr : VC4_DialectEnumAttr<VC4_QPUMux, "qpu_mux">;
+def VC4_TMUUnitAttr : VC4_DialectEnumAttr<VC4_TMUUnit, "tmu_unit">;
+def VC4_TMUModeAttr : VC4_DialectEnumAttr<VC4_TMUMode, "tmu_mode">;
+def VC4_TextureTypeAttr
+: VC4_DialectEnumAttr<VC4_TextureType, "texture_type">;
+def VC4_MagFilterAttr
+: VC4_DialectEnumAttr<VC4_MagFilter, "mag_filter">;
+def VC4_MinFilterAttr
+: VC4_DialectEnumAttr<VC4_MinFilter, "min_filter">;
+def VC4_WrapModeAttr : VC4_DialectEnumAttr<VC4_WrapMode, "wrap_mode">;
+def VC4_TMUReadPartAttr
+: VC4_DialectEnumAttr<VC4_TMUReadPart, "tmu_read_part">;
+def VC4_SFUKindAttr : VC4_DialectEnumAttr<VC4_SFUKind, "sfu_kind">;
+def VC4_VPMDescKindAttr
+: VC4_DialectEnumAttr<VC4_VPMDescKind, "vpm_desc_kind">;
+def VC4_VPMOrientationAttr
+: VC4_DialectEnumAttr<VC4_VPMOrientation, "vpm_orientation">;
+def VC4_VPMLaneModeAttr
+: VC4_DialectEnumAttr<VC4_VPMLaneMode, "vpm_lane_mode">;
+def VC4_VPMElemWidthAttr
+: VC4_DialectEnumAttr<VC4_VPMElemWidth, "vpm_elem_width">;
+def VC4_DMADescKindAttr
+: VC4_DialectEnumAttr<VC4_DMADescKind, "dma_desc_kind">;
+def VC4_DMABlockModeAttr
+: VC4_DialectEnumAttr<VC4_DMABlockMode, "dma_block_mode">;
+def VC4_DMAOrientationAttr
+: VC4_DialectEnumAttr<VC4_DMAOrientation, "dma_orientation">;
+def VC4_DMAElemWidthAttr
+: VC4_DialectEnumAttr<VC4_DMAElemWidth, "dma_elem_width">;
+def VC4_SemaphoreModeAttr
+: VC4_DialectEnumAttr<VC4_SemaphoreMode, "semaphore_mode">;
+def VC4_MutexModeAttr
+: VC4_DialectEnumAttr<VC4_MutexMode, "mutex_mode">;
+def VC4_ThreadSwitchModeAttr
+: VC4_DialectEnumAttr<VC4_ThreadSwitchMode, "thread_switch_mode">;
+def VC4_BranchCondAttr
+: VC4_DialectEnumAttr<VC4_BranchCond, "branch_cond">;
+def VC4_V3DQueryKindAttr
+: VC4_DialectEnumAttr<VC4_V3DQueryKind, "v3d_query_kind">;
+def VC4_V3DConfigureKindAttr
+: VC4_DialectEnumAttr<VC4_V3DConfigureKind, "v3d_configure_kind">;
+
+#endif // VC4_ATTRS_TD
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4Base.td =====
+#ifndef VC4_BASE_TD
+#define VC4_BASE_TD
+
+include "mlir/IR/DialectBase.td"
+
+def VC4_Dialect : Dialect {
+let name = "vc4";
+let cppNamespace = "::mlir::vc4";
+let summary = "VC4 compute/QPU dialect";
+let description = [{
+Dialect shell for the compute-focused VC4 MLIR target IR.
+}];
+let useDefaultAttributePrinterParser = 1;
+let useDefaultTypePrinterParser = 1;
+}
+
+#endif // VC4_BASE_TD
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4Dialect.td =====
+include "vc4/Dialect/VC4/IR/VC4Base.td"
+include "vc4/Dialect/VC4/IR/VC4Attrs.td"
+include "vc4/Dialect/VC4/IR/VC4Types.td"
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td =====
+#ifndef VC4_ENUMS_TD
+#define VC4_ENUMS_TD
+
+include "mlir/IR/EnumAttr.td"
+include "vc4/Dialect/VC4/IR/VC4Base.td"
+
+class VC4_I32Enum<string name, string summary, list<I32EnumAttrCase> cases>
+: I32EnumAttr<name, summary, cases> {
+let cppNamespace = "::mlir::vc4";
+}
+
+class VC4_DialectI32Enum<string name, string summary,
+                         list<I32EnumAttrCase> cases>
+    : I32EnumAttr<name, summary, cases> {
+let cppNamespace = "::mlir::vc4";
+let genSpecializedAttr = 0;
+}
+
+class VC4_EnumAttr<EnumAttrInfo enumInfo, string name>
+: EnumAttr<VC4_Dialect, enumInfo, name> {
+let cppNamespace = "::mlir::vc4";
+let assemblyFormat = "`<` $value `>`";
+}
+
+def VC4_FunctionForm : VC4_DialectI32Enum<"FunctionForm",
+"VC4 function form", [
+I32EnumAttrCase<"structured", 0>,
+I32EnumAttrCase<"scheduled", 1>
+]>;
+
+def VC4_ThreadingMode : VC4_DialectI32Enum<"ThreadingMode",
+"VC4 function threading mode", [
+I32EnumAttrCase<"single", 0>,
+I32EnumAttrCase<"threadable", 1>
+]>;
+
+def VC4_ExecutionDomain : VC4_DialectI32Enum<"ExecutionDomain",
+"VC4 function execution domain", [
+I32EnumAttrCase<"qpu", 0>,
+I32EnumAttrCase<"host", 1>
+]>;
+
+def VC4_BuiltinKind : VC4_DialectI32Enum<"BuiltinKind",
+"VC4 builtin kind", [
+I32EnumAttrCase<"elem_num", 0>,
+I32EnumAttrCase<"qpu_num", 1>,
+I32EnumAttrCase<"num_qpus", 2>
+]>;
+
+// Encodings match the VideoCore IV 3D Architecture Reference Guide QPU
+// instruction tables for encoded ALU, condition, immediate, and pack/unpack
+// fields.
+
+def VC4_AddOpcode : VC4_DialectI32Enum<"AddOpcode",
+"VC4 add ALU opcode", [
+I32EnumAttrCase<"nop", 0>,
+I32EnumAttrCase<"fadd", 1>,
+I32EnumAttrCase<"fsub", 2>,
+I32EnumAttrCase<"fmin", 3>,
+I32EnumAttrCase<"fmax", 4>,
+I32EnumAttrCase<"fminabs", 5>,
+I32EnumAttrCase<"fmaxabs", 6>,
+I32EnumAttrCase<"ftoi", 7>,
+I32EnumAttrCase<"itof", 8>,
+I32EnumAttrCase<"add", 12>,
+I32EnumAttrCase<"sub", 13>,
+I32EnumAttrCase<"shr", 14>,
+I32EnumAttrCase<"asr", 15>,
+I32EnumAttrCase<"ror", 16>,
+I32EnumAttrCase<"shl", 17>,
+I32EnumAttrCase<"min", 18>,
+I32EnumAttrCase<"max", 19>,
+I32EnumAttrCase<"bit_and", 20, "and">,
+I32EnumAttrCase<"bit_or", 21, "or">,
+I32EnumAttrCase<"bit_xor", 22, "xor">,
+I32EnumAttrCase<"bit_not", 23, "not">,
+I32EnumAttrCase<"clz", 24>,
+I32EnumAttrCase<"v8adds", 30>,
+I32EnumAttrCase<"v8subs", 31>
+]>;
+
+def VC4_MulOpcode : VC4_DialectI32Enum<"MulOpcode",
+"VC4 mul ALU opcode", [
+I32EnumAttrCase<"nop", 0>,
+I32EnumAttrCase<"fmul", 1>,
+I32EnumAttrCase<"mul24", 2>,
+I32EnumAttrCase<"v8muld", 3>,
+I32EnumAttrCase<"v8min", 4>,
+I32EnumAttrCase<"v8max", 5>,
+I32EnumAttrCase<"v8adds", 6>,
+I32EnumAttrCase<"v8subs", 7>
+]>;
+
+def VC4_Cond : VC4_DialectI32Enum<"Cond",
+"VC4 ALU condition code", [
+I32EnumAttrCase<"never", 0>,
+I32EnumAttrCase<"always", 1>,
+I32EnumAttrCase<"zs", 2>,
+I32EnumAttrCase<"zc", 3>,
+I32EnumAttrCase<"ns", 4>,
+I32EnumAttrCase<"nc", 5>,
+I32EnumAttrCase<"cs", 6>,
+I32EnumAttrCase<"cc", 7>
+]>;
+
+def VC4_LoadImmMode : VC4_DialectI32Enum<"LoadImmMode",
+"VC4 load-immediate encoding mode", [
+// Use the full hardware instruction-form encodings, not dense mode IDs.
+I32EnumAttrCase<"splat32", 112>,
+I32EnumAttrCase<"per_elem_i2", 113>,
+I32EnumAttrCase<"per_elem_u2", 115>
+]>;
+
+// These unpack enums keep the real field encodings. Splitting regfile-A and r4
+// unpack into separate dialect enums does not imply renumbering the retained
+// hardware values.
+def VC4_RegfileAUnpackMode : VC4_DialectI32Enum<"RegfileAUnpackMode",
+"VC4 regfile-A unpack mode", [
+I32EnumAttrCase<"none", 0>,
+I32EnumAttrCase<"f16a_or_i16a", 2>,
+I32EnumAttrCase<"f16b_or_i16b", 4>,
+I32EnumAttrCase<"replicate_8d", 6>,
+I32EnumAttrCase<"color8a", 8>,
+I32EnumAttrCase<"color8b", 10>,
+I32EnumAttrCase<"color8c", 12>,
+I32EnumAttrCase<"color8d", 14>
+]>;
+
+def VC4_RegfileAPackMode : VC4_DialectI32Enum<"RegfileAPackMode",
+"VC4 regfile-A pack mode", [
+I32EnumAttrCase<"none", 0>,
+I32EnumAttrCase<"to_16a", 1>,
+I32EnumAttrCase<"to_16b", 2>,
+I32EnumAttrCase<"to_8888", 3>,
+I32EnumAttrCase<"to_8a", 4>,
+I32EnumAttrCase<"to_8b", 5>,
+I32EnumAttrCase<"to_8c", 6>,
+I32EnumAttrCase<"to_8d", 7>,
+I32EnumAttrCase<"sat32", 8>,
+I32EnumAttrCase<"sat16a", 9>,
+I32EnumAttrCase<"sat16b", 10>,
+I32EnumAttrCase<"sat8888", 11>,
+I32EnumAttrCase<"sat8a", 12>,
+I32EnumAttrCase<"sat8b", 13>,
+I32EnumAttrCase<"sat8c", 14>,
+I32EnumAttrCase<"sat8d", 15>
+]>;
+
+def VC4_R4UnpackMode : VC4_DialectI32Enum<"R4UnpackMode",
+"VC4 r4 unpack mode", [
+I32EnumAttrCase<"none", 1>,
+I32EnumAttrCase<"f16a", 3>,
+I32EnumAttrCase<"f16b", 5>,
+I32EnumAttrCase<"replicate_8d", 7>,
+I32EnumAttrCase<"color8a", 9>,
+I32EnumAttrCase<"color8b", 11>,
+I32EnumAttrCase<"color8c", 13>,
+I32EnumAttrCase<"color8d", 15>
+]>;
+
+// Pack values likewise preserve the real encoded field values. The MUL pack
+// cases retain the PM-selected encodings instead of being renumbered to 0..N.
+def VC4_MulPackMode : VC4_DialectI32Enum<"MulPackMode",
+"VC4 mul ALU pack mode", [
+I32EnumAttrCase<"none", 16>,
+I32EnumAttrCase<"to_8888", 19>,
+I32EnumAttrCase<"to_8a", 20>,
+I32EnumAttrCase<"to_8b", 21>,
+I32EnumAttrCase<"to_8c", 22>,
+I32EnumAttrCase<"to_8d", 23>
+]>;
+
+// Compute-focused scope omits fragment/tile-buffer-only signals, but the
+// remaining signal values still use the original hardware numbering.
+def VC4_QPUSignal : VC4_DialectI32Enum<"QPUSignal",
+"VC4 scheduled QPU signal field", [
+I32EnumAttrCase<"bkpt", 0>,
+I32EnumAttrCase<"none", 1>,
+I32EnumAttrCase<"thrsw", 2>,
+I32EnumAttrCase<"thrend", 3>,
+I32EnumAttrCase<"last_thread_switch", 6>,
+I32EnumAttrCase<"ldtmu0", 10>,
+I32EnumAttrCase<"ldtmu1", 11>,
+I32EnumAttrCase<"small_imm", 13>,
+I32EnumAttrCase<"load_imm", 14>,
+I32EnumAttrCase<"branch", 15>
+]>;
+
+def VC4_QPUMux : VC4_DialectI32Enum<"QPUMux",
+"VC4 scheduled QPU source mux", [
+I32EnumAttrCase<"r0", 0>,
+I32EnumAttrCase<"r1", 1>,
+I32EnumAttrCase<"r2", 2>,
+I32EnumAttrCase<"r3", 3>,
+I32EnumAttrCase<"r4", 4>,
+I32EnumAttrCase<"r5", 5>,
+I32EnumAttrCase<"a", 6>,
+I32EnumAttrCase<"b", 7>
+]>;
+
+def VC4_TMUUnit : VC4_DialectI32Enum<"TMUUnit",
+"VC4 TMU unit selection", [
+I32EnumAttrCase<"tmu0", 0>,
+I32EnumAttrCase<"tmu1", 1>
+]>;
+
+def VC4_TMUMode : VC4_DialectI32Enum<"TMUMode",
+"VC4 TMU descriptor mode", [
+I32EnumAttrCase<"direct", 0>,
+I32EnumAttrCase<"texture2d", 1>,
+I32EnumAttrCase<"cubemap", 2>
+]>;
+
+def VC4_TextureType : VC4_DialectI32Enum<"TextureType",
+"VC4 texture format selection", [
+I32EnumAttrCase<"rgba8888", 0>,
+I32EnumAttrCase<"rgbx8888", 1>,
+I32EnumAttrCase<"rgba4444", 2>,
+I32EnumAttrCase<"rgba5551", 3>,
+I32EnumAttrCase<"rgb565", 4>,
+I32EnumAttrCase<"luminance", 5>,
+I32EnumAttrCase<"alpha", 6>,
+I32EnumAttrCase<"lumalpha", 7>,
+I32EnumAttrCase<"etc1", 8>,
+I32EnumAttrCase<"s16f", 9>,
+I32EnumAttrCase<"s8", 10>,
+I32EnumAttrCase<"s16", 11>,
+I32EnumAttrCase<"bw1", 12>,
+I32EnumAttrCase<"a4", 13>,
+I32EnumAttrCase<"a1", 14>,
+I32EnumAttrCase<"rgba64", 15>,
+I32EnumAttrCase<"rgba32r", 16>,
+I32EnumAttrCase<"yuyv422r", 17>
+]>;
+
+def VC4_MagFilter : VC4_DialectI32Enum<"MagFilter",
+"VC4 TMU magnification filter", [
+I32EnumAttrCase<"linear", 0>,
+I32EnumAttrCase<"nearest", 1>
+]>;
+
+def VC4_MinFilter : VC4_DialectI32Enum<"MinFilter",
+"VC4 TMU minification and mip filter", [
+I32EnumAttrCase<"linear", 0>,
+I32EnumAttrCase<"nearest", 1>,
+I32EnumAttrCase<"near_mip_near", 2>,
+I32EnumAttrCase<"near_mip_lin", 3>,
+I32EnumAttrCase<"lin_mip_near", 4>,
+I32EnumAttrCase<"lin_mip_lin", 5>
+]>;
+
+def VC4_WrapMode : VC4_DialectI32Enum<"WrapMode",
+"VC4 TMU wrap mode", [
+I32EnumAttrCase<"repeat", 0>,
+I32EnumAttrCase<"clamp", 1>,
+I32EnumAttrCase<"mirror", 2>,
+I32EnumAttrCase<"border", 3>
+]>;
+
+def VC4_TMUReadPart : VC4_DialectI32Enum<"TMUReadPart",
+"VC4 TMU receive selection", [
+I32EnumAttrCase<"raw32", 0>,
+I32EnumAttrCase<"rgba8888", 1>,
+I32EnumAttrCase<"rg1616", 2>,
+I32EnumAttrCase<"ba1616", 3>
+]>;
+
+def VC4_SFUKind : VC4_DialectI32Enum<"SFUKind",
+"VC4 SFU operation kind", [
+I32EnumAttrCase<"recip", 0>,
+I32EnumAttrCase<"recipsqrt", 1>,
+I32EnumAttrCase<"exp", 2>,
+I32EnumAttrCase<"log", 3>
+]>;
+
+def VC4_VPMDescKind : VC4_DialectI32Enum<"VPMDescKind",
+"VC4 VPM descriptor direction", [
+I32EnumAttrCase<"read", 0>,
+I32EnumAttrCase<"write", 1>
+]>;
+
+def VC4_VPMOrientation : VC4_DialectI32Enum<"VPMOrientation",
+"VC4 VPM block orientation", [
+I32EnumAttrCase<"horizontal", 0>,
+I32EnumAttrCase<"vertical", 1>
+]>;
+
+def VC4_VPMLaneMode : VC4_DialectI32Enum<"VPMLaneMode",
+"VC4 VPM lane layout", [
+I32EnumAttrCase<"packed", 0>,
+I32EnumAttrCase<"laned", 1>
+]>;
+
+def VC4_VPMElemWidth : VC4_DialectI32Enum<"VPMElemWidth",
+"VC4 VPM element width", [
+I32EnumAttrCase<"w8", 0>,
+I32EnumAttrCase<"w16", 1>,
+I32EnumAttrCase<"w32", 2>
+]>;
+
+def VC4_DMADescKind : VC4_DialectI32Enum<"DMADescKind",
+"VC4 DMA descriptor direction", [
+I32EnumAttrCase<"load", 0>,
+I32EnumAttrCase<"store", 1>
+]>;
+
+def VC4_DMABlockMode : VC4_DialectI32Enum<"DMABlockMode",
+"VC4 DMA block layout mode", [
+I32EnumAttrCase<"row_row", 0>,
+I32EnumAttrCase<"packed_rows", 1>
+]>;
+
+def VC4_DMAOrientation : VC4_DialectI32Enum<"DMAOrientation",
+"VC4 DMA orientation", [
+I32EnumAttrCase<"horizontal", 0>,
+I32EnumAttrCase<"vertical", 1>
+]>;
+
+def VC4_DMAElemWidth : VC4_DialectI32Enum<"DMAElemWidth",
+"VC4 DMA transfer element width", [
+I32EnumAttrCase<"w8", 0>,
+I32EnumAttrCase<"w16", 1>,
+I32EnumAttrCase<"w32", 2>
+]>;
+
+def VC4_SemaphoreMode : VC4_DialectI32Enum<"SemaphoreMode",
+"VC4 hardware semaphore mode", [
+I32EnumAttrCase<"acquire", 0>,
+I32EnumAttrCase<"release", 1>
+]>;
+
+def VC4_MutexMode : VC4_DialectI32Enum<"MutexMode",
+"VC4 hardware mutex mode", [
+I32EnumAttrCase<"acquire", 0>,
+I32EnumAttrCase<"release", 1>
+]>;
+
+def VC4_ThreadSwitchMode : VC4_DialectI32Enum<"ThreadSwitchMode",
+"VC4 hardware thread-switch mode", [
+I32EnumAttrCase<"thread_switch", 0, "switch">,
+I32EnumAttrCase<"last_switch", 1>
+]>;
+
+def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
+"VC4 structured branch condition", [
+I32EnumAttrCase<"all_z_set", 0>,
+I32EnumAttrCase<"all_z_clear", 1>,
+I32EnumAttrCase<"any_z_set", 2>,
+I32EnumAttrCase<"any_z_clear", 3>,
+I32EnumAttrCase<"all_n_set", 4>,
+I32EnumAttrCase<"all_n_clear", 5>,
+I32EnumAttrCase<"any_n_set", 6>,
+I32EnumAttrCase<"any_n_clear", 7>,
+I32EnumAttrCase<"all_c_set", 8>,
+I32EnumAttrCase<"all_c_clear", 9>,
+I32EnumAttrCase<"any_c_set", 10>,
+I32EnumAttrCase<"any_c_clear", 11>,
+I32EnumAttrCase<"always", 15>
+]>;
+
+def VC4_V3DQueryKind : VC4_DialectI32Enum<"V3DQueryKind",
+"VC4 V3D system query kind", [
+I32EnumAttrCase<"ident", 0>,
+I32EnumAttrCase<"queue_status", 1>,
+I32EnumAttrCase<"perf_counter", 2>,
+I32EnumAttrCase<"interrupt_status", 3>,
+I32EnumAttrCase<"error_status", 4>,
+I32EnumAttrCase<"scratch", 5>
+]>;
+
+def VC4_V3DConfigureKind : VC4_DialectI32Enum<"V3DConfigureKind",
+"VC4 V3D system configure kind", [
+I32EnumAttrCase<"cache_control", 0>,
+I32EnumAttrCase<"interrupt_enable", 1>,
+I32EnumAttrCase<"interrupt_disable", 2>,
+I32EnumAttrCase<"perf_map", 3>,
+I32EnumAttrCase<"perf_clear", 4>,
+I32EnumAttrCase<"perf_enable", 5>,
+I32EnumAttrCase<"vpm_reservation", 6>,
+I32EnumAttrCase<"vpm_allocator", 7>,
+I32EnumAttrCase<"scratch", 8>
+]>;
+
+#endif // VC4_ENUMS_TD
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td =====
+#ifndef VC4_OP_ENUMS_TD
+#define VC4_OP_ENUMS_TD
+
+include "vc4/Dialect/VC4/IR/VC4Enums.td"
+
+def VC4_FunctionFormAttr : VC4_EnumAttr<VC4_FunctionForm, "function_form">;
+
+def VC4_ThreadingModeAttr
+: VC4_EnumAttr<VC4_ThreadingMode, "threading_mode">;
+
+def VC4_ExecutionDomainAttr
+: VC4_EnumAttr<VC4_ExecutionDomain, "execution_domain">;
+
+def VC4_BuiltinKindAttr : VC4_EnumAttr<VC4_BuiltinKind, "builtin_kind">;
+
+#endif // VC4_OP_ENUMS_TD
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td =====
+#ifndef VC4_STRUCTURED_OPS_TD
+#define VC4_STRUCTURED_OPS_TD
+
+include "vc4/Dialect/VC4/IR/VC4Base.td"
+include "vc4/Dialect/VC4/IR/VC4Attrs.td"
+include "vc4/Dialect/VC4/IR/VC4OpEnums.td"
+include "vc4/Dialect/VC4/IR/VC4Types.td"
+
+include "mlir/IR/BuiltinAttributes.td"
+include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/IR/OpAsmInterface.td"
+include "mlir/IR/RegionKindInterface.td"
+include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
+class VC4_Op<string mnemonic, list<Trait> traits = []>
+: Op<VC4_Dialect, mnemonic, traits>;
+
+class VC4_MemoryEffectOp<string mnemonic, list<Trait> traits = []>
+: VC4_Op<mnemonic,
+[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>] # traits>;
+
+def VC4_ModuleOp : VC4_Op<"module", [
+IsolatedFromAbove, NoRegionArguments, SymbolTable, Symbol
+] # GraphRegionNoTerminator.traits> {
+let summary = "VC4 target module";
+let arguments = (ins
+SymbolNameAttr:$sym_name,
+OptionalAttr<StrAttr>:$sym_visibility
+);
+let regions = (region SizedRegion<1>:$bodyRegion);
+let assemblyFormat = "$sym_name attr-dict-with-keyword $bodyRegion";
+let extraClassDeclaration = [{
+static ModuleOp create(Location loc, StringRef name);
+}];
+let hasVerifier = 1;
+}
+
+def VC4_FuncOp : VC4_Op<"func", [
+FunctionOpInterface, IsolatedFromAbove, OpAsmOpInterface, NoTerminator
+]> {
+let summary = "VC4 target function";
+let arguments = (ins
+SymbolNameAttr:$sym_name,
+TypeAttrOf<FunctionType>:$function_type,
+OptionalAttr<StrAttr>:$sym_visibility,
+OptionalAttr<DictArrayAttr>:$arg_attrs,
+OptionalAttr<DictArrayAttr>:$res_attrs,
+OptionalAttr<UnitAttr>:$kernel,
+OptionalAttr<VC4_ThreadingModeAttr>:$threading,
+OptionalAttr<VC4_FunctionFormAttr>:$form,
+OptionalAttr<VC4_ExecutionDomainAttr>:$domain
+);
+let regions = (region AnyRegion:$body);
+let extraClassDeclaration = [{
+static FuncOp create(Location location, StringRef name, FunctionType type,
+ThreadingMode threading, FunctionForm form,
+ExecutionDomain domain,
+ArrayRef<NamedAttribute> attrs = {});
+
+    ::mlir::Region *getCallableRegion() {
+      return isExternal() ? nullptr : &getBody();
+    }
+
+    ArrayRef<Type> getArgumentTypes() { return getFunctionType().getInputs(); }
+    ArrayRef<Type> getResultTypes() { return getFunctionType().getResults(); }
+
+    bool isDeclaration() { return isExternal(); }
+}];
+let hasCustomAssemblyFormat = 1;
+let hasVerifier = 1;
+}
+
+def VC4_ReturnOp : VC4_Op<"return", [
+HasParent<"FuncOp">, ReturnLike, Terminator
+]> {
+let summary = "VC4 structured return";
+let arguments = (ins Variadic<AnyType>:$operands);
+let builders = [OpBuilder<(ins), [{
+build($_builder, $_state, ValueRange{});
+}]>];
+let assemblyFormat = "attr-dict ($operands^ `:` type($operands))?";
+let hasVerifier = 1;
+}
+
+def VC4_BuiltinOp : VC4_Op<"builtin", [Pure, HasParent<"FuncOp">]> {
+let summary = "VC4 builtin materialization";
+let arguments = (ins VC4_BuiltinKindAttr:$kind);
+let results = (outs AnyType:$result);
+let hasCustomAssemblyFormat = 1;
+let hasVerifier = 1;
+}
+
+def VC4_UniformReadOp : VC4_MemoryEffectOp<"uniform.read", [
+HasParent<"FuncOp">
+]> {
+let summary = "Read one element from the uniform stream";
+let results = (outs AnyType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_UniformSeekOp : VC4_MemoryEffectOp<"uniform.seek", [
+HasParent<"FuncOp">
+]> {
+let summary = "Reset or adjust the uniform stream pointer";
+let arguments = (ins
+AnyType:$offset,
+DefaultValuedAttr<BoolAttr, "false">:$relative
+);
+let assemblyFormat = "$offset attr-dict `:` type($offset)";
+let hasVerifier = 1;
+}
+
+def VC4_MovOp : VC4_Op<"mov", [
+Pure, SameOperandsAndResultType, HasParent<"FuncOp">
+]> {
+let summary = "Structured identity move";
+let arguments = (ins AnyType:$input);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$input attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_ReadOp : VC4_Op<"read", [
+SameOperandsAndResultType, HasParent<"FuncOp">
+]> {
+let summary = "Structured vc4asm-style pseudo read";
+let arguments = (ins AnyType:$source);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$source attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_ALUAddOp : VC4_Op<"alu.add", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 ADD-pipe operation";
+let arguments = (ins
+Variadic<AnyType>:$operands,
+VC4_AddOpcodeAttr:$op,
+VC4_CondAttr:$cond,
+OptionalAttr<UnitAttr>:$set_flags
+);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$op $operands attr-dict `:` functional-type($operands, results)";
+let hasVerifier = 1;
+}
+
+def VC4_ALUMulOp : VC4_Op<"alu.mul", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 MUL-pipe operation";
+let arguments = (ins
+Variadic<AnyType>:$operands,
+VC4_MulOpcodeAttr:$op,
+VC4_CondAttr:$cond,
+OptionalAttr<UnitAttr>:$set_flags
+);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$op $operands attr-dict `:` functional-type($operands, results)";
+let hasVerifier = 1;
+}
+
+// These value-shape ops stay in structured SSA. They are not scheduled sink
+// ops, and they are expected to normalize away before qasm emission.
+//
+// pack/unpack model carrier-word transforms over 32-bit VC4 values rather than
+// exposing true i8/i16 storage types in the IR. rotate models a structured
+// 16-lane operation that may later lower into sink encodings, but is not
+// itself a sink instruction.
+def VC4_LoadImmOp : VC4_Op<"load_imm", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 load-immediate materialization";
+let arguments = (ins
+VC4_LoadImmModeAttr:$mode,
+OptionalAttr<AnyAttr>:$value
+);
+let results = (outs AnyType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_PackOp : VC4_Op<"pack", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 pack operation";
+let arguments = (ins
+AnyType:$input,
+OptionalAttr<VC4_RegfileAPackModeAttr>:$regfile_a_mode,
+OptionalAttr<VC4_MulPackModeAttr>:$mul_mode
+);
+let results = (outs AnyType:$result);
+let hasVerifier = 1;
+}
+
+def VC4_UnpackOp : VC4_Op<"unpack", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 unpack operation";
+let arguments = (ins
+AnyType:$input,
+OptionalAttr<VC4_RegfileAUnpackModeAttr>:$regfile_a_mode,
+OptionalAttr<VC4_R4UnpackModeAttr>:$r4_mode
+);
+let results = (outs AnyType:$result);
+let hasVerifier = 1;
+}
+
+def VC4_RotateOp : VC4_Op<"rotate", [HasParent<"FuncOp">]> {
+let summary = "Structured VC4 horizontal rotate";
+let arguments = (ins
+AnyType:$input,
+Optional<AnySignlessIntegerOrIndex>:$amount,
+OptionalAttr<I32Attr>:$immediate
+);
+let results = (outs AnyType:$result);
+let hasVerifier = 1;
+}
+
+def VC4_TMUDescriptorOp : VC4_Op<"tmu.descriptor", [
+Pure, HasParent<"FuncOp">
+]> {
+let summary = "Structured TMU descriptor construction";
+let arguments = (ins
+VC4_TMUModeAttr:$mode,
+OptionalAttr<I32Attr>:$base,
+OptionalAttr<VC4_TextureTypeAttr>:$texture_type,
+OptionalAttr<I32Attr>:$mip_levels,
+OptionalAttr<I32Attr>:$width,
+OptionalAttr<I32Attr>:$height,
+OptionalAttr<VC4_MagFilterAttr>:$mag_filter,
+OptionalAttr<VC4_MinFilterAttr>:$min_filter,
+OptionalAttr<VC4_WrapModeAttr>:$wrap_s,
+OptionalAttr<VC4_WrapModeAttr>:$wrap_t,
+OptionalAttr<BoolAttr>:$flip_y,
+OptionalAttr<I32Attr>:$cube_map_stride,
+OptionalAttr<DictionaryAttr>:$child_image_fields,
+OptionalAttr<DictionaryAttr>:$bias_flags
+);
+let results = (outs VC4_TMUDescType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_TMURequestOp : VC4_MemoryEffectOp<"tmu.request", [HasParent<"FuncOp">]> {
+let summary = "Structured TMU request enqueue";
+let arguments = (ins
+Variadic<AnyType>:$operands,
+VC4_TMUUnitAttr:$unit
+);
+let results = (outs Optional<VC4_AsyncTokenType>:$token);
+let hasVerifier = 1;
+}
+
+def VC4_TMUReadOp : VC4_MemoryEffectOp<"tmu.read", [HasParent<"FuncOp">]> {
+let summary = "Structured TMU receive readback";
+let arguments = (ins
+Optional<VC4_AsyncTokenType>:$token,
+VC4_TMUUnitAttr:$unit,
+VC4_TMUReadPartAttr:$part
+);
+let results = (outs AnyType:$result);
+let hasVerifier = 1;
+}
+
+def VC4_TMUNoSwapOp : VC4_MemoryEffectOp<"tmu.noswap", [HasParent<"FuncOp">]> {
+let summary = "Structured TMU automatic swap control";
+let arguments = (ins
+Optional<AnySignlessInteger>:$value,
+OptionalAttr<BoolAttr>:$disable
+);
+let results = (outs);
+let hasVerifier = 1;
+}
+
+def VC4_SFUIssueOp : VC4_MemoryEffectOp<"sfu.issue", [HasParent<"FuncOp">]> {
+let summary = "Structured SFU issue";
+let arguments = (ins
+AnyType:$input,
+VC4_SFUKindAttr:$kind
+);
+let assemblyFormat = "$kind $input attr-dict `:` type($input)";
+let hasVerifier = 1;
+}
+
+def VC4_SFUReadOp : VC4_MemoryEffectOp<"sfu.read", [HasParent<"FuncOp">]> {
+let summary = "Structured SFU readback";
+let results = (outs AnyType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_VPMDescriptorOp : VC4_Op<"vpm.desc", [
+Pure, HasParent<"FuncOp">
+]> {
+let summary = "Structured VPM descriptor construction";
+let arguments = (ins
+VC4_VPMDescKindAttr:$kind,
+VC4_VPMOrientationAttr:$orientation,
+VC4_VPMLaneModeAttr:$lane_mode,
+VC4_VPMElemWidthAttr:$elem_width,
+OptionalAttr<I32Attr>:$addr,
+OptionalAttr<I32Attr>:$stride,
+OptionalAttr<I32Attr>:$num_vectors
+);
+let results = (outs VC4_VPMDescType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_VPMReadOp : VC4_MemoryEffectOp<"vpm.read", [HasParent<"FuncOp">]> {
+let summary = "Structured VPM read";
+let arguments = (ins VC4_VPMDescType:$descriptor);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$descriptor attr-dict `:` functional-type(operands, results)";
+let hasVerifier = 1;
+}
+
+def VC4_VPMWriteOp : VC4_MemoryEffectOp<"vpm.write", [HasParent<"FuncOp">]> {
+let summary = "Structured VPM write";
+let arguments = (ins
+VC4_VPMDescType:$descriptor,
+AnyType:$value
+);
+let assemblyFormat = "$descriptor `,` $value attr-dict `:` functional-type(operands, results)";
+let hasVerifier = 1;
+}
+
+def VC4_DMADescriptorOp : VC4_Op<"dma.desc", [
+Pure, HasParent<"FuncOp">
+]> {
+let summary = "Structured DMA descriptor construction";
+let arguments = (ins
+VC4_DMADescKindAttr:$kind,
+VC4_DMABlockModeAttr:$block_mode,
+VC4_DMAOrientationAttr:$orientation,
+VC4_DMAElemWidthAttr:$elem_width,
+OptionalAttr<I32Attr>:$start_offset,
+OptionalAttr<I32Attr>:$mpitch,
+OptionalAttr<I32Attr>:$vpitch,
+OptionalAttr<I32Attr>:$nrows,
+OptionalAttr<I32Attr>:$rowlen,
+OptionalAttr<I32Attr>:$units,
+OptionalAttr<I32Attr>:$depth,
+OptionalAttr<I32Attr>:$vpm_base,
+OptionalAttr<I32Attr>:$stride,
+OptionalAttr<I32Attr>:$extended_stride
+);
+let results = (outs VC4_DMADescType:$result);
+let assemblyFormat = "attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_DMAStartOp : VC4_MemoryEffectOp<"dma.start", [HasParent<"FuncOp">]> {
+let summary = "Structured DMA start";
+let arguments = (ins
+VC4_DMADescType:$descriptor,
+AnyType:$base
+);
+let results = (outs Optional<VC4_AsyncTokenType>:$token);
+let hasVerifier = 1;
+}
+
+def VC4_DMAStatusOp : VC4_MemoryEffectOp<"dma.status", [HasParent<"FuncOp">]> {
+let summary = "Structured DMA status poll";
+let arguments = (ins VC4_DMADescKindAttr:$kind);
+let results = (outs AnyType:$result);
+let assemblyFormat = "$kind attr-dict `:` type($result)";
+let hasVerifier = 1;
+}
+
+def VC4_DMAWaitOp : VC4_MemoryEffectOp<"dma.wait", [HasParent<"FuncOp">]> {
+let summary = "Structured DMA completion wait";
+let arguments = (ins
+Optional<VC4_AsyncTokenType>:$token,
+OptionalAttr<VC4_DMADescKindAttr>:$kind
+);
+let results = (outs);
+let hasVerifier = 1;
+}
+
+def VC4_MutexOp : VC4_MemoryEffectOp<"mutex", [HasParent<"FuncOp">]> {
+let summary = "Structured hardware mutex action";
+let arguments = (ins VC4_MutexModeAttr:$mode);
+let assemblyFormat = "$mode attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_SemaphoreOp : VC4_MemoryEffectOp<"semaphore", [HasParent<"FuncOp">]> {
+let summary = "Structured hardware semaphore action";
+let arguments = (ins
+VC4_SemaphoreModeAttr:$mode,
+I32Attr:$id
+);
+let assemblyFormat = "$mode attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_HostInterruptOp : VC4_MemoryEffectOp<"host_interrupt", [HasParent<"FuncOp">]> {
+let summary = "Structured host interrupt trigger";
+let results = (outs);
+let assemblyFormat = "attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_ThreadSwitchOp : VC4_MemoryEffectOp<"thread_switch", [HasParent<"FuncOp">]> {
+let summary = "Structured cooperative thread switch";
+let arguments = (ins VC4_ThreadSwitchModeAttr:$mode);
+let assemblyFormat = "$mode attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_ProgramEndOp : VC4_MemoryEffectOp<"program_end", [HasParent<"FuncOp">]> {
+let summary = "Structured program end signal";
+let results = (outs);
+let assemblyFormat = "attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_AsyncWaitOp : VC4_MemoryEffectOp<"async.wait", [HasParent<"FuncOp">]> {
+let summary = "Structured async token join";
+let arguments = (ins Variadic<VC4_AsyncTokenType>:$tokens);
+let results = (outs);
+let assemblyFormat = "attr-dict ($tokens^ `:` type($tokens))?";
+let hasVerifier = 1;
+}
+
+def VC4_CFBranchOp : VC4_Op<"cf.branch", [
+DeclareOpInterfaceMethods<BranchOpInterface>, HasParent<"FuncOp">,
+Pure, Terminator
+]> {
+let summary = "Structured hardware-facing flag branch";
+let arguments = (ins VC4_BranchCondAttr:$cond);
+let successors = (successor VariadicSuccessor<AnySuccessor>:$successors);
+let hasVerifier = 1;
+}
+
+def VC4_EnqueueQPUOp : VC4_MemoryEffectOp<"enqueue_qpu", [HasParent<"FuncOp">]> {
+let summary = "Structured QPU scheduler enqueue";
+let arguments = (ins
+Variadic<AnyType>:$operands,
+FlatSymbolRefAttr:$entry
+);
+let results = (outs Optional<VC4_AsyncTokenType>:$token);
+let hasVerifier = 1;
+}
+
+def VC4_ReserveQPUOp : VC4_MemoryEffectOp<"reserve_qpu", [HasParent<"FuncOp">]> {
+let summary = "Structured QPU reservation control";
+let arguments = (ins I32Attr:$mask);
+let assemblyFormat = "attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_V3DQueryOp : VC4_MemoryEffectOp<"v3d.query", [HasParent<"FuncOp">]> {
+let summary = "Structured V3D system query";
+let arguments = (ins
+Variadic<AnyType>:$selectors,
+VC4_V3DQueryKindAttr:$kind
+);
+let results = (outs Variadic<AnyType>:$results);
+let hasVerifier = 1;
+}
+
+def VC4_V3DConfigureOp : VC4_MemoryEffectOp<"v3d.configure", [HasParent<"FuncOp">]> {
+let summary = "Structured V3D system configure";
+let arguments = (ins
+Variadic<AnyType>:$payloads,
+VC4_V3DConfigureKindAttr:$kind
+);
+let results = (outs);
+let hasVerifier = 1;
+}
+
+def VC4_QPULDIOp : VC4_Op<"qpu.ldi"> {
+let summary = "Scheduled VC4 load-immediate instruction";
+let arguments = (ins
+VC4_LoadImmModeAttr:$mode,
+AnyAttr:$value,
+BoolAttr:$pm,
+OptionalAttr<AnyAttr>:$pack,
+VC4_CondAttr:$cond_add,
+VC4_CondAttr:$cond_mul,
+OptionalAttr<UnitAttr>:$set_flags,
+OptionalAttr<UnitAttr>:$write_swap,
+I32Attr:$waddr_add,
+I32Attr:$waddr_mul
+);
+let assemblyFormat = "$mode attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_QPUSemaOp : VC4_MemoryEffectOp<"qpu.sema"> {
+let summary = "Scheduled VC4 semaphore instruction";
+let arguments = (ins
+VC4_SemaphoreModeAttr:$mode,
+I32Attr:$id,
+BoolAttr:$pm,
+OptionalAttr<AnyAttr>:$pack,
+VC4_CondAttr:$cond_add,
+VC4_CondAttr:$cond_mul,
+OptionalAttr<UnitAttr>:$set_flags,
+OptionalAttr<UnitAttr>:$write_swap,
+I32Attr:$waddr_add,
+I32Attr:$waddr_mul
+);
+let assemblyFormat = "$mode attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_QPUBundleOp : VC4_Op<"qpu.bundle"> {
+let summary = "Scheduled VC4 ALU or small-immediate instruction";
+let arguments = (ins
+VC4_QPUSignalAttr:$sig,
+OptionalAttr<AnyAttr>:$unpack,
+BoolAttr:$pm,
+OptionalAttr<AnyAttr>:$pack,
+VC4_CondAttr:$cond_add,
+VC4_CondAttr:$cond_mul,
+OptionalAttr<UnitAttr>:$set_flags,
+OptionalAttr<UnitAttr>:$write_swap,
+I32Attr:$waddr_add,
+I32Attr:$waddr_mul,
+VC4_AddOpcodeAttr:$op_add,
+VC4_MulOpcodeAttr:$op_mul,
+I32Attr:$raddr_a,
+OptionalAttr<I32Attr>:$raddr_b,
+OptionalAttr<I32Attr>:$small_imm,
+VC4_QPUMuxAttr:$add_a,
+VC4_QPUMuxAttr:$add_b,
+VC4_QPUMuxAttr:$mul_a,
+VC4_QPUMuxAttr:$mul_b
+);
+let assemblyFormat = "attr-dict";
+let hasVerifier = 1;
+}
+
+def VC4_QPUBranchOp : VC4_Op<"qpu.branch", GraphRegionNoTerminator.traits> {
+let summary = "Scheduled VC4 branch instruction with explicit delay slots";
+let arguments = (ins
+VC4_BranchCondAttr:$cond,
+BoolAttr:$relative,
+BoolAttr:$use_reg,
+I32Attr:$raddr_a,
+I32Attr:$immediate,
+OptionalAttr<UnitAttr>:$write_swap,
+I32Attr:$waddr_add,
+I32Attr:$waddr_mul
+);
+let regions = (region SizedRegion<1>:$delay_slots);
+let assemblyFormat = "attr-dict-with-keyword $delay_slots";
+let hasVerifier = 1;
+}
+
+#endif // VC4_STRUCTURED_OPS_TD
+
+===== compiler/include/vc4/Dialect/VC4/IR/VC4Types.td =====
+#ifndef VC4_TYPES_TD
+#define VC4_TYPES_TD
+
+include "mlir/IR/AttrTypeBase.td"
+include "vc4/Dialect/VC4/IR/VC4Base.td"
+
+class VC4_Type<string name, string typeMnemonic>
+: TypeDef<VC4_Dialect, name> {
+let mnemonic = typeMnemonic;
+}
+
+def VC4_AsyncTokenType : VC4_Type<"AsyncToken", "async.token"> {
+let summary = "opaque async token type";
+}
+
+def VC4_TMUDescType : VC4_Type<"TMUDesc", "tmu.desc"> {
+let summary = "opaque TMU descriptor type";
+}
+
+def VC4_VPMDescType : VC4_Type<"VPMDesc", "vpm.desc"> {
+let summary = "opaque VPM descriptor type";
+}
+
+def VC4_DMADescType : VC4_Type<"DMADesc", "dma.desc"> {
+let summary = "opaque DMA descriptor type";
+}
+
+#endif // VC4_TYPES_TD
+
+===== compiler/lib/Dialect/VC4/IR/VC4Ops.cpp =====
+//===- VC4Ops.cpp - VC4 dialect operations -------------------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM
+// Exceptions.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Dialect/VC4/IR/VC4SideEffects.h"
+
+#include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/SymbolTable.h"
+#include "mlir/Interfaces/FunctionImplementation.h"
+#include "llvm/ADT/SmallSet.h"
+#include "llvm/ADT/TypeSwitch.h"
+
+using namespace mlir;
+
+namespace {
+
+static StringAttr getTypeAttrName(MLIRContext *context) {
+return StringAttr::get(context, "function_type");
+}
+
+static StringAttr getArgAttrsName(MLIRContext *context) {
+return StringAttr::get(context, "arg_attrs");
+}
+
+static StringAttr getResAttrsName(MLIRContext *context) {
+return StringAttr::get(context, "res_attrs");
+}
+
+static bool isI32OrVector16I32(Type type) {
+if (type.isSignlessInteger(32))
+return true;
+auto vectorType = dyn_cast<VectorType>(type);
+if (!vectorType || vectorType.getRank() != 1 || vectorType.isScalable())
+return false;
+return vectorType.getDimSize(0) == 16 &&
+vectorType.getElementType().isSignlessInteger(32);
+}
+
+static bool isScalar32BitVC4ValueType(Type type) {
+return type.isSignlessInteger(32) || type.isF32();
+}
+
+// Structured arithmetic/value-shape SSA uses only 32-bit VC4 carrier words:
+// scalar i32/f32 values or 16-lane vectors of those element types.
+// pack/unpack stay in this carrier-word domain instead of materializing true
+// i8/i16 storage types in the IR.
+static bool isVector16Of32BitVC4ValueType(Type type) {
+auto vectorType = dyn_cast<VectorType>(type);
+if (!vectorType || vectorType.getRank() != 1 || vectorType.isScalable())
+return false;
+if (vectorType.getDimSize(0) != 16)
+return false;
+return isScalar32BitVC4ValueType(vectorType.getElementType());
+}
+
+static bool isVC4StructuredValueType(Type type) {
+return isScalar32BitVC4ValueType(type) ||
+isVector16Of32BitVC4ValueType(type);
+}
+
+static bool hasSameVC4Shape(Type lhs, Type rhs) {
+if (lhs.isSignlessInteger(32) || lhs.isF32())
+return rhs.isSignlessInteger(32) || rhs.isF32();
+
+auto lhsVector = dyn_cast<VectorType>(lhs);
+auto rhsVector = dyn_cast<VectorType>(rhs);
+if (!lhsVector || !rhsVector)
+return false;
+return lhsVector.getRank() == 1 && rhsVector.getRank() == 1 &&
+!lhsVector.isScalable() && !rhsVector.isScalable() &&
+lhsVector.getDimSize(0) == 16 && rhsVector.getDimSize(0) == 16;
+}
+
+static bool isStringOneOf(StringRef value, ArrayRef<StringRef> allowed) {
+for (StringRef candidate : allowed) {
+if (value == candidate)
+return true;
+}
+return false;
+}
+
+static bool isNonEmptyStringAttr(Attribute attr) {
+auto stringAttr = dyn_cast_or_null<StringAttr>(attr);
+return stringAttr && !stringAttr.getValue().empty();
+}
+
+static std::optional<int64_t> getSignlessI32AttrValue(DictionaryAttr dict,
+StringRef name) {
+auto integerAttr = dyn_cast_or_null<IntegerAttr>(dict.get(name));
+if (!integerAttr || !integerAttr.getType().isSignlessInteger(32))
+return std::nullopt;
+return integerAttr.getInt();
+}
+
+static LogicalResult emitLaunchAbiError(mlir::vc4::FuncOp op,
+Twine message) {
+return op.emitOpError() << "\"vc4.launch_abi\" " << message;
+}
+
+static LogicalResult verifyLaunchAbiUniformIndex(mlir::vc4::FuncOp op,
+DictionaryAttr dict,
+StringRef entryKind,
+SmallVectorImpl<int64_t>
+&indices) {
+std::optional<int64_t> uniformIndex =
+getSignlessI32AttrValue(dict, "uniform_index");
+if (!uniformIndex) {
+return emitLaunchAbiError(op, Twine(entryKind) +
+Twine(" entry requires signless i32 "
+"'uniform_index'"));
+}
+if (*uniformIndex < 0) {
+return emitLaunchAbiError(
+op, Twine(entryKind) +
+Twine(" entry requires non-negative 'uniform_index'"));
+}
+indices.push_back(*uniformIndex);
+return success();
+}
+
+static LogicalResult verifyLaunchAbiArg(mlir::vc4::FuncOp op,
+DictionaryAttr arg,
+SmallVectorImpl<int64_t> &indices) {
+if (!isNonEmptyStringAttr(arg.get("name")))
+return emitLaunchAbiError(op,
+"argument entry requires a non-empty string 'name'");
+
+auto kindAttr = dyn_cast_or_null<StringAttr>(arg.get("kind"));
+if (!kindAttr ||
+!isStringOneOf(kindAttr.getValue(), {"scalar", "buffer"})) {
+return emitLaunchAbiError(
+op, "argument entry requires kind = \"scalar\" or \"buffer\"");
+}
+
+auto directionAttr = dyn_cast_or_null<StringAttr>(arg.get("direction"));
+if (!directionAttr)
+return emitLaunchAbiError(op, "argument entry requires string 'direction'");
+
+if (kindAttr.getValue() == "scalar") {
+if (directionAttr.getValue() != "by_value") {
+return emitLaunchAbiError(
+op, "scalar argument entry requires direction = \"by_value\"");
+}
+auto typeAttr = dyn_cast_or_null<StringAttr>(arg.get("type"));
+if (!typeAttr ||
+!isStringOneOf(typeAttr.getValue(), {"i32", "u32", "f32", "index"})) {
+return emitLaunchAbiError(
+op, "scalar argument entry requires type = \"i32\", \"u32\", "
+"\"f32\", or \"index\"");
+}
+if (arg.get("elem_type")) {
+return emitLaunchAbiError(
+op, "scalar argument entry must not specify 'elem_type'");
+}
+} else {
+if (!isStringOneOf(directionAttr.getValue(), {"in", "out", "inout"})) {
+return emitLaunchAbiError(
+op, "buffer argument entry requires direction = \"in\", \"out\", "
+"or \"inout\"");
+}
+auto elemTypeAttr = dyn_cast_or_null<StringAttr>(arg.get("elem_type"));
+if (!elemTypeAttr ||
+!isStringOneOf(elemTypeAttr.getValue(),
+{"i8", "u8", "i16", "u16", "i32", "u32", "f32"})) {
+return emitLaunchAbiError(
+op, "buffer argument entry requires elem_type = \"i8\", \"u8\", "
+"\"i16\", \"u16\", \"i32\", \"u32\", or \"f32\"");
+}
+if (arg.get("type"))
+return emitLaunchAbiError(op,
+"buffer argument entry must not specify 'type'");
+}
+
+return verifyLaunchAbiUniformIndex(op, arg, "argument", indices);
+}
+
+static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
+DictionaryAttr builtin,
+SmallVectorImpl<int64_t> &indices) {
+if (!isNonEmptyStringAttr(builtin.get("name")))
+return emitLaunchAbiError(op,
+"builtin entry requires a non-empty string 'name'");
+
+auto kindAttr =
+dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(builtin.get("kind"));
+if (!kindAttr)
+return emitLaunchAbiError(op, "builtin entry requires VC4 BuiltinKindAttr "
+"'kind'");
+
+auto materializationAttr =
+dyn_cast_or_null<StringAttr>(builtin.get("materialization"));
+if (!materializationAttr ||
+!isStringOneOf(materializationAttr.getValue(),
+{"uniform_suffix", "register"})) {
+return emitLaunchAbiError(
+op, "builtin entry requires materialization = \"uniform_suffix\" or "
+"\"register\"");
+}
+
+mlir::vc4::BuiltinKind kind = kindAttr.getValue();
+StringRef materialization = materializationAttr.getValue();
+if (kind == mlir::vc4::BuiltinKind::elem_num) {
+return emitLaunchAbiError(
+op, "builtin kind #vc4.builtin_kind<elem_num> must not appear");
+}
+if (kind == mlir::vc4::BuiltinKind::num_qpus &&
+materialization != "uniform_suffix") {
+return emitLaunchAbiError(
+op, "builtin kind #vc4.builtin_kind<num_qpus> must use "
+"materialization = \"uniform_suffix\"");
+}
+
+if (materialization == "uniform_suffix")
+return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
+
+if (builtin.get("uniform_index")) {
+return emitLaunchAbiError(
+op, "register-materialized builtin entry must not specify "
+"'uniform_index'");
+}
+return success();
+}
+
+static LogicalResult verifyLaunchAbiUniformLayout(
+mlir::vc4::FuncOp op, int64_t uniformWordsPerQPU,
+ArrayRef<int64_t> indices) {
+if (static_cast<int64_t>(indices.size()) != uniformWordsPerQPU) {
+return emitLaunchAbiError(
+op, "uniform indices must be unique and dense in [0, "
+"uniform_words_per_qpu)");
+}
+
+llvm::SmallSet<int64_t, 8> seen;
+for (int64_t index : indices) {
+if (index < 0 || index >= uniformWordsPerQPU ||
+!seen.insert(index).second) {
+return emitLaunchAbiError(
+op, "uniform indices must be unique and dense in [0, "
+"uniform_words_per_qpu)");
+}
+}
+
+for (int64_t index = 0; index < uniformWordsPerQPU; ++index) {
+if (!seen.count(index)) {
+return emitLaunchAbiError(
+op, "uniform indices must be unique and dense in [0, "
+"uniform_words_per_qpu)");
+}
+}
+return success();
+}
+
+static LogicalResult verifyLaunchAbi(mlir::vc4::FuncOp op) {
+Attribute rawAttr = op->getAttr("vc4.launch_abi");
+if (!rawAttr)
+return success();
+
+auto launchAbi = dyn_cast<DictionaryAttr>(rawAttr);
+if (!launchAbi)
+return emitLaunchAbiError(op, "requires a dictionary attribute");
+
+if (!op.getKernelAttr()) {
+return emitLaunchAbiError(op,
+"may appear only on vc4.func with 'kernel'");
+}
+if (!op.getDomain() || *op.getDomain() != mlir::vc4::ExecutionDomain::qpu) {
+return emitLaunchAbiError(
+op, "requires domain = #vc4.execution_domain<qpu>");
+}
+
+if (!isNonEmptyStringAttr(launchAbi.get("public_name"))) {
+return emitLaunchAbiError(
+op, "requires a non-empty string 'public_name'");
+}
+
+auto tailPolicyAttr =
+dyn_cast_or_null<StringAttr>(launchAbi.get("tail_policy"));
+if (!tailPolicyAttr ||
+!isStringOneOf(tailPolicyAttr.getValue(),
+{"exact_multiple", "tail_safe"})) {
+return emitLaunchAbiError(
+op, "requires tail_policy = \"exact_multiple\" or \"tail_safe\"");
+}
+
+std::optional<int64_t> uniformWordsPerQPU =
+getSignlessI32AttrValue(launchAbi, "uniform_words_per_qpu");
+if (!uniformWordsPerQPU || *uniformWordsPerQPU <= 0) {
+return emitLaunchAbiError(
+op, "requires a positive signless i32 'uniform_words_per_qpu'");
+}
+
+auto argsAttr = dyn_cast_or_null<ArrayAttr>(launchAbi.get("args"));
+if (!argsAttr)
+return emitLaunchAbiError(op, "requires array 'args'");
+
+auto builtinsAttr = dyn_cast_or_null<ArrayAttr>(launchAbi.get("builtins"));
+if (!builtinsAttr)
+return emitLaunchAbiError(op, "requires array 'builtins'");
+
+SmallVector<int64_t> uniformIndices;
+for (Attribute argAttr : argsAttr) {
+auto arg = dyn_cast<DictionaryAttr>(argAttr);
+if (!arg)
+return emitLaunchAbiError(op, "argument entry must be a dictionary");
+if (failed(verifyLaunchAbiArg(op, arg, uniformIndices)))
+return failure();
+}
+
+for (Attribute builtinAttr : builtinsAttr) {
+auto builtin = dyn_cast<DictionaryAttr>(builtinAttr);
+if (!builtin)
+return emitLaunchAbiError(op, "builtin entry must be a dictionary");
+if (failed(verifyLaunchAbiBuiltin(op, builtin, uniformIndices)))
+return failure();
+}
+
+return verifyLaunchAbiUniformLayout(op, *uniformWordsPerQPU, uniformIndices);
+}
+
+static bool isVC4IntValueType(Type type) {
+if (type.isSignlessInteger(32))
+return true;
+auto vectorType = dyn_cast<VectorType>(type);
+return vectorType && vectorType.getRank() == 1 && !vectorType.isScalable() &&
+vectorType.getDimSize(0) == 16 &&
+vectorType.getElementType().isSignlessInteger(32);
+}
+
+static bool isVC4FloatValueType(Type type) {
+if (type.isF32())
+return true;
+auto vectorType = dyn_cast<VectorType>(type);
+return vectorType && vectorType.getRank() == 1 && !vectorType.isScalable() &&
+vectorType.getDimSize(0) == 16 && vectorType.getElementType().isF32();
+}
+
+static bool isScalarSignlessIntegerOrIndex(Type type) {
+return type.isSignlessIntOrIndex() && !isa<VectorType>(type);
+}
+
+static LogicalResult verifyPositiveI32Attr(Operation *op, StringRef attrName,
+IntegerAttr attr) {
+if (!attr)
+return success();
+if (!attr.getType().isSignlessInteger(32))
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be signless i32";
+if (attr.getInt() <= 0) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be greater than zero";
+}
+return success();
+}
+
+static LogicalResult verifyNonNegativeI32Attr(Operation *op, StringRef attrName,
+IntegerAttr attr) {
+if (!attr)
+return success();
+if (!attr.getType().isSignlessInteger(32))
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be signless i32";
+if (attr.getInt() < 0) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be non-negative";
+}
+return success();
+}
+
+static LogicalResult verifyStructuredFormOp(Operation *op) {
+auto func = op->getParentOfType<mlir::vc4::FuncOp>();
+if (!func)
+return op->emitOpError("must be nested in a vc4.func");
+if (!func.getForm() ||
+*func.getForm() != mlir::vc4::FunctionForm::structured)
+return op->emitOpError("is only legal in functions with form = structured");
+return success();
+}
+
+static LogicalResult verifyScheduledFormOp(Operation *op) {
+auto func = op->getParentOfType<mlir::vc4::FuncOp>();
+if (!func)
+return op->emitOpError("must be nested in a vc4.func");
+if (!func.getForm() ||
+*func.getForm() != mlir::vc4::FunctionForm::scheduled)
+return op->emitOpError("is only legal in functions with form = scheduled");
+return success();
+}
+
+static bool isVC4QPUOp(Operation &op) {
+return op.getName().getStringRef().starts_with("vc4.qpu.");
+}
+
+static bool isVC4StructuredOp(Operation &op) {
+StringRef name = op.getName().getStringRef();
+return name.starts_with("vc4.") && !name.starts_with("vc4.qpu.");
+}
+
+static bool isVC4HostDomainOnlyOp(Operation &op) {
+StringRef name = op.getName().getStringRef();
+return name == "vc4.enqueue_qpu" || name == "vc4.reserve_qpu" ||
+name == "vc4.v3d.query" || name == "vc4.v3d.configure";
+}
+
+static bool isVC4SharedStructuredDomainOp(Operation &op) {
+StringRef name = op.getName().getStringRef();
+return name == "vc4.async.wait" || name == "vc4.cf.branch" ||
+name == "vc4.return";
+}
+
+static bool isVC4QPUDomainOnlyOp(Operation &op) {
+StringRef name = op.getName().getStringRef();
+return name == "vc4.builtin" || name == "vc4.mov" || name == "vc4.read" ||
+name == "vc4.load_imm" || name == "vc4.pack" ||
+name == "vc4.unpack" || name == "vc4.rotate" ||
+name == "vc4.mutex" || name == "vc4.semaphore" ||
+name == "vc4.host_interrupt" || name == "vc4.thread_switch" ||
+name == "vc4.program_end" || name.starts_with("vc4.uniform.") ||
+name.starts_with("vc4.alu.") || name.starts_with("vc4.tmu.") ||
+name.starts_with("vc4.sfu.") || name.starts_with("vc4.vpm.") ||
+name.starts_with("vc4.dma.") || name.starts_with("vc4.qpu.");
+}
+
+static LogicalResult verifyAllOperandsAndResultAreVC4Values(Operation *op) {
+for (Type operandType : op->getOperandTypes()) {
+if (!isVC4StructuredValueType(operandType)) {
+return op->emitOpError(
+"operands must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+}
+for (Type resultType : op->getResultTypes()) {
+if (!isVC4StructuredValueType(resultType)) {
+return op->emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+}
+return success();
+}
+
+static LogicalResult verifySameTypeOperandsAndResult(Operation *op) {
+Type resultType = op->getResult(0).getType();
+for (Type operandType : op->getOperandTypes()) {
+if (operandType != resultType) {
+return op->emitOpError(
+"requires operand and result types to match exactly")
+<< " (got operand type " << operandType << " and result type "
+<< resultType << ")";
+}
+}
+return success();
+}
+
+static LogicalResult verifyBinaryALUTypes(Operation *op, bool requireFloat) {
+if (op->getNumOperands() != 2)
+return op->emitOpError("expects exactly 2 operands for this opcode");
+if (failed(verifyAllOperandsAndResultAreVC4Values(op)))
+return failure();
+
+Type lhsType = op->getOperand(0).getType();
+Type rhsType = op->getOperand(1).getType();
+Type resultType = op->getResult(0).getType();
+if (lhsType != rhsType || lhsType != resultType) {
+return op->emitOpError("requires both operands and the result to have the "
+"same type");
+}
+
+if (requireFloat) {
+if (!isVC4FloatValueType(resultType))
+return op->emitOpError("requires f32 or vector<16xf32> types");
+} else {
+if (!isVC4IntValueType(resultType))
+return op->emitOpError("requires i32 or vector<16xi32> types");
+}
+return success();
+}
+
+static bool haveCompatibleVC4Shapes(TypeRange types) {
+if (types.empty())
+return true;
+Type firstType = types.front();
+for (Type type : types.drop_front()) {
+if (!hasSameVC4Shape(firstType, type))
+return false;
+}
+return true;
+}
+
+static std::optional<mlir::vc4::TMUMode> inferTMUModeFromDescriptor(Value value) {
+if (!value || !isa<mlir::vc4::TMUDescType>(value.getType()))
+return std::nullopt;
+if (auto descriptor = value.getDefiningOp<mlir::vc4::TMUDescriptorOp>())
+return descriptor.getMode();
+return std::nullopt;
+}
+
+static std::optional<mlir::vc4::VPMDescKind>
+inferVPMDescKindFromDescriptor(Value value) {
+if (!value || !isa<mlir::vc4::VPMDescType>(value.getType()))
+return std::nullopt;
+if (auto descriptor = value.getDefiningOp<mlir::vc4::VPMDescriptorOp>())
+return descriptor.getKind();
+return std::nullopt;
+}
+
+static std::optional<mlir::vc4::DMADescKind>
+inferDMADescKindFromDescriptor(Value value) {
+if (!value || !isa<mlir::vc4::DMADescType>(value.getType()))
+return std::nullopt;
+if (auto descriptor = value.getDefiningOp<mlir::vc4::DMADescriptorOp>())
+return descriptor.getKind();
+return std::nullopt;
+}
+
+using MemoryEffectList = SmallVectorImpl<MemoryEffects::EffectInstance>;
+
+template <typename ResourceT, typename EffectT>
+static void addEffect(MemoryEffectList &effects) {
+effects.emplace_back(EffectT::get(), ResourceT::get());
+}
+
+template <typename ResourceT>
+static void addReadEffect(MemoryEffectList &effects) {
+addEffect<ResourceT, MemoryEffects::Read>(effects);
+}
+
+template <typename ResourceT>
+static void addWriteEffect(MemoryEffectList &effects) {
+addEffect<ResourceT, MemoryEffects::Write>(effects);
+}
+
+template <typename ResourceT>
+static void addReadWriteEffects(MemoryEffectList &effects) {
+addReadEffect<ResourceT>(effects);
+addWriteEffect<ResourceT>(effects);
+}
+
+static void addTMURequestEffects(mlir::vc4::TMUUnit unit,
+MemoryEffectList &effects) {
+switch (unit) {
+case mlir::vc4::TMUUnit::tmu0:
+addWriteEffect<mlir::vc4::effects::TMUReq0>(effects);
+break;
+case mlir::vc4::TMUUnit::tmu1:
+addWriteEffect<mlir::vc4::effects::TMUReq1>(effects);
+break;
+}
+addReadEffect<mlir::vc4::effects::MainMemory>(effects);
+}
+
+static void addTMUReadEffects(mlir::vc4::TMUUnit unit, MemoryEffectList &effects) {
+switch (unit) {
+case mlir::vc4::TMUUnit::tmu0:
+addReadEffect<mlir::vc4::effects::TMURcv0>(effects);
+break;
+case mlir::vc4::TMUUnit::tmu1:
+addReadEffect<mlir::vc4::effects::TMURcv1>(effects);
+break;
+}
+}
+
+static void addDMAQueueEffects(std::optional<mlir::vc4::DMADescKind> kind,
+MemoryEffectList &effects, bool isWrite) {
+if (!kind || *kind == mlir::vc4::DMADescKind::load) {
+if (isWrite)
+addWriteEffect<mlir::vc4::effects::VDR>(effects);
+else
+addReadEffect<mlir::vc4::effects::VDR>(effects);
+}
+if (!kind || *kind == mlir::vc4::DMADescKind::store) {
+if (isWrite)
+addWriteEffect<mlir::vc4::effects::VDW>(effects);
+else
+addReadEffect<mlir::vc4::effects::VDW>(effects);
+}
+}
+
+static std::optional<mlir::vc4::DMADescKind> inferDMADescKindFromToken(Value token) {
+if (!token || !isa<mlir::vc4::AsyncTokenType>(token.getType()))
+return std::nullopt;
+if (auto start = token.getDefiningOp<mlir::vc4::DMAStartOp>())
+return inferDMADescKindFromDescriptor(start.getDescriptor());
+return std::nullopt;
+}
+
+static LogicalResult verifyQPUWriteAddressAttr(Operation *op, StringRef attrName,
+IntegerAttr attr) {
+if (!attr || !attr.getType().isSignlessInteger(32)) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be signless i32";
+}
+int64_t value = attr.getInt();
+if (value < 0 || value > 63) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be in range [0, 63]";
+}
+return success();
+}
+
+static LogicalResult verifyQPUBundleReadAddressAttr(Operation *op,
+StringRef attrName,
+IntegerAttr attr) {
+if (!attr || !attr.getType().isSignlessInteger(32)) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be signless i32";
+}
+int64_t value = attr.getInt();
+if (value < 0 || value > 63) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be in range [0, 63]";
+}
+return success();
+}
+
+static LogicalResult verifyQPUBranchReadAddressAttr(Operation *op,
+StringRef attrName,
+IntegerAttr attr) {
+if (!attr || !attr.getType().isSignlessInteger(32)) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be signless i32";
+}
+int64_t value = attr.getInt();
+if (value < 0 || value > 31) {
+return op->emitOpError() << "'" << attrName
+<< "' attribute must be in range [0, 31]";
+}
+return success();
+}
+
+static bool isQPUUpperWriteAddress(int64_t value) { return value >= 32; }
+
+// Small-immediate selectors use the encoded hardware space directly:
+// 0..47 are immediate integer/float literal selectors,
+// 48 is the rotate-by-r5 selector,
+// 49..63 are immediate rotate selectors.
+static bool isQPUSmallImmLiteralSelector(int64_t value) {
+return value >= 0 && value <= 47;
+}
+
+static bool isQPUSmallImmRotateByR5Selector(int64_t value) {
+return value == 48;
+}
+
+static bool isQPUSmallImmImmediateRotateSelector(int64_t value) {
+return value >= 49 && value <= 63;
+}
+
+static bool isQPUSmallImmVectorRotateSelector(int64_t value) {
+return isQPUSmallImmRotateByR5Selector(value) ||
+isQPUSmallImmImmediateRotateSelector(value);
+}
+
+static bool isQPUValidSmallImmSelector(int64_t value) {
+return isQPUSmallImmLiteralSelector(value) ||
+isQPUSmallImmRotateByR5Selector(value) ||
+isQPUSmallImmImmediateRotateSelector(value);
+}
+
+static bool isQPUAccumulatorMuxR0ToR3(mlir::vc4::QPUMux mux) {
+return mux == mlir::vc4::QPUMux::r0 || mux == mlir::vc4::QPUMux::r1 ||
+mux == mlir::vc4::QPUMux::r2 || mux == mlir::vc4::QPUMux::r3;
+}
+
+// Semaphore instructions must not target closely-coupled peripheral write
+// addresses that can stall the instruction stream.
+static bool isQPUStallCapablePeripheralWriteAddress(int64_t value) {
+return (value >= 43 && value <= 47) || (value >= 52 && value <= 55) ||
+(value >= 56 && value <= 63);
+}
+
+static LogicalResult verifyQPUSemaWriteAddressAttr(Operation *op,
+StringRef attrName,
+IntegerAttr attr) {
+if (failed(verifyQPUWriteAddressAttr(op, attrName, attr)))
+return failure();
+
+int64_t value = attr.getInt();
+if (isQPUStallCapablePeripheralWriteAddress(value)) {
+return op->emitOpError()
+<< "'" << attrName
+<< "' must not target stall-capable peripheral write addresses "
+"(TLB 43..47, SFU 52..55, TMU 56..63) for vc4.qpu.sema";
+}
+return success();
+}
+
+static bool isQPUAddPipeActive(mlir::vc4::AddOpcode opcode) {
+return opcode != mlir::vc4::AddOpcode::nop;
+}
+
+static bool isQPUMulPipeActive(mlir::vc4::MulOpcode opcode) {
+return opcode != mlir::vc4::MulOpcode::nop;
+}
+
+static LogicalResult verifyQPUBundleWriteConflict(
+Operation *op, mlir::vc4::AddOpcode addOpcode,
+mlir::vc4::MulOpcode mulOpcode, IntegerAttr waddrAddAttr,
+IntegerAttr waddrMulAttr) {
+if (!isQPUAddPipeActive(addOpcode) || !isQPUMulPipeActive(mulOpcode))
+return success();
+
+int64_t waddrAdd = waddrAddAttr.getInt();
+int64_t waddrMul = waddrMulAttr.getInt();
+if (waddrAdd != waddrMul || !isQPUUpperWriteAddress(waddrAdd))
+return success();
+
+return op->emitOpError(
+"active ADD and MUL pipelines must not target the same accumulator/I/O "
+"write address");
+}
+
+static LogicalResult verifyQPUPackAttr(Operation *op, bool pm, Attribute packAttr) {
+if (!packAttr)
+return success();
+
+if (!pm) {
+if (!isa<mlir::vc4::RegfileAPackModeAttr>(packAttr)) {
+return op->emitOpError(
+"pm = false requires 'pack' to use #vc4.regfile_a_pack_mode");
+}
+return success();
+}
+
+if (!isa<mlir::vc4::MulPackModeAttr>(packAttr)) {
+return op->emitOpError(
+"pm = true requires 'pack' to use #vc4.mul_pack_mode");
+}
+return success();
+}
+
+static LogicalResult verifyQPUUnpackAttr(Operation *op, bool pm,
+Attribute unpackAttr) {
+if (!unpackAttr)
+return success();
+
+if (!pm) {
+if (!isa<mlir::vc4::RegfileAUnpackModeAttr>(unpackAttr)) {
+return op->emitOpError(
+"pm = false requires 'unpack' to use #vc4.regfile_a_unpack_mode");
+}
+return success();
+}
+
+if (!isa<mlir::vc4::R4UnpackModeAttr>(unpackAttr)) {
+return op->emitOpError(
+"pm = true requires 'unpack' to use #vc4.r4_unpack_mode");
+}
+return success();
+}
+
+static LogicalResult verifyQPULoadImmPayload(Operation *op,
+mlir::vc4::LoadImmMode mode,
+Attribute valueAttr) {
+switch (mode) {
+case mlir::vc4::LoadImmMode::splat32: {
+auto intAttr = dyn_cast<IntegerAttr>(valueAttr);
+if (!intAttr || !intAttr.getType().isSignlessInteger(32)) {
+return op->emitOpError(
+"splat32 mode requires a signless i32 'value' attribute");
+}
+return success();
+}
+case mlir::vc4::LoadImmMode::per_elem_i2:
+case mlir::vc4::LoadImmMode::per_elem_u2: {
+auto valuesAttr = dyn_cast<DenseI32ArrayAttr>(valueAttr);
+if (!valuesAttr) {
+return op->emitOpError(
+"per-element mode requires a dense i32 array 'value' attribute");
+}
+if (valuesAttr.asArrayRef().size() != 16)
+return op->emitOpError("per-element mode requires exactly 16 lane values");
+int32_t minValue =
+mode == mlir::vc4::LoadImmMode::per_elem_i2 ? -2 : 0;
+int32_t maxValue =
+mode == mlir::vc4::LoadImmMode::per_elem_i2 ? 1 : 3;
+for (int32_t laneValue : valuesAttr.asArrayRef()) {
+if (laneValue < minValue || laneValue > maxValue) {
+return op->emitOpError() << "lane values for mode "
+<< mlir::vc4::stringifyLoadImmMode(mode)
+<< " must be in range [" << minValue << ", "
+<< maxValue << "]";
+}
+}
+return success();
+}
+}
+
+llvm_unreachable("unhandled vc4.qpu.ldi mode");
+}
+
+} // namespace
+
+mlir::vc4::ModuleOp mlir::vc4::ModuleOp::create(Location loc, StringRef name) {
+OpBuilder builder(loc->getContext());
+OperationState state(loc, getOperationName());
+state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(),
+builder.getStringAttr(name));
+Region *bodyRegion = state.addRegion();
+bodyRegion->push_back(new Block);
+return cast<mlir::vc4::ModuleOp>(Operation::create(state));
+}
+
+mlir::vc4::FuncOp mlir::vc4::FuncOp::create(
+Location location, StringRef name, FunctionType type,
+mlir::vc4::ThreadingMode threading, mlir::vc4::FunctionForm form,
+mlir::vc4::ExecutionDomain domain,
+ArrayRef<NamedAttribute> attrs) {
+OpBuilder builder(location->getContext());
+OperationState state(location, getOperationName());
+state.addAttribute(::mlir::SymbolTable::getSymbolAttrName(),
+builder.getStringAttr(name));
+state.addAttribute(getTypeAttrName(builder.getContext()), TypeAttr::get(type));
+state.addAttribute("threading",
+mlir::vc4::ThreadingModeAttr::get(builder.getContext(),
+threading));
+state.addAttribute("form",
+mlir::vc4::FunctionFormAttr::get(builder.getContext(),
+form));
+state.addAttribute("domain",
+mlir::vc4::ExecutionDomainAttr::get(builder.getContext(),
+domain));
+state.attributes.append(attrs.begin(), attrs.end());
+state.addRegion();
+return cast<mlir::vc4::FuncOp>(Operation::create(state));
+}
+
+ParseResult mlir::vc4::FuncOp::parse(OpAsmParser &parser,
+OperationState &result) {
+auto buildFuncType =
+[](Builder &builder, ArrayRef<Type> inputs, ArrayRef<Type> results,
+function_interface_impl::VariadicFlag, std::string &) -> Type {
+return FunctionType::get(builder.getContext(), inputs, results);
+};
+
+return function_interface_impl::parseFunctionOp(
+parser, result, /*allowVariadic=*/false,
+getTypeAttrName(parser.getContext()), buildFuncType,
+getArgAttrsName(parser.getContext()), getResAttrsName(parser.getContext()));
+}
+
+void mlir::vc4::FuncOp::print(OpAsmPrinter &printer) {
+function_interface_impl::printFunctionOp(
+printer, *this, /*isVariadic=*/false, "function_type",
+getArgAttrsName(getContext()), getResAttrsName(getContext()));
+}
+
+ParseResult mlir::vc4::BuiltinOp::parse(OpAsmParser &parser,
+OperationState &result) {
+StringRef kindKeyword;
+SMLoc kindLoc = parser.getCurrentLocation();
+if (parser.parseKeyword(&kindKeyword))
+return failure();
+
+std::optional<mlir::vc4::BuiltinKind> kind =
+mlir::vc4::symbolizeBuiltinKind(kindKeyword);
+if (!kind)
+return parser.emitError(kindLoc)
+<< "expected one of [elem_num, qpu_num, num_qpus] for vc4 builtin kind";
+
+if (parser.parseOptionalAttrDict(result.attributes))
+return failure();
+
+Type resultType;
+if (parser.parseColonType(resultType))
+return failure();
+
+result.addTypes(resultType);
+result.addAttribute("kind",
+mlir::vc4::BuiltinKindAttr::get(parser.getContext(), *kind));
+return success();
+}
+
+void mlir::vc4::BuiltinOp::print(OpAsmPrinter &printer) {
+printer << ' ' << mlir::vc4::stringifyBuiltinKind(getKind());
+printer.printOptionalAttrDict((*this)->getAttrs(), {"kind"});
+printer << " : " << getResult().getType();
+}
+
+LogicalResult mlir::vc4::ModuleOp::verify() {
+for (Operation &op : getBodyRegion().front()) {
+if (!isa<mlir::vc4::FuncOp>(op))
+return emitOpError("expects only vc4.func operations in the module body");
+}
+return success();
+}
+
+LogicalResult mlir::vc4::FuncOp::verify() {
+if (!getThreadingAttr())
+return emitOpError("requires a 'threading' attribute");
+if (!getFormAttr())
+return emitOpError("requires a 'form' attribute");
+if (!getDomainAttr())
+return emitOpError("requires a 'domain' attribute");
+
+mlir::vc4::FunctionForm form = *getForm();
+mlir::vc4::ExecutionDomain domain = *getDomain();
+if (getKernelAttr() && domain != mlir::vc4::ExecutionDomain::qpu) {
+return emitOpError(
+"the 'kernel' attribute is only legal with domain = #vc4.execution_domain<qpu>");
+}
+if (failed(verifyLaunchAbi(*this)))
+return failure();
+if (isExternal())
+return success();
+
+if (form == mlir::vc4::FunctionForm::structured) {
+for (Block &block : getBody()) {
+if (block.empty() || !block.back().mightHaveTrait<OpTrait::IsTerminator>()) {
+return emitOpError(
+"structured functions require every block to end in a terminator");
+}
+}
+}
+
+bool sawError = false;
+getBody().walk([&](Operation *op) {
+if (sawError)
+return WalkResult::interrupt();
+
+    if (form == mlir::vc4::FunctionForm::structured) {
+      if (domain == mlir::vc4::ExecutionDomain::qpu &&
+          isVC4HostDomainOnlyOp(*op)) {
+        op->emitOpError("is only legal in functions with domain = host");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      if (domain == mlir::vc4::ExecutionDomain::host &&
+          !isVC4HostDomainOnlyOp(*op) && !isVC4SharedStructuredDomainOp(*op) &&
+          (isVC4QPUDomainOnlyOp(*op) || isVC4StructuredOp(*op) ||
+           isVC4QPUOp(*op))) {
+        op->emitOpError("is only legal in functions with domain = qpu");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      if (isVC4QPUOp(*op)) {
+        op->emitOpError("is only legal in functions with form = scheduled");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      if (!isVC4StructuredOp(*op)) {
+        op->emitOpError("is not a legal operation in functions with form = structured");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+      return WalkResult::advance();
+    }
+
+    if (domain == mlir::vc4::ExecutionDomain::host && isVC4QPUOp(*op)) {
+      op->emitOpError("is only legal in functions with domain = qpu");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+
+    if (isVC4QPUOp(*op))
+      return WalkResult::advance();
+
+    if (isVC4StructuredOp(*op)) {
+      op->emitOpError("is only legal in functions with form = structured");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+
+    op->emitOpError("is not a legal operation in functions with form = scheduled");
+    sawError = true;
+    return WalkResult::interrupt();
+});
+
+return failure(sawError);
+}
+
+LogicalResult mlir::vc4::ReturnOp::verify() {
+auto func = (*this)->getParentOfType<mlir::vc4::FuncOp>();
+if (!func)
+return emitOpError("must be nested in a vc4.func");
+if (!func.getForm() ||
+*func.getForm() != mlir::vc4::FunctionForm::structured)
+return emitOpError("is only legal in functions with form = structured");
+
+FunctionType functionType = func.getFunctionType();
+if (getNumOperands() != functionType.getNumResults())
+return emitOpError() << "expected " << functionType.getNumResults()
+<< " operands to match the enclosing function signature";
+
+for (auto [index, operandType, resultType] :
+llvm::zip_equal(llvm::seq<unsigned>(0, getNumOperands()),
+getOperandTypes(), functionType.getResults())) {
+if (operandType != resultType) {
+return emitOpError() << "type of return operand #" << index << " ("
+<< operandType
+<< ") must match the enclosing function result type ("
+<< resultType << ")";
+}
+}
+
+return success();
+}
+
+LogicalResult mlir::vc4::BuiltinOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+if (!isI32OrVector16I32(getResult().getType()))
+return emitOpError("result type must be i32 or vector<16xi32>");
+return success();
+}
+
+void mlir::vc4::UniformReadOp::getEffects(MemoryEffectList &effects) {
+addReadEffect<mlir::vc4::effects::UniformStream>(effects);
+}
+
+void mlir::vc4::UniformSeekOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::UniformStream>(effects);
+}
+
+LogicalResult mlir::vc4::UniformReadOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+
+LogicalResult mlir::vc4::UniformSeekOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+Type offsetType = getOffset().getType();
+if (isa<VectorType>(offsetType))
+return emitOpError("operand must be a scalar signless integer or index");
+if (!offsetType.isSignlessIntOrIndex())
+return emitOpError("operand must be a signless integer or index");
+return success();
+}
+
+LogicalResult mlir::vc4::MovOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+
+LogicalResult mlir::vc4::ReadOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+
+LogicalResult mlir::vc4::ALUAddOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+switch (getOp()) {
+case mlir::vc4::AddOpcode::nop:
+return emitOpError("structured vc4.alu.add does not support the nop opcode");
+case mlir::vc4::AddOpcode::fadd:
+case mlir::vc4::AddOpcode::fsub:
+case mlir::vc4::AddOpcode::fmin:
+case mlir::vc4::AddOpcode::fmax:
+case mlir::vc4::AddOpcode::fminabs:
+case mlir::vc4::AddOpcode::fmaxabs:
+return verifyBinaryALUTypes(getOperation(), /*requireFloat=*/true);
+case mlir::vc4::AddOpcode::add:
+case mlir::vc4::AddOpcode::sub:
+case mlir::vc4::AddOpcode::shr:
+case mlir::vc4::AddOpcode::asr:
+case mlir::vc4::AddOpcode::ror:
+case mlir::vc4::AddOpcode::shl:
+case mlir::vc4::AddOpcode::min:
+case mlir::vc4::AddOpcode::max:
+case mlir::vc4::AddOpcode::bit_and:
+case mlir::vc4::AddOpcode::bit_or:
+case mlir::vc4::AddOpcode::bit_xor:
+case mlir::vc4::AddOpcode::v8adds:
+case mlir::vc4::AddOpcode::v8subs:
+return verifyBinaryALUTypes(getOperation(), /*requireFloat=*/false);
+case mlir::vc4::AddOpcode::bit_not:
+case mlir::vc4::AddOpcode::clz:
+if (getNumOperands() != 1)
+return emitOpError("expects exactly 1 operand for this opcode");
+if (failed(verifyAllOperandsAndResultAreVC4Values(getOperation())))
+return failure();
+if (failed(verifySameTypeOperandsAndResult(getOperation())))
+return failure();
+if (!isVC4IntValueType(getResult().getType()))
+return emitOpError("requires i32 or vector<16xi32> types");
+return success();
+case mlir::vc4::AddOpcode::ftoi:
+if (getNumOperands() != 1)
+return emitOpError("expects exactly 1 operand for this opcode");
+if (failed(verifyAllOperandsAndResultAreVC4Values(getOperation())))
+return failure();
+if (!isVC4FloatValueType(getOperand(0).getType()))
+return emitOpError("requires an f32 or vector<16xf32> operand");
+if (!isVC4IntValueType(getResult().getType()))
+return emitOpError("requires an i32 or vector<16xi32> result");
+if (!hasSameVC4Shape(getOperand(0).getType(), getResult().getType()))
+return emitOpError("operand and result must have compatible scalar or "
+"16-lane vector shapes");
+return success();
+case mlir::vc4::AddOpcode::itof:
+if (getNumOperands() != 1)
+return emitOpError("expects exactly 1 operand for this opcode");
+if (failed(verifyAllOperandsAndResultAreVC4Values(getOperation())))
+return failure();
+if (!isVC4IntValueType(getOperand(0).getType()))
+return emitOpError("requires an i32 or vector<16xi32> operand");
+if (!isVC4FloatValueType(getResult().getType()))
+return emitOpError("requires an f32 or vector<16xf32> result");
+if (!hasSameVC4Shape(getOperand(0).getType(), getResult().getType()))
+return emitOpError("operand and result must have compatible scalar or "
+"16-lane vector shapes");
+return success();
+}
+
+llvm_unreachable("unhandled vc4.alu.add opcode");
+}
+
+LogicalResult mlir::vc4::ALUMulOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+switch (getOp()) {
+case mlir::vc4::MulOpcode::nop:
+return emitOpError("structured vc4.alu.mul does not support the nop opcode");
+case mlir::vc4::MulOpcode::fmul:
+return verifyBinaryALUTypes(getOperation(), /*requireFloat=*/true);
+case mlir::vc4::MulOpcode::mul24:
+case mlir::vc4::MulOpcode::v8muld:
+case mlir::vc4::MulOpcode::v8min:
+case mlir::vc4::MulOpcode::v8max:
+case mlir::vc4::MulOpcode::v8adds:
+case mlir::vc4::MulOpcode::v8subs:
+return verifyBinaryALUTypes(getOperation(), /*requireFloat=*/false);
+}
+
+llvm_unreachable("unhandled vc4.alu.mul opcode");
+}
+
+LogicalResult mlir::vc4::LoadImmOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+// Structured vc4.load_imm remains on the SSA side of the dialect even when
+// it corresponds closely to a later vc4.qpu.ldi sink form.
+Attribute valueAttr = getValueAttr();
+if (!valueAttr)
+return emitOpError("requires a 'value' attribute");
+
+Type resultType = getResult().getType();
+switch (getMode()) {
+case mlir::vc4::LoadImmMode::splat32: {
+auto intAttr = dyn_cast<IntegerAttr>(valueAttr);
+if (!intAttr || !intAttr.getType().isSignlessInteger(32))
+return emitOpError("splat32 mode requires a signless i32 'value' attribute");
+if (!isVC4StructuredValueType(resultType)) {
+return emitOpError("splat32 mode result type must be i32, f32, "
+"vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+case mlir::vc4::LoadImmMode::per_elem_i2:
+case mlir::vc4::LoadImmMode::per_elem_u2: {
+auto valuesAttr = dyn_cast<DenseI32ArrayAttr>(valueAttr);
+if (!valuesAttr)
+return emitOpError("per-element mode requires a dense i32 array 'value' attribute");
+if (valuesAttr.asArrayRef().size() != 16)
+return emitOpError("per-element mode requires exactly 16 lane values");
+int32_t minValue =
+getMode() == mlir::vc4::LoadImmMode::per_elem_i2 ? -2 : 0;
+int32_t maxValue =
+getMode() == mlir::vc4::LoadImmMode::per_elem_i2 ? 1 : 3;
+for (int32_t laneValue : valuesAttr.asArrayRef()) {
+if (laneValue < minValue || laneValue > maxValue) {
+return emitOpError() << "lane values for mode "
+<< mlir::vc4::stringifyLoadImmMode(getMode())
+<< " must be in range [" << minValue << ", "
+<< maxValue << "]";
+}
+}
+auto vectorType = dyn_cast<VectorType>(resultType);
+if (!vectorType || vectorType.getRank() != 1 || vectorType.isScalable() ||
+vectorType.getDimSize(0) != 16 ||
+!vectorType.getElementType().isSignlessInteger(32)) {
+return emitOpError(
+"per-element mode result type must be vector<16xi32>");
+}
+return success();
+}
+}
+
+llvm_unreachable("unhandled vc4.load_imm mode");
+}
+
+LogicalResult mlir::vc4::PackOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+bool hasRegfileAMode = static_cast<bool>(getRegfileAModeAttr());
+bool hasMulMode = static_cast<bool>(getMulModeAttr());
+if (hasRegfileAMode == hasMulMode) {
+return emitOpError(
+"requires exactly one of 'regfile_a_mode' or 'mul_mode'");
+}
+
+Type inputType = getInput().getType();
+Type resultType = getResult().getType();
+if (!hasSameVC4Shape(inputType, resultType)) {
+return emitOpError("input and result must have compatible scalar or "
+"16-lane vector shapes");
+}
+if (!isVC4IntValueType(resultType))
+return emitOpError(
+"result type must be a 32-bit carrier word: i32 or vector<16xi32>");
+
+if (hasRegfileAMode) {
+switch (*getRegfileAMode()) {
+case mlir::vc4::RegfileAPackMode::none:
+return emitOpError("regfile_a_mode must not be <none>");
+case mlir::vc4::RegfileAPackMode::to_16a:
+case mlir::vc4::RegfileAPackMode::to_16b:
+if (!isVC4StructuredValueType(inputType)) {
+return emitOpError(
+"input type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+case mlir::vc4::RegfileAPackMode::sat32:
+case mlir::vc4::RegfileAPackMode::to_8888:
+case mlir::vc4::RegfileAPackMode::to_8a:
+case mlir::vc4::RegfileAPackMode::to_8b:
+case mlir::vc4::RegfileAPackMode::to_8c:
+case mlir::vc4::RegfileAPackMode::to_8d:
+case mlir::vc4::RegfileAPackMode::sat16a:
+case mlir::vc4::RegfileAPackMode::sat16b:
+case mlir::vc4::RegfileAPackMode::sat8888:
+case mlir::vc4::RegfileAPackMode::sat8a:
+case mlir::vc4::RegfileAPackMode::sat8b:
+case mlir::vc4::RegfileAPackMode::sat8c:
+case mlir::vc4::RegfileAPackMode::sat8d:
+if (!isVC4IntValueType(inputType))
+return emitOpError("regfile_a_mode requires i32 or vector<16xi32> input");
+return success();
+}
+llvm_unreachable("unhandled vc4.pack regfile_a_mode");
+}
+
+switch (*getMulMode()) {
+case mlir::vc4::MulPackMode::none:
+return emitOpError("mul_mode must not be <none>");
+case mlir::vc4::MulPackMode::to_8888:
+case mlir::vc4::MulPackMode::to_8a:
+case mlir::vc4::MulPackMode::to_8b:
+case mlir::vc4::MulPackMode::to_8c:
+case mlir::vc4::MulPackMode::to_8d:
+if (!isVC4FloatValueType(inputType))
+return emitOpError("mul_mode requires f32 or vector<16xf32> input");
+return success();
+}
+
+llvm_unreachable("unhandled vc4.pack mul_mode");
+}
+
+LogicalResult mlir::vc4::UnpackOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+bool hasRegfileAMode = static_cast<bool>(getRegfileAModeAttr());
+bool hasR4Mode = static_cast<bool>(getR4ModeAttr());
+if (hasRegfileAMode == hasR4Mode) {
+return emitOpError(
+"requires exactly one of 'regfile_a_mode' or 'r4_mode'");
+}
+
+Type inputType = getInput().getType();
+Type resultType = getResult().getType();
+if (!hasSameVC4Shape(inputType, resultType)) {
+return emitOpError("input and result must have compatible scalar or "
+"16-lane vector shapes");
+}
+if (!isVC4IntValueType(inputType))
+return emitOpError(
+"input type must be a 32-bit carrier word: i32 or vector<16xi32>");
+
+if (hasRegfileAMode) {
+switch (*getRegfileAMode()) {
+case mlir::vc4::RegfileAUnpackMode::none:
+return emitOpError("regfile_a_mode must not be <none>");
+case mlir::vc4::RegfileAUnpackMode::f16a_or_i16a:
+case mlir::vc4::RegfileAUnpackMode::f16b_or_i16b:
+case mlir::vc4::RegfileAUnpackMode::color8a:
+case mlir::vc4::RegfileAUnpackMode::color8b:
+case mlir::vc4::RegfileAUnpackMode::color8c:
+case mlir::vc4::RegfileAUnpackMode::color8d:
+if (!isVC4StructuredValueType(resultType)) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+case mlir::vc4::RegfileAUnpackMode::replicate_8d:
+if (!isVC4IntValueType(resultType))
+return emitOpError("replicate_8d requires i32 or vector<16xi32> result");
+return success();
+}
+llvm_unreachable("unhandled vc4.unpack regfile_a_mode");
+}
+
+switch (*getR4Mode()) {
+case mlir::vc4::R4UnpackMode::none:
+return emitOpError("r4_mode must not be <none>");
+case mlir::vc4::R4UnpackMode::f16a:
+case mlir::vc4::R4UnpackMode::f16b:
+case mlir::vc4::R4UnpackMode::color8a:
+case mlir::vc4::R4UnpackMode::color8b:
+case mlir::vc4::R4UnpackMode::color8c:
+case mlir::vc4::R4UnpackMode::color8d:
+if (!isVC4FloatValueType(resultType))
+return emitOpError("r4_mode requires f32 or vector<16xf32> result");
+return success();
+case mlir::vc4::R4UnpackMode::replicate_8d:
+if (!isVC4IntValueType(resultType))
+return emitOpError("replicate_8d requires i32 or vector<16xi32> result");
+return success();
+}
+
+llvm_unreachable("unhandled vc4.unpack r4_mode");
+}
+
+LogicalResult mlir::vc4::RotateOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+Type inputType = getInput().getType();
+Type resultType = getResult().getType();
+if (inputType != resultType)
+return emitOpError("input and result types must match exactly");
+if (!isVector16Of32BitVC4ValueType(inputType))
+return emitOpError(
+"structured vc4.rotate requires vector<16xi32> or vector<16xf32> "
+"input and result types");
+
+bool hasAmount = static_cast<bool>(getAmount());
+bool hasImmediate = static_cast<bool>(getImmediateAttr());
+if (hasAmount == hasImmediate) {
+return emitOpError(
+"requires exactly one of an amount operand or an immediate attribute");
+}
+
+if (hasAmount) {
+if (!isScalarSignlessIntegerOrIndex(getAmount().getType()))
+return emitOpError("amount operand must be a scalar signless integer or index");
+return success();
+}
+
+auto immediateAttr = getImmediateAttr();
+if (!immediateAttr.getType().isSignlessInteger(32))
+return emitOpError("immediate attribute must be signless i32");
+int64_t value = immediateAttr.getInt();
+if (value < 0 || value > 15)
+return emitOpError("immediate rotate amount must be in range [0, 15]");
+return success();
+}
+
+LogicalResult mlir::vc4::TMUDescriptorOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (failed(verifyPositiveI32Attr(getOperation(), "mip_levels",
+getMipLevelsAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "width", getWidthAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "height", getHeightAttr())))
+return failure();
+if (failed(verifyPositiveI32Attr(getOperation(), "cube_map_stride",
+getCubeMapStrideAttr())))
+return failure();
+
+if (static_cast<bool>(getWidthAttr()) != static_cast<bool>(getHeightAttr())) {
+return emitOpError(
+"requires 'width' and 'height' to be provided together");
+}
+
+if (getChildImageFieldsAttr() && getChildImageFieldsAttr().empty()) {
+return emitOpError("'child_image_fields' attribute must not be empty");
+}
+if (getBiasFlagsAttr() && getBiasFlagsAttr().empty()) {
+return emitOpError("'bias_flags' attribute must not be empty");
+}
+
+bool hasTextureOnlyFields = getBaseAttr() || getTextureTypeAttr() ||
+getMipLevelsAttr() || getWidthAttr() ||
+getHeightAttr() || getMagFilterAttr() ||
+getMinFilterAttr() || getWrapSAttr() ||
+getWrapTAttr() || getFlipYAttr() ||
+getCubeMapStrideAttr() ||
+getChildImageFieldsAttr() || getBiasFlagsAttr();
+
+switch (getMode()) {
+case mlir::vc4::TMUMode::direct:
+if (hasTextureOnlyFields) {
+return emitOpError(
+"direct mode must not carry texture setup attributes");
+}
+return success();
+case mlir::vc4::TMUMode::texture2d:
+if (getCubeMapStrideAttr()) {
+return emitOpError(
+"'cube_map_stride' is only legal for mode = cubemap");
+}
+return success();
+case mlir::vc4::TMUMode::cubemap:
+return success();
+}
+
+llvm_unreachable("unhandled vc4.tmu.descriptor mode");
+}
+
+void mlir::vc4::TMURequestOp::getEffects(MemoryEffectList &effects) {
+addTMURequestEffects(getUnit(), effects);
+}
+
+LogicalResult mlir::vc4::TMURequestOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+ValueRange operands = getOperands();
+if (operands.empty())
+return emitOpError("requires at least one operand");
+
+unsigned descriptorCount = llvm::count_if(operands, [](Value operand) {
+return isa<mlir::vc4::TMUDescType>(operand.getType());
+});
+if (descriptorCount > 1)
+return emitOpError("accepts at most one !vc4.tmu.desc operand");
+
+bool hasDescriptor =
+isa<mlir::vc4::TMUDescType>(operands.back().getType());
+if (descriptorCount == 1 && !hasDescriptor) {
+return emitOpError("descriptor operand must be the last operand");
+}
+
+ValueRange valueOperands =
+hasDescriptor ? operands.drop_back() : operands;
+if (valueOperands.empty()) {
+return emitOpError(
+"requires at least one address or coordinate operand");
+}
+
+auto verifyTextureOperands = [&](unsigned minCount,
+unsigned maxCount) -> LogicalResult {
+if (valueOperands.size() < minCount || valueOperands.size() > maxCount) {
+return emitOpError() << "expects between " << minCount << " and "
+<< maxCount
+<< " coordinate operands for the selected TMU mode";
+}
+TypeRange valueOperandTypes = valueOperands.getTypes();
+for (Type type : valueOperandTypes) {
+if (!isVC4StructuredValueType(type)) {
+return emitOpError("coordinate operands must be i32, f32, "
+"vector<16xi32>, or vector<16xf32>");
+}
+}
+if (!haveCompatibleVC4Shapes(valueOperandTypes)) {
+return emitOpError("coordinate operands must have compatible scalar or "
+"16-lane vector shapes");
+}
+return success();
+};
+
+if (!hasDescriptor) {
+if (valueOperands.size() != 1) {
+return emitOpError(
+"requests without a descriptor are only legal in direct mode and "
+"require exactly one address operand");
+}
+if (!isI32OrVector16I32(valueOperands.front().getType())) {
+return emitOpError(
+"direct-mode address operand must be i32 or vector<16xi32>");
+}
+return success();
+}
+
+std::optional<mlir::vc4::TMUMode> mode =
+inferTMUModeFromDescriptor(operands.back());
+if (!mode)
+return verifyTextureOperands(/*minCount=*/1, /*maxCount=*/4);
+
+switch (*mode) {
+case mlir::vc4::TMUMode::direct:
+if (valueOperands.size() != 1) {
+return emitOpError(
+"direct-mode descriptors require exactly one address operand");
+}
+if (!isI32OrVector16I32(valueOperands.front().getType())) {
+return emitOpError(
+"direct-mode address operand must be i32 or vector<16xi32>");
+}
+return success();
+case mlir::vc4::TMUMode::texture2d:
+return verifyTextureOperands(/*minCount=*/1, /*maxCount=*/3);
+case mlir::vc4::TMUMode::cubemap:
+return verifyTextureOperands(/*minCount=*/3, /*maxCount=*/4);
+}
+
+llvm_unreachable("unhandled vc4.tmu.request mode");
+}
+
+void mlir::vc4::TMUReadOp::getEffects(MemoryEffectList &effects) {
+addTMUReadEffects(getUnit(), effects);
+}
+
+LogicalResult mlir::vc4::TMUReadOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (Value token = getToken()) {
+if (Operation *definingOp = token.getDefiningOp()) {
+auto request = dyn_cast<mlir::vc4::TMURequestOp>(definingOp);
+if (!request) {
+return emitOpError(
+"token operand must come from vc4.tmu.request or be a block argument");
+}
+if (request.getUnit() != getUnit()) {
+return emitOpError("token unit must match the selected read unit");
+}
+}
+}
+
+switch (getPart()) {
+case mlir::vc4::TMUReadPart::raw32:
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError("part = raw32 requires i32, f32, vector<16xi32>, "
+"or vector<16xf32> result type");
+}
+return success();
+case mlir::vc4::TMUReadPart::rgba8888:
+case mlir::vc4::TMUReadPart::rg1616:
+case mlir::vc4::TMUReadPart::ba1616:
+if (!isI32OrVector16I32(getResult().getType())) {
+return emitOpError("packed TMU read parts require i32 or vector<16xi32> "
+"result type");
+}
+return success();
+}
+
+llvm_unreachable("unhandled vc4.tmu.read part");
+}
+
+void mlir::vc4::TMUNoSwapOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
+LogicalResult mlir::vc4::TMUNoSwapOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+bool hasValue = static_cast<bool>(getValue());
+bool hasDisableAttr = static_cast<bool>(getDisableAttr());
+if (hasValue == hasDisableAttr) {
+return emitOpError(
+"requires exactly one of a value operand or a 'disable' attribute");
+}
+
+if (hasValue && isa<VectorType>(getValue().getType())) {
+return emitOpError("value operand must be a scalar signless integer");
+}
+
+return success();
+}
+
+void mlir::vc4::SFUIssueOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::SFU>(effects);
+}
+
+LogicalResult mlir::vc4::SFUIssueOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (!isVC4StructuredValueType(getInput().getType())) {
+return emitOpError(
+"input type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+
+void mlir::vc4::SFUReadOp::getEffects(MemoryEffectList &effects) {
+addReadEffect<mlir::vc4::effects::SFU>(effects);
+}
+
+LogicalResult mlir::vc4::SFUReadOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+return success();
+}
+
+LogicalResult mlir::vc4::VPMDescriptorOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (failed(verifyNonNegativeI32Attr(getOperation(), "addr", getAddrAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "num_vectors",
+getNumVectorsAttr())))
+return failure();
+
+switch (getKind()) {
+case mlir::vc4::VPMDescKind::read:
+if (!getNumVectorsAttr())
+return emitOpError("kind = read requires a 'num_vectors' attribute");
+return success();
+case mlir::vc4::VPMDescKind::write:
+if (getNumVectorsAttr())
+return emitOpError("kind = write must not carry 'num_vectors'");
+return success();
+}
+
+llvm_unreachable("unhandled vc4.vpm.desc kind");
+}
+
+void mlir::vc4::VPMReadOp::getEffects(MemoryEffectList &effects) {
+addReadEffect<mlir::vc4::effects::VPMReadFIFO>(effects);
+}
+
+LogicalResult mlir::vc4::VPMReadOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (!isVC4StructuredValueType(getResult().getType())) {
+return emitOpError(
+"result type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+
+std::optional<mlir::vc4::VPMDescKind> kind =
+inferVPMDescKindFromDescriptor(getDescriptor());
+if (kind && *kind != mlir::vc4::VPMDescKind::read)
+return emitOpError("descriptor kind must be <read>");
+
+return success();
+}
+
+void mlir::vc4::VPMWriteOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::VPMWriteFIFO>(effects);
+}
+
+LogicalResult mlir::vc4::VPMWriteOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (!isVC4StructuredValueType(getValue().getType())) {
+return emitOpError(
+"value type must be i32, f32, vector<16xi32>, or vector<16xf32>");
+}
+
+std::optional<mlir::vc4::VPMDescKind> kind =
+inferVPMDescKindFromDescriptor(getDescriptor());
+if (kind && *kind != mlir::vc4::VPMDescKind::write)
+return emitOpError("descriptor kind must be <write>");
+
+return success();
+}
+
+LogicalResult mlir::vc4::DMADescriptorOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (failed(verifyNonNegativeI32Attr(getOperation(), "start_offset",
+getStartOffsetAttr())))
+return failure();
+if (failed(verifyNonNegativeI32Attr(getOperation(), "mpitch",
+getMpitchAttr())))
+return failure();
+if (failed(verifyNonNegativeI32Attr(getOperation(), "vpitch",
+getVpitchAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "nrows", getNrowsAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "rowlen", getRowlenAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "units", getUnitsAttr())))
+return failure();
+if (failed(
+verifyPositiveI32Attr(getOperation(), "depth", getDepthAttr())))
+return failure();
+if (failed(verifyNonNegativeI32Attr(getOperation(), "vpm_base",
+getVpmBaseAttr())))
+return failure();
+if (failed(
+verifyNonNegativeI32Attr(getOperation(), "stride", getStrideAttr())))
+return failure();
+if (failed(verifyNonNegativeI32Attr(getOperation(), "extended_stride",
+getExtendedStrideAttr())))
+return failure();
+
+if (auto startOffset = getStartOffsetAttr()) {
+if (startOffset.getInt() > 3) {
+return emitOpError(
+"'start_offset' attribute must be in range [0, 3]");
+}
+}
+
+if (static_cast<bool>(getMpitchAttr()) != static_cast<bool>(getVpitchAttr())) {
+return emitOpError(
+"requires 'mpitch' and 'vpitch' to be provided together");
+}
+if (static_cast<bool>(getNrowsAttr()) != static_cast<bool>(getRowlenAttr())) {
+return emitOpError(
+"requires 'nrows' and 'rowlen' to be provided together");
+}
+if (getExtendedStrideAttr() && !getStrideAttr()) {
+return emitOpError(
+"'extended_stride' requires the base 'stride' attribute");
+}
+if (getUnitsAttr() && getDepthAttr()) {
+return emitOpError(
+"must not specify both 'units' and 'depth' in one descriptor");
+}
+
+switch (getKind()) {
+case mlir::vc4::DMADescKind::load:
+case mlir::vc4::DMADescKind::store:
+return success();
+}
+
+llvm_unreachable("unhandled vc4.dma.desc kind");
+}
+
+void mlir::vc4::DMAStartOp::getEffects(MemoryEffectList &effects) {
+std::optional<mlir::vc4::DMADescKind> kind =
+inferDMADescKindFromDescriptor(getDescriptor());
+addDMAQueueEffects(kind, effects, /*isWrite=*/true);
+if (!kind || *kind == mlir::vc4::DMADescKind::load)
+addReadEffect<mlir::vc4::effects::MainMemory>(effects);
+if (!kind || *kind == mlir::vc4::DMADescKind::store)
+addWriteEffect<mlir::vc4::effects::MainMemory>(effects);
+}
+
+LogicalResult mlir::vc4::DMAStartOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (!isScalarSignlessIntegerOrIndex(getBase().getType())) {
+return emitOpError("base address must be a scalar signless integer or index");
+}
+
+std::optional<mlir::vc4::DMADescKind> kind =
+inferDMADescKindFromDescriptor(getDescriptor());
+if (kind && *kind != mlir::vc4::DMADescKind::load &&
+*kind != mlir::vc4::DMADescKind::store) {
+return emitOpError("descriptor kind must be <load> or <store>");
+}
+return success();
+}
+
+void mlir::vc4::DMAStatusOp::getEffects(MemoryEffectList &effects) {
+addDMAQueueEffects(getKind(), effects, /*isWrite=*/false);
+}
+
+LogicalResult mlir::vc4::DMAStatusOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+Type resultType = getResult().getType();
+if (!resultType.isSignlessIntOrIndex() || isa<VectorType>(resultType)) {
+return emitOpError("result type must be a scalar signless integer or index");
+}
+return success();
+}
+
+void mlir::vc4::DMAWaitOp::getEffects(MemoryEffectList &effects) {
+std::optional<mlir::vc4::DMADescKind> kind =
+getKindAttr()
+? std::optional<mlir::vc4::DMADescKind>(getKind())
+: inferDMADescKindFromToken(getToken());
+addDMAQueueEffects(kind, effects, /*isWrite=*/false);
+}
+
+LogicalResult mlir::vc4::DMAWaitOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+bool hasToken = static_cast<bool>(getToken());
+bool hasKind = static_cast<bool>(getKindAttr());
+if (hasToken == hasKind) {
+return emitOpError(
+"requires exactly one of a token operand or a 'kind' attribute");
+}
+
+if (Value token = getToken()) {
+if (Operation *definingOp = token.getDefiningOp()) {
+auto start = dyn_cast<mlir::vc4::DMAStartOp>(definingOp);
+if (!start) {
+return emitOpError(
+"token operand must come from vc4.dma.start or be a block argument");
+}
+}
+}
+
+return success();
+}
+
+void mlir::vc4::MutexOp::getEffects(MemoryEffectList &effects) {
+addReadWriteEffects<mlir::vc4::effects::Mutex>(effects);
+}
+
+LogicalResult mlir::vc4::MutexOp::verify() {
+return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::SemaphoreOp::getEffects(MemoryEffectList &effects) {
+addReadWriteEffects<mlir::vc4::effects::Semaphore>(effects);
+}
+
+LogicalResult mlir::vc4::SemaphoreOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+int64_t id = getIdAttr().getInt();
+if (id < 0 || id > 15)
+return emitOpError("semaphore 'id' attribute must be in range [0, 15]");
+return success();
+}
+
+void mlir::vc4::HostInterruptOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::HostIRQ>(effects);
+}
+
+LogicalResult mlir::vc4::HostInterruptOp::verify() {
+return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::ThreadSwitchOp::getEffects(MemoryEffectList &effects) {
+effects.emplace_back(MemoryEffects::Write::get());
+}
+
+LogicalResult mlir::vc4::ThreadSwitchOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+auto func = (*this)->getParentOfType<mlir::vc4::FuncOp>();
+if (!func || !func.getThreading() ||
+*func.getThreading() != mlir::vc4::ThreadingMode::threadable) {
+return emitOpError(
+"is only legal in functions with threading = threadable");
+}
+return success();
+}
+
+void mlir::vc4::ProgramEndOp::getEffects(MemoryEffectList &effects) {
+effects.emplace_back(MemoryEffects::Write::get());
+}
+
+LogicalResult mlir::vc4::ProgramEndOp::verify() {
+return verifyStructuredFormOp(getOperation());
+}
+
+void mlir::vc4::AsyncWaitOp::getEffects(MemoryEffectList &effects) {
+effects.emplace_back(MemoryEffects::Write::get());
+}
+
+LogicalResult mlir::vc4::AsyncWaitOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (getTokens().empty())
+return emitOpError("requires at least one async token operand");
+return success();
+}
+
+LogicalResult mlir::vc4::CFBranchOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+unsigned numSuccessors = getNumSuccessors();
+if (getCond() == mlir::vc4::BranchCond::always) {
+if (numSuccessors != 1)
+return emitOpError("cond = always requires exactly one successor");
+return success();
+}
+
+if (numSuccessors != 2)
+return emitOpError("conditional branch requires exactly two successors");
+return success();
+}
+
+mlir::SuccessorOperands mlir::vc4::CFBranchOp::getSuccessorOperands(unsigned index) {
+assert(index < getNumSuccessors() && "successor index out of range");
+return mlir::SuccessorOperands(
+mlir::MutableOperandRange(getOperation(), /*start=*/0, /*length=*/0));
+}
+
+LogicalResult mlir::vc4::EnqueueQPUOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+if (getNumOperands() != 0 && getNumOperands() != 2) {
+return emitOpError(
+"supports either no operands or exactly two operands for uniforms base and length");
+}
+if (getNumOperands() == 2) {
+if (!isScalarSignlessIntegerOrIndex(getOperand(0).getType()) ||
+!isScalarSignlessIntegerOrIndex(getOperand(1).getType())) {
+return emitOpError(
+"uniforms base and length operands must be scalar signless integers or index");
+}
+}
+
+Operation *symbol = SymbolTable::lookupNearestSymbolFrom(getOperation(), getEntryAttr());
+auto func = dyn_cast_or_null<mlir::vc4::FuncOp>(symbol);
+if (!func)
+return emitOpError("referenced 'entry' must resolve to a vc4.func symbol");
+if (!func.getKernelAttr())
+return emitOpError("referenced function must be marked with the 'kernel' attribute");
+return success();
+}
+
+void mlir::vc4::EnqueueQPUOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::QPUScheduler>(effects);
+}
+
+LogicalResult mlir::vc4::ReserveQPUOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+int64_t mask = getMaskAttr().getInt();
+if (mask < 0 || mask > 0xFFF)
+return emitOpError("mask attribute must fit the 12-QPU target range [0, 4095]");
+return success();
+}
+
+void mlir::vc4::ReserveQPUOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::QPUScheduler>(effects);
+}
+
+LogicalResult mlir::vc4::V3DQueryOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+auto verifyScalarIntLike = [&](Type type, StringRef what) -> LogicalResult {
+if (!isScalarSignlessIntegerOrIndex(type)) {
+return emitOpError() << what
+<< " must be a scalar signless integer or index";
+}
+return success();
+};
+
+if (getNumResults() != 1)
+return emitOpError("currently requires exactly one result");
+if (failed(verifyScalarIntLike(getResult(0).getType(), "result type")))
+return failure();
+
+switch (getKind()) {
+case mlir::vc4::V3DQueryKind::ident:
+case mlir::vc4::V3DQueryKind::queue_status:
+case mlir::vc4::V3DQueryKind::interrupt_status:
+case mlir::vc4::V3DQueryKind::error_status:
+if (getNumOperands() != 0)
+return emitOpError("selected query kind does not accept selector operands");
+return success();
+case mlir::vc4::V3DQueryKind::perf_counter:
+case mlir::vc4::V3DQueryKind::scratch:
+if (getNumOperands() != 1)
+return emitOpError("selected query kind requires exactly one selector operand");
+return verifyScalarIntLike(getOperand(0).getType(), "selector operand");
+}
+
+llvm_unreachable("unhandled vc4.v3d.query kind");
+}
+
+void mlir::vc4::V3DQueryOp::getEffects(MemoryEffectList &effects) {
+addReadEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
+LogicalResult mlir::vc4::V3DConfigureOp::verify() {
+if (failed(verifyStructuredFormOp(getOperation())))
+return failure();
+
+auto verifyScalarOperands = [&](unsigned expected) -> LogicalResult {
+if (getNumOperands() != expected) {
+return emitOpError() << "selected configure kind requires exactly "
+<< expected << " payload operand"
+<< (expected == 1 ? "" : "s");
+}
+for (Type type : getOperandTypes()) {
+if (!isScalarSignlessIntegerOrIndex(type)) {
+return emitOpError(
+"payload operands must be scalar signless integers or index");
+}
+}
+return success();
+};
+
+switch (getKind()) {
+case mlir::vc4::V3DConfigureKind::cache_control:
+case mlir::vc4::V3DConfigureKind::interrupt_enable:
+case mlir::vc4::V3DConfigureKind::interrupt_disable:
+case mlir::vc4::V3DConfigureKind::perf_enable:
+case mlir::vc4::V3DConfigureKind::vpm_reservation:
+case mlir::vc4::V3DConfigureKind::vpm_allocator:
+return verifyScalarOperands(/*expected=*/1);
+case mlir::vc4::V3DConfigureKind::perf_map:
+case mlir::vc4::V3DConfigureKind::scratch:
+return verifyScalarOperands(/*expected=*/2);
+case mlir::vc4::V3DConfigureKind::perf_clear:
+return verifyScalarOperands(/*expected=*/0);
+}
+
+llvm_unreachable("unhandled vc4.v3d.configure kind");
+}
+
+void mlir::vc4::V3DConfigureOp::getEffects(MemoryEffectList &effects) {
+addWriteEffect<mlir::vc4::effects::V3DSystem>(effects);
+}
+
+LogicalResult mlir::vc4::QPULDIOp::verify() {
+if (failed(verifyScheduledFormOp(getOperation())))
+return failure();
+
+if (failed(verifyQPULoadImmPayload(getOperation(), getMode(), getValueAttr())))
+return failure();
+if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+return failure();
+return success();
+}
+
+void mlir::vc4::QPUSemaOp::getEffects(MemoryEffectList &effects) {
+addReadWriteEffects<mlir::vc4::effects::Semaphore>(effects);
+}
+
+LogicalResult mlir::vc4::QPUSemaOp::verify() {
+if (failed(verifyScheduledFormOp(getOperation())))
+return failure();
+
+int64_t id = getIdAttr().getInt();
+if (id < 0 || id > 15)
+return emitOpError("'id' attribute must be in range [0, 15]");
+if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+return failure();
+if (failed(
+verifyQPUSemaWriteAddressAttr(getOperation(), "waddr_add",
+getWaddrAddAttr())))
+return failure();
+if (failed(
+verifyQPUSemaWriteAddressAttr(getOperation(), "waddr_mul",
+getWaddrMulAttr())))
+return failure();
+return success();
+}
+
+LogicalResult mlir::vc4::QPUBundleOp::verify() {
+if (failed(verifyScheduledFormOp(getOperation())))
+return failure();
+
+bool hasRaddrB = static_cast<bool>(getRaddrBAttr());
+bool hasSmallImm = static_cast<bool>(getSmallImmAttr());
+if (hasRaddrB == hasSmallImm) {
+return emitOpError(
+"requires exactly one of 'raddr_b' or 'small_imm'");
+}
+
+if (failed(verifyQPUUnpackAttr(getOperation(), getPm(), getUnpackAttr())))
+return failure();
+if (failed(verifyQPUPackAttr(getOperation(), getPm(), getPackAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+return failure();
+if (failed(verifyQPUBundleWriteConflict(getOperation(), getOpAdd(), getOpMul(),
+getWaddrAddAttr(), getWaddrMulAttr())))
+return failure();
+if (failed(
+verifyQPUBundleReadAddressAttr(getOperation(), "raddr_a",
+getRaddrAAttr())))
+return failure();
+if (hasRaddrB &&
+failed(verifyQPUBundleReadAddressAttr(getOperation(), "raddr_b",
+getRaddrBAttr()))) {
+return failure();
+}
+
+if (hasSmallImm) {
+int64_t smallImm = getSmallImmAttr().getInt();
+if (!isQPUValidSmallImmSelector(smallImm)) {
+return emitOpError(
+"'small_imm' attribute must be an encoded selector in range [0, 63]");
+}
+if (isQPUSmallImmVectorRotateSelector(smallImm) &&
+(!isQPUAccumulatorMuxR0ToR3(getMulA()) ||
+!isQPUAccumulatorMuxR0ToR3(getMulB()))) {
+return emitOpError(
+"vector-rotate small_imm selectors 48..63 require both MUL inputs "
+"to come from accumulators r0..r3");
+}
+}
+
+switch (getSig()) {
+case mlir::vc4::QPUSignal::small_imm:
+if (!hasSmallImm) {
+return emitOpError(
+"sig = #vc4.qpu_signal<small_imm> requires a 'small_imm' attribute");
+}
+break;
+case mlir::vc4::QPUSignal::load_imm:
+return emitOpError(
+"sig = #vc4.qpu_signal<load_imm> is represented by vc4.qpu.ldi");
+case mlir::vc4::QPUSignal::branch:
+return emitOpError(
+"sig = #vc4.qpu_signal<branch> is represented by vc4.qpu.branch");
+default:
+if (hasSmallImm) {
+return emitOpError(
+"'small_imm' attribute requires sig = #vc4.qpu_signal<small_imm>");
+}
+break;
+}
+
+return success();
+}
+
+LogicalResult mlir::vc4::QPUBranchOp::verify() {
+if (failed(verifyScheduledFormOp(getOperation())))
+return failure();
+
+if (failed(
+verifyQPUBranchReadAddressAttr(getOperation(), "raddr_a",
+getRaddrAAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_add", getWaddrAddAttr())))
+return failure();
+if (failed(
+verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
+return failure();
+
+if (!getDelaySlots().hasOneBlock())
+return emitOpError("delay-slot region must contain exactly one block");
+
+Block &delaySlotBlock = getDelaySlots().front();
+if (delaySlotBlock.getNumArguments() != 0)
+return emitOpError("delay-slot region block must not take arguments");
+
+unsigned delaySlotCount = 0;
+for (Operation &op : delaySlotBlock) {
+++delaySlotCount;
+if (!isVC4QPUOp(op)) {
+return op.emitOpError(
+"is not a legal delay-slot operation; expected a vc4.qpu.* op");
+}
+}
+
+if (delaySlotCount != 3) {
+return emitOpError() << "delay-slot region must contain exactly 3 "
+<< "scheduled QPU ops";
+}
+
+return success();
+}
+
+#define GET_OP_CLASSES
+#include "vc4/Dialect/VC4/IR/VC4Ops.cpp.inc"
+
+===== compiler/tools/vc4-opt/vc4-opt.cpp =====
+//===- vc4-opt.cpp - VC4 standalone optimizer driver ---------------------===//
+//
+// Part of the LLVM Project, under the Apache License v2.0 with LLVM
+// Exceptions.
+// SPDX-License-Identifier: Apache-2.0 WITH LLVM-exception
+//
+//===----------------------------------------------------------------------===//
+
+#include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
+
+#include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/DialectRegistry.h"
+#include "mlir/Interfaces/SideEffectInterfaces.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "llvm/Support/InitLLVM.h"
+
+namespace {
+
+static bool isAllowedVC4QASMInputOp(mlir::Operation &op) {
+return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPUBranchOp,
+mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp>(op);
+}
+
+static bool isAllowedVC4LauncherInputOp(mlir::Operation &op) {
+return llvm::isa<mlir::vc4::AsyncWaitOp, mlir::vc4::CFBranchOp,
+mlir::vc4::EnqueueQPUOp, mlir::vc4::ReserveQPUOp,
+mlir::vc4::V3DQueryOp, mlir::vc4::V3DConfigureOp,
+mlir::vc4::ReturnOp>(op);
+}
+
+static bool isVC4ScheduledSinkFamilyOp(mlir::Operation &op) {
+return op.getName().getStringRef().starts_with("vc4.qpu.");
+}
+
+static bool isVC4ScheduledNonBranchOp(mlir::Operation &op) {
+return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
+mlir::vc4::QPUSemaOp>(op);
+}
+
+static bool isVC4LauncherOrSystemOp(mlir::Operation &op) {
+return llvm::isa<mlir::vc4::AsyncWaitOp, mlir::vc4::CFBranchOp,
+mlir::vc4::EnqueueQPUOp, mlir::vc4::ReserveQPUOp,
+mlir::vc4::V3DQueryOp, mlir::vc4::V3DConfigureOp,
+mlir::vc4::ReturnOp>(op);
+}
+
+static bool isVC4StructuredFamilyOp(mlir::Operation &op) {
+llvm::StringRef name = op.getName().getStringRef();
+return name.starts_with("vc4.") && !name.starts_with("vc4.qpu.");
+}
+
+static bool isVC4ScheduledQPUDomainFunction(mlir::vc4::FuncOp func) {
+std::optional<mlir::vc4::ExecutionDomain> domain = func.getDomain();
+std::optional<mlir::vc4::FunctionForm> form = func.getForm();
+return domain && *domain == mlir::vc4::ExecutionDomain::qpu && form &&
+*form == mlir::vc4::FunctionForm::scheduled;
+}
+
+static bool isVC4BundleAddPipeWriteActive(mlir::vc4::QPUBundleOp op) {
+return op.getOpAdd() != mlir::vc4::AddOpcode::nop;
+}
+
+static bool isVC4BundleMulPipeWriteActive(mlir::vc4::QPUBundleOp op) {
+return op.getOpMul() != mlir::vc4::MulOpcode::nop;
+}
+
+static bool isVC4ThreadEndSignal(mlir::vc4::QPUSignal signal) {
+return signal == mlir::vc4::QPUSignal::thrend;
+}
+
+static bool isVC4ThreadSwitchSignal(mlir::vc4::QPUSignal signal) {
+return signal == mlir::vc4::QPUSignal::thrsw ||
+signal == mlir::vc4::QPUSignal::last_thread_switch;
+}
+
+static bool isVC4TMULoadSignal(mlir::vc4::QPUSignal signal) {
+return signal == mlir::vc4::QPUSignal::ldtmu0 ||
+signal == mlir::vc4::QPUSignal::ldtmu1;
+}
+
+static bool isVC4SFUWriteAddress(int64_t value) {
+return mlir::vc4::isVC4QPUSFUWriteAddress(value);
+}
+
+static bool isVC4AccumulatorR5WriteAddress(int64_t value) {
+return mlir::vc4::isVC4QPUR5WriteAddress(value);
+}
+
+static bool isVC4AccumulatorR0ToR3WriteAddress(int64_t value) {
+return value >= 32 && value <= 35;
+}
+
+static bool isVC4AccumulatorR0ToR3Mux(mlir::vc4::QPUMux mux) {
+return mux == mlir::vc4::QPUMux::r0 || mux == mlir::vc4::QPUMux::r1 ||
+mux == mlir::vc4::QPUMux::r2 || mux == mlir::vc4::QPUMux::r3;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+getVC4AccumulatorR0ToR3MuxForWriteAddress(int64_t value) {
+switch (value) {
+case 32:
+return mlir::vc4::QPUMux::r0;
+case 33:
+return mlir::vc4::QPUMux::r1;
+case 34:
+return mlir::vc4::QPUMux::r2;
+case 35:
+return mlir::vc4::QPUMux::r3;
+default:
+return std::nullopt;
+}
+}
+
+static llvm::StringRef
+getVC4AccumulatorR0ToR3Name(mlir::vc4::QPUMux mux) {
+switch (mux) {
+case mlir::vc4::QPUMux::r0:
+return "r0";
+case mlir::vc4::QPUMux::r1:
+return "r1";
+case mlir::vc4::QPUMux::r2:
+return "r2";
+case mlir::vc4::QPUMux::r3:
+return "r3";
+default:
+return "<invalid-accumulator>";
+}
+}
+
+static bool scheduledInstructionWritesPhysicalRegfile(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+return (isVC4BundleAddPipeWriteActive(bundle) &&
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+bundle.getWaddrAddAttr().getInt())) ||
+(isVC4BundleMulPipeWriteActive(bundle) &&
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+bundle.getWaddrMulAttr().getInt()));
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+ldi.getWaddrAddAttr().getInt()) ||
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+ldi.getWaddrMulAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+sema.getWaddrAddAttr().getInt()) ||
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+sema.getWaddrMulAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+branch.getWaddrAddAttr().getInt()) ||
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(
+branch.getWaddrMulAttr().getInt());
+}
+return false;
+}
+
+static std::optional<int64_t>
+scheduledInstructionPhysicalRegfileAWrite(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+int64_t value = bundle.getWaddrAddAttr().getInt();
+if (isVC4BundleAddPipeWriteActive(bundle) &&
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
+return value;
+}
+return std::nullopt;
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+int64_t value = ldi.getWaddrAddAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+int64_t value = sema.getWaddrAddAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+int64_t value = branch.getWaddrAddAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+return std::nullopt;
+}
+
+static std::optional<int64_t>
+scheduledInstructionPhysicalRegfileBWrite(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+int64_t value = bundle.getWaddrMulAttr().getInt();
+if (isVC4BundleMulPipeWriteActive(bundle) &&
+mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
+return value;
+}
+return std::nullopt;
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+int64_t value = ldi.getWaddrMulAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+int64_t value = sema.getWaddrMulAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+int64_t value = branch.getWaddrMulAttr().getInt();
+if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return value;
+return std::nullopt;
+}
+return std::nullopt;
+}
+
+static bool scheduledInstructionReadsPhysicalRegfileA(mlir::Operation *op,
+int64_t value) {
+if (!mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return false;
+
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
+return bundle.getRaddrAAttr().getInt() == value;
+
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op))
+return branch.getRaddrAAttr().getInt() == value;
+
+return false;
+}
+
+static bool scheduledInstructionReadsPhysicalRegfileB(mlir::Operation *op,
+int64_t value) {
+if (!mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
+return false;
+
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+if (auto raddrB = bundle.getRaddrBAttr())
+return raddrB.getInt() == value;
+}
+
+return false;
+}
+
+static bool scheduledInstructionWritesR5(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+return (isVC4BundleAddPipeWriteActive(bundle) &&
+isVC4AccumulatorR5WriteAddress(bundle.getWaddrAddAttr().getInt())) ||
+(isVC4BundleMulPipeWriteActive(bundle) &&
+isVC4AccumulatorR5WriteAddress(bundle.getWaddrMulAttr().getInt()));
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return isVC4AccumulatorR5WriteAddress(ldi.getWaddrAddAttr().getInt()) ||
+isVC4AccumulatorR5WriteAddress(ldi.getWaddrMulAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return isVC4AccumulatorR5WriteAddress(sema.getWaddrAddAttr().getInt()) ||
+isVC4AccumulatorR5WriteAddress(sema.getWaddrMulAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return isVC4AccumulatorR5WriteAddress(branch.getWaddrAddAttr().getInt()) ||
+isVC4AccumulatorR5WriteAddress(branch.getWaddrMulAttr().getInt());
+}
+return false;
+}
+
+static bool scheduledInstructionUsesRotateByR5SmallImm(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+if (bundle.getSig() != mlir::vc4::QPUSignal::small_imm)
+return false;
+if (auto smallImm = bundle.getSmallImmAttr())
+return smallImm.getInt() == 48;
+}
+return false;
+}
+
+static bool isVC4VectorRotateSmallImmSelector(int64_t value) {
+return value >= 48 && value <= 63;
+}
+
+static bool isVC4VectorRotateBundle(mlir::vc4::QPUBundleOp bundle) {
+if (bundle.getSig() != mlir::vc4::QPUSignal::small_imm)
+return false;
+if (auto smallImm = bundle.getSmallImmAttr())
+return isVC4VectorRotateSmallImmSelector(smallImm.getInt());
+return false;
+}
+
+static bool
+scheduledBundleUsesAccumulatorR0ToR3(mlir::vc4::QPUBundleOp bundle,
+mlir::vc4::QPUMux mux) {
+if (!isVC4AccumulatorR0ToR3Mux(mux))
+return false;
+return bundle.getMulA() == mux || bundle.getMulB() == mux;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+scheduledInstructionAccumulatorR0ToR3AddWrite(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+int64_t value = bundle.getWaddrAddAttr().getInt();
+if (isVC4BundleAddPipeWriteActive(bundle) &&
+isVC4AccumulatorR0ToR3WriteAddress(value)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(value);
+}
+return std::nullopt;
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+ldi.getWaddrAddAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+sema.getWaddrAddAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+branch.getWaddrAddAttr().getInt());
+}
+return std::nullopt;
+}
+
+static std::optional<mlir::vc4::QPUMux>
+scheduledInstructionAccumulatorR0ToR3MulWrite(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+int64_t value = bundle.getWaddrMulAttr().getInt();
+if (isVC4BundleMulPipeWriteActive(bundle) &&
+isVC4AccumulatorR0ToR3WriteAddress(value)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(value);
+}
+return std::nullopt;
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+ldi.getWaddrMulAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+sema.getWaddrMulAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return getVC4AccumulatorR0ToR3MuxForWriteAddress(
+branch.getWaddrMulAttr().getInt());
+}
+return std::nullopt;
+}
+
+static bool scheduledInstructionWritesSFU(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+return (isVC4BundleAddPipeWriteActive(bundle) &&
+isVC4SFUWriteAddress(bundle.getWaddrAddAttr().getInt())) ||
+(isVC4BundleMulPipeWriteActive(bundle) &&
+isVC4SFUWriteAddress(bundle.getWaddrMulAttr().getInt()));
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return isVC4SFUWriteAddress(ldi.getWaddrAddAttr().getInt()) ||
+isVC4SFUWriteAddress(ldi.getWaddrMulAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return isVC4SFUWriteAddress(sema.getWaddrAddAttr().getInt()) ||
+isVC4SFUWriteAddress(sema.getWaddrMulAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return isVC4SFUWriteAddress(branch.getWaddrAddAttr().getInt()) ||
+isVC4SFUWriteAddress(branch.getWaddrMulAttr().getInt());
+}
+return false;
+}
+
+template <typename Predicate>
+static bool scheduledInstructionReadsRegisterSpaceAddress(mlir::Operation *op,
+Predicate predicate) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+if (predicate(bundle.getRaddrAAttr().getInt()))
+return true;
+if (auto raddrB = bundle.getRaddrBAttr())
+return predicate(raddrB.getInt());
+return false;
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op))
+return predicate(branch.getRaddrAAttr().getInt());
+return false;
+}
+
+template <typename Predicate>
+static bool scheduledInstructionWritesRegisterSpaceAddress(
+mlir::Operation *op, Predicate predicate) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+return (isVC4BundleAddPipeWriteActive(bundle) &&
+predicate(bundle.getWaddrAddAttr().getInt())) ||
+(isVC4BundleMulPipeWriteActive(bundle) &&
+predicate(bundle.getWaddrMulAttr().getInt()));
+}
+if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+return predicate(ldi.getWaddrAddAttr().getInt()) ||
+predicate(ldi.getWaddrMulAttr().getInt());
+}
+if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+return predicate(sema.getWaddrAddAttr().getInt()) ||
+predicate(sema.getWaddrMulAttr().getInt());
+}
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+return predicate(branch.getWaddrAddAttr().getInt()) ||
+predicate(branch.getWaddrMulAttr().getInt());
+}
+return false;
+}
+
+template <typename Predicate>
+static bool scheduledInstructionTouchesRegisterSpaceAddress(
+mlir::Operation *op, Predicate predicate) {
+return scheduledInstructionReadsRegisterSpaceAddress(op, predicate) ||
+scheduledInstructionWritesRegisterSpaceAddress(op, predicate);
+}
+
+// In the current sink IR subset, an r4 read is visible only through the
+// explicit QPU bundle muxes.
+static bool scheduledInstructionReadsR4(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+return bundle.getAddA() == mlir::vc4::QPUMux::r4 ||
+bundle.getAddB() == mlir::vc4::QPUMux::r4 ||
+bundle.getMulA() == mlir::vc4::QPUMux::r4 ||
+bundle.getMulB() == mlir::vc4::QPUMux::r4;
+}
+return false;
+}
+
+// The currently representable sink-level r4-write-event subset is:
+// - TMU receive signals encoded on vc4.qpu.bundle (ldtmu0 / ldtmu1)
+// - any scheduled instruction that writes an SFU destination (52..55)
+static bool scheduledInstructionTriggersR4WriteEventSubset(mlir::Operation *op) {
+if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+if (isVC4TMULoadSignal(bundle.getSig()))
+return true;
+}
+return scheduledInstructionWritesSFU(op);
+}
+
+static bool scheduledInstructionTouchesPhysicalRegfileAddress14(
+mlir::Operation *op) {
+return scheduledInstructionTouchesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUThreadEndHazardPhysicalRegfileAddress);
+}
+
+static bool scheduledInstructionReadsUniform(mlir::Operation *op) {
+return scheduledInstructionReadsRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUUniformReadAddress);
+}
+
+static bool scheduledInstructionReadsVarying(mlir::Operation *op) {
+return scheduledInstructionReadsRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUVaryingReadAddress);
+}
+
+static bool scheduledInstructionTouchesVPMVDRVDWRegisterSpace(
+mlir::Operation *op) {
+return scheduledInstructionTouchesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUVPMVDRVDWRegisterSpaceAddress);
+}
+
+static bool scheduledInstructionTouchesVPMVDRVDWControlRegisterSpace(
+mlir::Operation *op) {
+return scheduledInstructionTouchesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUVPMDMAControlAddress);
+}
+
+static bool scheduledInstructionWritesUniformsAddress(mlir::Operation *op) {
+return scheduledInstructionWritesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUUniformsAddress);
+}
+
+static bool scheduledInstructionWritesTMUNoswap(mlir::Operation *op) {
+return scheduledInstructionWritesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUTMUNoswapAddress);
+}
+
+static bool scheduledInstructionWritesTMUParameter(mlir::Operation *op) {
+return scheduledInstructionWritesRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUTMUParameterWriteAddress);
+}
+
+static bool scheduledInstructionReadsMutexAcquire(mlir::Operation *op) {
+return scheduledInstructionReadsRegisterSpaceAddress(
+op, mlir::vc4::isVC4QPUMutexAddress);
+}
+
+static mlir::LogicalResult appendVC4ScheduledInstructionStream(
+mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream,
+llvm::StringRef verifierPassArg) {
+if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
+mlir::vc4::QPUSemaOp>(op)) {
+stream.push_back(op);
+return mlir::success();
+}
+
+if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+stream.push_back(op);
+if (!branch.getDelaySlots().hasOneBlock()) {
+return op->emitOpError() << "must have exactly one delay-slot block for "
+<< verifierPassArg;
+}
+for (mlir::Operation &delaySlotOp : branch.getDelaySlots().front()) {
+if (mlir::failed(
+appendVC4ScheduledInstructionStream(&delaySlotOp, stream,
+verifierPassArg))) {
+return mlir::failure();
+}
+}
+return mlir::success();
+}
+
+return op->emitOpError() << "is not a supported scheduled sink op for "
+<< verifierPassArg;
+}
+
+static mlir::LogicalResult collectVC4ScheduledInstructionStream(
+mlir::vc4::FuncOp func, llvm::StringRef verifierPassArg,
+llvm::SmallVectorImpl<mlir::Operation *> &stream) {
+if (!func.getBody().hasOneBlock()) {
+return func.emitOpError() << "scheduled qpu-domain functions checked by "
+<< verifierPassArg
+<< " must have a single top-level block";
+}
+
+for (mlir::Operation &op : func.getBody().front()) {
+if (mlir::failed(
+appendVC4ScheduledInstructionStream(&op, stream, verifierPassArg))) {
+return mlir::failure();
+}
+}
+return mlir::success();
+}
+
+static mlir::InFlightDiagnostic
+emitInvalidQASMEpilogueDiag(mlir::vc4::FuncOp func) {
+return func.emitOpError(
+"is not directly emittable: qasm input requires an explicit thrend plus "
+"two delay-slot instructions at the end of the flattened scheduled "
+"instruction stream");
+}
+
+struct VC4TestPrintEffectsPass
+: public mlir::PassWrapper<VC4TestPrintEffectsPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VC4TestPrintEffectsPass)
+
+llvm::StringRef getArgument() const final { return "vc4-test-print-effects"; }
+llvm::StringRef getDescription() const final {
+return "Print VC4 MemoryEffectOpInterface effects";
+}
+
+void runOnOperation() final {
+getOperation()->walk([](mlir::Operation *op) {
+if (!op->getName().getStringRef().starts_with("vc4."))
+return;
+
+      auto effectInterface = llvm::dyn_cast<mlir::MemoryEffectOpInterface>(op);
+      if (!effectInterface)
+        return;
+
+      llvm::SmallVector<mlir::MemoryEffects::EffectInstance> effects;
+      effectInterface.getEffects(effects);
+      if (effects.empty())
+        return;
+
+      llvm::outs() << op->getName().getStringRef() << ": ";
+      for (size_t i = 0, e = effects.size(); i != e; ++i) {
+        if (i)
+          llvm::outs() << ", ";
+
+        auto &effect = effects[i];
+        llvm::StringRef effectName = "Effect";
+        if (llvm::isa<mlir::MemoryEffects::Read>(effect.getEffect()))
+          effectName = "Read";
+        else if (llvm::isa<mlir::MemoryEffects::Write>(effect.getEffect()))
+          effectName = "Write";
+        else if (llvm::isa<mlir::MemoryEffects::Allocate>(effect.getEffect()))
+          effectName = "Allocate";
+        else if (llvm::isa<mlir::MemoryEffects::Free>(effect.getEffect()))
+          effectName = "Free";
+
+        llvm::outs() << effectName << '<' << effect.getResource()->getName()
+                     << '>';
+      }
+      llvm::outs() << '\n';
+    });
+}
+};
+
+struct VC4VerifyEmitContractPass
+: public mlir::PassWrapper<VC4VerifyEmitContractPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VC4VerifyEmitContractPass)
+
+llvm::StringRef getArgument() const final {
+return "vc4-verify-emit-contract";
+}
+llvm::StringRef getDescription() const final {
+return "Verify which vc4.func operations are valid later emission inputs";
+}
+
+void runOnOperation() final {
+bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+
+      if (func.isExternal())
+        return mlir::WalkResult::advance();
+
+      std::optional<mlir::vc4::ExecutionDomain> domain = func.getDomain();
+      std::optional<mlir::vc4::FunctionForm> form = func.getForm();
+      if (!domain || !form)
+        return mlir::WalkResult::advance();
+
+      if (*domain == mlir::vc4::ExecutionDomain::qpu &&
+          *form == mlir::vc4::FunctionForm::structured) {
+        func.emitOpError(
+            "is not directly emittable: qasm emission later consumes only "
+            "domain = #vc4.execution_domain<qpu>, "
+            "form = #vc4.function_form<scheduled> functions; lower structured "
+            "QPU ops such as uniforms/TMU/VPM/DMA/value-shape ops first");
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      if (*domain == mlir::vc4::ExecutionDomain::host &&
+          *form == mlir::vc4::FunctionForm::scheduled) {
+        func.emitOpError(
+            "is not directly emittable: launcher generation later consumes "
+            "only domain = #vc4.execution_domain<host>, "
+            "form = #vc4.function_form<structured> functions");
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      if (*domain == mlir::vc4::ExecutionDomain::qpu &&
+          *form == mlir::vc4::FunctionForm::scheduled) {
+        func.getBody().walk([&](mlir::Operation *op) {
+          if (isAllowedVC4QASMInputOp(*op))
+            return mlir::WalkResult::advance();
+
+          if (isVC4LauncherOrSystemOp(*op)) {
+            op->emitOpError()
+                << "is not a legal qasm-input op in "
+                   "domain = #vc4.execution_domain<qpu>, "
+                   "form = #vc4.function_form<scheduled> functions; "
+                   "host/system ops belong in host structured functions";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (isVC4StructuredFamilyOp(*op)) {
+            op->emitOpError()
+                << "is not a legal qasm-input op in "
+                   "domain = #vc4.execution_domain<qpu>, "
+                   "form = #vc4.function_form<scheduled> functions; lower "
+                   "structured device ops to vc4.qpu.* sink ops first";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          op->emitOpError()
+              << "is not a supported scheduled sink op for qasm input; "
+                 "expected only vc4.qpu.bundle, vc4.qpu.branch, "
+                 "vc4.qpu.ldi, or vc4.qpu.sema";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        });
+        if (sawError)
+          return mlir::WalkResult::interrupt();
+
+        llvm::SmallVector<mlir::Operation *> stream;
+        if (mlir::failed(collectVC4ScheduledInstructionStream(
+                func, "--vc4-verify-emit-contract", stream))) {
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        if (stream.size() < 3) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; found only " << stream.size()
+              << " scheduled instruction slot(s)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        size_t epilogueStart = stream.size() - 3;
+        auto finalThreadEnd =
+            llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart]);
+        if (!finalThreadEnd || !isVC4ThreadEndSignal(finalThreadEnd.getSig())) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-3 must be a vc4.qpu.bundle with sig = "
+                 "#vc4.qpu_signal<thrend>";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        for (size_t i = 0; i != epilogueStart; ++i) {
+          if (auto earlierThreadEnd =
+                  llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
+              earlierThreadEnd &&
+              isVC4ThreadEndSignal(earlierThreadEnd.getSig())) {
+            emitInvalidQASMEpilogueDiag(func)
+                << "; found an earlier vc4.qpu.bundle with sig = "
+                   "#vc4.qpu_signal<thrend> before slot N-3";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 1])) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-2 must be a non-branch scheduled op "
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 2])) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; slot N-1 must be a non-branch scheduled op "
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        if (auto trailingThreadEnd =
+                llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 1]);
+            (trailingThreadEnd &&
+             isVC4ThreadEndSignal(trailingThreadEnd.getSig())) ||
+            (llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 2]) &&
+             isVC4ThreadEndSignal(
+                 llvm::cast<mlir::vc4::QPUBundleOp>(stream[epilogueStart + 2])
+                     .getSig()))) {
+          emitInvalidQASMEpilogueDiag(func)
+              << "; only slot N-3 may carry sig = "
+                 "#vc4.qpu_signal<thrend>; slots N-2 and N-1 must be "
+                 "non-branch scheduled ops without another thread-end signal";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        return mlir::WalkResult::advance();
+      }
+
+      if (*domain == mlir::vc4::ExecutionDomain::host &&
+          *form == mlir::vc4::FunctionForm::structured) {
+        func.getBody().walk([&](mlir::Operation *op) {
+          if (isAllowedVC4LauncherInputOp(*op))
+            return mlir::WalkResult::advance();
+
+          if (isVC4ScheduledSinkFamilyOp(*op)) {
+            op->emitOpError()
+                << "is not a legal launcher-input op in "
+                   "domain = #vc4.execution_domain<host>, "
+                   "form = #vc4.function_form<structured> functions; "
+                   "scheduled sink ops belong in qpu scheduled functions";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (isVC4StructuredFamilyOp(*op)) {
+            op->emitOpError()
+                << "is not a legal launcher-input op in "
+                   "domain = #vc4.execution_domain<host>, "
+                   "form = #vc4.function_form<structured> functions; "
+                   "QPU/device ops belong in qpu functions";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          op->emitOpError()
+              << "is not a supported host/system launcher-input op; "
+                 "expected only vc4.enqueue_qpu, vc4.reserve_qpu, "
+                 "vc4.v3d.query, vc4.v3d.configure, vc4.async.wait, "
+                 "vc4.cf.branch, or vc4.return";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        });
+        return sawError ? mlir::WalkResult::interrupt()
+                        : mlir::WalkResult::advance();
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+}
+};
+
+// This pass checks only a narrow scheduled-hardware subset that cannot live in
+// individual op verifiers:
+// - thread-end signal instructions must not write physical regfile A/B
+//   addresses 0..31
+// - a thread-end window must not touch physical regfile address 14
+// - the same window must not read the uniform register-space address 32
+// - the same window must not read the varying register-space address 35
+// - the same window must not access VPM/VDR/VDW register-space addresses
+//   48..50
+// - thread-switch signals are only legal for threadable functions
+// - the final thread-switch signal in the flattened stream must be
+//   last_thread_switch
+//
+// To make the instruction stream well-defined, the pass requires checked
+// scheduled qpu-domain functions to have a single top-level block. The stream
+// is then flattened in program order, with a vc4.qpu.branch contributing one
+// instruction slot followed immediately by its explicit delay-slot ops in region
+// order. The checked thread-end window is the signaling instruction plus the
+// next two instruction slots in this flattened stream.
+struct VC4VerifyScheduledHardwareRulesPass
+: public mlir::PassWrapper<VC4VerifyScheduledHardwareRulesPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
+VC4VerifyScheduledHardwareRulesPass)
+
+llvm::StringRef getArgument() const final {
+return "vc4-verify-scheduled-hardware-rules";
+}
+llvm::StringRef getDescription() const final {
+return "Verify a narrow subset of cross-instruction scheduled QPU hardware rules";
+}
+
+void runOnOperation() final {
+bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-hardware-rules", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      std::optional<mlir::vc4::ThreadingMode> threading = func.getThreading();
+      std::optional<size_t> lastThreadSwitchIndex;
+      for (size_t i = 0, e = stream.size(); i != e; ++i) {
+        auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
+        if (!bundle)
+          continue;
+
+        if (isVC4ThreadSwitchSignal(bundle.getSig())) {
+          if (!threading ||
+              *threading != mlir::vc4::ThreadingMode::threadable) {
+            if (bundle.getSig() == mlir::vc4::QPUSignal::thrsw) {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<thrsw> is only legal in "
+                     "functions with threading = "
+                     "#vc4.threading_mode<threadable>";
+            } else {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<last_thread_switch> is only legal "
+                     "in functions with threading = "
+                     "#vc4.threading_mode<threadable>";
+            }
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (i + 2 >= e) {
+            if (bundle.getSig() == mlir::vc4::QPUSignal::thrsw) {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<thrsw> requires two following "
+                     "delay-slot instructions in the flattened scheduled "
+                     "instruction stream";
+            } else {
+              bundle.emitOpError()
+                  << "sig = #vc4.qpu_signal<last_thread_switch> requires two "
+                     "following delay-slot instructions in the flattened "
+                     "scheduled instruction stream";
+            }
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          lastThreadSwitchIndex = i;
+        }
+
+        if (!isVC4ThreadEndSignal(bundle.getSig()))
+          continue;
+
+        if (scheduledInstructionWritesPhysicalRegfile(bundle.getOperation())) {
+          bundle.emitOpError()
+              << "sig = #vc4.qpu_signal<"
+              << mlir::vc4::stringifyQPUSignal(bundle.getSig())
+              << "> must not write physical regfile A/B addresses 0..31";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+
+        for (size_t j = i, windowEnd = std::min(i + 3, e); j != windowEnd; ++j) {
+          mlir::Operation *windowOp = stream[j];
+          if (scheduledInstructionTouchesPhysicalRegfileAddress14(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read or "
+                   "write physical regfile address "
+                << mlir::vc4::kVC4QPUThreadEndHazardPhysicalRegfileAddr;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionReadsUniform(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read "
+                   "uniform register-space address "
+                << mlir::vc4::kVC4QPUUniformRead;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionReadsVarying(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not read "
+                   "varying register-space address "
+                << mlir::vc4::kVC4QPUVaryingRead;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionTouchesVPMVDRVDWRegisterSpace(windowOp)) {
+            windowOp->emitOpError()
+                << "is in the thread-end hazard window and must not access "
+                   "VPM/VDR/VDW register-space addresses "
+                << mlir::vc4::kVC4QPUVPMVDRVDWMin << ".."
+                << mlir::vc4::kVC4QPUVPMVDRVDWMax;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+      }
+
+      if (lastThreadSwitchIndex) {
+        for (size_t i = 0; i != *lastThreadSwitchIndex; ++i) {
+          auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[i]);
+          if (bundle &&
+              bundle.getSig() == mlir::vc4::QPUSignal::last_thread_switch) {
+            bundle.emitOpError()
+                << "sig = #vc4.qpu_signal<last_thread_switch> must be the "
+                   "final thread-switch signal in the flattened scheduled "
+                   "instruction stream";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        auto finalThreadSwitch =
+            llvm::cast<mlir::vc4::QPUBundleOp>(stream[*lastThreadSwitchIndex]);
+        if (finalThreadSwitch.getSig() == mlir::vc4::QPUSignal::thrsw) {
+          finalThreadSwitch.emitOpError()
+              << "the final thread-switch signal in the flattened scheduled "
+                 "instruction stream must be "
+                 "#vc4.qpu_signal<last_thread_switch>";
+          sawError = true;
+          return mlir::WalkResult::interrupt();
+        }
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+}
+};
+
+// This verifier-only pass checks only a narrow adjacent-instruction
+// scheduled-hardware subset that the current sink IR can represent directly:
+// - regfile-A write -> next-instruction same regfile-A read
+// - regfile-B write -> next-instruction same regfile-B read
+// - accumulator r0..r3 write -> next-instruction vector rotate using that
+//   same accumulator on the MUL side
+// - r5 write -> next-instruction small_imm = 48 (rotate-by-r5)
+// - SFU write -> next-two-instruction window must not:
+//   - read r4 through a vc4.qpu.bundle source mux
+//   - trigger another representable r4 write event, conservatively limited to
+//     TMU receive signals (ldtmu0 / ldtmu1) or another SFU write
+//
+// As with --vc4-verify-scheduled-hardware-rules, the checked instruction
+// stream is defined only for scheduled qpu-domain functions with a single
+// top-level block. The stream is flattened in program order, with a
+// vc4.qpu.branch contributing one instruction slot followed immediately by its
+// explicit delay-slot ops in region order.
+struct VC4VerifyScheduledAdjacentHazardsPass
+: public mlir::PassWrapper<VC4VerifyScheduledAdjacentHazardsPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
+VC4VerifyScheduledAdjacentHazardsPass)
+
+llvm::StringRef getArgument() const final {
+return "vc4-verify-scheduled-adjacent-hazards";
+}
+llvm::StringRef getDescription() const final {
+return "Verify a narrow subset of adjacent scheduled QPU hardware hazards";
+}
+
+void runOnOperation() final {
+bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-adjacent-hazards", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      for (size_t i = 0, e = stream.size(); i != e; ++i) {
+        mlir::Operation *op = stream[i];
+        mlir::Operation *next = i + 1 < e ? stream[i + 1] : nullptr;
+
+        if (next) {
+          if (std::optional<int64_t> aWrite =
+                  scheduledInstructionPhysicalRegfileAWrite(op);
+              aWrite && scheduledInstructionReadsPhysicalRegfileA(next, *aWrite)) {
+            next->emitOpError()
+                << "reads physical regfile-A address " << *aWrite
+                << " written by the immediately previous scheduled instruction";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (std::optional<int64_t> bWrite =
+                  scheduledInstructionPhysicalRegfileBWrite(op);
+              bWrite && scheduledInstructionReadsPhysicalRegfileB(next, *bWrite)) {
+            next->emitOpError()
+                << "reads physical regfile-B address " << *bWrite
+                << " written by the immediately previous scheduled instruction";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (scheduledInstructionWritesR5(op) &&
+              scheduledInstructionUsesRotateByR5SmallImm(next)) {
+            next->emitOpError(
+                "uses small_imm = 48 (rotate-by-r5) immediately after an r5 "
+                "write");
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+
+          if (auto nextBundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(next);
+              nextBundle && isVC4VectorRotateBundle(nextBundle)) {
+            auto emitVectorRotateHazard =
+                [&](std::optional<mlir::vc4::QPUMux> writtenAccumulator) {
+                  if (!writtenAccumulator ||
+                      !scheduledBundleUsesAccumulatorR0ToR3(
+                          nextBundle, *writtenAccumulator)) {
+                    return false;
+                  }
+                  nextBundle.emitOpError()
+                      << "does a vector rotate immediately after the previous "
+                         "scheduled instruction wrote accumulator "
+                      << getVC4AccumulatorR0ToR3Name(*writtenAccumulator);
+                  sawError = true;
+                  return true;
+                };
+
+            if (emitVectorRotateHazard(
+                    scheduledInstructionAccumulatorR0ToR3AddWrite(op)) ||
+                emitVectorRotateHazard(
+                    scheduledInstructionAccumulatorR0ToR3MulWrite(op))) {
+              return mlir::WalkResult::interrupt();
+            }
+          }
+        }
+
+        if (!scheduledInstructionWritesSFU(op))
+          continue;
+
+        for (size_t j = i + 1, windowEnd = std::min(i + 3, e); j != windowEnd;
+             ++j) {
+          mlir::Operation *windowOp = stream[j];
+          if (scheduledInstructionReadsR4(windowOp)) {
+            windowOp->emitOpError(
+                "is in the two-instruction SFU hazard window and must not "
+                "read r4 through vc4.qpu.bundle source muxes");
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          if (scheduledInstructionTriggersR4WriteEventSubset(windowOp)) {
+            windowOp->emitOpError(
+                "is in the two-instruction SFU hazard window and must not "
+                "trigger another representable r4 write event "
+                "(ldtmu0/ldtmu1 or another SFU write)");
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+}
+};
+
+// This verifier-only pass checks only two sink-level IO spacing rules that are
+// directly relevant to compute kernels in the current scheduled subset:
+// - a write to UNIFORMS_ADDRESS (40) must not be followed within the next two
+//   instruction slots by a uniform read (raddr = 32)
+// - after a write to TMU_NOSWAP (36), the first later TMU parameter write
+//   (56..63) must be at least three instruction slots later
+//
+// As with the other scheduled verifiers, the checked instruction stream is
+// defined only for scheduled qpu-domain functions with a single top-level
+// block. The stream is flattened in program order, with a vc4.qpu.branch
+// contributing one instruction slot followed immediately by its explicit
+// delay-slot ops in region order.
+struct VC4VerifyScheduledIOSpacingPass
+: public mlir::PassWrapper<VC4VerifyScheduledIOSpacingPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VC4VerifyScheduledIOSpacingPass)
+
+llvm::StringRef getArgument() const final {
+return "vc4-verify-scheduled-io-spacing";
+}
+llvm::StringRef getDescription() const final {
+return "Verify a narrow subset of scheduled QPU IO spacing rules";
+}
+
+void runOnOperation() final {
+bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-io-spacing", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      for (size_t i = 0, e = stream.size(); i != e; ++i) {
+        mlir::Operation *op = stream[i];
+
+        if (scheduledInstructionWritesUniformsAddress(op)) {
+          for (size_t j = i + 1, windowEnd = std::min(i + 3, e); j != windowEnd;
+               ++j) {
+            mlir::Operation *windowOp = stream[j];
+            if (!scheduledInstructionReadsUniform(windowOp))
+              continue;
+            windowOp->emitOpError()
+                << "reads uniform register-space address "
+                << mlir::vc4::kVC4QPUUniformRead
+                << " within two instruction slots after a write to "
+                   "UNIFORMS_ADDRESS "
+                << mlir::vc4::kVC4QPUUniformsAddress;
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+        }
+
+        if (!scheduledInstructionWritesTMUNoswap(op))
+          continue;
+
+        for (size_t j = i + 1; j != e; ++j) {
+          mlir::Operation *laterOp = stream[j];
+          if (!scheduledInstructionWritesTMUParameter(laterOp))
+            continue;
+          size_t distance = j - i;
+          if (distance < 3) {
+            laterOp->emitOpError()
+                << "writes TMU parameter register-space addresses "
+                << mlir::vc4::kVC4QPUTMUParameterWriteMin << ".."
+                << mlir::vc4::kVC4QPUTMUParameterWriteMax << " only "
+                << distance
+                << " instruction slot(s) after a write to TMU_NOSWAP "
+                << mlir::vc4::kVC4QPUTMUNoswap
+                << "; the first later TMU parameter write must be at least "
+                   "three instruction slots later";
+            sawError = true;
+            return mlir::WalkResult::interrupt();
+          }
+          break;
+        }
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+}
+};
+
+// This verifier-only pass checks a conservative single-slot subset of
+// closely-coupled peripheral accesses that are directly representable in the
+// current compute-focused scheduled sink IR:
+// - TMU read signal on vc4.qpu.bundle (ldtmu0 / ldtmu1)
+// - TMU parameter write (56..63)
+// - SFU write (52..55)
+// - mutex acquire read through a representable sink instruction (raddr = 51)
+// - semaphore access (vc4.qpu.sema)
+// - VPM / VDR / VDW control register-space access (49..50)
+//
+// Any flattened scheduled instruction slot that encodes more than one of those
+// access categories is rejected.
+struct VC4VerifyScheduledPeripheralAccessesPass
+: public mlir::PassWrapper<VC4VerifyScheduledPeripheralAccessesPass,
+mlir::OperationPass<mlir::ModuleOp>> {
+MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(
+VC4VerifyScheduledPeripheralAccessesPass)
+
+llvm::StringRef getArgument() const final {
+return "vc4-verify-scheduled-peripheral-accesses";
+}
+llvm::StringRef getDescription() const final {
+return "Verify conservative single-slot scheduled QPU peripheral-access combinations";
+}
+
+void runOnOperation() final {
+bool sawError = false;
+
+    getOperation()->walk([&](mlir::vc4::FuncOp func) {
+      if (sawError)
+        return mlir::WalkResult::interrupt();
+      if (func.isExternal() || !isVC4ScheduledQPUDomainFunction(func))
+        return mlir::WalkResult::advance();
+
+      llvm::SmallVector<mlir::Operation *> stream;
+      if (mlir::failed(collectVC4ScheduledInstructionStream(
+              func, "--vc4-verify-scheduled-peripheral-accesses", stream))) {
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      for (mlir::Operation *op : stream) {
+        bool hasTMUReadSignal = false;
+        if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
+          hasTMUReadSignal = isVC4TMULoadSignal(bundle.getSig());
+
+        bool hasTMUParameterWrite = scheduledInstructionWritesTMUParameter(op);
+        bool hasSFUWrite = scheduledInstructionWritesSFU(op);
+        bool hasMutexAcquireRead = scheduledInstructionReadsMutexAcquire(op);
+        bool hasSemaphoreAccess = llvm::isa<mlir::vc4::QPUSemaOp>(op);
+        bool hasVPMVDRVDWControlAccess =
+            scheduledInstructionTouchesVPMVDRVDWControlRegisterSpace(op);
+
+        unsigned accessCount = static_cast<unsigned>(hasTMUReadSignal) +
+                               static_cast<unsigned>(hasTMUParameterWrite) +
+                               static_cast<unsigned>(hasSFUWrite) +
+                               static_cast<unsigned>(hasMutexAcquireRead) +
+                               static_cast<unsigned>(hasSemaphoreAccess) +
+                               static_cast<unsigned>(
+                                   hasVPMVDRVDWControlAccess);
+        if (accessCount <= 1)
+          continue;
+
+        auto diag = op->emitOpError(
+            "encodes more than one closely-coupled peripheral access in a "
+            "single scheduled instruction slot (");
+        bool firstCategory = true;
+        auto appendCategory = [&](llvm::StringRef category) {
+          if (!firstCategory)
+            diag << ", ";
+          diag << category;
+          firstCategory = false;
+        };
+
+        if (hasTMUReadSignal)
+          appendCategory("TMU read signal");
+        if (hasTMUParameterWrite)
+          appendCategory("TMU parameter write");
+        if (hasSFUWrite)
+          appendCategory("SFU write");
+        if (hasMutexAcquireRead)
+          appendCategory("mutex acquire read");
+        if (hasSemaphoreAccess)
+          appendCategory("semaphore access");
+        if (hasVPMVDRVDWControlAccess)
+          appendCategory("VPM/VDR/VDW control register-space access");
+        diag << ")";
+
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      return mlir::WalkResult::advance();
+    });
+
+    if (sawError)
+      signalPassFailure();
+}
+};
+
+} // namespace
+
+int main(int argc, char **argv) {
+llvm::InitLLVM y(argc, argv);
+mlir::PassRegistration<VC4TestPrintEffectsPass>();
+mlir::PassRegistration<VC4VerifyEmitContractPass>();
+mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
+mlir::PassRegistration<VC4VerifyScheduledAdjacentHazardsPass>();
+mlir::PassRegistration<VC4VerifyScheduledIOSpacingPass>();
+mlir::PassRegistration<VC4VerifyScheduledPeripheralAccessesPass>();
+
+mlir::DialectRegistry registry;
+registry.insert<mlir::vc4::VC4Dialect>();
+
+return mlir::asMainReturnCode(
+mlir::MlirOptMain(argc, argv, "VC4 modular optimizer driver\n", registry));
+}
+
+===== compiler/test/Dialect/VC4/alu-and-load-imm-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @add_arity_error {
+vc4.func @bad_add(%a: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.alu.add <add> %a {cond = #vc4.cond<always>} : (i32) -> i32 // expected-error {{expects exactly 2 operands for this opcode}}
+vc4.return
+}
+}
+
+vc4.module @add_type_error {
+vc4.func @bad_fadd(%a: i32, %b: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.alu.add <fadd> %a, %b {cond = #vc4.cond<always>} : (i32, i32) -> i32 // expected-error {{requires f32 or vector<16xf32> types}}
+vc4.return
+}
+}
+
+vc4.module @conversion_shape_error {
+vc4.func @bad_ftoi(%a: vector<16xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.alu.add <ftoi> %a {cond = #vc4.cond<always>} : (vector<16xf32>) -> i32 // expected-error {{operand and result must have compatible scalar or 16-lane vector shapes}}
+vc4.return
+}
+}
+
+vc4.module @mul_nop_error {
+vc4.func @bad_mul(%a: i32, %b: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.alu.mul <nop> %a, %b {cond = #vc4.cond<always>} : (i32, i32) -> i32 // expected-error {{structured vc4.alu.mul does not support the nop opcode}}
+vc4.return
+}
+}
+
+vc4.module @load_imm_missing_value {
+vc4.func @bad_ldi0() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.load_imm {mode = #vc4.load_imm_mode<splat32>} : i32 // expected-error {{requires a 'value' attribute}}
+vc4.return
+}
+}
+
+vc4.module @load_imm_splat_payload_error {
+vc4.func @bad_ldi1() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.load_imm {mode = #vc4.load_imm_mode<splat32>, value = array<i32: 1, 2, 3, 4>} : i32 // expected-error {{splat32 mode requires a signless i32 'value' attribute}}
+vc4.return
+}
+}
+
+vc4.module @load_imm_lane_count_error {
+vc4.func @bad_ldi2() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_u2>, value = array<i32: 0, 1, 2, 3>} : vector<16xi32> // expected-error {{per-element mode requires exactly 16 lane values}}
+vc4.return
+}
+}
+
+vc4.module @load_imm_lane_range_error {
+vc4.func @bad_ldi3() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_i2>, value = array<i32: -2, -1, 0, 1, 2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>} : vector<16xi32> // expected-error {{lane values for mode per_elem_i2 must be in range}}
+vc4.return
+}
+}
+
+vc4.module @load_imm_result_type_error {
+vc4.func @bad_ldi4() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_u2>, value = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>} : vector<16xf32> // expected-error {{per-element mode result type must be vector<16xi32>}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/alu-and-load-imm-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @alu_ops {
+// CHECK: vc4.func @main(%[[A:.*]]: i32, %[[B:.*]]: i32, %[[FA:.*]]: f32, %[[FB:.*]]: f32, %[[VI:.*]]: vector<16xi32>, %[[VF:.*]]: vector<16xf32>) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[ADD:.*]] = vc4.alu.add <add> %[[A]], %[[B]] {cond = #vc4.cond<always>} : (i32, i32) -> i32
+// CHECK: %[[ITOF:.*]] = vc4.alu.add <itof> %[[A]] {cond = #vc4.cond<always>} : (i32) -> f32
+// CHECK: %[[FADD:.*]] = vc4.alu.add <fadd> %[[FA]], %[[FB]] {cond = #vc4.cond<zs>, set_flags} : (f32, f32) -> f32
+// CHECK: %[[BITNOT:.*]] = vc4.alu.add <not> %[[VI]] {cond = #vc4.cond<always>} : (vector<16xi32>) -> vector<16xi32>
+// CHECK: %[[FMUL:.*]] = vc4.alu.mul <fmul> %[[FA]], %[[FB]] {cond = #vc4.cond<always>} : (f32, f32) -> f32
+// CHECK: %[[MUL24:.*]] = vc4.alu.mul <mul24> %[[VI]], %[[VI]] {cond = #vc4.cond<nc>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+// CHECK: %[[LDI0:.*]] = vc4.load_imm {mode = #vc4.load_imm_mode<splat32>, value = 1065353216 : i32} : f32
+// CHECK: %[[LDI1:.*]] = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_i2>, value = array<i32: -2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>} : vector<16xi32>
+// CHECK: %[[LDI2:.*]] = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_u2>, value = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>} : vector<16xi32>
+// CHECK: vc4.return %[[ADD]] : i32
+
+vc4.module @alu_ops {
+vc4.func @main(%a: i32, %b: i32, %fa: f32, %fb: f32, %vi: vector<16xi32>, %vf: vector<16xf32>) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%add = vc4.alu.add <add> %a, %b {cond = #vc4.cond<always>} : (i32, i32) -> i32
+%itof = vc4.alu.add <itof> %a {cond = #vc4.cond<always>} : (i32) -> f32
+%fadd = vc4.alu.add <fadd> %fa, %fb {cond = #vc4.cond<zs>, set_flags} : (f32, f32) -> f32
+%bitnot = vc4.alu.add <not> %vi {cond = #vc4.cond<always>} : (vector<16xi32>) -> vector<16xi32>
+%fmul = vc4.alu.mul <fmul> %fa, %fb {cond = #vc4.cond<always>} : (f32, f32) -> f32
+%mul24 = vc4.alu.mul <mul24> %vi, %vi {cond = #vc4.cond<nc>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+%ldi0 = vc4.load_imm {mode = #vc4.load_imm_mode<splat32>, value = 1065353216 : i32} : f32
+%ldi1 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_i2>, value = array<i32: -2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>} : vector<16xi32>
+%ldi2 = vc4.load_imm {mode = #vc4.load_imm_mode<per_elem_u2>, value = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>} : vector<16xi32>
+vc4.return %add : i32
+}
+}
+
+===== compiler/test/Dialect/VC4/dma-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @dma_desc_pair_error {
+vc4.func @bad_pitch() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.dma.desc {kind = #vc4.dma_desc_kind<load>, block_mode = #vc4.dma_block_mode<row_row>, orientation = #vc4.dma_orientation<horizontal>, elem_width = #vc4.dma_elem_width<w16>, mpitch = 8 : i32} : !vc4.dma.desc // expected-error {{requires 'mpitch' and 'vpitch' to be provided together}}
+vc4.return
+}
+}
+
+vc4.module @dma_desc_stride_error {
+vc4.func @bad_stride() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.dma.desc {kind = #vc4.dma_desc_kind<store>, block_mode = #vc4.dma_block_mode<packed_rows>, orientation = #vc4.dma_orientation<vertical>, elem_width = #vc4.dma_elem_width<w32>, extended_stride = 64 : i32} : !vc4.dma.desc // expected-error {{'extended_stride' requires the base 'stride' attribute}}
+vc4.return
+}
+}
+
+vc4.module @dma_desc_units_depth_error {
+vc4.func @bad_units_depth() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.dma.desc {kind = #vc4.dma_desc_kind<load>, block_mode = #vc4.dma_block_mode<row_row>, orientation = #vc4.dma_orientation<horizontal>, elem_width = #vc4.dma_elem_width<w8>, units = 2 : i32, depth = 3 : i32} : !vc4.dma.desc // expected-error {{must not specify both 'units' and 'depth' in one descriptor}}
+vc4.return
+}
+}
+
+vc4.module @dma_desc_start_offset_error {
+vc4.func @bad_offset() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'start_offset' attribute must be in range}}
+%0 = vc4.dma.desc {kind = #vc4.dma_desc_kind<store>, block_mode = #vc4.dma_block_mode<row_row>, orientation = #vc4.dma_orientation<vertical>, elem_width = #vc4.dma_elem_width<w16>, start_offset = 4 : i32} : !vc4.dma.desc
+vc4.return
+}
+}
+
+vc4.module @dma_start_base_type_error {
+vc4.func @bad_start(%addr: vector<16xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.dma.desc {kind = #vc4.dma_desc_kind<load>, block_mode = #vc4.dma_block_mode<row_row>, orientation = #vc4.dma_orientation<horizontal>, elem_width = #vc4.dma_elem_width<w32>} : !vc4.dma.desc
+// expected-error@+1 {{base address must be a scalar signless integer or index}}
+%0 = "vc4.dma.start"(%desc, %addr) : (!vc4.dma.desc, vector<16xi32>) -> !vc4.async.token
+vc4.return
+}
+}
+
+vc4.module @dma_status_type_error {
+vc4.func @bad_status() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.dma.status <load> : f32 // expected-error {{result type must be a scalar signless integer or index}}
+vc4.return
+}
+}
+
+vc4.module @dma_wait_both_error {
+vc4.func @bad_wait(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.dma.desc {kind = #vc4.dma_desc_kind<load>, block_mode = #vc4.dma_block_mode<row_row>, orientation = #vc4.dma_orientation<horizontal>, elem_width = #vc4.dma_elem_width<w32>} : !vc4.dma.desc
+%tok = "vc4.dma.start"(%desc, %addr) : (!vc4.dma.desc, i32) -> !vc4.async.token
+"vc4.dma.wait"(%tok) <{kind = #vc4.dma_desc_kind<load>}> : (!vc4.async.token) -> () // expected-error {{requires exactly one of a token operand or a 'kind' attribute}}
+vc4.return
+}
+}
+
+vc4.module @dma_wait_missing_error {
+vc4.func @bad_wait_missing() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+"vc4.dma.wait"() : () -> () // expected-error {{requires exactly one of a token operand or a 'kind' attribute}}
+vc4.return
+}
+}
+
+vc4.module @dma_wait_token_origin_error {
+vc4.func @bad_wait_token(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%tok = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+"vc4.dma.wait"(%tok) : (!vc4.async.token) -> () // expected-error {{token operand must come from vc4.dma.start or be a block argument}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/dma-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @dma_ops {
+// CHECK: vc4.func @main(%[[ADDR:.*]]: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[LOAD_DESC:.*]] = vc4.dma.desc {block_mode = #vc4.dma_block_mode<row_row>, depth = 4 : i32, elem_width = #vc4.dma_elem_width<w16>, kind = #vc4.dma_desc_kind<load>, mpitch = 8 : i32, nrows = 2 : i32, orientation = #vc4.dma_orientation<horizontal>, rowlen = 16 : i32, start_offset = 1 : i32, stride = 32 : i32, vpitch = 2 : i32, vpm_base = 4 : i32} : !vc4.dma.desc
+// CHECK: %[[STORE_DESC:.*]] = vc4.dma.desc {block_mode = #vc4.dma_block_mode<packed_rows>, elem_width = #vc4.dma_elem_width<w32>, extended_stride = 64 : i32, kind = #vc4.dma_desc_kind<store>, nrows = 1 : i32, orientation = #vc4.dma_orientation<vertical>, rowlen = 8 : i32, stride = 16 : i32, units = 3 : i32, vpm_base = 12 : i32} : !vc4.dma.desc
+// CHECK: %[[TOK:.*]] = "vc4.dma.start"(%[[LOAD_DESC]], %[[ADDR]]) : (!vc4.dma.desc, i32) -> !vc4.async.token
+// CHECK: "vc4.dma.start"(%[[STORE_DESC]], %[[ADDR]]) : (!vc4.dma.desc, i32) -> ()
+// CHECK: %[[STATUS0:.*]] = vc4.dma.status <load> : i32
+// CHECK: %[[STATUS1:.*]] = vc4.dma.status <store> : index
+// CHECK: "vc4.dma.wait"(%[[TOK]]) : (!vc4.async.token) -> ()
+// CHECK: "vc4.dma.wait"() <{kind = #vc4.dma_desc_kind<store>}> : () -> ()
+
+vc4.module @dma_ops {
+vc4.func @main(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%load_desc = vc4.dma.desc {
+kind = #vc4.dma_desc_kind<load>,
+block_mode = #vc4.dma_block_mode<row_row>,
+orientation = #vc4.dma_orientation<horizontal>,
+elem_width = #vc4.dma_elem_width<w16>,
+start_offset = 1 : i32,
+mpitch = 8 : i32,
+vpitch = 2 : i32,
+nrows = 2 : i32,
+rowlen = 16 : i32,
+depth = 4 : i32,
+vpm_base = 4 : i32,
+stride = 32 : i32
+} : !vc4.dma.desc
+%store_desc = vc4.dma.desc {
+kind = #vc4.dma_desc_kind<store>,
+block_mode = #vc4.dma_block_mode<packed_rows>,
+orientation = #vc4.dma_orientation<vertical>,
+elem_width = #vc4.dma_elem_width<w32>,
+nrows = 1 : i32,
+rowlen = 8 : i32,
+units = 3 : i32,
+vpm_base = 12 : i32,
+stride = 16 : i32,
+extended_stride = 64 : i32
+} : !vc4.dma.desc
+
+    %tok = "vc4.dma.start"(%load_desc, %addr) : (!vc4.dma.desc, i32) -> !vc4.async.token
+    "vc4.dma.start"(%store_desc, %addr) : (!vc4.dma.desc, i32) -> ()
+    %status0 = vc4.dma.status <load> : i32
+    %status1 = vc4.dma.status <store> : index
+    "vc4.dma.wait"(%tok) : (!vc4.async.token) -> ()
+    "vc4.dma.wait"() <{kind = #vc4.dma_desc_kind<store>}> : () -> ()
+    vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/function-form-segregation-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @structured_rejects_scheduled {
+vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = scheduled}}
+"vc4.qpu.fake"() : () -> ()
+}
+}
+
+vc4.module @scheduled_rejects_structured {
+vc4.func @bad_scheduled() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = structured}}
+%0 = vc4.uniform.read : i32
+}
+}
+
+vc4.module @scheduled_rejects_nested_structured {
+vc4.func @bad_nested() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+"vc4.qpu.fake_region"() ({
+// expected-error@+1 {{is only legal in functions with form = structured}}
+%0 = vc4.uniform.read : i32
+}) : () -> ()
+}
+}
+
+vc4.module @qpu_domain_rejects_host_ops {
+vc4.func @bad_host_op(%base: i32, %len: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with domain = host}}
+%0 = "vc4.enqueue_qpu"(%base, %len) <{entry = @kernel}> : (i32, i32) -> !vc4.async.token
+vc4.return
+}
+
+vc4.func @kernel() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.return
+}
+}
+
+vc4.module @host_domain_rejects_qpu_ops {
+vc4.func @bad_device_op() attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with domain = qpu}}
+%0 = vc4.uniform.read : i32
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics --allow-unregistered-dialect
+
+vc4.module @missing_threading {
+// expected-error@+1 {{requires a 'threading' attribute}}
+vc4.func private @f() attributes {form = #vc4.function_form<structured>, domain = #vc4.execution_domain<qpu>}
+}
+
+vc4.module @missing_form {
+// expected-error@+1 {{requires a 'form' attribute}}
+vc4.func private @f() attributes {threading = #vc4.threading_mode<single>, domain = #vc4.execution_domain<qpu>}
+}
+
+vc4.module @missing_domain {
+// expected-error@+1 {{requires a 'domain' attribute}}
+vc4.func private @f() attributes {form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>}
+}
+
+vc4.module @kernel_host_domain_error {
+// expected-error@+1 {{the 'kernel' attribute is only legal with domain = #vc4.execution_domain<qpu>}}
+vc4.func private @f() attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>}
+}
+
+vc4.module @builtin_type_error {
+vc4.func @bad_builtin() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{result type must be i32 or vector<16xi32>}}
+%0 = vc4.builtin elem_num : vector<8xi32>
+vc4.return
+}
+}
+
+vc4.module @scheduled_return_error {
+vc4.func @bad_return() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = structured}}
+vc4.return
+}
+}
+
+vc4.module @return_type_error {
+vc4.func @bad_result() -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.builtin elem_num : vector<16xi32>
+// expected-error@+1 {{type of return operand #0}}
+vc4.return %0 : vector<16xi32>
+}
+}
+
+vc4.module @structured_qpu_error {
+vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = scheduled}}
+"vc4.qpu.fake"() : () -> ()
+}
+}
+
+vc4.module @scheduled_non_qpu_error {
+vc4.func @bad_scheduled() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is not a legal operation in functions with form = scheduled}}
+"test.fake"() : () -> ()
+}
+}
+
+===== compiler/test/Dialect/VC4/launch-abi-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @non_kernel {
+// expected-error@+1 {{"vc4.launch_abi" may appear only on vc4.func with 'kernel'}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @empty_public_name {
+// expected-error@+1 {{"vc4.launch_abi" requires a non-empty string 'public_name'}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @bad_buffer_direction {
+// expected-error@+1 {{"vc4.launch_abi" buffer argument entry requires direction = "in", "out", or "inout"}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 2 : i32, args = [{name = "x", kind = "buffer", direction = "by_value", elem_type = "f32", uniform_index = 0 : i32}], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @scalar_missing_type {
+// expected-error@+1 {{"vc4.launch_abi" scalar argument entry requires type = "i32", "u32", "f32", or "index"}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 2 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", uniform_index = 0 : i32}], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @duplicate_uniform_indices {
+// expected-error@+1 {{"vc4.launch_abi" uniform indices must be unique and dense in [0, uniform_words_per_qpu)}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 2 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @num_qpus_register {
+// expected-error@+1 {{"vc4.launch_abi" builtin kind #vc4.builtin_kind<num_qpus> must use materialization = "uniform_suffix"}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "register"}]}} {
+vc4.return
+}
+}
+
+vc4.module @elem_num_builtin {
+// expected-error@+1 {{"vc4.launch_abi" builtin kind #vc4.builtin_kind<elem_num> must not appear}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "elem", kind = #vc4.builtin_kind<elem_num>, materialization = "register"}]}} {
+vc4.return
+}
+}
+
+vc4.module @register_uniform_index {
+// expected-error@+1 {{"vc4.launch_abi" register-materialized builtin entry must not specify 'uniform_index'}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "register", uniform_index = 1 : i32}]}} {
+vc4.return
+}
+}
+
+vc4.module @non_dense_uniform_indices {
+// expected-error@+1 {{"vc4.launch_abi" uniform indices must be unique and dense in [0, uniform_words_per_qpu)}}
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 3 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 2 : i32}]}} {
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/launch-abi-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK-LABEL: vc4.module @kernels
+// CHECK-LABEL: vc4.func @saxpy_kernel
+// CHECK-SAME: kernel
+// CHECK-SAME: vc4.launch_abi =
+// CHECK-SAME: direction = "in"
+// CHECK-SAME: elem_type = "f32"
+// CHECK-SAME: kind = "buffer"
+// CHECK-SAME: name = "x"
+// CHECK-SAME: kind = #vc4.builtin_kind<qpu_num>
+// CHECK-SAME: materialization = "uniform_suffix"
+// CHECK-SAME: name = "qpu_id"
+// CHECK-SAME: kind = #vc4.builtin_kind<num_qpus>
+// CHECK-SAME: materialization = "uniform_suffix"
+// CHECK-SAME: name = "num_qpus"
+// CHECK-SAME: uniform_index = 5 : i32
+// CHECK-SAME: public_name = "saxpy_launch"
+// CHECK-SAME: tail_policy = "exact_multiple"
+// CHECK-SAME: uniform_words_per_qpu = 6 : i32
+// CHECK-LABEL: vc4.func @uses_num_qpus
+// CHECK: %{{.*}} = vc4.builtin num_qpus : i32
+
+vc4.module @kernels {
+vc4.func @saxpy_kernel() attributes {
+domain = #vc4.execution_domain<qpu>,
+form = #vc4.function_form<structured>,
+kernel,
+threading = #vc4.threading_mode<single>,
+"vc4.launch_abi" = {
+public_name = "saxpy_launch",
+tail_policy = "exact_multiple",
+uniform_words_per_qpu = 6 : i32,
+args = [
+{name = "x", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 0 : i32},
+{name = "y", kind = "buffer", direction = "inout", elem_type = "f32", uniform_index = 1 : i32},
+{name = "a", kind = "scalar", direction = "by_value", type = "f32", uniform_index = 2 : i32},
+{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32}
+],
+builtins = [
+{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32},
+{name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32}
+]
+}
+} {
+vc4.return
+}
+
+vc4.func @uses_num_qpus() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.builtin num_qpus : i32
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/module-func-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @kernels {
+// CHECK: vc4.func @main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>}
+// CHECK: %[[QPU:.*]] = vc4.builtin qpu_num : i32
+// CHECK: vc4.return
+
+vc4.module @kernels {
+vc4.func @main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>} {
+%qpu = vc4.builtin qpu_num : i32
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-branch-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @branch_requires_scheduled_form {
+vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<always>, relative = true, use_reg = false, raddr_a = 0 : i32, immediate = 0 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+// expected-error@+1 {{is only legal in functions with form = scheduled}}
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <acquire> {id = 0 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+vc4.return
+}
+}
+
+vc4.module @branch_zero_delay_slots {
+vc4.func @bad_zero_slots() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{delay-slot region must contain exactly 3 scheduled QPU ops}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, relative = false, use_reg = true, raddr_a = 1 : i32, immediate = 8 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+}
+}
+}
+
+vc4.module @branch_two_delay_slots {
+vc4.func @bad_two_slots() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{delay-slot region must contain exactly 3 scheduled QPU ops}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, relative = false, use_reg = true, raddr_a = 1 : i32, immediate = 8 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+}
+
+vc4.module @branch_four_delay_slots {
+vc4.func @bad_four_slots() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{delay-slot region must contain exactly 3 scheduled QPU ops}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, relative = false, use_reg = true, raddr_a = 1 : i32, immediate = 8 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+vc4.qpu.ldi <splat32> {value = 2 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 1 : i32, waddr_mul = 1 : i32}
+}
+}
+}
+
+vc4.module @branch_delay_slot_mixing_error {
+vc4.func @bad_delay_slot_mixing() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_clear>, relative = true, use_reg = false, raddr_a = 0 : i32, immediate = 4 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+// expected-error@+1 {{is only legal in functions with form = structured}}
+%0 = vc4.uniform.read : i32
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <acquire> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+}
+
+vc4.module @branch_multiple_blocks_error {
+vc4.func @bad_multiple_blocks() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{expects region #0 to have 0 or 1 blocks}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, relative = false, use_reg = false, raddr_a = 0 : i32, immediate = 12 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+^bb0:
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+^bb1:
+vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+}
+
+vc4.module @branch_block_arguments_error {
+vc4.func @bad_block_arguments() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{delay-slot region block must not take arguments}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, relative = true, use_reg = false, raddr_a = 0 : i32, immediate = 16 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+^bb0(%slot: i32):
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+}
+
+vc4.module @branch_raddr_range_error {
+vc4.func @bad_raddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'raddr_a' attribute must be in range [0, 31]}}
+vc4.qpu.branch attributes {cond = #vc4.branch_cond<always>, relative = false, use_reg = true, raddr_a = 32 : i32, immediate = 0 : i32, waddr_add = 0 : i32, waddr_mul = 0 : i32} {
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.sema <release> {id = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-branch-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_branch {
+// CHECK: vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// CHECK: vc4.qpu.branch attributes {
+// CHECK-SAME: cond = #vc4.branch_cond<any_z_clear>
+// CHECK-SAME: immediate = 64 : i32
+// CHECK-SAME: raddr_a = 3 : i32
+// CHECK-SAME: relative = true
+// CHECK-SAME: use_reg = false
+// CHECK-SAME: waddr_add = 1 : i32
+// CHECK-SAME: waddr_mul = 2 : i32
+// CHECK: {
+// CHECK: vc4.qpu.bundle
+// CHECK: vc4.qpu.ldi <splat32>
+// CHECK: vc4.qpu.sema <release>
+// CHECK: }
+
+vc4.module @qpu_branch {
+vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.branch attributes {
+cond = #vc4.branch_cond<any_z_clear>,
+relative = true,
+use_reg = false,
+raddr_a = 3 : i32,
+immediate = 64 : i32,
+waddr_add = 1 : i32,
+waddr_mul = 2 : i32
+} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 7 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 2 : i32,
+waddr_mul = 3 : i32
+}
+vc4.qpu.sema <release> {
+id = 5 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 4 : i32,
+waddr_mul = 5 : i32
+}
+}
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-bundle-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @bundle_requires_scheduled_form {
+vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = scheduled}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+vc4.return
+}
+}
+
+vc4.module @bundle_operand_source_exclusive_error {
+vc4.func @bad_sources() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{requires exactly one of 'raddr_b' or 'small_imm'}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_operand_source_double_specified_error {
+vc4.func @bad_sources() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{requires exactly one of 'raddr_b' or 'small_imm'}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, small_imm = 2 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_signal_small_imm_mismatch {
+vc4.func @bad_signal() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'small_imm' attribute requires sig = #vc4.qpu_signal<small_imm>}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, small_imm = 2 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_signal_small_imm_missing_payload {
+vc4.func @bad_signal() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<small_imm> requires a 'small_imm' attribute}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_pack_path_error {
+vc4.func @bad_pack() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{pm = true requires 'pack' to use #vc4.mul_pack_mode}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = true, pack = #vc4.regfile_a_pack_mode<to_16a>, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, small_imm = 2 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_unpack_path_error {
+vc4.func @bad_unpack() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{pm = false requires 'unpack' to use #vc4.regfile_a_unpack_mode}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, unpack = #vc4.r4_unpack_mode<f16a>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_raddr_range_error {
+vc4.func @bad_raddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'raddr_b' attribute must be in range [0, 63]}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 32 : i32, raddr_b = 64 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_small_imm_range_error {
+vc4.func @bad_small_imm() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'small_imm' attribute must be an encoded selector in range [0, 63]}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, small_imm = 64 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_vector_rotate_requires_accumulator_mul_inputs {
+vc4.func @bad_vector_rotate() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{vector-rotate small_imm selectors 48..63 require both MUL inputs to come from accumulators r0..r3}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, small_imm = 49 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r4>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_dedicated_signal_error {
+vc4.func @bad_sig() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<load_imm> is represented by vc4.qpu.ldi}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<load_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+vc4.module @bundle_duplicate_accumulator_write_error {
+vc4.func @bad_write_conflict() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{active ADD and MUL pipelines must not target the same accumulator/I/O write address}}
+vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 32 : i32, waddr_mul = 32 : i32, op_add = #vc4.add_opcode<add>, op_mul = #vc4.mul_opcode<fmul>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-bundle-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_bundle {
+// CHECK: vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// CHECK: vc4.qpu.bundle
+// CHECK-SAME: add_a = #vc4.qpu_mux<a>
+// CHECK-SAME: add_b = #vc4.qpu_mux<b>
+// CHECK-SAME: cond_add = #vc4.cond<always>
+// CHECK-SAME: cond_mul = #vc4.cond<never>
+// CHECK-SAME: mul_a = #vc4.qpu_mux<r0>
+// CHECK-SAME: mul_b = #vc4.qpu_mux<r1>
+// CHECK-SAME: op_add = #vc4.add_opcode<add>
+// CHECK-SAME: op_mul = #vc4.mul_opcode<nop>
+// CHECK-SAME: pack = #vc4.regfile_a_pack_mode<to_16a>
+// CHECK-SAME: pm = false
+// CHECK-SAME: raddr_a = 32 : i32
+// CHECK-SAME: raddr_b = 35 : i32
+// CHECK-SAME: sig = #vc4.qpu_signal<none>
+// CHECK-SAME: unpack = #vc4.regfile_a_unpack_mode<f16a_or_i16a>
+// CHECK-SAME: waddr_add = 1 : i32
+// CHECK-SAME: waddr_mul = 2 : i32
+// CHECK: vc4.qpu.bundle
+// CHECK-SAME: add_a = #vc4.qpu_mux<a>
+// CHECK-SAME: add_b = #vc4.qpu_mux<b>
+// CHECK-SAME: cond_add = #vc4.cond<zs>
+// CHECK-SAME: cond_mul = #vc4.cond<always>
+// CHECK-SAME: mul_a = #vc4.qpu_mux<r2>
+// CHECK-SAME: mul_b = #vc4.qpu_mux<r3>
+// CHECK-SAME: op_add = #vc4.add_opcode<sub>
+// CHECK-SAME: op_mul = #vc4.mul_opcode<fmul>
+// CHECK-SAME: pack = #vc4.mul_pack_mode<to_8a>
+// CHECK-SAME: pm = true
+// CHECK-SAME: raddr_a = 4 : i32
+// CHECK-SAME: set_flags
+// CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
+// CHECK-SAME: small_imm = 49 : i32
+// CHECK-SAME: unpack = #vc4.r4_unpack_mode<f16a>
+// CHECK-SAME: waddr_add = 5 : i32
+// CHECK-SAME: waddr_mul = 6 : i32
+// CHECK-SAME: write_swap
+
+vc4.module @qpu_bundle {
+vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+unpack = #vc4.regfile_a_unpack_mode<f16a_or_i16a>,
+pm = false,
+pack = #vc4.regfile_a_pack_mode<to_16a>,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 1 : i32,
+waddr_mul = 2 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 32 : i32,
+raddr_b = 35 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      unpack = #vc4.r4_unpack_mode<f16a>,
+      pm = true,
+      pack = #vc4.mul_pack_mode<to_8a>,
+      cond_add = #vc4.cond<zs>,
+      cond_mul = #vc4.cond<always>,
+      set_flags,
+      write_swap,
+      waddr_add = 5 : i32,
+      waddr_mul = 6 : i32,
+      op_add = #vc4.add_opcode<sub>,
+      op_mul = #vc4.mul_opcode<fmul>,
+      raddr_a = 4 : i32,
+      small_imm = 49 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r2>,
+      mul_b = #vc4.qpu_mux<r3>
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-ldi-sema-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @ldi_requires_scheduled_form {
+vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with form = scheduled}}
+vc4.qpu.ldi <splat32> {value = 0 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+vc4.return
+}
+}
+
+vc4.module @ldi_splat_payload_error {
+vc4.func @bad_payload() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{splat32 mode requires a signless i32 'value' attribute}}
+vc4.qpu.ldi <splat32> {value = array<i32: 0, 1, 2, 3>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @ldi_per_elem_range_error {
+vc4.func @bad_lanes() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{lane values for mode per_elem_i2 must be in range [-2, 1]}}
+vc4.qpu.ldi <per_elem_i2> {value = array<i32: -2, -1, 0, 1, 2, -1, 0, 1, -2, -1, 0, 1, -2, -1, 0, 1>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @ldi_pack_path_error {
+vc4.func @bad_pack() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{pm = false requires 'pack' to use #vc4.regfile_a_pack_mode}}
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, pack = #vc4.mul_pack_mode<to_8a>, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @ldi_waddr_error {
+vc4.func @bad_waddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'waddr_add' attribute must be in range [0, 63]}}
+vc4.qpu.ldi <splat32> {value = 1 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 64 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @sema_id_error {
+vc4.func @bad_id() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'id' attribute must be in range [0, 15]}}
+vc4.qpu.sema <release> {id = 16 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @sema_pack_path_error {
+vc4.func @bad_pack() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{pm = true requires 'pack' to use #vc4.mul_pack_mode}}
+vc4.qpu.sema <acquire> {id = 2 : i32, pm = true, pack = #vc4.regfile_a_pack_mode<to_16a>, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
+}
+}
+
+vc4.module @sema_stall_capable_write_address_error {
+vc4.func @bad_waddr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{'waddr_mul' must not target stall-capable peripheral write addresses}}
+vc4.qpu.sema <release> {id = 2 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 56 : i32}
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-ldi-sema-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_ldi_sema {
+// CHECK: vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// CHECK: vc4.qpu.ldi <splat32>
+// CHECK-SAME: cond_add = #vc4.cond<always>
+// CHECK-SAME: cond_mul = #vc4.cond<never>
+// CHECK-SAME: pm = false
+// CHECK-SAME: value = 42 : i32
+// CHECK-SAME: waddr_add = 1 : i32
+// CHECK-SAME: waddr_mul = 2 : i32
+// CHECK: vc4.qpu.ldi <per_elem_u2>
+// CHECK-SAME: cond_add = #vc4.cond<zs>
+// CHECK-SAME: cond_mul = #vc4.cond<always>
+// CHECK-SAME: pack = #vc4.mul_pack_mode<to_8a>
+// CHECK-SAME: pm = true
+// CHECK-SAME: set_flags
+// CHECK-SAME: value = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>
+// CHECK-SAME: waddr_add = 3 : i32
+// CHECK-SAME: waddr_mul = 4 : i32
+// CHECK-SAME: write_swap
+// CHECK: vc4.qpu.sema <acquire>
+// CHECK-SAME: cond_add = #vc4.cond<always>
+// CHECK-SAME: cond_mul = #vc4.cond<always>
+// CHECK-SAME: id = 7 : i32
+// CHECK-SAME: pack = #vc4.regfile_a_pack_mode<to_16a>
+// CHECK-SAME: pm = false
+// CHECK-SAME: waddr_add = 5 : i32
+// CHECK-SAME: waddr_mul = 6 : i32
+
+vc4.module @qpu_ldi_sema {
+vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 42 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 1 : i32,
+waddr_mul = 2 : i32
+}
+
+    vc4.qpu.ldi <per_elem_u2> {
+      value = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>,
+      pm = true,
+      pack = #vc4.mul_pack_mode<to_8a>,
+      cond_add = #vc4.cond<zs>,
+      cond_mul = #vc4.cond<always>,
+      set_flags,
+      write_swap,
+      waddr_add = 3 : i32,
+      waddr_mul = 4 : i32
+    }
+
+    vc4.qpu.sema <acquire> {
+      id = 7 : i32,
+      pm = false,
+      pack = #vc4.regfile_a_pack_mode<to_16a>,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 5 : i32,
+      waddr_mul = 6 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-adjacent-hazards-invalid.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-adjacent-hazards %s --split-input-file --verify-diagnostics
+
+vc4.module @regfile_a_next_read_hazard {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 5 : i32,
+waddr_mul = 32 : i32
+}
+
+    // expected-error@+1 {{reads physical regfile-A address 5 written by the immediately previous scheduled instruction}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 5 : i32,
+      raddr_b = 6 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+}
+
+// -----
+
+vc4.module @regfile_b_next_read_hazard {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 6 : i32
+}
+
+    // expected-error@+1 {{reads physical regfile-B address 6 written by the immediately previous scheduled instruction}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 7 : i32,
+      raddr_b = 6 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+}
+
+// -----
+
+vc4.module @rotate_by_r5_after_r5_write {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 37 : i32
+}
+
+    // expected-error@+1 {{uses small_imm = 48 (rotate-by-r5) immediately after an r5 write}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      small_imm = 48 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+}
+
+// -----
+
+vc4.module @vector_rotate_after_accumulator_r0_write {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 40 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 6 : i32,
+raddr_b = 7 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r2>,
+mul_b = #vc4.qpu_mux<r3>
+}
+
+    // expected-error@+1 {{does a vector rotate immediately after the previous scheduled instruction wrote accumulator r0}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      small_imm = 49 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r2>
+    }
+}
+}
+
+// -----
+
+vc4.module @sfu_window_rejects_r4_read {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 52 : i32,
+waddr_mul = 32 : i32
+}
+
+    // expected-error@+1 {{is in the two-instruction SFU hazard window and must not read r4 through vc4.qpu.bundle source muxes}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      raddr_b = 9 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r4>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 35 : i32,
+      waddr_mul = 36 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @sfu_window_rejects_tmu_r4_write_event {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 52 : i32,
+waddr_mul = 32 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      raddr_b = 9 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    // expected-error@+1 {{is in the two-instruction SFU hazard window and must not trigger another representable r4 write event (ldtmu0/ldtmu1 or another SFU write)}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<ldtmu0>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 35 : i32,
+      waddr_mul = 36 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 10 : i32,
+      raddr_b = 11 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+}
+
+// -----
+
+vc4.module @sfu_window_rejects_another_sfu_write {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 52 : i32,
+waddr_mul = 32 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      raddr_b = 9 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    // expected-error@+1 {{is in the two-instruction SFU hazard window and must not trigger another representable r4 write event (ldtmu0/ldtmu1 or another SFU write)}}
+    vc4.qpu.ldi <splat32> {
+      value = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 53 : i32,
+      waddr_mul = 35 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-adjacent-hazards.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-adjacent-hazards %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_scheduled_adjacent_hazards
+// CHECK: vc4.func @scheduled_adjacent_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: small_imm = 49 : i32
+// CHECK: waddr_add = 52 : i32
+// CHECK: vc4.func @scheduled_vector_rotate_after_spacer_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 32 : i32
+// CHECK: small_imm = 49 : i32
+
+vc4.module @qpu_scheduled_adjacent_hazards {
+vc4.func @scheduled_adjacent_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 3 : i32,
+waddr_mul = 32 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 4 : i32,
+      raddr_b = 5 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 35 : i32,
+      waddr_mul = 7 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 8 : i32,
+      raddr_b = 9 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 37 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 40 : i32,
+      waddr_mul = 41 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 10 : i32,
+      small_imm = 49 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 4 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 52 : i32,
+      waddr_mul = 42 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 43 : i32,
+      waddr_mul = 44 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 11 : i32,
+      raddr_b = 12 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 5 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 45 : i32,
+      waddr_mul = 46 : i32
+    }
+}
+
+vc4.func @scheduled_vector_rotate_after_spacer_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 40 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r2>,
+mul_b = #vc4.qpu_mux<r3>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 6 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 41 : i32,
+      waddr_mul = 42 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 43 : i32,
+      waddr_mul = 44 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 11 : i32,
+      small_imm = 49 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r2>
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-hardware-rules-invalid.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-hardware-rules %s --split-input-file --verify-diagnostics
+
+vc4.module @thread_end_must_not_write_physical_regfile {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<thrend> must not write physical regfile A/B addresses 0..31}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 1 : i32,
+waddr_mul = 32 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+}
+}
+
+// -----
+
+vc4.module @thread_end_window_rejects_register_14 {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    // expected-error@+1 {{is in the thread-end hazard window and must not read or write physical regfile address 14}}
+    vc4.qpu.ldi <splat32> {
+      value = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 14 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @thread_end_window_rejects_uniform_read {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    // expected-error@+1 {{is in the thread-end hazard window and must not read uniform register-space address 32}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 32 : i32,
+      raddr_b = 5 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @thread_end_window_rejects_varying_read {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    // expected-error@+1 {{is in the thread-end hazard window and must not read varying register-space address 35}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 35 : i32,
+      raddr_b = 5 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @thread_end_window_rejects_vpm_vdr_vdw_access {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    // expected-error@+1 {{is in the thread-end hazard window and must not access VPM/VDR/VDW register-space addresses 48..50}}
+    vc4.qpu.ldi <splat32> {
+      value = 7 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 48 : i32,
+      waddr_mul = 34 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @last_thread_switch_requires_threadable {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<last_thread_switch> is only legal in functions with threading = #vc4.threading_mode<threadable>}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<last_thread_switch>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @thread_switch_requires_threadable {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<thrsw> is only legal in functions with threading = #vc4.threading_mode<threadable>}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrsw>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @last_thread_switch_must_be_final_thread_switch_signal {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<last_thread_switch> must be the final thread-switch signal in the flattened scheduled instruction stream}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<last_thread_switch>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrsw>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 2 : i32,
+      raddr_b = 3 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 5 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 40 : i32,
+      waddr_mul = 41 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @last_thread_switch_requires_two_following_delay_slots {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{sig = #vc4.qpu_signal<last_thread_switch> requires two following delay-slot instructions in the flattened scheduled instruction stream}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<last_thread_switch>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+// -----
+
+vc4.module @final_thread_switch_must_be_last_thread_switch {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    // expected-error@+1 {{the final thread-switch signal in the flattened scheduled instruction stream must be #vc4.qpu_signal<last_thread_switch>}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrsw>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 2 : i32,
+      raddr_b = 3 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 4 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-hardware-rules.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-hardware-rules %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_scheduled_hardware_rules
+// CHECK: vc4.func @scheduled_thread_end_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>}
+// CHECK: sig = #vc4.qpu_signal<thrend>
+// CHECK: vc4.qpu.ldi <splat32>
+// CHECK: vc4.qpu.sema <release>
+// CHECK: vc4.func @scheduled_last_thread_switch_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>}
+// CHECK: sig = #vc4.qpu_signal<last_thread_switch>
+// CHECK: vc4.qpu.branch
+// CHECK: vc4.func @scheduled_thread_end_mutex_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>}
+// CHECK: vc4.func @scheduled_thread_switch_sequence_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>}
+// CHECK: sig = #vc4.qpu_signal<thrsw>
+// CHECK: sig = #vc4.qpu_signal<last_thread_switch>
+// CHECK: vc4.qpu.sema <release>
+
+vc4.module @qpu_scheduled_hardware_rules {
+vc4.func @scheduled_thread_end_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 11 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+
+vc4.func @scheduled_last_thread_switch_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<last_thread_switch>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 42 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+
+    vc4.qpu.branch attributes {
+      cond = #vc4.branch_cond<always>,
+      relative = false,
+      use_reg = true,
+      raddr_a = 3 : i32,
+      immediate = 0 : i32,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32
+    } {
+      vc4.qpu.bundle {
+        sig = #vc4.qpu_signal<none>,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<always>,
+        waddr_add = 32 : i32,
+        waddr_mul = 33 : i32,
+        op_add = #vc4.add_opcode<nop>,
+        op_mul = #vc4.mul_opcode<nop>,
+        raddr_a = 4 : i32,
+        raddr_b = 5 : i32,
+        add_a = #vc4.qpu_mux<a>,
+        add_b = #vc4.qpu_mux<b>,
+        mul_a = #vc4.qpu_mux<r0>,
+        mul_b = #vc4.qpu_mux<r1>
+      }
+      vc4.qpu.ldi <splat32> {
+        value = 7 : i32,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<never>,
+        waddr_add = 34 : i32,
+        waddr_mul = 35 : i32
+      }
+      vc4.qpu.sema <acquire> {
+        id = 1 : i32,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<always>,
+        waddr_add = 36 : i32,
+        waddr_mul = 37 : i32
+      }
+    }
+}
+
+vc4.func @scheduled_thread_end_mutex_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 9 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 51 : i32,
+      waddr_mul = 34 : i32
+    }
+
+    vc4.qpu.sema <release> {
+      id = 0 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+
+vc4.func @scheduled_thread_switch_sequence_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrsw>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+
+    vc4.qpu.ldi <splat32> {
+      value = 13 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<last_thread_switch>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 2 : i32,
+      raddr_b = 3 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 17 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 40 : i32,
+      waddr_mul = 41 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-io-spacing-invalid.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-io-spacing %s --split-input-file --verify-diagnostics
+
+vc4.module @uniform_read_too_soon_after_uniforms_address {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 40 : i32,
+waddr_mul = 33 : i32
+}
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+
+    // expected-error@+1 {{reads uniform register-space address 32 within two instruction slots after a write to UNIFORMS_ADDRESS 40}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 32 : i32,
+      raddr_b = 2 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+}
+
+// -----
+
+vc4.module @tmu_parameter_write_too_soon_after_noswap {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 36 : i32,
+waddr_mul = 33 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 3 : i32,
+      raddr_b = 4 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    // expected-error@+1 {{writes TMU parameter register-space addresses 56..63 only 2 instruction slot(s) after a write to TMU_NOSWAP 36; the first later TMU parameter write must be at least three instruction slots later}}
+    vc4.qpu.ldi <splat32> {
+      value = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 56 : i32,
+      waddr_mul = 39 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-io-spacing.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-io-spacing %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_scheduled_io_spacing
+// CHECK: vc4.func @uniforms_address_spacing_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 40 : i32
+// CHECK: raddr_a = 32 : i32
+// CHECK: vc4.func @tmu_noswap_spacing_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 36 : i32
+// CHECK: waddr_add = 56 : i32
+
+vc4.module @qpu_scheduled_io_spacing {
+vc4.func @uniforms_address_spacing_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 40 : i32,
+waddr_mul = 33 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 38 : i32,
+      waddr_mul = 39 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 32 : i32,
+      raddr_b = 2 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+}
+
+vc4.func @tmu_noswap_spacing_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 36 : i32,
+waddr_mul = 33 : i32
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 3 : i32,
+      raddr_b = 4 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 37 : i32,
+      waddr_mul = 38 : i32
+    }
+
+    vc4.qpu.ldi <splat32> {
+      value = 3 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 56 : i32,
+      waddr_mul = 39 : i32
+    }
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-peripheral-accesses-invalid.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-peripheral-accesses %s --split-input-file --verify-diagnostics
+
+vc4.module @tmu_read_signal_and_sfu_write_same_slot {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{encodes more than one closely-coupled peripheral access in a single scheduled instruction slot (TMU read signal, SFU write)}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<ldtmu0>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 52 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+}
+}
+
+// -----
+
+vc4.module @tmu_parameter_write_and_mutex_read_same_slot {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{encodes more than one closely-coupled peripheral access in a single scheduled instruction slot (TMU parameter write, mutex acquire read)}}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 56 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<add>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 51 : i32,
+raddr_b = 4 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+}
+}
+
+// -----
+
+vc4.module @semaphore_and_vpm_control_access_same_slot {
+vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{encodes more than one closely-coupled peripheral access in a single scheduled instruction slot (semaphore access, VPM/VDR/VDW control register-space access)}}
+vc4.qpu.sema <release> {
+id = 3 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 49 : i32,
+waddr_mul = 1 : i32
+}
+}
+}
+
+===== compiler/test/Dialect/VC4/qpu-scheduled-peripheral-accesses.mlir =====
+// RUN: vc4-opt --vc4-verify-scheduled-peripheral-accesses %s | FileCheck %s
+
+// CHECK: vc4.module @qpu_scheduled_peripheral_accesses
+// CHECK: vc4.func @tmu_read_signal_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: sig = #vc4.qpu_signal<ldtmu0>
+// CHECK: vc4.func @tmu_parameter_write_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 56 : i32
+// CHECK: vc4.func @semaphore_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: vc4.qpu.sema <release>
+// CHECK: vc4.func @vpm_data_port_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: waddr_add = 48 : i32
+// CHECK: vc4.func @mutex_read_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>}
+// CHECK: raddr_a = 51 : i32
+
+vc4.module @qpu_scheduled_peripheral_accesses {
+vc4.func @tmu_read_signal_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<ldtmu0>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+}
+
+vc4.func @tmu_parameter_write_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.ldi <splat32> {
+value = 7 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 56 : i32,
+waddr_mul = 1 : i32
+}
+}
+
+vc4.func @semaphore_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.sema <release> {
+id = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32
+}
+}
+
+vc4.func @vpm_data_port_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.sema <release> {
+id = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 48 : i32,
+waddr_mul = 1 : i32
+}
+}
+
+vc4.func @mutex_read_only_ok() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 51 : i32,
+raddr_b = 4 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+}
+}
+
+===== compiler/test/Dialect/VC4/sfu-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @sfu_issue_type_error {
+vc4.func @bad_issue(%arg0: i16) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+vc4.sfu.issue <recip> %arg0 : i16 // expected-error {{input type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+vc4.return
+}
+}
+
+vc4.module @sfu_issue_shape_error {
+vc4.func @bad_issue_shape(%arg0: vector<8xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+vc4.sfu.issue <log> %arg0 : vector<8xf32> // expected-error {{input type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+vc4.return
+}
+}
+
+vc4.module @sfu_read_type_error {
+vc4.func @bad_read() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.sfu.read : i16 // expected-error {{result type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+vc4.return
+}
+}
+
+vc4.module @sfu_read_shape_error {
+vc4.func @bad_read_shape() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.sfu.read : vector<8xi32> // expected-error {{result type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/sfu-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @sfu_ops {
+// CHECK: vc4.func @main(%[[I:.*]]: i32, %[[F:.*]]: f32, %[[VI:.*]]: vector<16xi32>, %[[VF:.*]]: vector<16xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: vc4.sfu.issue <recip> %[[F]] : f32
+// CHECK: vc4.sfu.issue <recipsqrt> %[[VF]] : vector<16xf32>
+// CHECK: vc4.sfu.issue <exp> %[[I]] : i32
+// CHECK: vc4.sfu.issue <log> %[[VI]] : vector<16xi32>
+// CHECK: %[[R0:.*]] = vc4.sfu.read : f32
+// CHECK: %[[R1:.*]] = vc4.sfu.read : vector<16xf32>
+// CHECK: vc4.return
+
+vc4.module @sfu_ops {
+vc4.func @main(%i: i32, %f: f32, %vi: vector<16xi32>, %vf: vector<16xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+vc4.sfu.issue <recip> %f : f32
+vc4.sfu.issue <recipsqrt> %vf : vector<16xf32>
+vc4.sfu.issue <exp> %i : i32
+vc4.sfu.issue <log> %vi : vector<16xi32>
+%r0 = vc4.sfu.read : f32
+%r1 = vc4.sfu.read : vector<16xf32>
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/side-effects.mlir =====
+// RUN: vc4-opt %s --vc4-test-print-effects -o /dev/null | FileCheck %s
+
+// CHECK: vc4.qpu.sema: Read<Semaphore>, Write<Semaphore>
+// CHECK: vc4.uniform.read: Read<UniformStream>
+// CHECK: vc4.uniform.seek: Write<UniformStream>
+// CHECK: vc4.tmu.request: Write<TMUReq0>, Read<MainMemory>
+// CHECK: vc4.tmu.request: Write<TMUReq1>, Read<MainMemory>
+// CHECK: vc4.tmu.read: Read<TMURcv0>
+// CHECK: vc4.tmu.read: Read<TMURcv1>
+// CHECK: vc4.tmu.noswap: Write<V3DSystem>
+// CHECK: vc4.sfu.issue: Write<SFU>
+// CHECK: vc4.sfu.read: Read<SFU>
+// CHECK: vc4.vpm.read: Read<VPMReadFIFO>
+// CHECK: vc4.vpm.write: Write<VPMWriteFIFO>
+// CHECK: vc4.dma.start: Write<VDR>, Read<MainMemory>
+// CHECK: vc4.dma.start: Write<VDW>, Write<MainMemory>
+// CHECK: vc4.dma.status: Read<VDW>
+// CHECK: vc4.dma.wait: Read<VDR>
+// CHECK: vc4.mutex: Read<Mutex>, Write<Mutex>
+// CHECK: vc4.semaphore: Read<Semaphore>, Write<Semaphore>
+// CHECK: vc4.host_interrupt: Write<HostIRQ>
+// CHECK: vc4.enqueue_qpu: Write<QPUScheduler>
+// CHECK: vc4.reserve_qpu: Write<QPUScheduler>
+// CHECK: vc4.v3d.query: Read<V3DSystem>
+// CHECK: vc4.v3d.configure: Write<V3DSystem>
+
+vc4.module @side_effects {
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.return
+}
+
+vc4.func @scheduled_main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+vc4.qpu.sema <release> {
+id = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 0 : i32,
+waddr_mul = 0 : i32
+}
+}
+
+vc4.func @qpu_main(%addr: i32, %coord: f32, %vec: vector<16xi32>, %scalar: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%tex_desc = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<texture2d>,
+texture_type = #vc4.texture_type<rgba8888>,
+width = 16 : i32,
+height = 16 : i32
+} : !vc4.tmu.desc
+%read_desc = vc4.vpm.desc {
+kind = #vc4.vpm_desc_kind<read>,
+orientation = #vc4.vpm_orientation<horizontal>,
+lane_mode = #vc4.vpm_lane_mode<packed>,
+elem_width = #vc4.vpm_elem_width<w32>,
+num_vectors = 1 : i32
+} : !vc4.vpm.desc
+%write_desc = vc4.vpm.desc {
+kind = #vc4.vpm_desc_kind<write>,
+orientation = #vc4.vpm_orientation<horizontal>,
+lane_mode = #vc4.vpm_lane_mode<packed>,
+elem_width = #vc4.vpm_elem_width<w32>
+} : !vc4.vpm.desc
+%dma_load = vc4.dma.desc {
+kind = #vc4.dma_desc_kind<load>,
+block_mode = #vc4.dma_block_mode<row_row>,
+orientation = #vc4.dma_orientation<horizontal>,
+elem_width = #vc4.dma_elem_width<w32>
+} : !vc4.dma.desc
+%dma_store = vc4.dma.desc {
+kind = #vc4.dma_desc_kind<store>,
+block_mode = #vc4.dma_block_mode<row_row>,
+orientation = #vc4.dma_orientation<horizontal>,
+elem_width = #vc4.dma_elem_width<w32>
+} : !vc4.dma.desc
+
+    %u = vc4.uniform.read : i32
+    vc4.uniform.seek %addr : i32
+    %tok0 = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+    "vc4.tmu.request"(%coord, %tex_desc) <{unit = #vc4.tmu_unit<tmu1>}> : (f32, !vc4.tmu.desc) -> ()
+    %tmu0 = "vc4.tmu.read"() <{unit = #vc4.tmu_unit<tmu0>, part = #vc4.tmu_read_part<raw32>}> : () -> i32
+    %tmu1 = "vc4.tmu.read"() <{unit = #vc4.tmu_unit<tmu1>, part = #vc4.tmu_read_part<raw32>}> : () -> i32
+    "vc4.tmu.noswap"() <{disable = true}> : () -> ()
+    vc4.sfu.issue <recip> %scalar : f32
+    %sfu = vc4.sfu.read : f32
+    %vpm = vc4.vpm.read %read_desc : (!vc4.vpm.desc) -> vector<16xi32>
+    vc4.vpm.write %write_desc, %vec : (!vc4.vpm.desc, vector<16xi32>) -> ()
+    %dma_tok = "vc4.dma.start"(%dma_load, %addr) : (!vc4.dma.desc, i32) -> !vc4.async.token
+    "vc4.dma.start"(%dma_store, %addr) : (!vc4.dma.desc, i32) -> ()
+    %status = vc4.dma.status <store> : i32
+    "vc4.dma.wait"(%dma_tok) : (!vc4.async.token) -> ()
+    vc4.mutex <acquire>
+    vc4.semaphore <release> {id = 1 : i32}
+    vc4.host_interrupt
+    vc4.return
+}
+
+vc4.func @host_main(%addr: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%qpu_tok = "vc4.enqueue_qpu"(%addr, %addr) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
+vc4.reserve_qpu {mask = 1 : i32}
+%ident = "vc4.v3d.query"() <{kind = #vc4.v3d_query_kind<ident>}> : () -> i32
+"vc4.v3d.configure"(%addr) <{kind = #vc4.v3d_configure_kind<cache_control>}> : (i32) -> ()
+vc4.async.wait %qpu_tok : !vc4.async.token
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/structured-system-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @branch_successor_error {
+vc4.func @bad_branch() attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{conditional branch requires exactly two successors}}
+"vc4.cf.branch"() [^bb1] <{cond = #vc4.branch_cond<any_z_set>}> : () -> ()
+^bb1:
+vc4.return
+}
+}
+
+vc4.module @enqueue_symbol_error {
+vc4.func @bad_enqueue(%base: i32, %len: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{referenced 'entry' must resolve to a vc4.func symbol}}
+%0 = "vc4.enqueue_qpu"(%base, %len) <{entry = @missing}> : (i32, i32) -> !vc4.async.token
+vc4.return
+}
+}
+
+vc4.module @enqueue_kernel_error {
+vc4.func @not_kernel() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+vc4.return
+}
+vc4.func @bad_kernel_ref(%base: i32, %len: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{referenced function must be marked with the 'kernel' attribute}}
+%0 = "vc4.enqueue_qpu"(%base, %len) <{entry = @not_kernel}> : (i32, i32) -> !vc4.async.token
+vc4.return
+}
+}
+
+vc4.module @reserve_mask_error {
+vc4.func @bad_mask() attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{mask attribute must fit the 12-QPU target range}}
+"vc4.reserve_qpu"() <{mask = 4096 : i32}> : () -> ()
+vc4.return
+}
+}
+
+vc4.module @query_selector_error {
+vc4.func @bad_query() attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{selected query kind requires exactly one selector operand}}
+%0 = "vc4.v3d.query"() <{kind = #vc4.v3d_query_kind<perf_counter>}> : () -> i32
+vc4.return
+}
+}
+
+vc4.module @configure_payload_error {
+vc4.func @bad_config(%x: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{selected configure kind requires exactly 2 payload operands}}
+"vc4.v3d.configure"(%x) <{kind = #vc4.v3d_configure_kind<perf_map>}> : (i32) -> ()
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/structured-system-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @structured_system {
+// CHECK: vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>}
+// CHECK: vc4.func @driver(%[[BASE:.*]]: i32, %[[LEN:.*]]: i32, %[[SEL:.*]]: i32, %[[CFG:.*]]: i32, %[[SCR:.*]]: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// CHECK: %[[TOK:.*]] = "vc4.enqueue_qpu"(%[[BASE]], %[[LEN]]) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
+// CHECK: vc4.reserve_qpu {mask = 15 : i32}
+// CHECK: %[[IDENT:.*]] = "vc4.v3d.query"() <{kind = #vc4.v3d_query_kind<ident>}> : () -> i32
+// CHECK: %[[PERF:.*]] = "vc4.v3d.query"(%[[SEL]]) <{kind = #vc4.v3d_query_kind<perf_counter>}> : (i32) -> index
+// CHECK: "vc4.v3d.configure"(%[[CFG]]) <{kind = #vc4.v3d_configure_kind<cache_control>}> : (i32) -> ()
+// CHECK: "vc4.v3d.configure"(%[[SEL]], %[[SCR]]) <{kind = #vc4.v3d_configure_kind<scratch>}> : (i32, i32) -> ()
+// CHECK: "vc4.cf.branch"()[^bb1, ^bb2] <{cond = #vc4.branch_cond<any_z_clear>}> : () -> ()
+// CHECK: ^bb1:
+// CHECK: "vc4.cf.branch"()[^bb3] <{cond = #vc4.branch_cond<always>}> : () -> ()
+// CHECK: ^bb2:
+// CHECK: ^bb3:
+// CHECK: vc4.async.wait %[[TOK]] : !vc4.async.token
+
+vc4.module @structured_system {
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>} {
+vc4.program_end
+vc4.return
+}
+
+vc4.func @driver(%base: i32, %len: i32, %sel: i32, %cfg: i32, %scratch: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+%tok = "vc4.enqueue_qpu"(%base, %len) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
+"vc4.reserve_qpu"() <{mask = 15 : i32}> : () -> ()
+%ident = "vc4.v3d.query"() <{kind = #vc4.v3d_query_kind<ident>}> : () -> i32
+%perf = "vc4.v3d.query"(%sel) <{kind = #vc4.v3d_query_kind<perf_counter>}> : (i32) -> index
+"vc4.v3d.configure"(%cfg) <{kind = #vc4.v3d_configure_kind<cache_control>}> : (i32) -> ()
+"vc4.v3d.configure"(%sel, %scratch) <{kind = #vc4.v3d_configure_kind<scratch>}> : (i32, i32) -> ()
+"vc4.cf.branch"() [^bb1, ^bb2] <{cond = #vc4.branch_cond<any_z_clear>}> : () -> ()
+^bb1:
+"vc4.cf.branch"() [^bb3] <{cond = #vc4.branch_cond<always>}> : () -> ()
+^bb2:
+vc4.return
+^bb3:
+vc4.async.wait %tok : !vc4.async.token
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/sync-thread-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @thread_switch_threading_error {
+vc4.func @bad_switch() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{is only legal in functions with threading = threadable}}
+vc4.thread_switch <switch>
+vc4.return
+}
+}
+
+vc4.module @semaphore_id_error {
+vc4.func @bad_sema() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{semaphore 'id' attribute must be in range}}
+vc4.semaphore <acquire> {id = 16 : i32}
+vc4.return
+}
+}
+
+vc4.module @async_wait_empty_error {
+vc4.func @bad_wait() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{requires at least one async token operand}}
+vc4.async.wait
+vc4.return
+}
+}
+
+vc4.module @host_interrupt_scheduled_error {
+vc4.func @bad_irq() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<threadable>} {
+// expected-error@+1 {{is only legal in functions with form = structured}}
+vc4.host_interrupt
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/sync-thread-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @sync_thread_ops {
+// CHECK: vc4.func @threadable_main(%[[ADDR:.*]]: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+// CHECK: vc4.mutex <acquire>
+// CHECK: vc4.mutex <release>
+// CHECK: vc4.semaphore <acquire> {id = 3 : i32}
+// CHECK: vc4.semaphore <release> {id = 9 : i32}
+// CHECK: vc4.host_interrupt
+// CHECK: vc4.thread_switch <switch>
+// CHECK: vc4.thread_switch <last_switch>
+// CHECK: %[[DMA_DESC:.*]] = vc4.dma.desc {block_mode = #vc4.dma_block_mode<row_row>, elem_width = #vc4.dma_elem_width<w32>, kind = #vc4.dma_desc_kind<load>, orientation = #vc4.dma_orientation<horizontal>} : !vc4.dma.desc
+// CHECK: %[[DMA_TOK:.*]] = "vc4.dma.start"(%[[DMA_DESC]], %[[ADDR]]) : (!vc4.dma.desc, i32) -> !vc4.async.token
+// CHECK: %[[TMU_TOK:.*]] = "vc4.tmu.request"(%[[ADDR]]) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+// CHECK: vc4.async.wait %[[DMA_TOK]], %[[TMU_TOK]] : !vc4.async.token, !vc4.async.token
+// CHECK: vc4.program_end
+// CHECK: vc4.return
+// CHECK: vc4.func @end_only() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: vc4.program_end
+// CHECK: vc4.return
+
+vc4.module @sync_thread_ops {
+vc4.func @threadable_main(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<threadable>} {
+vc4.mutex <acquire>
+vc4.mutex <release>
+vc4.semaphore <acquire> {id = 3 : i32}
+vc4.semaphore <release> {id = 9 : i32}
+vc4.host_interrupt
+vc4.thread_switch <switch>
+vc4.thread_switch <last_switch>
+
+    %dma_desc = vc4.dma.desc {
+      kind = #vc4.dma_desc_kind<load>,
+      block_mode = #vc4.dma_block_mode<row_row>,
+      orientation = #vc4.dma_orientation<horizontal>,
+      elem_width = #vc4.dma_elem_width<w32>
+    } : !vc4.dma.desc
+    %dma_tok = "vc4.dma.start"(%dma_desc, %addr) : (!vc4.dma.desc, i32) -> !vc4.async.token
+    %tmu_tok = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+    vc4.async.wait %dma_tok, %tmu_tok : !vc4.async.token, !vc4.async.token
+    vc4.program_end
+    vc4.return
+}
+
+vc4.func @end_only() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+vc4.program_end
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/tmu-descriptor-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @direct_texture_fields_error {
+vc4.func @bad_direct() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>, texture_type = #vc4.texture_type<rgba8888>} : !vc4.tmu.desc // expected-error {{direct mode must not carry texture setup attributes}}
+vc4.return
+}
+}
+
+vc4.module @texture2d_cubemap_stride_error {
+vc4.func @bad_texture2d() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.tmu.descriptor {mode = #vc4.tmu_mode<texture2d>, cube_map_stride = 16 : i32} : !vc4.tmu.desc // expected-error {{'cube_map_stride' is only legal for mode = cubemap}}
+vc4.return
+}
+}
+
+vc4.module @width_height_pair_error {
+vc4.func @bad_size() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.tmu.descriptor {mode = #vc4.tmu_mode<cubemap>, width = 64 : i32} : !vc4.tmu.desc // expected-error {{requires 'width' and 'height' to be provided together}}
+vc4.return
+}
+}
+
+vc4.module @positive_integer_error {
+vc4.func @bad_mips() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.tmu.descriptor {mode = #vc4.tmu_mode<texture2d>, mip_levels = 0 : i32} : !vc4.tmu.desc // expected-error {{'mip_levels' attribute must be greater than zero}}
+vc4.return
+}
+}
+
+vc4.module @empty_child_dict_error {
+vc4.func @bad_child_fields() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.tmu.descriptor {mode = #vc4.tmu_mode<cubemap>, child_image_fields = {}} : !vc4.tmu.desc // expected-error {{'child_image_fields' attribute must not be empty}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/tmu-descriptor-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @tmu_descriptor_attrs attributes {part = #vc4.tmu_read_part<rg1616>, unit = #vc4.tmu_unit<tmu1>} {
+vc4.module @tmu_descriptor_attrs attributes {unit = #vc4.tmu_unit<tmu1>, part = #vc4.tmu_read_part<rg1616>} {
+}
+
+// CHECK: vc4.module @tmu_descriptors {
+// CHECK: vc4.func @main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[DIRECT:.*]] = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
+// CHECK: %[[TEX2D:.*]] = vc4.tmu.descriptor {base = 4096 : i32, height = 64 : i32, mag_filter = #vc4.mag_filter<linear>, min_filter = #vc4.min_filter<lin_mip_lin>, mip_levels = 5 : i32, mode = #vc4.tmu_mode<texture2d>, texture_type = #vc4.texture_type<rgba8888>, width = 128 : i32, wrap_s = #vc4.wrap_mode<repeat>, wrap_t = #vc4.wrap_mode<clamp>} : !vc4.tmu.desc
+// CHECK: %[[CUBE:.*]] = vc4.tmu.descriptor {base = 8192 : i32, bias_flags = {per_pixel = true}, child_image_fields = {height = 16 : i32, width = 16 : i32}, cube_map_stride = 256 : i32, flip_y = true, height = 32 : i32, mag_filter = #vc4.mag_filter<nearest>, min_filter = #vc4.min_filter<near_mip_near>, mip_levels = 6 : i32, mode = #vc4.tmu_mode<cubemap>, texture_type = #vc4.texture_type<rgb565>, width = 32 : i32, wrap_s = #vc4.wrap_mode<mirror>, wrap_t = #vc4.wrap_mode<border>} : !vc4.tmu.desc
+
+vc4.module @tmu_descriptors {
+vc4.func @main() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%direct = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
+%tex2d = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<texture2d>,
+base = 4096 : i32,
+texture_type = #vc4.texture_type<rgba8888>,
+mip_levels = 5 : i32,
+width = 128 : i32,
+height = 64 : i32,
+mag_filter = #vc4.mag_filter<linear>,
+min_filter = #vc4.min_filter<lin_mip_lin>,
+wrap_s = #vc4.wrap_mode<repeat>,
+wrap_t = #vc4.wrap_mode<clamp>
+} : !vc4.tmu.desc
+%cube = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<cubemap>,
+base = 8192 : i32,
+texture_type = #vc4.texture_type<rgb565>,
+mip_levels = 6 : i32,
+width = 32 : i32,
+height = 32 : i32,
+mag_filter = #vc4.mag_filter<nearest>,
+min_filter = #vc4.min_filter<near_mip_near>,
+wrap_s = #vc4.wrap_mode<mirror>,
+wrap_t = #vc4.wrap_mode<border>,
+flip_y = true,
+cube_map_stride = 256 : i32,
+child_image_fields = {width = 16 : i32, height = 16 : i32},
+bias_flags = {per_pixel = true}
+} : !vc4.tmu.desc
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/tmu-request-read-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @direct_address_type_error {
+vc4.func @bad_direct(%addr: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (f32) -> !vc4.async.token // expected-error {{direct-mode address operand must be i32 or vector<16xi32>}}
+vc4.return
+}
+}
+
+vc4.module @descriptor_last_error {
+vc4.func @bad_order(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
+%0 = "vc4.tmu.request"(%desc, %addr) <{unit = #vc4.tmu_unit<tmu0>}> : (!vc4.tmu.desc, i32) -> !vc4.async.token // expected-error {{descriptor operand must be the last operand}}
+vc4.return
+}
+}
+
+vc4.module @cubemap_operand_count_error {
+vc4.func @bad_cube(%s: f32, %t: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<cubemap>,
+texture_type = #vc4.texture_type<rgb565>,
+width = 16 : i32,
+height = 16 : i32,
+cube_map_stride = 64 : i32
+} : !vc4.tmu.desc
+%0 = "vc4.tmu.request"(%s, %t, %desc) <{unit = #vc4.tmu_unit<tmu1>}> : (f32, f32, !vc4.tmu.desc) -> !vc4.async.token // expected-error {{expects between 3 and 4 coordinate operands for the selected TMU mode}}
+vc4.return
+}
+}
+
+vc4.module @read_token_unit_error {
+vc4.func @bad_read_unit(%addr: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%tok = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+%0 = "vc4.tmu.read"(%tok) <{unit = #vc4.tmu_unit<tmu1>, part = #vc4.tmu_read_part<raw32>}> : (!vc4.async.token) -> i32 // expected-error {{token unit must match the selected read unit}}
+vc4.return
+}
+}
+
+vc4.module @read_packed_type_error {
+vc4.func @bad_read_type() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.tmu.read"() <{unit = #vc4.tmu_unit<tmu0>, part = #vc4.tmu_read_part<rgba8888>}> : () -> f32 // expected-error {{packed TMU read parts require i32 or vector<16xi32> result type}}
+vc4.return
+}
+}
+
+vc4.module @noswap_mode_selection_error {
+vc4.func @bad_noswap(%flag: i1) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+"vc4.tmu.noswap"(%flag) <{disable = false}> : (i1) -> () // expected-error {{requires exactly one of a value operand or a 'disable' attribute}}
+vc4.return
+}
+}
+
+vc4.module @noswap_missing_form_error {
+vc4.func @bad_noswap_missing() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+"vc4.tmu.noswap"() : () -> () // expected-error {{requires exactly one of a value operand or a 'disable' attribute}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/tmu-request-read-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @tmu_request_read {
+// CHECK: %[[DIRECT_DESC:.*]] = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
+// CHECK: %[[TEX_DESC:.*]] = vc4.tmu.descriptor {height = 64 : i32, mode = #vc4.tmu_mode<texture2d>, texture_type = #vc4.texture_type<rgba8888>, width = 64 : i32} : !vc4.tmu.desc
+// CHECK: %[[CUBE_DESC:.*]] = vc4.tmu.descriptor {cube_map_stride = 128 : i32, height = 32 : i32, mode = #vc4.tmu_mode<cubemap>, texture_type = #vc4.texture_type<rgb565>, width = 32 : i32} : !vc4.tmu.desc
+// CHECK: %[[TOK0:.*]] = "vc4.tmu.request"(%[[ADDR:.*]]) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+// CHECK: %[[TOK1:.*]] = "vc4.tmu.request"(%[[ADDR]], %[[DIRECT_DESC]]) <{unit = #vc4.tmu_unit<tmu0>}> : (i32, !vc4.tmu.desc) -> !vc4.async.token
+// CHECK: "vc4.tmu.request"(%[[S0:.*]], %[[T0:.*]], %[[TEX_DESC]]) <{unit = #vc4.tmu_unit<tmu1>}> : (f32, f32, !vc4.tmu.desc) -> ()
+// CHECK: %[[TOK2:.*]] = "vc4.tmu.request"(%[[R0:.*]], %[[R0]], %[[R0]], %[[BIAS:.*]], %[[CUBE_DESC]]) <{unit = #vc4.tmu_unit<tmu1>}> : (vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, !vc4.tmu.desc) -> !vc4.async.token
+// CHECK: %[[RAW:.*]] = "vc4.tmu.read"(%[[TOK0]]) <{part = #vc4.tmu_read_part<raw32>, unit = #vc4.tmu_unit<tmu0>}> : (!vc4.async.token) -> vector<16xf32>
+// CHECK: %[[PACKED:.*]] = "vc4.tmu.read"() <{part = #vc4.tmu_read_part<rgba8888>, unit = #vc4.tmu_unit<tmu1>}> : () -> i32
+// CHECK: "vc4.tmu.noswap"() <{disable = true}> : () -> ()
+// CHECK: "vc4.tmu.noswap"(%[[FLAG:.*]]) : (i1) -> ()
+
+vc4.module @tmu_request_read {
+vc4.func @main(%addr: i32, %s: f32, %t: f32,
+%r: vector<16xf32>, %bias: vector<16xf32>, %flag: i1) attributes {threading = #vc4.threading_mode<single>, form = #vc4.function_form<structured>, domain = #vc4.execution_domain<qpu>} {
+%direct_desc = vc4.tmu.descriptor {mode = #vc4.tmu_mode<direct>} : !vc4.tmu.desc
+%tex_desc = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<texture2d>,
+texture_type = #vc4.texture_type<rgba8888>,
+width = 64 : i32,
+height = 64 : i32
+} : !vc4.tmu.desc
+%cube_desc = vc4.tmu.descriptor {
+mode = #vc4.tmu_mode<cubemap>,
+texture_type = #vc4.texture_type<rgb565>,
+width = 32 : i32,
+height = 32 : i32,
+cube_map_stride = 128 : i32
+} : !vc4.tmu.desc
+
+    %tok0 = "vc4.tmu.request"(%addr) <{unit = #vc4.tmu_unit<tmu0>}> : (i32) -> !vc4.async.token
+    %tok1 = "vc4.tmu.request"(%addr, %direct_desc) <{unit = #vc4.tmu_unit<tmu0>}> : (i32, !vc4.tmu.desc) -> !vc4.async.token
+    "vc4.tmu.request"(%s, %t, %tex_desc) <{unit = #vc4.tmu_unit<tmu1>}> : (f32, f32, !vc4.tmu.desc) -> ()
+    %tok2 = "vc4.tmu.request"(%r, %r, %r, %bias, %cube_desc) <{unit = #vc4.tmu_unit<tmu1>}> : (vector<16xf32>, vector<16xf32>, vector<16xf32>, vector<16xf32>, !vc4.tmu.desc) -> !vc4.async.token
+
+    %raw = "vc4.tmu.read"(%tok0) <{unit = #vc4.tmu_unit<tmu0>, part = #vc4.tmu_read_part<raw32>}> : (!vc4.async.token) -> vector<16xf32>
+    %packed = "vc4.tmu.read"() <{unit = #vc4.tmu_unit<tmu1>, part = #vc4.tmu_read_part<rgba8888>}> : () -> i32
+
+    "vc4.tmu.noswap"() <{disable = true}> : () -> ()
+    "vc4.tmu.noswap"(%flag) : (i1) -> ()
+
+    vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/types-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @types {
+// CHECK: vc4.func private @opaque_types(!vc4.async.token, !vc4.tmu.desc, !vc4.vpm.desc) -> !vc4.dma.desc attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>}
+
+vc4.module @types {
+vc4.func private @opaque_types(%token: !vc4.async.token, %tmu: !vc4.tmu.desc, %vpm: !vc4.vpm.desc) -> !vc4.dma.desc attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>}
+}
+
+===== compiler/test/Dialect/VC4/uniform-and-read-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @uniform_read_type_error {
+vc4.func @bad_uniform_read() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{result type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+%0 = vc4.uniform.read : i16
+vc4.return
+}
+}
+
+vc4.module @uniform_seek_type_error {
+vc4.func @bad_uniform_seek(%offset: vector<16xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{operand must be a scalar signless integer or index}}
+vc4.uniform.seek %offset : vector<16xi32>
+vc4.return
+}
+}
+
+vc4.module @mov_type_error {
+vc4.func @bad_mov(%arg0: vector<8xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{result type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+%0 = vc4.mov %arg0 : vector<8xi32>
+vc4.return
+}
+}
+
+vc4.module @read_type_error {
+vc4.func @bad_read(%arg0: i16) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// expected-error@+1 {{result type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+%0 = vc4.read %arg0 : i16
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/uniform-and-read-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @uniforms {
+// CHECK: vc4.func @main(%[[SEED:.*]]: vector<16xf32>, %[[OFS:.*]]: i32) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[U0:.*]] = vc4.uniform.read : i32
+// CHECK: vc4.uniform.seek %[[OFS]] : i32
+// CHECK: vc4.uniform.seek %[[OFS]] {relative = true} : i32
+// CHECK: %[[MOV:.*]] = vc4.mov %[[SEED]] : vector<16xf32>
+// CHECK: %[[READ:.*]] = vc4.read %[[MOV]] : vector<16xf32>
+// CHECK: vc4.return %[[U0]] : i32
+
+vc4.module @uniforms {
+vc4.func @main(%seed: vector<16xf32>, %ofs: i32) -> i32 attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%u0 = vc4.uniform.read : i32
+vc4.uniform.seek %ofs : i32
+vc4.uniform.seek %ofs {relative = true} : i32
+%m = vc4.mov %seed : vector<16xf32>
+%r = vc4.read %m : vector<16xf32>
+vc4.return %u0 : i32
+}
+}
+
+===== compiler/test/Dialect/VC4/value-shape-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @pack_mode_selection_error {
+vc4.func @bad_pack(%arg0: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.pack"(%arg0) : (i32) -> i32 // expected-error {{requires exactly one of 'regfile_a_mode' or 'mul_mode'}}
+vc4.return
+}
+}
+
+vc4.module @pack_mul_type_error {
+vc4.func @bad_pack_mul(%arg0: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.pack"(%arg0) <{mul_mode = #vc4.mul_pack_mode<to_8a>}> : (i32) -> i32 // expected-error {{mul_mode requires f32 or vector<16xf32> input}}
+vc4.return
+}
+}
+
+vc4.module @pack_non_carrier_result_error {
+vc4.func @bad_pack_result(%arg0: vector<16xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.pack"(%arg0) <{regfile_a_mode = #vc4.regfile_a_pack_mode<to_16a>}> : (vector<16xf32>) -> vector<16xi16> // expected-error {{result type must be a 32-bit carrier word: i32 or vector<16xi32>}}
+vc4.return
+}
+}
+
+vc4.module @unpack_mode_selection_error {
+vc4.func @bad_unpack(%arg0: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.unpack"(%arg0) <{regfile_a_mode = #vc4.regfile_a_unpack_mode<none>}> : (i32) -> i32 // expected-error {{regfile_a_mode must not be <none>}}
+vc4.return
+}
+}
+
+vc4.module @unpack_r4_type_error {
+vc4.func @bad_unpack_r4(%arg0: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.unpack"(%arg0) <{r4_mode = #vc4.r4_unpack_mode<color8a>}> : (i32) -> i32 // expected-error {{r4_mode requires f32 or vector<16xf32> result}}
+vc4.return
+}
+}
+
+vc4.module @unpack_non_carrier_input_error {
+vc4.func @bad_unpack_input(%arg0: vector<16xi16>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.unpack"(%arg0) <{regfile_a_mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>}> : (vector<16xi16>) -> vector<16xf32> // expected-error {{input type must be a 32-bit carrier word: i32 or vector<16xi32>}}
+vc4.return
+}
+}
+
+vc4.module @rotate_exclusive_error {
+vc4.func @bad_rotate_both(%arg0: vector<16xi32>, %amt: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.rotate"(%arg0, %amt) <{immediate = 3 : i32}> : (vector<16xi32>, i32) -> vector<16xi32> // expected-error {{requires exactly one of an amount operand or an immediate attribute}}
+vc4.return
+}
+}
+
+vc4.module @rotate_missing_amount_error {
+vc4.func @bad_rotate_none(%arg0: vector<16xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.rotate"(%arg0) : (vector<16xi32>) -> vector<16xi32> // expected-error {{requires exactly one of an amount operand or an immediate attribute}}
+vc4.return
+}
+}
+
+vc4.module @rotate_shape_error {
+vc4.func @bad_rotate_shape(%arg0: vector<8xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.rotate"(%arg0) <{immediate = 1 : i32}> : (vector<8xi32>) -> vector<8xi32> // expected-error {{structured vc4.rotate requires vector<16xi32> or vector<16xf32> input and result types}}
+vc4.return
+}
+}
+
+vc4.module @rotate_immediate_range_error {
+vc4.func @bad_rotate_imm(%arg0: vector<16xf32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = "vc4.rotate"(%arg0) <{immediate = 16 : i32}> : (vector<16xf32>) -> vector<16xf32> // expected-error {{immediate rotate amount must be in range}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/value-shape-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @value_shape {
+// CHECK: vc4.func @main(%[[I:.*]]: i32, %[[F:.*]]: f32, %[[VI:.*]]: vector<16xi32>, %[[VF:.*]]: vector<16xf32>, %[[AMT:.*]]: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[P0:.*]] = "vc4.pack"(%[[F]]) <{regfile_a_mode = #vc4.regfile_a_pack_mode<to_16a>}> : (f32) -> i32
+// CHECK: %[[P1:.*]] = "vc4.pack"(%[[VF]]) <{mul_mode = #vc4.mul_pack_mode<to_8a>}> : (vector<16xf32>) -> vector<16xi32>
+// CHECK: %[[U0:.*]] = "vc4.unpack"(%[[I]]) <{regfile_a_mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>}> : (i32) -> f32
+// CHECK: %[[U1:.*]] = "vc4.unpack"(%[[VI]]) <{r4_mode = #vc4.r4_unpack_mode<replicate_8d>}> : (vector<16xi32>) -> vector<16xi32>
+// CHECK: %[[R0:.*]] = "vc4.rotate"(%[[VI]], %[[AMT]]) : (vector<16xi32>, i32) -> vector<16xi32>
+// CHECK: %[[R1:.*]] = "vc4.rotate"(%[[VF]]) <{immediate = 4 : i32}> : (vector<16xf32>) -> vector<16xf32>
+// CHECK: vc4.return
+
+vc4.module @value_shape {
+vc4.func @main(%i: i32, %f: f32, %vi: vector<16xi32>, %vf: vector<16xf32>, %amt: i32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%p0 = "vc4.pack"(%f) <{regfile_a_mode = #vc4.regfile_a_pack_mode<to_16a>}> : (f32) -> i32
+%p1 = "vc4.pack"(%vf) <{mul_mode = #vc4.mul_pack_mode<to_8a>}> : (vector<16xf32>) -> vector<16xi32>
+%u0 = "vc4.unpack"(%i) <{regfile_a_mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>}> : (i32) -> f32
+%u1 = "vc4.unpack"(%vi) <{r4_mode = #vc4.r4_unpack_mode<replicate_8d>}> : (vector<16xi32>) -> vector<16xi32>
+%r0 = "vc4.rotate"(%vi, %amt) : (vector<16xi32>, i32) -> vector<16xi32>
+%r1 = "vc4.rotate"(%vf) <{immediate = 4 : i32}> : (vector<16xf32>) -> vector<16xf32>
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/verify-emit-contract-invalid.mlir =====
+// RUN: vc4-opt --vc4-verify-emit-contract %s --split-input-file --verify-diagnostics
+
+vc4.module @qpu_structured_not_directly_emittable {
+// expected-error@+1 {{is not directly emittable: qasm emission later consumes only domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled> functions}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>} {
+%0 = vc4.uniform.read : i32
+"vc4.semaphore"() <{id = 2 : i32, mode = #vc4.semaphore_mode<release>}> : () -> ()
+vc4.program_end
+vc4.return
+}
+}
+
+// -----
+
+vc4.module @host_scheduled_not_directly_emittable {
+// Generic syntax keeps the function non-external without introducing
+// scheduled-body ops that would trigger unrelated dialect verifiers first.
+// expected-error@+1 {{'vc4.func' op is not directly emittable: launcher generation later consumes only domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured> functions}}
+"vc4.func"() <{domain = #vc4.execution_domain<host>, form = #vc4.function_form<scheduled>, function_type = () -> (), sym_name = "driver_stub", sym_visibility = "private", threading = #vc4.threading_mode<single>}> ({
+^bb0:
+}) : () -> ()
+}
+
+// -----
+
+vc4.module @qpu_scheduled_missing_thrend_epilogue {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; slot N-3 must be a vc4.qpu.bundle with sig = #vc4.qpu_signal<thrend>}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 2 : i32,
+waddr_mul = 3 : i32
+}
+vc4.qpu.sema <release> {
+id = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 4 : i32,
+waddr_mul = 5 : i32
+}
+}
+}
+
+// -----
+
+vc4.module @qpu_scheduled_duplicate_thrend_epilogue {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; found an earlier vc4.qpu.bundle with sig = #vc4.qpu_signal<thrend> before slot N-3}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 7 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 34 : i32,
+waddr_mul = 35 : i32
+}
+vc4.qpu.sema <release> {
+id = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 36 : i32,
+waddr_mul = 37 : i32
+}
+}
+}
+
+// -----
+
+vc4.module @qpu_scheduled_thrend_not_in_slot_n_minus_3 {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; slot N-3 must be a vc4.qpu.bundle with sig = #vc4.qpu_signal<thrend>}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 3 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 2 : i32,
+waddr_mul = 3 : i32
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.sema <release> {
+id = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 36 : i32,
+waddr_mul = 37 : i32
+}
+}
+}
+
+// -----
+
+vc4.module @qpu_scheduled_epilogue_tail_must_not_branch {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; slot N-3 must be a vc4.qpu.bundle with sig = #vc4.qpu_signal<thrend>}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.branch attributes {
+cond = #vc4.branch_cond<always>,
+relative = true,
+use_reg = false,
+raddr_a = 0 : i32,
+immediate = 16 : i32,
+waddr_add = 4 : i32,
+waddr_mul = 5 : i32
+} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 6 : i32,
+waddr_mul = 7 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 9 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 8 : i32,
+waddr_mul = 9 : i32
+}
+vc4.qpu.sema <release> {
+id = 3 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 10 : i32,
+waddr_mul = 11 : i32
+}
+}
+}
+}
+
+// -----
+
+vc4.module @qpu_scheduled_stream_too_short_for_epilogue {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; found only 2 scheduled instruction slot(s)}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.sema <release> {
+id = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 36 : i32,
+waddr_mul = 37 : i32
+}
+}
+}
+
+// -----
+
+vc4.module @qpu_scheduled_duplicate_thrend_in_tail_delay_slots {
+// expected-error@+1 {{'vc4.func' op is not directly emittable: qasm input requires an explicit thrend plus two delay-slot instructions at the end of the flattened scheduled instruction stream; only slot N-3 may carry sig = #vc4.qpu_signal<thrend>; slots N-2 and N-1 must be non-branch scheduled ops without another thread-end signal}}
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 32 : i32,
+waddr_mul = 33 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<thrend>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 34 : i32,
+waddr_mul = 35 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 4 : i32,
+raddr_b = 5 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.sema <release> {
+id = 2 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 36 : i32,
+waddr_mul = 37 : i32
+}
+}
+}
+
+===== compiler/test/Dialect/VC4/verify-emit-contract.mlir =====
+// RUN: vc4-opt --vc4-verify-emit-contract %s | FileCheck %s
+
+// CHECK: vc4.module @emit_contract
+// CHECK: vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>}
+// CHECK: vc4.qpu.bundle
+// CHECK: vc4.qpu.branch
+// CHECK: sig = #vc4.qpu_signal<thrend>
+// CHECK: vc4.qpu.ldi <splat32>
+// CHECK: vc4.qpu.sema <release>
+// CHECK: vc4.func @driver(%[[BASE:.*]]: i32, %[[LEN:.*]]: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>}
+// CHECK: %[[TOK:.*]] = "vc4.enqueue_qpu"(%[[BASE]], %[[LEN]]) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
+// CHECK: vc4.reserve_qpu {mask = 3 : i32}
+// CHECK: vc4.async.wait %[[TOK]] : !vc4.async.token
+
+vc4.module @emit_contract {
+vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 0 : i32,
+waddr_mul = 1 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 0 : i32,
+raddr_b = 1 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.branch attributes {
+cond = #vc4.branch_cond<always>,
+relative = true,
+use_reg = false,
+raddr_a = 0 : i32,
+immediate = 16 : i32,
+waddr_add = 0 : i32,
+waddr_mul = 0 : i32
+} {
+vc4.qpu.bundle {
+sig = #vc4.qpu_signal<none>,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 2 : i32,
+waddr_mul = 3 : i32,
+op_add = #vc4.add_opcode<nop>,
+op_mul = #vc4.mul_opcode<nop>,
+raddr_a = 2 : i32,
+raddr_b = 3 : i32,
+add_a = #vc4.qpu_mux<a>,
+add_b = #vc4.qpu_mux<b>,
+mul_a = #vc4.qpu_mux<r0>,
+mul_b = #vc4.qpu_mux<r1>
+}
+vc4.qpu.ldi <splat32> {
+value = 7 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<never>,
+waddr_add = 4 : i32,
+waddr_mul = 5 : i32
+}
+vc4.qpu.sema <release> {
+id = 1 : i32,
+pm = false,
+cond_add = #vc4.cond<always>,
+cond_mul = #vc4.cond<always>,
+waddr_add = 6 : i32,
+waddr_mul = 7 : i32
+}
+}
+
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrend>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 33 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.ldi <splat32> {
+      value = 11 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 34 : i32,
+      waddr_mul = 35 : i32
+    }
+    vc4.qpu.sema <release> {
+      id = 2 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 36 : i32,
+      waddr_mul = 37 : i32
+    }
+}
+
+vc4.func @driver(%base: i32, %len: i32) attributes {domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%tok = "vc4.enqueue_qpu"(%base, %len) <{entry = @kernel_entry}> : (i32, i32) -> !vc4.async.token
+"vc4.reserve_qpu"() <{mask = 3 : i32}> : () -> ()
+"vc4.cf.branch"() [^bb1, ^bb2] <{cond = #vc4.branch_cond<any_z_clear>}> : () -> ()
+^bb1:
+vc4.async.wait %tok : !vc4.async.token
+vc4.return
+^bb2:
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/vpm-invalid.mlir =====
+// RUN: vc4-opt %s --verify-diagnostics
+
+vc4.module @vpm_read_descriptor_missing_count {
+vc4.func @bad_desc() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<read>, orientation = #vc4.vpm_orientation<horizontal>, lane_mode = #vc4.vpm_lane_mode<packed>, elem_width = #vc4.vpm_elem_width<w32>} : !vc4.vpm.desc // expected-error {{kind = read requires a 'num_vectors' attribute}}
+vc4.return
+}
+}
+
+vc4.module @vpm_write_descriptor_extra_count {
+vc4.func @bad_write_desc() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<write>, orientation = #vc4.vpm_orientation<vertical>, lane_mode = #vc4.vpm_lane_mode<laned>, elem_width = #vc4.vpm_elem_width<w16>, num_vectors = 1 : i32} : !vc4.vpm.desc // expected-error {{kind = write must not carry 'num_vectors'}}
+vc4.return
+}
+}
+
+vc4.module @vpm_descriptor_addr_range {
+vc4.func @bad_addr() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%0 = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<write>, orientation = #vc4.vpm_orientation<vertical>, lane_mode = #vc4.vpm_lane_mode<packed>, elem_width = #vc4.vpm_elem_width<w8>, addr = -1 : i32} : !vc4.vpm.desc // expected-error {{'addr' attribute must be non-negative}}
+vc4.return
+}
+}
+
+vc4.module @vpm_read_kind_mismatch {
+vc4.func @bad_read(%vin: vector<16xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<write>, orientation = #vc4.vpm_orientation<vertical>, lane_mode = #vc4.vpm_lane_mode<laned>, elem_width = #vc4.vpm_elem_width<w32>} : !vc4.vpm.desc
+%0 = vc4.vpm.read %desc : (!vc4.vpm.desc) -> vector<16xi32> // expected-error {{descriptor kind must be <read>}}
+vc4.return
+}
+}
+
+vc4.module @vpm_write_kind_mismatch {
+vc4.func @bad_write(%vin: vector<16xi32>) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<read>, orientation = #vc4.vpm_orientation<horizontal>, lane_mode = #vc4.vpm_lane_mode<packed>, elem_width = #vc4.vpm_elem_width<w32>, num_vectors = 1 : i32} : !vc4.vpm.desc
+vc4.vpm.write %desc, %vin : (!vc4.vpm.desc, vector<16xi32>) -> () // expected-error {{descriptor kind must be <write>}}
+vc4.return
+}
+}
+
+vc4.module @vpm_write_value_type_error {
+vc4.func @bad_value(%vin: i16) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%desc = vc4.vpm.desc {kind = #vc4.vpm_desc_kind<write>, orientation = #vc4.vpm_orientation<horizontal>, lane_mode = #vc4.vpm_lane_mode<packed>, elem_width = #vc4.vpm_elem_width<w32>} : !vc4.vpm.desc
+vc4.vpm.write %desc, %vin : (!vc4.vpm.desc, i16) -> () // expected-error {{value type must be i32, f32, vector<16xi32>, or vector<16xf32>}}
+vc4.return
+}
+}
+
+===== compiler/test/Dialect/VC4/vpm-roundtrip.mlir =====
+// RUN: vc4-opt %s | FileCheck %s
+
+// CHECK: vc4.module @vpm_ops {
+// CHECK: vc4.func @main(%[[VIN:.*]]: vector<16xi32>, %[[SCALAR:.*]]: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+// CHECK: %[[READ_DESC:.*]] = vc4.vpm.desc {addr = 0 : i32, elem_width = #vc4.vpm_elem_width<w32>, kind = #vc4.vpm_desc_kind<read>, lane_mode = #vc4.vpm_lane_mode<packed>, num_vectors = 2 : i32, orientation = #vc4.vpm_orientation<horizontal>, stride = 1 : i32} : !vc4.vpm.desc
+// CHECK: %[[WRITE_DESC:.*]] = vc4.vpm.desc {addr = 16 : i32, elem_width = #vc4.vpm_elem_width<w16>, kind = #vc4.vpm_desc_kind<write>, lane_mode = #vc4.vpm_lane_mode<laned>, orientation = #vc4.vpm_orientation<vertical>, stride = 4 : i32} : !vc4.vpm.desc
+// CHECK: %[[R0:.*]] = vc4.vpm.read %[[READ_DESC]] : (!vc4.vpm.desc) -> vector<16xi32>
+// CHECK: vc4.vpm.write %[[WRITE_DESC]], %[[VIN]] : (!vc4.vpm.desc, vector<16xi32>) -> ()
+// CHECK: vc4.vpm.write %[[WRITE_DESC]], %[[SCALAR]] : (!vc4.vpm.desc, f32) -> ()
+// CHECK: vc4.return
+
+vc4.module @vpm_ops {
+vc4.func @main(%vin: vector<16xi32>, %scalar: f32) attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
+%read_desc = vc4.vpm.desc {
+kind = #vc4.vpm_desc_kind<read>,
+orientation = #vc4.vpm_orientation<horizontal>,
+lane_mode = #vc4.vpm_lane_mode<packed>,
+elem_width = #vc4.vpm_elem_width<w32>,
+addr = 0 : i32,
+stride = 1 : i32,
+num_vectors = 2 : i32
+} : !vc4.vpm.desc
+%write_desc = vc4.vpm.desc {
+kind = #vc4.vpm_desc_kind<write>,
+orientation = #vc4.vpm_orientation<vertical>,
+lane_mode = #vc4.vpm_lane_mode<laned>,
+elem_width = #vc4.vpm_elem_width<w16>,
+addr = 16 : i32,
+stride = 4 : i32
+} : !vc4.vpm.desc
+
+    %r0 = vc4.vpm.read %read_desc : (!vc4.vpm.desc) -> vector<16xi32>
+    vc4.vpm.write %write_desc, %vin : (!vc4.vpm.desc, vector<16xi32>) -> ()
+    vc4.vpm.write %write_desc, %scalar : (!vc4.vpm.desc, f32) -> ()
+    vc4.return
+}
+}
+
+===== compiler/docs/codegen/hardware-ground-truth-test-contract.md =====
+# VC4 CodeGen Hardware Ground-Truth Test Contract
+
+Status: **locked contract for VC4 codegen ground-truth tests**
+Audience: VC4 backend maintainers and coding agents authoring tests
+Applies to: `compiler/test/CodeGen/VC4/**` and `compiler/docs/codegen/test-backlog.md`
+
+This document is the source of truth for the VC4 codegen hardware-test corpus. It supersedes earlier “hardware-only reference” drafts and incorporates the first successful `minimal_thrend` hardware run.
+
+The locked test model is:
+
+1. Each hardware-run test has an **input MLIR program** in final-stage `vc4` dialect form.
+2. Each hardware-run test has a trusted **reference bundle** that computes the same semantics on real Raspberry Pi VC4 hardware.
+3. Before codegen exists, the test validates only the **reference / ground-truth side**.
+4. After codegen exists, the same test also generates a **candidate bundle** from `input.mlir`, builds it, runs it on hardware, and checks the candidate result against the same semantic oracle.
+
+The goal is not to make generated qasm text character-for-character identical to the reference qasm. The goal is to prove that codegen from the given `vc4` MLIR produces a deployable bundle that computes the same result on hardware.
+
+---
+
+## 1. Hardware and project basis
+
+The VC4 backend targets QPU user programs, not merely textual assembly output. Runnable examples must therefore be grounded in actual QPU launch and execution behavior.
+
+Relevant VC4 hardware facts that shape this contract:
+
+- QPUs are 16-way SIMD processors.
+- General-purpose user programs are queued through the V3D QPU scheduler user-program request interface. The host provides a program address and uniforms address / length to the scheduler, and observes request/completion state through V3D scheduler registers.
+- Uniforms are a sequential stream. Reading the uniform register consumes the next 32-bit word and auto-increments the uniforms pointer.
+- Program termination uses a thread-end / program-end signal and two following delay-slot instructions.
+- TMU, SFU, VPM/VDR/VDW, semaphore, mutex, branch, and thread-switch behavior have real placement and hazard constraints that must ultimately be validated on hardware or explicitly categorized as assembler-only / litmus-only until hardware execution exists.
+
+The practical conclusion is:
+
+> For runnable examples, **real Raspberry Pi hardware execution is the gold standard**. Local checks verify shape, syntax, and buildability. Semantic correctness is established by the hardware result line.
+
+---
+
+## 2. Test phases
+
+Every ordinary codegen hardware-run test has up to two runnable sides.
+
+### 2.1 Reference / ground-truth side
+
+This side exists first.
+
+It contains a trusted, self-contained qasm + C launcher + C harness bundle that can run on the Pi without codegen. The bundle may be hand-authored, imported from a known-good reference, or otherwise explicitly trusted by maintainers.
+
+The reference side proves:
+
+- the semantic behavior expected from the test,
+- the runtime/build/harness assumptions,
+- the launcher ABI shape for the example,
+- the relevant hardware behavior exercised by the kernel.
+
+The reference side is what we create now.
+
+### 2.2 Candidate / generated-code side
+
+This side exists later, after codegen exists.
+
+The candidate side is produced from `input.mlir` by the VC4 code generator. It must produce a source bundle:
+
+- `kernel.qasm`,
+- `kernel_launch.c`,
+- `kernel_launch.h`,
+
+plus whatever local test harness glue is needed to run it through the same Pi flow.
+
+The candidate side passes only if its semantic result matches the same expected JSON oracle used by the reference side.
+
+---
+
+## 3. Implemented hardware-run directory shape
+
+Each implemented hardware-run test lives under:
+
+```text
+compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/
+```
+
+Required shape during the reference-only phase:
+
+```text
+compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/
+  README.md
+  input.mlir
+  expected.json
+
+  reference/
+    .gitignore
+    Makefile
+    run.sh
+    3-test-<test-name>.c
+    mailbox.c
+    mailbox.h
+    <kernel>.qasm
+    <kernel>_launch.c
+    <kernel>_launch.h
+
+  share/                         # required when vc4asm -c needs ../share templates/includes
+    vc4tmpl/template.h           # copied mechanically from old_compiler/reference/share
+    vc4inc/vc4.qinc              # required if qasm includes ../share/vc4inc/vc4.qinc
+```
+
+Optional files:
+
+```text
+  input.json                     # deterministic host-side input description, if useful
+  reference_result.golden.json   # optional captured reference result if stable
+  notes.md                       # extra hardware notes, if needed
+
+  candidate/
+    README.md                    # optional placeholder before codegen exists
+```
+
+There is **no required root-level `run.sh`** in the locked contract. The support runner is side-aware and runs `reference/run.sh` or `candidate/run.sh` directly.
+
+Generated/transient files must not be committed unless a test README explicitly justifies them as source-of-truth artifacts. Normally, do **not** commit:
+
+```text
+objs/
+*.o
+*.d
+*.elf
+*.bin
+*.list
+*shader.c
+*shader.h
+run.log
+candidate/generated/*
+```
+
+The reference directory must normally contain a `.gitignore` like:
+
+```gitignore
+objs/
+*.o
+*.d
+*.elf
+*.bin
+*.list
+*shader.c
+*shader.h
+run.log
+```
+
+---
+
+## 4. `input.mlir` contract
+
+`input.mlir` is the MLIR program that the future code generator should consume. It must describe the same kernel/launch semantics as the reference bundle.
+
+Because `compiler/test/lit.cfg.py` discovers `*.mlir`, every checked-in `input.mlir` under `compiler/test` must also be a valid lit test. A hardware-run `input.mlir` is therefore both:
+
+1. the future codegen input, and
+2. a local lit-checked final-stage `vc4` emission-contract input.
+
+### 4.1 Required `RUN:` line
+
+Every hardware-run `input.mlir` must begin with a `RUN:` line that verifies the final-stage VC4 emission contract locally.
+
+Recommended v1 scheduled-kernel `RUN:` line:
+
+```mlir
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+```
+
+This prevents lit from reporting the file as unresolved and gives the test a useful local shape check even before candidate-side codegen exists.
+
+### 4.2 Required MLIR properties
+
+`input.mlir` must:
+
+1. use the `vc4` dialect,
+2. represent the final stage before code generation,
+3. be parseable by current `vc4-opt`, unless the test is explicitly not yet cataloged,
+4. identify the launchable QPU kernel,
+5. carry the launcher ABI metadata needed to generate `launcher.c` and `launcher.h`,
+6. make the physical uniform stream layout explicit through verified metadata,
+7. make the tail policy explicit,
+8. match the semantic behavior of the reference bundle.
+
+### 4.3 Final-stage device body
+
+For v1 codegen, qasm emission consumes only scheduled QPU sink functions:
+
+```mlir
+vc4.func @kernel_name() attributes {
+  domain = #vc4.execution_domain<qpu>,
+  form = #vc4.function_form<scheduled>,
+  kernel,
+  threading = #vc4.threading_mode<single>,
+  "vc4.launch_abi" = { ... }
+} {
+  // vc4.qpu.bundle / vc4.qpu.ldi / vc4.qpu.sema / vc4.qpu.branch only.
+}
+```
+
+The scheduled sink subset for final qasm emission is:
+
+- `vc4.qpu.bundle`,
+- `vc4.qpu.ldi`,
+- `vc4.qpu.sema`,
+- `vc4.qpu.branch`.
+
+Structured `vc4` functions are not final qasm-emission inputs. They are lowering inputs for later milestones.
+
+---
+
+## 5. Launcher ABI metadata contract
+
+The qasm body alone is not enough to generate the launcher. The launcher also needs semantic argument and physical uniform ABI metadata.
+
+The current dialect supports this with a verified `"vc4.launch_abi"` dictionary attribute on launchable QPU kernel functions. This attribute is part of the hardware-run input contract.
+
+### 5.1 Required top-level fields
+
+A kernel function with `"vc4.launch_abi"` must be a `kernel` function in QPU domain.
+
+The dictionary must contain:
+
+```mlir
+"vc4.launch_abi" = {
+  public_name = "...",
+  tail_policy = "exact_multiple" | "tail_safe",
+  uniform_words_per_qpu = <positive i32>,
+  args = [...],
+  builtins = [...]
+}
+```
+
+Meaning:
+
+- `public_name`: public launcher function name in generated C.
+- `tail_policy`: test/kernel policy for non-full vector tails.
+- `uniform_words_per_qpu`: number of 32-bit words in the per-QPU physical uniform stream.
+- `args`: semantic public API arguments.
+- `builtins`: execution builtins materialized for the kernel.
+
+Uniform indices across `args` and uniform-materialized `builtins` must be unique and dense in `[0, uniform_words_per_qpu)`.
+
+### 5.2 Argument entries
+
+Buffer argument:
+
+```mlir
+{name = "x", kind = "buffer", direction = "in" | "out" | "inout", elem_type = "i8" | "u8" | "i16" | "u16" | "i32" | "u32" | "f32", uniform_index = 0 : i32}
+```
+
+Scalar argument:
+
+```mlir
+{name = "n", kind = "scalar", direction = "by_value", type = "i32" | "u32" | "f32" | "index", uniform_index = 1 : i32}
+```
+
+The public launcher API exposes semantic arguments. It must not expose raw uniform arrays, `qpu_id`, `num_qpus`, hardware addresses, or scheduler registers unless a specific low-level test explicitly exists for such an API.
+
+### 5.3 Builtin entries
+
+Uniform-suffix builtin:
+
+```mlir
+{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32}
+{name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32}
+```
+
+Register-materialized builtin, if used:
+
+```mlir
+{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "register"}
+```
+
+Rules:
+
+- `#vc4.builtin_kind<elem_num>` must not appear in `vc4.launch_abi` builtins.
+- `#vc4.builtin_kind<num_qpus>` currently uses `materialization = "uniform_suffix"`.
+- register-materialized builtins must not specify `uniform_index`.
+
+### 5.4 SAXPY ABI example
+
+For the SAXPY reference, the semantic public API is:
+
+```c
+int saxpy_launch(struct vc4_runtime *rt, float *x, float *y, float a, uint32_t n);
+```
+
+The physical uniform stream per QPU is:
+
+```text
+[0] x base address
+[1] y base address
+[2] alpha as one f32/u32 word
+[3] n element count
+[4] qpu_id
+[5] num_qpus
+```
+
+The last two entries are conceptual execution builtins even if the current physical implementation passes them through the uniform stream.
+
+---
+
+## 6. Reference bundle contract
+
+The reference bundle is a trusted implementation of the same semantics as `input.mlir`.
+
+Required files in `reference/`:
+
+```text
+reference/
+  .gitignore
+  Makefile
+  run.sh
+  3-test-<test-name>.c
+  mailbox.c
+  mailbox.h
+  <kernel>.qasm
+  <kernel>_launch.c
+  <kernel>_launch.h
+```
+
+For examples modeled on the known SAXPY reference, `reference/run.sh` should:
+
+1. assemble qasm with `vc4asm`,
+2. generate derived shader C/H files,
+3. build the bare-metal test using the local Makefile,
+4. boot/run the Pi with `pi-install` or the configured equivalent,
+5. stream serial output to stdout.
+
+When `reference/run.sh` invokes `vc4asm`, it must keep `set -euo pipefail` and
+capture assembler output inside an `if ! out=$(vc4asm ... 2>&1); then`
+conditional. On nonzero assembler exit, print `ASSEMBLY FAILED WITH OUTPUT`,
+print the captured output, and exit nonzero. On zero assembler exit with
+non-empty output, print `ASSEMBLY PRODUCED UNEXPECTED OUTPUT`, print the
+captured output, and exit nonzero. Only after clean assembly should the script
+print `RUNNING MAKE` and run `make`. Do not remove strict mode to expose
+assembler diagnostics.
+
+The reference `run.sh` must not power-cycle the Pi. Power cycling is the job of `Support/run_hardware_test.sh`.
+
+### 6.1 vc4asm `share/` requirement
+
+When `reference/run.sh` runs `vc4asm -c ...` from inside `reference/`, vc4asm may look for generated-C templates at:
+
+```text
+../share/vc4tmpl/template.h
+```
+
+Therefore tests using `vc4asm -c` must either:
+
+1. copy `old_compiler/reference/share` to the test root as `<test-root>/share`, or
+2. document another explicit template/include strategy.
+
+For qasm that includes vc4asm helper macros, prefer the stable relative include form used by the reference tests:
+
+```qasm
+.include "../share/vc4inc/vc4.qinc"
+```
+
+Do not rely on a machine-local absolute include path inside checked-in qasm.
+
+---
+
+## 7. `expected.json` contract
+
+Every hardware-run test root contains:
+
+```text
+expected.json
+```
+
+The expected JSON is the semantic oracle. It is intentionally small and stable.
+
+Example:
+
+```json
+{
+  "name": "minimal_thrend",
+  "status": "PASS",
+  "required": {
+    "completed_qpus": 12
+  }
+}
+```
+
+Example with float tolerance:
+
+```json
+{
+  "name": "saxpy_reference",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}
+```
+
+Meaning:
+
+- top-level `name` is required exactly,
+- top-level `status` is required exactly,
+- fields under `required` are exact comparisons after type coercion,
+- fields under `float_max` require `abs(actual) <= limit`.
+
+Do not include unstable values such as execution time, speedup, serial port names, or build paths in required checks.
+
+---
+
+## 8. `VC4_TEST_RESULT` contract
+
+Every successful hardware run must print a final machine-readable line:
+
+```text
+VC4_TEST_RESULT name=<test-name> status=PASS key=value ...
+```
+
+Rules:
+
+1. The checker uses the **last** `VC4_TEST_RESULT` line in the log.
+2. Every field is `key=value`.
+3. Values should avoid whitespace; use underscores if needed.
+4. The line must include at least:
+    - `name=<test-name>`
+    - `status=PASS`
+5. Tests should include semantic fields such as:
+    - `mismatches=0`
+    - `max_abs_diff=0.0`
+    - `completed_qpus=12`
+    - `checksum=<value>`
+6. Timing values may be printed but must not be required by `expected.json` unless the test is explicitly about timing.
+
+Example from the first successful hardware contract test:
+
+```text
+VC4_TEST_RESULT name=minimal_thrend status=PASS completed_qpus=12 active_qpus=12 elapsed_usec=100
+```
+
+The oracle for that test requires only `completed_qpus=12`, not `elapsed_usec`.
+
+---
+
+## 9. Support runner contract
+
+Stage 0 support tools:
+
+```text
+compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py
+compiler/test/CodeGen/VC4/Support/run_hardware_test.sh
+```
+
+### 9.1 Result checker
+
+`check_vc4_test_result.py` parses the last `VC4_TEST_RESULT` line in a log and compares it to `expected.json`.
+
+Self-test:
+
+```bash
+python3 compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py --self-test
+```
+
+### 9.2 Hardware runner
+
+`run_hardware_test.sh` runs one side of a hardware test directory.
+
+Reference side:
+
+```bash
+compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name> \
+  reference
+```
+
+Candidate side, once codegen exists:
+
+```bash
+compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name> \
+  candidate
+```
+
+The runner performs:
+
+1. validate `<test-root>/input.mlir`,
+2. validate `<test-root>/expected.json`,
+3. validate `<test-root>/<side>/run.sh`,
+4. power cycle unless `VC4_SKIP_POWER_CYCLE=1`,
+5. sleep after power cycle,
+6. run `bash run.sh` inside the selected side directory,
+7. tee output to `<side>/run.log`,
+8. call `check_vc4_test_result.py <test-root>/expected.json <side>/run.log`.
+
+Environment variables:
+
+```bash
+VC4_PI_POWER_CYCLE_CMD='uhubctl -l 0-1 -a cycle'
+VC4_PI_POWER_CYCLE_SLEEP_SEC=1
+VC4_SKIP_POWER_CYCLE=0
+VC4_RUN_SH_MAX_ATTEMPTS=3
+```
+
+The runner may retry `bash run.sh` when the log contains the known transient serial failure:
+
+```text
+tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]
+```
+
+Individual test `run.sh` scripts must not power-cycle the Pi.
+
+---
+
+## 10. Catalog contract
+
+The catalog lives at:
+
+```text
+compiler/test/CodeGen/VC4/catalog.json
+```
+
+The catalog is factual, not aspirational.
+
+A test may enter the catalog only when all of these are true:
+
+1. `input.mlir` exists.
+2. `input.mlir` has a valid lit `RUN:` line.
+3. The local `vc4-opt` verifier run passes.
+4. The reference bundle exists.
+5. `expected.json` exists.
+6. The reference run was executed on hardware.
+7. `Support/check_vc4_test_result.py expected.json reference/run.log` passed.
+8. The test README explains what is being checked.
+9. Generated build artifacts have been removed or ignored.
+10. The test does not claim candidate/codegen coverage until candidate-side execution exists.
+
+Recommended catalog entry shape:
+
+```json
+{
+  "implemented_tests": [
+    {
+      "id": "hardware-run-minimal-thrend",
+      "name": "minimal_thrend",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend reference",
+      "requires_hardware": true,
+      "candidate_enabled": false,
+      "notes": "Minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output."
+    }
+  ]
+}
+```
+
+Do not add future tests to `catalog.json`. Planned tests belong in `compiler/docs/codegen/test-backlog.md`.
+
+---
+
+## 11. Backlog contract
+
+Planned tests live in:
+
+```text
+compiler/docs/codegen/test-backlog.md
+```
+
+Backlog entries may describe future work but are not coverage.
+
+A backlog entry should say:
+
+- proposed test name,
+- feature covered,
+- expected `input.mlir` shape,
+- expected reference bundle shape,
+- expected semantic oracle,
+- prerequisites,
+- graduation criteria.
+
+Graduation criteria always include: files exist, local MLIR verification passes, reference run passes on hardware, catalog entry added.
+
+---
+
+## 12. Initial hardware-run sequence
+
+The initial hardware-run corpus should grow incrementally. Do not jump directly to a large SAXPY import before smaller hardware facts are stable.
+
+Locked initial sequence:
+
+1. `minimal_thrend`
+    - Minimal QPU user-program launch/completion.
+    - Qasm: `thrend` plus two delay slots.
+    - Oracle: all active QPUs completed.
+2. `memory_output`
+    - First output-producing kernel.
+    - Writes a deterministic value/pattern to memory.
+    - Proves launcher memory allocation/copyback and output oracle flow.
+3. `read_nop_write`
+    - Reads input, performs no meaningful arithmetic, writes output.
+    - Proves input + output data movement with minimal compute.
+4. `saxpy_reference`
+    - Rich reference modeled on the known-good SAXPY bundle.
+    - Proves arithmetic + memory movement + work distribution + semantic launcher API.
+
+The SAXPY reference remains the model for public/physical ABI separation, but it is not the first test and it must not freeze SAXPY-specific restrictions as global backend rules.
+
+---
+
+## 13. SAXPY reference test contract
+
+When imported, SAXPY should live at:
+
+```text
+compiler/test/CodeGen/VC4/Hardware/Run/saxpy_reference/
+```
+
+Required shape:
+
+```text
+saxpy_reference/
+  README.md
+  input.mlir
+  expected.json
+  reference/
+    .gitignore
+    Makefile
+    run.sh
+    3-test-saxpy.c
+    mailbox.c
+    mailbox.h
+    saxpy.qasm
+    saxpy_launch.c
+    saxpy_launch.h
+  share/
+    vc4tmpl/template.h
+    vc4inc/vc4.qinc
+```
+
+`reference/3-test-saxpy.c` must print:
+
+```text
+VC4_TEST_RESULT name=saxpy_reference status=PASS mismatches=0 max_abs_diff=<value> n=<N> qpus=<activeQpus> lanes=16
+```
+
+`expected.json` should require:
+
+```json
+{
+  "name": "saxpy_reference",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}
+```
+
+### 13.1 SAXPY `input.mlir` intent
+
+The SAXPY `input.mlir` should describe the same computation and physical ABI as the reference qasm/launcher.
+
+Semantic operation:
+
+```text
+for i in 0..n:
+  y[i] = a * x[i] + y[i]
+```
+
+Public launcher API:
+
+```c
+int saxpy_launch(struct vc4_runtime *rt, float *x, float *y, float a, uint32_t n);
+```
+
+Reference physical uniform order per QPU:
+
+```text
+x base address
+y base address
+alpha
+n
+qpu_id
+num_qpus
+```
+
+Reference work distribution:
+
+```text
+base_element = qpu_id * 16
+stride_elements = num_qpus * 16
+```
+
+Reference tail policy:
+
+```text
+exact_multiple
+```
+
+The current reference launcher rejects `n % laneWidth != 0`; this must be represented as this test's policy only, not as a global backend policy.
+
+The device body should be a scheduled QPU sink function equivalent to `reference/saxpy.qasm`.
+
+---
+
+## 14. Assembler-only and litmus tests
+
+Not every hardware-related test is a full reference/candidate codegen semantic pair.
+
+### 14.1 Assembler qualification
+
+Assembler qualification tests verify that the chosen assembler accepts or rejects a specific qasm subset.
+
+Directory shape:
+
+```text
+compiler/test/CodeGen/VC4/Hardware/AssemblerQual/<test-name>/
+  README.md
+  run.sh
+  expected.json
+  <case>.qasm
+```
+
+These tests may not have `input.mlir`, because they qualify assembler behavior rather than codegen semantics. If they later become codegen tests, they should graduate to `Hardware/Run`.
+
+### 14.2 Hardware litmus
+
+Hardware litmus tests resolve hardware facts, such as branch register-source behavior or TMU FIFO depth.
+
+Directory shape:
+
+```text
+compiler/test/CodeGen/VC4/Hardware/Litmus/<test-name>/
+  README.md
+  run.sh
+  expected.json
+  <test>.qasm
+  <test harness files>
+```
+
+Litmus tests may not have a candidate side. They are hardware truth-acquisition tests, not ordinary codegen semantic tests.
+
+---
+
+## 15. What must not happen
+
+The following are explicitly forbidden by this contract:
+
+1. Do not add future tests to `catalog.json`.
+2. Do not add broad `XFAIL: *` placeholders for missing future compiler passes.
+3. Do not claim codegen coverage before candidate-side generation exists.
+4. Do not compare generated qasm character-for-character against reference qasm for semantic tests unless exact qasm text is explicitly the contract.
+5. Do not require unstable timing/speedup values in `expected.json`.
+6. Do not commit transient run outputs or generated build products unless explicitly documented.
+7. Do not power-cycle the Pi inside individual test `run.sh` scripts.
+8. Do not expose `qpu_id`, `num_qpus`, or raw uniform internals in public launcher APIs unless a test explicitly exists to check such a low-level API.
+9. Do not freeze SAXPY-specific exact-multiple tail policy as a global codegen rule.
+10. Do not let Codex invent large batches of catalog entries without running them.
+11. Do not place an `input.mlir` under `compiler/test` without a `RUN:` line.
+12. Do not rely on machine-local absolute vc4asm include/template paths in checked-in tests.
+13. Do not use a bare `out=$(vc4asm ... 2>&1)` assignment in hardware
+    `run.sh` scripts; use `if ! out=$(vc4asm ... 2>&1); then` under strict
+    mode and reject unexpected assembler output.
+
+---
+
+## 16. Minimal acceptance checklist for adding a hardware-run test
+
+Before adding a test to `catalog.json`, verify:
+
+```bash
+# 1. Files exist.
+find compiler/test/CodeGen/VC4/Hardware/Run/<test-name> -maxdepth 3 -type f | sort
+
+# 2. MLIR input exists and has a RUN line.
+test -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/input.mlir
+sed -n '1,5p' compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/input.mlir
+
+# 3. Expected oracle exists.
+test -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/expected.json
+
+# 4. Reference runner exists.
+test -d compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference
+test -x compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.sh
+
+# 5. vc4asm support paths exist if vc4asm -c is used.
+test -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/share/vc4tmpl/template.h
+
+# 6. run.sh captures vc4asm diagnostics safely if vc4asm is used.
+python3 compiler/test/CodeGen/VC4/Support/check_hardware_run_sh_assembler_capture.py \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name>
+
+# 7. Local MLIR verification passes.
+compiler/build/bin/vc4-opt \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/input.mlir \
+  --vc4-verify-emit-contract \
+  --vc4-verify-scheduled-hardware-rules \
+  --vc4-verify-scheduled-adjacent-hazards \
+  --vc4-verify-scheduled-io-spacing \
+  --vc4-verify-scheduled-peripheral-accesses \
+  -o /dev/null
+
+# 8. Full local lit suite passes.
+cmake --build compiler/build --target check-vc4
+
+# 9. Run reference side on hardware.
+compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
+  compiler/test/CodeGen/VC4/Hardware/Run/<test-name> \
+  reference
+
+# 10. Confirm result line.
+grep 'VC4_TEST_RESULT' compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.log
+
+# 11. Clean transient build outputs before commit.
+rm -rf compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/objs
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*.elf
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*.bin
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*.list
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*shader.c
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/*shader.h
+rm -f compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference/run.log
+
+# 12. Confirm generated files are ignored and not staged.
+git status --short
+git status --ignored --short compiler/test/CodeGen/VC4/Hardware/Run/<test-name>/reference | sed -n '1,120p'
+```
+
+Only after these pass should the test be considered implemented.
+
+---
+
+## 17. Summary
+
+The locked VC4 codegen hardware-test contract is:
+
+```text
+input.mlir + trusted reference qasm/c/h bundle + hardware semantic oracle
+```
+
+Now:
+
+```text
+Run reference bundle on hardware -> check expected.json.
+```
+
+Later:
+
+```text
+Generate candidate bundle from input.mlir -> run on hardware -> compare to the same semantic oracle/reference result.
+```
+
+This contract gives future codegen implementation agents a real target while avoiding brittle text overfitting. It also keeps the corpus honest: only materialized, locally verified, hardware-checked tests enter the implemented catalog.
+
+===== compiler/docs/codegen/vc4_cuda_mapping_guide.md =====
+# VC4-as-CUDA Mapping Guide for an MLIR Backend
+
+**Status:** Working and hardware-validated design for a CUDA-like abstraction over Raspberry Pi VideoCore IV / VC4 general-purpose QPU execution.
+
+**Intended reader:** Compiler/runtime implementer building an MLIR backend that wants VC4 kernels to *look* as much like CUDA kernels as possible while preserving VC4 correctness.
+
+**Core conclusion:** Model the Raspberry Pi VC4 GPU as **one tiny CUDA-like SM** with **12 physical warp slots**, **16 SIMD lanes per warp**, and **one global 4 KiB user-visible shared-memory window** backed by VPM.
+
+**Runtime-image conclusion:** A VC4 “CUDA” program should have **one persistent device-visible program allocation**. That allocation owns the compiled kernel code blobs, kernel descriptors, uniform streams, uniform-pointer arrays, VPM/semaphore scheduling metadata, and any fixed test/runtime payloads. Each compiled kernel is copied into that allocation **once** during runtime/program setup. Later kernel launches reuse the same device code address and only rewrite the relevant uniform streams and scheduling metadata.
+
+**Current validation status:**
+
+```text
+Targeted qpu_num test:                   PASS
+VPM slice visibility test:               PASS
+QPU semaphore barrier / __syncthreads(): PASS
+```
+
+The `__syncthreads()` implementation described here is considered **locked for first compiler implementation**, subject to the invariants in Sections 8, 10, 11, 16, and 17.
+
+---
+
+## 1. Ground facts this design assumes
+
+### 1.1 Hardware facts from the VC4 architecture guide
+
+The VideoCore IV QPU is a **16-way SIMD processor**. The guide says a QPU can be treated “for all intents and purposes” as a 16-way 32-bit SIMD processor, even though it is physically implemented as a 4-way SIMD processor multiplexed over four cycles.
+
+QPUs are grouped into **slices** of up to four QPUs. A slice shares resources such as:
+
+- instruction cache,
+- Special Functions Unit,
+- one or two Texture and Memory Lookup Units,
+- varying interpolation hardware.
+
+The guide does **not** describe VPM storage as private per slice. In the system block diagram, VPM appears outside the QPU slices as a separate shared system block.
+
+The VPM section states that, from a QPU perspective, the VPM window is a two-dimensional array of 32-bit words:
+
+```text
+width:       16 words
+max height:  64 rows
+word size:   32 bits
+```
+
+Therefore the user-visible generic QPU window is:
+
+```text
+64 rows × 16 words/row × 4 bytes/word = 4096 bytes
+```
+
+The guide also defines `V3D_VPMBASE.VPMURSV` as the amount of VPM reserved **for all user programs**, in units of 256 bytes.
+
+### 1.2 Measured facts from the current Raspberry Pi VC4 test setup
+
+The `vpm_slice_visibility` hardware test observed this topology:
+
+```text
+V3D_IDENT1 = 0xc1102431
+VPMSZ      = 12 KiB physical VPM
+QUPS       = 4 QPUs per slice
+NSLC       = 3 slices
+num_qpus   = 12
+VPMBASE    = 16 reservation units = 4096 bytes
+```
+
+It then tested same-slice and cross-slice VPM visibility/collision behavior. Cross-slice pairs saw each other’s writes, and cross-slice same-row collisions behaved as “last writer wins.” Therefore the user-visible VPM storage behaves as:
+
+```text
+one global 4 KiB user-visible VPM window
+```
+
+not:
+
+```text
+three independent 4 KiB windows, one per 4-QPU slice
+```
+
+The corrected `qpu_num` test established that the physical QPUs are individually runnable when the host uses `V3D_SQRSV0/1` to reserve all QPUs except the target. Do not infer physical QPU assignment from the order in which short user-program requests are queued.
+
+The `qpu_barrier_syncthreads` hardware test established that a four-semaphore reusable barrier can act as the first backend implementation of CUDA-like `__syncthreads()` when the runtime guarantees full residency of all participating block warps. The test passed:
+
+```text
+same-slice 2-warp smoke test
+cross-slice 0↔1 2-warp test
+cross-slice 0↔2 2-warp test
+full 12-QPU / 12-warp block stress test, 64 iterations
+two-resident-block partition test, 2 blocks × 4 warps/block, 32 iterations
+```
+
+### 1.3 Backend policy facts introduced by this specification
+
+This compiler/runtime design additionally adopts these ABI/runtime policies:
+
+```text
+1. One persistent device-visible program allocation per compiled VC4 CUDA-like program.
+2. One runtime/program struct owns all generated QPU kernel code fields.
+3. Each kernel code blob is copied to device-visible memory exactly once during setup.
+4. Later launches enqueue the already-resident code address using SRQPC.
+5. Uniform streams are persistent fields inside the same allocation and are overwritten per launch.
+6. Uniform-pointer arrays gain a kernel dimension: kernel_id × request_id.
+7. Uniform streams are non-rectangular across kernels because different kernels may have different uniform counts.
+```
+
+This policy is conceptually similar to CUDA’s “first launch is slow” behavior, where driver setup, JIT compilation, module loading, and code upload may occur lazily. For this VC4 backend, that work should be done **eagerly** during runtime/program setup instead of being hidden inside the first kernel launch.
+
+---
+
+## 2. High-level CUDA-like device model
+
+Expose this target as a CUDA-like device with one multiprocessor:
+
+```text
+multiProcessorCount:              1
+warpSize / subgroup size:         16
+max physical warps per SM:        12
+max logical threads per SM:       192
+max logical threads per block:    192
+shared memory per SM:             4096 bytes
+shared memory per block:          up to 4096 bytes, subject to occupancy
+persistent program allocations:   1 per compiled program/runtime instance
+kernel code residency:            copied once during setup, reused thereafter
+```
+
+This is the central abstraction:
+
+```text
+CUDA-ish device       -> one VC4 V3D/QPU complex
+CUDA SM               -> the whole VC4 general-QPU execution domain
+CUDA warp             -> one QPU user program, 16 SIMD lanes
+CUDA lane             -> one QPU SIMD element
+CUDA thread           -> one SIMD lane in one logical QPU warp
+CUDA thread block     -> a cooperative group of 1..12 logical QPU warps
+CUDA shared memory    -> a software allocation in the single global 4 KiB VPM window
+CUDA module/program   -> one persistent VC4 program image allocation
+CUDA kernel function  -> one code field / descriptor inside the persistent program image
+CUDA kernel launch    -> rewrite uniforms, enqueue existing code PC, wait or stream according to mode
+```
+
+Do **not** map VC4 slices to CUDA SMs. Slices are real performance topology, but they are not independent shared-memory domains.
+
+---
+
+## 3. Primitive mapping table
+
+| CUDA / MLIR GPU concept | VC4 mapping | Required compiler/runtime behavior |
+|---|---|---|
+| `threadIdx.x` | `logical_warp_id * 16 + ELEMENT_NUMBER` | `logical_warp_id` comes from uniforms; `ELEMENT_NUMBER` is QPU A-read register 38. |
+| `lane_id` | `ELEMENT_NUMBER` | 0..15. |
+| CUDA warp | one QPU user-program request | Warp size is 16, not 32. |
+| `warp_id` within block | uniform | Never use physical `QPU_NUMBER` for logical warp identity. |
+| `QPU_NUMBER` | physical QPU id | Debug/profiling/topology only. B-read register 38. |
+| thread block / CTA | group of 1..12 QPU requests | All barrier-participating warps must be resident together. |
+| SM | whole VC4 user-QPU system | Treat as one SM for correctness. |
+| slice | group of 4 QPUs sharing I-cache/SFU/TMU/VRI | Performance topology only. Not an SM. |
+| `__shared__` memory | VPM row allocation | One global 4 KiB pool, partitioned by runtime among resident blocks. |
+| `__syncthreads()` | QPU semaphore barrier | Use the validated reusable four-semaphore protocol; all participating warps must already be resident. |
+| global load | TMU direct memory lookup | Natural path for 32-bit reads. |
+| global store | QPU register → VPM → VDW DMA store | Efficient mainly for coalesced/affine vector stores. |
+| private registers | QPU vector registers and accumulators | Respect QPU register hazards and delay restrictions. |
+| atomics | not native in this model | Reject, emulate slowly with global mutex, or lower only special cases. |
+| divergent SIMT control flow | SIMD masks/predication | No native CUDA-style per-lane PCs/reconvergence. |
+| CUDA module / cubin | persistent VC4 program image | One device-visible allocation containing all kernel code blobs and descriptors. |
+| kernel function pointer | `kernel_desc[k].code_gpu_addr` | Stable GPU bus address of copied QPU code. |
+| kernel launch arguments | per-kernel uniform streams | Rewritten in persistent host-visible memory before enqueueing. |
+| launch queue entry | `SRQUA` + `SRQPC` write | `SRQUA = uniform stream bus address`; `SRQPC = resident code bus address`. |
+
+---
+
+## 4. QPU as CUDA warp
+
+### 4.1 Warp size
+
+Set:
+
+```c
+#define VC4_WARP_SIZE 16
+```
+
+A QPU instruction operates over 16 SIMD elements. These map naturally to CUDA-like lanes:
+
+```text
+lane = ELEMENT_NUMBER;   // 0..15
+```
+
+### 4.2 Logical thread id
+
+For a one-dimensional block:
+
+```c
+uint32_t lane = element_number();
+uint32_t tid  = logical_warp_id * 16 + lane;
+uint32_t active = tid < block_dim_x;
+```
+
+For multidimensional blocks, first compute the flattened logical thread id, then unflatten:
+
+```c
+uint32_t flat = logical_warp_id * 16 + lane;
+
+threadIdx.x = flat % blockDim.x;
+threadIdx.y = (flat / blockDim.x) % blockDim.y;
+threadIdx.z = flat / (blockDim.x * blockDim.y);
+
+active = flat < blockDim.x * blockDim.y * blockDim.z;
+```
+
+Boundary lanes must be predicated off. For a block with 100 logical threads, the compiler launches:
+
+```text
+ceil(100 / 16) = 7 QPU warps
+```
+
+and masks out lanes with:
+
+```text
+flat >= 100
+```
+
+### 4.3 Do not use physical QPU number as logical warp id
+
+The hardware QPU scheduler chooses physical QPUs automatically. A short program may run repeatedly on the same physical QPU. Therefore:
+
+```text
+logical_warp_id  -> uniform supplied by runtime
+physical_qpu_id  -> QPU_NUMBER, only for diagnostics/performance
+```
+
+The corrected `qpu_num` test used QPU reservations to target individual QPUs. That is useful for tests, not for normal kernel indexing.
+
+---
+
+## 5. SM model and slices
+
+### 5.1 Correctness model
+
+For correctness, model the device as:
+
+```text
+one SM
+12 QPU warp slots
+one global VPM user window
+one persistent runtime/program allocation
+```
+
+The runtime’s block scheduler should act like a CUDA occupancy scheduler for a single SM.
+
+### 5.2 Performance model
+
+VC4 slices still matter for performance:
+
+```text
+slice 0: QPU 0, 1, 2, 3
+slice 1: QPU 4, 5, 6, 7
+slice 2: QPU 8, 9, 10, 11
+```
+
+Each slice shares I-cache, SFU, TMU, and VRI-like resources. This can affect instruction-cache locality, TMU pressure, and SFU-heavy code. However, slices do not define separate shared-memory scopes.
+
+### 5.3 Rule
+
+Do not expose:
+
+```text
+3 SMs × 4 QPUs/slice × 4 KiB shared memory
+```
+
+Expose:
+
+```text
+1 SM × 12 QPUs × 4 KiB shared memory
+```
+
+---
+
+## 6. Thread block / CTA mapping
+
+A CUDA-like thread block maps to a set of logical QPU warps:
+
+```c
+warps_per_block = ceil(block_threads / 16);
+```
+
+Hard limits:
+
+```text
+1 <= warps_per_block <= 12
+block_threads <= 192
+```
+
+If a block requires barriers or shared memory, the runtime must ensure all of that block’s QPU warps are resident together.
+
+### 6.1 Block uniforms
+
+Each QPU warp request should receive a uniform stream with at least:
+
+```c
+struct vc4_warp_uniforms {
+    uint32_t block_id_x;
+    uint32_t block_id_y;
+    uint32_t block_id_z;
+
+    uint32_t grid_dim_x;
+    uint32_t grid_dim_y;
+    uint32_t grid_dim_z;
+
+    uint32_t block_dim_x;
+    uint32_t block_dim_y;
+    uint32_t block_dim_z;
+
+    uint32_t logical_warp_id;       // 0..warps_per_block-1
+    uint32_t warps_per_block;
+
+    uint32_t vpm_base_row;          // start row of this block's shared allocation
+    uint32_t vpm_rows;              // rows allocated to this block
+
+    uint32_t barrier_arrive_sem;    // only if barriers are used
+    uint32_t barrier_go_sem;
+    uint32_t barrier_depart_sem;
+    uint32_t barrier_reset_sem;
+
+    // kernel argument pointers/scalars follow
+};
+```
+
+The exact layout can be backend-specific, but it must be stable and documented because every QPU request consumes its uniforms sequentially.
+
+### 6.2 Kernel-specific uniform layouts
+
+Different kernels may have different uniform counts and layouts. The compiler should generate one uniform-layout definition per kernel:
+
+```c
+#define KERNEL0_NUM_UNIFS  17
+#define KERNEL1_NUM_UNIFS  29
+#define KERNEL2_NUM_UNIFS   8
+```
+
+Uniform storage therefore has a kernel dimension and is usually non-rectangular:
+
+```text
+kernel 0: NUM_QPUS × KERNEL0_NUM_UNIFS
+kernel 1: NUM_QPUS × KERNEL1_NUM_UNIFS
+kernel 2: NUM_QPUS × KERNEL2_NUM_UNIFS
+```
+
+The runtime should never assume that all kernels have the same uniform stride.
+
+---
+
+## 7. Shared memory as VPM
+
+### 7.1 Global VPM pool
+
+Use:
+
+```c
+#define VC4_VPM_USER_BYTES 4096
+#define VC4_VPM_ROWS       64
+#define VC4_VPM_ROW_BYTES  64
+#define VC4_VPM_ROW_WORDS  16
+```
+
+At runtime initialization for user-QPU kernels, reserve the 4 KiB user window:
+
+```c
+V3D_VPMBASE = 16;   // 16 × 256 bytes = 4096 bytes
+```
+
+The guide says this register can only be written when V3D is idle before shading has commenced. Treat `V3D_VPMBASE` as a global device configuration for this backend.
+
+### 7.2 Per-block shared allocation
+
+CUDA has a shared-memory pool per SM and partitions it among resident blocks. Do the same:
+
+```text
+4 KiB VPM pool
+  = block 0 shared rows
+  + block 1 shared rows
+  + ...
+  + compiler scratch rows
+  + VDW store-staging rows
+```
+
+A one-block-at-a-time launch can allocate all rows to the block:
+
+```text
+block 0: rows 0..63
+```
+
+A multi-resident launch must partition:
+
+```text
+block 0: rows  0..15
+block 1: rows 16..31
+block 2: rows 32..47
+block 3: rows 48..63
+```
+
+or any equivalent runtime-chosen row layout.
+
+### 7.3 Row layout
+
+The most natural 32-bit shared-memory layout is:
+
+```text
+VPM row    = one 16-lane vector
+VPM column = lane id
+```
+
+A shared array:
+
+```c
+__shared__ uint32_t s[N];
+```
+
+maps to:
+
+```c
+row = vpm_base_row + index / 16;
+col = index % 16;
+```
+
+A full-warp contiguous store:
+
+```c
+s[logical_warp_id * 16 + lane] = value;
+```
+
+becomes one horizontal 32-bit VPM vector write to:
+
+```c
+row = vpm_base_row + logical_warp_id;
+```
+
+### 7.4 Shared-memory allocation accounting
+
+For 32-bit shared data:
+
+```c
+rows = ceil(num_u32_elements / 16);
+bytes_charged = rows * 64;
+```
+
+For byte/halfword data, VC4 has 8-bit and 16-bit VPM modes, but the initial backend should still allocate conservatively at row granularity unless it has a tested packed-lane lowering.
+
+### 7.5 VPM is not arbitrary scalar SRAM
+
+CUDA shared memory supports arbitrary scalar per-thread addressing. VC4 VPM is structured vector memory. Accesses are programmed using setup registers and then read/written as horizontal or vertical vectors.
+
+Initially support these shared-memory patterns:
+
+```text
+contiguous per-warp rows
+simple affine row/column accesses
+block reductions using row-granular staging
+transpose-like patterns that map to horizontal/vertical VPM access
+```
+
+Initially reject or slow-path:
+
+```text
+arbitrary per-lane shared-memory scatter/gather
+large irregular shared arrays
+shared-memory atomics
+byte-addressed alias-heavy shared memory
+```
+
+### 7.6 Hidden VPM rows
+
+Do not assume the entire 4 KiB can always be user-visible `__shared__` memory. The compiler/runtime may need hidden VPM rows for:
+
+- VDW global-store staging,
+- reductions,
+- temporary transposes,
+- spill staging,
+- result marshaling in tests.
+
+Two reasonable policies:
+
+```text
+Policy A: expose less than 4096 bytes as max user shared memory, reserving hidden rows.
+Policy B: expose 4096 bytes but reject kernels whose codegen also needs hidden VPM rows.
+```
+
+For early compiler bring-up, Policy A is safer.
+
+---
+
+## 8. Occupancy model
+
+### 8.1 Resource variables
+
+For each kernel/block shape:
+
+```c
+warp_size         = 16;
+warps_per_block   = ceil(block_threads / 16);
+
+user_shared_rows  = ceil(user_shared_bytes / 64);
+compiler_rows     = rows needed for VDW staging, reductions, spills, etc.;
+rows_per_block    = user_shared_rows + compiler_rows;
+
+barrier_semas_per_block = needs_barrier ? 4 : 0;
+```
+
+The validated reusable barrier uses four semaphores per block:
+
+```text
+arrive
+release/go
+depart
+reset
+```
+
+This is more conservative than a one-shot two-semaphore barrier, but it avoids generation races when `__syncthreads()` appears multiple times or inside a loop.
+
+### 8.2 Resident block count
+
+For a single-SM model:
+
+```c
+resident_blocks = min(
+    floor(12 / warps_per_block),
+    floor(64 / rows_per_block),
+    needs_barrier ? floor(16 / 4) : UINT_MAX
+);
+```
+
+Also require:
+
+```text
+resident_blocks >= 1
+```
+
+If not, reject the kernel/block configuration or lower it using a special slow path.
+
+### 8.3 Barrier safety rule
+
+For any kernel using `__syncthreads()`:
+
+```text
+All warps of every resident block must be resident before any of them can wait at a barrier.
+```
+
+Never enqueue more barrier-participating blocks than can fit by QPU slots, VPM rows, and semaphore IDs.
+
+A deadlocking bad schedule looks like:
+
+```text
+block A has 8 warps; only 6 start
+those 6 reach barrier and occupy 6 QPUs
+remaining 2 warps of block A are queued behind other work
+barrier can never complete
+```
+
+The runtime must avoid this by scheduling whole resident block waves.
+
+---
+
+## 9. Software scheduler model
+
+### 9.1 What CUDA does
+
+A CUDA SM has an instruction-level warp scheduler. When one warp stalls, the SM can issue instructions from another resident warp.
+
+### 9.2 What VC4 does
+
+VC4 does not expose that kind of software-controlled warp issue. A QPU user program is queued with:
+
+```text
+SRQUA = uniforms address
+SRQPC = program counter
+```
+
+The hardware QPU scheduler picks a physical QPU. Once a QPU starts a program, it runs that program until it terminates or stalls internally. Your software scheduler cannot preempt it and run another warp on the same QPU.
+
+Therefore:
+
+```text
+software block scheduler -> chooses block waves and uniform streams
+hardware QPU scheduler   -> assigns queued warp programs to physical QPUs
+QPU program              -> one logical warp, runs to completion
+```
+
+### 9.3 Runtime scheduling modes
+
+Implement two modes.
+
+#### Mode A: independent-vector mode
+
+Use for kernels with:
+
+```text
+no shared memory
+no cross-warp barrier
+no block-level cooperation
+```
+
+Schedule many independent QPU warp tasks. Each request processes a vector tile:
+
+```c
+global_base = logical_request_id * 16;
+lane        = ELEMENT_NUMBER;
+global_id   = global_base + lane;
+```
+
+This mode is appropriate for:
+
+- elementwise kernels,
+- map operations,
+- simple affine loads/stores,
+- staged reductions where each pass is separate,
+- MLIR `linalg` tiles with no workgroup memory.
+
+#### Mode B: cooperative-block mode
+
+Use for kernels with:
+
+```text
+workgroup/shared memory
+__syncthreads()
+cross-warp reductions
+block-level tiling
+```
+
+For each resident wave:
+
+```text
+1. Select resident blocks according to occupancy.
+2. Allocate VPM rows and semaphore IDs for each block.
+3. Overwrite the persistent uniform streams for the selected kernel and requests.
+4. Queue all QPU warp requests for those blocks using the already-resident kernel code address.
+5. Wait for all requests in the wave to complete.
+6. Reuse VPM/semaphore/uniform-request slots for the next wave.
+```
+
+For initial correctness, a one-block-at-a-time cooperative-block mode is acceptable:
+
+```text
+resident_blocks = 1
+```
+
+The barrier test has also validated a two-resident-block partition case. Multi-resident blocks are therefore allowed when the runtime correctly partitions QPU slots, VPM rows, and semaphore IDs.
+
+---
+
+## 10. Persistent program image and one-allocation runtime policy
+
+### 10.1 Core rule
+
+A VC4 CUDA-like program should perform **one device-visible allocation** for the compiled program/runtime image:
+
+```text
+one allocation -> one struct vc4_gpu / struct qpu / program image
+```
+
+That allocation owns all compiler-generated QPU launch state:
+
+```text
+all kernel code blobs
+all kernel descriptors
+all per-kernel uniform streams
+all per-kernel uniform-pointer arrays
+all fixed runtime scheduling metadata
+optional fixed payload/test buffers
+```
+
+Each compiled kernel is copied into the allocation **exactly once** during runtime/program setup. After that, every launch dispatches to the same resident code location by writing that code address to the QPU scheduler.
+
+### 10.2 Scope of the “one allocation” rule
+
+The hard rule for this backend is:
+
+```text
+No per-kernel-launch mem_alloc/mem_free for QPU code, uniform streams,
+uniform-pointer arrays, kernel descriptors, or launch-control state.
+```
+
+For early tests and compiler bring-up, fixed input/output payloads should also be fields inside the same allocation when practical. If a future CUDA-like memory API supports dynamic user buffers, those buffers may become a separate memory-management layer. That should not change the rule that **kernel code and launch-control state are persistent and not reallocated per launch**.
+
+### 10.3 Naming note: `struct qpu` versus `struct gpu`
+
+If the project currently calls the device-visible launch struct `struct QPU` or `struct qpu`, keep that name for API continuity. Conceptually, though, this struct represents the whole CUDA-like VC4 GPU program image, not one physical QPU.
+
+Recommended conceptual name:
+
+```c
+struct vc4_gpu_program;
+```
+
+Acceptable project-local names:
+
+```c
+struct qpu;
+struct gpu;
+struct vc4_cuda_state;
+struct vc4_program_image;
+```
+
+The important invariant is not the name. The important invariant is:
+
+```text
+one persistent device-visible allocation owns all code + uniform launch state
+```
+
+### 10.4 Fixed-field layout for a known set of kernels
+
+For a compiled program with a statically known kernel set, a fixed-field struct is straightforward and friendly to C:
+
+```c
+#define VC4_MAX_QPUS 12
+
+#define KERNEL0_CODE_WORDS  128
+#define KERNEL0_NUM_UNIFS    17
+
+#define KERNEL1_CODE_WORDS  224
+#define KERNEL1_NUM_UNIFS    29
+
+struct vc4_kernel_desc {
+    uint32_t code_gpu_addr;          // bus address to write to SRQPC
+    uint32_t code_word_count;
+    uint32_t unif_words_per_request;
+    uint32_t max_requests_per_wave;  // usually <= 12
+    uint32_t unif_gpu_addr;          // optional base address for diagnostics
+    uint32_t unif_ptr_gpu_addr;      // optional base address for diagnostics
+    uint32_t flags;
+};
+
+struct vc4_gpu_program {
+    uint32_t magic;
+    uint32_t total_size_bytes;
+    uint32_t num_kernels;
+    uint32_t active_qpus;
+    uint32_t warp_size;
+    uint32_t vpm_rows;
+
+    struct vc4_kernel_desc kernel[2];
+
+    // Kernel 0 code and launch state.
+    uint32_t kernel0_code[KERNEL0_CODE_WORDS] __attribute__((aligned(8)));
+    uint32_t kernel0_unif[VC4_MAX_QPUS][KERNEL0_NUM_UNIFS];
+    uint32_t kernel0_unif_ptr[VC4_MAX_QPUS];
+
+    // Kernel 1 code and launch state.
+    uint32_t kernel1_code[KERNEL1_CODE_WORDS] __attribute__((aligned(8)));
+    uint32_t kernel1_unif[VC4_MAX_QPUS][KERNEL1_NUM_UNIFS];
+    uint32_t kernel1_unif_ptr[VC4_MAX_QPUS];
+
+    // Optional fixed payload / scratch / result fields.
+    uint32_t runtime_scratch[/* ... */];
+};
+```
+
+This layout expresses the new uniform dimension directly:
+
+```text
+kernel_id -> request_id/QPU-warp slot -> uniform word
+```
+
+The arrays are non-rectangular across kernels because `KERNEL0_NUM_UNIFS` and `KERNEL1_NUM_UNIFS` may differ.
+
+### 10.5 Descriptor/offset layout for arbitrary kernel counts
+
+If the compiler wants one generic runtime struct for arbitrary programs, use descriptors plus offsets into a flexible storage area:
+
+```c
+struct vc4_kernel_desc {
+    uint32_t code_word_offset;
+    uint32_t code_word_count;
+
+    uint32_t unif_word_offset;
+    uint32_t unif_words_per_request;
+    uint32_t max_requests_per_wave;
+
+    uint32_t unif_ptr_word_offset;
+
+    uint32_t code_gpu_addr;
+    uint32_t flags;
+};
+
+struct vc4_gpu_program_header {
+    uint32_t magic;
+    uint32_t total_size_bytes;
+    uint32_t num_kernels;
+    uint32_t active_qpus;
+    uint32_t warp_size;
+    uint32_t vpm_rows;
+    struct vc4_kernel_desc kernels[];
+
+    // followed by aligned code/unif/unif_ptr storage
+};
+```
+
+Then compute:
+
+```c
+uint32_t *code     = storage_words + desc->code_word_offset;
+uint32_t *unif     = storage_words + desc->unif_word_offset;
+uint32_t *unif_ptr = storage_words + desc->unif_ptr_word_offset;
+```
+
+The storage required for a kernel’s uniforms is:
+
+```c
+kernel_unif_words = max_requests_per_wave * unif_words_per_request;
+```
+
+The storage required for a kernel’s uniform pointers is:
+
+```c
+kernel_unif_ptr_words = max_requests_per_wave;
+```
+
+### 10.6 Runtime/program setup: eager code upload
+
+Runtime/program setup should do all allocation and code copying eagerly:
+
+```c
+int vc4_cuda_program_setup(struct vc4_cuda_runtime *rt,
+                           struct vc4_gpu_program **out)
+{
+    // 1. Initialize VC4 runtime and decode IDENT1.
+    // 2. Compute total size for one program image allocation.
+    // 3. mem_alloc exactly once for the program image.
+    // 4. mem_lock and map it once.
+    // 5. memset the program image.
+    // 6. Copy each assembled kernel code blob into its assigned field/offset.
+    // 7. Fill kernel descriptors, including code_gpu_addr.
+    // 8. Precompute all unif_ptr[kernel][request] addresses.
+    // 9. Set V3D_VPMBASE = 16 while V3D is idle.
+    // 10. Clear instruction/uniform caches after initial code/uniform image setup.
+    // 11. Return the persistent mapped program image.
+}
+```
+
+After setup, the program image stays allocated and locked for the lifetime of the compiled program/runtime instance.
+
+Do not do this in normal kernel launches:
+
+```text
+mem_alloc
+mem_lock
+copy qasm shader bytes
+recompute code placement
+mem_unlock
+mem_free
+```
+
+### 10.7 Kernel launch: reuse resident code, overwrite uniforms
+
+A kernel launch should be a scheduling operation, not a code-upload operation.
+
+For each launch wave:
+
+```c
+int vc4_cuda_launch_kernel(struct vc4_gpu_program *gpu,
+                           uint32_t kernel_id,
+                           const struct launch_shape *shape,
+                           const struct kernel_args *args)
+{
+    struct vc4_kernel_desc *desc = &gpu->kernel[kernel_id];
+
+    // 1. Compute grid/block wave and occupancy.
+    // 2. Assign VPM rows and semaphores for resident blocks.
+    // 3. Overwrite desc's persistent uniform streams for each request in this wave.
+    // 4. Clear/invalidate the uniforms cache for active slices.
+    // 5. Queue requests:
+    //        PUT32(V3D_SRQUA, unif_ptr[request]);
+    //        PUT32(V3D_SRQPC, desc->code_gpu_addr);
+    // 6. Wait for completions or stream next wave according to scheduling mode.
+}
+```
+
+The code address written to `SRQPC` is stable:
+
+```c
+PUT32(V3D_SRQPC, gpu->kernel[kernel_id].code_gpu_addr);
+```
+
+The uniform address written to `SRQUA` changes by request:
+
+```c
+PUT32(V3D_SRQUA, gpu->kernel[kernel_id].unif_ptr[request]);
+```
+
+The uniform contents may change on every launch:
+
+```c
+gpu->kernel0_unif[request][0] = block_id_x;
+gpu->kernel0_unif[request][1] = logical_warp_id;
+gpu->kernel0_unif[request][2] = vpm_base_row;
+gpu->kernel0_unif[request][3] = barrier_arrive_sem;
+// ... kernel args ...
+```
+
+### 10.8 Uniform storage: kernel dimension, request dimension, word dimension
+
+The old mental model for one test kernel was:
+
+```text
+unif[NUM_QPUS][NUM_UNIFS]
+unif_ptr[NUM_QPUS]
+```
+
+The program-level model is:
+
+```text
+unif[kernel_id][request_id][uniform_word]
+unif_ptr[kernel_id][request_id]
+```
+
+Because kernels can have different uniform counts, this is not naturally rectangular in C. Use one of these two implementations:
+
+```text
+Implementation A:
+    Separate fields per kernel:
+        kernel0_unif[NUM_QPUS][KERNEL0_NUM_UNIFS]
+        kernel1_unif[NUM_QPUS][KERNEL1_NUM_UNIFS]
+        ...
+
+Implementation B:
+    Flat storage plus descriptors:
+        desc[k].unif_word_offset
+        desc[k].unif_words_per_request
+        desc[k].unif_ptr_word_offset
+```
+
+Both are correct. The fixed-field form is easier for generated C tests. The descriptor/offset form is better for a general MLIR runtime.
+
+### 10.9 Multiple kernels in one program image
+
+For a program with multiple kernels:
+
+```text
+kernel 0: elementwise_add
+kernel 1: tiled_matmul
+kernel 2: block_reduce
+```
+
+one allocation should contain all three code blobs:
+
+```c
+struct vc4_gpu_program {
+    ...
+    uint32_t elementwise_add_code[ELEMENTWISE_ADD_CODE_WORDS];
+    uint32_t tiled_matmul_code[TILED_MATMUL_CODE_WORDS];
+    uint32_t block_reduce_code[BLOCK_REDUCE_CODE_WORDS];
+
+    uint32_t elementwise_add_unif[VC4_MAX_QPUS][ELEMENTWISE_ADD_NUM_UNIFS];
+    uint32_t tiled_matmul_unif[VC4_MAX_QPUS][TILED_MATMUL_NUM_UNIFS];
+    uint32_t block_reduce_unif[VC4_MAX_QPUS][BLOCK_REDUCE_NUM_UNIFS];
+
+    uint32_t elementwise_add_unif_ptr[VC4_MAX_QPUS];
+    uint32_t tiled_matmul_unif_ptr[VC4_MAX_QPUS];
+    uint32_t block_reduce_unif_ptr[VC4_MAX_QPUS];
+};
+```
+
+Launching different kernels only changes which code address is enqueued:
+
+```c
+launch kernel 0 -> SRQPC = gpu_addr(program->elementwise_add_code)
+launch kernel 1 -> SRQPC = gpu_addr(program->tiled_matmul_code)
+launch kernel 2 -> SRQPC = gpu_addr(program->block_reduce_code)
+```
+
+No code blob is recopied for repeated calls.
+
+### 10.10 Cache and coherency requirements
+
+Because code and uniforms are reused at stable addresses, cache handling is part of the ABI.
+
+#### Kernel code
+
+After copying kernel code during setup:
+
+```text
+clear instruction caches for active slices
+optionally clear L2 according to the memory/coherency mode
+```
+
+If kernel code is never modified again, the runtime should not need to clear instruction caches merely because the kernel is launched again.
+
+If a kernel is hot-patched or reassembled into the same code field, then the runtime must treat that like a new code upload:
+
+```text
+write code
+flush/clean CPU side if needed
+clear VC4 instruction cache for active slices
+clear relevant L2 state if needed
+```
+
+#### Uniform streams
+
+Uniform streams are intentionally overwritten per launch. Since VC4 has a uniforms cache per slice, the conservative rule is:
+
+```text
+After the host overwrites uniform streams at addresses that may have been used before,
+clear the uniforms cache for active slices before queueing QPU requests.
+```
+
+A conservative launch can clear all slice caches as existing tests often do:
+
+```c
+PUT32(V3D_SLCACTL, 0xffffffffu);
+```
+
+A production runtime can narrow this to the relevant Uniforms Cache Clear bits for active slices once that is tested.
+
+If the runtime uses a ring of never-reused uniform addresses, uniform-cache clearing may be relaxed later. The first implementation should not rely on that optimization.
+
+#### Global data buffers
+
+If the CPU writes global input buffers that TMU reads, the runtime must ensure those writes are visible to VC4 before launch. If the QPUs write output buffers through VDW, the runtime must ensure those writes are visible to the CPU before host-side validation/consumption.
+
+The exact CPU/GPU cache protocol depends on the memory flags and address aliases used by the project. For this backend’s correctness contract, record the chosen policy explicitly in the runtime.
+
+### 10.11 CUDA first-launch analogy
+
+CUDA often has a slow first kernel launch because the driver may initialize context state, JIT compile code, load modules, allocate internal resources, and copy code to the device lazily.
+
+The VC4 backend should not hide that work inside the first launch. It should do it eagerly:
+
+```text
+runtime/program setup:
+    assemble or receive already-assembled QASM
+    allocate one program image
+    copy all kernel code once
+    set up descriptors and uniform arrays
+    configure VPM reservation
+    clear caches after setup
+
+kernel launches:
+    update uniforms
+    assign VPM/semaphore resources
+    enqueue resident code address
+```
+
+The conceptual analogy is still useful:
+
+```text
+CUDA first-launch overhead      ~ VC4 runtime/program setup
+CUDA later kernel launches      ~ VC4 SRQUA/SRQPC scheduling of resident code
+```
+
+### 10.12 Prohibited production launch behavior
+
+Production kernel launch code should not:
+
+```text
+allocate a new struct qpu/gpu per launch
+copy the same kernel code blob per launch
+free the QPU launch allocation after each launch
+compute code placement per launch
+assume all kernels have the same uniform count
+use physical QPU number as logical warp id
+use launch order as physical QPU assignment
+```
+
+### 10.13 Recommended persistent launch-state invariants
+
+The runtime should maintain these invariants:
+
+```text
+program_image != NULL for the lifetime of the VC4 CUDA-like program
+program_image_handle is locked while kernels may launch
+kernel_desc[k].code_gpu_addr is stable after setup
+kernel_desc[k].unif_words_per_request is stable after setup
+kernel_desc[k].unif_ptr[request] is stable after setup
+unif contents may change every launch
+VPM row allocations are assigned per resident wave
+semaphore allocations are assigned per resident wave
+```
+
+---
+
+## 11. Barrier mapping: `__syncthreads()`
+
+### 11.1 Hardware primitive
+
+VC4 provides sixteen system-wide 4-bit counting semaphores. A semaphore increment stalls if the count is 15; a decrement stalls if the count is 0.
+
+### 11.2 Validation status
+
+The first compiler implementation of `__syncthreads()` is locked to the four-semaphore reusable barrier protocol below.
+
+The `qpu_barrier_syncthreads` hardware test passed these cases:
+
+```text
+same_slice_smoke:
+    1 block × 2 warps, repeated 4 times
+    observed mask matched expected mask
+    mismatches = 0
+
+cross_slice_0_1:
+    1 block × 2 warps across slice 0 and slice 1
+    mismatches = 0
+
+cross_slice_0_2:
+    1 block × 2 warps across slice 0 and slice 2
+    mismatches = 0
+
+full_block_stress:
+    1 block × 12 warps
+    all 12 QPUs participated
+    64 barrier iterations
+    every warp saw all 12 rows after every barrier
+    mismatches = 0
+
+two_block_partition:
+    2 resident blocks × 4 warps/block
+    32 barrier iterations
+    block-local VPM/semaphore partitioning worked
+    mismatches = 0
+```
+
+Therefore the compiler/runtime can use this barrier for:
+
+```text
+block-wide ordering among resident logical QPU warps
+VPM shared-memory visibility before/after __syncthreads()
+repeated barriers and loop barriers
+multiple resident blocks when semaphores and VPM rows are partitioned
+```
+
+### 11.3 Recommended reusable barrier
+
+For a block with `N` logical QPU warps:
+
+```text
+N = warps_per_block
+leader = logical_warp_id == 0
+```
+
+Use four semaphores per resident block:
+
+```text
+arrive_sem
+release_sem
+depart_sem
+reset_sem
+```
+
+Barrier protocol:
+
+```text
+if N == 1:
+    return
+
+if logical_warp_id != 0:
+    sem_inc(arrive_sem)        // I arrived at barrier
+    sem_dec(release_sem)       // wait for leader to release phase 1
+
+    sem_inc(depart_sem)        // I consumed my release token
+    sem_dec(reset_sem)         // wait until leader confirms barrier generation reset
+else:
+    repeat N-1 times:
+        sem_dec(arrive_sem)    // wait for all non-leaders
+
+    repeat N-1 times:
+        sem_inc(release_sem)   // release all non-leaders
+
+    repeat N-1 times:
+        sem_dec(depart_sem)    // wait until release tokens consumed
+
+    repeat N-1 times:
+        sem_inc(reset_sem)     // allow non-leaders into next generation
+```
+
+This protocol is intentionally more conservative than the minimal one-shot barrier. It is safe for repeated `__syncthreads()` calls and loops because non-leaders cannot enter the next barrier generation until the leader has observed that the previous release tokens were consumed.
+
+### 11.4 Compiler lowering
+
+Lower:
+
+```mlir
+gpu.barrier
+```
+
+or CUDA-like:
+
+```c
+__syncthreads();
+```
+
+to the above semaphore protocol.
+
+### 11.5 Required scheduling invariant
+
+The barrier only works if all participating logical QPU warps are resident. The runtime must guarantee:
+
+```text
+warps_per_block <= available QPU slots assigned to resident blocks
+```
+
+For a block with 12 warps, this means no other barrier-participating block can be resident at the same time.
+
+### 11.6 Semaphore ownership invariant
+
+Each resident block using barriers owns a distinct four-semaphore set:
+
+```text
+block 0: semaphores  0..3
+block 1: semaphores  4..7
+block 2: semaphores  8..11
+block 3: semaphores 12..15
+```
+
+or an equivalent allocator result.
+
+Do not reuse a block’s semaphores until all QPU requests for that block have completed.
+
+### 11.7 Barrier participation invariant
+
+CUDA-like `__syncthreads()` is only valid when every logical warp of the block reaches the same barrier generation.
+
+Allowed:
+
+```text
+barrier in uniform control flow
+barrier reached by all logical warps
+partial final warp participates even if some lanes are inactive
+```
+
+Rejected or transformed:
+
+```text
+barrier in divergent control flow where some logical threads/warps may skip it
+early return before a later barrier unless the compiler proves all block warps return uniformly
+```
+
+---
+
+## 12. Global memory lowering
+
+### 12.1 Loads
+
+The natural path for global memory loads is TMU direct memory lookup. For direct memory lookup:
+
+```text
+write address to TMU s register
+signal TMU read
+consume result from r4
+```
+
+Use this for per-lane 32-bit loads. Optimize coalescing and uniform address patterns later.
+
+### 12.2 Stores
+
+VC4 has no CUDA-like native scalar global store instruction. The usual path is:
+
+```text
+QPU registers -> VPM -> VDW DMA store -> memory
+```
+
+This favors:
+
+```text
+coalesced contiguous vector stores
+affine strided stores
+row/column stores through VPM
+```
+
+Initially reject or slow-path:
+
+```text
+arbitrary per-lane scatter stores
+uncoalesced byte stores
+atomics
+```
+
+### 12.3 VDW setup serialization
+
+VDW/VPM setup registers are shared enough that unprotected concurrent setup/store sequences are unsafe unless proven otherwise by a setup-clobber test.
+
+Initial backend rule:
+
+```text
+Protect VPM setup + VPM access + VDW setup + VDW address + VDW wait sequences with the global QPU mutex.
+```
+
+This is conservative and may reduce performance, but it avoids false correctness failures while the compiler is being built.
+
+Later, after a dedicated setup-clobber test, relax this rule if safe.
+
+---
+
+## 13. Divergence and control flow
+
+A QPU is SIMD, not CUDA SIMT with independent per-lane program counters.
+
+Lower divergent control flow using:
+
+```text
+active masks
+predicated ALU writes
+predicated VPM/global stores
+if-conversion where profitable
+```
+
+Uniform control flow can branch normally. Per-lane divergent control flow should be represented as masks.
+
+Do not claim full CUDA SIMT semantics unless the backend implements a robust reconvergence/masking scheme.
+
+---
+
+## 14. Register/private memory model
+
+### 14.1 Private values
+
+Per-thread private scalar values become vector registers:
+
+```text
+one logical scalar per CUDA thread -> one 16-lane QPU vector value
+```
+
+### 14.2 Register hazards
+
+The guide documents QPU instruction restrictions, including no immediate read from a physical regfile location written by the previous instruction. Accumulators avoid some of these hazards.
+
+The code generator must include a VC4 hazard scheduler that handles:
+
+- physical regfile read-after-write restrictions,
+- branch delay slots,
+- thread-end delay slots,
+- SFU result latency and `r4` restrictions,
+- TMU result latency and `r4` use,
+- VPM read setup latency,
+- final instructions not accessing uniforms/VPM/VDW/VDR.
+
+### 14.3 Spills
+
+Do not initially promise large private memory. Spills are expensive and likely require either:
+
+- global memory via TMU/VDW sequences,
+- VPM scratch rows,
+- or recomputation.
+
+For an early backend, reject kernels whose register pressure requires spilling.
+
+---
+
+## 15. MLIR lowering recommendations
+
+### 15.1 Target properties
+
+Expose or internally assume:
+
+```text
+subgroup_size = 16
+max_workgroup_size = 192
+max_workgroup_memory = 4096 bytes minus compiler reserve
+num_multiprocessors = 1
+num_kernel_code_uploads_per_program_setup = num_kernels
+num_kernel_code_uploads_per_launch = 0
+```
+
+### 15.2 Map MLIR GPU constructs
+
+| MLIR construct | VC4 lowering |
+|---|---|
+| `gpu.thread_id x/y/z` | derived from `logical_warp_id`, `ELEMENT_NUMBER`, and block dimensions |
+| `gpu.block_id x/y/z` | uniform |
+| `gpu.block_dim x/y/z` | uniform or compile-time constant |
+| `gpu.grid_dim x/y/z` | uniform |
+| `gpu.barrier` | validated four-semaphore reusable QPU barrier |
+| workgroup memory attribution | VPM row allocation |
+| private memory attribution | QPU registers, reject/spill if too large |
+| subgroup operations | QPU horizontal vector operations/rotates where possible |
+| global loads | TMU direct memory lookup |
+| global stores | VPM + VDW DMA store |
+| kernel symbol | index into persistent `kernel_desc[]` |
+| kernel launch operands | writes to that kernel’s persistent uniform streams |
+
+### 15.3 Preferred kernel shapes
+
+Good first targets:
+
+```text
+elementwise tensor ops
+coalesced loads/stores
+affine linalg tiles
+small reductions
+row-wise reductions
+stencils with simple shared-memory halos
+matrix/vector kernels with explicit VPM tiling
+```
+
+Hard targets:
+
+```text
+arbitrary CUDA C
+heavy divergence
+large shared memory
+shared-memory atomics
+global atomics
+uncoalesced scatter stores
+large private arrays
+```
+
+---
+
+## 16. Runtime resource allocation and launch lifecycle
+
+### 16.1 Runtime/program setup lifecycle
+
+Program setup is where allocation and code copying happen:
+
+```text
+1. Decode hardware topology from V3D_IDENT1.
+2. Verify expected QPU/VPM/semaphore resources.
+3. Compute total persistent program-image size.
+4. Allocate exactly one device-visible program image.
+5. Lock/map that allocation for host access.
+6. Copy every assembled kernel code blob into its assigned code field/offset.
+7. Fill kernel descriptors and stable code_gpu_addr values.
+8. Precompute per-kernel uniform-pointer arrays.
+9. Set or verify V3D_VPMBASE = 16 while idle.
+10. Clear relevant VC4 caches after setup.
+11. Keep this allocation alive until program/runtime shutdown.
+```
+
+After this lifecycle completes, kernel code is resident.
+
+### 16.2 Cooperative kernel launch lifecycle
+
+For each cooperative kernel launch:
+
+```text
+1. Look up kernel descriptor by kernel_id.
+2. Compute warps_per_block.
+3. Compute rows_per_block.
+4. Compute semaphores_per_block.
+5. Compute resident_blocks.
+6. For each resident block:
+       assign VPM row range
+       assign semaphore IDs
+       assign logical block IDs
+7. For each logical QPU warp request in the resident wave:
+       overwrite the already-allocated uniform stream for this kernel/request
+8. Clear/invalidate the uniforms cache for active slices.
+9. Queue all QPU requests in the resident wave:
+       SRQUA = persistent unif_ptr[kernel_id][request]
+       SRQPC = persistent kernel_desc[kernel_id].code_gpu_addr
+10. Wait for completions.
+11. Reclaim logical VPM row/semaphore allocations for the next wave.
+12. Launch next resident wave.
+```
+
+### 16.3 Independent-vector launch lifecycle
+
+For kernels without barriers/shared memory, the runtime can be more relaxed and stream QPU requests through the hardware scheduler:
+
+```text
+1. Look up resident kernel code address.
+2. Fill persistent uniform streams for a batch of independent vector requests.
+3. Clear uniforms cache for active slices.
+4. Enqueue requests using the resident code address.
+5. Poll completions and continue streaming as appropriate.
+```
+
+Still do not allocate or copy code per launch.
+
+### 16.4 Shutdown lifecycle
+
+At runtime/program shutdown:
+
+```text
+1. Ensure all queued QPU programs have completed.
+2. Clear QPU reservations if the runtime changed them.
+3. Release or restore any persistent V3D state owned by the runtime.
+4. Unlock and free the one persistent program-image allocation.
+```
+
+---
+
+## 17. Conservative implementation rules
+
+Use these rules until more tests prove they can be relaxed:
+
+```text
+1. Warp size is always 16.
+2. Physical QPU number is never logical warp id.
+3. Shared memory is one 4 KiB global VPM pool.
+4. Slices are not SMs.
+5. Barrier-enabled blocks must be fully resident.
+6. Reusable barriers use four semaphores per resident block.
+7. VPM/VDW setup and access sequences are protected by the global mutex.
+8. Workgroup memory is row-granular and initially 32-bit vector-oriented.
+9. Arbitrary shared-memory scatter/gather is rejected or slow-pathed.
+10. Global stores are limited to coalesced/affine patterns initially.
+11. Kernels requiring native atomics are rejected or explicitly emulated.
+12. Kernels requiring spills are rejected until spill lowering is implemented.
+13. The runtime/program image uses one persistent device-visible allocation.
+14. Every kernel code blob is copied into that allocation exactly once during setup.
+15. Kernel launches reuse resident code addresses; they do not copy code.
+16. Uniform streams are persistent and may be overwritten per launch.
+17. Uniform cache invalidation/clearing is required after overwriting reused uniform streams.
+18. Uniform storage has a kernel dimension and a request/QPU-warp dimension.
+19. Different kernels may have different uniform counts; do not force a rectangular uniform layout unless using a max-stride padding policy intentionally.
+20. The launch path must not call mem_alloc/mem_free for code or launch-control state.
+```
+
+---
+
+## 18. Tests that should gate compiler features
+
+### 18.1 Already established
+
+1. **Targeted `qpu_num` test**
+    - Confirms individual physical QPUs are runnable.
+    - Confirms `QPU_NUMBER` is read correctly when QPU reservations target one QPU.
+    - Confirms normal kernels should use logical warp IDs from uniforms rather than physical `QPU_NUMBER`.
+
+2. **VPM slice visibility test**
+    - Confirms user-visible VPM storage is global across slices.
+    - Confirms cross-slice same-row collisions behave as global last-writer-wins.
+    - Confirms slices should not be modeled as independent CUDA SMs.
+
+3. **Semaphore barrier / `__syncthreads()` test**
+    - Confirms the four-semaphore reusable barrier works same-slice and cross-slice.
+    - Confirms a full 12-warp block can repeatedly synchronize and observe VPM writes.
+    - Confirms two resident blocks can synchronize independently when VPM rows and semaphore IDs are partitioned.
+    - Locks the first compiler implementation of `gpu.barrier` / `__syncthreads()`.
+
+### 18.2 Required next tests
+
+1. **Persistent program image / resident code reuse test**
+    - Allocate exactly one program image.
+    - Copy at least two kernels into separate code fields during setup.
+    - Launch kernel A, then kernel B, then kernel A again.
+    - Verify no per-launch code copy or allocation occurs.
+    - Verify all launches dispatch using the same stable code addresses.
+    - Verify different arguments are passed by overwriting the already-allocated uniform streams.
+    - Verify cache clearing policy is sufficient when uniforms are overwritten at the same addresses.
+
+2. **Uniform-cache reuse test**
+    - Use one kernel and one persistent uniform stream address.
+    - Launch with argument value X.
+    - Overwrite the same uniform stream with argument value Y.
+    - Clear uniforms cache according to the runtime policy.
+    - Relaunch and verify the QPU observes Y, not X.
+    - Optionally run a negative/diagnostic variant without uniform-cache clearing to determine whether stale uniform data can be observed.
+
+3. **VPM setup-clobber test**
+    - Deliberately interleave VPM setup from one QPU with VPM access from another.
+    - Determine whether setup state is per-QPU, per-slice, or global.
+    - Until this passes, keep mutex serialization around VPM setup/access.
+
+4. **Global-store correctness test**
+    - Coalesced vector stores through VPM+VDW.
+    - Multiple QPUs store to disjoint output regions.
+    - Verify no VDW setup race under chosen serialization protocol.
+
+5. **TMU global-load test**
+    - Per-lane direct-address loads.
+    - Coalesced and strided patterns.
+    - Boundary-mask behavior.
+
+6. **Persistent multi-kernel ABI test**
+    - Generate a program with kernels that have different uniform counts.
+    - Store them in one persistent program allocation.
+    - Verify `kernel0_unif[request][K0_NUM_UNIFS]` and `kernel1_unif[request][K1_NUM_UNIFS]` or descriptor/offset equivalents are addressed correctly.
+    - Verify launches do not assume a rectangular `num_kernels × NUM_QPUS × max_num_unifs` layout unless the runtime intentionally pads to max stride.
+
+---
+
+## 19. Final mental model
+
+Use this model when designing the MLIR backend:
+
+```text
+VC4 is one CUDA-like SM.
+
+The SM has:
+    12 physical QPU warp slots,
+    16 lanes per warp,
+    192 max logical threads resident,
+    4 KiB shared memory total,
+    16 counting semaphores,
+    one global QPU mutex,
+    TMU-based global loads,
+    VPM/VDW-based global stores.
+
+A CUDA-like block is:
+    1..12 QPU warp programs,
+    scheduled as a full resident group if it uses barriers/shared memory,
+    assigned a VPM row range,
+    assigned semaphore IDs,
+    indexed by uniforms plus ELEMENT_NUMBER.
+
+A VC4 CUDA-like program image is:
+    one persistent device-visible allocation,
+    containing every kernel's QPU code blob,
+    containing every kernel's uniform streams and uniform-pointer arrays,
+    initialized once during runtime/program setup,
+    reused for every kernel launch.
+
+A kernel launch is:
+    choose a resident kernel descriptor,
+    overwrite persistent uniforms for this launch/wave,
+    clear uniforms cache as required,
+    enqueue SRQUA/SRQPC pairs using the stable resident code address,
+    wait or stream according to independent/cooperative scheduling mode.
+```
+
+This is the closest CUDA-like abstraction that remains faithful to measured VC4 behavior while giving the compiler a clean implementation target.
+
+===== compiler/test/CodeGen/VC4/catalog.json =====
+{
+"implemented_tests": [
+{
+"id": "hardware-run-minimal-thrend",
+"name": "minimal_thrend",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend reference",
+"requires_hardware": true,
+"candidate_enabled": false,
+"notes": "Minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output."
+},
+{
+"id": "hardware-run-memory-output",
+"name": "memory_output",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/memory_output reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "QPU memory-output test: each active QPU writes one 16-lane u32 vector through VPM/VDW to host-visible memory."
+},
+{
+"id": "hardware-run-read-nop-write",
+"name": "read_nop_write",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "QPU read-nop-write test: copies one 16-lane u32 vector per active QPU from host input to host output through VDR DMA load, VPM read/write, and VDW DMA store."
+},
+{
+"id": "hardware-run-tmu-read-nop-write",
+"name": "tmu_read_nop_write",
+"kind": "hardware-run",
+"input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/input.mlir",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "TMU0 direct-memory read counterpart to read_nop_write; copies one 16-lane u32 vector per active QPU from input to result via TMU read and VPM/VDW store. Reference hardware run passed with mismatches=0, active_qpus=12, words=192, checksum=18528."
+},
+{
+"id": "hardware-run-saxpy-tmu",
+"name": "saxpy_tmu",
+"kind": "hardware-run",
+"input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/input.mlir",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "TMU-backed basic SAXPY golden: direct TMU0 reads for x/y, fmul/fadd arithmetic, VPM/VDW result store. Current scheduled input intentionally serializes each TMU request/read pair; overlapping TMU requests should be covered by a later scheduled-overlap test."
+},
+{
+"id": "hardware-run-saxpy-tmu-overlap",
+"name": "saxpy_tmu_overlap",
+"kind": "hardware-run",
+"input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/input.mlir",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "Overlapped-TMU SAXPY reference: issues independent TMU0 direct-memory requests for x and y before consuming both results, computes y = alpha * x + y, and stores through VPM/VDW. Candidate side disabled until codegen exists."
+},
+{
+"id": "hardware-run-sfu-recip",
+"name": "sfu_recip",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip reference",
+"requires_hardware": true,
+"candidate_enabled": false,
+"notes": "SFU reciprocal reference test. Exercises SFU_RECIP write/readback through r4 with the required two-instruction r4 dead window before the N+3 read; oracle accepts VC4 SFU approximation with mismatches=0, checksum=195672, and max_abs_diff<=0.0003."
+},
+{
+"id": "hardware-run-qpu-num-register",
+"name": "qpu_num_register",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/qpu_num_register reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "Exploratory hardware-run test that queues 16 QPU user-program requests and records the hardware QPU_NUMBER/qpu_num register observed by each dispatched kernel. The oracle requires 16 completed requests, no pending output slots, and observed values in the architectural 4-bit QPU-number range; it deliberately does not pin scheduler assignment order or observed qpu_mask."
+},
+{
+"id": "hardware-run-saxpy-full",
+"name": "saxpy_full",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "Tail-safe SAXPY hardware-run reference. Computes y[i] = alpha * x[i] + y[i] for varied n values including zero, short tails, vector boundaries, QPU-round boundaries, and n=1000. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launches. Candidate/codegen side remains disabled."
+},
+{
+"id": "hardware-run-matmul-naive",
+"name": "matmul_naive",
+"kind": "hardware-run",
+"test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive",
+"input_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/input.mlir",
+"reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference",
+"expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/expected.json",
+"run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive reference",
+"requires_hardware": true,
+"reference_passed": true,
+"candidate_enabled": false,
+"notes": "Naive CUDA-shaped matrix multiplication hardware-run reference for C[M,N] = A[M,K] * B[K,N]. Exercises TMU direct loads, QPU floating-point accumulation, tail-safe column stores through VPM/VDW, and logical work distribution across active QPUs. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launch cases. Candidate/codegen side remains disabled."
+}
+]
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Final-stage VC4 scheduled-sink input for the saxpy_16 hardware golden.
+//
+// Reference-side semantics:
+//   for i in 0..n:
+//     y[i] = alpha * x[i] + y[i]
+//
+// Test policy:
+//   n is a runtime kernel argument.
+//   The kernel/reference expects n to be a multiple of 16 * active_qpus.
+//   Tail masking is intentionally not part of this test.
+//   The generated launcher must not guard on n.
+//
+// Physical uniform stream per QPU:
+//   [0] x base address
+//   [1] y base address
+//   [2] alpha as one f32/u32 word
+//   [3] n element count
+//   [4] qpu_id
+//   [5] num_qpus
+//
+// This fixture intentionally uses the current dialect spelling for qpu.branch:
+//   cond, relative, use_reg, immediate, raddr_a, waddr_add, waddr_mul.
+// False write_swap is represented by omission, not by `write_swap = false`.
+
+vc4.module @saxpy_16 {
+vc4.func @saxpy_16_kernel() attributes {
+domain = #vc4.execution_domain<qpu>,
+form = #vc4.function_form<scheduled>,
+kernel,
+threading = #vc4.threading_mode<single>,
+"vc4.launch_abi" = {
+public_name = "saxpy_16_launch",
+tail_policy = "exact_multiple",
+uniform_words_per_qpu = 6 : i32,
+args = [
+{name = "x", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 0 : i32},
+{name = "y", kind = "buffer", direction = "inout", elem_type = "f32", uniform_index = 1 : i32},
+{name = "alpha", kind = "scalar", direction = "by_value", type = "f32", uniform_index = 2 : i32},
+{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32}
+],
+builtins = [
+{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32},
+{name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32}
+]
+}
+} {
+// Scheduled sink body skeleton for the current verifier-facing fixture.
+// The trusted reference semantics are established by reference/saxpy_16.qasm
+// and the hardware result oracle. Candidate-side codegen should eventually
+// replace this schematic body with the exact scheduled QPU sink for that qasm.
+
+    // Prologue / setup slots.
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<none>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<none>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<none>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+
+    // Loop-back branch shape. The true emitted immediate is resolved by codegen.
+    // The hardware branch fields are represented in dialect properties with the
+    // long names below; do not use rel/reg/ws in this dialect syntax.
+    "vc4.qpu.branch"() <{
+      cond = #vc4.branch_cond<any_c_clear>,
+      relative = true,
+      use_reg = false,
+      raddr_a = 0 : i32,
+      waddr_add = 39 : i32,
+      waddr_mul = 39 : i32,
+      immediate = 0 : i32
+    }> ({
+      "vc4.qpu.bundle"() <{
+        sig = #vc4.qpu_signal<none>, pm = false,
+        op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+        cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+        add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+        mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+        raddr_a = 0 : i32, raddr_b = 1 : i32,
+        waddr_add = 39 : i32, waddr_mul = 39 : i32
+      }> : () -> ()
+
+      "vc4.qpu.bundle"() <{
+        sig = #vc4.qpu_signal<none>, pm = false,
+        op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+        cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+        add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+        mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+        raddr_a = 0 : i32, raddr_b = 1 : i32,
+        waddr_add = 39 : i32, waddr_mul = 39 : i32
+      }> : () -> ()
+
+      "vc4.qpu.bundle"() <{
+        sig = #vc4.qpu_signal<none>, pm = false,
+        op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+        cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+        add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+        mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+        raddr_a = 0 : i32, raddr_b = 1 : i32,
+        waddr_add = 39 : i32, waddr_mul = 39 : i32
+      }> : () -> ()
+    }) {vc4.codegen.target = "loop"} : () -> ()
+
+    // Thread end plus two delay slots. The final three instructions do not touch
+    // uniforms, VPM/VDR/VDW, or regfile address 14.
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<thrend>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<none>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+
+    "vc4.qpu.bundle"() <{
+      sig = #vc4.qpu_signal<none>, pm = false,
+      op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>,
+      cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>,
+      add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>,
+      raddr_a = 0 : i32, raddr_b = 1 : i32,
+      waddr_add = 39 : i32, waddr_mul = 39 : i32
+    }> : () -> ()
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Final-stage hardware-run metadata for saxpy_full.
+//
+// This test is the tail-safe SAXPY successor to saxpy_16.  The trusted
+// reference qasm computes y[i] = alpha * x[i] + y[i] for arbitrary tested n,
+// distributes vector chunks by qpu_id/num_qpus, and dynamically programs VDW
+// DEPTH for the final partial vector.  Candidate/codegen execution remains
+// disabled until the backend can emit the qasm/launcher bundle.
+
+module attributes {
+"vc4.hardware_run_test.name" = "saxpy_full",
+"vc4.hardware_run_test.kind" = "hardware-run-reference",
+"vc4.hardware_run_test.reference_kernel" = "reference/saxpy_full.qasm",
+"vc4.hardware_run_test.launch_abi" = {
+public_name = "saxpy_full_launch",
+tail_policy = "tail_safe",
+uniform_words_per_qpu = 6 : i32,
+args = [
+{name = "x", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 0 : i32},
+{name = "y", kind = "buffer", direction = "inout", elem_type = "f32", uniform_index = 1 : i32},
+{name = "alpha", kind = "scalar", direction = "by_value", type = "f32", uniform_index = 2 : i32},
+{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32}
+],
+builtins = [
+{name = "qpu_id", kind = "qpu_num", materialization = "uniform_suffix", uniform_index = 4 : i32},
+{name = "num_qpus", kind = "num_qpus", materialization = "uniform_suffix", uniform_index = 5 : i32}
+],
+work_distribution = {
+base_element = "qpu_id * 16",
+stride_elements = "num_qpus * 16",
+tail_store = "dynamic_vdw_depth"
+}
+}
+} {
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Final-stage hardware-run metadata for matmul_naive.
+//
+// This test models the CUDA-like independent-vector lowering for a naive f32
+// row-major matmul:
+//
+//   C[M,N] = A[M,K] * B[K,N]
+//
+// One QPU request is one logical 16-lane warp.  ELEMENT_NUMBER supplies the
+// lane/column within a 16-column tile.  qpu_id and num_qpus are logical launch
+// builtins carried as uniforms for grid-stride row distribution.  Candidate
+// codegen execution remains disabled until the backend can emit the qasm and
+// launcher bundle.
+
+module attributes {
+"vc4.hardware_run_test.name" = "matmul_naive",
+"vc4.hardware_run_test.kind" = "hardware-run-reference",
+"vc4.hardware_run_test.reference_kernel" = "reference/matmul_naive.qasm",
+"vc4.hardware_run_test.launch_abi" = {
+public_name = "matmul_naive_launch",
+tail_policy = "tail_safe",
+uniform_words_per_qpu = 8 : i32,
+args = [
+{name = "a", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 0 : i32},
+{name = "b", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 1 : i32},
+{name = "c", kind = "buffer", direction = "out", elem_type = "f32", uniform_index = 2 : i32},
+{name = "m", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32},
+{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 4 : i32},
+{name = "k", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 5 : i32}
+],
+builtins = [
+{name = "qpu_id", kind = "qpu_num", materialization = "uniform_suffix", uniform_index = 6 : i32},
+{name = "num_qpus", kind = "num_qpus", materialization = "uniform_suffix", uniform_index = 7 : i32}
+],
+work_distribution = {
+logical_warp = "one QPU request",
+lane = "ELEMENT_NUMBER",
+row = "qpu_id + t * num_qpus",
+column = "column_tile_base + lane",
+column_tile_width = 16 : i32,
+store_tail = "dynamic_vdw_depth"
+},
+memory_paths = {
+global_loads = "TMU direct memory lookup",
+global_stores = "VPM staging plus VDW DMA store",
+vpm_vdw_serialization = "global_mutex"
+}
+}
+} {
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Final-stage hardware-run metadata for matmul_blocked.
+//
+// This test models the CUDA-like cooperative-block lowering for a blocked f32
+// row-major matmul:
+//
+//   C[M,N] = A[M,K] * B[K,N]
+//
+// One resident block contains 12 logical QPU warps.  Each QPU warp computes one
+// output row of a 12x16 C tile, and each SIMD lane computes one column.  The
+// block stages a 12x16 B tile in VPM rows and uses the locked four-semaphore
+// reusable barrier as the implementation of gpu.barrier / __syncthreads().
+// Candidate codegen execution remains disabled until the backend can emit the
+// qasm and launcher bundle.
+
+module attributes {
+"vc4.hardware_run_test.name" = "matmul_blocked",
+"vc4.hardware_run_test.kind" = "hardware-run-reference",
+"vc4.hardware_run_test.reference_kernel" = "reference/matmul_blocked.qasm",
+"vc4.hardware_run_test.launch_abi" = {
+public_name = "matmul_blocked_launch",
+tail_policy = "tail_safe",
+uniform_words_per_qpu = 14 : i32,
+args = [
+{name = "a", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 0 : i32},
+{name = "b", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 1 : i32},
+{name = "c", kind = "buffer", direction = "out", elem_type = "f32", uniform_index = 2 : i32},
+{name = "m", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32},
+{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 4 : i32},
+{name = "k", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 5 : i32}
+],
+builtins = [
+{name = "padded_k_stride", kind = "runtime_internal", materialization = "uniform_suffix", uniform_index = 6 : i32},
+{name = "padded_n_stride", kind = "runtime_internal", materialization = "uniform_suffix", uniform_index = 7 : i32},
+{name = "tile_row_base", kind = "block_id_y", materialization = "uniform_suffix", uniform_index = 8 : i32},
+{name = "tile_col_base", kind = "block_id_x", materialization = "uniform_suffix", uniform_index = 9 : i32},
+{name = "logical_warp_id", kind = "warp_id", materialization = "uniform_suffix", uniform_index = 10 : i32},
+{name = "warps_per_block", kind = "warps_per_block", materialization = "uniform_suffix", uniform_index = 11 : i32},
+{name = "padded_k_limit", kind = "runtime_internal", materialization = "uniform_suffix", uniform_index = 12 : i32},
+{name = "vpm_base_row", kind = "workgroup_memory_base", materialization = "uniform_suffix", uniform_index = 13 : i32}
+],
+work_distribution = {
+device_model = "one_cuda_like_sm",
+block_shape = "12_qpu_warps_x_16_lanes",
+output_tile = "12_rows_x_16_columns",
+row = "tile_row_base + logical_warp_id",
+column = "tile_col_base + ELEMENT_NUMBER",
+k_tile_rows = 12 : i32,
+shared_memory = "B tile in VPM rows vpm_base_row..vpm_base_row+11",
+barriers = "four_semaphore_reusable_syncthreads_after_loads_and_after_reads",
+store_tail = "dynamic_vdw_depth"
+},
+memory_paths = {
+global_loads = "TMU direct memory lookup",
+workgroup_memory = "VPM horizontal 32-bit rows",
+global_stores = "VPM staging plus VDW DMA store",
+vpm_vdw_serialization = "global_mutex"
+},
+runtime_resource_policy = {
+gpu_allocations_per_boot = 1 : i32,
+code_copies_per_boot = 1 : i32,
+resident_blocks_per_wave = 1 : i32,
+qpu_requests_per_wave = 12 : i32,
+semaphore_ids = "0,1,2,3"
+}
+}
+} {
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Exploratory final-stage metadata for qpu_barrier_syncthreads.
+//
+// This hardware-run test intentionally exercises direct QPU hardware features
+// that are not yet represented cleanly by the final-stage vc4 dialect as a
+// scheduled sink body: register-materialized QPU_NUMBER/ELEMENT_NUMBER, generic
+// VPM reads/writes, VDW stores, global mutex I/O, and QPU semaphore barrier
+// instructions. The trusted handwritten reference qasm is therefore the
+// hardware source of truth for this exploratory gpu.barrier / __syncthreads
+// lowering test. Candidate/codegen execution remains disabled until those
+// operations can be represented and emitted faithfully.
+
+module attributes {
+"vc4.hardware_run_test.name" = "qpu_barrier_syncthreads",
+"vc4.hardware_run_test.kind" = "hardware-run-exploratory",
+"vc4.hardware_run_test.reference_kernel" = "reference/qpu_barrier_syncthreads.qasm",
+"vc4.hardware_run_test.launch_abi" = {
+public_name = "qpu_barrier_syncthreads_launch",
+tail_policy = "fixed_barrier_modes",
+uniform_words_per_qpu = 14 : i32,
+args = [
+{name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 12 : i32}
+],
+builtins = [
+{name = "qpu_num", kind = "qpu_register", materialization = "register"},
+{name = "elem_num", kind = "qpu_register", materialization = "register"},
+{name = "mutex", kind = "qpu_io", materialization = "register"},
+{name = "semaphore", kind = "qpu_signal", materialization = "instruction"},
+{name = "vpm_vdw", kind = "qpu_io", materialization = "register"}
+],
+physical_uniform_stream = [
+{index = 0 : i32, name = "mode"},
+{index = 1 : i32, name = "run_id"},
+{index = 2 : i32, name = "block_id"},
+{index = 3 : i32, name = "logical_warp_id"},
+{index = 4 : i32, name = "warps_per_block"},
+{index = 5 : i32, name = "iterations"},
+{index = 6 : i32, name = "vpm_base_row"},
+{index = 7 : i32, name = "vpm_rows_per_block"},
+{index = 8 : i32, name = "arrive_sem"},
+{index = 9 : i32, name = "release_sem"},
+{index = 10 : i32, name = "depart_sem"},
+{index = 11 : i32, name = "reset_sem"},
+{index = 12 : i32, name = "result_warp_ptr"},
+{index = 13 : i32, name = "run_result_ptr"}
+],
+modes = [
+{id = 0 : i32, name = "same_slice_smoke", blocks = 1 : i32, warps_per_block = 2 : i32, iterations = 4 : i32},
+{id = 1 : i32, name = "cross_slice_0_1", blocks = 1 : i32, warps_per_block = 2 : i32, iterations = 4 : i32},
+{id = 2 : i32, name = "cross_slice_0_2", blocks = 1 : i32, warps_per_block = 2 : i32, iterations = 4 : i32},
+{id = 3 : i32, name = "full_block_stress", blocks = 1 : i32, warps_per_block = 12 : i32, iterations = 64 : i32},
+{id = 4 : i32, name = "two_block_partition", blocks = 2 : i32, warps_per_block = 4 : i32, iterations = 32 : i32}
+],
+barrier_protocol = {
+kind = "four_semaphore_reusable",
+barriers_per_iteration = 2 : i32,
+semaphores_per_block = 4 : i32,
+block0_semaphores = [0 : i32, 1 : i32, 2 : i32, 3 : i32],
+block1_semaphores = [4 : i32, 5 : i32, 6 : i32, 7 : i32]
+}
+}
+} {
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json =====
+{
+"name": "saxpy_full",
+"status": "PASS",
+"required": {
+"cases": 19,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_n": 1000
+},
+"float_max": {
+"max_abs_diff": 0.0001
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$here/../../../../../../.." && pwd)
+
+"$repo_root/compiler/test/CodeGen/VC4/Support/run_hardware_test.sh" \
+"$here" \
+reference
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/3-test-saxpy_full.c =====
+#include "rpi.h"
+#include "saxpy_full_launch.h"
+
+#define SAXPY_FULL_EPSILON 0.0001f
+#define CHECKSUM_SCALE 1024.0f
+#define SAXPY_FULL_MAX_N 1000u
+#define SAXPY_FULL_GUARD 32u
+#define SAXPY_FULL_BUFFER_N (SAXPY_FULL_MAX_N + SAXPY_FULL_GUARD)
+#define SAXPY_FULL_SENTINEL (-12345.0f)
+
+static float x_values[SAXPY_FULL_BUFFER_N];
+static float y_values[SAXPY_FULL_BUFFER_N];
+static float y_initial[SAXPY_FULL_BUFFER_N];
+static float expected_values[SAXPY_FULL_BUFFER_N];
+
+static const uint32_t test_sizes[] = {
+0u,
+1u,
+2u,
+15u,
+16u,
+17u,
+31u,
+32u,
+33u,
+191u,
+192u,
+193u,
+255u,
+256u,
+257u,
+767u,
+768u,
+769u,
+1000u,
+};
+
+static float absf_local(float value)
+{
+return value < 0.0f ? -value : value;
+}
+
+static void fill_inputs(uint32_t n)
+{
+for (uint32_t i = 0; i < SAXPY_FULL_BUFFER_N; i++)
+{
+x_values[i] = ((float)((i * 7u + 3u) % 101u) * 0.125f) - 4.0f;
+y_values[i] = ((float)((i * 5u + 11u) % 67u) * 0.25f) + 0.5f;
+y_initial[i] = y_values[i];
+expected_values[i] = y_values[i];
+}
+
+    for (uint32_t i = n; i < n + SAXPY_FULL_GUARD && i < SAXPY_FULL_BUFFER_N; i++)
+    {
+        y_values[i] = SAXPY_FULL_SENTINEL;
+        y_initial[i] = SAXPY_FULL_SENTINEL;
+        expected_values[i] = SAXPY_FULL_SENTINEL;
+    }
+}
+
+static void run_cpu_reference(float alpha, uint32_t n)
+{
+for (uint32_t i = 0; i < n; i++)
+expected_values[i] = alpha * x_values[i] + y_initial[i];
+}
+
+static int scaled_checksum(const float *values, uint32_t n)
+{
+int checksum = 0;
+for (uint32_t i = 0; i < n; i++)
+checksum += (int)(values[i] * CHECKSUM_SCALE);
+return checksum;
+}
+
+static void verify_results(uint32_t n, int *mismatch_count, float *max_abs_diff)
+{
+*mismatch_count = 0;
+*max_abs_diff = 0.0f;
+
+    for (uint32_t i = 0; i < n; i++)
+    {
+        float diff = y_values[i] - expected_values[i];
+        float abs_diff = absf_local(diff);
+        if (abs_diff > *max_abs_diff)
+            *max_abs_diff = abs_diff;
+
+        if (abs_diff > SAXPY_FULL_EPSILON)
+        {
+            if (*mismatch_count < 8)
+            {
+                printk("ERROR: n=%d i=%d gpu=%f cpu=%f diff=%f\n",
+                       (int)n,
+                       (int)i,
+                       y_values[i],
+                       expected_values[i],
+                       diff);
+            }
+            (*mismatch_count)++;
+        }
+    }
+}
+
+static int verify_sentinel_tail(uint32_t n)
+{
+int mismatches = 0;
+for (uint32_t i = n; i < n + SAXPY_FULL_GUARD && i < SAXPY_FULL_BUFFER_N; i++)
+{
+if (y_values[i] != SAXPY_FULL_SENTINEL)
+{
+if (mismatches < 8)
+{
+printk("ERROR: sentinel changed n=%d i=%d value=%f expected=%f\n",
+(int)n,
+(int)i,
+y_values[i],
+SAXPY_FULL_SENTINEL);
+}
+mismatches++;
+}
+}
+return mismatches;
+}
+
+void notmain(void)
+{
+struct vc4_runtime rt;
+const float alpha = 2.5f;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(&rt);
+    uint32_t laneWidth = vc4_runtime_lane_width();
+
+    if (activeQpus != VC4_RUNTIME_MAX_QPUS)
+        panic("Unexpected active QPU count: %d", (int)activeQpus);
+    if (laneWidth != VC4_RUNTIME_LANE_WIDTH)
+        panic("Unexpected lane width: %d", (int)laneWidth);
+
+    if (saxpy_full_prepare(&rt, SAXPY_FULL_MAX_N) < 0)
+        panic("saxpy_full one-time runtime setup failed");
+
+    printk("Running VC4 saxpy_full reference bundle...\n");
+    printk("SAXPY_FULL_RUNTIME_SETUP max_n=%d allocations=%d\n",
+           SAXPY_FULL_MAX_N,
+           (int)saxpy_full_runtime_allocations());
+
+    int start = timer_get_usec();
+    int totalMismatches = 0;
+    int sentinelMismatches = 0;
+    int launchFailures = 0;
+    int checksumAccum = 0;
+    float maxAbsDiffOverall = 0.0f;
+
+    const uint32_t caseCount = sizeof(test_sizes) / sizeof(test_sizes[0]);
+
+    for (uint32_t caseIndex = 0; caseIndex < caseCount; caseIndex++)
+    {
+        uint32_t n = test_sizes[caseIndex];
+        if (n > SAXPY_FULL_MAX_N)
+            panic("test n exceeds SAXPY_FULL_MAX_N: %d", (int)n);
+
+        fill_inputs(n);
+        run_cpu_reference(alpha, n);
+
+        if (saxpy_full_launch(&rt, x_values, y_values, alpha, n) < 0)
+        {
+            printk("ERROR: saxpy_full launch failed for n=%d\n", (int)n);
+            launchFailures++;
+            continue;
+        }
+
+        int mismatches = 0;
+        float maxAbsDiff = 0.0f;
+        verify_results(n, &mismatches, &maxAbsDiff);
+
+        int caseSentinelMismatches = verify_sentinel_tail(n);
+        int checksum = scaled_checksum(y_values, n);
+        int expectedChecksum = scaled_checksum(expected_values, n);
+        if (checksum != expectedChecksum)
+        {
+            printk("ERROR: checksum mismatch n=%d gpu=%d cpu=%d\n",
+                   (int)n,
+                   checksum,
+                   expectedChecksum);
+            mismatches++;
+        }
+
+        if (maxAbsDiff > maxAbsDiffOverall)
+            maxAbsDiffOverall = maxAbsDiff;
+
+        totalMismatches += mismatches;
+        sentinelMismatches += caseSentinelMismatches;
+        checksumAccum += checksum;
+
+        printk("SAXPY_FULL_CASE n=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
+               (int)n,
+               (int)activeQpus,
+               (int)laneWidth,
+               mismatches,
+               caseSentinelMismatches,
+               checksum,
+               maxAbsDiff,
+               (int)saxpy_full_runtime_launches(),
+               (int)saxpy_full_runtime_allocations());
+    }
+
+    int end = timer_get_usec();
+    int elapsed = end - start;
+
+    uint32_t runtimeAllocations = saxpy_full_runtime_allocations();
+    uint32_t runtimeLaunches = saxpy_full_runtime_launches();
+    uint32_t runtimeCapacity = saxpy_full_runtime_capacity();
+
+    const char *status =
+        (totalMismatches == 0 &&
+         sentinelMismatches == 0 &&
+         launchFailures == 0 &&
+         runtimeAllocations == 1 &&
+         runtimeLaunches == caseCount &&
+         runtimeCapacity == SAXPY_FULL_MAX_N) ? "PASS" : "FAIL";
+
+    printk("VC4_TEST_RESULT name=saxpy_full status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+           status,
+           (int)caseCount,
+           totalMismatches,
+           sentinelMismatches,
+           launchFailures,
+           (int)activeQpus,
+           (int)laneWidth,
+           SAXPY_FULL_MAX_N,
+           checksumAccum,
+           maxAbsDiffOverall,
+           (int)runtimeAllocations,
+           (int)runtimeLaunches,
+           elapsed);
+
+    /* Intentionally keep the single GPU allocation live until reboot.  The
+     * hardware runner power-cycles before each hardware test, and this avoids
+     * the repeated alloc/lock/unlock/free cycle that this test is specifically
+     * avoiding. */
+    vc4_runtime_shutdown(&rt);
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/Makefile =====
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c saxpy_full_launch.c saxpy_fullshader.c
+
+PROGS := 3-test-saxpy_full.c
+
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 1
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.c =====
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+// Wait until mailbox is not full.
+while (MAILBOX_STATUS & MAILBOX_FULL)
+{
+}
+// Lower 4 bits are used for channel.
+MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+uint32_t data;
+while (1)
+{
+data = MAILBOX_READ;
+if ((data & 0xF) == channel)
+return data & ~0xF;
+}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+// Check alignment.
+if ((uint32_t)msg & 0xF) return 0;
+mailbox_write(8, (uint32_t)msg);
+while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+uint32_t p[7] __attribute__((aligned(16))) =
+{
+7 * sizeof(uint32_t), // size
+0x00000000,			  // process request
+0x3000e,			  // (the tag id)
+1 * sizeof(uint32_t), // (size of the buffer)
+1 * sizeof(uint32_t), // (size of the data)
+handle,				  // (handle)
+0					  // end tag
+};
+assert(mbox_property(p));
+return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+uint32_t code,
+uint32_t unifs[],
+int num_qpus)
+{
+//printk("RUNNING WITH %d\n QPUS", num_qpus);
+PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+if (!rt)
+return -1;
+if (qpu_enable(1))
+return -1;
+rt->isInitialized = 1;
+rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+if (!rt || !rt->isInitialized)
+return;
+qpu_enable(0);
+rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+if (!rt)
+return 0;
+return rt->active_qpus;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.h =====
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+* Bare-metal Mailbox Interface for Raspberry Pi
+*
+* This header defines the functions for interacting with the GPU's mailbox
+* property interface in a bare-metal environment.
+*
+* Functions:
+*   - mailbox_write(): Write a message to the mailbox.
+*   - mailbox_read():  Read a message from the mailbox.
+*   - mailbox_call():  Send a property message and wait for the response.
+*
+*   - mem_alloc():     Allocate GPU memory.
+*   - mem_free():      Free GPU memory.
+*   - mem_lock():      Lock allocated GPU memory and return its bus address.
+*   - mem_unlock():    Unlock GPU memory.
+*
+*   - qpu_enable():    Enable (or disable) the QPU.
+*   - execute_qpu():   Execute QPU code.
+*
+* All property messages are sent on mailbox channel 8.
+*
+* Note: Ensure that the mailbox message buffers are 16-byte aligned.
+  */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+* 'msg' must be 16-byte aligned.
+* Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+  */
+  int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+*
+* mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+*             and 'flags'. Returns a nonzero handle on success.
+*
+* mem_free:   Releases the GPU memory associated with the given handle.
+*
+* mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+*             Returns the bus address on success.
+*
+* mem_unlock: Unlocks the previously locked GPU memory.
+  */
+  uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+  uint32_t mem_free(uint32_t handle);
+  uint32_t mem_lock(uint32_t handle);
+  uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+*
+* qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+  uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+VC4_RUNTIME_LANE_WIDTH = 16,
+VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+int isInitialized;
+/* Generic runtime launch policy for the current session. */
+uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+echo "ASSEMBLING QASM"
+if ! out=$(vc4asm -c saxpy_fullshader.c -h saxpy_fullshader.h saxpy_full.qasm 2>&1); then
+echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+if [[ -n "$out" ]]; then
+echo "▶ ASSEMBLY PRODUCED UNEXPECTED OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full.qasm =====
+.include "../share/vc4inc/vc4.qinc"
+
+# saxpy_full reference kernel.
+#
+# Tail-safe TMU-backed SAXPY golden:
+#   y[i] = alpha * x[i] + y[i] for i in [0, n)
+#
+# Differences from saxpy_16:
+#   - n may be any value, including 0 and non-multiples of 16.
+#   - Each QPU still processes vector chunks at:
+#       base_element = qpu_id * 16 + k * num_qpus * 16
+#   - The launcher pads the private GPU scratch buffers up to a 16-element
+#     boundary so tail-lane TMU reads stay in allocated GPU memory.
+#   - The kernel programs VDW DEPTH dynamically for the final partial vector,
+#     so only the logical tail element count is stored for the final chunk.
+#
+# Physical uniform stream order for one launched QPU:
+#   ra0 = x base address in padded GPU scratch
+#   ra1 = y base address/result address in padded GPU scratch
+#   ra2 = alpha (one scalar f32 word; uniform reads are lane-broadcast)
+#   ra3 = logical n element count, not padded_n
+#   ra4 = qpu_id
+#   ra5 = num_qpus
+mov ra0, unif
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+
+# byte_offset = qpu_id * 16 lanes * sizeof(f32)
+shl r0, ra4, 6
+mov ra8, r0
+
+# stride_bytes = num_qpus * 16 lanes * sizeof(f32)
+shl r3, ra5, 6
+mov rb20, r3
+
+# nbytes = n * sizeof(f32)
+shl r1, ra3, 2
+mov ra9, r1
+
+# Current x/y byte addresses for this QPU.
+add ra10, ra0, r0
+add ra11, ra1, r0
+
+# Use one disjoint VPM row per QPU for the output path.
+mov ra12, ra4
+
+# If this QPU's initial chunk base is already >= nbytes, do no work.
+mov r1, ra9
+sub.setf r1, ra8, r1
+brr.anync -, :end
+nop
+nop
+nop
+
+:loop
+# remaining_bytes = nbytes - byte_offset.  Move one A-reg source through
+# an accumulator so the subtract does not read two regfile-A values.
+mov r1, ra8
+sub r3, ra9, r1
+
+    # store_count = min(16, remaining_bytes / sizeof(f32)).
+    # Branch if remaining_bytes >= 64.  The value is scalar-uniform across lanes.
+    mov r1, 64
+    sub.setf -, r3, r1
+    brr.anync -, :full_chunk
+    nop
+    nop
+    nop
+
+    # Tail chunk: remaining_bytes is 4..60, so remaining_words is 1..15.
+    shr r1, r3, 2
+    mov ra13, r1
+    brr -, :have_store_count
+    nop
+    nop
+    nop
+
+:full_chunk
+mov r1, 16
+mov ra13, r1
+
+:have_store_count
+# Compute per-lane byte offsets in an accumulator.  The launcher pads the
+# private GPU scratch buffers to a 16-element boundary, so these TMU reads
+# are in-bounds even for inactive tail lanes.
+shl r1, elem_num, 2
+
+    # Issue two independent direct-memory TMU0 request vectors before receiving.
+    # Each active lane requests:
+    #   first FIFO entry:  x_current + lane*4
+    #   second FIFO entry: y_current + lane*4
+    add t0s, ra10, r1
+    add t0s, ra11, r1
+    nop
+
+    # Receive x first. The receive FIFO preserves request order.
+    ldtmu0
+
+    # Use x from r4 while signalling the receive for y. y is available in r4
+    # for the following instruction.
+    fmul r2, r4, ra2; ldtmu0
+
+    # Complete canonical SAXPY arithmetic: y = alpha * x + y.
+    fadd r2, r2, r4
+
+    # Stage the result into this QPU's VPM row.
+    mov r3, vpm_setup(1, 1, h32(0))
+    add vw_setup, r3, ra12
+    mov vpm, r2
+    read vw_wait
+
+    # DMA the VPM row to current y memory through VDW.
+    # Build a VDW setup word with dynamic DEPTH = store_count:
+    #   0x80804000 = ID(VDW basic) | UNITS(1) | HORIZ(1) | DEPTH(0)
+    #   DEPTH is then OR/add-ed into bits [22:16].  Shifts by 16 are expressed
+    #   as two shifts by 8 to stay in well-tested small-immediate shift form.
+    mov r1, ra13
+    shl r1, r1, 8
+    shl r1, r1, 8
+    mov r3, 0x80804000
+    add r2, r3, r1
+    shl r1, ra12, 7
+    add vw_setup, r2, r1
+    mov vw_addr, ra11
+    read vw_wait
+
+    # Advance this QPU's worklist by num_qpus vectors.
+    add ra8, ra8, rb20
+    add ra10, ra10, rb20
+    add ra11, ra11, rb20
+
+    # Loop while the next chunk base is still < nbytes.
+    mov r1, ra9
+    sub.setf r1, ra8, r1
+    brr.anyc -, :loop
+    nop
+    nop
+    nop
+
+:end
+# End program. The final thread-end instruction and two delay slots avoid
+# uniform/VPM/VDW access and physical register address 14.
+thrend
+nop
+nop
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.c =====
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "saxpy_full_launch.h"
+#include "saxpy_fullshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define NUM_UNIFS 6
+
+struct saxpy_full_launch_state
+{
+uint32_t code[sizeof(saxpy_fullshader) / sizeof(uint32_t)];
+uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];
+uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];
+uint32_t handle;
+uint32_t max_n;
+uint32_t padded_capacity_n;
+uint32_t launch_count;
+float payload[];
+};
+
+static volatile struct saxpy_full_launch_state *g_state;
+static uint32_t g_handle;
+static uint32_t g_allocations;
+
+static uint32_t float_as_u32(float value)
+{
+union
+{
+float f;
+uint32_t u;
+} bits;
+
+    bits.f = value;
+    return bits.u;
+}
+
+static uint32_t round_up_to_lane_width(uint32_t n)
+{
+const uint32_t laneWidth = VC4_RUNTIME_LANE_WIDTH;
+if (n == 0)
+return 0;
+return (n + laneWidth - 1u) & ~(laneWidth - 1u);
+}
+
+static size_t saxpy_full_state_size(uint32_t padded_capacity_n)
+{
+return offsetof(struct saxpy_full_launch_state, payload) +
+(size_t)2 * padded_capacity_n * sizeof(float);
+}
+
+static float *saxpy_full_x_ptr(volatile struct saxpy_full_launch_state *state)
+{
+return (float *)state->payload;
+}
+
+static float *saxpy_full_y_ptr(volatile struct saxpy_full_launch_state *state)
+{
+return (float *)state->payload + state->padded_capacity_n;
+}
+
+int saxpy_full_prepare(struct vc4_runtime *rt, uint32_t max_n)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+    if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)
+        return -1;
+
+    uint32_t paddedCapacity = round_up_to_lane_width(max_n);
+    if (paddedCapacity < max_n)
+        return -1;
+
+    if (g_state)
+    {
+        /* This test/runtime shape is intentionally single-allocation. */
+        if (max_n <= g_state->max_n)
+            return 0;
+        return -1;
+    }
+
+    size_t allocSize = saxpy_full_state_size(paddedCapacity);
+    if (allocSize > 0xffffffffu)
+        return -1;
+
+    uint32_t handle = mem_alloc((uint32_t)allocSize, 4096, GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct saxpy_full_launch_state *state =
+        (volatile struct saxpy_full_launch_state *)(vc - GPU_BASE);
+    if (!state)
+    {
+        mem_unlock(handle);
+        mem_free(handle);
+        return -1;
+    }
+
+    memset((void *)state, 0, allocSize);
+    state->handle = handle;
+    state->max_n = max_n;
+    state->padded_capacity_n = paddedCapacity;
+    state->launch_count = 0;
+
+    /* Copy the assembled kernel code to GPU-visible memory exactly once. */
+    memcpy((void *)state->code, saxpy_fullshader, sizeof state->code);
+
+    for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; qpu++)
+        state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu];
+
+    g_handle = handle;
+    g_state = state;
+    g_allocations++;
+    return 0;
+}
+
+int saxpy_full_launch(
+struct vc4_runtime *rt,
+const float *x,
+float *y,
+float alpha,
+uint32_t n)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+if (n != 0 && (!x || !y))
+return -1;
+if (!g_state)
+return -1;
+if (n > g_state->max_n)
+return -1;
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+    if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)
+        return -1;
+
+    uint32_t paddedN = round_up_to_lane_width(n);
+    if (paddedN < n || paddedN > g_state->padded_capacity_n)
+        return -1;
+
+    float *gpuX = saxpy_full_x_ptr(g_state);
+    float *gpuY = saxpy_full_y_ptr(g_state);
+
+    if (n != 0)
+    {
+        memcpy(gpuX, x, n * sizeof(float));
+        memcpy(gpuY, y, n * sizeof(float));
+    }
+
+    /*
+     * Pad only the private GPU scratch buffers up to this launch's vector
+     * boundary. The logical n uniform remains unchanged. Padding keeps
+     * inactive tail-lane TMU reads inside the one allocated GPU buffer; the
+     * qasm uses a dynamic VDW DEPTH so the final partial vector stores only
+     * the logical tail count.
+     */
+    for (uint32_t i = n; i < paddedN; i++)
+    {
+        gpuX[i] = 0.0f;
+        gpuY[i] = 0.0f;
+    }
+
+    uint32_t gpuXAddr = GPU_BASE + (uint32_t)gpuX;
+    uint32_t gpuYAddr = GPU_BASE + (uint32_t)gpuY;
+
+    for (uint32_t qpu = 0; qpu < activeQpus; qpu++)
+    {
+        /*
+         * Physical uniform stream order per QPU:
+         *   [0] x scratch base address
+         *   [1] y scratch base/result address
+         *   [2] alpha
+         *   [3] logical n, not paddedN
+         *   [4] qpu_id
+         *   [5] num_qpus
+         *
+         * qpu_id and num_qpus are conceptual execution builtins in the MLIR
+         * input even though this reference physically carries them as uniforms.
+         */
+        g_state->unif[qpu][0] = gpuXAddr;
+        g_state->unif[qpu][1] = gpuYAddr;
+        g_state->unif[qpu][2] = float_as_u32(alpha);
+        g_state->unif[qpu][3] = n;
+        g_state->unif[qpu][4] = qpu;
+        g_state->unif[qpu][5] = activeQpus;
+        g_state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&g_state->unif[qpu];
+    }
+
+    gpu_fft_base_exec_direct((uint32_t)g_state->code,
+                             (uint32_t *)g_state->unif_ptr,
+                             activeQpus);
+
+    if (n != 0)
+        memcpy(y, gpuY, n * sizeof(float));
+
+    g_state->launch_count++;
+    return 0;
+}
+
+void saxpy_full_release(struct vc4_runtime *rt)
+{
+(void)rt;
+
+    if (!g_state)
+        return;
+
+    /* One-time teardown only. The hardware test does not call this during the
+     * n-loop; repeated kernel calls reuse the single allocation above. */
+    mem_unlock(g_handle);
+    mem_free(g_handle);
+    g_state = 0;
+    g_handle = 0;
+}
+
+uint32_t saxpy_full_runtime_allocations(void)
+{
+return g_allocations;
+}
+
+uint32_t saxpy_full_runtime_launches(void)
+{
+if (!g_state)
+return 0;
+return g_state->launch_count;
+}
+
+uint32_t saxpy_full_runtime_capacity(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_n;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.h =====
+#ifndef SAXPY_FULL_LAUNCH_H
+#define SAXPY_FULL_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+/*
+* Public semantic launcher API for saxpy_full.
+*
+* Computes y[i] = alpha * x[i] + y[i] for every i in [0, n).
+*
+* Unlike saxpy_16, this reference has tail_safe semantics: n may be zero,
+* less than one vector, non-multiple-of-16, non-multiple-of-active-QPUs, or
+* larger than one full active-QPU round.
+*
+* Runtime/setup discipline for this test:
+*   - saxpy_full_prepare() performs the single GPU allocation for this kernel
+*     and copies the assembled qasm code to that allocation exactly once.
+*   - saxpy_full_launch() only updates the already-allocated payload/uniforms
+*     and queues the already-resident shader code.
+*   - The bare-metal hardware test intentionally keeps this allocation live
+*     until the Pi is power-cycled; this avoids repeated alloc/lock/unlock/free
+*     cycles while exercising many different n values in one boot.
+*
+* The public launch API exposes only semantic arguments plus the runtime
+* handle. It does not expose qpu_id, num_qpus, raw uniform streams, VPM rows,
+* TMU details, or scheduler internals.
+  */
+  int saxpy_full_prepare(struct vc4_runtime *rt, uint32_t max_n);
+
+int saxpy_full_launch(
+struct vc4_runtime *rt,
+const float *x,
+float *y,
+float alpha,
+uint32_t n);
+
+/* Optional cleanup for callers that want an explicit one-time teardown. */
+void saxpy_full_release(struct vc4_runtime *rt);
+
+/* Test diagnostics: these do not expose raw scheduler or uniform internals. */
+uint32_t saxpy_full_runtime_allocations(void);
+uint32_t saxpy_full_runtime_launches(void);
+uint32_t saxpy_full_runtime_capacity(void);
+
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/expected.json =====
+{
+"name": "matmul_naive",
+"status": "PASS",
+"required": {
+"cases": 10,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_m": 19,
+"max_n": 31,
+"max_k": 13,
+"runtime_allocations": 1,
+"runtime_launches": 10
+},
+"float_max": {
+"max_abs_diff": 0.0005
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
+compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive \
+reference
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/3-test-matmul_naive.c =====
+#include "rpi.h"
+#include "matmul_naive_launch.h"
+
+#define MATMUL_NAIVE_EPSILON 0.0005f
+#define CHECKSUM_SCALE 4096.0f
+
+#define MATMUL_NAIVE_CASES 10
+#define MATMUL_NAIVE_MAX_M 19u
+#define MATMUL_NAIVE_MAX_N 31u
+#define MATMUL_NAIVE_MAX_K 13u
+#define MATMUL_NAIVE_MAX_A (MATMUL_NAIVE_MAX_M * MATMUL_NAIVE_MAX_K)
+#define MATMUL_NAIVE_MAX_B (MATMUL_NAIVE_MAX_K * MATMUL_NAIVE_MAX_N)
+#define MATMUL_NAIVE_MAX_C (MATMUL_NAIVE_MAX_M * MATMUL_NAIVE_MAX_N)
+#define MATMUL_NAIVE_HOST_GUARD 16u
+#define MATMUL_NAIVE_SENTINEL -7777.0f
+
+typedef struct
+{
+uint32_t m;
+uint32_t n;
+uint32_t k;
+} matmul_case_t;
+
+static const matmul_case_t cases[MATMUL_NAIVE_CASES] = {
+{0, 7, 3},
+{4, 0, 5},
+{4, 7, 0},
+{1, 1, 1},
+{3, 5, 4},
+{5, 15, 6},
+{5, 16, 6},
+{5, 17, 6},
+{13, 17, 9},
+{19, 31, 13},
+};
+
+static float a_values[MATMUL_NAIVE_MAX_A ? MATMUL_NAIVE_MAX_A : 1];
+static float b_values[MATMUL_NAIVE_MAX_B ? MATMUL_NAIVE_MAX_B : 1];
+static float c_values[MATMUL_NAIVE_MAX_C + MATMUL_NAIVE_HOST_GUARD];
+static float expected_values[MATMUL_NAIVE_MAX_C ? MATMUL_NAIVE_MAX_C : 1];
+
+static float absf_local(float value)
+{
+return value < 0.0f ? -value : value;
+}
+
+static float make_a_value(uint32_t i)
+{
+int centered = (int)(i % 17u) - 8;
+return ((float)centered) * 0.125f;
+}
+
+static float make_b_value(uint32_t i)
+{
+int centered = (int)(i % 19u) - 9;
+return ((float)centered) * 0.0625f;
+}
+
+static void fill_inputs(uint32_t m, uint32_t n, uint32_t k)
+{
+uint32_t aCount = m * k;
+uint32_t bCount = k * n;
+uint32_t cCount = m * n;
+
+    for (uint32_t i = 0; i < aCount; i++)
+        a_values[i] = make_a_value(i + 3u * m + 5u * k);
+    for (uint32_t i = 0; i < bCount; i++)
+        b_values[i] = make_b_value(i + 7u * n + 11u * k);
+    for (uint32_t i = 0; i < cCount + MATMUL_NAIVE_HOST_GUARD; i++)
+        c_values[i] = MATMUL_NAIVE_SENTINEL;
+}
+
+static void run_cpu_reference(uint32_t m, uint32_t n, uint32_t k)
+{
+for (uint32_t row = 0; row < m; row++)
+{
+for (uint32_t col = 0; col < n; col++)
+{
+float acc = 0.0f;
+for (uint32_t kk = 0; kk < k; kk++)
+acc += a_values[row * k + kk] * b_values[kk * n + col];
+expected_values[row * n + col] = acc;
+}
+}
+}
+
+static int scaled_checksum(const float *values, uint32_t count)
+{
+int checksum = 0;
+for (uint32_t i = 0; i < count; i++)
+checksum += (int)(values[i] * CHECKSUM_SCALE);
+return checksum;
+}
+
+static void verify_results(uint32_t m,
+uint32_t n,
+int *mismatch_count,
+float *max_abs_diff)
+{
+uint32_t cCount = m * n;
+*mismatch_count = 0;
+*max_abs_diff = 0.0f;
+
+    for (uint32_t i = 0; i < cCount; i++)
+    {
+        float diff = c_values[i] - expected_values[i];
+        float abs_diff = absf_local(diff);
+        if (abs_diff > *max_abs_diff)
+            *max_abs_diff = abs_diff;
+
+        if (abs_diff > MATMUL_NAIVE_EPSILON)
+        {
+            if (*mismatch_count < 8)
+            {
+                uint32_t row = n ? (i / n) : 0;
+                uint32_t col = n ? (i % n) : 0;
+                printk("ERROR: row=%d col=%d gpu=%f cpu=%f diff=%f\n",
+                       (int)row,
+                       (int)col,
+                       c_values[i],
+                       expected_values[i],
+                       diff);
+            }
+            (*mismatch_count)++;
+        }
+    }
+}
+
+static int verify_host_guard(uint32_t m, uint32_t n)
+{
+uint32_t cCount = m * n;
+int mismatches = 0;
+for (uint32_t i = 0; i < MATMUL_NAIVE_HOST_GUARD; i++)
+{
+if (c_values[cCount + i] != MATMUL_NAIVE_SENTINEL)
+{
+if (mismatches < 4)
+{
+printk("ERROR: host guard i=%d value=%f\n",
+(int)i,
+c_values[cCount + i]);
+}
+mismatches++;
+}
+}
+return mismatches;
+}
+
+void notmain(void)
+{
+struct vc4_runtime rt;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(&rt);
+    uint32_t laneWidth = vc4_runtime_lane_width();
+
+    if (activeQpus != VC4_RUNTIME_MAX_QPUS)
+        panic("Unexpected active QPU count: %d", (int)activeQpus);
+    if (laneWidth != 16)
+        panic("Unexpected lane width: %d", (int)laneWidth);
+
+    if (matmul_naive_prepare(&rt,
+                             MATMUL_NAIVE_MAX_M,
+                             MATMUL_NAIVE_MAX_N,
+                             MATMUL_NAIVE_MAX_K) < 0)
+        panic("matmul_naive one-time runtime setup failed");
+
+    printk("Running VC4 matmul_naive reference bundle...\n");
+    printk("MATMUL_NAIVE_RUNTIME_SETUP max_m=%d max_n=%d max_k=%d allocations=%d\n",
+           (int)MATMUL_NAIVE_MAX_M,
+           (int)MATMUL_NAIVE_MAX_N,
+           (int)MATMUL_NAIVE_MAX_K,
+           (int)matmul_naive_runtime_allocations());
+
+    int totalMismatches = 0;
+    int sentinelMismatches = 0;
+    int launchFailures = 0;
+    int checksumAccum = 0;
+    float globalMaxAbsDiff = 0.0f;
+
+    int start = timer_get_usec();
+
+    for (uint32_t caseIndex = 0; caseIndex < MATMUL_NAIVE_CASES; caseIndex++)
+    {
+        uint32_t m = cases[caseIndex].m;
+        uint32_t n = cases[caseIndex].n;
+        uint32_t k = cases[caseIndex].k;
+        uint32_t cCount = m * n;
+
+        fill_inputs(m, n, k);
+        run_cpu_reference(m, n, k);
+
+        if (matmul_naive_launch(&rt, a_values, b_values, c_values, m, n, k) < 0)
+        {
+            printk("MATMUL_NAIVE_CASE case=%d m=%d n=%d k=%d launch=FAIL launches=%d allocations=%d\n",
+                   (int)caseIndex,
+                   (int)m,
+                   (int)n,
+                   (int)k,
+                   (int)matmul_naive_runtime_launches(),
+                   (int)matmul_naive_runtime_allocations());
+            launchFailures++;
+            continue;
+        }
+
+        int mismatches = 0;
+        float maxAbsDiff = 0.0f;
+        verify_results(m, n, &mismatches, &maxAbsDiff);
+        int guardMismatches = verify_host_guard(m, n);
+        int checksum = scaled_checksum(c_values, cCount);
+        int expectedChecksum = scaled_checksum(expected_values, cCount);
+
+        if (checksum != expectedChecksum)
+        {
+            printk("ERROR: checksum case=%d gpu=%d cpu=%d\n",
+                   (int)caseIndex,
+                   checksum,
+                   expectedChecksum);
+            mismatches++;
+        }
+
+        totalMismatches += mismatches;
+        sentinelMismatches += guardMismatches;
+        checksumAccum += checksum;
+        if (maxAbsDiff > globalMaxAbsDiff)
+            globalMaxAbsDiff = maxAbsDiff;
+
+        printk("MATMUL_NAIVE_CASE case=%d m=%d n=%d k=%d elements=%d mismatches=%d guard_mismatches=%d checksum=%d expected_checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
+               (int)caseIndex,
+               (int)m,
+               (int)n,
+               (int)k,
+               (int)cCount,
+               mismatches,
+               guardMismatches,
+               checksum,
+               expectedChecksum,
+               maxAbsDiff,
+               (int)matmul_naive_runtime_launches(),
+               (int)matmul_naive_runtime_allocations());
+    }
+
+    int end = timer_get_usec();
+    int elapsed = end - start;
+
+    uint32_t runtimeAllocations = matmul_naive_runtime_allocations();
+    uint32_t runtimeLaunches = matmul_naive_runtime_launches();
+    uint32_t runtimeCapacityM = matmul_naive_runtime_capacity_m();
+    uint32_t runtimeCapacityN = matmul_naive_runtime_capacity_n();
+    uint32_t runtimeCapacityK = matmul_naive_runtime_capacity_k();
+
+    const char *status =
+        (totalMismatches == 0 &&
+         sentinelMismatches == 0 &&
+         launchFailures == 0 &&
+         runtimeAllocations == 1 &&
+         runtimeLaunches == MATMUL_NAIVE_CASES &&
+         runtimeCapacityM == MATMUL_NAIVE_MAX_M &&
+         runtimeCapacityN == MATMUL_NAIVE_MAX_N &&
+         runtimeCapacityK == MATMUL_NAIVE_MAX_K) ? "PASS" : "FAIL";
+
+    printk("VC4_TEST_RESULT name=matmul_naive status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_m=%d max_n=%d max_k=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+           status,
+           MATMUL_NAIVE_CASES,
+           totalMismatches,
+           sentinelMismatches,
+           launchFailures,
+           (int)activeQpus,
+           (int)laneWidth,
+           (int)MATMUL_NAIVE_MAX_M,
+           (int)MATMUL_NAIVE_MAX_N,
+           (int)MATMUL_NAIVE_MAX_K,
+           checksumAccum,
+           globalMaxAbsDiff,
+           (int)runtimeAllocations,
+           (int)runtimeLaunches,
+           elapsed);
+
+    if (status[0] != 'P')
+        panic("matmul_naive verification failed");
+
+    /* Intentionally keep the single GPU allocation live until reboot.  The
+     * hardware runner power-cycles before each hardware test, and this avoids
+     * the repeated alloc/lock/unlock/free cycle that this test is specifically
+     * avoiding. */
+    vc4_runtime_shutdown(&rt);
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/Makefile =====
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c matmul_naive_launch.c matmul_naiveshader.c
+
+PROGS := 3-test-matmul_naive.c
+
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 1
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/mailbox.c =====
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+// Wait until mailbox is not full.
+while (MAILBOX_STATUS & MAILBOX_FULL)
+{
+}
+// Lower 4 bits are used for channel.
+MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+uint32_t data;
+while (1)
+{
+data = MAILBOX_READ;
+if ((data & 0xF) == channel)
+return data & ~0xF;
+}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+// Check alignment.
+if ((uint32_t)msg & 0xF) return 0;
+mailbox_write(8, (uint32_t)msg);
+while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+uint32_t p[7] __attribute__((aligned(16))) =
+{
+7 * sizeof(uint32_t), // size
+0x00000000,			  // process request
+0x3000e,			  // (the tag id)
+1 * sizeof(uint32_t), // (size of the buffer)
+1 * sizeof(uint32_t), // (size of the data)
+handle,				  // (handle)
+0					  // end tag
+};
+assert(mbox_property(p));
+return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+uint32_t code,
+uint32_t unifs[],
+int num_qpus)
+{
+//printk("RUNNING WITH %d\n QPUS", num_qpus);
+PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+if (!rt)
+return -1;
+if (qpu_enable(1))
+return -1;
+rt->isInitialized = 1;
+rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+if (!rt || !rt->isInitialized)
+return;
+qpu_enable(0);
+rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+if (!rt)
+return 0;
+return rt->active_qpus;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/mailbox.h =====
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+* Bare-metal Mailbox Interface for Raspberry Pi
+*
+* This header defines the functions for interacting with the GPU's mailbox
+* property interface in a bare-metal environment.
+*
+* Functions:
+*   - mailbox_write(): Write a message to the mailbox.
+*   - mailbox_read():  Read a message from the mailbox.
+*   - mailbox_call():  Send a property message and wait for the response.
+*
+*   - mem_alloc():     Allocate GPU memory.
+*   - mem_free():      Free GPU memory.
+*   - mem_lock():      Lock allocated GPU memory and return its bus address.
+*   - mem_unlock():    Unlock GPU memory.
+*
+*   - qpu_enable():    Enable (or disable) the QPU.
+*   - execute_qpu():   Execute QPU code.
+*
+* All property messages are sent on mailbox channel 8.
+*
+* Note: Ensure that the mailbox message buffers are 16-byte aligned.
+  */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+* 'msg' must be 16-byte aligned.
+* Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+  */
+  int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+*
+* mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+*             and 'flags'. Returns a nonzero handle on success.
+*
+* mem_free:   Releases the GPU memory associated with the given handle.
+*
+* mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+*             Returns the bus address on success.
+*
+* mem_unlock: Unlocks the previously locked GPU memory.
+  */
+  uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+  uint32_t mem_free(uint32_t handle);
+  uint32_t mem_lock(uint32_t handle);
+  uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+*
+* qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+  uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+VC4_RUNTIME_LANE_WIDTH = 16,
+VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+int isInitialized;
+/* Generic runtime launch policy for the current session. */
+uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive.qasm =====
+.include "../share/vc4inc/vc4.qinc"
+
+# matmul_naive reference kernel.
+#
+# Computes row-major C[M,N] = A[M,K] * B[K,N] for f32 matrices.
+#
+# CUDA-like mapping used by this test:
+#   - one QPU user-program request is one logical 16-lane warp;
+#   - ELEMENT_NUMBER is the lane id / column within a 16-column tile;
+#   - qpu_id and num_qpus are logical launch builtins carried as uniforms;
+#   - each logical warp owns rows qpu_id, qpu_id + num_qpus, ...;
+#   - for each row, lanes compute one 16-column output tile at a time.
+#
+# This is intentionally naive: no VPM shared-memory tiling and no barrier.
+# It exercises TMU direct global loads, floating-point multiply/add, tail-safe
+# VDW stores, and grid-stride row distribution across all active QPUs.
+#
+# Physical uniform stream order for one launched QPU:
+#   ra0 = A base address, compact row-major M*K f32
+#   ra1 = B base address, compact row-major K*N f32 plus private guard padding
+#   ra2 = C base address, compact row-major M*N f32
+#   ra3 = M
+#   ra4 = N
+#   ra5 = K
+#   ra6 = qpu_id        (logical warp id for independent-vector mode)
+#   ra7 = num_qpus
+mov ra0, unif
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+mov ra6, unif
+mov ra7, unif
+
+# Constants and loop-invariant values kept in B-regfile where useful so later
+# arithmetic can read one A-regfile value and one B-regfile value.
+mov rb20, ra7        # row stride in rows = num_qpus
+mov rb21, ra5        # K
+mov rb22, ra4        # N
+mov r0, 15
+add r0, r0, 1
+mov rb23, r0         # 16 columns per vector tile
+
+# Current output row for this logical QPU and private VPM staging row.
+mov ra8, ra6         # row
+mov ra12, ra6        # VPM staging row, one per logical QPU
+
+:row_check
+# if row >= M: done
+mov r1, ra3
+sub.setf r1, ra8, r1
+brr.anync -, :end
+nop
+nop
+nop
+
+# A row base byte address: A + (row*K)*4.
+mul24 r0, ra8, rb21
+shl r0, r0, 2
+add ra10, ra0, r0
+
+# C row base byte address: C + (row*N)*4.
+mul24 r0, ra8, rb22
+shl r0, r0, 2
+add ra11, ra2, r0
+
+# col = 0
+mov ra9, 0
+
+:col_check
+# if col >= N: advance to next row
+mov r1, rb22
+sub.setf r1, ra9, r1
+brr.anync -, :row_advance
+nop
+nop
+nop
+
+# store_count = min(16, N - col)
+mov r1, rb22
+sub r3, r1, ra9
+sub.setf -, r3, rb23
+brr.anync -, :full_col_tile
+nop
+nop
+nop
+
+# Tail column tile: remaining columns are in r3, 1..15.
+mov ra13, r3
+brr -, :have_store_count
+nop
+nop
+nop
+
+:full_col_tile
+mov ra13, rb23
+
+:have_store_count
+# acc = 0.0 in every lane.  Integer zero has the same bits as f32 zero.
+mov r2, 0
+
+# k = 0
+mov ra15, 0
+
+:k_check
+# if k >= K: store accumulated vector
+mov r1, rb21
+sub.setf r1, ra15, r1
+brr.anync -, :k_done
+nop
+nop
+nop
+
+# Queue A[row,k] as a direct TMU0 lookup.  The scalar address is written as a
+# vector, so every lane receives the same A value.
+shl r1, ra15, 2
+add t0s, ra10, r1
+
+# Queue B[k,col+lane] as a direct TMU0 lookup.
+# The launcher puts guard padding after compact B so inactive tail lanes in the
+# last K row remain inside allocated GPU memory.  Those lanes are never stored.
+mul24 r0, ra15, rb22
+add r0, r0, ra9
+add r0, r0, elem_num
+shl r0, r0, 2
+add t0s, ra1, r0
+nop
+
+# Receive A first, then receive B while preserving A in r3.
+ldtmu0
+mov r3, r4; ldtmu0
+
+# acc += A * B
+fmul r0, r3, r4
+fadd r2, r2, r0
+
+# ++k
+add ra15, ra15, 1
+brr -, :k_check
+nop
+nop
+nop
+
+:k_done
+# Store acc to C[row, col : col + store_count).  VPM/VDW setup and access are
+# kept under the global mutex, matching the conservative compiler/runtime rule
+# until the setup-clobber tests prove a narrower rule is safe.
+read mutex_acq
+
+# Stage the result vector into this QPU's VPM row.
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra12
+mov vpm, r2
+read vw_wait
+
+# Build VDW setup with dynamic DEPTH = store_count:
+#   0x80804000 = ID(VDW basic) | UNITS(1) | HORIZ(1) | DEPTH(0)
+#   DEPTH lives in bits [22:16].
+mov r1, ra13
+shl r1, r1, 8
+shl r1, r1, 8
+mov r3, 0x80804000
+add r0, r3, r1
+shl r1, ra12, 7
+add vw_setup, r0, r1
+
+# Destination address = C row base + col*4.
+shl r1, ra9, 2
+add r1, ra11, r1
+mov vw_addr, r1
+read vw_wait
+
+mov mutex_rel, 0
+
+# col += 16
+add ra9, ra9, rb23
+brr -, :col_check
+nop
+nop
+nop
+
+:row_advance
+# row += num_qpus
+add ra8, ra8, rb20
+brr -, :row_check
+nop
+nop
+nop
+
+:end
+# End program. The final thread-end instruction and two delay slots avoid
+# uniform/VPM/VDW access and physical register address 14.
+thrend
+nop
+nop
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive_launch.c =====
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "matmul_naive_launch.h"
+#include "matmul_naiveshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define NUM_UNIFS 8
+#define B_GUARD_FLOATS 16u
+
+struct matmul_naive_launch_state
+{
+uint32_t code[sizeof(matmul_naiveshader) / sizeof(uint32_t)];
+uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];
+uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];
+uint32_t handle;
+uint32_t max_m;
+uint32_t max_n;
+uint32_t max_k;
+uint32_t launch_count;
+float payload[];
+};
+
+static volatile struct matmul_naive_launch_state *g_state;
+static uint32_t g_handle;
+static uint32_t g_allocations;
+
+static size_t matmul_naive_count_a(uint32_t m, uint32_t k)
+{
+return (size_t)m * (size_t)k;
+}
+
+static size_t matmul_naive_count_b(uint32_t n, uint32_t k)
+{
+return (size_t)k * (size_t)n;
+}
+
+static size_t matmul_naive_count_c(uint32_t m, uint32_t n)
+{
+return (size_t)m * (size_t)n;
+}
+
+static size_t matmul_naive_capacity_a(volatile struct matmul_naive_launch_state *state)
+{
+return matmul_naive_count_a(state->max_m, state->max_k);
+}
+
+static size_t matmul_naive_capacity_b(volatile struct matmul_naive_launch_state *state)
+{
+return matmul_naive_count_b(state->max_n, state->max_k) + B_GUARD_FLOATS;
+}
+
+static size_t matmul_naive_capacity_c(volatile struct matmul_naive_launch_state *state)
+{
+return matmul_naive_count_c(state->max_m, state->max_n);
+}
+
+static size_t matmul_naive_state_size(uint32_t max_m, uint32_t max_n, uint32_t max_k)
+{
+size_t aCapacity = (size_t)max_m * (size_t)max_k;
+size_t bCapacity = (size_t)max_k * (size_t)max_n + B_GUARD_FLOATS;
+size_t cCapacity = (size_t)max_m * (size_t)max_n;
+return offsetof(struct matmul_naive_launch_state, payload) +
+(aCapacity + bCapacity + cCapacity) * sizeof(float);
+}
+
+static float *matmul_naive_a_ptr(volatile struct matmul_naive_launch_state *state)
+{
+return (float *)state->payload;
+}
+
+static float *matmul_naive_b_ptr(volatile struct matmul_naive_launch_state *state)
+{
+return (float *)state->payload + matmul_naive_capacity_a(state);
+}
+
+static float *matmul_naive_c_ptr(volatile struct matmul_naive_launch_state *state)
+{
+return (float *)state->payload +
+matmul_naive_capacity_a(state) +
+matmul_naive_capacity_b(state);
+}
+
+int matmul_naive_prepare(
+struct vc4_runtime *rt,
+uint32_t max_m,
+uint32_t max_n,
+uint32_t max_k)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+    if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)
+        return -1;
+
+    if (g_state)
+    {
+        /* This test/runtime shape is intentionally single-allocation. */
+        if (max_m <= g_state->max_m &&
+            max_n <= g_state->max_n &&
+            max_k <= g_state->max_k)
+            return 0;
+        return -1;
+    }
+
+    size_t allocSize = matmul_naive_state_size(max_m, max_n, max_k);
+    if (allocSize > 0xffffffffu)
+        return -1;
+
+    uint32_t handle = mem_alloc((uint32_t)allocSize, 4096, GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct matmul_naive_launch_state *state =
+        (volatile struct matmul_naive_launch_state *)(vc - GPU_BASE);
+    if (!state)
+    {
+        mem_unlock(handle);
+        mem_free(handle);
+        return -1;
+    }
+
+    memset((void *)state, 0, allocSize);
+    state->handle = handle;
+    state->max_m = max_m;
+    state->max_n = max_n;
+    state->max_k = max_k;
+    state->launch_count = 0;
+
+    /* Copy the assembled kernel code to GPU-visible memory exactly once. */
+    memcpy((void *)state->code, matmul_naiveshader, sizeof state->code);
+
+    for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; qpu++)
+        state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu];
+
+    g_handle = handle;
+    g_state = state;
+    g_allocations++;
+    return 0;
+}
+
+int matmul_naive_launch(
+struct vc4_runtime *rt,
+const float *a,
+const float *b,
+float *c,
+uint32_t m,
+uint32_t n,
+uint32_t k)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+if (!g_state)
+return -1;
+if (m > g_state->max_m || n > g_state->max_n || k > g_state->max_k)
+return -1;
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+    if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)
+        return -1;
+
+    size_t aCount = matmul_naive_count_a(m, k);
+    size_t bCount = matmul_naive_count_b(n, k);
+    size_t cCount = matmul_naive_count_c(m, n);
+
+    if ((aCount && !a) || (bCount && !b) || (cCount && !c))
+        return -1;
+
+    float *gpuA = matmul_naive_a_ptr(g_state);
+    float *gpuB = matmul_naive_b_ptr(g_state);
+    float *gpuC = matmul_naive_c_ptr(g_state);
+
+    if (aCount)
+        memcpy(gpuA, a, aCount * sizeof(float));
+    if (bCount)
+        memcpy(gpuB, b, bCount * sizeof(float));
+    if (cCount)
+        memcpy(gpuC, c, cCount * sizeof(float));
+
+    /*
+     * Pad only the private GPU B scratch region after this launch's compact
+     * K*N payload.  Tail-lane TMU reads in the last B row may read up to 15
+     * floats past logical B, but the qasm never stores those inactive lanes.
+     */
+    for (uint32_t i = 0; i < B_GUARD_FLOATS; i++)
+        gpuB[bCount + i] = 0.0f;
+
+    uint32_t gpuAAddr = GPU_BASE + (uint32_t)gpuA;
+    uint32_t gpuBAddr = GPU_BASE + (uint32_t)gpuB;
+    uint32_t gpuCAddr = GPU_BASE + (uint32_t)gpuC;
+
+    for (uint32_t qpu = 0; qpu < activeQpus; qpu++)
+    {
+        /*
+         * Physical uniform stream order per QPU:
+         *   [0] A scratch base address
+         *   [1] B scratch base address
+         *   [2] C scratch/result base address
+         *   [3] M
+         *   [4] N
+         *   [5] K
+         *   [6] qpu_id
+         *   [7] num_qpus
+         *
+         * qpu_id and num_qpus are conceptual execution builtins in the MLIR
+         * input even though this reference physically carries them as uniforms.
+         */
+        g_state->unif[qpu][0] = gpuAAddr;
+        g_state->unif[qpu][1] = gpuBAddr;
+        g_state->unif[qpu][2] = gpuCAddr;
+        g_state->unif[qpu][3] = m;
+        g_state->unif[qpu][4] = n;
+        g_state->unif[qpu][5] = k;
+        g_state->unif[qpu][6] = qpu;
+        g_state->unif[qpu][7] = activeQpus;
+        g_state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&g_state->unif[qpu];
+    }
+
+    gpu_fft_base_exec_direct((uint32_t)g_state->code,
+                             (uint32_t *)g_state->unif_ptr,
+                             activeQpus);
+
+    if (cCount)
+        memcpy(c, gpuC, cCount * sizeof(float));
+
+    g_state->launch_count++;
+    return 0;
+}
+
+void matmul_naive_release(struct vc4_runtime *rt)
+{
+(void)rt;
+
+    if (!g_state)
+        return;
+
+    /* One-time teardown only. The hardware test does not call this during the
+     * shape loop; repeated kernel calls reuse the single allocation above. */
+    mem_unlock(g_handle);
+    mem_free(g_handle);
+    g_state = 0;
+    g_handle = 0;
+}
+
+uint32_t matmul_naive_runtime_allocations(void)
+{
+return g_allocations;
+}
+
+uint32_t matmul_naive_runtime_launches(void)
+{
+if (!g_state)
+return 0;
+return g_state->launch_count;
+}
+
+uint32_t matmul_naive_runtime_capacity_m(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_m;
+}
+
+uint32_t matmul_naive_runtime_capacity_n(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_n;
+}
+
+uint32_t matmul_naive_runtime_capacity_k(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_k;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/matmul_naive_launch.h =====
+#ifndef MATMUL_NAIVE_LAUNCH_H
+#define MATMUL_NAIVE_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+/*
+* Public semantic launcher API for matmul_naive.
+*
+* Computes row-major C[M,N] = A[M,K] * B[K,N] for f32 matrices.
+*
+* Runtime/setup discipline for this test:
+*   - matmul_naive_prepare() performs the single GPU allocation for this
+*     kernel and copies the assembled qasm code to that allocation exactly
+*     once.
+*   - matmul_naive_launch() only updates the already-allocated payload and
+*     uniform streams for the current M/N/K, then queues the already-resident
+*     shader code.
+*   - The bare-metal hardware test intentionally keeps this allocation live
+*     until the Pi is power-cycled; this avoids repeated alloc/lock/unlock/free
+*     cycles while exercising many matrix shapes in one boot.
+*
+* The public launch API exposes only semantic arguments plus the runtime
+* handle. It does not expose qpu_id, num_qpus, raw uniform streams, private
+* B guard padding, VPM rows, TMU details, or scheduler internals.
+  */
+  int matmul_naive_prepare(
+  struct vc4_runtime *rt,
+  uint32_t max_m,
+  uint32_t max_n,
+  uint32_t max_k);
+
+int matmul_naive_launch(
+struct vc4_runtime *rt,
+const float *a,
+const float *b,
+float *c,
+uint32_t m,
+uint32_t n,
+uint32_t k);
+
+/* Optional cleanup for callers that want an explicit one-time teardown. */
+void matmul_naive_release(struct vc4_runtime *rt);
+
+/* Test diagnostics: these do not expose raw scheduler or uniform internals. */
+uint32_t matmul_naive_runtime_allocations(void);
+uint32_t matmul_naive_runtime_launches(void);
+uint32_t matmul_naive_runtime_capacity_m(void);
+uint32_t matmul_naive_runtime_capacity_n(void);
+uint32_t matmul_naive_runtime_capacity_k(void);
+
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+echo "ASSEMBLING QASM"
+if ! out=$(vc4asm -c matmul_naiveshader.c -h matmul_naiveshader.h matmul_naive.qasm 2>&1); then
+echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+if [[ -n $out ]]; then
+echo "▶ ASSEMBLY PRODUCED UNEXPECTED OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/expected.json =====
+{
+"name": "qpu_barrier_syncthreads",
+"status": "PASS",
+"required": {
+"runs": 5,
+"same_slice_pass": 1,
+"cross_slice_0_1_pass": 1,
+"cross_slice_0_2_pass": 1,
+"full_block_pass": 1,
+"multi_block_pass": 1,
+"qpu_mismatches": 0,
+"data_mismatches": 0,
+"timeouts": 0,
+"invalid_topology": 0,
+"errstat_relevant_changed": 0
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/reference/run.sh"
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/3-test-qpu_barrier_syncthreads.c =====
+#include "rpi.h"
+#include "qpu_barrier_syncthreads_launch.h"
+
+#define ERRSTAT_RELEVANT_MASK 0x0000efffu /* exclude VCD idle bit 12 */
+
+static struct qpu_barrier_results results
+__attribute__((aligned(16)));
+
+static uint32_t low_mask_local(uint32_t n)
+{
+return (n >= 32u) ? 0xffffffffu : ((1u << n) - 1u);
+}
+
+static uint32_t tag(uint32_t run_id,
+uint32_t block_id,
+uint32_t iter,
+uint32_t logical_warp_id,
+uint32_t lane)
+{
+return 0xb0000000u |
+((run_id & 0x0fu) << 24) |
+((block_id & 0x0fu) << 20) |
+((iter & 0xffu) << 12) |
+((logical_warp_id & 0x0fu) << 8) |
+(lane & 0x0fu);
+}
+
+static uint32_t errstat_relevant_changed(uint32_t before, uint32_t after)
+{
+return (((before ^ after) & ERRSTAT_RELEVANT_MASK) != 0);
+}
+
+static const char *mode_name(uint32_t mode)
+{
+switch (mode)
+{
+case QPU_BARRIER_MODE_SAME_SLICE_SMOKE:
+return "same_slice_smoke";
+case QPU_BARRIER_MODE_CROSS_SLICE_0_1:
+return "cross_slice_0_1";
+case QPU_BARRIER_MODE_CROSS_SLICE_0_2:
+return "cross_slice_0_2";
+case QPU_BARRIER_MODE_FULL_BLOCK_STRESS:
+return "full_block_stress";
+case QPU_BARRIER_MODE_TWO_BLOCK_PARTITION:
+return "two_block_partition";
+default:
+return "unknown";
+}
+}
+
+static void print_topology_json(void)
+{
+printk("vc4_barrier_topology.json:\n");
+printk("{\n");
+printk("  ident1: %x,\n", results.ident1);
+printk("  vpmsz_field: %d,\n", (int)results.vpmsz_field);
+printk("  vpm_kib: %d,\n", (int)results.vpm_kib);
+printk("  qpus_per_slice: %d,\n", (int)results.qpus_per_slice);
+printk("  num_slices: %d,\n", (int)results.num_slices);
+printk("  num_qpus: %d,\n", (int)results.num_qpus);
+printk("  num_semaphores: %d,\n", (int)results.num_semaphores);
+printk("  vpmbase_written: %d,\n", (int)results.vpmbase_written);
+printk("  vpmbase_readback: %x\n", results.vpmbase_readback);
+printk("}\n");
+}
+
+static uint32_t validate_qpu_report(
+const struct qpu_barrier_warp_result *warp,
+uint32_t *qpu_out)
+{
+uint32_t qpu = warp->physical_qpu_report[0];
+uint32_t mismatches = 0;
+
+    if (qpu >= QPU_BARRIER_MAX_QPUS)
+        mismatches++;
+
+    for (uint32_t lane = 0; lane < QPU_BARRIER_LANES; lane++)
+    {
+        if (warp->physical_qpu_report[lane] != qpu)
+            mismatches++;
+    }
+
+    *qpu_out = qpu;
+    return mismatches;
+}
+
+static uint32_t sum_mismatch_vector(
+const struct qpu_barrier_warp_result *warp)
+{
+uint32_t sum = 0;
+for (uint32_t lane = 0; lane < QPU_BARRIER_LANES; lane++)
+sum += warp->mismatch_count_by_lane[lane];
+return sum;
+}
+
+static uint32_t first_missing_peer(uint32_t mask, uint32_t expected_mask)
+{
+for (uint32_t peer = 0; peer < QPU_BARRIER_MAX_WARPS; peer++)
+{
+uint32_t bit = 1u << peer;
+if ((expected_mask & bit) && ((mask & bit) == 0))
+return peer;
+}
+return 0xffffffffu;
+}
+
+static void analyze_runs(uint32_t *full_block_pass,
+uint32_t *multi_block_pass,
+uint32_t *qpu_mismatches,
+uint32_t *data_mismatches,
+uint32_t *timeouts,
+uint32_t *errstat_relevant_changed_count,
+uint32_t *same_slice_pass,
+uint32_t *cross_slice_0_1_pass,
+uint32_t *cross_slice_0_2_pass)
+{
+*full_block_pass = 0;
+*multi_block_pass = 0;
+*qpu_mismatches = 0;
+*data_mismatches = 0;
+*timeouts = 0;
+*errstat_relevant_changed_count = 0;
+*same_slice_pass = 0;
+*cross_slice_0_1_pass = 0;
+*cross_slice_0_2_pass = 0;
+
+    printk("vc4_barrier_runs.csv:\n");
+    printk("run,mode,blocks,warps_per_block,total_requests,iterations,expected_qpu_mask,observed_qpu_mask,mismatches,errstat_before,errstat_after,timeout\n");
+
+    for (uint32_t i = 0; i < results.run_count; i++)
+    {
+        struct qpu_barrier_run_result *run = &results.runs[i];
+        uint32_t expected_peer_mask = low_mask_local(run->warps_per_block);
+        uint32_t run_data_mismatches = 0;
+        uint32_t run_qpu_mismatches = 0;
+        uint32_t observed_qpu_mask = 0;
+        uint32_t run_err_changed = errstat_relevant_changed(run->errstat_before,
+                                                            run->errstat_after);
+
+        if (run->timeout)
+            (*timeouts)++;
+        if (run_err_changed)
+            (*errstat_relevant_changed_count)++;
+
+        for (uint32_t request = 0; request < run->total_requests; request++)
+        {
+            const struct qpu_barrier_warp_result *warp = &run->warp[request];
+            uint32_t qpu = 0xffffffffu;
+            uint32_t warp_qpu_mismatches = validate_qpu_report(warp, &qpu);
+            uint32_t warp_mismatch_sum = sum_mismatch_vector(warp);
+            uint32_t all_seen0 = warp->all_seen_mask_by_lane[0];
+            uint32_t always_seen0 = warp->always_seen_mask_by_lane[0];
+
+            run_qpu_mismatches += warp_qpu_mismatches;
+            if (qpu < QPU_BARRIER_MAX_QPUS)
+                observed_qpu_mask |= 1u << qpu;
+
+            for (uint32_t lane = 0; lane < QPU_BARRIER_LANES; lane++)
+            {
+                if (warp->all_seen_mask_by_lane[lane] != expected_peer_mask)
+                    run_data_mismatches++;
+                if (warp->always_seen_mask_by_lane[lane] != expected_peer_mask)
+                    run_data_mismatches++;
+                if (warp->mismatch_count_by_lane[lane] != 0)
+                    run_data_mismatches += warp->mismatch_count_by_lane[lane];
+            }
+
+            printk("BARRIER_WARP run=%d block=%d warp=%d qpu=%d all_seen=%x always_seen=%x mismatches=%d\n",
+                   (int)run->run_id,
+                   (int)warp->block_id,
+                   (int)warp->logical_warp_id,
+                   (int)qpu,
+                   all_seen0,
+                   always_seen0,
+                   (int)warp_mismatch_sum);
+
+            if (run->first_bad_iter == 0xffffffffu)
+            {
+                uint32_t missing = first_missing_peer(always_seen0,
+                                                      expected_peer_mask);
+                if (warp_qpu_mismatches || warp_mismatch_sum ||
+                    all_seen0 != expected_peer_mask ||
+                    always_seen0 != expected_peer_mask)
+                {
+                    run->first_bad_iter = 0xffffffffu;
+                    run->first_bad_block = warp->block_id;
+                    run->first_bad_reader_warp = warp->logical_warp_id;
+                    run->first_bad_peer_warp = missing;
+                    run->first_bad_lane = 0;
+                    run->first_bad_observed = all_seen0;
+                    run->first_bad_expected = expected_peer_mask;
+                }
+            }
+        }
+
+        run->observed_qpu_mask = observed_qpu_mask;
+        if (observed_qpu_mask != run->expected_qpu_mask)
+            run_qpu_mismatches++;
+
+        run->mismatch_count = run_data_mismatches;
+        *qpu_mismatches += run_qpu_mismatches;
+        *data_mismatches += run_data_mismatches;
+
+        printk("%d,%s,%d,%d,%d,%d,%x,%x,%d,%x,%x,%d\n",
+               (int)run->run_id,
+               mode_name(run->mode),
+               (int)run->block_count,
+               (int)run->warps_per_block,
+               (int)run->total_requests,
+               (int)run->iterations,
+               run->expected_qpu_mask,
+               run->observed_qpu_mask,
+               (int)run_data_mismatches,
+               run->errstat_before,
+               run->errstat_after,
+               (int)run->timeout);
+
+        uint32_t pass = (run_data_mismatches == 0 &&
+                         run_qpu_mismatches == 0 &&
+                         run->timeout == 0 &&
+                         run_err_changed == 0);
+
+        if (run->mode == QPU_BARRIER_MODE_SAME_SLICE_SMOKE)
+            *same_slice_pass = pass;
+        if (run->mode == QPU_BARRIER_MODE_CROSS_SLICE_0_1)
+            *cross_slice_0_1_pass = pass;
+        if (run->mode == QPU_BARRIER_MODE_CROSS_SLICE_0_2)
+            *cross_slice_0_2_pass = pass;
+        if (run->mode == QPU_BARRIER_MODE_FULL_BLOCK_STRESS)
+            *full_block_pass = pass;
+        if (run->mode == QPU_BARRIER_MODE_TWO_BLOCK_PARTITION)
+            *multi_block_pass = pass;
+    }
+}
+
+void notmain(void)
+{
+struct vc4_runtime rt;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    printk("Running VC4 qpu_barrier_syncthreads reference bundle...\n");
+    int start = timer_get_usec();
+    int launch_rc = qpu_barrier_syncthreads_launch(&rt, &results);
+    int end = timer_get_usec();
+    int elapsed = end - start;
+
+    print_topology_json();
+
+    uint32_t invalid_topology = 0;
+    if (results.num_qpus < QPU_BARRIER_EXPECTED_QPUS)
+        invalid_topology = 1;
+    if (results.qpus_per_slice != 4u)
+        invalid_topology = 1;
+    if (results.num_slices < 3u)
+        invalid_topology = 1;
+    if (results.num_semaphores < 16u)
+        invalid_topology = 1;
+    if ((results.vpmbase_readback & 0x1fu) != QPU_BARRIER_VPM_URSV_4K)
+        invalid_topology = 1;
+
+    uint32_t full_block_pass = 0;
+    uint32_t multi_block_pass = 0;
+    uint32_t qpu_mismatches = 0;
+    uint32_t data_mismatches = 0;
+    uint32_t timeouts = 0;
+    uint32_t errstat_relevant_changed_count = 0;
+    uint32_t same_slice_pass = 0;
+    uint32_t cross_slice_0_1_pass = 0;
+    uint32_t cross_slice_0_2_pass = 0;
+
+    analyze_runs(&full_block_pass,
+                 &multi_block_pass,
+                 &qpu_mismatches,
+                 &data_mismatches,
+                 &timeouts,
+                 &errstat_relevant_changed_count,
+                 &same_slice_pass,
+                 &cross_slice_0_1_pass,
+                 &cross_slice_0_2_pass);
+
+    uint32_t status_pass = (launch_rc == 0 &&
+                            invalid_topology == 0 &&
+                            results.run_count == 5u &&
+                            same_slice_pass &&
+                            cross_slice_0_1_pass &&
+                            cross_slice_0_2_pass &&
+                            full_block_pass &&
+                            multi_block_pass &&
+                            qpu_mismatches == 0 &&
+                            data_mismatches == 0 &&
+                            timeouts == 0 &&
+                            errstat_relevant_changed_count == 0);
+
+    if (status_pass)
+    {
+        printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=PASS runs=%d same_slice_pass=%d cross_slice_0_1_pass=%d cross_slice_0_2_pass=%d full_block_pass=%d multi_block_pass=%d qpu_mismatches=%d data_mismatches=%d timeouts=%d invalid_topology=%d errstat_relevant_changed=%d elapsed_usec=%d\n",
+               (int)results.run_count,
+               (int)same_slice_pass,
+               (int)cross_slice_0_1_pass,
+               (int)cross_slice_0_2_pass,
+               (int)full_block_pass,
+               (int)multi_block_pass,
+               (int)qpu_mismatches,
+               (int)data_mismatches,
+               (int)timeouts,
+               (int)invalid_topology,
+               (int)errstat_relevant_changed_count,
+               elapsed);
+    }
+    else
+    {
+        struct qpu_barrier_run_result *bad = &results.runs[0];
+        for (uint32_t i = 0; i < results.run_count; i++)
+        {
+            if (results.runs[i].timeout || results.runs[i].mismatch_count ||
+                results.runs[i].observed_qpu_mask != results.runs[i].expected_qpu_mask ||
+                errstat_relevant_changed(results.runs[i].errstat_before,
+                                         results.runs[i].errstat_after))
+            {
+                bad = &results.runs[i];
+                break;
+            }
+        }
+
+        printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=FAIL runs=%d launch_rc=%d first_bad_run=%d first_bad_iter=%x first_bad_block=%x first_bad_reader_warp=%x first_bad_peer_warp=%x first_bad_lane=%x observed=%x expected=%x same_slice_pass=%d cross_slice_0_1_pass=%d cross_slice_0_2_pass=%d full_block_pass=%d multi_block_pass=%d qpu_mismatches=%d data_mismatches=%d timeouts=%d invalid_topology=%d errstat_relevant_changed=%d elapsed_usec=%d\n",
+               (int)results.run_count,
+               launch_rc,
+               (int)bad->run_id,
+               bad->first_bad_iter,
+               bad->first_bad_block,
+               bad->first_bad_reader_warp,
+               bad->first_bad_peer_warp,
+               bad->first_bad_lane,
+               bad->first_bad_observed,
+               bad->first_bad_expected,
+               (int)same_slice_pass,
+               (int)cross_slice_0_1_pass,
+               (int)cross_slice_0_2_pass,
+               (int)full_block_pass,
+               (int)multi_block_pass,
+               (int)qpu_mismatches,
+               (int)data_mismatches,
+               (int)timeouts,
+               (int)invalid_topology,
+               (int)errstat_relevant_changed_count,
+               elapsed);
+    }
+
+    vc4_runtime_shutdown(&rt);
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/Makefile =====
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c qpu_barrier_syncthreads_launch.c qpu_barrier_syncthreadsshader.c
+
+PROGS := 3-test-qpu_barrier_syncthreads.c
+
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 1
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.c =====
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+// Wait until mailbox is not full.
+while (MAILBOX_STATUS & MAILBOX_FULL)
+{
+}
+// Lower 4 bits are used for channel.
+MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+uint32_t data;
+while (1)
+{
+data = MAILBOX_READ;
+if ((data & 0xF) == channel)
+return data & ~0xF;
+}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+// Check alignment.
+if ((uint32_t)msg & 0xF) return 0;
+mailbox_write(8, (uint32_t)msg);
+while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+uint32_t p[7] __attribute__((aligned(16))) =
+{
+7 * sizeof(uint32_t), // size
+0x00000000,			  // process request
+0x3000e,			  // (the tag id)
+1 * sizeof(uint32_t), // (size of the buffer)
+1 * sizeof(uint32_t), // (size of the data)
+handle,				  // (handle)
+0					  // end tag
+};
+assert(mbox_property(p));
+return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+uint32_t code,
+uint32_t unifs[],
+int num_qpus)
+{
+//printk("RUNNING WITH %d\n QPUS", num_qpus);
+PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+if (!rt)
+return -1;
+if (qpu_enable(1))
+return -1;
+rt->isInitialized = 1;
+rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+if (!rt || !rt->isInitialized)
+return;
+qpu_enable(0);
+rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+if (!rt)
+return 0;
+return rt->active_qpus;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.h =====
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+* Bare-metal Mailbox Interface for Raspberry Pi
+*
+* This header defines the functions for interacting with the GPU's mailbox
+* property interface in a bare-metal environment.
+*
+* Functions:
+*   - mailbox_write(): Write a message to the mailbox.
+*   - mailbox_read():  Read a message from the mailbox.
+*   - mailbox_call():  Send a property message and wait for the response.
+*
+*   - mem_alloc():     Allocate GPU memory.
+*   - mem_free():      Free GPU memory.
+*   - mem_lock():      Lock allocated GPU memory and return its bus address.
+*   - mem_unlock():    Unlock GPU memory.
+*
+*   - qpu_enable():    Enable (or disable) the QPU.
+*   - execute_qpu():   Execute QPU code.
+*
+* All property messages are sent on mailbox channel 8.
+*
+* Note: Ensure that the mailbox message buffers are 16-byte aligned.
+  */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+* 'msg' must be 16-byte aligned.
+* Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+  */
+  int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+*
+* mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+*             and 'flags'. Returns a nonzero handle on success.
+*
+* mem_free:   Releases the GPU memory associated with the given handle.
+*
+* mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+*             Returns the bus address on success.
+*
+* mem_unlock: Unlocks the previously locked GPU memory.
+  */
+  uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+  uint32_t mem_free(uint32_t handle);
+  uint32_t mem_lock(uint32_t handle);
+  uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+*
+* qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+  uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+VC4_RUNTIME_LANE_WIDTH = 16,
+VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+int isInitialized;
+/* Generic runtime launch policy for the current session. */
+uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads.qasm =====
+.include "../share/vc4inc/vc4.qinc"
+
+# qpu_barrier_syncthreads reference kernel.
+#
+# One generated-style QPU program covers all requested barrier modes.
+# Physical uniform stream per request:
+#   ra0  mode
+#   ra1  run_id
+#   ra2  block_id
+#   ra3  logical_warp_id
+#   ra4  warps_per_block
+#   ra5  iterations
+#   ra6  vpm_base_row
+#   ra7  vpm_rows_per_block
+#   ra8  arrive_sem      (documented ABI; semaphore IDs are immediate in VC4)
+#   ra9  release_sem     (documented ABI; not dynamically encoded)
+#   ra10 depart_sem      (documented ABI; overwritten after uniforms)
+#   ra11 reset_sem       (documented ABI; overwritten after uniforms)
+#   ra12 result_warp_ptr
+#   ra13 run_result_ptr  (reserved for future scalar first-mismatch stores)
+#
+# The QPU semaphore instruction encodes the semaphore number as a 4-bit
+# immediate field, so this qasm dispatches statically by block_id:
+# block 0 uses semaphores 0..3 and block 1 uses semaphores 4..7.
+#
+# The VPM access and VDW result-store sequences are protected by the
+# global QPU mutex.  This test is about reusable semaphore barriers, not
+# VPM setup-state sharing.
+mov ra0, unif
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+mov ra6, unif
+mov ra7, unif
+mov ra8, unif
+mov ra9, unif
+mov ra10, unif
+mov ra11, unif
+mov ra12, unif
+mov ra13, unif
+
+# Scratch/state registers after uniform load:
+#   ra8  iteration counter
+#   ra9  all_seen_mask accumulator
+#   ra10 always_seen_mask accumulator
+#   ra11 vector-mismatch count
+mov r0, qpu_num
+mov ra8, 0
+mov ra9, 0
+mov ra10, 0xffff
+mov ra11, 0
+
+:iter_loop
+mov r1, ra5
+sub.setf -, ra8, r1
+brr.allz -, :store_results
+nop
+nop
+nop
+
+# Build tag(run_id, block_id, iter, logical_warp_id, lane).
+mov r2, 0xb0000000
+mov r3, ra1
+shl r3, r3, 12
+shl r3, r3, 12
+or r2, r2, r3
+mov r3, ra2
+shl r3, r3, 12
+shl r3, r3, 8
+or r2, r2, r3
+mov r3, ra8
+shl r3, r3, 12
+or r2, r2, r3
+mov r3, ra3
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+# Write this logical warp tag to vpm_base_row + logical_warp_id.
+mov r1, ra6
+add r1, r1, ra3
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, r1
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# Barrier barrier_after_writes: block 0 uses semaphores 0..3, block 1 uses 4..7.
+sub.setf -, ra2, 0
+brr.allz -, :barrier_after_writes_base0
+nop
+nop
+nop
+sub.setf -, ra2, 1
+brr.allz -, :barrier_after_writes_base4
+nop
+nop
+nop
+brr -, :barrier_after_writes_base0
+nop
+nop
+nop
+:barrier_after_writes_base0
+# Four-semaphore reusable barrier.  Leader is logical_warp_id 0.
+sub.setf -, ra3, 0
+brr.allz -, :barrier_after_writes_leader_b0
+nop
+nop
+nop
+:barrier_after_writes_nonleader_b0
+srel -, 0
+sacq -, 1
+srel -, 2
+sacq -, 3
+brr -, :barrier_after_writes_done
+nop
+nop
+nop
+:barrier_after_writes_leader_b0
+:barrier_after_writes_arrive_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_arrive_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_release_b0_init
+nop
+nop
+nop
+sacq -, 0
+sub r3, r3, 1
+brr -, :barrier_after_writes_arrive_b0_loop
+nop
+nop
+nop
+:barrier_after_writes_release_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_release_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_depart_b0_init
+nop
+nop
+nop
+srel -, 1
+sub r3, r3, 1
+brr -, :barrier_after_writes_release_b0_loop
+nop
+nop
+nop
+:barrier_after_writes_depart_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_depart_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_reset_b0_init
+nop
+nop
+nop
+sacq -, 2
+sub r3, r3, 1
+brr -, :barrier_after_writes_depart_b0_loop
+nop
+nop
+nop
+:barrier_after_writes_reset_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_reset_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_done
+nop
+nop
+nop
+srel -, 3
+sub r3, r3, 1
+brr -, :barrier_after_writes_reset_b0_loop
+nop
+nop
+nop
+:barrier_after_writes_base4
+# Four-semaphore reusable barrier.  Leader is logical_warp_id 0.
+sub.setf -, ra3, 0
+brr.allz -, :barrier_after_writes_leader_b4
+nop
+nop
+nop
+:barrier_after_writes_nonleader_b4
+srel -, 4
+sacq -, 5
+srel -, 6
+sacq -, 7
+brr -, :barrier_after_writes_done
+nop
+nop
+nop
+:barrier_after_writes_leader_b4
+:barrier_after_writes_arrive_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_arrive_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_release_b4_init
+nop
+nop
+nop
+sacq -, 4
+sub r3, r3, 1
+brr -, :barrier_after_writes_arrive_b4_loop
+nop
+nop
+nop
+:barrier_after_writes_release_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_release_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_depart_b4_init
+nop
+nop
+nop
+srel -, 5
+sub r3, r3, 1
+brr -, :barrier_after_writes_release_b4_loop
+nop
+nop
+nop
+:barrier_after_writes_depart_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_depart_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_reset_b4_init
+nop
+nop
+nop
+sacq -, 6
+sub r3, r3, 1
+brr -, :barrier_after_writes_depart_b4_loop
+nop
+nop
+nop
+:barrier_after_writes_reset_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_writes_reset_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_writes_done
+nop
+nop
+nop
+srel -, 7
+sub r3, r3, 1
+brr -, :barrier_after_writes_reset_b4_loop
+nop
+nop
+nop
+:barrier_after_writes_done
+
+# Read every peer row in this block and accumulate a seen mask.  A peer
+# is counted only if all 16 SIMD lanes match the lane-distinctive tag.
+mov rb20, 0
+mov rb21, 1
+mov rb22, 0
+
+:peer_loop
+sub.setf -, rb20, ra4
+brr.allz -, :peer_done
+nop
+nop
+nop
+
+# Read peer row vpm_base_row + peer_warp.
+add r1, ra6, rb20
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vr_setup, r3, r1
+nop
+nop
+nop
+mov r2, vpm
+mov mutex_rel, 0
+
+# Build expected peer tag into r1.
+mov r1, 0xb0000000
+mov r3, ra1
+shl r3, r3, 12
+shl r3, r3, 12
+or r1, r1, r3
+mov r3, ra2
+shl r3, r3, 12
+shl r3, r3, 8
+or r1, r1, r3
+mov r3, ra8
+shl r3, r3, 12
+or r1, r1, r3
+mov r3, rb20
+shl r3, r3, 8
+or r1, r1, r3
+or r1, r1, elem_num
+
+# If every lane matches, include this peer bit; otherwise count one
+# vector mismatch for this reader/peer/iteration.
+sub.setf -, r2, r1
+brr.allz -, :peer_match
+nop
+nop
+nop
+
+add ra11, ra11, 1
+brr -, :peer_next
+nop
+nop
+nop
+
+:peer_match
+mov r1, rb22
+or r1, r1, rb21
+mov rb22, r1
+
+:peer_next
+# VC4 small-immediate ALU instructions encode the immediate in the B-read
+# field, so they cannot also read a source from regfile B.  Move the B-reg
+# loop state through an accumulator before using the immediate 1.
+mov r3, rb21
+shl r3, r3, 1
+mov rb21, r3
+mov r3, rb20
+add r3, r3, 1
+mov rb20, r3
+brr -, :peer_loop
+nop
+nop
+nop
+
+:peer_done
+mov r1, rb22
+or ra9, ra9, r1
+and ra10, ra10, r1
+
+# Barrier barrier_after_reads: block 0 uses semaphores 0..3, block 1 uses 4..7.
+sub.setf -, ra2, 0
+brr.allz -, :barrier_after_reads_base0
+nop
+nop
+nop
+sub.setf -, ra2, 1
+brr.allz -, :barrier_after_reads_base4
+nop
+nop
+nop
+brr -, :barrier_after_reads_base0
+nop
+nop
+nop
+:barrier_after_reads_base0
+# Four-semaphore reusable barrier.  Leader is logical_warp_id 0.
+sub.setf -, ra3, 0
+brr.allz -, :barrier_after_reads_leader_b0
+nop
+nop
+nop
+:barrier_after_reads_nonleader_b0
+srel -, 0
+sacq -, 1
+srel -, 2
+sacq -, 3
+brr -, :barrier_after_reads_done
+nop
+nop
+nop
+:barrier_after_reads_leader_b0
+:barrier_after_reads_arrive_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_arrive_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_release_b0_init
+nop
+nop
+nop
+sacq -, 0
+sub r3, r3, 1
+brr -, :barrier_after_reads_arrive_b0_loop
+nop
+nop
+nop
+:barrier_after_reads_release_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_release_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_depart_b0_init
+nop
+nop
+nop
+srel -, 1
+sub r3, r3, 1
+brr -, :barrier_after_reads_release_b0_loop
+nop
+nop
+nop
+:barrier_after_reads_depart_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_depart_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_reset_b0_init
+nop
+nop
+nop
+sacq -, 2
+sub r3, r3, 1
+brr -, :barrier_after_reads_depart_b0_loop
+nop
+nop
+nop
+:barrier_after_reads_reset_b0_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_reset_b0_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_done
+nop
+nop
+nop
+srel -, 3
+sub r3, r3, 1
+brr -, :barrier_after_reads_reset_b0_loop
+nop
+nop
+nop
+:barrier_after_reads_base4
+# Four-semaphore reusable barrier.  Leader is logical_warp_id 0.
+sub.setf -, ra3, 0
+brr.allz -, :barrier_after_reads_leader_b4
+nop
+nop
+nop
+:barrier_after_reads_nonleader_b4
+srel -, 4
+sacq -, 5
+srel -, 6
+sacq -, 7
+brr -, :barrier_after_reads_done
+nop
+nop
+nop
+:barrier_after_reads_leader_b4
+:barrier_after_reads_arrive_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_arrive_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_release_b4_init
+nop
+nop
+nop
+sacq -, 4
+sub r3, r3, 1
+brr -, :barrier_after_reads_arrive_b4_loop
+nop
+nop
+nop
+:barrier_after_reads_release_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_release_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_depart_b4_init
+nop
+nop
+nop
+srel -, 5
+sub r3, r3, 1
+brr -, :barrier_after_reads_release_b4_loop
+nop
+nop
+nop
+:barrier_after_reads_depart_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_depart_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_reset_b4_init
+nop
+nop
+nop
+sacq -, 6
+sub r3, r3, 1
+brr -, :barrier_after_reads_depart_b4_loop
+nop
+nop
+nop
+:barrier_after_reads_reset_b4_init
+mov r3, ra4
+sub r3, r3, 1
+:barrier_after_reads_reset_b4_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_after_reads_done
+nop
+nop
+nop
+srel -, 7
+sub r3, r3, 1
+brr -, :barrier_after_reads_reset_b4_loop
+nop
+nop
+nop
+:barrier_after_reads_done
+
+add ra8, ra8, 1
+brr -, :iter_loop
+nop
+nop
+nop
+
+:store_results
+# Store compact per-warp vectors. Offsets match qpu_barrier_warp_result.
+# offset 16: physical_qpu_report[16]
+# offset 80: all_seen_mask_by_lane[16]
+# offset 144: always_seen_mask_by_lane[16]
+# offset 208: mismatch_count_by_lane[16]
+
+# Store physical_qpu_report vector to result_warp_ptr + 16.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 63
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 63
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov r1, 16
+add r1, ra12, r1
+mov vw_addr, r1
+read vw_wait
+mov mutex_rel, 0
+
+# Store all_seen_mask_by_lane vector to result_warp_ptr + 80.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 63
+add vw_setup, r3, r1
+mov vpm, ra9
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 63
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov r1, 80
+add r1, ra12, r1
+mov vw_addr, r1
+read vw_wait
+mov mutex_rel, 0
+
+# Store always_seen_mask_by_lane vector to result_warp_ptr + 144.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 63
+add vw_setup, r3, r1
+mov vpm, ra10
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 63
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov r1, 144
+add r1, ra12, r1
+mov vw_addr, r1
+read vw_wait
+mov mutex_rel, 0
+
+# Store mismatch_count_by_lane vector to result_warp_ptr + 208.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 63
+add vw_setup, r3, r1
+mov vpm, ra11
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 63
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov r1, 208
+add r1, ra12, r1
+mov vw_addr, r1
+read vw_wait
+mov mutex_rel, 0
+
+:end
+thrend
+nop
+nop
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.c =====
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "qpu_barrier_syncthreads_launch.h"
+#include "qpu_barrier_syncthreadsshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_IDENT1 (V3D_BASE + 0x00004)
+#define V3D_L2CACTL (V3D_BASE + 0x00020)
+#define V3D_SLCACTL (V3D_BASE + 0x00024)
+#define V3D_SQRSV0 (V3D_BASE + 0x00410)
+#define V3D_SQRSV1 (V3D_BASE + 0x00414)
+#define V3D_SRQPC (V3D_BASE + 0x00430)
+#define V3D_SRQUA (V3D_BASE + 0x00434)
+#define V3D_SRQCS (V3D_BASE + 0x0043c)
+#define V3D_VPMBASE (V3D_BASE + 0x00504)
+#define V3D_DBCFG (V3D_BASE + 0x00e00)
+#define V3D_DBQITE (V3D_BASE + 0x00e2c)
+#define V3D_DBQITC (V3D_BASE + 0x00e30)
+#define V3D_ERRSTAT (V3D_BASE + 0x00f20)
+
+#define NUM_UNIFS 14u
+
+struct qpu_barrier_launch_state
+{
+uint32_t code[sizeof(qpu_barrier_syncthreadsshader) / sizeof(uint32_t)];
+uint32_t unif[QPU_BARRIER_MAX_WARPS][NUM_UNIFS];
+uint32_t unif_ptr[QPU_BARRIER_MAX_WARPS];
+uint32_t handle;
+struct qpu_barrier_results results;
+};
+
+struct qpu_barrier_run_config
+{
+uint32_t mode;
+uint32_t block_count;
+uint32_t warps_per_block;
+uint32_t iterations;
+uint32_t allowed_qpu_mask;
+uint32_t vpm_rows_per_block;
+};
+
+static uint32_t gpu_addr(const volatile void *ptr)
+{
+return GPU_BASE + (uint32_t)ptr;
+}
+
+static uint32_t low_mask(uint32_t n)
+{
+if (n >= 32u)
+return 0xffffffffu;
+return (1u << n) - 1u;
+}
+
+static void decode_ident1(volatile struct qpu_barrier_results *res)
+{
+uint32_t ident1 = GET32(V3D_IDENT1);
+uint32_t vpmsz_field = (ident1 >> 28) & 0xf;
+
+    res->ident1 = ident1;
+    res->vpmsz_field = vpmsz_field;
+    res->vpm_kib = vpmsz_field ? vpmsz_field : 16u;
+    res->num_semaphores = (ident1 >> 16) & 0xffu;
+    res->qpus_per_slice = (ident1 >> 8) & 0xfu;
+    res->num_slices = (ident1 >> 4) & 0xfu;
+    res->num_qpus = res->qpus_per_slice * res->num_slices;
+}
+
+static int topology_supports_required_modes(
+volatile const struct qpu_barrier_results *res)
+{
+if (res->num_qpus < QPU_BARRIER_EXPECTED_QPUS)
+return 0;
+if (res->qpus_per_slice != 4u)
+return 0;
+if (res->num_slices < 3u)
+return 0;
+if (res->num_semaphores < 16u)
+return 0;
+return 1;
+}
+
+static void reserve_qpu_mask(uint32_t allowed_mask)
+{
+uint32_t sqrsv0 = 0;
+uint32_t sqrsv1 = 0;
+
+    for (uint32_t q = 0; q < QPU_BARRIER_MAX_QPUS; q++)
+    {
+        uint32_t reserve_user_programs =
+            ((allowed_mask & (1u << q)) == 0) ? 1u : 0u;
+
+        if (q < 8u)
+            sqrsv0 |= reserve_user_programs << (4u * q);
+        else
+            sqrsv1 |= reserve_user_programs << (4u * (q - 8u));
+    }
+
+    PUT32(V3D_SQRSV0, sqrsv0);
+    PUT32(V3D_SQRSV1, sqrsv1);
+}
+
+static void clear_qpu_reservations(void)
+{
+PUT32(V3D_SQRSV0, 0);
+PUT32(V3D_SQRSV1, 0);
+}
+
+static void clear_scheduler_and_caches(void)
+{
+PUT32(V3D_DBCFG, 0);
+PUT32(V3D_DBQITE, 0);
+PUT32(V3D_DBQITC, 0xffffffffu);
+PUT32(V3D_L2CACTL, 1u << 2);
+PUT32(V3D_SLCACTL, 0xffffffffu);
+
+    /* Clear queue, queue error, request count, and completion count. */
+    PUT32(V3D_SRQCS, (1u << 0) | (1u << 7) | (1u << 8) | (1u << 16));
+}
+
+static int wait_for_completions(uint32_t expected)
+{
+uint32_t start = (uint32_t)timer_get_usec();
+
+    while ((((GET32(V3D_SRQCS) >> 16) & 0xffu) != expected))
+    {
+        uint32_t now = (uint32_t)timer_get_usec();
+        if ((uint32_t)(now - start) > QPU_BARRIER_TIMEOUT_USEC)
+            return -1;
+    }
+
+    return 0;
+}
+
+static void fill_vector(volatile uint32_t vec[QPU_BARRIER_LANES],
+uint32_t value)
+{
+for (uint32_t i = 0; i < QPU_BARRIER_LANES; i++)
+vec[i] = value;
+}
+
+static void clear_warp_result(
+volatile struct qpu_barrier_warp_result *warp,
+uint32_t block_id,
+uint32_t logical_warp_id)
+{
+warp->block_id = block_id;
+warp->logical_warp_id = logical_warp_id;
+warp->reserved0 = 0;
+warp->reserved1 = 0;
+fill_vector(warp->physical_qpu_report, QPU_BARRIER_SENTINEL);
+fill_vector(warp->all_seen_mask_by_lane, QPU_BARRIER_SENTINEL);
+fill_vector(warp->always_seen_mask_by_lane, QPU_BARRIER_SENTINEL);
+fill_vector(warp->mismatch_count_by_lane, QPU_BARRIER_SENTINEL);
+}
+
+static void prepare_run_result(
+volatile struct qpu_barrier_run_result *run,
+uint32_t run_id,
+const struct qpu_barrier_run_config *cfg)
+{
+memset((void *)run, 0, sizeof *run);
+
+    run->run_id = run_id;
+    run->mode = cfg->mode;
+    run->block_count = cfg->block_count;
+    run->warps_per_block = cfg->warps_per_block;
+    run->total_requests = cfg->block_count * cfg->warps_per_block;
+    run->iterations = cfg->iterations;
+    run->sem_base = 0;
+    run->vpm_base_row[0] = 0;
+    run->vpm_base_row[1] = 16;
+    run->vpm_base_row[2] = 32;
+    run->vpm_base_row[3] = 48;
+    run->vpm_rows_per_block = cfg->vpm_rows_per_block;
+    run->qpu_set_mask = cfg->allowed_qpu_mask;
+    run->expected_qpu_mask = cfg->allowed_qpu_mask;
+    run->observed_qpu_mask = 0;
+    run->first_bad_iter = 0xffffffffu;
+    run->first_bad_block = 0xffffffffu;
+    run->first_bad_reader_warp = 0xffffffffu;
+    run->first_bad_peer_warp = 0xffffffffu;
+    run->first_bad_lane = 0xffffffffu;
+    run->first_bad_observed = QPU_BARRIER_SENTINEL;
+    run->first_bad_expected = QPU_BARRIER_SENTINEL;
+
+    for (uint32_t block = 0; block < cfg->block_count; block++)
+    {
+        for (uint32_t warp = 0; warp < cfg->warps_per_block; warp++)
+        {
+            uint32_t request = block * cfg->warps_per_block + warp;
+            clear_warp_result(&run->warp[request], block, warp);
+        }
+    }
+}
+
+static int launch_run(
+volatile struct qpu_barrier_launch_state *state,
+uint32_t run_index,
+const struct qpu_barrier_run_config *cfg)
+{
+volatile struct qpu_barrier_run_result *run =
+&state->results.runs[run_index];
+uint32_t total_requests = cfg->block_count * cfg->warps_per_block;
+
+    if (total_requests == 0 || total_requests > QPU_BARRIER_MAX_WARPS)
+        return -1;
+    if (cfg->iterations == 0 || cfg->iterations > QPU_BARRIER_MAX_ITERS)
+        return -1;
+
+    prepare_run_result(run, run_index, cfg);
+
+    for (uint32_t block = 0; block < cfg->block_count; block++)
+    {
+        for (uint32_t warp = 0; warp < cfg->warps_per_block; warp++)
+        {
+            uint32_t request = block * cfg->warps_per_block + warp;
+            uint32_t sem_base = block * 4u;
+
+            state->unif[request][0] = cfg->mode;
+            state->unif[request][1] = run_index;
+            state->unif[request][2] = block;
+            state->unif[request][3] = warp;
+            state->unif[request][4] = cfg->warps_per_block;
+            state->unif[request][5] = cfg->iterations;
+            state->unif[request][6] = run->vpm_base_row[block];
+            state->unif[request][7] = cfg->vpm_rows_per_block;
+            state->unif[request][8] = sem_base + 0u;
+            state->unif[request][9] = sem_base + 1u;
+            state->unif[request][10] = sem_base + 2u;
+            state->unif[request][11] = sem_base + 3u;
+            state->unif[request][12] = gpu_addr(&run->warp[request]);
+            state->unif[request][13] = gpu_addr(run);
+            state->unif_ptr[request] = gpu_addr(&state->unif[request][0]);
+        }
+    }
+
+    reserve_qpu_mask(cfg->allowed_qpu_mask);
+    clear_scheduler_and_caches();
+
+    run->errstat_before = GET32(V3D_ERRSTAT);
+
+    for (uint32_t i = 0; i < total_requests; i++)
+    {
+        PUT32(V3D_SRQUA, state->unif_ptr[i]);
+        PUT32(V3D_SRQPC, (uint32_t)state->code);
+    }
+
+    int rc = wait_for_completions(total_requests);
+    run->errstat_after = GET32(V3D_ERRSTAT);
+    state->results.srqcs_after_last_run = GET32(V3D_SRQCS);
+    clear_qpu_reservations();
+
+    if (rc < 0)
+    {
+        run->timeout = 1;
+        state->results.timeouts++;
+        return -1;
+    }
+
+    return 0;
+}
+
+int qpu_barrier_syncthreads_launch(
+struct vc4_runtime *rt,
+struct qpu_barrier_results *out_results)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+if (!out_results)
+return -1;
+
+    uint32_t handle = mem_alloc(sizeof(struct qpu_barrier_launch_state),
+                                4096,
+                                GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct qpu_barrier_launch_state *state =
+        (volatile struct qpu_barrier_launch_state *)(vc - GPU_BASE);
+    memset((void *)state, 0, sizeof *state);
+    state->handle = handle;
+    memcpy((void *)state->code,
+           qpu_barrier_syncthreadsshader,
+           sizeof state->code);
+
+    decode_ident1(&state->results);
+    state->results.vpmbase_written = QPU_BARRIER_VPM_URSV_4K;
+    PUT32(V3D_VPMBASE, QPU_BARRIER_VPM_URSV_4K);
+    state->results.vpmbase_readback = GET32(V3D_VPMBASE);
+
+    uint32_t qps = state->results.qpus_per_slice;
+    uint32_t cross1 = qps;
+    uint32_t cross2 = 2u * qps;
+
+    struct qpu_barrier_run_config configs[5];
+    configs[0] = (struct qpu_barrier_run_config){
+        QPU_BARRIER_MODE_SAME_SLICE_SMOKE,
+        1u,
+        2u,
+        4u,
+        (1u << 0) | (1u << 1),
+        16u,
+    };
+    configs[1] = (struct qpu_barrier_run_config){
+        QPU_BARRIER_MODE_CROSS_SLICE_0_1,
+        1u,
+        2u,
+        4u,
+        (1u << 0) | (1u << cross1),
+        16u,
+    };
+    configs[2] = (struct qpu_barrier_run_config){
+        QPU_BARRIER_MODE_CROSS_SLICE_0_2,
+        1u,
+        2u,
+        4u,
+        (1u << 0) | (1u << cross2),
+        16u,
+    };
+    configs[3] = (struct qpu_barrier_run_config){
+        QPU_BARRIER_MODE_FULL_BLOCK_STRESS,
+        1u,
+        12u,
+        64u,
+        low_mask(12u),
+        32u,
+    };
+    configs[4] = (struct qpu_barrier_run_config){
+        QPU_BARRIER_MODE_TWO_BLOCK_PARTITION,
+        2u,
+        4u,
+        32u,
+        low_mask(8u),
+        16u,
+    };
+
+    int rc = 0;
+    state->results.run_count = 5;
+
+    if (!topology_supports_required_modes(&state->results))
+    {
+        rc = -1;
+    }
+    else
+    {
+        for (uint32_t i = 0; i < state->results.run_count; i++)
+        {
+            if (launch_run(state, i, &configs[i]) < 0)
+            {
+                rc = -1;
+                break;
+            }
+        }
+    }
+
+    memcpy(out_results, (const void *)&state->results, sizeof *out_results);
+
+    clear_qpu_reservations();
+    mem_unlock(handle);
+    mem_free(handle);
+    return rc;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.h =====
+#ifndef QPU_BARRIER_SYNCTHREADS_LAUNCH_H
+#define QPU_BARRIER_SYNCTHREADS_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+#define QPU_BARRIER_LANES              16u
+#define QPU_BARRIER_MAX_QPUS           16u
+#define QPU_BARRIER_EXPECTED_QPUS      12u
+#define QPU_BARRIER_VPM_URSV_4K        16u
+#define QPU_BARRIER_VPM_ROWS           64u
+#define QPU_BARRIER_ROW_WORDS          16u
+#define QPU_BARRIER_SENTINEL           0xdeadbeefu
+#define QPU_BARRIER_MAX_ITERS          64u
+#define QPU_BARRIER_TIMEOUT_USEC       2000000u
+#define QPU_BARRIER_MAX_RUNS           8u
+#define QPU_BARRIER_MAX_WARPS          12u
+
+#define QPU_BARRIER_MODE_SAME_SLICE_SMOKE       0u
+#define QPU_BARRIER_MODE_CROSS_SLICE_0_1        1u
+#define QPU_BARRIER_MODE_CROSS_SLICE_0_2        2u
+#define QPU_BARRIER_MODE_FULL_BLOCK_STRESS      3u
+#define QPU_BARRIER_MODE_TWO_BLOCK_PARTITION    4u
+
+struct qpu_barrier_warp_result {
+uint32_t block_id;
+uint32_t logical_warp_id;
+uint32_t reserved0;
+uint32_t reserved1;
+
+    uint32_t physical_qpu_report[QPU_BARRIER_LANES];
+    uint32_t all_seen_mask_by_lane[QPU_BARRIER_LANES];
+    uint32_t always_seen_mask_by_lane[QPU_BARRIER_LANES];
+    uint32_t mismatch_count_by_lane[QPU_BARRIER_LANES];
+};
+
+struct qpu_barrier_run_result {
+uint32_t run_id;
+uint32_t mode;
+uint32_t block_count;
+uint32_t warps_per_block;
+uint32_t total_requests;
+uint32_t iterations;
+
+    uint32_t sem_base;
+    uint32_t vpm_base_row[4];
+    uint32_t vpm_rows_per_block;
+
+    uint32_t qpu_set_mask;
+    uint32_t expected_qpu_mask;
+    uint32_t observed_qpu_mask;
+
+    uint32_t errstat_before;
+    uint32_t errstat_after;
+    uint32_t timeout;
+
+    uint32_t mismatch_count;
+    uint32_t first_bad_iter;
+    uint32_t first_bad_block;
+    uint32_t first_bad_reader_warp;
+    uint32_t first_bad_peer_warp;
+    uint32_t first_bad_lane;
+    uint32_t first_bad_observed;
+    uint32_t first_bad_expected;
+
+    struct qpu_barrier_warp_result warp[QPU_BARRIER_MAX_WARPS];
+};
+
+struct qpu_barrier_results {
+uint32_t ident1;
+uint32_t vpmsz_field;
+uint32_t vpm_kib;
+uint32_t qpus_per_slice;
+uint32_t num_slices;
+uint32_t num_qpus;
+uint32_t num_semaphores;
+uint32_t vpmbase_written;
+uint32_t vpmbase_readback;
+uint32_t srqcs_after_last_run;
+uint32_t timeouts;
+uint32_t errstat_changed_count;
+
+    uint32_t run_count;
+    struct qpu_barrier_run_result runs[QPU_BARRIER_MAX_RUNS];
+};
+
+/*
+* Public semantic launcher API for qpu_barrier_syncthreads.
+*
+* Runs the fixed hardware-grounded barrier validation modes and writes the
+* decoded topology and per-run diagnostics into out_results.  The public API
+* exposes only the runtime handle and semantic output buffer.  It does not
+* expose raw uniform streams, QPU reservation registers, semaphore IDs, VPM
+* rows, V3D scheduler internals, or physical QPU assignment controls.
+  */
+  int qpu_barrier_syncthreads_launch(
+  struct vc4_runtime *rt,
+  struct qpu_barrier_results *out_results);
+
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+echo "ASSEMBLING QASM"
+if ! out=$(vc4asm -c qpu_barrier_syncthreadsshader.c -h qpu_barrier_syncthreadsshader.h qpu_barrier_syncthreads.qasm 2>&1); then
+echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+if [[ -n "$out" ]]; then
+echo "▶ ASSEMBLY PRODUCED UNEXPECTED OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/input.mlir =====
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
+
+// Exploratory final-stage metadata for vpm_slice_visibility.
+//
+// This hardware-run test intentionally exercises direct QPU hardware features
+// that are not yet represented cleanly by the final-stage vc4 dialect as a
+// scheduled sink body: register-materialized QPU_NUMBER/ELEMENT_NUMBER,
+// VPM generic reads/writes, VDW stores, global mutex I/O, and QPU semaphores.
+// The trusted handwritten reference qasm is therefore the hardware source of
+// truth for this exploratory test.  Candidate/codegen execution remains
+// disabled until those operations can be represented and emitted faithfully.
+
+module attributes {
+"vc4.hardware_run_test.name" = "vpm_slice_visibility",
+"vc4.hardware_run_test.kind" = "hardware-run-exploratory",
+"vc4.hardware_run_test.reference_kernel" = "reference/vpm_slice_visibility.qasm",
+"vc4.hardware_run_test.launch_abi" = {
+public_name = "vpm_slice_visibility_launch",
+tail_policy = "fixed_representative_pairs",
+uniform_words_per_qpu = 9 : i32,
+args = [
+{name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
+],
+builtins = [
+{name = "qpu_num", kind = "qpu_register", materialization = "register"},
+{name = "elem_num", kind = "qpu_register", materialization = "register"},
+{name = "mutex", kind = "qpu_io", materialization = "register"},
+{name = "semaphore", kind = "qpu_signal", materialization = "instruction"},
+{name = "vpm_vdw", kind = "qpu_io", materialization = "register"}
+],
+modes = [
+{id = 0 : i32, name = "single_qpu_vpm_sanity"},
+{id = 1 : i32, name = "visibility_pair"},
+{id = 2 : i32, name = "collision_pair"}
+]
+}
+} {
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/expected.json =====
+{
+"name": "vpm_slice_visibility",
+"status": "PASS",
+"required": {
+"sanity_mismatches": 0,
+"same_slice_visibility_pass": 1,
+"same_slice_collision_pass": 1,
+"reported_qpu_mismatches": 0,
+"timeouts": 0,
+"invalid_topology": 0,
+"errstat_relevant_changed": 0
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$here/../../../../../../.." && pwd)
+
+"$repo_root/compiler/test/CodeGen/VC4/Support/run_hardware_test.sh" \
+"$here" \
+reference
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/3-test-vpm_slice_visibility.c =====
+#include "rpi.h"
+#include "vpm_slice_visibility_launch.h"
+
+#define ERRSTAT_RELEVANT_MASK 0x0000efffu /* exclude VCD idle bit 12 */
+
+static struct vpm_slice_visibility_results results
+__attribute__((aligned(16)));
+
+static uint32_t tag_sanity(uint32_t lane)
+{
+return 0xd5000000u | (lane & 0x0fu);
+}
+
+static uint32_t tag_visibility(uint32_t writer_qpu,
+uint32_t trial,
+uint32_t lane)
+{
+return 0xa5000000u |
+((trial & 0x0fu) << 20) |
+((writer_qpu & 0x0fu) << 8) |
+(lane & 0x0fu);
+}
+
+static uint32_t tag_collision(uint32_t writer_qpu,
+uint32_t order,
+uint32_t lane)
+{
+return 0xc5000000u |
+((order & 0x0fu) << 20) |
+((writer_qpu & 0x0fu) << 8) |
+(lane & 0x0fu);
+}
+
+static uint32_t vector_matches_visibility(
+const uint32_t vec[VPM_SLICE_VISIBILITY_LANES],
+uint32_t writer_qpu,
+uint32_t trial)
+{
+for (uint32_t lane = 0; lane < VPM_SLICE_VISIBILITY_LANES; lane++)
+{
+if (vec[lane] != tag_visibility(writer_qpu, trial, lane))
+return 0;
+}
+return 1;
+}
+
+static uint32_t vector_matches_collision(
+const uint32_t vec[VPM_SLICE_VISIBILITY_LANES],
+uint32_t writer_qpu,
+uint32_t order)
+{
+for (uint32_t lane = 0; lane < VPM_SLICE_VISIBILITY_LANES; lane++)
+{
+if (vec[lane] != tag_collision(writer_qpu, order, lane))
+return 0;
+}
+return 1;
+}
+
+static uint32_t vector_matches_sanity(
+const uint32_t vec[VPM_SLICE_VISIBILITY_LANES])
+{
+for (uint32_t lane = 0; lane < VPM_SLICE_VISIBILITY_LANES; lane++)
+{
+if (vec[lane] != tag_sanity(lane))
+return 0;
+}
+return 1;
+}
+
+static uint32_t qpu_report_mismatches(
+const uint32_t vec[VPM_SLICE_VISIBILITY_LANES],
+uint32_t expected_qpu)
+{
+uint32_t mismatches = 0;
+for (uint32_t lane = 0; lane < VPM_SLICE_VISIBILITY_LANES; lane++)
+{
+if (vec[lane] != expected_qpu)
+mismatches++;
+}
+return mismatches;
+}
+
+static uint32_t errstat_relevant_changed(uint32_t before, uint32_t after)
+{
+return (((before ^ after) & ERRSTAT_RELEVANT_MASK) != 0);
+}
+
+static void print_vector(const char *prefix,
+const uint32_t vec[VPM_SLICE_VISIBILITY_LANES])
+{
+printk("%s", prefix);
+for (uint32_t lane = 0; lane < VPM_SLICE_VISIBILITY_LANES; lane++)
+printk(" %x", vec[lane]);
+printk("\n");
+}
+
+static void print_topology_json(void)
+{
+printk("vc4_vpm_topology.json:\n");
+printk("{\n");
+printk("  ident1: %x,\n", results.ident1);
+printk("  vpmsz_field: %d,\n", (int)results.vpmsz_field);
+printk("  vpm_kib: %d,\n", (int)results.vpm_kib);
+printk("  tmus_per_slice: %d,\n", (int)results.tmus_per_slice);
+printk("  qpus_per_slice: %d,\n", (int)results.qpus_per_slice);
+printk("  num_slices: %d,\n", (int)results.num_slices);
+printk("  revision: %d,\n", (int)results.revision);
+printk("  num_qpus: %d,\n", (int)results.num_qpus);
+printk("  vpmbase_written: %d,\n", (int)results.vpmbase_written);
+printk("  vpmbase_readback: %x\n", results.vpmbase_readback);
+printk("}\n");
+}
+
+static uint32_t validate_sanity(uint32_t *reported_qpu_mismatches,
+uint32_t *errstat_changed)
+{
+uint32_t sanity_mismatches = 0;
+
+    if (!vector_matches_sanity(results.sanity.observed))
+        sanity_mismatches = VPM_SLICE_VISIBILITY_LANES;
+
+    *reported_qpu_mismatches +=
+        qpu_report_mismatches(results.sanity.qpu_report, 0);
+
+    *errstat_changed += errstat_relevant_changed(results.sanity.errstat_before,
+                                                 results.sanity.errstat_after);
+
+    printk("Single-QPU sanity: qpu_report_lane0=%d observed_match=%d errstat_before=%x errstat_after=%x timeout=%d\n",
+           (int)results.sanity.qpu_report[0],
+           (int)(sanity_mismatches == 0),
+           results.sanity.errstat_before,
+           results.sanity.errstat_after,
+           (int)results.sanity.timeout);
+
+    if (sanity_mismatches)
+    {
+        print_vector("SANITY observed:", results.sanity.observed);
+        printk("SANITY expected lane0=%x lane15=%x\n",
+               tag_sanity(0),
+               tag_sanity(15));
+    }
+
+    return sanity_mismatches;
+}
+
+static void analyze_visibility(uint32_t *same_slice_visibility_pass,
+uint32_t *cross_slice_visibility_matches,
+uint32_t *cross_slice_visibility_misses,
+uint32_t *reported_qpu_mismatches,
+uint32_t *errstat_changed)
+{
+*same_slice_visibility_pass = 0;
+*cross_slice_visibility_matches = 0;
+*cross_slice_visibility_misses = 0;
+
+    printk("vc4_vpm_visibility_matrix.csv:\n");
+    printk("trial,writer,reader,writer_slice,reader_slice,match,observed0,expected0,errstat_before,errstat_after,timeout\n");
+
+    for (uint32_t i = 0; i < results.visibility_pair_count; i++)
+    {
+        const struct vpm_slice_visibility_pair_result *pair =
+            &results.visibility[i];
+        uint32_t match = vector_matches_visibility(pair->observed,
+                                                   pair->writer_qpu,
+                                                   pair->trial);
+        uint32_t same_slice = (pair->writer_slice == pair->reader_slice);
+        uint32_t expected0 = tag_visibility(pair->writer_qpu,
+                                            pair->trial,
+                                            0);
+
+        if (same_slice && match)
+            *same_slice_visibility_pass = 1;
+        if (!same_slice && match)
+            (*cross_slice_visibility_matches)++;
+        if (!same_slice && !match)
+            (*cross_slice_visibility_misses)++;
+
+        *reported_qpu_mismatches +=
+            qpu_report_mismatches(pair->writer_report, pair->writer_qpu);
+        *reported_qpu_mismatches +=
+            qpu_report_mismatches(pair->reader_report, pair->reader_qpu);
+        *errstat_changed += errstat_relevant_changed(pair->errstat_before,
+                                                     pair->errstat_after);
+
+        printk("%d,%d,%d,%d,%d,%d,%x,%x,%x,%x,%d\n",
+               (int)pair->trial,
+               (int)pair->writer_qpu,
+               (int)pair->reader_qpu,
+               (int)pair->writer_slice,
+               (int)pair->reader_slice,
+               (int)match,
+               pair->observed[0],
+               expected0,
+               pair->errstat_before,
+               pair->errstat_after,
+               (int)pair->timeout);
+
+        printk("VISIBILITY_PAIR writer=%d reader=%d writer_slice=%d reader_slice=%d match=%d\n",
+               (int)pair->writer_qpu,
+               (int)pair->reader_qpu,
+               (int)pair->writer_slice,
+               (int)pair->reader_slice,
+               (int)match);
+
+        if (!match)
+        {
+            print_vector("  observed:", pair->observed);
+            printk("  expected lane0=%x lane15=%x\n",
+                   expected0,
+                   tag_visibility(pair->writer_qpu, pair->trial, 15));
+        }
+    }
+}
+
+static void analyze_collision(uint32_t *same_slice_collision_pass,
+uint32_t *cross_collision_global_like,
+uint32_t *cross_collision_per_slice_like,
+uint32_t *cross_collision_other,
+uint32_t *reported_qpu_mismatches,
+uint32_t *errstat_changed)
+{
+uint32_t same_slice_runs = 0;
+uint32_t same_slice_runs_pass = 0;
+
+    *cross_collision_global_like = 0;
+    *cross_collision_per_slice_like = 0;
+    *cross_collision_other = 0;
+
+    printk("vc4_vpm_collision_matrix.csv:\n");
+    printk("trial,a,b,slice_a,slice_b,order,a_reads_a,a_reads_b,b_reads_a,b_reads_b,class,errstat_before,errstat_after,timeout\n");
+
+    for (uint32_t i = 0; i < results.collision_run_count; i++)
+    {
+        const struct vpm_slice_visibility_collision_result *collision =
+            &results.collision[i];
+        uint32_t a_reads_a = vector_matches_collision(collision->observed_by_a,
+                                                      collision->qpu_a,
+                                                      collision->order);
+        uint32_t a_reads_b = vector_matches_collision(collision->observed_by_a,
+                                                      collision->qpu_b,
+                                                      collision->order);
+        uint32_t b_reads_a = vector_matches_collision(collision->observed_by_b,
+                                                      collision->qpu_a,
+                                                      collision->order);
+        uint32_t b_reads_b = vector_matches_collision(collision->observed_by_b,
+                                                      collision->qpu_b,
+                                                      collision->order);
+        uint32_t same_slice = collision->slice_a == collision->slice_b;
+        uint32_t last_writer = collision->order == 0 ? collision->qpu_b
+                                                     : collision->qpu_a;
+        uint32_t both_read_last = 0;
+        uint32_t each_reads_own = a_reads_a && b_reads_b;
+        uint32_t class_id = 0;
+
+        if (last_writer == collision->qpu_a)
+            both_read_last = a_reads_a && b_reads_a;
+        else
+            both_read_last = a_reads_b && b_reads_b;
+
+        if (same_slice)
+        {
+            same_slice_runs++;
+            if (both_read_last)
+                same_slice_runs_pass++;
+        }
+        else if (both_read_last)
+        {
+            (*cross_collision_global_like)++;
+            class_id = 1;
+        }
+        else if (each_reads_own)
+        {
+            (*cross_collision_per_slice_like)++;
+            class_id = 2;
+        }
+        else
+        {
+            (*cross_collision_other)++;
+            class_id = 3;
+        }
+
+        *reported_qpu_mismatches +=
+            qpu_report_mismatches(collision->qpu_a_report, collision->qpu_a);
+        *reported_qpu_mismatches +=
+            qpu_report_mismatches(collision->qpu_b_report, collision->qpu_b);
+        *errstat_changed += errstat_relevant_changed(collision->errstat_before,
+                                                     collision->errstat_after);
+
+        printk("%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%x,%x,%d\n",
+               (int)collision->trial,
+               (int)collision->qpu_a,
+               (int)collision->qpu_b,
+               (int)collision->slice_a,
+               (int)collision->slice_b,
+               (int)collision->order,
+               (int)a_reads_a,
+               (int)a_reads_b,
+               (int)b_reads_a,
+               (int)b_reads_b,
+               (int)class_id,
+               collision->errstat_before,
+               collision->errstat_after,
+               (int)collision->timeout);
+
+        printk("COLLISION_PAIR a=%d b=%d order=%d same_slice=%d both_read_last=%d each_reads_own=%d class=%d\n",
+               (int)collision->qpu_a,
+               (int)collision->qpu_b,
+               (int)collision->order,
+               (int)same_slice,
+               (int)both_read_last,
+               (int)each_reads_own,
+               (int)class_id);
+
+        if (!same_slice && class_id == 3)
+        {
+            print_vector("  observed_by_a:", collision->observed_by_a);
+            print_vector("  observed_by_b:", collision->observed_by_b);
+        }
+    }
+
+    *same_slice_collision_pass =
+        (same_slice_runs != 0 && same_slice_runs_pass == same_slice_runs);
+}
+
+void notmain(void)
+{
+struct vc4_runtime rt;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    printk("Running VC4 vpm_slice_visibility reference bundle...\n");
+    int start = timer_get_usec();
+    int launch_rc = vpm_slice_visibility_launch(&rt, &results);
+    int end = timer_get_usec();
+    int elapsed = end - start;
+
+    print_topology_json();
+
+    uint32_t invalid_topology = 0;
+    if (results.qpus_per_slice < 2 ||
+        results.num_slices < 2 ||
+        results.num_qpus == 0 ||
+        results.num_qpus > VPM_SLICE_VISIBILITY_MAX_QPUS)
+        invalid_topology = 1;
+
+    uint32_t reported_qpu_mismatches = 0;
+    uint32_t errstat_relevant_changed_count = 0;
+    uint32_t sanity_mismatches = validate_sanity(&reported_qpu_mismatches,
+                                                 &errstat_relevant_changed_count);
+
+    uint32_t same_slice_visibility_pass = 0;
+    uint32_t cross_slice_visibility_matches = 0;
+    uint32_t cross_slice_visibility_misses = 0;
+    analyze_visibility(&same_slice_visibility_pass,
+                       &cross_slice_visibility_matches,
+                       &cross_slice_visibility_misses,
+                       &reported_qpu_mismatches,
+                       &errstat_relevant_changed_count);
+
+    uint32_t same_slice_collision_pass = 0;
+    uint32_t cross_collision_global_like = 0;
+    uint32_t cross_collision_per_slice_like = 0;
+    uint32_t cross_collision_other = 0;
+    analyze_collision(&same_slice_collision_pass,
+                      &cross_collision_global_like,
+                      &cross_collision_per_slice_like,
+                      &cross_collision_other,
+                      &reported_qpu_mismatches,
+                      &errstat_relevant_changed_count);
+
+    uint32_t conclusion_id = 0;
+    if (cross_slice_visibility_matches != 0 &&
+        cross_slice_visibility_misses == 0 &&
+        cross_collision_global_like != 0 &&
+        cross_collision_per_slice_like == 0 &&
+        cross_collision_other == 0)
+    {
+        conclusion_id = 1; /* global-like */
+        printk("VPM storage interpretation: global_like_user_visible_4KiB_window\n");
+    }
+    else if (cross_slice_visibility_misses != 0 &&
+             cross_slice_visibility_matches == 0 &&
+             cross_collision_per_slice_like != 0 &&
+             cross_collision_global_like == 0 &&
+             cross_collision_other == 0)
+    {
+        conclusion_id = 2; /* per-slice-like */
+        printk("VPM storage interpretation: per_slice_like_4KiB_windows\n");
+    }
+    else
+    {
+        conclusion_id = 3; /* mixed or inconclusive */
+        printk("VPM storage interpretation: mixed_or_inconclusive\n");
+    }
+
+    uint32_t pass = 1;
+    if (launch_rc < 0)
+        pass = 0;
+    if (invalid_topology)
+        pass = 0;
+    if (sanity_mismatches != 0)
+        pass = 0;
+    if (!same_slice_visibility_pass)
+        pass = 0;
+    if (!same_slice_collision_pass)
+        pass = 0;
+    if (reported_qpu_mismatches != 0)
+        pass = 0;
+    if (results.timeouts != 0)
+        pass = 0;
+    if (errstat_relevant_changed_count != 0)
+        pass = 0;
+
+    printk("vc4_vpm_full_log.txt: elapsed_usec=%d launch_rc=%d srqcs_after_last_run=%x\n",
+           elapsed,
+           launch_rc,
+           results.srqcs_after_last_run);
+
+    if (pass)
+    {
+        printk("VC4_TEST_RESULT name=vpm_slice_visibility status=PASS sanity_mismatches=%d same_slice_visibility_pass=%d same_slice_collision_pass=%d reported_qpu_mismatches=%d timeouts=%d invalid_topology=%d errstat_relevant_changed=%d visibility_pairs=%d collision_runs=%d cross_slice_visibility_matches=%d cross_slice_visibility_misses=%d cross_collision_global_like=%d cross_collision_per_slice_like=%d cross_collision_other=%d conclusion_id=%d elapsed_usec=%d\n",
+               (int)sanity_mismatches,
+               (int)same_slice_visibility_pass,
+               (int)same_slice_collision_pass,
+               (int)reported_qpu_mismatches,
+               (int)results.timeouts,
+               (int)invalid_topology,
+               (int)errstat_relevant_changed_count,
+               (int)results.visibility_pair_count,
+               (int)results.collision_run_count,
+               (int)cross_slice_visibility_matches,
+               (int)cross_slice_visibility_misses,
+               (int)cross_collision_global_like,
+               (int)cross_collision_per_slice_like,
+               (int)cross_collision_other,
+               (int)conclusion_id,
+               elapsed);
+    }
+    else
+    {
+        printk("VC4_TEST_RESULT name=vpm_slice_visibility status=FAIL sanity_mismatches=%d same_slice_visibility_pass=%d same_slice_collision_pass=%d reported_qpu_mismatches=%d timeouts=%d invalid_topology=%d errstat_relevant_changed=%d visibility_pairs=%d collision_runs=%d cross_slice_visibility_matches=%d cross_slice_visibility_misses=%d cross_collision_global_like=%d cross_collision_per_slice_like=%d cross_collision_other=%d conclusion_id=%d elapsed_usec=%d\n",
+               (int)sanity_mismatches,
+               (int)same_slice_visibility_pass,
+               (int)same_slice_collision_pass,
+               (int)reported_qpu_mismatches,
+               (int)results.timeouts,
+               (int)invalid_topology,
+               (int)errstat_relevant_changed_count,
+               (int)results.visibility_pair_count,
+               (int)results.collision_run_count,
+               (int)cross_slice_visibility_matches,
+               (int)cross_slice_visibility_misses,
+               (int)cross_collision_global_like,
+               (int)cross_collision_per_slice_like,
+               (int)cross_collision_other,
+               (int)conclusion_id,
+               elapsed);
+        panic("vpm_slice_visibility validation failed");
+    }
+
+    vc4_runtime_shutdown(&rt);
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/Makefile =====
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c vpm_slice_visibility_launch.c vpm_slice_visibilityshader.c
+
+PROGS := 3-test-vpm_slice_visibility.c
+
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 1
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.c =====
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+// Wait until mailbox is not full.
+while (MAILBOX_STATUS & MAILBOX_FULL)
+{
+}
+// Lower 4 bits are used for channel.
+MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+uint32_t data;
+while (1)
+{
+data = MAILBOX_READ;
+if ((data & 0xF) == channel)
+return data & ~0xF;
+}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+// Check alignment.
+if ((uint32_t)msg & 0xF) return 0;
+mailbox_write(8, (uint32_t)msg);
+while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+uint32_t p[7] __attribute__((aligned(16))) =
+{
+7 * sizeof(uint32_t), // size
+0x00000000,			  // process request
+0x3000e,			  // (the tag id)
+1 * sizeof(uint32_t), // (size of the buffer)
+1 * sizeof(uint32_t), // (size of the data)
+handle,				  // (handle)
+0					  // end tag
+};
+assert(mbox_property(p));
+return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+uint32_t code,
+uint32_t unifs[],
+int num_qpus)
+{
+//printk("RUNNING WITH %d\n QPUS", num_qpus);
+PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+if (!rt)
+return -1;
+if (qpu_enable(1))
+return -1;
+rt->isInitialized = 1;
+rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+if (!rt || !rt->isInitialized)
+return;
+qpu_enable(0);
+rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+if (!rt)
+return 0;
+return rt->active_qpus;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.h =====
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+* Bare-metal Mailbox Interface for Raspberry Pi
+*
+* This header defines the functions for interacting with the GPU's mailbox
+* property interface in a bare-metal environment.
+*
+* Functions:
+*   - mailbox_write(): Write a message to the mailbox.
+*   - mailbox_read():  Read a message from the mailbox.
+*   - mailbox_call():  Send a property message and wait for the response.
+*
+*   - mem_alloc():     Allocate GPU memory.
+*   - mem_free():      Free GPU memory.
+*   - mem_lock():      Lock allocated GPU memory and return its bus address.
+*   - mem_unlock():    Unlock GPU memory.
+*
+*   - qpu_enable():    Enable (or disable) the QPU.
+*   - execute_qpu():   Execute QPU code.
+*
+* All property messages are sent on mailbox channel 8.
+*
+* Note: Ensure that the mailbox message buffers are 16-byte aligned.
+  */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+* 'msg' must be 16-byte aligned.
+* Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+  */
+  int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+*
+* mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+*             and 'flags'. Returns a nonzero handle on success.
+*
+* mem_free:   Releases the GPU memory associated with the given handle.
+*
+* mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+*             Returns the bus address on success.
+*
+* mem_unlock: Unlocks the previously locked GPU memory.
+  */
+  uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+  uint32_t mem_free(uint32_t handle);
+  uint32_t mem_lock(uint32_t handle);
+  uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+*
+* qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+  uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+VC4_RUNTIME_LANE_WIDTH = 16,
+VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+int isInitialized;
+/* Generic runtime launch policy for the current session. */
+uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+echo "ASSEMBLING QASM"
+if ! out=$(vc4asm -c vpm_slice_visibilityshader.c -h vpm_slice_visibilityshader.h vpm_slice_visibility.qasm 2>&1); then
+echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+if [[ -n $out ]]; then
+echo "▶ ASSEMBLY PRODUCED OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility.qasm =====
+.include "../share/vc4inc/vc4.qinc"
+
+# vpm_slice_visibility reference kernel.
+#
+# Exploratory VC4 QPU VPM storage-visibility smoke test.
+#
+# mode 0: single-QPU VPM sanity check
+#   uniforms after mode:
+#     [1] qpu_report_vector_bus
+#     [2] observed_vector_bus
+#     [3] test_row
+#
+# mode 1: ordered writer/reader visibility pair
+#   uniforms after mode:
+#     [1] writer_qpu
+#     [2] reader_qpu
+#     [3] trial
+#     [4] test_row
+#     [5] observed_vector_bus
+#     [6] reader_report_vector_bus
+#     [7] writer_report_vector_bus
+#
+# mode 2: same-address collision pair
+#   uniforms after mode:
+#     [1] qpu_a
+#     [2] qpu_b
+#     [3] order                # 0 = A then B, 1 = B then A
+#     [4] test_row
+#     [5] observed_by_a_bus
+#     [6] observed_by_b_bus
+#     [7] qpu_a_report_vector_bus
+#     [8] qpu_b_report_vector_bus
+#
+# The storage tests hold the global QPU mutex around VPM setup/access and
+# around VPM->VDW result stores.  Ordering between the two active QPUs uses
+# QPU semaphore instructions only.  The final thread-end instruction and its
+# two delay slots do not touch uniforms, VPM, VDR, VDW, or regfile address 14.
+
+mov ra0, unif
+nop
+
+# Dispatch on mode.  The branches are deliberately separated by non-branch
+# instructions and each branch has the required three delay-slot instructions.
+sub.setf -, ra0, 0
+brr.allz -, :sanity
+nop
+nop
+nop
+
+sub.setf -, ra0, 1
+brr.allz -, :visibility
+nop
+nop
+nop
+
+sub.setf -, ra0, 2
+brr.allz -, :collision
+nop
+nop
+nop
+
+brr -, :end
+nop
+nop
+nop
+
+:sanity
+# Uniforms: ra1=qpu_report_bus, ra2=observed_bus, ra3=test_row.
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+
+mov r0, qpu_num
+
+# r2[lane] = 0xD5000000 | elem_num.
+mov r2, 0xd5000000
+or r2, r2, elem_num
+
+# Write the sanity vector to TEST_ROW, then read the same row back.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra3
+mov vpm, r2
+read vw_wait
+mov r3, vpm_setup(1, 1, h32(0))
+add vr_setup, r3, ra3
+nop
+nop
+nop
+mov r2, vpm
+mov mutex_rel, 0
+
+# Store qpu_num vector to host at ra1 using RESULT_ROW_A = 60.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 60
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 60
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra1
+read vw_wait
+mov mutex_rel, 0
+
+# Store observed sanity vector to host at ra2 using RESULT_ROW_ONE = 62.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 62
+add vw_setup, r3, r1
+mov vpm, r2
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 62
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra2
+read vw_wait
+mov mutex_rel, 0
+
+brr -, :end
+nop
+nop
+nop
+
+:visibility
+# Uniforms:
+#   ra1=writer_qpu, ra2=reader_qpu, ra3=trial, ra4=test_row,
+#   ra5=observed_bus, ra6=reader_report_bus, ra7=writer_report_bus.
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+mov ra6, unif
+mov ra7, unif
+
+mov r0, qpu_num
+
+sub.setf -, r0, ra1
+brr.allz -, :vis_writer
+nop
+nop
+nop
+
+sub.setf -, r0, ra2
+brr.allz -, :vis_reader
+nop
+nop
+nop
+
+# An unexpected QPU should not happen if SQRSV0/1 reservations worked.  Exit
+# rather than participating in the semaphore protocol and corrupting storage.
+brr -, :end
+nop
+nop
+nop
+
+:vis_writer
+# Start barrier: writer and reader both report ready, then consume the other
+# side's ready token.  S_WRITER_READY=0, S_READER_READY=1.
+srel -, 0
+sacq -, 1
+
+# Wait until the reader has cleared TEST_ROW.  S_CLEARED=2.
+sacq -, 2
+
+# r2[lane] = visibility tag for writer_qpu/trial/lane.
+mov r2, 0xa5000000
+and r3, ra3, 15
+shl r3, r3, 8
+shl r3, r3, 12
+or r2, r2, r3
+and r3, ra1, 15
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+# Write writer tag to TEST_ROW under the global mutex.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# Store writer's reported qpu_num vector to host at ra7.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 60
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 60
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra7
+read vw_wait
+mov mutex_rel, 0
+
+# Release reader to observe the row, then wait for reader completion.
+# S_WRITTEN=3, S_READER_DONE=4.
+srel -, 3
+sacq -, 4
+
+brr -, :end
+nop
+nop
+nop
+
+:vis_reader
+# Start barrier.  S_READER_READY=1, S_WRITER_READY=0.
+srel -, 1
+sacq -, 0
+
+# Clear TEST_ROW under the global mutex before allowing the writer to write.
+mov r2, 0
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# Tell the writer the row is cleared, then wait for the writer's tag.
+srel -, 2
+sacq -, 3
+
+# Read TEST_ROW under the global mutex.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vr_setup, r3, ra4
+nop
+nop
+nop
+mov r2, vpm
+mov mutex_rel, 0
+
+# Store observed vector to host at ra5 using RESULT_ROW_ONE = 62.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 62
+add vw_setup, r3, r1
+mov vpm, r2
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 62
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra5
+read vw_wait
+mov mutex_rel, 0
+
+# Store reader's reported qpu_num vector to host at ra6.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 61
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 61
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra6
+read vw_wait
+mov mutex_rel, 0
+
+srel -, 4
+
+brr -, :end
+nop
+nop
+nop
+
+:collision
+# Uniforms:
+#   ra1=qpu_a, ra2=qpu_b, ra3=order, ra4=test_row,
+#   ra5=observed_by_a_bus, ra6=observed_by_b_bus,
+#   ra7=qpu_a_report_bus, ra8=qpu_b_report_bus.
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+mov ra6, unif
+mov ra7, unif
+mov ra8, unif
+
+mov r0, qpu_num
+
+sub.setf -, r0, ra1
+brr.allz -, :col_a
+nop
+nop
+nop
+
+sub.setf -, r0, ra2
+brr.allz -, :col_b
+nop
+nop
+nop
+
+brr -, :end
+nop
+nop
+nop
+
+:col_a
+# Start barrier: S_A_READY=0, S_B_READY=1.
+srel -, 0
+sacq -, 1
+
+# Clear this QPU's view of TEST_ROW.
+mov r2, 0
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# Clear barrier: S_A_CLEAR=2, S_B_CLEAR=3.
+srel -, 2
+sacq -, 3
+
+sub.setf -, ra3, 0
+brr.allz -, :col_a_order0
+nop
+nop
+nop
+brr -, :col_a_order1
+nop
+nop
+nop
+
+:col_b
+# Start barrier: S_B_READY=1, S_A_READY=0.
+srel -, 1
+sacq -, 0
+
+# Clear this QPU's view of TEST_ROW.
+mov r2, 0
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# Clear barrier: S_B_CLEAR=3, S_A_CLEAR=2.
+srel -, 3
+sacq -, 2
+
+sub.setf -, ra3, 0
+brr.allz -, :col_b_order0
+nop
+nop
+nop
+brr -, :col_b_order1
+nop
+nop
+nop
+
+:col_a_order0
+# Order 0: A writes first, B writes second.
+# Build tag_a = 0xC5000000 | ((order&15)<<20) | ((qpu_a&15)<<8) | lane.
+mov r2, 0xc5000000
+and r3, ra3, 15
+shl r3, r3, 8
+shl r3, r3, 12
+or r2, r2, r3
+and r3, ra1, 15
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+# S_A_WROTE=4, S_B_WROTE=5.
+srel -, 4
+sacq -, 5
+
+brr -, :col_a_read_store
+nop
+nop
+nop
+
+:col_b_order0
+# Order 0: wait for A, then B writes second.
+sacq -, 4
+
+mov r2, 0xc5000000
+and r3, ra3, 15
+shl r3, r3, 8
+shl r3, r3, 12
+or r2, r2, r3
+and r3, ra2, 15
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+srel -, 5
+
+brr -, :col_b_read_store
+nop
+nop
+nop
+
+:col_a_order1
+# Order 1: B writes first, A writes second.
+sacq -, 5
+
+mov r2, 0xc5000000
+and r3, ra3, 15
+shl r3, r3, 8
+shl r3, r3, 12
+or r2, r2, r3
+and r3, ra1, 15
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+srel -, 4
+
+brr -, :col_a_read_store
+nop
+nop
+nop
+
+:col_b_order1
+# Order 1: B writes first, then waits for A to write second.
+mov r2, 0xc5000000
+and r3, ra3, 15
+shl r3, r3, 8
+shl r3, r3, 12
+or r2, r2, r3
+and r3, ra2, 15
+shl r3, r3, 8
+or r2, r2, r3
+or r2, r2, elem_num
+
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vw_setup, r3, ra4
+mov vpm, r2
+read vw_wait
+mov mutex_rel, 0
+
+srel -, 5
+sacq -, 4
+
+brr -, :col_b_read_store
+nop
+nop
+nop
+
+:col_a_read_store
+# Read TEST_ROW into r2.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vr_setup, r3, ra4
+nop
+nop
+nop
+mov r2, vpm
+mov mutex_rel, 0
+
+# Store observed_by_a at ra5 using RESULT_ROW_A = 60.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 60
+add vw_setup, r3, r1
+mov vpm, r2
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 60
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra5
+read vw_wait
+mov mutex_rel, 0
+
+# Store qpu_a report vector at ra7.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 61
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 61
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra7
+read vw_wait
+mov mutex_rel, 0
+
+# Store-completion barrier: S_A_STORED=6, S_B_STORED=7.
+srel -, 6
+sacq -, 7
+
+brr -, :end
+nop
+nop
+nop
+
+:col_b_read_store
+# Read TEST_ROW into r2.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+add vr_setup, r3, ra4
+nop
+nop
+nop
+mov r2, vpm
+mov mutex_rel, 0
+
+# Store observed_by_b at ra6 using RESULT_ROW_B = 61.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 61
+add vw_setup, r3, r1
+mov vpm, r2
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 61
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra6
+read vw_wait
+mov mutex_rel, 0
+
+# Store qpu_b report vector at ra8.
+read mutex_acq
+mov r3, vpm_setup(1, 1, h32(0))
+mov r1, 60
+add vw_setup, r3, r1
+mov vpm, r0
+read vw_wait
+mov r3, vdw_setup_1(0)
+mov vw_setup, r3
+mov r1, 60
+shl r1, r1, 7
+mov r3, vdw_setup_0(1, 16, dma_h32(0, 0))
+add vw_setup, r3, r1
+mov vw_addr, ra8
+read vw_wait
+mov mutex_rel, 0
+
+# Store-completion barrier: S_B_STORED=7, S_A_STORED=6.
+srel -, 7
+sacq -, 6
+
+brr -, :end
+nop
+nop
+nop
+
+:end
+thrend
+nop
+nop
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.c =====
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "vpm_slice_visibility_launch.h"
+#include "vpm_slice_visibilityshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_IDENT1 (V3D_BASE + 0x00004)
+#define V3D_L2CACTL (V3D_BASE + 0x00020)
+#define V3D_SLCACTL (V3D_BASE + 0x00024)
+#define V3D_SQRSV0 (V3D_BASE + 0x00410)
+#define V3D_SQRSV1 (V3D_BASE + 0x00414)
+#define V3D_SRQPC (V3D_BASE + 0x00430)
+#define V3D_SRQUA (V3D_BASE + 0x00434)
+#define V3D_SRQCS (V3D_BASE + 0x0043c)
+#define V3D_VPMBASE (V3D_BASE + 0x00504)
+#define V3D_DBCFG (V3D_BASE + 0x00e00)
+#define V3D_DBQITE (V3D_BASE + 0x00e2c)
+#define V3D_DBQITC (V3D_BASE + 0x00e30)
+#define V3D_ERRSTAT (V3D_BASE + 0x00f20)
+
+#define NUM_UNIFS 9u
+#define QPU_REQUEST_TIMEOUT_USEC 2000000u
+
+#define MODE_SANITY 0u
+#define MODE_VISIBILITY 1u
+#define MODE_COLLISION 2u
+
+struct vpm_slice_visibility_launch_state
+{
+uint32_t code[sizeof(vpm_slice_visibilityshader) / sizeof(uint32_t)];
+uint32_t unif[2][NUM_UNIFS];
+uint32_t unif_ptr[2];
+uint32_t handle;
+struct vpm_slice_visibility_results results;
+};
+
+static uint32_t gpu_addr(const volatile void *ptr)
+{
+return GPU_BASE + (uint32_t)ptr;
+}
+
+static void fill_vector(volatile uint32_t *dst, uint32_t value)
+{
+for (uint32_t i = 0; i < VPM_SLICE_VISIBILITY_LANES; i++)
+dst[i] = value;
+}
+
+static uint32_t slice_of_qpu(uint32_t qpu, uint32_t qpus_per_slice)
+{
+return qpus_per_slice ? (qpu / qpus_per_slice) : 0xffffffffu;
+}
+
+static void decode_ident1(volatile struct vpm_slice_visibility_results *res)
+{
+uint32_t ident1 = GET32(V3D_IDENT1);
+uint32_t vpmsz_field = (ident1 >> 28) & 0xf;
+
+    res->ident1 = ident1;
+    res->vpmsz_field = vpmsz_field;
+    res->vpm_kib = vpmsz_field ? vpmsz_field : 16u;
+    res->tmus_per_slice = (ident1 >> 12) & 0xf;
+    res->qpus_per_slice = (ident1 >> 8) & 0xf;
+    res->num_slices = (ident1 >> 4) & 0xf;
+    res->revision = ident1 & 0xf;
+    res->num_qpus = res->qpus_per_slice * res->num_slices;
+}
+
+static void reserve_only_pair(uint32_t qpu_a, uint32_t qpu_b)
+{
+uint32_t sqrsv0 = 0;
+uint32_t sqrsv1 = 0;
+
+    for (uint32_t q = 0; q < VPM_SLICE_VISIBILITY_MAX_QPUS; q++)
+    {
+        uint32_t reserve_user_programs = 1u;
+        if (q == qpu_a || q == qpu_b)
+            reserve_user_programs = 0u;
+
+        if (q < 8u)
+            sqrsv0 |= reserve_user_programs << (4u * q);
+        else
+            sqrsv1 |= reserve_user_programs << (4u * (q - 8u));
+    }
+
+    PUT32(V3D_SQRSV0, sqrsv0);
+    PUT32(V3D_SQRSV1, sqrsv1);
+}
+
+static void clear_qpu_reservations(void)
+{
+PUT32(V3D_SQRSV0, 0);
+PUT32(V3D_SQRSV1, 0);
+}
+
+static void clear_scheduler_and_caches(void)
+{
+PUT32(V3D_DBCFG, 0);
+PUT32(V3D_DBQITE, 0);
+PUT32(V3D_DBQITC, 0xffffffffu);
+PUT32(V3D_L2CACTL, 1u << 2);
+PUT32(V3D_SLCACTL, 0xffffffffu);
+
+    /* Clear queue, queue error, request count, and completion count. */
+    PUT32(V3D_SRQCS, (1u << 0) | (1u << 7) | (1u << 8) | (1u << 16));
+}
+
+static int wait_for_completions(uint32_t expected)
+{
+uint32_t start = (uint32_t)timer_get_usec();
+
+    while ((((GET32(V3D_SRQCS) >> 16) & 0xffu) != expected))
+    {
+        uint32_t now = (uint32_t)timer_get_usec();
+        if ((uint32_t)(now - start) > QPU_REQUEST_TIMEOUT_USEC)
+            return -1;
+    }
+
+    return 0;
+}
+
+static int launch_requests(
+volatile struct vpm_slice_visibility_launch_state *state,
+uint32_t request_count)
+{
+if (request_count == 0 || request_count > 2)
+return -1;
+
+    clear_scheduler_and_caches();
+
+    for (uint32_t i = 0; i < request_count; i++)
+    {
+        PUT32(V3D_SRQUA, state->unif_ptr[i]);
+        PUT32(V3D_SRQPC, (uint32_t)state->code);
+    }
+
+    if (wait_for_completions(request_count) < 0)
+        return -1;
+
+    state->results.srqcs_after_last_run = GET32(V3D_SRQCS);
+    return 0;
+}
+
+static void set_unif_ptrs(volatile struct vpm_slice_visibility_launch_state *state)
+{
+for (uint32_t i = 0; i < 2; i++)
+state->unif_ptr[i] = gpu_addr(&state->unif[i][0]);
+}
+
+static int run_sanity(
+volatile struct vpm_slice_visibility_launch_state *state)
+{
+volatile struct vpm_slice_visibility_sanity_result *sanity =
+&state->results.sanity;
+
+    fill_vector(sanity->qpu_report, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(sanity->observed, VPM_SLICE_VISIBILITY_SENTINEL);
+
+    state->unif[0][0] = MODE_SANITY;
+    state->unif[0][1] = gpu_addr(&sanity->qpu_report[0]);
+    state->unif[0][2] = gpu_addr(&sanity->observed[0]);
+    state->unif[0][3] = VPM_SLICE_VISIBILITY_TEST_ROW;
+
+    reserve_only_pair(0, 0);
+    sanity->errstat_before = GET32(V3D_ERRSTAT);
+    int rc = launch_requests(state, 1);
+    sanity->errstat_after = GET32(V3D_ERRSTAT);
+    clear_qpu_reservations();
+
+    if (rc < 0)
+    {
+        sanity->timeout = 1;
+        state->results.timeouts++;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int run_visibility_pair(
+volatile struct vpm_slice_visibility_launch_state *state,
+uint32_t writer,
+uint32_t reader,
+uint32_t trial)
+{
+volatile struct vpm_slice_visibility_results *res = &state->results;
+
+    if (res->visibility_pair_count >= VPM_SLICE_VISIBILITY_MAX_VISIBILITY_PAIRS)
+        return -1;
+
+    uint32_t index = res->visibility_pair_count++;
+    volatile struct vpm_slice_visibility_pair_result *pair =
+        &res->visibility[index];
+
+    pair->writer_qpu = writer;
+    pair->reader_qpu = reader;
+    pair->writer_slice = slice_of_qpu(writer, res->qpus_per_slice);
+    pair->reader_slice = slice_of_qpu(reader, res->qpus_per_slice);
+    pair->trial = trial;
+    fill_vector(pair->observed, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(pair->reader_report, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(pair->writer_report, VPM_SLICE_VISIBILITY_SENTINEL);
+
+    for (uint32_t i = 0; i < 2; i++)
+    {
+        state->unif[i][0] = MODE_VISIBILITY;
+        state->unif[i][1] = writer;
+        state->unif[i][2] = reader;
+        state->unif[i][3] = trial;
+        state->unif[i][4] = VPM_SLICE_VISIBILITY_TEST_ROW;
+        state->unif[i][5] = gpu_addr(&pair->observed[0]);
+        state->unif[i][6] = gpu_addr(&pair->reader_report[0]);
+        state->unif[i][7] = gpu_addr(&pair->writer_report[0]);
+    }
+
+    reserve_only_pair(writer, reader);
+    pair->errstat_before = GET32(V3D_ERRSTAT);
+    int rc = launch_requests(state, 2);
+    pair->errstat_after = GET32(V3D_ERRSTAT);
+    clear_qpu_reservations();
+
+    if (rc < 0)
+    {
+        pair->timeout = 1;
+        res->timeouts++;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int run_collision_pair(
+volatile struct vpm_slice_visibility_launch_state *state,
+uint32_t qpu_a,
+uint32_t qpu_b,
+uint32_t order,
+uint32_t trial)
+{
+volatile struct vpm_slice_visibility_results *res = &state->results;
+
+    if (res->collision_run_count >= VPM_SLICE_VISIBILITY_MAX_COLLISION_RUNS)
+        return -1;
+
+    uint32_t index = res->collision_run_count++;
+    volatile struct vpm_slice_visibility_collision_result *collision =
+        &res->collision[index];
+
+    collision->qpu_a = qpu_a;
+    collision->qpu_b = qpu_b;
+    collision->slice_a = slice_of_qpu(qpu_a, res->qpus_per_slice);
+    collision->slice_b = slice_of_qpu(qpu_b, res->qpus_per_slice);
+    collision->order = order;
+    collision->trial = trial;
+    fill_vector(collision->observed_by_a, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(collision->observed_by_b, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(collision->qpu_a_report, VPM_SLICE_VISIBILITY_SENTINEL);
+    fill_vector(collision->qpu_b_report, VPM_SLICE_VISIBILITY_SENTINEL);
+
+    for (uint32_t i = 0; i < 2; i++)
+    {
+        state->unif[i][0] = MODE_COLLISION;
+        state->unif[i][1] = qpu_a;
+        state->unif[i][2] = qpu_b;
+        state->unif[i][3] = order;
+        state->unif[i][4] = VPM_SLICE_VISIBILITY_TEST_ROW;
+        state->unif[i][5] = gpu_addr(&collision->observed_by_a[0]);
+        state->unif[i][6] = gpu_addr(&collision->observed_by_b[0]);
+        state->unif[i][7] = gpu_addr(&collision->qpu_a_report[0]);
+        state->unif[i][8] = gpu_addr(&collision->qpu_b_report[0]);
+    }
+
+    reserve_only_pair(qpu_a, qpu_b);
+    collision->errstat_before = GET32(V3D_ERRSTAT);
+    int rc = launch_requests(state, 2);
+    collision->errstat_after = GET32(V3D_ERRSTAT);
+    clear_qpu_reservations();
+
+    if (rc < 0)
+    {
+        collision->timeout = 1;
+        res->timeouts++;
+        return -1;
+    }
+
+    return 0;
+}
+
+static int add_visibility_representatives(
+volatile struct vpm_slice_visibility_launch_state *state)
+{
+volatile struct vpm_slice_visibility_results *res = &state->results;
+uint32_t qps = res->qpus_per_slice;
+uint32_t nslices = res->num_slices;
+uint32_t nq = res->num_qpus;
+uint32_t trial = 1;
+
+    if (qps >= 2 && nq >= 2)
+        if (run_visibility_pair(state, 0, 1, trial++) < 0)
+            return -1;
+
+    if (nslices >= 2 && qps < nq)
+    {
+        if (run_visibility_pair(state, 0, qps, trial++) < 0)
+            return -1;
+        if (run_visibility_pair(state, qps, 0, trial++) < 0)
+            return -1;
+    }
+
+    if (nslices >= 3 && (2u * qps) < nq)
+    {
+        if (run_visibility_pair(state, 0, 2u * qps, trial++) < 0)
+            return -1;
+        if (run_visibility_pair(state, 2u * qps, 0, trial++) < 0)
+            return -1;
+    }
+
+    return 0;
+}
+
+static int add_collision_representatives(
+volatile struct vpm_slice_visibility_launch_state *state)
+{
+volatile struct vpm_slice_visibility_results *res = &state->results;
+uint32_t qps = res->qpus_per_slice;
+uint32_t nslices = res->num_slices;
+uint32_t nq = res->num_qpus;
+uint32_t trial = 20;
+
+    if (qps >= 2 && nq >= 2)
+    {
+        if (run_collision_pair(state, 0, 1, 0, trial++) < 0)
+            return -1;
+        if (run_collision_pair(state, 0, 1, 1, trial++) < 0)
+            return -1;
+    }
+
+    if (nslices >= 2 && qps < nq)
+    {
+        if (run_collision_pair(state, 0, qps, 0, trial++) < 0)
+            return -1;
+        if (run_collision_pair(state, 0, qps, 1, trial++) < 0)
+            return -1;
+    }
+
+    if (nslices >= 3 && (2u * qps) < nq)
+    {
+        if (run_collision_pair(state, 0, 2u * qps, 0, trial++) < 0)
+            return -1;
+        if (run_collision_pair(state, 0, 2u * qps, 1, trial++) < 0)
+            return -1;
+    }
+
+    return 0;
+}
+
+int vpm_slice_visibility_launch(
+struct vc4_runtime *rt,
+struct vpm_slice_visibility_results *out)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+if (!out)
+return -1;
+
+    uint32_t handle = mem_alloc(sizeof(struct vpm_slice_visibility_launch_state),
+                                4096,
+                                GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct vpm_slice_visibility_launch_state *state =
+        (volatile struct vpm_slice_visibility_launch_state *)(vc - GPU_BASE);
+    if (!state)
+    {
+        mem_unlock(handle);
+        mem_free(handle);
+        return -1;
+    }
+
+    memset((void *)state, 0, sizeof *state);
+    state->handle = handle;
+    memcpy((void *)state->code,
+           vpm_slice_visibilityshader,
+           sizeof state->code);
+    set_unif_ptrs(state);
+
+    decode_ident1(&state->results);
+
+    PUT32(V3D_VPMBASE, VPM_SLICE_VISIBILITY_VPM_URSV_4K);
+    state->results.vpmbase_written = VPM_SLICE_VISIBILITY_VPM_URSV_4K;
+    state->results.vpmbase_readback = GET32(V3D_VPMBASE);
+
+    clear_qpu_reservations();
+
+    int rc = 0;
+    if (state->results.num_qpus == 0 ||
+        state->results.qpus_per_slice == 0 ||
+        state->results.num_slices == 0 ||
+        state->results.num_qpus > VPM_SLICE_VISIBILITY_MAX_QPUS)
+    {
+        rc = -1;
+    }
+    else
+    {
+        if (run_sanity(state) < 0)
+            rc = -1;
+        else if (add_visibility_representatives(state) < 0)
+            rc = -1;
+        else if (add_collision_representatives(state) < 0)
+            rc = -1;
+    }
+
+    clear_qpu_reservations();
+    memcpy(out, (const void *)&state->results, sizeof *out);
+
+    mem_unlock(handle);
+    mem_free(handle);
+    return rc;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.h =====
+#ifndef VPM_SLICE_VISIBILITY_LAUNCH_H
+#define VPM_SLICE_VISIBILITY_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+#define VPM_SLICE_VISIBILITY_LANES 16u
+#define VPM_SLICE_VISIBILITY_MAX_QPUS 16u
+#define VPM_SLICE_VISIBILITY_MAX_VISIBILITY_PAIRS 5u
+#define VPM_SLICE_VISIBILITY_MAX_COLLISION_RUNS 6u
+#define VPM_SLICE_VISIBILITY_TEST_ROW 17u
+#define VPM_SLICE_VISIBILITY_VPM_URSV_4K 16u
+#define VPM_SLICE_VISIBILITY_SENTINEL 0xdeadbeefu
+
+struct vpm_slice_visibility_sanity_result
+{
+uint32_t qpu_report[VPM_SLICE_VISIBILITY_LANES];
+uint32_t observed[VPM_SLICE_VISIBILITY_LANES];
+uint32_t errstat_before;
+uint32_t errstat_after;
+uint32_t timeout;
+};
+
+struct vpm_slice_visibility_pair_result
+{
+uint32_t writer_qpu;
+uint32_t reader_qpu;
+uint32_t writer_slice;
+uint32_t reader_slice;
+uint32_t trial;
+uint32_t errstat_before;
+uint32_t errstat_after;
+uint32_t timeout;
+uint32_t observed[VPM_SLICE_VISIBILITY_LANES];
+uint32_t reader_report[VPM_SLICE_VISIBILITY_LANES];
+uint32_t writer_report[VPM_SLICE_VISIBILITY_LANES];
+};
+
+struct vpm_slice_visibility_collision_result
+{
+uint32_t qpu_a;
+uint32_t qpu_b;
+uint32_t slice_a;
+uint32_t slice_b;
+uint32_t order;
+uint32_t trial;
+uint32_t errstat_before;
+uint32_t errstat_after;
+uint32_t timeout;
+uint32_t observed_by_a[VPM_SLICE_VISIBILITY_LANES];
+uint32_t observed_by_b[VPM_SLICE_VISIBILITY_LANES];
+uint32_t qpu_a_report[VPM_SLICE_VISIBILITY_LANES];
+uint32_t qpu_b_report[VPM_SLICE_VISIBILITY_LANES];
+};
+
+struct vpm_slice_visibility_results
+{
+uint32_t ident1;
+uint32_t vpmsz_field;
+uint32_t vpm_kib;
+uint32_t tmus_per_slice;
+uint32_t qpus_per_slice;
+uint32_t num_slices;
+uint32_t revision;
+uint32_t num_qpus;
+uint32_t vpmbase_written;
+uint32_t vpmbase_readback;
+uint32_t srqcs_after_last_run;
+uint32_t timeouts;
+
+    struct vpm_slice_visibility_sanity_result sanity;
+
+    uint32_t visibility_pair_count;
+    struct vpm_slice_visibility_pair_result
+        visibility[VPM_SLICE_VISIBILITY_MAX_VISIBILITY_PAIRS];
+
+    uint32_t collision_run_count;
+    struct vpm_slice_visibility_collision_result
+        collision[VPM_SLICE_VISIBILITY_MAX_COLLISION_RUNS];
+};
+
+/*
+* Public semantic launcher API for vpm_slice_visibility.
+*
+* Runs the exploratory VPM sanity, representative visibility-pair, and
+* representative collision-pair probes described in the handwritten harness.
+* The public API exposes only the runtime handle and an output result object.
+* It does not expose raw uniform streams or per-call scheduler internals.
+  */
+  int vpm_slice_visibility_launch(
+  struct vc4_runtime *rt,
+  struct vpm_slice_visibility_results *out);
+
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/expected.json =====
+{
+"name": "matmul_blocked",
+"status": "PASS",
+"required": {
+"cases": 8,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_m": 25,
+"max_n": 31,
+"max_k": 25,
+"runtime_allocations": 1,
+"runtime_launches": 8,
+"runtime_tile_waves": 14,
+"timeouts": 0,
+"errstat_relevant_changed": 0
+},
+"float_max": {
+"max_abs_diff": 0.001
+}
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/run.sh =====
+#!/bin/bash
+set -euo pipefail
+
+cd "$(dirname "$0")/reference"
+exec ./run.sh
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/3-test-matmul_blocked.c =====
+#include "rpi.h"
+#include "matmul_blocked_launch.h"
+
+#define MATMUL_BLOCKED_EPSILON 0.001f
+#define CHECKSUM_SCALE 1024.0f
+#define MATMUL_BLOCKED_MAX_M 25u
+#define MATMUL_BLOCKED_MAX_N 31u
+#define MATMUL_BLOCKED_MAX_K 25u
+#define MATMUL_BLOCKED_GUARD 64u
+#define MATMUL_BLOCKED_MAX_A (MATMUL_BLOCKED_MAX_M * MATMUL_BLOCKED_MAX_K)
+#define MATMUL_BLOCKED_MAX_B (MATMUL_BLOCKED_MAX_K * MATMUL_BLOCKED_MAX_N)
+#define MATMUL_BLOCKED_MAX_C (MATMUL_BLOCKED_MAX_M * MATMUL_BLOCKED_MAX_N)
+#define MATMUL_BLOCKED_C_BUFFER (MATMUL_BLOCKED_MAX_C + MATMUL_BLOCKED_GUARD)
+#define MATMUL_BLOCKED_SENTINEL (-9876.0f)
+#define MATMUL_BLOCKED_EXPECTED_TILE_WAVES 14u
+
+struct matmul_blocked_case
+{
+uint32_t m;
+uint32_t n;
+uint32_t k;
+};
+
+static const struct matmul_blocked_case cases[] = {
+{0u, 7u, 5u},
+{4u, 0u, 5u},
+{5u, 6u, 0u},
+{1u, 1u, 1u},
+{4u, 7u, 5u},
+{12u, 16u, 12u},
+{13u, 17u, 7u},
+{25u, 31u, 25u},
+};
+
+static float a_values[MATMUL_BLOCKED_MAX_A];
+static float b_values[MATMUL_BLOCKED_MAX_B];
+static float c_values[MATMUL_BLOCKED_C_BUFFER];
+static float expected_values[MATMUL_BLOCKED_C_BUFFER];
+
+static float absf_local(float value)
+{
+return value < 0.0f ? -value : value;
+}
+
+static void fill_inputs(uint32_t case_index, uint32_t m, uint32_t n, uint32_t k)
+{
+for (uint32_t i = 0; i < MATMUL_BLOCKED_MAX_A; i++)
+a_values[i] = 0.0f;
+for (uint32_t i = 0; i < MATMUL_BLOCKED_MAX_B; i++)
+b_values[i] = 0.0f;
+for (uint32_t i = 0; i < MATMUL_BLOCKED_C_BUFFER; i++)
+{
+c_values[i] = MATMUL_BLOCKED_SENTINEL;
+expected_values[i] = MATMUL_BLOCKED_SENTINEL;
+}
+
+    for (uint32_t row = 0; row < m; row++)
+    {
+        for (uint32_t col = 0; col < k; col++)
+        {
+            int raw = (int)((row * 7u + col * 5u + case_index * 3u) % 23u) - 11;
+            a_values[row * k + col] = (float)raw * 0.0625f;
+        }
+    }
+
+    for (uint32_t row = 0; row < k; row++)
+    {
+        for (uint32_t col = 0; col < n; col++)
+        {
+            int raw = (int)((row * 11u + col * 3u + case_index * 5u) % 29u) - 14;
+            b_values[row * n + col] = (float)raw * 0.03125f;
+        }
+    }
+}
+
+static void run_cpu_reference(uint32_t m, uint32_t n, uint32_t k)
+{
+for (uint32_t row = 0; row < m; row++)
+{
+for (uint32_t col = 0; col < n; col++)
+{
+float acc = 0.0f;
+for (uint32_t kk = 0; kk < k; kk++)
+acc += a_values[row * k + kk] * b_values[kk * n + col];
+expected_values[row * n + col] = acc;
+}
+}
+}
+
+static int scaled_checksum(const float *values, uint32_t count)
+{
+int checksum = 0;
+for (uint32_t i = 0; i < count; i++)
+checksum += (int)(values[i] * CHECKSUM_SCALE);
+return checksum;
+}
+
+static void verify_results(
+uint32_t case_index,
+uint32_t m,
+uint32_t n,
+int *mismatch_count,
+float *max_abs_diff)
+{
+*mismatch_count = 0;
+*max_abs_diff = 0.0f;
+
+    uint32_t count = m * n;
+    for (uint32_t i = 0; i < count; i++)
+    {
+        float diff = c_values[i] - expected_values[i];
+        float abs_diff = absf_local(diff);
+        if (abs_diff > *max_abs_diff)
+            *max_abs_diff = abs_diff;
+
+        if (abs_diff > MATMUL_BLOCKED_EPSILON)
+        {
+            if (*mismatch_count < 8)
+            {
+                uint32_t row = n ? (i / n) : 0;
+                uint32_t col = n ? (i % n) : 0;
+                printk("ERROR: case=%d row=%d col=%d gpu=%f cpu=%f diff=%f\n",
+                       (int)case_index,
+                       (int)row,
+                       (int)col,
+                       c_values[i],
+                       expected_values[i],
+                       diff);
+            }
+            (*mismatch_count)++;
+        }
+    }
+}
+
+static int verify_sentinel_tail(uint32_t m, uint32_t n)
+{
+uint32_t count = m * n;
+int mismatches = 0;
+
+    for (uint32_t i = count; i < count + MATMUL_BLOCKED_GUARD && i < MATMUL_BLOCKED_C_BUFFER; i++)
+    {
+        if (c_values[i] != MATMUL_BLOCKED_SENTINEL)
+        {
+            if (mismatches < 8)
+            {
+                printk("ERROR: sentinel changed index=%d value=%f expected=%f\n",
+                       (int)i,
+                       c_values[i],
+                       MATMUL_BLOCKED_SENTINEL);
+            }
+            mismatches++;
+        }
+    }
+
+    return mismatches;
+}
+
+static uint32_t ceil_div_u32(uint32_t a, uint32_t b)
+{
+if (a == 0)
+return 0;
+return (a + b - 1u) / b;
+}
+
+static uint32_t expected_tile_waves(uint32_t m, uint32_t n)
+{
+return ceil_div_u32(m, 12u) * ceil_div_u32(n, 16u);
+}
+
+void notmain(void)
+{
+struct vc4_runtime rt;
+
+    if (vc4_runtime_init(&rt) < 0)
+        panic("Failed to initialize VC4 runtime");
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(&rt);
+    uint32_t laneWidth = vc4_runtime_lane_width();
+
+    if (activeQpus != VC4_RUNTIME_MAX_QPUS)
+        panic("Unexpected active QPU count: %d", (int)activeQpus);
+    if (laneWidth != VC4_RUNTIME_LANE_WIDTH)
+        panic("Unexpected lane width: %d", (int)laneWidth);
+
+    printk("Running VC4 matmul_blocked reference bundle...\n");
+
+    if (matmul_blocked_prepare(&rt,
+                               MATMUL_BLOCKED_MAX_M,
+                               MATMUL_BLOCKED_MAX_N,
+                               MATMUL_BLOCKED_MAX_K) < 0)
+        panic("matmul_blocked runtime setup failed");
+
+    printk("MATMUL_BLOCKED_RUNTIME_SETUP max_m=%d max_n=%d max_k=%d allocations=%d ident1=%x vpmbase=%x\n",
+           MATMUL_BLOCKED_MAX_M,
+           MATMUL_BLOCKED_MAX_N,
+           MATMUL_BLOCKED_MAX_K,
+           (int)matmul_blocked_runtime_allocations(),
+           (unsigned)matmul_blocked_runtime_ident1(),
+           (unsigned)matmul_blocked_runtime_vpmbase_readback());
+
+    int start = timer_get_usec();
+    int totalMismatches = 0;
+    int sentinelMismatches = 0;
+    int launchFailures = 0;
+    int checksumAccum = 0;
+    float maxAbsDiffOverall = 0.0f;
+    uint32_t expectedWaves = 0;
+
+    const uint32_t caseCount = sizeof(cases) / sizeof(cases[0]);
+
+    for (uint32_t caseIndex = 0; caseIndex < caseCount; caseIndex++)
+    {
+        uint32_t m = cases[caseIndex].m;
+        uint32_t n = cases[caseIndex].n;
+        uint32_t k = cases[caseIndex].k;
+
+        if (m > MATMUL_BLOCKED_MAX_M || n > MATMUL_BLOCKED_MAX_N || k > MATMUL_BLOCKED_MAX_K)
+            panic("matmul_blocked case exceeds max shape");
+
+        expectedWaves += expected_tile_waves(m, n);
+
+        fill_inputs(caseIndex, m, n, k);
+        run_cpu_reference(m, n, k);
+
+        if (matmul_blocked_launch(&rt, a_values, b_values, c_values, m, n, k) < 0)
+        {
+            printk("ERROR: matmul_blocked launch failed case=%d m=%d n=%d k=%d\n",
+                   (int)caseIndex,
+                   (int)m,
+                   (int)n,
+                   (int)k);
+            launchFailures++;
+            break;
+        }
+
+        int mismatches = 0;
+        float maxAbsDiff = 0.0f;
+        verify_results(caseIndex, m, n, &mismatches, &maxAbsDiff);
+
+        int caseSentinelMismatches = verify_sentinel_tail(m, n);
+        uint32_t count = m * n;
+        int checksum = scaled_checksum(c_values, count);
+        int expectedChecksum = scaled_checksum(expected_values, count);
+        if (checksum != expectedChecksum)
+        {
+            printk("ERROR: checksum mismatch case=%d gpu=%d cpu=%d\n",
+                   (int)caseIndex,
+                   checksum,
+                   expectedChecksum);
+            mismatches++;
+        }
+
+        if (maxAbsDiff > maxAbsDiffOverall)
+            maxAbsDiffOverall = maxAbsDiff;
+
+        totalMismatches += mismatches;
+        sentinelMismatches += caseSentinelMismatches;
+        checksumAccum += checksum;
+
+        printk("MATMUL_BLOCKED_CASE case=%d m=%d n=%d k=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d tile_waves=%d allocations=%d\n",
+               (int)caseIndex,
+               (int)m,
+               (int)n,
+               (int)k,
+               (int)activeQpus,
+               (int)laneWidth,
+               mismatches,
+               caseSentinelMismatches,
+               checksum,
+               maxAbsDiff,
+               (int)matmul_blocked_runtime_launches(),
+               (int)matmul_blocked_runtime_tile_waves(),
+               (int)matmul_blocked_runtime_allocations());
+    }
+
+    int end = timer_get_usec();
+    int elapsed = end - start;
+
+    uint32_t runtimeAllocations = matmul_blocked_runtime_allocations();
+    uint32_t runtimeLaunches = matmul_blocked_runtime_launches();
+    uint32_t runtimeTileWaves = matmul_blocked_runtime_tile_waves();
+    uint32_t runtimeTimeouts = matmul_blocked_runtime_timeouts();
+    uint32_t errstatRelevantChanged = matmul_blocked_runtime_errstat_relevant_changed();
+
+    if (expectedWaves != MATMUL_BLOCKED_EXPECTED_TILE_WAVES)
+        printk("ERROR: expected tile wave accounting got=%d expected=%d\n",
+               (int)expectedWaves,
+               MATMUL_BLOCKED_EXPECTED_TILE_WAVES);
+
+    const char *status =
+        (totalMismatches == 0 &&
+         sentinelMismatches == 0 &&
+         launchFailures == 0 &&
+         runtimeAllocations == 1u &&
+         runtimeLaunches == caseCount &&
+         expectedWaves == MATMUL_BLOCKED_EXPECTED_TILE_WAVES &&
+         runtimeTileWaves == expectedWaves &&
+         runtimeTimeouts == 0u &&
+         errstatRelevantChanged == 0u) ? "PASS" : "FAIL";
+
+    printk("VC4_TEST_RESULT name=matmul_blocked status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_m=%d max_n=%d max_k=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_tile_waves=%d timeouts=%d errstat_relevant_changed=%d srqcs_after_last_wave=%x elapsed_usec=%d\n",
+           status,
+           (int)caseCount,
+           totalMismatches,
+           sentinelMismatches,
+           launchFailures,
+           (int)activeQpus,
+           (int)laneWidth,
+           MATMUL_BLOCKED_MAX_M,
+           MATMUL_BLOCKED_MAX_N,
+           MATMUL_BLOCKED_MAX_K,
+           checksumAccum,
+           maxAbsDiffOverall,
+           (int)runtimeAllocations,
+           (int)runtimeLaunches,
+           (int)runtimeTileWaves,
+           (int)runtimeTimeouts,
+           (int)errstatRelevantChanged,
+           (unsigned)matmul_blocked_runtime_srqcs_after_last_wave(),
+           elapsed);
+
+    vc4_runtime_shutdown(&rt);
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/Makefile =====
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c matmul_blocked_launch.c matmul_blockedshader.c
+
+PROGS := 3-test-matmul_blocked.c
+
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 1
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/mailbox.c =====
+#include <stdint.h>
+#include "rpi.h"
+#include "mailbox.h"
+
+#define MAILBOX_BASE 0x2000B880
+#define MAILBOX_READ (*(volatile uint32_t *)(MAILBOX_BASE + 0x0))
+#define MAILBOX_STATUS (*(volatile uint32_t *)(MAILBOX_BASE + 0x18))
+#define MAILBOX_WRITE (*(volatile uint32_t *)(MAILBOX_BASE + 0x20))
+
+#define MAILBOX_FULL 0x80000000
+#define MAILBOX_EMPTY 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_SRQSC (V3D_BASE + 0x418)
+#define V3D_L2CACTL (V3D_BASE + 0x020)
+#define V3D_SLCACTL (V3D_BASE + 0x024)
+#define V3D_SRQPC (V3D_BASE + 0x0430)
+#define V3D_SRQUA (V3D_BASE + 0x0434)
+#define V3D_SRQCS (V3D_BASE + 0x043c)
+#define V3D_DBCFG (V3D_BASE + 0x0e00)
+#define V3D_DBQITE (V3D_BASE + 0x0e2c)
+#define V3D_DBQITC (V3D_BASE + 0x0e30)
+//
+// Basic mailbox I/O routines
+//
+
+// Write 'data' to the mailbox on the specified channel.
+void mailbox_write(uint8_t channel, uint32_t data)
+{
+// Wait until mailbox is not full.
+while (MAILBOX_STATUS & MAILBOX_FULL)
+{
+}
+// Lower 4 bits are used for channel.
+MAILBOX_WRITE = (data & ~0xF) | (channel & 0xF);
+}
+
+// Read from the mailbox on the specified channel.
+uint32_t mailbox_read(uint8_t channel)
+{
+uint32_t data;
+while (1)
+{
+data = MAILBOX_READ;
+if ((data & 0xF) == channel)
+return data & ~0xF;
+}
+}
+
+// Perform a mailbox property call.
+// The message buffer 'msg' must be 16-byte aligned.
+// Returns nonzero if the call succeeded.
+int mbox_property(uint32_t *msg)
+{
+// Check alignment.
+if ((uint32_t)msg & 0xF) return 0;
+mailbox_write(8, (uint32_t)msg);
+while (mailbox_read(8) != (uint32_t)msg);
+
+	return (msg[1] == 0x80000000);
+}
+
+//
+// Mailbox property calls for GPU memory and QPU control.
+// All property messages are sent on mailbox channel 8.
+//
+
+uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags)
+{
+
+	uint32_t p[9] __attribute__((aligned(16))) =
+		{
+			9 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000c,			  // (the tag id)
+			3 * sizeof(uint32_t), // (size of the buffer)
+			3 * sizeof(uint32_t), // (size of the data)
+			size,				  // (num bytes)
+			align,				  // (alignment)
+			flags,				  // (MEM_FLAG_L1_NONALLOCATING)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_free(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000f,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_lock(uint32_t handle)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x3000d,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			handle,				  // (handle)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+uint32_t mem_unlock(uint32_t handle)
+{
+uint32_t p[7] __attribute__((aligned(16))) =
+{
+7 * sizeof(uint32_t), // size
+0x00000000,			  // process request
+0x3000e,			  // (the tag id)
+1 * sizeof(uint32_t), // (size of the buffer)
+1 * sizeof(uint32_t), // (size of the data)
+handle,				  // (handle)
+0					  // end tag
+};
+assert(mbox_property(p));
+return p[5];
+}
+
+uint32_t qpu_enable(uint32_t enable)
+{
+
+	uint32_t p[7] __attribute__((aligned(16))) =
+		{
+			7 * sizeof(uint32_t), // size
+			0x00000000,			  // process request
+			0x30012,			  // (the tag id)
+			1 * sizeof(uint32_t), // (size of the buffer)
+			1 * sizeof(uint32_t), // (size of the data)
+			enable,				  // (enable QPU)
+			0					  // end tag
+		};
+	assert(mbox_property(p));
+	return p[5];
+}
+
+unsigned gpu_fft_base_exec_direct(
+uint32_t code,
+uint32_t unifs[],
+int num_qpus)
+{
+//printk("RUNNING WITH %d\n QPUS", num_qpus);
+PUT32(V3D_DBCFG, 0); // Disallow IRQ
+
+	PUT32(V3D_DBQITE, 0);  // Disable IRQ
+	PUT32(V3D_DBQITC, -1); // Resets IRQ flags
+
+	PUT32(V3D_L2CACTL, 1 << 2); // Clear L2 cache
+	PUT32(V3D_SLCACTL, -1);		// Clear other caches
+
+	PUT32(V3D_SRQCS, (1 << 7) | (1 << 8) | (1 << 16)); // Reset error bit and counts
+
+	for (unsigned q = 0; q < num_qpus; q++)
+	{ // Launch shader(s)
+
+		PUT32(V3D_SRQUA, (uint32_t)unifs[q]); // Set the uniforms address
+		PUT32(V3D_SRQPC, (uint32_t)code); // Set the program counter
+	}
+
+
+	// Busy wait polling
+	while (((GET32(V3D_SRQCS) >> 16) & 0xff) != num_qpus);
+
+	return 0;
+}
+
+int vc4_runtime_init(struct vc4_runtime *rt)
+{
+if (!rt)
+return -1;
+if (qpu_enable(1))
+return -1;
+rt->isInitialized = 1;
+rt->active_qpus = VC4_RUNTIME_MAX_QPUS;
+return 0;
+}
+
+void vc4_runtime_shutdown(struct vc4_runtime *rt)
+{
+if (!rt || !rt->isInitialized)
+return;
+qpu_enable(0);
+rt->isInitialized = 0;
+}
+
+uint32_t vc4_runtime_lane_width(void)
+{
+return VC4_RUNTIME_LANE_WIDTH;
+}
+
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt)
+{
+if (!rt)
+return 0;
+return rt->active_qpus;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/mailbox.h =====
+#ifndef BARE_MBOX_H
+#define BARE_MBOX_H
+
+#include <stdint.h>
+#include <stddef.h>
+
+/*
+* Bare-metal Mailbox Interface for Raspberry Pi
+*
+* This header defines the functions for interacting with the GPU's mailbox
+* property interface in a bare-metal environment.
+*
+* Functions:
+*   - mailbox_write(): Write a message to the mailbox.
+*   - mailbox_read():  Read a message from the mailbox.
+*   - mailbox_call():  Send a property message and wait for the response.
+*
+*   - mem_alloc():     Allocate GPU memory.
+*   - mem_free():      Free GPU memory.
+*   - mem_lock():      Lock allocated GPU memory and return its bus address.
+*   - mem_unlock():    Unlock GPU memory.
+*
+*   - qpu_enable():    Enable (or disable) the QPU.
+*   - execute_qpu():   Execute QPU code.
+*
+* All property messages are sent on mailbox channel 8.
+*
+* Note: Ensure that the mailbox message buffers are 16-byte aligned.
+  */
+
+/* Basic mailbox I/O routines */
+void mailbox_write(uint8_t channel, uint32_t data);
+uint32_t mailbox_read(uint8_t channel);
+
+/* Mailbox property call.
+* 'msg' must be 16-byte aligned.
+* Returns nonzero on success (i.e. if msg[1] == 0x80000000).
+  */
+  int mbox_property(uint32_t *msg);
+
+/* GPU memory allocation and management functions.
+*
+* mem_alloc:  Allocates 'size' bytes of GPU memory, with the given 'align'
+*             and 'flags'. Returns a nonzero handle on success.
+*
+* mem_free:   Releases the GPU memory associated with the given handle.
+*
+* mem_lock:   Locks the allocated GPU memory to obtain a bus address.
+*             Returns the bus address on success.
+*
+* mem_unlock: Unlocks the previously locked GPU memory.
+  */
+  uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);
+  uint32_t mem_free(uint32_t handle);
+  uint32_t mem_lock(uint32_t handle);
+  uint32_t mem_unlock(uint32_t handle);
+
+/* QPU control functions.
+*
+* qpu_enable: Enable (or disable) the QPU. Pass 1 to enable, 0 to disable. */
+  uint32_t qpu_enable(uint32_t enable);
+
+unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);
+
+enum {
+VC4_RUNTIME_LANE_WIDTH = 16,
+VC4_RUNTIME_MAX_QPUS = 12,
+};
+
+struct vc4_runtime {
+int isInitialized;
+/* Generic runtime launch policy for the current session. */
+uint32_t active_qpus;
+};
+
+int vc4_runtime_init(struct vc4_runtime *rt);
+void vc4_runtime_shutdown(struct vc4_runtime *rt);
+uint32_t vc4_runtime_lane_width(void);
+uint32_t vc4_runtime_active_qpus(const struct vc4_runtime *rt);
+
+#endif /* BARE_MBOX_H */
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked.qasm =====
+.include "../share/vc4inc/vc4.qinc"
+
+# matmul_blocked reference kernel.
+#
+# CUDA-like blocked f32 matmul:
+#   C[M,N] = A[M,K] * B[K,N]
+#
+# One resident cooperative block computes one 12-row x 16-column C tile.
+#   - one QPU request is one logical 16-lane warp;
+#   - logical_warp_id selects the row inside the block tile;
+#   - ELEMENT_NUMBER selects the column lane inside the 16-column tile;
+#   - VPM rows vpm_base_row .. vpm_base_row+11 hold one shared B K-tile;
+#   - semaphores 0..3 implement the four-semaphore reusable block barrier;
+#   - VPM/VDW setup, VPM reads/writes, and VDW stores are mutex protected.
+#
+# Physical uniform stream order for one logical warp request:
+#   ra0  = A scratch base, row-major with stride padded_k_capacity
+#   ra1  = B scratch base, row-major with stride padded_n_capacity
+#   ra2  = C scratch base, row-major with stride padded_n_capacity
+#   ra3  = logical M
+#   ra4  = logical N
+#   ra5  = logical K, documented ABI only; padding controls the loop bound
+#   ra6  = padded_k_capacity / A row stride
+#   ra7  = padded_n_capacity / B and C row stride
+#   ra8  = tile_row_base
+#   ra9  = tile_col_base
+#   ra10 = logical_warp_id in the resident block, 0..11
+#   ra11 = warps_per_block / K tile rows, normally 12
+#   ra12 = padded K loop bound for this launch, multiple of warps_per_block
+#   ra13 = vpm_base_row, normally 0
+#
+# The launcher pads A and B scratch memory with zeroes.  The qasm therefore
+# computes over padded K rows and padded N columns, but stores only logical
+# columns using dynamic VDW DEPTH.  Rows beyond M are written only to the
+# private padded C scratch and are never copied back to the semantic host C.
+
+mov ra0, unif
+mov ra1, unif
+mov ra2, unif
+mov ra3, unif
+mov ra4, unif
+mov ra5, unif
+mov ra6, unif
+mov ra7, unif
+mov ra8, unif
+mov ra9, unif
+mov ra10, unif
+mov ra11, unif
+mov ra12, unif
+mov ra13, unif
+
+# Keep stride/shape values in the B regfile so multiply/address instructions
+# can read one A-regfile source and one B-regfile source.
+mov rb20, ra6        # A row stride = padded_k_capacity
+mov rb21, ra7        # B/C row stride = padded_n_capacity
+mov rb22, ra11       # warps_per_block, also K tile size
+mov rb23, ra12       # padded K loop bound for this launch
+mov rb24, ra13       # VPM base row for shared B tile
+
+# row = tile_row_base + logical_warp_id.
+mov r0, ra8
+add r0, r0, ra10
+mov ra15, r0
+
+# store_count = min(16, N - tile_col_base).  Host launches only tile_col < N.
+mov r0, 15
+add r0, r0, 1
+mov ra13, r0         # default 16 columns
+mov r1, ra4
+sub r3, r1, ra9      # remaining columns in this tile
+sub.setf -, r3, ra13
+brr.anync -, :store_count_ready
+nop
+nop
+nop
+mov ra13, r3         # tail columns, 1..15
+:store_count_ready
+
+# acc = 0.0 in all lanes.
+mov r2, 0
+
+# kbase = 0.
+mov ra16, 0
+
+:k_tile_check
+# if kbase >= padded_k_limit: store accumulated C vector.
+mov r1, rb23
+sub.setf r1, ra16, r1
+brr.anync -, :store_c_vector
+nop
+nop
+nop
+
+# Each logical warp loads one B row for this K tile into shared VPM:
+#   sharedB[logical_warp_id, lane] = B[kbase + logical_warp_id,
+#                                      tile_col_base + lane]
+mov r0, ra16
+add r0, r0, ra10
+mul24 r0, r0, rb21
+add r0, r0, ra9
+add r0, r0, elem_num
+shl r0, r0, 2
+add t0s, ra1, r0
+nop
+ldtmu0
+mov r3, r4
+
+read mutex_acq
+mov r1, rb24
+add r1, r1, ra10
+mov r0, vpm_setup(1, 1, h32(0))
+add vw_setup, r0, r1
+mov vpm, r3
+read vw_wait
+mov mutex_rel, 0
+
+# Barrier #1: all B rows for this K tile are in VPM before any warp reads them.
+sub.setf -, ra10, 0
+brr.allz -, :barrier_load_leader
+nop
+nop
+nop
+:barrier_load_nonleader
+srel -, 0
+sacq -, 1
+srel -, 2
+sacq -, 3
+brr -, :barrier_load_done
+nop
+nop
+nop
+:barrier_load_leader
+mov r3, rb22
+sub r3, r3, 1
+:barrier_load_arrive_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_load_release_init
+nop
+nop
+nop
+sacq -, 0
+sub r3, r3, 1
+brr -, :barrier_load_arrive_loop
+nop
+nop
+nop
+:barrier_load_release_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_load_release_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_load_depart_init
+nop
+nop
+nop
+srel -, 1
+sub r3, r3, 1
+brr -, :barrier_load_release_loop
+nop
+nop
+nop
+:barrier_load_depart_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_load_depart_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_load_reset_init
+nop
+nop
+nop
+sacq -, 2
+sub r3, r3, 1
+brr -, :barrier_load_depart_loop
+nop
+nop
+nop
+:barrier_load_reset_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_load_reset_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_load_done
+nop
+nop
+nop
+srel -, 3
+sub r3, r3, 1
+brr -, :barrier_load_reset_loop
+nop
+nop
+nop
+:barrier_load_done
+
+# p = 0 .. warps_per_block-1.  For each p, load A[row,kbase+p] as a scalar
+# vector and read shared B[p,lane] from VPM, then accumulate A*B.
+mov ra17, 0
+:p_loop_check
+mov r1, rb22
+sub.setf r1, ra17, r1
+brr.anync -, :p_loop_done
+nop
+nop
+nop
+
+# Queue A[row, kbase+p] as direct TMU0 lookup.  The address vector is the
+# same in every lane, so every lane receives the scalar A value.
+mul24 r0, ra15, rb20
+add r0, r0, ra16
+add r0, r0, ra17
+shl r0, r0, 2
+add t0s, ra0, r0
+
+# Read shared B[p,lane] from VPM while the A lookup is in flight.
+read mutex_acq
+mov r1, rb24
+add r1, r1, ra17
+mov r0, vpm_setup(1, 1, h32(0))
+add vr_setup, r0, r1
+nop
+nop
+nop
+mov r3, vpm
+mov mutex_rel, 0
+
+ldtmu0
+fmul r0, r4, r3
+fadd r2, r2, r0
+
+add ra17, ra17, 1
+brr -, :p_loop_check
+nop
+nop
+nop
+
+:p_loop_done
+# Barrier #2: every warp has finished reading the shared B tile before any
+# warp overwrites those VPM rows for the next K tile.
+sub.setf -, ra10, 0
+brr.allz -, :barrier_read_leader
+nop
+nop
+nop
+:barrier_read_nonleader
+srel -, 0
+sacq -, 1
+srel -, 2
+sacq -, 3
+brr -, :barrier_read_done
+nop
+nop
+nop
+:barrier_read_leader
+mov r3, rb22
+sub r3, r3, 1
+:barrier_read_arrive_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_read_release_init
+nop
+nop
+nop
+sacq -, 0
+sub r3, r3, 1
+brr -, :barrier_read_arrive_loop
+nop
+nop
+nop
+:barrier_read_release_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_read_release_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_read_depart_init
+nop
+nop
+nop
+srel -, 1
+sub r3, r3, 1
+brr -, :barrier_read_release_loop
+nop
+nop
+nop
+:barrier_read_depart_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_read_depart_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_read_reset_init
+nop
+nop
+nop
+sacq -, 2
+sub r3, r3, 1
+brr -, :barrier_read_depart_loop
+nop
+nop
+nop
+:barrier_read_reset_init
+mov r3, rb22
+sub r3, r3, 1
+:barrier_read_reset_loop
+sub.setf -, r3, 0
+brr.allz -, :barrier_read_done
+nop
+nop
+nop
+srel -, 3
+sub r3, r3, 1
+brr -, :barrier_read_reset_loop
+nop
+nop
+nop
+:barrier_read_done
+
+# kbase += warps_per_block.
+add ra16, ra16, rb22
+brr -, :k_tile_check
+nop
+nop
+nop
+
+:store_c_vector
+# Store acc to C[row, tile_col : tile_col + store_count).  The result vector is
+# staged through VPM row 63 and DMA-stored with dynamic DEPTH for N tails.
+read mutex_acq
+
+mov r1, 63
+mov r0, vpm_setup(1, 1, h32(0))
+add vw_setup, r0, r1
+mov vpm, r2
+read vw_wait
+
+# Build VDW setup word with dynamic DEPTH = store_count:
+#   0x80804000 = ID(VDW basic) | UNITS(1) | HORIZ(1) | DEPTH(0)
+#   DEPTH lives in bits [22:16].
+mov r1, ra13
+shl r1, r1, 8
+shl r1, r1, 8
+mov r3, 0x80804000
+add r0, r3, r1
+mov r1, 63
+shl r1, r1, 7
+add vw_setup, r0, r1
+
+# Destination address = C + (row * padded_n_capacity + tile_col_base) * 4.
+mul24 r0, ra15, rb21
+add r0, r0, ra9
+shl r0, r0, 2
+add r0, ra2, r0
+mov vw_addr, r0
+read vw_wait
+
+mov mutex_rel, 0
+
+:end
+# End program.  The final thread-end instruction and two delay slots avoid
+# uniforms, VPM/VDR/VDW, and physical register-file address 14.
+thrend
+nop
+nop
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked_launch.c =====
+#include "rpi.h"
+#include <stddef.h>
+#include <string.h>
+#include "matmul_blocked_launch.h"
+#include "matmul_blockedshader.h"
+
+#define GPU_MEM_FLG 0xC
+#define GPU_BASE 0x40000000
+
+#define V3D_BASE 0x20C00000
+#define V3D_IDENT1 (V3D_BASE + 0x00004)
+#define V3D_L2CACTL (V3D_BASE + 0x00020)
+#define V3D_SLCACTL (V3D_BASE + 0x00024)
+#define V3D_SQRSV0 (V3D_BASE + 0x00410)
+#define V3D_SQRSV1 (V3D_BASE + 0x00414)
+#define V3D_SRQPC (V3D_BASE + 0x00430)
+#define V3D_SRQUA (V3D_BASE + 0x00434)
+#define V3D_SRQCS (V3D_BASE + 0x0043c)
+#define V3D_VPMBASE (V3D_BASE + 0x00504)
+#define V3D_DBCFG (V3D_BASE + 0x00e00)
+#define V3D_DBQITE (V3D_BASE + 0x00e2c)
+#define V3D_DBQITC (V3D_BASE + 0x00e30)
+#define V3D_ERRSTAT (V3D_BASE + 0x00f20)
+
+#define MATMUL_BLOCKED_WARPS_PER_BLOCK 12u
+#define MATMUL_BLOCKED_TILE_COLS 16u
+#define MATMUL_BLOCKED_VPM_URSV_4K 16u
+#define MATMUL_BLOCKED_NUM_UNIFS 14u
+#define MATMUL_BLOCKED_TIMEOUT_USEC 2000000u
+#define MATMUL_BLOCKED_ERRSTAT_RELEVANT_MASK 0x0000efffu
+
+struct matmul_blocked_launch_state
+{
+uint32_t code[sizeof(matmul_blockedshader) / sizeof(uint32_t)];
+uint32_t unif[MATMUL_BLOCKED_WARPS_PER_BLOCK][MATMUL_BLOCKED_NUM_UNIFS];
+uint32_t unif_ptr[MATMUL_BLOCKED_WARPS_PER_BLOCK];
+uint32_t handle;
+
+    uint32_t max_m;
+    uint32_t max_n;
+    uint32_t max_k;
+    uint32_t padded_m;
+    uint32_t padded_n;
+    uint32_t padded_k;
+
+    uint32_t launch_count;
+    uint32_t tile_wave_count;
+    uint32_t timeout_count;
+    uint32_t errstat_relevant_changed_count;
+    uint32_t ident1;
+    uint32_t vpmbase_readback;
+    uint32_t srqcs_after_last_wave;
+
+    float payload[];
+};
+
+static volatile struct matmul_blocked_launch_state *g_state;
+static uint32_t g_handle;
+static uint32_t g_allocations;
+
+static uint32_t gpu_addr(const volatile void *ptr)
+{
+return GPU_BASE + (uint32_t)ptr;
+}
+
+static uint32_t round_up(uint32_t value, uint32_t multiple)
+{
+if (value == 0)
+return 0;
+return ((value + multiple - 1u) / multiple) * multiple;
+}
+
+static size_t matmul_blocked_state_size(
+uint32_t padded_m,
+uint32_t padded_n,
+uint32_t padded_k)
+{
+size_t a_count = (size_t)padded_m * padded_k;
+size_t b_count = (size_t)padded_k * padded_n;
+size_t c_count = (size_t)padded_m * padded_n;
+return offsetof(struct matmul_blocked_launch_state, payload) +
+(a_count + b_count + c_count) * sizeof(float);
+}
+
+static float *matmul_blocked_a_ptr(volatile struct matmul_blocked_launch_state *state)
+{
+return (float *)state->payload;
+}
+
+static float *matmul_blocked_b_ptr(volatile struct matmul_blocked_launch_state *state)
+{
+return (float *)state->payload + (size_t)state->padded_m * state->padded_k;
+}
+
+static float *matmul_blocked_c_ptr(volatile struct matmul_blocked_launch_state *state)
+{
+return matmul_blocked_b_ptr(state) + (size_t)state->padded_k * state->padded_n;
+}
+
+static void reserve_qpu_mask(uint32_t allowed_mask)
+{
+uint32_t sqrsv0 = 0;
+uint32_t sqrsv1 = 0;
+
+    for (uint32_t q = 0; q < 16u; q++)
+    {
+        uint32_t reserve_user_programs =
+            ((allowed_mask & (1u << q)) == 0) ? 1u : 0u;
+
+        if (q < 8u)
+            sqrsv0 |= reserve_user_programs << (4u * q);
+        else
+            sqrsv1 |= reserve_user_programs << (4u * (q - 8u));
+    }
+
+    PUT32(V3D_SQRSV0, sqrsv0);
+    PUT32(V3D_SQRSV1, sqrsv1);
+}
+
+static void clear_qpu_reservations(void)
+{
+PUT32(V3D_SQRSV0, 0);
+PUT32(V3D_SQRSV1, 0);
+}
+
+static void clear_scheduler_and_caches(void)
+{
+PUT32(V3D_DBCFG, 0);
+PUT32(V3D_DBQITE, 0);
+PUT32(V3D_DBQITC, 0xffffffffu);
+PUT32(V3D_L2CACTL, 1u << 2);
+PUT32(V3D_SLCACTL, 0xffffffffu);
+PUT32(V3D_SRQCS, (1u << 0) | (1u << 7) | (1u << 8) | (1u << 16));
+}
+
+static int wait_for_completions(uint32_t expected)
+{
+uint32_t start = (uint32_t)timer_get_usec();
+
+    while ((((GET32(V3D_SRQCS) >> 16) & 0xffu) != expected))
+    {
+        uint32_t now = (uint32_t)timer_get_usec();
+        if ((uint32_t)(now - start) > MATMUL_BLOCKED_TIMEOUT_USEC)
+            return -1;
+    }
+
+    return 0;
+}
+
+static int launch_tile_wave(
+volatile struct matmul_blocked_launch_state *state,
+uint32_t m,
+uint32_t n,
+uint32_t k,
+uint32_t k_padded_limit,
+uint32_t tile_row_base,
+uint32_t tile_col_base)
+{
+(void)m;
+(void)k;
+
+    uint32_t gpuA = gpu_addr(matmul_blocked_a_ptr(state));
+    uint32_t gpuB = gpu_addr(matmul_blocked_b_ptr(state));
+    uint32_t gpuC = gpu_addr(matmul_blocked_c_ptr(state));
+
+    for (uint32_t warp = 0; warp < MATMUL_BLOCKED_WARPS_PER_BLOCK; warp++)
+    {
+        state->unif[warp][0] = gpuA;
+        state->unif[warp][1] = gpuB;
+        state->unif[warp][2] = gpuC;
+        state->unif[warp][3] = m;
+        state->unif[warp][4] = n;
+        state->unif[warp][5] = k;
+        state->unif[warp][6] = state->padded_k;
+        state->unif[warp][7] = state->padded_n;
+        state->unif[warp][8] = tile_row_base;
+        state->unif[warp][9] = tile_col_base;
+        state->unif[warp][10] = warp;
+        state->unif[warp][11] = MATMUL_BLOCKED_WARPS_PER_BLOCK;
+        state->unif[warp][12] = k_padded_limit;
+        state->unif[warp][13] = 0u;
+        state->unif_ptr[warp] = gpu_addr(&state->unif[warp][0]);
+    }
+
+    reserve_qpu_mask(0x0fffu);
+    clear_scheduler_and_caches();
+
+    uint32_t err_before = GET32(V3D_ERRSTAT);
+
+    for (uint32_t warp = 0; warp < MATMUL_BLOCKED_WARPS_PER_BLOCK; warp++)
+    {
+        PUT32(V3D_SRQUA, state->unif_ptr[warp]);
+        PUT32(V3D_SRQPC, (uint32_t)state->code);
+    }
+
+    int rc = wait_for_completions(MATMUL_BLOCKED_WARPS_PER_BLOCK);
+    uint32_t err_after = GET32(V3D_ERRSTAT);
+    state->srqcs_after_last_wave = GET32(V3D_SRQCS);
+    clear_qpu_reservations();
+
+    state->tile_wave_count++;
+
+    if (((err_before ^ err_after) & MATMUL_BLOCKED_ERRSTAT_RELEVANT_MASK) != 0)
+        state->errstat_relevant_changed_count++;
+
+    if (rc < 0)
+    {
+        state->timeout_count++;
+        return -1;
+    }
+
+    return 0;
+}
+
+int matmul_blocked_prepare(
+struct vc4_runtime *rt,
+uint32_t max_m,
+uint32_t max_n,
+uint32_t max_k)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+
+    uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+    if (activeQpus != MATMUL_BLOCKED_WARPS_PER_BLOCK)
+        return -1;
+
+    if (g_state)
+    {
+        if (max_m <= g_state->max_m &&
+            max_n <= g_state->max_n &&
+            max_k <= g_state->max_k)
+            return 0;
+        return -1;
+    }
+
+    uint32_t paddedM = round_up(max_m, MATMUL_BLOCKED_WARPS_PER_BLOCK);
+    uint32_t paddedN = round_up(max_n, MATMUL_BLOCKED_TILE_COLS);
+    uint32_t paddedK = round_up(max_k, MATMUL_BLOCKED_WARPS_PER_BLOCK);
+    if (paddedM < max_m || paddedN < max_n || paddedK < max_k)
+        return -1;
+
+    size_t allocSize = matmul_blocked_state_size(paddedM, paddedN, paddedK);
+    if (allocSize > 0xffffffffu)
+        return -1;
+
+    uint32_t handle = mem_alloc((uint32_t)allocSize, 4096, GPU_MEM_FLG);
+    if (!handle)
+        return -1;
+
+    uint32_t vc = mem_lock(handle);
+    if (!vc)
+    {
+        mem_free(handle);
+        return -1;
+    }
+
+    volatile struct matmul_blocked_launch_state *state =
+        (volatile struct matmul_blocked_launch_state *)(vc - GPU_BASE);
+    memset((void *)state, 0, allocSize);
+
+    state->handle = handle;
+    state->max_m = max_m;
+    state->max_n = max_n;
+    state->max_k = max_k;
+    state->padded_m = paddedM;
+    state->padded_n = paddedN;
+    state->padded_k = paddedK;
+    state->ident1 = GET32(V3D_IDENT1);
+
+    PUT32(V3D_VPMBASE, MATMUL_BLOCKED_VPM_URSV_4K);
+    state->vpmbase_readback = GET32(V3D_VPMBASE);
+
+    memcpy((void *)state->code, matmul_blockedshader, sizeof state->code);
+    for (uint32_t warp = 0; warp < MATMUL_BLOCKED_WARPS_PER_BLOCK; warp++)
+        state->unif_ptr[warp] = gpu_addr(&state->unif[warp][0]);
+
+    g_handle = handle;
+    g_state = state;
+    g_allocations++;
+    return 0;
+}
+
+int matmul_blocked_launch(
+struct vc4_runtime *rt,
+const float *a,
+const float *b,
+float *c,
+uint32_t m,
+uint32_t n,
+uint32_t k)
+{
+if (!rt || !rt->isInitialized)
+return -1;
+if (!g_state)
+return -1;
+if (m > g_state->max_m || n > g_state->max_n || k > g_state->max_k)
+return -1;
+if ((m != 0 && k != 0 && !a) || (k != 0 && n != 0 && !b))
+return -1;
+if (m != 0 && n != 0 && !c)
+return -1;
+
+    float *gpuA = matmul_blocked_a_ptr(g_state);
+    float *gpuB = matmul_blocked_b_ptr(g_state);
+    float *gpuC = matmul_blocked_c_ptr(g_state);
+
+    size_t a_count = (size_t)g_state->padded_m * g_state->padded_k;
+    size_t b_count = (size_t)g_state->padded_k * g_state->padded_n;
+    size_t c_count = (size_t)g_state->padded_m * g_state->padded_n;
+    memset(gpuA, 0, a_count * sizeof(float));
+    memset(gpuB, 0, b_count * sizeof(float));
+    memset(gpuC, 0, c_count * sizeof(float));
+
+    for (uint32_t row = 0; row < m; row++)
+    {
+        if (k != 0)
+            memcpy(gpuA + (size_t)row * g_state->padded_k,
+                   a + (size_t)row * k,
+                   (size_t)k * sizeof(float));
+    }
+
+    for (uint32_t row = 0; row < k; row++)
+    {
+        if (n != 0)
+            memcpy(gpuB + (size_t)row * g_state->padded_n,
+                   b + (size_t)row * n,
+                   (size_t)n * sizeof(float));
+    }
+
+    uint32_t kPaddedLimit = round_up(k, MATMUL_BLOCKED_WARPS_PER_BLOCK);
+    int rc = 0;
+
+    if (m != 0 && n != 0)
+    {
+        for (uint32_t tileRow = 0; tileRow < m; tileRow += MATMUL_BLOCKED_WARPS_PER_BLOCK)
+        {
+            for (uint32_t tileCol = 0; tileCol < n; tileCol += MATMUL_BLOCKED_TILE_COLS)
+            {
+                if (launch_tile_wave(g_state, m, n, k, kPaddedLimit, tileRow, tileCol) < 0)
+                {
+                    rc = -1;
+                    goto done;
+                }
+            }
+        }
+    }
+
+done:
+if (rc == 0 && m != 0 && n != 0)
+{
+for (uint32_t row = 0; row < m; row++)
+{
+memcpy(c + (size_t)row * n,
+gpuC + (size_t)row * g_state->padded_n,
+(size_t)n * sizeof(float));
+}
+}
+
+    g_state->launch_count++;
+    return rc;
+}
+
+void matmul_blocked_release(struct vc4_runtime *rt)
+{
+(void)rt;
+if (!g_state)
+return;
+
+    mem_unlock(g_handle);
+    mem_free(g_handle);
+    g_state = 0;
+    g_handle = 0;
+}
+
+uint32_t matmul_blocked_runtime_allocations(void)
+{
+return g_allocations;
+}
+
+uint32_t matmul_blocked_runtime_launches(void)
+{
+if (!g_state)
+return 0;
+return g_state->launch_count;
+}
+
+uint32_t matmul_blocked_runtime_tile_waves(void)
+{
+if (!g_state)
+return 0;
+return g_state->tile_wave_count;
+}
+
+uint32_t matmul_blocked_runtime_timeouts(void)
+{
+if (!g_state)
+return 0;
+return g_state->timeout_count;
+}
+
+uint32_t matmul_blocked_runtime_errstat_relevant_changed(void)
+{
+if (!g_state)
+return 0;
+return g_state->errstat_relevant_changed_count;
+}
+
+uint32_t matmul_blocked_runtime_vpmbase_readback(void)
+{
+if (!g_state)
+return 0;
+return g_state->vpmbase_readback;
+}
+
+uint32_t matmul_blocked_runtime_ident1(void)
+{
+if (!g_state)
+return 0;
+return g_state->ident1;
+}
+
+uint32_t matmul_blocked_runtime_srqcs_after_last_wave(void)
+{
+if (!g_state)
+return 0;
+return g_state->srqcs_after_last_wave;
+}
+
+uint32_t matmul_blocked_runtime_capacity_m(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_m;
+}
+
+uint32_t matmul_blocked_runtime_capacity_n(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_n;
+}
+
+uint32_t matmul_blocked_runtime_capacity_k(void)
+{
+if (!g_state)
+return 0;
+return g_state->max_k;
+}
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blocked_launch.h =====
+#ifndef MATMUL_BLOCKED_LAUNCH_H
+#define MATMUL_BLOCKED_LAUNCH_H
+
+#include <stdint.h>
+#include "mailbox.h"
+
+/*
+* Public semantic launcher API for matmul_blocked.
+*
+* Computes row-major C[M,N] = A[M,K] * B[K,N] for f32 matrices.
+*
+* CUDA-like cooperative-block shape used by this reference:
+*   - one resident block computes a 12-row x 16-column C tile;
+*   - one QPU request is one logical 16-lane warp;
+*   - logical_warp_id is supplied by the runtime as a uniform;
+*   - ELEMENT_NUMBER is the lane / column within the 16-column tile;
+*   - VPM rows are used as CUDA-like shared memory for a B K-tile;
+*   - a four-semaphore reusable barrier synchronizes the 12 resident warps.
+*
+* Runtime/setup discipline for this test:
+*   - matmul_blocked_prepare() performs the single GPU allocation for this
+*     kernel and copies the assembled qasm code to that allocation exactly once.
+*   - matmul_blocked_launch() only refreshes the already-allocated payload and
+*     uniform streams, then queues the already-resident shader code one tile
+*     wave at a time.
+*   - The bare-metal hardware test keeps the allocation live until the runner
+*     power-cycles the Pi.  This avoids repeated alloc/lock/unlock/free cycles.
+*
+* The public launch API exposes only semantic arguments plus the runtime
+* handle. It does not expose physical QPU IDs, raw uniform arrays, VPM rows,
+* semaphore IDs, or scheduler registers.
+  */
+  int matmul_blocked_prepare(
+  struct vc4_runtime *rt,
+  uint32_t max_m,
+  uint32_t max_n,
+  uint32_t max_k);
+
+int matmul_blocked_launch(
+struct vc4_runtime *rt,
+const float *a,
+const float *b,
+float *c,
+uint32_t m,
+uint32_t n,
+uint32_t k);
+
+/* Optional one-time teardown. The hardware test intentionally does not call it
+* inside the multi-case loop. */
+  void matmul_blocked_release(struct vc4_runtime *rt);
+
+/* Test diagnostics: these do not expose raw uniform streams. */
+uint32_t matmul_blocked_runtime_allocations(void);
+uint32_t matmul_blocked_runtime_launches(void);
+uint32_t matmul_blocked_runtime_tile_waves(void);
+uint32_t matmul_blocked_runtime_timeouts(void);
+uint32_t matmul_blocked_runtime_errstat_relevant_changed(void);
+uint32_t matmul_blocked_runtime_vpmbase_readback(void);
+uint32_t matmul_blocked_runtime_ident1(void);
+uint32_t matmul_blocked_runtime_srqcs_after_last_wave(void);
+uint32_t matmul_blocked_runtime_capacity_m(void);
+uint32_t matmul_blocked_runtime_capacity_n(void);
+uint32_t matmul_blocked_runtime_capacity_k(void);
+
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blockedshader.c =====
+#include "matmul_blockedshader.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef _MSC_VER
+__declspec(align(8))
+#elif defined(__GNUC__)
+__attribute__((aligned(8)))
+#endif
+uint32_t matmul_blockedshader[496] = {
+0x15827d80, 0x10020027,
+0x15827d80, 0x10020067,
+0x15827d80, 0x100200a7,
+0x15827d80, 0x100200e7,
+0x15827d80, 0x10020127,
+0x15827d80, 0x10020167,
+0x15827d80, 0x100201a7,
+0x15827d80, 0x100201e7,
+0x15827d80, 0x10020227,
+0x15827d80, 0x10020267,
+0x15827d80, 0x100202a7,
+0x15827d80, 0x100202e7,
+0x15827d80, 0x10020327,
+0x15827d80, 0x10020367,
+0x151a7d80, 0x10021527,
+0x151e7d80, 0x10021567,
+0x152e7d80, 0x100215a7,
+0x15327d80, 0x100215e7,
+0x15367d80, 0x10021627,
+0x15227d80, 0x10020827,
+0x0c2a7180, 0x10020827,
+0x159e7000, 0x100203e7,
+0x0000000f, 0xe0020827,
+0x0c9c11c0, 0xd0020827,
+0x159e7000, 0x10020367,
+0x15127d80, 0x10020867,
+0x0d267380, 0x100208e7,
+0x0d367780, 0x100229e7,
+0x00000008, 0xf0b809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159e76c0, 0x10020367,
+0x00000000, 0xe00208a7,
+0x00000000, 0xe0020427,
+0x159d7fc0, 0x10020867,
+0x0d427c40, 0x10022867,
+0x000005b8, 0xf0b809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x15427d80, 0x10020827,
+0x0c2a7180, 0x10020827,
+0x409d5007, 0x100049e0,
+0x0c267180, 0x10020827,
+0x0c9a7180, 0x10020827,
+0x119c21c0, 0xd0020827,
+0x0c067c00, 0x10020e27,
+0x009e7000, 0x100009e7,
+0x009e7000, 0xa00009e7,
+0x159e7900, 0x100208e7,
+0x00ce7000, 0x100009e7,
+0x159d8fc0, 0x10020867,
+0x0c2a7380, 0x10020867,
+0x00101a00, 0xe0020827,
+0x0c9e7040, 0x10021c67,
+0x159e76c0, 0x10020c27,
+0x009f2000, 0x100009e7,
+0x00000000, 0xe0020ce7,
+0x0d280dc0, 0xd00229e7,
+0x00000040, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000000, 0xe80009e7,
+0x00000011, 0xe80009e7,
+0x00000002, 0xe80009e7,
+0x00000013, 0xe80009e7,
+0x000001a0, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000010, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000001, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000012, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000003, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000000, 0xe0020467,
+0x159d6fc0, 0x10020867,
+0x0d467c40, 0x10022867,
+0x000000b8, 0xf0b809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x403d4037, 0x100049e0,
+0x0c427180, 0x10020827,
+0x0c467180, 0x10020827,
+0x119c21c0, 0xd0020827,
+0x0c027c00, 0x10020e27,
+0x00ce7000, 0x100009e7,
+0x159d8fc0, 0x10020867,
+0x0c467380, 0x10020867,
+0x00101a00, 0xe0020827,
+0x0c9e7040, 0x10020c67,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x15c27d80, 0x100208e7,
+0x00000000, 0xe0020ce7,
+0x009e7000, 0xa00009e7,
+0x209e7023, 0x100049e0,
+0x019e7400, 0x100208a7,
+0x0c441dc0, 0xd0020467,
+0xffffff18, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x0d280dc0, 0xd00229e7,
+0x00000040, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000000, 0xe80009e7,
+0x00000011, 0xe80009e7,
+0x00000002, 0xe80009e7,
+0x00000013, 0xe80009e7,
+0x000001a0, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000010, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000001, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000012, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x159d6fc0, 0x100208e7,
+0x0d9c17c0, 0xd00208e7,
+0x0d9c07c0, 0xd00229e7,
+0x00000030, 0xf00809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00000003, 0xe80009e7,
+0x0d9c17c0, 0xd00208e7,
+0xffffffa8, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x0c416dc0, 0x10020427,
+0xfffffa18, 0xf0f809e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7,
+0x00ce7000, 0x100009e7,
+0x0000003f, 0xe0020867,
+0x00101a00, 0xe0020827,
+0x0c9e7040, 0x10021c67,
+0x159e7480, 0x10020c27,
+0x009f2000, 0x100009e7,
+0x15367d80, 0x10020867,
+0x119c83c0, 0xd0020867,
+0x119c83c0, 0xd0020867,
+0x80804000, 0xe00208e7,
+0x0c9e7640, 0x10020827,
+0x0000003f, 0xe0020867,
+0x119c73c0, 0xd0020867,
+0x0c9e7040, 0x10021c67,
+0x403d5037, 0x100049e0,
+0x0c267180, 0x10020827,
+0x119c21c0, 0xd0020827,
+0x0c0a7c00, 0x10020827,
+0x159e7000, 0x10021ca7,
+0x009f2000, 0x100009e7,
+0x00000000, 0xe0020ce7,
+0x009e7000, 0x300009e7,
+0x009e7000, 0x100009e7,
+0x009e7000, 0x100009e7
+};
+#ifdef __HIGHC__
+#pragma Align_to(8, matmul_blockedshader)
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/matmul_blockedshader.h =====
+#ifndef matmul_blockedshader_H
+#define matmul_blockedshader_H
+
+#include <inttypes.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern uint32_t matmul_blockedshader[496];
+
+
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/matmul_blocked/reference/run.sh =====
+#!/bin/bash
+set -uo pipefail
+
+echo "ASSEMBLING QASM"
+out=$(vc4asm -c matmul_blockedshader.c -h matmul_blockedshader.h matmul_blocked.qasm 2>&1)
+asm_rc=$?
+
+if [[ $asm_rc -ne 0 ]]; then
+echo "▶ ASSEMBLY FAILED WITH OUTPUT:"
+printf '%s\n' "$out"
+exit "$asm_rc"
+fi
+
+if [[ -n "$out" ]]; then
+echo "▶ ASSEMBLY PRODUCED UNEXPECTED OUTPUT:"
+printf '%s\n' "$out"
+exit 1
+fi
+
+echo "RUNNING MAKE"
+make
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4inc/vc4.qinc =====
+# general definitions
+
+# VPM setup helpers
+.func vdr_setup_0(mpitch, rowlen, nrows, dma)
+# .assert !(mpitch & (mpitch-1)) && !(mpitch & ~0x7fff0)
+.assert !(mpitch & ~0xf)
+.assert rowlen >= 0 && rowlen <= 0x10
+.assert nrows >= 0 && nrows <= 0x10
+.assert !(dma & ~0x7000ffff) && (dma & 0x70000000) != 0x10000000
+# 0x80000000 | ilog2(mpitch/8+1) << 24 | (rowlen & 0xf) << 20 | (nrows & 0xf) << 16 | dma
+0x80000000 | mpitch << 24 | (rowlen & 0xf) << 20 | (nrows & 0xf) << 16 | dma
+.endf
+.func vdr_setup_1(stride)
+.assert !(stride & ~0x1fff)
+0x90000000 | stride
+.endf
+.func vdr_h32(vpitch, y, x)
+.assert vpitch >= 0 && vpitch <= 0x10
+.assert !(y & ~0x3f)
+.assert !(x & ~0xf)
+(vpitch & 0xf) << 12 | y << 4 | x
+.endf
+.func vdr_v32(vpitch, y, x)
+.assert vpitch >= 0 && vpitch <= 0x10
+.assert !(y & ~0x3f)
+.assert !(x & ~0xf)
+(vpitch & 0xf) << 12 | 0x800 | y << 4 | x
+.endf
+.func vdw_setup_0(units, depth, dma)
+.assert units >= 0 && units <= 0x80
+.assert depth >= 0 && depth <= 0x80
+.assert !(dma & ~0x7fff)
+0x80000000 | (units & 0x7f) << 23 | (depth & 0x7f) << 16 | (dma & 0xffff)
+.endf
+.func vdw_setup_1(stride)
+.assert !(stride & ~0xffff) # VPM supports 16 bit stride rather than 13 as documented
+0xc0000000 | stride
+.endf
+.func dma_h32(y, x)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+0x4000 | y << 7 | x << 3
+.endf
+.func dma_h16p(y, x, h)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+.assert !(h & ~1)
+0x4002 | y << 7 | x << 3 | h
+.endf
+.func dma_h8p(y, x, b)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+.assert !(b & ~3)
+0x4004 | y << 7 | x << 3 | b
+.endf
+.func dma_v32(y, x)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+y << 7 | x << 3
+.endf
+.func dma_v16p(y, x, h)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+.assert !(h & ~1)
+2 | y << 7 | x << 3 | h
+.endf
+.func dma_v8p(y, x, b)
+.assert !(y & ~0x7f)
+.assert !(x & ~0xf)
+.assert !(b & ~3)
+4 | y << 7 | x << 3 | b
+.endf
+.func vpm_setup(num, stride, dma)
+.assert num >= 0 && num <= 0x10
+.assert stride >= -0x40 && stride <= 0x40
+.assert !(dma & ~0xfff)
+(num & 0xf) << 20 | (stride & 0x3f) << 12 | dma
+.endf
+.func h32(y)
+.assert !(y & ~0x3f)
+0xa00 | y
+.endf
+.func h16p(y, h)
+.assert !(y & ~0x3f)
+.assert !(h & ~1)
+0x900 | y << 1 | h
+.endf
+.func h16l(y, h)
+.assert !(y & ~0x3f)
+.assert !(h & ~1)
+0xd00 | y << 1 | h
+.endf
+.func h8p(y, b)
+.assert !(y & ~0x3f)
+.assert !(b & ~3)
+0x800 | y << 2 | b
+.endf
+.func h8l(y, b)
+.assert !(y & ~0x3f)
+.assert !(b & ~3)
+0xc00 | y << 2 | b
+.endf
+.func v32(y, x)
+.assert !(y & ~0x30)
+.assert !(x & ~0xf)
+0x200 | y | x
+.endf
+.func v16p(y, x, h)
+.assert !(y & ~0x30)
+.assert !(x & ~0xf)
+.assert !(h & ~1)
+0x100 | (y | x) << 1 | h
+.endf
+.func v16l(y, x, h)
+.assert !(y & ~0x30)
+.assert !(x & ~0xf)
+.assert !(h & ~1)
+0x500 | (y | x) << 1 | h
+.endf
+.func v8p(y, x, b)
+.assert !(y & ~0x30)
+.assert !(x & ~0xf)
+.assert !(b & ~3)
+(y | x) << 2 | b
+.endf
+.func v8l(y, x, b)
+.assert !(y & ~0x30)
+.assert !(x & ~0xf)
+.assert !(b & ~3)
+0x400 | (y | x) << 2 | b
+.endf
+
+# functional semaphore style
+.set sacq(i) sacq0 + i
+.set srel(i) srel0 + i
+
+# operand type query macros
+.set isConstant(x)  x < [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-2]
+.set isLdPE(x)      x >= [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-2] && x < :[0,0,0]
+.set isLdPES(x)     x >= [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,-2] && x < [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2]
+.set isLdPEU(x)     x >= [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] && x < :[0,0,0]
+.set isRegister(x)  x >= :[0,0] && x < :[0,16]
+.set isRegfileA(x)  isRegister(x) && (x & :[0,1]) == :[0,1]
+.set isRegfileB(x)  isRegister(x) && (x & :[0,2]) == :[0,2]
+.set isAccu(x)      isRegister(x) && (x & :[-8,0x34]) == :[32,0] && (x & :[-2,0]) != :[38,0]
+.set isReadable(x)  isRegister(x) && (x & :[0,4]) == :[0,4] || x == r5
+.set isWritable(x)  isRegister(x) && (x & :[0,8]) == :[0,8]
+.set isRotate(x)    isRegister(x) && (x & :[0,0,-1]) != :[0,0]
+.set isSemaphore(x) x >= :[0,16,0] && x <= :[-1,-1]
+.set isLabel(x)     x > :[-1,-1,-1,255]
+.set isSmallImmd(x) isConstant(x) && (!(x+16 & ~0x1f) || !(x-0x3b800000 & 0xf87fffff))
+
+# mathematics
+.func min(x,y)
+.if x < y
+y
+.else
+x
+.endif
+.endf
+.func max(x,y)
+.if x > y
+x
+.else
+y
+.endif
+.endf
+.func ilog2(x) # unsigned!
+.if !(x & ~0x3)
+x - 1 - (x == 3)
+.elseif !(x & ~0xf)
+ilog2(x >>> 2) + 2
+.elseif !(x & ~0xff)
+ilog2(x >>> 4) + 4
+.elseif !(x & ~0xffff)
+ilog2(x >>> 8) + 8
+.else
+ilog2(x >>> 16) + 16
+.endif
+.endf
+.func countBits(x)
+.lset x, x                        - (x >>> 1 & 0x5555555555555555)
+.lset x, (x & 0x3333333333333333) + (x >>> 2 & 0x3333333333333333)
+.lset x, (x & 0x0f0f0f0f0f0f0f0f) + (x >>> 4 & 0x0f0f0f0f0f0f0f0f)
+.lset x, (x & 0x00ff00ff00ff00ff) + (x >>> 8 & 0x00ff00ff00ff00ff)
+.lset x, (x & 0x0000ffff0000ffff) + (x >>> 16 & 0x0000ffff0000ffff)
+(x & 0x00000000ffffffff) + (x >>> 32)
+.endf
+.func reverseBits4(x)
+.lset x, x >>> 1 & 0x5 | (x & 0x5) <<< 1
+x >>> 2 | x <<< 2
+.endf
+.func reverseBits8(x)
+.lset x, x >>> 1 & 0x55 | (x & 0x55) <<< 1
+.lset x, x >>> 2 & 0x33 | (x & 0x33) <<< 2
+x >>> 4 | x <<< 4
+.endf
+.func reverseBits16(x)
+.lset x, x >>> 1 & 0x5555 | (x & 0x5555) <<< 1
+.lset x, x >>> 2 & 0x3333 | (x & 0x3333) <<< 2
+.lset x, x >>> 4 & 0x0f0f | (x & 0x0f0f) <<< 4
+x >>> 8 | x <<< 8
+.endf
+.func reverseBits32(x)
+.lset x, x >>> 1 & 0x55555555 | (x & 0x55555555) <<< 1
+.lset x, x >>> 2 & 0x33333333 | (x & 0x33333333) <<< 2
+.lset x, x >>> 4 & 0x0f0f0f0f | (x & 0x0f0f0f0f) <<< 4
+.lset x, x >>> 8 & 0x00ff00ff | (x & 0x00ff00ff) <<< 8
+x >>> 16 | x <<< 16
+.endf
+.func reverseBits64(x)
+.lset x, x >>> 1 & 0x5555555555555555 | (x & 0x5555555555555555) <<< 1
+.lset x, x >>> 2 & 0x3333333333333333 | (x & 0x3333333333333333) <<< 2
+.lset x, x >>> 4 & 0x0f0f0f0f0f0f0f0f | (x & 0x0f0f0f0f0f0f0f0f) <<< 4
+.lset x, x >>> 8 & 0x00ff00ff00ff00ff | (x & 0x00ff00ff00ff00ff) <<< 8
+.lset x, x >>> 16& 0x0000ffff0000ffff | (x & 0x0000ffff0000ffff) <<< 16
+x >>> 32 | x <<< 32
+.endf
+.func reverseBits(x,n)
+reverseBits64(x<<<(64-n))
+.endf
+.set M_E,       2.7182818284590452354  # e
+.set M_LOG2E,   1.4426950408889634074  # log_2 e
+.set M_LOG10E,  0.43429448190325182765 # log_10 e
+.set M_LN2,     0.69314718055994530942 # log_e 2
+.set M_LN10,    2.30258509299404568402 # log_e 10
+.set M_PI,      3.14159265358979323846 # pi
+.set M_2PI,     6.28318530717958647693 # 2 pi
+.set M_PI_2,    1.57079632679489661923 # pi/2
+.set M_PI_4,    0.78539816339744830962 # pi/4
+.set M_1_PI,    0.31830988618379067154 # 1/pi
+.set M_2_PI,    0.63661977236758134308 # 2/pi
+.set M_2_SQRTPI,1.12837916709551257390 # 2/sqrt pi
+.set M_SQRT2,   1.41421356237309504880 # sqrt 2
+.set M_SQRT1_2, 0.70710678118654752440 # 1/sqrt 2
+.set M_NAN,     0./0.
+.set M_INF,     1./0.
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.c =====
+#include "___HEADERNAME___"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#ifdef _MSC_VER
+__declspec(align(8))
+#elif defined(__GNUC__)
+__attribute__((aligned(8)))
+#endif
+uint32_t ___SYMBOLNAME___[___INSTCOUNT2___] = {
+___HEXDATA___};
+#ifdef __HIGHC__
+#pragma Align_to(8, ___SYMBOLNAME___)
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.h =====
+#ifndef ___SYMBOLNAME____H
+#define ___SYMBOLNAME____H
+
+#include <inttypes.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern uint32_t ___SYMBOLNAME___[___INSTCOUNT2___];
+
+___SYMBOLDEFS___
+#ifdef __cplusplus
+}
+#endif
+#endif
+
+===== compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template2.h =====
+#ifndef ___SYMBOLNAME____H
+#define ___SYMBOLNAME____H
+
+#include <inttypes.h>
+
+struct unspecified__;
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+___SYMBOLIMPORTS___
+#ifdef __cplusplus
+}
+#endif
+
+___SYMBOLPROXIES___
+#endif
+
+
 You are continuing development of a VC4 / Raspberry Pi QPU MLIR backend and its hardware-grounded codegen test corpus.
 
 You are generating “minimal friction workflow” hardware-run test bundles. The user will append a new test specification after this prompt. Produce the new bundle for that specification.
