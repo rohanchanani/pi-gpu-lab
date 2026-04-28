@@ -1,0 +1,33 @@
+TEST_NAME: layernorm_row
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a small row-wise layer normalization kernel using warp-local reductions, SFU reciprocal-square-root, and per-lane normalization.
+
+WHY_THIS_TEST_NOW:
+Layer normalization is a canonical transformer/ML kernel that combines reductions, scalar broadcast, SFU use, and elementwise output. It is a natural next step after warp reduction and GEMV. The first version should be intentionally small and row-local so it can be implemented by one QPU warp per row without cross-QPU barriers.
+
+SEMANTICS:
+For each row of width `W <= 16`, compute `mean = sum(x)/W`, `var = sum((x-mean)^2)/W`, and `out = (x - mean) * rsqrt(var + epsilon) * gamma + beta`. Use scalar `gamma` and `beta` uniforms shared across all elements, not per-channel scale/bias. Support row counts `R` and widths including tails less than 16. CPU reference uses float and tolerance appropriate for SFU approximation.
+
+PUBLIC_LAUNCH_API:
+Expose `int layernorm_row_prepare(struct vc4_runtime *rt, struct layernorm_row_state *state, uint32_t max_rows, uint32_t max_width);`, `int layernorm_row_launch(struct layernorm_row_state *state, const float *input, float *output, uint32_t rows, uint32_t width, float epsilon, float gamma, float beta);`, and shutdown. Public API exposes semantic tensors and scalars only.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate scratch for `max_rows * round_up(max_width,16)` input/output plus guards. Each launch pads private input lanes beyond width with zero and stores only active width elements. Repeated launches update payloads/uniforms in the existing allocation. Use 12 active QPUs, one QPU warp per row, rows distributed by qpu_id.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, rows, width, padded_width, epsilon, gamma, beta, qpu_id, num_qpus. Each QPU handles rows round-robin. For a row, load up to 16 active values through TMU, mask inactive lanes, reduce sum to mean, compute squared deviations and reduce to variance, write variance+epsilon to SFU_RECIPSQRT, wait required latency, then compute normalized output per active lane. Store with dynamic VDW depth equal to width. No VPM shared memory or semaphores are required, but VDW store setup remains mutex-protected.
+
+TEST_CASES:
+Use cases `(rows,width)`: `(0,8)`, `(1,1)`, `(2,4)`, `(3,8)`, `(5,15)`, `(7,16)`, `(13,9)`. Use deterministic inputs that avoid zero variance except for one explicit constant-row case if the CPU reference and epsilon handle it. Use `epsilon=1e-3f`, `gamma=1.25f`, `beta=-0.5f`.
+
+EXPECTED_OUTPUT:
+Print `LAYERNORM_ROW_RUNTIME_SETUP max_rows=13 max_width=16 allocations=1`. Print `LAYERNORM_ROW_CASE case=<id> rows=<r> width=<w> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=layernorm_row status=PASS cases=7 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_rows=13 max_width=16 max_abs_diff=<value> runtime_allocations=1 runtime_launches=7 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=7`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_rows=13`, `max_width=16`, `runtime_allocations=1`, and `runtime_launches=7`. Add `float_max.max_abs_diff = 0.02` to allow SFU reciprocal-square-root approximation differences. Do not require checksum or timing.
+
+NON_GOALS:
+This test does not implement vector gamma/beta, width greater than one QPU warp, batching beyond simple rows, or high-precision numerics. It is a small row-local layernorm correctness smoke.
+
+SPECIAL_NOTES:
+Respect SFU latency: after writing SFU_RECIPSQRT, do not touch r4 for the next two instructions and read the result only at the documented latency. Print the first few mismatches with row/lane details because numerical issues are likely.

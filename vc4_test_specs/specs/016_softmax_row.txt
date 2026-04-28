@@ -1,0 +1,33 @@
+TEST_NAME: softmax_row
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a small row-wise softmax kernel using max reduction, SFU exponentiation, sum reduction, and per-lane normalization.
+
+WHY_THIS_TEST_NOW:
+Softmax is a direct prerequisite for attention and combines the same primitives as layernorm with SFU_EXP instead of reciprocal-square-root. Keeping the first version to row width `<=16` allows one QPU warp per row, avoiding block-wide reductions while still testing numerical stabilization and lane reductions.
+
+SEMANTICS:
+For each row of width `W <= 16`, compute numerically stable softmax: `m = max(x)`, `e_i = exp(x_i - m)`, `s = sum(e_i)`, `out_i = e_i / s`. Rows with `W=0` are not launched; shapes with zero rows are no-op. CPU reference uses standard float `expf` and a tolerance appropriate for VC4 SFU_EXP and reciprocal approximation. Only active lanes are stored; guard values remain sentinel.
+
+PUBLIC_LAUNCH_API:
+Expose `int softmax_row_prepare(struct vc4_runtime *rt, struct softmax_row_state *state, uint32_t max_rows, uint32_t max_width);`, `int softmax_row_launch(struct softmax_row_state *state, const float *input, float *output, uint32_t rows, uint32_t width);`, and shutdown.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate padded row scratch and output guards for max rows/width. Repeated cases update data and uniforms only. Use one QPU warp per row, rows distributed by qpu_id, and tail-safe dynamic store depth for width. If width is zero, the harness should treat the case as a no-op and still count it as a launch only if the launcher actually dispatches.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, rows, width, padded_width, qpu_id, num_qpus. Load one row vector through TMU, mask inactive lanes to `-infinity` for max reduction, reduce max, subtract max, write active lane values to SFU_EXP one vector at a time as supported, respect SFU r4 latency, reduce exponentials to sum, compute reciprocal of sum using SFU_RECIP, multiply exponentials by reciprocal, and store active lanes through VPM/VDW. No VPM shared memory or semaphores are required.
+
+TEST_CASES:
+Use cases `(rows,width)`: `(0,8)`, `(1,1)`, `(2,4)`, `(3,8)`, `(5,15)`, `(7,16)`, `(13,9)`. Use deterministic input values in a small range such as `[-2,2]` to avoid overflow and make tolerances stable. Include one row with all equal values.
+
+EXPECTED_OUTPUT:
+Print `SOFTMAX_ROW_RUNTIME_SETUP max_rows=13 max_width=16 allocations=1`. Print `SOFTMAX_ROW_CASE case=<id> rows=<r> width=<w> mismatches=0 sentinel_mismatches=0 row_sum_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=softmax_row status=PASS cases=7 total_mismatches=0 sentinel_mismatches=0 row_sum_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_rows=13 max_width=16 max_abs_diff=<value> runtime_allocations=1 runtime_launches=7 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=7`, `total_mismatches=0`, `sentinel_mismatches=0`, `row_sum_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_rows=13`, `max_width=16`, `runtime_allocations=1`, and `runtime_launches=7`. Add `float_max.max_abs_diff = 0.03`.
+
+NON_GOALS:
+This test does not implement rows wider than one QPU warp, block-wide softmax, causal masking, attention, or high-precision numerical requirements. It is a small SFU/reduction correctness test.
+
+SPECIAL_NOTES:
+This test is more numerically sensitive than earlier tests. The harness should verify both elementwise tolerance and that each nonempty row sum is close to 1.0, but only `row_sum_mismatches=0` should be an exact oracle field.

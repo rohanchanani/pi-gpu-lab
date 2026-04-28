@@ -1,4 +1,21 @@
-# TEST_NAME<TAB>SPEC_PATH
-# Add tests here, one per line.
-# Example:
-# matmul_blocked	vc4_test_specs/specs/001_matmul_blocked.txt
+# TEST_NAME	SPEC_PATH
+vpm_setup_clobber	vc4_test_specs/specs/001_vpm_setup_clobber.txt
+global_store_coalesced_multi	vc4_test_specs/specs/002_global_store_coalesced_multi.txt
+tmu_strided_load	vc4_test_specs/specs/003_tmu_strided_load.txt
+warp_reduce_sum	vc4_test_specs/specs/004_warp_reduce_sum.txt
+block_reduce_sum	vc4_test_specs/specs/005_block_reduce_sum.txt
+warp_prefix_sum	vc4_test_specs/specs/006_warp_prefix_sum.txt
+shared_transpose_16x16	vc4_test_specs/specs/007_shared_transpose_16x16.txt
+conv1d_3tap	vc4_test_specs/specs/008_conv1d_3tap.txt
+stencil2d_5point_naive	vc4_test_specs/specs/009_stencil2d_5point_naive.txt
+stencil2d_5point_shared	vc4_test_specs/specs/010_stencil2d_5point_shared.txt
+image_sobel_3x3	vc4_test_specs/specs/011_image_sobel_3x3.txt
+image_boxblur_shared	vc4_test_specs/specs/012_image_boxblur_shared.txt
+maxpool2d_2x2	vc4_test_specs/specs/013_maxpool2d_2x2.txt
+gemv_naive_tail	vc4_test_specs/specs/014_gemv_naive_tail.txt
+layernorm_row	vc4_test_specs/specs/015_layernorm_row.txt
+softmax_row	vc4_test_specs/specs/016_softmax_row.txt
+attention_qk_naive	vc4_test_specs/specs/017_attention_qk_naive.txt
+attention_naive_tiny	vc4_test_specs/specs/018_attention_naive_tiny.txt
+flash_attention_tiny	vc4_test_specs/specs/019_flash_attention_tiny.txt
+mandelbrot_masked_loop	vc4_test_specs/specs/020_mandelbrot_masked_loop.txt

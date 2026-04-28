@@ -1,0 +1,34 @@
+TEST_NAME: image_boxblur_shared
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a shared-memory 3x3 grayscale box blur using VPM tile staging and barrier synchronization.
+
+WHY_THIS_TEST_NOW:
+After naive image Sobel and shared stencil, a shared-memory box blur provides an image-model kernel that reuses a local neighborhood from VPM. It is a practical CNN/preprocessing-style primitive and stresses cooperative halo loading, integer neighborhood sums, block-local VPM rows, barrier synchronization, and coalesced stores.
+
+SEMANTICS:
+For a grayscale `uint32_t` image, compute 3x3 box blur with clamp-to-edge boundaries:
+`out[y,x] = floor((sum of 9 clamped neighbor pixels + 4) / 9)` for rounded integer division. Use the low 8 bits of each input word and store the output as `uint32_t`. The primary shared-memory tile is a 12x16 VPM tile containing a one-pixel halo around a 10x14 interior output tile.
+
+PUBLIC_LAUNCH_API:
+Expose `int image_boxblur_shared_prepare(struct vc4_runtime *rt, struct image_boxblur_shared_state *state, uint32_t max_width, uint32_t max_height);`, `int image_boxblur_shared_launch(struct image_boxblur_shared_state *state, const uint32_t *input, uint32_t *output, uint32_t width, uint32_t height, uint32_t tile_origin_x, uint32_t tile_origin_y);`, and shutdown. The public API keeps VPM rows, semaphore ids, and logical warp details private.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Each launch schedules one cooperative 12-warp resident block using VPM rows 0..11 for the input tile, a hidden row for store staging, and semaphores 0..3. All warps are enqueued together and complete before the next case. The harness copies back output and checks only the tile region plus guards. Check relevant ERRSTAT changes.
+
+QPU_KERNEL_SHAPE:
+Each warp loads one row of the 12x16 clamped tile into its VPM row using TMU direct loads. After the barrier, interior warps 1..10 and lanes 1..14 compute the 3x3 sum from VPM. Prefer consuming all 3x3 values from VPM using horizontal row reads and lane rotations or vertical access. Store the 10x14 output tile to global output through VPM/VDW. VPM setup/read/write and VDW store/wait are mutex-protected. No global loads should occur after the barrier except for a documented fallback.
+
+TEST_CASES:
+Use three cases: a `16x12` gradient image at origin `(0,0)`, a `31x19` patterned image at origin `(3,2)`, and a boundary-touching tile near the bottom-right edge. Use deterministic integer patterns and CPU exact reference.
+
+EXPECTED_OUTPUT:
+Print `IMAGE_BOXBLUR_SHARED_RUNTIME_SETUP max_width=31 max_height=19 allocations=1 warps_per_block=12`. Print per-case lines: `IMAGE_BOXBLUR_SHARED_CASE case=<id> width=<w> height=<h> origin_x=<x> origin_y=<y> mismatches=0 sentinel_mismatches=0 checksum=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=image_boxblur_shared status=PASS cases=3 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 warps_per_block=12 runtime_allocations=1 runtime_launches=3 timeouts=0 errstat_relevant_changed=0 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=3`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `warps_per_block=12`, `runtime_allocations=1`, `runtime_launches=3`, `timeouts=0`, and `errstat_relevant_changed=0`.
+
+NON_GOALS:
+This is not a full-image tiled scheduler, not a separable optimized blur, and not an arbitrary convolution. It is one shared-memory tile per launch.
+
+SPECIAL_NOTES:
+Use integer arithmetic for exact verification. Division by 9 can be implemented with a known exact integer method for the limited sum range `0..2295`; if qasm division is too hard, the spec may be narrowed to unrounded sum output, but then the file and README must state that the test validates shared-memory 3x3 sum rather than average.

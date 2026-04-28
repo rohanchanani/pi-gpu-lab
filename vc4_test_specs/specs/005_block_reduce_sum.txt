@@ -1,0 +1,33 @@
+TEST_NAME: block_reduce_sum
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a CUDA-like block reduction across up to 12 QPU warps using VPM shared memory and the locked four-semaphore barrier.
+
+WHY_THIS_TEST_NOW:
+After validating intra-QPU reduction and the reusable barrier, the next canonical primitive is a cooperative block reduction. This test combines per-warp partial sums, VPM shared-memory staging, `gpu.barrier` semantics, and leader finalization in one real algorithm. It is a prerequisite pattern for row reductions, layernorm, softmax, attention, and scientific reductions.
+
+SEMANTICS:
+For each block-shaped input, compute the sum of up to `warps_per_block * 16` float values. Every participating warp first reduces its own 16-lane vector to a partial sum, writes the partial to a VPM row, synchronizes, and then the leader computes the block sum from all partials. The result is stored as one 16-lane vector with the block sum replicated across lanes. The harness verifies the replicated result against a CPU reference.
+
+PUBLIC_LAUNCH_API:
+Expose `int block_reduce_sum_prepare(struct vc4_runtime *rt, struct block_reduce_sum_state *state, uint32_t max_blocks, uint32_t max_values_per_block);`, `int block_reduce_sum_launch(struct block_reduce_sum_state *state, const float *input, float *out, uint32_t blocks, uint32_t values_per_block, uint32_t warps_per_block);`, and shutdown. The public API exposes semantic block count, values per block, and warps per block. It must not expose semaphore ids, VPM rows, qpu_id, num_qpus, or raw uniforms.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and code copy. The launcher schedules cooperative resident waves: all logical warps of one or more resident blocks must be enqueued together, with disjoint VPM rows and semaphore IDs per block. For first implementation, one resident block at a time is acceptable for `warps_per_block=12`; for smaller blocks, two resident blocks may be used only if VPM rows and semaphores are partitioned. Repeated cases update uniforms and payloads inside the same allocation. Use V3D_VPMBASE=16 and check relevant ERRSTAT bits before/after.
+
+QPU_KERNEL_SHAPE:
+Uniforms include input base, output base, blocks, values_per_block, logical block id, logical warp id, warps_per_block, VPM base row, barrier semaphore static group, and qpu_id/num_qpus if needed for diagnostics. Lane id is ELEMENT_NUMBER. Each warp loads one 16-value segment, masks inactive lanes, reduces to a partial, writes the partial vector or a lane-distinctive partial row into VPM, and executes the four-semaphore barrier. The leader reads partial rows from VPM under the mutex, sums them, stores the block result through VPM/VDW, and all warps execute a final barrier before exit so shared rows are not reused early. VPM setup/access and VDW setup/store/wait remain mutex-protected.
+
+TEST_CASES:
+Use cases: one block with `warps_per_block=1, values=1`; one block with `warps_per_block=2, values=31`; one block with `warps_per_block=4, values=64`; one full block with `warps_per_block=12, values=192`; one full block with tail `values=173`; and two or three independent blocks with `warps_per_block=4, values=59` if the launcher supports multi-resident or sequential resident waves. All cases use deterministic small float values.
+
+EXPECTED_OUTPUT:
+Print `BLOCK_REDUCE_SUM_RUNTIME_SETUP max_blocks=<n> max_values_per_block=192 allocations=1`. Print per-case lines: `BLOCK_REDUCE_SUM_CASE case=<id> blocks=<b> warps_per_block=<w> values_per_block=<v> mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> tile_waves=<count> allocations=1`. Print optional `BLOCK_REDUCE_BLOCK` diagnostics for failures. Final line: `VC4_TEST_RESULT name=block_reduce_sum status=PASS cases=6 total_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_values_per_block=192 full_block_pass=1 tail_pass=1 multi_block_pass=<0|1> max_abs_diff=<value> runtime_allocations=1 runtime_launches=6 timeouts=0 errstat_relevant_changed=0 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=6`, `total_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_values_per_block=192`, `full_block_pass=1`, `tail_pass=1`, `runtime_allocations=1`, `runtime_launches=6`, `timeouts=0`, and `errstat_relevant_changed=0`. Use `float_max.max_abs_diff = 0.0005`. If multi-block is implemented, require `multi_block_pass=1`; otherwise set the case list to sequential blocks and use `multi_block_pass=0` as a documented non-goal for this version.
+
+NON_GOALS:
+This test does not implement arbitrary reductions larger than one resident wave, atomics, global reductions across blocks, or performance-tuned tree reductions. It does not relax the VPM mutex rule.
+
+SPECIAL_NOTES:
+Barrier participation must be uniform across every logical warp in the block, including inactive tail lanes. Do not schedule a barrier block unless all its warps can be resident in the wave.

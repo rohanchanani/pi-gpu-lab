@@ -1,0 +1,35 @@
+TEST_NAME: flash_attention_tiny
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate the algorithmic structure of tiny streaming attention using online max/sum accumulation without materializing the score matrix.
+
+WHY_THIS_TEST_NOW:
+Flash attention is an ambitious stress target after naive full attention. The goal is not performance parity but correctness of the streaming algorithm: process K/V entries in small tiles, maintain an online row maximum and denominator, and update the output vector without storing the full `QK^T` matrix. This tests a future compiler direction for memory-frugal attention on a device with only 4 KiB shared memory.
+
+SEMANTICS:
+For each query row, compute the same output as scaled dot-product attention:
+`out = softmax(scale * QK^T) * V`.
+Use the online update form. For a new score `s`, update `m_new = max(m, s)`, `l_new = l * exp(m - m_new) + exp(s - m_new)`, and `acc_new = acc * (l * exp(m - m_new) / l_new) + V * (exp(s - m_new) / l_new)`. Shapes are tiny: `D <= 16`, `K_LEN <= 8`, `Q_LEN <= 4`. CPU reference computes standard naive attention and compares with tolerance.
+
+PUBLIC_LAUNCH_API:
+Expose `int flash_attention_tiny_prepare(struct vc4_runtime *rt, struct flash_attention_tiny_state *state, uint32_t max_q_len, uint32_t max_k_len, uint32_t max_d);`, `int flash_attention_tiny_launch(struct flash_attention_tiny_state *state, const float *q, const float *k, const float *v, float *out, uint32_t q_len, uint32_t k_len, uint32_t d, float scale);`, and shutdown.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate scratch for Q/K/V/output and any VPM rows used for K/V tile staging. Repeated cases update payloads and uniforms only. One QPU warp computes one query row; lanes represent D output dimensions. The implementation may stage one K/V row at a time or a small K/V tile into VPM, but must remain within the 4 KiB VPM budget and use mutex-protected setup/access.
+
+QPU_KERNEL_SHAPE:
+For each query row, initialize online `m=-infinity`, `l=0`, and accumulator vector `acc=0`. For each key row, compute score by reducing `Q[d]*K[k,d]` across lanes, use SFU_EXP and comparisons to update online max/denominator, load V[k,d], and update lane-wise accumulator. At the end, store `acc` as the output row. Use VPM for a small staged K/V tile if helpful and barrier only if multiple warps cooperate; the simplest passing version may avoid cross-QPU cooperation and use one warp per query row. VDW stores are mutex-protected.
+
+TEST_CASES:
+Use shapes `(q_len,k_len,d)`: `(1,1,1)`, `(2,3,4)`, `(3,4,8)`, `(4,7,16)`. Use deterministic small-range Q/K/V values and scale constants. Include a case with equal scores and a case with increasing scores to exercise online max changes.
+
+EXPECTED_OUTPUT:
+Print `FLASH_ATTENTION_TINY_RUNTIME_SETUP max_q_len=4 max_k_len=7 max_d=16 allocations=1`. Print per-case lines: `FLASH_ATTENTION_TINY_CASE case=<id> q_len=<q> k_len=<k> d=<d> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=flash_attention_tiny status=PASS cases=4 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_q_len=4 max_k_len=7 max_d=16 max_abs_diff=<value> runtime_allocations=1 runtime_launches=4 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=4`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_q_len=4`, `max_k_len=7`, `max_d=16`, `runtime_allocations=1`, and `runtime_launches=4`. Add `float_max.max_abs_diff = 0.08`.
+
+NON_GOALS:
+This is not a performance benchmark, not a large tiled flash-attention kernel, not multi-head, not causal, and not optimized. It is an algorithmic streaming-attention correctness smoke.
+
+SPECIAL_NOTES:
+This is intentionally ambitious and may be quarantined by the autorunner. If the model cannot implement SFU-heavy online softmax reliably, it should narrow the implementation to a one-query-row fixed shape but keep the API and expected diagnostics honest.

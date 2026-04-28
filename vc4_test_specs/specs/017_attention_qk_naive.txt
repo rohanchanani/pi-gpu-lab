@@ -1,0 +1,33 @@
+TEST_NAME: attention_qk_naive
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate the first attention-specific kernel by computing a tiny score matrix `S = Q * K^T` without softmax or value projection.
+
+WHY_THIS_TEST_NOW:
+Before full attention, the backend should validate Q/K memory layout and dot-product score generation. This kernel is essentially a tiny matmul/GEMV hybrid shaped like attention: query rows dot key rows. It exercises row-wise reductions, tails in sequence length and head dimension, and coalesced row-vector score stores.
+
+SEMANTICS:
+Given Q with shape `[Q_LEN, D]` and K with shape `[K_LEN, D]`, compute `S[q, k] = scale * Σ_{d=0..D-1} Q[q,d] * K[k,d]`. Use row-major storage. Support `D <= 16` for the first version so one QPU warp can reduce the feature dimension per score vector. Lanes can map to key index `k` for one query row when `K_LEN <= 16`, with each lane computing one score by looping over D. CPU reference verifies all scores.
+
+PUBLIC_LAUNCH_API:
+Expose `int attention_qk_naive_prepare(struct vc4_runtime *rt, struct attention_qk_naive_state *state, uint32_t max_q_len, uint32_t max_k_len, uint32_t max_d);`, `int attention_qk_naive_launch(struct attention_qk_naive_state *state, const float *q, const float *k, float *scores, uint32_t q_len, uint32_t k_len, uint32_t d, float scale);`, and shutdown.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate scratch for max Q, max K, max score matrix plus guards. Repeated cases update payloads/uniforms only. Use one QPU warp per query row, rows distributed by qpu_id. Each warp stores a vector of up to 16 key scores; dynamic store depth handles `k_len` tails. For `q_len=0` or `k_len=0`, no logical scores should be written.
+
+QPU_KERNEL_SHAPE:
+Uniforms: q base, k base, scores base, q_len, k_len, d, scale, qpu_id, num_qpus. Each QPU handles query rows round-robin. Lane id is key index within the K row vector; inactive lanes for `lane >= k_len` are masked and not stored. For each feature dimension `t`, load scalar `Q[q,t]` replicated or loaded per lane as needed, load `K[lane,t]` by TMU, accumulate `Q*K` per lane, multiply by scale, and store the score row through VPM/VDW. No cross-QPU barrier is needed.
+
+TEST_CASES:
+Use shapes `(q_len,k_len,d)`: `(0,4,5)`, `(3,0,5)`, `(1,1,1)`, `(2,3,4)`, `(4,7,8)`, `(5,15,13)`, `(7,16,16)`. Use small deterministic float values and scale values such as `1.0f`, `0.5f`, or `1/sqrt(d)` approximated by host constant.
+
+EXPECTED_OUTPUT:
+Print `ATTENTION_QK_NAIVE_RUNTIME_SETUP max_q_len=7 max_k_len=16 max_d=16 allocations=1`. Print `ATTENTION_QK_NAIVE_CASE case=<id> q_len=<q> k_len=<k> d=<d> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=attention_qk_naive status=PASS cases=7 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_q_len=7 max_k_len=16 max_d=16 max_abs_diff=<value> runtime_allocations=1 runtime_launches=7 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=7`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_q_len=7`, `max_k_len=16`, `max_d=16`, `runtime_allocations=1`, and `runtime_launches=7`. Add `float_max.max_abs_diff = 0.001`.
+
+NON_GOALS:
+This test does not implement softmax, masking, causal attention, value projection, multi-head batching, or K length greater than 16. It is the QK score baseline.
+
+SPECIAL_NOTES:
+Keep D and K_LEN at or below one QPU vector for the first implementation. That makes the mapping idiomatic and avoids block-wide reductions before full attention.

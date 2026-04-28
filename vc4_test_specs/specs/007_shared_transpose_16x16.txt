@@ -1,0 +1,33 @@
+TEST_NAME: shared_transpose_16x16
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a CUDA-like shared-memory transpose of a 16x16 tile using VPM horizontal writes, barrier synchronization, and transposed reads/stores.
+
+WHY_THIS_TEST_NOW:
+Transposition is a canonical shared-memory GPU kernel and a natural test for VC4 VPM because VPM is a structured 2D vector memory rather than arbitrary scalar SRAM. After validating VPM visibility and barriers, this test checks whether the backend can stage a 2D tile in shared memory, synchronize a cooperative block, and store data in a different orientation.
+
+SEMANTICS:
+Given a 16x16 matrix of `uint32_t`, compute its transpose. Output element `B[col][row] = A[row][col]`. Use one cooperative block with four logical QPU warps; each warp handles four input rows over a small loop. All 16 VPM rows are used as shared tile rows. After all rows are staged and a barrier completes, each warp stores four transposed output rows. The CPU reference checks exact integer output.
+
+PUBLIC_LAUNCH_API:
+Expose `int shared_transpose_16x16_prepare(struct vc4_runtime *rt, struct shared_transpose_16x16_state *state);`, `int shared_transpose_16x16_launch(struct shared_transpose_16x16_state *state, const uint32_t *input, uint32_t *output);`, and shutdown. Public API exposes only input and output 256-word buffers.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and one code copy. Prepare allocates scratch for input, output, code, and four uniform streams. Launch copies the 16x16 input into device scratch, initializes output sentinels, assigns one resident block of four warps, semaphores 0..3, VPM rows 0..15, and dispatches the four QPU requests together. Repeated launches in the harness should reuse the same allocation.
+
+QPU_KERNEL_SHAPE:
+Uniforms include input base, output base, logical_warp_id, warps_per_block=4, vpm_base_row=0, semaphore group for block 0, qpu_id, and num_qpus. Each warp loads four contiguous input rows using TMU direct memory lookup and writes each row as one horizontal 32-bit VPM vector to rows `logical_warp_id*4 + r`. Execute the locked four-semaphore barrier. Then read transposed data. Preferred implementation uses VPM vertical 32-bit reads if available and known-good; fallback may use a sequence of horizontal row reads plus lane extraction/rotation if that is more reliable. Store each transposed output row as a coalesced 16-word VDW store. Protect VPM/VDW setup/access with the global mutex except for semaphore operations.
+
+TEST_CASES:
+Use four deterministic input patterns under one runtime allocation: identity-like `A[row][col] = row*16+col`, high-bit tagged `0x70000000 | row<<8 | col`, affine pattern `(row*37 + col*11)`, and sparse diagonal/anti-diagonal sentinels. Each launch handles exactly one 16x16 tile.
+
+EXPECTED_OUTPUT:
+Print `SHARED_TRANSPOSE_16X16_RUNTIME_SETUP allocations=1 active_qpus=12 lanes=16 warps_per_block=4`. Print per-case lines: `SHARED_TRANSPOSE_16X16_CASE case=<id> mismatches=0 sentinel_mismatches=0 checksum=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=shared_transpose_16x16 status=PASS cases=4 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 warps_per_block=4 runtime_allocations=1 runtime_launches=4 timeouts=0 errstat_relevant_changed=0 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=4`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `warps_per_block=4`, `runtime_allocations=1`, `runtime_launches=4`, `timeouts=0`, and `errstat_relevant_changed=0`. Do not require checksum or timing.
+
+NON_GOALS:
+This test does not support arbitrary matrix sizes, bank-conflict optimization, performance-tuned transpose, or arbitrary shared-memory scatter. It is one fixed 16x16 tile designed to validate VPM-as-shared-memory orientation and barrier use.
+
+SPECIAL_NOTES:
+A 16-warp block would exceed the 12-QPU resident limit, so the test intentionally uses four warps, each handling four rows. If VPM vertical access proves fragile, a horizontal-read fallback is acceptable if the README states the limitation.

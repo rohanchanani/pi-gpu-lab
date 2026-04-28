@@ -1,0 +1,33 @@
+TEST_NAME: tmu_strided_load
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate direct TMU global loads for coalesced, strided, offset, and tail-masked read patterns.
+
+WHY_THIS_TEST_NOW:
+The default VC4 load policy for ordinary global memory is TMU direct memory lookup. SAXPY and matmul already use TMU loads in useful kernels, but a focused load test should isolate address formation, stride, offsets, tail-lane padding, and repeated launches without adding substantial arithmetic or shared memory. This test provides the load-side counterpart to the coalesced global-store test.
+
+SEMANTICS:
+For each case, read `n` 32-bit float elements from `input[offset + i * stride]` and compute `out[i] = scale * input[offset + i * stride] + bias`. The input allocation includes enough padding that inactive tail-lane TMU reads stay inside allocated GPU memory. The output guard region past `n` must remain sentinel. The CPU reference uses the same formula and verifies `max_abs_diff <= 0.0001`.
+
+PUBLIC_LAUNCH_API:
+Expose `int tmu_strided_load_prepare(struct vc4_runtime *rt, struct tmu_strided_load_state *state, uint32_t max_input_words, uint32_t max_n);`, `int tmu_strided_load_launch(struct tmu_strided_load_state *state, const float *input, float *out, uint32_t n, uint32_t offset, uint32_t stride, float scale, float bias);`, and shutdown. Public arguments are semantic only: input, output, n, offset, stride, scale, bias. Do not expose qpu_id, num_qpus, TMU registers, raw uniforms, or scratch addresses.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Prepare must allocate once, lock once, copy code once, and precompute uniform streams. The launch function copies the current input payload into already allocated scratch, initializes output guards, updates uniforms, dispatches active QPUs, and copies back only `n` results. Use max input storage large enough for the largest tested `(offset + (n-1)*stride)` plus one padded vector. Use 12 active QPUs and 16 lanes.
+
+QPU_KERNEL_SHAPE:
+Uniform stream: input base, output base, n, offset, stride, scale, bias, qpu_id, num_qpus. Each QPU handles vector chunks round-robin. Per lane, compute logical index `i`, source index `offset + i * stride`, byte address `input_base + 4 * source_index`, issue TMU direct memory lookup by writing TMU0_S, signal TMU read, read result from r4, perform `scale * value + bias`, and store the coalesced output vector through VPM/VDW. Inactive tail lanes may load padded scratch but must not store beyond logical `n`. VPM/VDW store setup remains mutex-protected.
+
+TEST_CASES:
+Use cases such as `(n=0, offset=0, stride=1)`, `(1,0,1)`, `(15,2,1)`, `(16,3,1)`, `(17,1,1)`, `(31,4,2)`, `(32,5,2)`, `(33,7,3)`, `(65,11,4)`, `(191,13,2)`, `(257,17,3)`. Use deterministic input values such as `input[j] = ((j * 17 + 5) % 113) * 0.125f - 6.0f`, `scale=-1.75f`, and `bias=0.5f`. All cases run under one runtime allocation.
+
+EXPECTED_OUTPUT:
+Print `TMU_STRIDED_LOAD_RUNTIME_SETUP max_n=257 max_input_words=<value> allocations=1`. Print one line per case: `TMU_STRIDED_LOAD_CASE case=<id> n=<n> offset=<offset> stride=<stride> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=0.0 launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=tmu_strided_load status=PASS cases=11 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=257 max_stride=4 max_abs_diff=<value> runtime_allocations=1 runtime_launches=11 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=11`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_n=257`, `max_stride=4`, `runtime_allocations=1`, `runtime_launches=11`. Add `float_max.max_abs_diff = 0.0001`. Do not require checksum or elapsed time.
+
+NON_GOALS:
+This test does not validate texture-format sampling, bilinear filtering, shared memory, barriers, global scatter stores, or VPM setup clobber behavior. It uses TMU only for direct 32-bit memory lookup.
+
+SPECIAL_NOTES:
+For direct memory lookup, general-memory TMU reads use the absolute memory address and no texture uniform is automatically consumed. Keep TMU result latency and r4 hazards explicit in qasm. Use padded scratch, not public `n` changes, to keep tail reads inside allocation.

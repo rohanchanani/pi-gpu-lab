@@ -1,0 +1,33 @@
+TEST_NAME: warp_reduce_sum
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a single-QPU 16-lane reduction primitive by summing each input vector and storing a replicated per-vector result.
+
+WHY_THIS_TEST_NOW:
+Reductions are a canonical primitive for ML, scientific computing, softmax, layernorm, GEMV, and attention. Before building block-wide reductions, the backend needs a hardware-run reference for reducing the 16 SIMD lanes within one QPU. This test is intentionally single-warp in semantics: it exercises horizontal vector operations and masking without VPM shared memory or cross-QPU barriers.
+
+SEMANTICS:
+The input is a sequence of logical vectors of up to 16 float elements. For each vector `v`, compute `sum = Σ active_lanes input[v*16 + lane]`. Store an output vector of 16 floats where every active lane contains `sum`; inactive lanes in the final padded vector must not be copied back into the logical output or must remain sentinel in the host-visible guard region. The CPU reference verifies every logical output element for every vector.
+
+PUBLIC_LAUNCH_API:
+Expose `int warp_reduce_sum_prepare(struct vc4_runtime *rt, struct warp_reduce_sum_state *state, uint32_t max_n);`, `int warp_reduce_sum_launch(struct warp_reduce_sum_state *state, const float *input, float *out, uint32_t n);`, and shutdown. The public API exposes only input, output, and logical element count. It does not expose vector count, qpu_id, num_qpus, raw uniform streams, or reduction implementation details.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and one qasm code copy. The launch function pads private input/output scratch to a 16-element boundary, updates uniforms, dispatches 12 active QPUs, and copies back exactly `n` output elements. Run multiple cases in one boot under the same runtime state. The qasm must handle `n=0` and arbitrary tails.
+
+QPU_KERNEL_SHAPE:
+Uniform stream: input base, output base, n, qpu_id, num_qpus. Each QPU processes vector chunks round-robin: vector index starts at qpu_id and strides by num_qpus. The QPU uses TMU direct loads to load the 16 lane values for that vector, masks inactive final-vector lanes to zero before reduction, performs a horizontal sum using a known-good QPU rotation/reduction sequence, and writes the sum replicated across all 16 lanes through VPM/VDW. VPM/VDW setup/store/wait remains protected by the global mutex. No semaphore barrier is required.
+
+TEST_CASES:
+Use deterministic sizes: `0, 1, 2, 15, 16, 17, 31, 32, 33, 191, 192, 193, 511`. Use input values chosen to keep sums exactly representable or numerically stable, such as small multiples of 0.125. Verify output for all logical elements, not just lane 0, so that replication and tail stores are tested.
+
+EXPECTED_OUTPUT:
+Print `WARP_REDUCE_SUM_RUNTIME_SETUP max_n=511 allocations=1`. Print one line per case: `WARP_REDUCE_SUM_CASE case=<id> n=<n> vectors=<ceil> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=warp_reduce_sum status=PASS cases=13 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=511 max_abs_diff=<value> runtime_allocations=1 runtime_launches=13 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=13`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_n=511`, `runtime_allocations=1`, `runtime_launches=13`. Add `float_max.max_abs_diff = 0.0002`. Do not require checksum or elapsed time.
+
+NON_GOALS:
+This test does not validate cross-QPU reductions, VPM shared memory, barriers, arbitrary segmented reductions, or integer reductions. It is only the per-QPU lane-reduction primitive.
+
+SPECIAL_NOTES:
+Use input values that make CPU and QPU floating-point sums stable under the chosen reduction order. If exact agreement is too brittle, keep tolerance modest and print first mismatch with vector index, lane, GPU, CPU, and diff.

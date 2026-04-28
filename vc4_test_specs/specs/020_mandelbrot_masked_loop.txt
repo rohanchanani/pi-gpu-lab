@@ -1,0 +1,33 @@
+TEST_NAME: mandelbrot_masked_loop
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate divergent SIMD-style masked loop behavior by computing Mandelbrot iteration counts for a small image.
+
+WHY_THIS_TEST_NOW:
+Most prior tests emphasize affine tensor kernels. Mandelbrot stresses a different compiler path: per-lane loop masks, iterative control flow, early-exit conditions, integer/float arithmetic, and image-like output. It is useful for a CUDA-like backend because VC4 has SIMD lanes, not independent SIMT program counters, so divergence must be represented with masks/predication.
+
+SEMANTICS:
+For each pixel in a small image, map `(x,y)` to complex coordinate `(cx,cy)`, iterate `z = z^2 + c` while `|z|^2 <= 4` and `iter < max_iter`, and output the iteration count as `uint32_t`. Each SIMD lane has its own active mask; lanes that have escaped stop updating their z value and keep their first escape count. CPU reference computes the same formula with float and exact integer iteration counts.
+
+PUBLIC_LAUNCH_API:
+Expose `int mandelbrot_masked_loop_prepare(struct vc4_runtime *rt, struct mandelbrot_masked_loop_state *state, uint32_t max_width, uint32_t max_height);`, `int mandelbrot_masked_loop_launch(struct mandelbrot_masked_loop_state *state, uint32_t *output, uint32_t width, uint32_t height, float min_x, float min_y, float step_x, float step_y, uint32_t max_iter);`, and shutdown. Public API exposes only semantic image geometry and output buffer.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate output scratch for max image plus guard. Repeated launches update uniforms and sentinel guards only. Use 12 active QPUs and 16 lanes. No input buffer is required. Store output as `uint32_t` through VPM/VDW with dynamic tail depth.
+
+QPU_KERNEL_SHAPE:
+Uniforms: output base, width, height, total_pixels, min_x, min_y, step_x, step_y, max_iter, qpu_id, num_qpus. Each lane maps flat pixel index to x/y, computes cx/cy, initializes zx=0, zy=0, iter=0, active=true. Loop while any lane active and iteration count less than max_iter. Use per-lane predicates/masks to update only active lanes. When a lane first exceeds radius squared 4.0, record the current iteration count and deactivate that lane. Store final counts coalesced through VPM/VDW. No VPM shared memory or semaphores are needed.
+
+TEST_CASES:
+Use image shapes `(1,1)`, `(16,1)`, `(17,3)`, `(31,19)`, and `(32,32)` if runtime fits. Use `max_iter` values 8, 16, 32, and 64. Use deterministic view windows such as `min_x=-2.0`, `min_y=-1.5`, `step_x=3.0/width`, `step_y=3.0/height`. Verify exact iteration counts.
+
+EXPECTED_OUTPUT:
+Print `MANDELBROT_MASKED_LOOP_RUNTIME_SETUP max_width=32 max_height=32 allocations=1`. Print per-case lines: `MANDELBROT_MASKED_LOOP_CASE case=<id> width=<w> height=<h> max_iter=<mi> mismatches=0 sentinel_mismatches=0 checksum=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=mandelbrot_masked_loop status=PASS cases=5 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_width=32 max_height=32 max_iter=64 runtime_allocations=1 runtime_launches=5 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=5`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_width=32`, `max_height=32`, `max_iter=64`, `runtime_allocations=1`, and `runtime_launches=5`.
+
+NON_GOALS:
+This test does not validate high-quality rendering, color mapping, performance, global memory loads, shared memory, or barriers. It is a divergent masked-loop correctness stress.
+
+SPECIAL_NOTES:
+Floating-point differences near the Mandelbrot boundary can change iteration counts. Choose view windows and/or CPU reference constants that are stable on VC4 f32. If exact counts are too brittle, adjust the test window away from boundary-sensitive points rather than weakening the oracle broadly.

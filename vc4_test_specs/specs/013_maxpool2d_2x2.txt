@@ -1,0 +1,33 @@
+TEST_NAME: maxpool2d_2x2
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a canonical CNN 2x2 max-pooling kernel with tails for odd image dimensions.
+
+WHY_THIS_TEST_NOW:
+Max pooling is a simple but important ML/image primitive that tests small-window reductions, 2D indexing, non-unit output shape, boundary/tail behavior for odd dimensions, and coalesced global stores. It is easier than convolution because it uses only four loads and max operations per output, and it does not require shared memory or barriers.
+
+SEMANTICS:
+Given a row-major float input image of shape `height x width`, compute output shape `out_h = ceil(height / 2)`, `out_w = ceil(width / 2)`. For each output `(oy, ox)`, take the maximum of valid input elements in the 2x2 window starting at `(2*oy, 2*ox)`. If width or height is odd, the partial window uses only in-bounds values. CPU reference uses the same rule. Output guard values past `out_h*out_w` must remain sentinel.
+
+PUBLIC_LAUNCH_API:
+Expose `int maxpool2d_2x2_prepare(struct vc4_runtime *rt, struct maxpool2d_2x2_state *state, uint32_t max_width, uint32_t max_height);`, `int maxpool2d_2x2_launch(struct maxpool2d_2x2_state *state, const float *input, float *output, uint32_t width, uint32_t height);`, and shutdown.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate input scratch for max image and output scratch for max pooled image plus guards. Each launch updates input/output scratch and uniforms only. Use 12 QPUs and 16 lanes. For zero width or height, no QPU work should be required and guards must remain intact.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, width, height, out_w, out_h, total_outputs, qpu_id, num_qpus. Each lane maps a flat output index to `(oy, ox)`, computes up to four input indices, handles partial odd-edge windows by substituting a very negative value for missing elements, performs fmax reductions, and stores the result through VPM/VDW with dynamic tail depth. No semaphores or VPM shared memory are required.
+
+TEST_CASES:
+Use shapes `(0,7)`, `(1,1)`, `(2,2)`, `(3,3)`, `(5,7)`, `(16,16)`, `(17,9)`, `(31,19)`. Use deterministic float input values with negative and positive values. Verify all output elements and sentinel guards.
+
+EXPECTED_OUTPUT:
+Print `MAXPOOL2D_2X2_RUNTIME_SETUP max_width=31 max_height=19 allocations=1`. Print `MAXPOOL2D_2X2_CASE case=<id> width=<w> height=<h> out_w=<ow> out_h=<oh> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=maxpool2d_2x2 status=PASS cases=8 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_width=31 max_height=19 max_abs_diff=<value> runtime_allocations=1 runtime_launches=8 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=8`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_width=31`, `max_height=19`, `runtime_allocations=1`, and `runtime_launches=8`. Add `float_max.max_abs_diff = 0.0001`.
+
+NON_GOALS:
+This test does not implement average pooling, channel dimensions, NCHW/NHWC batching, shared-memory pooling, or argmax indices.
+
+SPECIAL_NOTES:
+Use `fmax` and deterministic input values. Ensure qasm handles partial windows on odd width/height without reading outside allocated input scratch.

@@ -1,0 +1,33 @@
+TEST_NAME: gemv_naive_tail
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate naive matrix-vector multiplication with arbitrary row and column tails.
+
+WHY_THIS_TEST_NOW:
+GEMV is a canonical ML inference primitive and a simpler reduction-heavy cousin of matmul. It tests row-wise dot products, column tails, multiple vector chunks per row, and scalar output stores. It reuses concepts from matmul_naive and warp_reduce_sum while adding reduction across a logical row.
+
+SEMANTICS:
+Compute `y[row] = Σ_{col=0..N-1} A[row,N][col] * x[col]` for `M` rows and `N` columns. Inputs are `float`, outputs are `float`. Support `M=0`, `N=0`, small tails, and N larger than 16. If `N=0`, output is zero for each row. CPU reference uses the same accumulation order if possible; tolerance is modest.
+
+PUBLIC_LAUNCH_API:
+Expose `int gemv_naive_tail_prepare(struct vc4_runtime *rt, struct gemv_naive_tail_state *state, uint32_t max_m, uint32_t max_n);`, `int gemv_naive_tail_launch(struct gemv_naive_tail_state *state, const float *a, const float *x, float *y, uint32_t m, uint32_t n);`, and shutdown. Public API exposes only semantic matrix/vector buffers and dimensions.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one allocation/code copy. Allocate scratch for max A, max x padded to lane width, max y plus guard, and per-QPU uniforms. Repeated launches update payloads and uniforms in place. For scalar outputs, the launcher/qasm may store one replicated vector per row into scratch and copy the first word per row to the public y, or use a compact VDW store if implemented; the public semantics remain a dense y vector.
+
+QPU_KERNEL_SHAPE:
+Preferred mapping: one QPU warp computes one output row at a time, with rows distributed round-robin by qpu_id. For each row, lanes iterate over columns in chunks of 16, load A[row,col+lane] and x[col+lane] through TMU, mask tail lanes, accumulate lane partials, reduce across lanes to a row sum, and store the scalar result. VPM/VDW store setup is mutex-protected. No cross-QPU barrier is required.
+
+TEST_CASES:
+Use shapes `(M,N)`: `(0,7)`, `(4,0)`, `(1,1)`, `(3,5)`, `(5,16)`, `(7,17)`, `(12,31)`, `(19,13)`, `(25,33)`. Deterministic inputs should use small multiples of 0.125 or 0.25 to keep tolerance stable.
+
+EXPECTED_OUTPUT:
+Print `GEMV_NAIVE_TAIL_RUNTIME_SETUP max_m=25 max_n=33 allocations=1`. Print `GEMV_NAIVE_TAIL_CASE case=<id> m=<m> n=<n> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=gemv_naive_tail status=PASS cases=9 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_m=25 max_n=33 max_abs_diff=<value> runtime_allocations=1 runtime_launches=9 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=9`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_m=25`, `max_n=33`, `runtime_allocations=1`, and `runtime_launches=9`. Add `float_max.max_abs_diff = 0.001`.
+
+NON_GOALS:
+This test does not implement batched GEMV, optimized caching of x in VPM, shared-memory tiling, or arbitrary transpose layouts. It is the naive baseline.
+
+SPECIAL_NOTES:
+This test is allowed to be slower than ideal. Correct row-wise reduction and tail handling are more important than performance.

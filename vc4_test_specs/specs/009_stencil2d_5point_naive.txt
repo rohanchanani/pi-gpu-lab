@@ -1,0 +1,34 @@
+TEST_NAME: stencil2d_5point_naive
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a naive 2D five-point stencil using direct TMU global loads and coalesced VPM/VDW stores.
+
+WHY_THIS_TEST_NOW:
+A 2D stencil is a canonical scientific-computing kernel and the natural extension of 1D convolution. The naive version should come before shared-memory tiling: it tests 2D indexing, row pitch, multiple neighbor loads, boundary handling, and tail-safe row stores without adding barriers or VPM shared-memory staging.
+
+SEMANTICS:
+For a `height x width` float grid in row-major order, compute for every cell `(y,x)`:
+`out[y,x] = center_weight * in[y,x] + neighbor_weight * (in[y-1,x] + in[y+1,x] + in[y,x-1] + in[y,x+1])`, with clamp-to-edge boundary for neighbor coordinates. Use `center_weight=0.5f` and `neighbor_weight=0.125f` by default. The CPU reference applies the same rule. Output guards beyond `height*width` must remain sentinel.
+
+PUBLIC_LAUNCH_API:
+Expose `int stencil2d_5point_naive_prepare(struct vc4_runtime *rt, struct stencil2d_5point_naive_state *state, uint32_t max_width, uint32_t max_height);`, `int stencil2d_5point_naive_launch(struct stencil2d_5point_naive_state *state, const float *input, float *output, uint32_t width, uint32_t height, float center_weight, float neighbor_weight);`, and shutdown. The public API exposes semantic shape and coefficients only.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and code copy for all cases. Allocate padded input/output scratch sized for `max_width*max_height` rounded for tail-lane safety plus guards. Repeated launches update scratch and uniforms only. Use active_qpus=12 and lane_width=16.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, width, height, total_elements, center_weight, neighbor_weight, qpu_id, num_qpus. Each lane maps a flat output index `i` to `(y=i/width, x=i%width)`. Compute clamped neighbor flat indices and issue five TMU direct memory loads. Accumulate in f32 and store through VPM/VDW with dynamic tail depth. No shared memory or semaphores. VPM/VDW store sequence remains mutex-protected.
+
+TEST_CASES:
+Use shapes `(0,7)`, `(1,1)`, `(2,3)`, `(5,7)`, `(7,5)`, `(16,4)`, `(17,9)`, `(31,19)`, and `(32,32)` if memory fits comfortably. Include odd widths so row-tail logic is exercised. Use deterministic input values based on `i`, `x`, and `y`.
+
+EXPECTED_OUTPUT:
+Print `STENCIL2D_5POINT_NAIVE_RUNTIME_SETUP max_width=32 max_height=32 allocations=1`. Print per-case lines: `STENCIL2D_5POINT_NAIVE_CASE case=<id> width=<w> height=<h> n=<n> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=stencil2d_5point_naive status=PASS cases=9 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_width=32 max_height=32 max_abs_diff=<value> runtime_allocations=1 runtime_launches=9 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=9`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_width=32`, `max_height=32`, `runtime_allocations=1`, and `runtime_launches=9`. Add `float_max.max_abs_diff = 0.0005`.
+
+NON_GOALS:
+This test does not use shared memory, halos staged in VPM, barriers, or optimized row reuse. It is explicitly the naive direct-load stencil baseline.
+
+SPECIAL_NOTES:
+For `width=0` or `height=0`, the launcher should dispatch no logical work and the harness should expect no output changes. The qasm should still be tail-safe for all nonzero cases.

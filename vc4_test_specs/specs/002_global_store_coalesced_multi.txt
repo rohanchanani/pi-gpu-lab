@@ -1,0 +1,33 @@
+TEST_NAME: global_store_coalesced_multi
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate tail-safe coalesced global stores from multiple QPUs through the VC4 VPM/VDW store path.
+
+WHY_THIS_TEST_NOW:
+All real VC4 kernels ultimately depend on VPM/VDW for global stores, because the QPU has no CUDA-like scalar global store instruction. Existing SAXPY and matmul tests use this path, but they mix it with arithmetic and load behavior. This test isolates the generated-store abstraction: vector registers are staged into VPM rows and stored through VDW, with dynamic tail depth, many QPUs writing disjoint contiguous regions, and repeated launches under the one-allocation runtime discipline.
+
+SEMANTICS:
+For each test case, compute `out[i] = 0x51000000 | ((case_id & 0xff) << 16) | (i & 0xffff)` for `i in [0,n)`. Values beyond `n` in a guard region must remain `QPU_STORE_SENTINEL`. The kernel must support arbitrary `n` including zero, less than 16, non-multiple-of-16, non-multiple-of-active-QPUs, and larger than one full active-QPU round. Output values are 32-bit unsigned integers so the oracle is exact.
+
+PUBLIC_LAUNCH_API:
+Expose `int global_store_coalesced_multi_prepare(struct vc4_runtime *rt, struct global_store_coalesced_multi_state *state, uint32_t max_n);`, `int global_store_coalesced_multi_launch(struct global_store_coalesced_multi_state *state, uint32_t *out, uint32_t n, uint32_t case_id);`, and `void global_store_coalesced_multi_shutdown(struct global_store_coalesced_multi_state *state);`. The public launch call exposes only the semantic output buffer, logical element count, and case id. It must not expose qpu_id, num_qpus, VPM rows, uniform streams, VDW setup words, or scheduler registers.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use exactly one GPU allocation and one qasm code copy in prepare. Allocate enough scratch for `max_n` rounded up to lane width plus guard space, per-QPU uniform streams, and code. Repeated launches must only update uniforms/output scratch and queue the already resident code. Use `VC4_RUNTIME_MAX_QPUS=12` and lane width 16. For each launch, initialize the device output scratch and host guard region with a sentinel before dispatch, then copy back only the logical `n` words and verify guards on the host.
+
+QPU_KERNEL_SHAPE:
+Each QPU request receives uniforms: output base bus address, logical n, case_id, qpu_id, num_qpus. Work distribution is vector-chunk round robin: `base = (qpu_id * 16) + chunk * (num_qpus * 16)`, `lane = ELEMENT_NUMBER`, `i = base + lane`. If `base >= n`, the QPU exits. For a partial final vector, compute active lane count and program VDW `DEPTH` so only the valid prefix is stored. VPM/VDW setup/store/wait must be protected by the global mutex. No TMU loads are needed. Final thread end must not touch VPM, VDW, uniforms, or register-file address 14.
+
+TEST_CASES:
+Use deterministic sizes: `0, 1, 2, 15, 16, 17, 31, 32, 33, 191, 192, 193, 255, 256, 257, 767, 768, 769, 1000`. Use distinct case ids matching the case index. This mirrors the tail coverage from saxpy_full but removes arithmetic and load dependencies. The harness must run all cases in one boot through one prepared runtime allocation.
+
+EXPECTED_OUTPUT:
+Print `GLOBAL_STORE_COHERENT_RUNTIME_SETUP max_n=1000 allocations=1 active_qpus=12 lanes=16`. Print one line per case: `GLOBAL_STORE_COHERENT_CASE case=<id> n=<n> qpus=12 lanes=16 mismatches=0 sentinel_mismatches=0 checksum=<deterministic> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=global_store_coalesced_multi status=PASS cases=19 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=1000 checksum_accum=<value> runtime_allocations=1 runtime_launches=19 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=19`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_n=1000`, `runtime_allocations=1`, and `runtime_launches=19`. Do not require checksum or elapsed time.
+
+NON_GOALS:
+This test does not validate TMU loads, floating-point arithmetic, shared memory, barriers, scatter stores, atomics, or VPM setup sharing. It only validates coalesced affine stores through the conservative VPM/VDW path.
+
+SPECIAL_NOTES:
+This is a foundational store-path regression. If it fails, later tensor/image tests should not be trusted. The generated-style launcher must not reject odd `n`; all tail behavior belongs in the qasm/store-depth logic.

@@ -1,0 +1,33 @@
+TEST_NAME: vpm_setup_clobber
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Determine whether the VC4 QPU VPM generic read/write setup state is private per QPU, shared per slice, or shared globally.
+
+WHY_THIS_TEST_NOW:
+The current runtime conservatively protects every VPM setup, VPM access, VDW setup, and VDW store/wait sequence with the global QPU mutex. The earlier VPM slice visibility test established that user-visible VPM storage is one global 4 KiB window, not one 4 KiB window per slice, but it intentionally serialized setup/access and therefore did not answer whether VPM setup registers or FIFOs can be clobbered by another QPU. This test is the next hardware litmus needed before the compiler/runtime can decide whether it may ever relax global-mutex serialization for shared-memory codegen.
+
+SEMANTICS:
+For selected ordered physical QPU pairs `(a, b)`, QPU A programs VPM generic horizontal 32-bit write setup for `CLOBBER_ROWA`, QPU B then programs VPM generic horizontal 32-bit write setup for `CLOBBER_ROWB`, and QPU A subsequently writes a lane-distinctive tag vector to `VPM_WRITE` without reprogramming setup. The test then reads both rows and classifies whether QPU A's data landed in row A, row B, both, or neither. A row-A result means no setup clobber for that pair. A row-B result means B's setup redirected A's later write. The classification is reported, but the stable oracle only requires that the protocol ran validly without timeouts, unexpected QPUs, relevant ERRSTAT changes, or malformed readback.
+
+PUBLIC_LAUNCH_API:
+Expose a semantic low-level diagnostic API in `vpm_setup_clobber_launch.h` that uses a runtime handle and a result buffer, not raw scheduler internals. The API may expose intended QPU pair values because this is explicitly a hardware topology litmus, but it must still keep uniform packing, QPU reservation register programming, code address, and scheduler details private in the launcher implementation. Suggested API: `int vpm_setup_clobber_prepare(struct vc4_runtime *rt, struct vpm_setup_clobber_state *state);`, `int vpm_setup_clobber_run_pair(struct vpm_setup_clobber_state *state, uint32_t qpu_a, uint32_t qpu_b, uint32_t trial, struct vpm_setup_clobber_record *out);`, and `void vpm_setup_clobber_shutdown(struct vpm_setup_clobber_state *state);`.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and one code copy for the entire test. The prepare function must enable QPUs, decode V3D_IDENT1, reserve the 4 KiB user VPM window with V3D_VPMBASE=16 while idle, copy the qasm code once, and allocate reusable uniform streams/result buffers. Each pair run updates uniforms and result buffers in the already allocated memory, reserves all QPUs except the two selected physical QPUs through V3D_SQRSV0/1, queues two copies of the same program, waits for two completions with a timeout, records ERRSTAT before/after, and restores QPU reservations. Test representative pairs first: `(0,1)`, `(0,4)`, `(4,0)`, `(0,8)`, `(8,0)` when topology supports them. If practical, also run all ordered pairs among discovered `num_qpus`; the oracle should record `pairs_run` rather than require a specific matrix size on smaller hardware.
+
+QPU_KERNEL_SHAPE:
+Each queued request reads `QPU_NUMBER` and branches by physical role. A and B synchronize only with semaphore instructions. The clearing phase uses the global mutex and writes zero vectors to `CLOBBER_ROWA` and `CLOBBER_ROWB`. The clobber phase intentionally does not hold the mutex while A writes setup row A, B writes setup row B, and A writes `VPM_WRITE`. Readback and host result stores return to the conservative mutex-protected protocol. Tags must be lane-distinctive: `0xe5000000 | ((a & 15) << 8) | lane`. Store observed row A and row B as 16-word vectors using VPM/VDW. Final thread end must use `nop; thrend` followed by two nops.
+
+TEST_CASES:
+Run a topology discovery header and at least these representative ordered pairs when available: same-slice `(0,1)` and `(1,0)`, cross-slice `(0,QUPS)` and `(QUPS,0)`, and second cross-slice `(0,2*QUPS)` and `(2*QUPS,0)` if `NSLC >= 3`. Include at least three trials per representative pair to catch nondeterministic setup sharing. If all-pairs mode is manageable, run every ordered pair `a != b` once after the representative cases. The test should power-cycle between full test invocations through the outer hardware runner, but not inside reference/run.sh.
+
+EXPECTED_OUTPUT:
+Print `vc4_vpm_setup_clobber_topology.json:` with IDENT1, VPM KiB, QUPS, NSLC, NSEM, VPMBASE write/readback, and num_qpus. Print `vc4_vpm_setup_clobber_matrix.csv:` with `trial,a,b,slice_a,slice_b,row_a_match,row_b_match,classification,errstat_before,errstat_after,timeout`. Print one `SETUP_CLOBBER_PAIR` diagnostic line per pair. Final line: `VC4_TEST_RESULT name=vpm_setup_clobber status=PASS pairs_run=<n> valid_pairs=<n> setup_clobber_count=<n> no_clobber_count=<n> other_count=<n> qpu_mismatches=0 timeouts=0 invalid_topology=0 errstat_relevant_changed=0 runtime_allocations=1 runtime_launches=<n> conclusion_id=<0|1|2|3> elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name=vpm_setup_clobber`, `status=PASS`, `qpu_mismatches=0`, `timeouts=0`, `invalid_topology=0`, `errstat_relevant_changed=0`, and `runtime_allocations=1`. Require `pairs_run` and `valid_pairs` equal to the number the harness deterministically chooses for the detected 12-QPU topology if the harness hard-codes that topology, otherwise require only `valid_pairs` through a stable exact field such as `representative_pairs=6`. Do not require `setup_clobber_count`, `no_clobber_count`, `other_count`, `conclusion_id`, or timing because those are the hardware facts being discovered.
+
+NON_GOALS:
+This test does not prove VPM storage visibility; that was already tested separately. It does not test VDW setup clobbering independently unless the qasm explicitly extends the same pattern to VDW setup. It does not measure performance and must not be used alone to change runtime serialization policy unless the classifications are stable over repeated supervised runs.
+
+SPECIAL_NOTES:
+This test intentionally violates the normal global-mutex rule only in the small setup-clobber window. All clearing, readback, and VDW stores must remain mutex-protected. Use QPU reservations for deterministic physical coverage. If a run times out, subsequent attempts should be power-cycled because semaphore counts may be poisoned. Keep the public launcher API explicitly diagnostic; this is an exception to the normal rule that physical QPU ids are not public semantic kernel arguments.

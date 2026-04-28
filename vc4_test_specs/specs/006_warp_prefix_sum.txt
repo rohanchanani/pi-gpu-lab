@@ -1,0 +1,33 @@
+TEST_NAME: warp_prefix_sum
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a single-QPU 16-lane inclusive prefix-sum primitive with exact integer results and tail masking.
+
+WHY_THIS_TEST_NOW:
+Prefix scan is a canonical GPU primitive distinct from reduction: it requires lane-relative data movement and staged accumulation across the SIMD vector. A warp-local scan test gives the backend a compact control/data dependency stress case before block-wide scans or stream compaction. It should be easier and more deterministic than floating-point softmax or layernorm because it can use small unsigned integers and exact results.
+
+SEMANTICS:
+For each logical 16-element vector, compute inclusive prefix sum: `out[v*16 + lane] = input[v*16 + 0] + ... + input[v*16 + lane]` for active lanes. Inactive tail lanes are ignored and must not update the host-visible guard region. Use unsigned 32-bit input values small enough to avoid overflow. CPU reference computes exact `uint32_t` results.
+
+PUBLIC_LAUNCH_API:
+Expose `int warp_prefix_sum_prepare(struct vc4_runtime *rt, struct warp_prefix_sum_state *state, uint32_t max_n);`, `int warp_prefix_sum_launch(struct warp_prefix_sum_state *state, const uint32_t *input, uint32_t *out, uint32_t n);`, and shutdown. Do not expose physical QPU ids, raw uniforms, or qasm implementation details.
+
+RUNTIME_SETUP_REQUIREMENTS:
+One GPU allocation, one code copy, repeated launches. Private input scratch should be padded to a 16-element boundary with zeros. Output guard region should be initialized with `0xdeadbeef` and verified unchanged past `n`. Use active_qpus=12 and lane_width=16. The launcher updates uniforms and payloads for each case without allocating again.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, n, qpu_id, num_qpus. Each QPU handles vector chunks round-robin. Load one 16-lane vector with TMU direct memory lookup, zero inactive lanes, then perform an inclusive scan using vector rotations and conditional add/mask steps for offsets 1, 2, 4, and 8. Store the result vector through VPM/VDW with dynamic tail depth. VPM/VDW setup/store/wait remains protected by the global mutex. No cross-QPU semaphores are required.
+
+TEST_CASES:
+Use sizes `0, 1, 2, 3, 15, 16, 17, 31, 32, 33, 191, 192, 193, 511`. Use deterministic input values such as `input[i] = ((i * 7 + 3) % 11) + 1`. Verify every active element exactly and verify sentinels past `n`.
+
+EXPECTED_OUTPUT:
+Print `WARP_PREFIX_SUM_RUNTIME_SETUP max_n=511 allocations=1`. Print per-case lines: `WARP_PREFIX_SUM_CASE case=<id> n=<n> vectors=<ceil> mismatches=0 sentinel_mismatches=0 checksum=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=warp_prefix_sum status=PASS cases=14 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=511 runtime_allocations=1 runtime_launches=14 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=14`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_n=511`, `runtime_allocations=1`, and `runtime_launches=14`. Do not require checksum or timing.
+
+NON_GOALS:
+This test does not implement block-wide prefix scan, stream compaction, segmented scan, or floating-point scans. It does not use shared memory or barriers.
+
+SPECIAL_NOTES:
+Use exact integer arithmetic to avoid numerical tolerance ambiguity. If qasm uses small immediates, respect the no-small-immediate-with-B-regfile-read rule by moving B-reg values through accumulators before immediate operations.

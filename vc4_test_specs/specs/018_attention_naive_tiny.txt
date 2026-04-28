@@ -1,0 +1,37 @@
+TEST_NAME: attention_naive_tiny
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate full tiny scaled dot-product attention for one head without materializing a large score matrix.
+
+WHY_THIS_TEST_NOW:
+After QK scores and row softmax, the next canonical transformer kernel is full attention: `softmax(QK^T * scale) * V`. This tiny version focuses on correctness and memory layout, not performance. It should be small enough for one QPU warp per query row and one vector-width value dimension.
+
+SEMANTICS:
+Given Q `[Q_LEN,D]`, K `[K_LEN,D]`, and V `[K_LEN,D]` with `D <= 16` and `K_LEN <= 8`, compute for each query row:
+`score[k] = scale * dot(Q[q], K[k])`;
+`p[k] = softmax(score)[k]`;
+`out[q,d] = Σ_k p[k] * V[k,d]`.
+Output has shape `[Q_LEN,D]`. CPU reference uses stable softmax and verifies tolerance. Use no causal mask in this test.
+
+PUBLIC_LAUNCH_API:
+Expose `int attention_naive_tiny_prepare(struct vc4_runtime *rt, struct attention_naive_tiny_state *state, uint32_t max_q_len, uint32_t max_k_len, uint32_t max_d);`, `int attention_naive_tiny_launch(struct attention_naive_tiny_state *state, const float *q, const float *k, const float *v, float *out, uint32_t q_len, uint32_t k_len, uint32_t d, float scale);`, and shutdown.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and one code copy. Allocate scratch for Q, K, V, output, and any small temporary result area if the implementation uses one. Multiple test cases must update payloads and uniforms in place. Use one QPU warp per query row; lanes correspond to value dimension `d` for the output vector. For `D < 16`, inactive lanes must not store beyond the row width. For zero Q_LEN or K_LEN, handle as no-op or zero-output according to documented semantics.
+
+QPU_KERNEL_SHAPE:
+Each QPU handles query rows round-robin. For a query row, compute scores for each key one at a time. A lane-vector holds the D components. Load Q row and K row through TMU, multiply, reduce across lanes to a scalar score, update a small in-register or VPM temporary score list, compute stable softmax using SFU_EXP and reductions over up to 8 keys, then accumulate the output vector `out[d]` by loading V[k,d] and multiplying by probability `p[k]`. Store the output row through VPM/VDW with dynamic depth D. No inter-QPU barrier is needed. VPM may be used as scratch if helpful; protect VPM/VDW setup/access with mutex.
+
+TEST_CASES:
+Use shapes `(q_len,k_len,d)`: `(0,4,8)`, `(2,0,8)`, `(1,1,1)`, `(2,3,4)`, `(3,4,8)`, `(5,7,16)`. Use deterministic Q/K/V values in a small range such as `[-1,1]`, with scale values `1.0f` or `0.353553f` for D=8. Include one equal-score case so softmax is uniform.
+
+EXPECTED_OUTPUT:
+Print `ATTENTION_NAIVE_TINY_RUNTIME_SETUP max_q_len=5 max_k_len=7 max_d=16 allocations=1`. Print per-case lines: `ATTENTION_NAIVE_TINY_CASE case=<id> q_len=<q> k_len=<k> d=<d> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=attention_naive_tiny status=PASS cases=6 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_q_len=5 max_k_len=7 max_d=16 max_abs_diff=<value> runtime_allocations=1 runtime_launches=6 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=6`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_q_len=5`, `max_k_len=7`, `max_d=16`, `runtime_allocations=1`, and `runtime_launches=6`. Add `float_max.max_abs_diff = 0.05` because SFU_EXP/RECIP approximations may differ from CPU expf.
+
+NON_GOALS:
+This test does not implement batching, multi-head attention, causal masks, dropout, K/V cache, D greater than 16, or optimized tiling. It is a tiny full-attention correctness smoke.
+
+SPECIAL_NOTES:
+If a single qasm kernel is too risky, a multi-kernel bundle is allowed only if all kernels are copied once into fields of a single GPU allocation during prepare, and repeated launches only update uniforms/payloads. The preferred implementation is one kernel per query row to keep the test self-contained.

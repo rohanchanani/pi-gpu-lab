@@ -1,0 +1,33 @@
+TEST_NAME: conv1d_3tap
+TEST_KIND: hardware-run
+ONE_SENTENCE_PURPOSE: Validate a tail-safe 1D three-tap convolution kernel using TMU global loads, uniform coefficients, boundary handling, and VPM/VDW stores.
+
+WHY_THIS_TEST_NOW:
+A 1D convolution is the simplest canonical signal/image-processing kernel beyond elementwise operations. It stresses multiple neighboring global loads per output element, uniform scalar coefficients, boundary rules, and tail-safe stores, while avoiding shared-memory tiling. It is the right bridge from SAXPY/TMU load tests toward 2D stencils and convolutional image kernels.
+
+SEMANTICS:
+For `i in [0,n)`, compute `out[i] = c0 * x[left] + c1 * x[i] + c2 * x[right]`, where `left = (i == 0 ? 0 : i - 1)` and `right = (i + 1 >= n ? n - 1 : i + 1)` using clamp-to-edge boundary behavior. Inputs and outputs are `float`. The CPU reference uses the same boundary rule and verifies a small float tolerance. Output guard values past `n` must remain sentinel.
+
+PUBLIC_LAUNCH_API:
+Expose `int conv1d_3tap_prepare(struct vc4_runtime *rt, struct conv1d_3tap_state *state, uint32_t max_n);`, `int conv1d_3tap_launch(struct conv1d_3tap_state *state, const float *x, float *out, uint32_t n, float c0, float c1, float c2);`, and shutdown. Do not expose qpu_id, num_qpus, TMU details, raw uniforms, or scratch pointers.
+
+RUNTIME_SETUP_REQUIREMENTS:
+Use one GPU allocation and one code copy. Allocate input scratch padded enough for safe tail-lane loads and output scratch plus guard. Each launch copies the current input, initializes output guards, updates coefficients and n in already allocated uniforms, dispatches 12 QPUs, and copies back only `n` outputs. All test cases run under one runtime allocation.
+
+QPU_KERNEL_SHAPE:
+Uniforms: input base, output base, n, c0, c1, c2, qpu_id, num_qpus. Work distribution is vector chunk round-robin. For each active lane, compute logical `i`; derive clamped indices for left/current/right; issue three TMU direct loads; perform two fmul/fadd sequences; and store the coalesced output vector through VPM/VDW with dynamic depth for tails. Inactive lanes must not store beyond `n`. VPM/VDW setup remains mutex-protected. No VPM shared-memory staging or semaphores are needed.
+
+TEST_CASES:
+Use sizes `0, 1, 2, 15, 16, 17, 31, 32, 33, 191, 192, 193, 511`. Use deterministic input values such as `x[i] = ((i*13+7)%97)*0.0625f - 3.0f`. Use coefficients `c0=-0.25f`, `c1=1.5f`, `c2=0.75f` for all cases. Verify every output and guard.
+
+EXPECTED_OUTPUT:
+Print `CONV1D_3TAP_RUNTIME_SETUP max_n=511 allocations=1`. Print `CONV1D_3TAP_CASE case=<id> n=<n> mismatches=0 sentinel_mismatches=0 checksum=<value> max_abs_diff=<value> launches=<count> allocations=1`. Final line: `VC4_TEST_RESULT name=conv1d_3tap status=PASS cases=13 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=511 max_abs_diff=<value> runtime_allocations=1 runtime_launches=13 elapsed_usec=<time>`.
+
+EXPECTED_JSON_ORACLE:
+Require exact `name`, `status`, `cases=13`, `total_mismatches=0`, `sentinel_mismatches=0`, `launch_failures=0`, `active_qpus=12`, `lanes=16`, `max_n=511`, `runtime_allocations=1`, and `runtime_launches=13`. Add `float_max.max_abs_diff = 0.0003`.
+
+NON_GOALS:
+This is not an optimized convolution, not a shared-memory convolution, and not a 2D image kernel. It does not test barriers or VPM shared-memory reuse.
+
+SPECIAL_NOTES:
+Keep clamp-to-edge boundary logic in qasm; do not require the launcher to pre-pad public input. It may pad only private scratch for inactive tail-lane safety.
