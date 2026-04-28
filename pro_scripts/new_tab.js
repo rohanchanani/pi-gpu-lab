@@ -29,6 +29,16 @@ function boolArg(args, name) {
   return /^(1|true|yes|y)$/i.test(String(args[name] || ""));
 }
 
+function intArg(args, name, defaultValue) {
+  const raw = args[name];
+  if (raw === undefined || raw === null || raw === "") return defaultValue;
+  const value = Number.parseInt(String(raw), 10);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new Error(`Invalid integer argument --${name}: ${raw}`);
+  }
+  return value;
+}
+
 function requireArg(args, name) {
   if (!args[name]) {
     throw new Error(`Missing required argument: --${name}`);
@@ -243,12 +253,14 @@ async function lastAssistantText(page) {
   return "";
 }
 
-async function waitForNewAssistantToSettle(page, beforeCount) {
+async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs = 20 * 60 * 1000) {
   let previous = "";
   let stableCount = 0;
   let lastNonEmpty = "";
+  const start = Date.now();
+  const deadline = start + responseTimeoutMs;
 
-  for (let i = 0; i < 240; i++) {
+  while (Date.now() < deadline) {
     await page.waitForTimeout(1000);
 
     const loc = page.locator('[data-message-author-role="assistant"]');
@@ -258,7 +270,7 @@ async function waitForNewAssistantToSettle(page, beforeCount) {
 
     if (count > beforeCount) {
       current = await loc.nth(count - 1).innerText().catch(() => "");
-    } else if (i > 20) {
+     } else if (Date.now() - start > 20000) {
       current = await lastAssistantText(page);
     }
 
@@ -278,13 +290,14 @@ async function waitForNewAssistantToSettle(page, beforeCount) {
   return lastNonEmpty;
 }
 
-async function fillPromptBox(page, promptBox, fullPrompt) {
+async function fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs = 120000) {
   try {
-    await promptBox.fill(fullPrompt, { timeout: 5000 });
+    await promptBox.fill(fullPrompt, { timeout: promptTimeoutMs });
     return;
   } catch (_) {}
 
-  await promptBox.click();
+  await promptBox.scrollIntoViewIfNeeded({ timeout: Math.min(promptTimeoutMs, 30000) }).catch(() => {});
+  await promptBox.click({ timeout: Math.min(promptTimeoutMs, 30000), force: true });
 
   const mod = process.platform === "darwin" ? "Meta" : "Control";
   await page.keyboard.press(`${mod}+A`);
@@ -292,8 +305,8 @@ async function fillPromptBox(page, promptBox, fullPrompt) {
   await page.keyboard.insertText(fullPrompt);
 }
 
-async function submitPrompt(page, promptBox, fullPrompt) {
-  await fillPromptBox(page, promptBox, fullPrompt);
+async function submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs = 120000) {
+  await fillPromptBox(page, promptBox, fullPrompt, promptTimeoutMs);
   await page.waitForTimeout(700);
 
   const sendSelectors = [
@@ -308,12 +321,12 @@ async function submitPrompt(page, promptBox, fullPrompt) {
     if (count === 0) continue;
 
     try {
-      await loc.waitFor({ state: "visible", timeout: 3000 });
+      await loc.waitFor({ state: "visible", timeout: Math.min(promptTimeoutMs, 30000) });
 
       for (let i = 0; i < 10; i++) {
         const disabled = await loc.isDisabled().catch(() => true);
         if (!disabled) {
-          await loc.click({ timeout: 5000 });
+          await loc.click({ timeout: Math.min(promptTimeoutMs, 30000) });
           return;
         }
         await page.waitForTimeout(500);
@@ -338,6 +351,33 @@ async function denyMicIfPossible(browser) {
       } catch (_) {}
     }
   } catch (_) {}
+}
+
+async function dismissBlockingOverlays(page) {
+  const labels = [
+    "Continue",
+    "Accept",
+    "Accept all",
+    "Got it",
+    "OK",
+    "Okay",
+    "Not now",
+    "Maybe later",
+    "Dismiss",
+    "Close",
+  ];
+
+  for (const label of labels) {
+    const loc = page.getByRole("button", { name: label }).last();
+    const count = await loc.count().catch(() => 0);
+    if (count === 0) continue;
+    try {
+      if (await loc.isVisible({ timeout: 500 }).catch(() => false)) {
+        await loc.click({ timeout: 1000 }).catch(() => {});
+        await page.waitForTimeout(300);
+      }
+    } catch (_) {}
+  }
 }
 
 async function dumpDebugState(page, metaDir) {
@@ -401,6 +441,11 @@ async function main() {
   const metaDir = path.join(outDir, ".gpt-web-run");
   const closeTab = boolArg(args, "close-tab");
 
+  const connectTimeoutMs = intArg(args, "connect-timeout-ms", 120000);
+  const pageTimeoutMs = intArg(args, "page-timeout-ms", 120000);
+  const promptTimeoutMs = intArg(args, "prompt-timeout-ms", 120000);
+  const responseTimeoutMs = intArg(args, "response-timeout-ms", 20 * 60 * 1000);
+
   mkdirp(outDir);
   mkdirp(metaDir);
 
@@ -436,7 +481,7 @@ User prompt:
 ${userPrompt}
 `.trim();
 
-  const browser = await chromium.connectOverCDP(CDP_URL);
+  const browser = await chromium.connectOverCDP(CDP_URL, { timeout: connectTimeoutMs });
   let page = null;
 
   try {
@@ -447,24 +492,27 @@ ${userPrompt}
       throw new Error(`No existing Chrome context found at ${CDP_URL}`);
     }
 
-    context.setDefaultTimeout(15000);
+    context.setDefaultTimeout(pageTimeoutMs);
+    context.setDefaultNavigationTimeout(pageTimeoutMs);
 
     page = await context.newPage();
     await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
 
     await page.goto("https://chatgpt.com/", {
       waitUntil: "domcontentloaded",
+      timeout: pageTimeoutMs,
     });
 
     await page.waitForTimeout(3000);
+    await dismissBlockingOverlays(page);
 
-    const promptBox = await findPromptBox(page);
+    const promptBox = await findPromptBox(page, promptTimeoutMs);
     const beforeCount = await assistantCount(page);
 
-    await submitPrompt(page, promptBox, fullPrompt);
+    await submitPrompt(page, promptBox, fullPrompt, promptTimeoutMs);
 
     console.log("Prompt submitted in new ChatGPT tab. Waiting for response to settle...");
-    const answer = await waitForNewAssistantToSettle(page, beforeCount);
+    const answer = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
 
     const answerPath = path.join(metaDir, "answer.md");
     fs.writeFileSync(answerPath, answer || "", "utf8");
@@ -509,8 +557,9 @@ ${userPrompt}
       await page.close().catch(() => {});
     }
 
-    // Default behavior: leave the generated ChatGPT tab open.
-    // Do not call browser.close(); force process exit instead.
+    // Default behavior: leave the generated ChatGPT tab open, but cleanly
+    // detach Playwright from the externally launched Chrome instance.
+    await browser.disconnect().catch(() => {});
     forceProcessExitSoon();
   }
 }

@@ -48,6 +48,8 @@ VC4_OPT_FLAGS = [
 DEFAULT_CHAT_TIMEOUT_SEC = 20 * 60
 DEFAULT_CODEX_TIMEOUT_SEC = 10 * 60
 DEFAULT_STEP_TIMEOUT_SEC = 2 * 60
+DEFAULT_CHAT_INFRA_RETRIES = 3
+DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS = 120000
 
 TEST_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
@@ -545,13 +547,15 @@ def copy_staged_files_into_repo(stage_dir: Path, repo: Path) -> int:
         if src.is_symlink():
             raise DriverError(f"symlink in staged output is not allowed: {src}")
         rel_path = safe_stage_rel(src, stage_dir)
+        if rel_path.parts and rel_path.parts[0] == ".gpt-web-run":
+            continue
         dst = repo / rel_path
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         copied += 1
 
     if copied == 0:
-        raise DriverError("no files were produced in staging output")
+        raise DriverError("no generated files were produced in staging output outside .gpt-web-run metadata")
     return copied
 
 
@@ -664,6 +668,7 @@ def run_attempt(
     chat_timeout_sec: int,
     codex_timeout_sec: int,
     step_timeout_sec: int,
+    browser_internal_timeout_ms: int,
 ) -> AttemptOutcome:
     test_root = repo / "compiler/test/CodeGen/VC4/Hardware/Run" / spec.name
     attempt_name = f"attempt-{attempt_index:02d}"
@@ -685,6 +690,14 @@ def run_attempt(
         str(prompt_path.resolve()),
         "--out",
         str(stage_dir.resolve()),
+        "--connect-timeout-ms",
+        str(browser_internal_timeout_ms),
+        "--page-timeout-ms",
+        str(browser_internal_timeout_ms),
+        "--prompt-timeout-ms",
+        str(browser_internal_timeout_ms),
+        "--response-timeout-ms",
+        str(chat_timeout_sec * 1000),
     ]
 
     chat_result = run_command(
@@ -993,6 +1006,8 @@ def run_one_test(
     chat_timeout_sec: int,
     codex_timeout_sec: int,
     step_timeout_sec: int,
+    chat_infra_retries: int,
+    browser_internal_timeout_ms: int,
 ) -> tuple[str, bool]:
     """
     Returns (status, have_context_tab_after), where status is passed/incomplete.
@@ -1007,6 +1022,7 @@ def run_one_test(
     )
 
     last_failure: Optional[Failure] = None
+    chat_infra_failures = 0
 
     while True:
         print(
@@ -1025,6 +1041,7 @@ def run_one_test(
             chat_timeout_sec=chat_timeout_sec,
             codex_timeout_sec=codex_timeout_sec,
             step_timeout_sec=step_timeout_sec,
+            browser_internal_timeout_ms=browser_internal_timeout_ms,
         )
 
         if outcome.passed:
@@ -1040,6 +1057,25 @@ def run_one_test(
 
         assert outcome.failure is not None
         last_failure = outcome.failure
+
+        if last_failure.stage == "chat":
+            chat_infra_failures += 1
+            print(
+                f"[vc4-auto] CHAT INFRA FAILURE {spec.name} "
+                f"retry={chat_infra_failures}/{chat_infra_retries}"
+            )
+            if chat_infra_failures <= chat_infra_retries:
+                attempt_index += 1
+                # Retry the same model prompt. This is a browser/CDP/UI failure,
+                # not a model repair opportunity and not a test failure.
+                continue
+            raise DriverError(
+                f"ChatGPT browser automation failed {chat_infra_failures} times for {spec.name}; "
+                "aborting without marking the test incomplete. Check Chrome remote debugging, login state, "
+                "and .vc4_auto/logs for screenshots/answers."
+            )
+
+        chat_infra_failures = 0
         print(
             f"[vc4-auto] FAIL {spec.name} stage={last_failure.stage} "
             f"fixes_used={fixes_used}/{max_fixes}"
@@ -1088,6 +1124,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--chat-timeout-sec", type=int, default=DEFAULT_CHAT_TIMEOUT_SEC)
     parser.add_argument("--codex-timeout-sec", type=int, default=DEFAULT_CODEX_TIMEOUT_SEC)
     parser.add_argument("--step-timeout-sec", type=int, default=DEFAULT_STEP_TIMEOUT_SEC)
+    parser.add_argument("--chat-infra-retries", type=int, default=DEFAULT_CHAT_INFRA_RETRIES,
+                        help="browser/CDP/UI retries before aborting without marking incomplete")
+    parser.add_argument("--browser-internal-timeout-ms", type=int, default=DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS,
+                        help="timeout passed into new_tab/current_tab for CDP, page, and prompt operations")
     parser.add_argument("--only", default="", help="comma-separated test names to run")
     parser.add_argument("--allow-dirty", action="store_true")
     parser.add_argument(
@@ -1166,6 +1206,8 @@ def main(argv: Optional[list[str]] = None) -> int:
             chat_timeout_sec=args.chat_timeout_sec,
             codex_timeout_sec=args.codex_timeout_sec,
             step_timeout_sec=args.step_timeout_sec,
+            chat_infra_retries=args.chat_infra_retries,
+            browser_internal_timeout_ms=args.browser_internal_timeout_ms,
         )
         print(f"[vc4-auto] DONE {spec.name}: {status}")
 
