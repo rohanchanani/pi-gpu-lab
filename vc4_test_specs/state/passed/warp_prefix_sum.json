@@ -1,0 +1,10 @@
+{
+  "name": "warp_prefix_sum",
+  "status": "passed",
+  "completed_utc": "2026-04-28T10:30:49.673957+00:00",
+  "attempts_used": 4,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/warp_prefix_sum/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=warp_prefix_sum status=PASS cases=14 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=511 checksum_accum=62730 runtime_allocations=1 runtime_launches=14 elapsed_usec=143911"
+}
