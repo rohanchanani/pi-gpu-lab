@@ -1,0 +1,20 @@
+{
+  "name": "matmul_naive",
+  "status": "PASS",
+  "required": {
+    "cases": 10,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_m": 19,
+    "max_n": 31,
+    "max_k": 13,
+    "runtime_allocations": 1,
+    "runtime_launches": 10
+  },
+  "float_max": {
+    "max_abs_diff": 0.0005
+  }
+}

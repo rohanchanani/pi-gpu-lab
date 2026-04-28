@@ -1,20 +1,22 @@
 # VC4-as-CUDA Mapping Guide for an MLIR Backend
 
-**Status:** Working and now partially hardware-validated design for a CUDA-like abstraction over Raspberry Pi VideoCore IV / VC4 general-purpose QPU execution.
+**Status:** Working and hardware-validated design for a CUDA-like abstraction over Raspberry Pi VideoCore IV / VC4 general-purpose QPU execution.
 
 **Intended reader:** Compiler/runtime implementer building an MLIR backend that wants VC4 kernels to *look* as much like CUDA kernels as possible while preserving VC4 correctness.
 
 **Core conclusion:** Model the Raspberry Pi VC4 GPU as **one tiny CUDA-like SM** with **12 physical warp slots**, **16 SIMD lanes per warp**, and **one global 4 KiB user-visible shared-memory window** backed by VPM.
 
+**Runtime-image conclusion:** A VC4 “CUDA” program should have **one persistent device-visible program allocation**. That allocation owns the compiled kernel code blobs, kernel descriptors, uniform streams, uniform-pointer arrays, VPM/semaphore scheduling metadata, and any fixed test/runtime payloads. Each compiled kernel is copied into that allocation **once** during runtime/program setup. Later kernel launches reuse the same device code address and only rewrite the relevant uniform streams and scheduling metadata.
+
 **Current validation status:**
 
 ```text
-Targeted qpu_num test:              PASS
-VPM slice visibility test:          PASS
-QPU semaphore barrier / syncthreads: PASS
+Targeted qpu_num test:                   PASS
+VPM slice visibility test:               PASS
+QPU semaphore barrier / __syncthreads(): PASS
 ```
 
-The `__syncthreads()` implementation described here is now considered **locked for first compiler implementation**, subject to the invariants in Sections 10 and 20.
+The `__syncthreads()` implementation described here is considered **locked for first compiler implementation**, subject to the invariants in Sections 8, 10, 11, 16, and 17.
 
 ---
 
@@ -49,10 +51,6 @@ Therefore the user-visible generic QPU window is:
 
 The guide also defines `V3D_VPMBASE.VPMURSV` as the amount of VPM reserved **for all user programs**, in units of 256 bytes.
 
-The guide documents sixteen system-wide 4-bit counting semaphores. Each QPU can increment or decrement one of those semaphores using the semaphore instruction. A decrement stalls if the semaphore count is zero; an increment stalls if the count is already fifteen.
-
-The guide also documents one global QPU mutex shared between all QPUs. This guide uses that mutex conservatively for VPM/VDW setup and DMA-store sequences until a dedicated setup-clobber test proves which setup states are private and which are shared.
-
 ### 1.2 Measured facts from the current Raspberry Pi VC4 test setup
 
 The `vpm_slice_visibility` hardware test observed this topology:
@@ -80,112 +78,31 @@ three independent 4 KiB windows, one per 4-QPU slice
 
 The corrected `qpu_num` test established that the physical QPUs are individually runnable when the host uses `V3D_SQRSV0/1` to reserve all QPUs except the target. Do not infer physical QPU assignment from the order in which short user-program requests are queued.
 
-### 1.3 Measured facts from the `qpu_barrier_syncthreads` hardware test
-
-The `qpu_barrier_syncthreads` hardware test observed the same topology:
+The `qpu_barrier_syncthreads` hardware test established that a four-semaphore reusable barrier can act as the first backend implementation of CUDA-like `__syncthreads()` when the runtime guarantees full residency of all participating block warps. The test passed:
 
 ```text
-V3D_IDENT1 = 0xc1102431
-VPMSZ      = 12 KiB physical VPM
-QUPS       = 4 QPUs per slice
-NSLC       = 3 slices
-num_qpus   = 12
-NSEM       = 16 semaphores
-VPMBASE    = 16 reservation units = 4096 bytes
+same-slice 2-warp smoke test
+cross-slice 0↔1 2-warp test
+cross-slice 0↔2 2-warp test
+full 12-QPU / 12-warp block stress test, 64 iterations
+two-resident-block partition test, 2 blocks × 4 warps/block, 32 iterations
 ```
 
-It validated a reusable QPU semaphore barrier intended to implement CUDA-like `__syncthreads()`.
+### 1.3 Backend policy facts introduced by this specification
 
-The test passed all of these cases:
+This compiler/runtime design additionally adopts these ABI/runtime policies:
 
 ```text
-same_slice_smoke:
-    blocks=1
-    warps_per_block=2
-    iterations=4
-    expected_qpu_mask=0x3
-    observed_qpu_mask=0x3
-    mismatches=0
-    timeout=0
-
-cross_slice_0_1:
-    blocks=1
-    warps_per_block=2
-    iterations=4
-    expected_qpu_mask=0x11
-    observed_qpu_mask=0x11
-    mismatches=0
-    timeout=0
-
-cross_slice_0_2:
-    blocks=1
-    warps_per_block=2
-    iterations=4
-    expected_qpu_mask=0x101
-    observed_qpu_mask=0x101
-    mismatches=0
-    timeout=0
-
-full_block_stress:
-    blocks=1
-    warps_per_block=12
-    total_requests=12
-    iterations=64
-    expected_qpu_mask=0xfff
-    observed_qpu_mask=0xfff
-    every warp all_seen=0xfff
-    every warp always_seen=0xfff
-    mismatches=0
-    timeout=0
-
-two_block_partition:
-    blocks=2
-    warps_per_block=4
-    total_requests=8
-    iterations=32
-    expected_qpu_mask=0xff
-    observed_qpu_mask=0xff
-    every block-local warp all_seen=0xf
-    every block-local warp always_seen=0xf
-    mismatches=0
-    timeout=0
+1. One persistent device-visible program allocation per compiled VC4 CUDA-like program.
+2. One runtime/program struct owns all generated QPU kernel code fields.
+3. Each kernel code blob is copied to device-visible memory exactly once during setup.
+4. Later launches enqueue the already-resident code address using SRQPC.
+5. Uniform streams are persistent fields inside the same allocation and are overwritten per launch.
+6. Uniform-pointer arrays gain a kernel dimension: kernel_id × request_id.
+7. Uniform streams are non-rectangular across kernels because different kernels may have different uniform counts.
 ```
 
-Final result:
-
-```text
-VC4_TEST_RESULT name=qpu_barrier_syncthreads status=PASS
-same_slice_pass=1
-cross_slice_0_1_pass=1
-cross_slice_0_2_pass=1
-full_block_pass=1
-multi_block_pass=1
-qpu_mismatches=0
-data_mismatches=0
-timeouts=0
-invalid_topology=0
-errstat_relevant_changed=0
-```
-
-Interpretation:
-
-```text
-The semaphore barrier is valid as the first implementation of CUDA-like
-__syncthreads() for resident logical QPU warps in one block.
-```
-
-More precisely:
-
-```text
-The barrier synchronizes same-slice QPUs.
-The barrier synchronizes cross-slice QPUs.
-The barrier works for a full 12-QPU block.
-The barrier works across many repeated generations.
-The barrier works for multiple resident blocks when VPM rows and semaphore IDs are partitioned per block.
-VPM writes before the barrier are visible to participating block warps after the barrier under the tested protocol.
-```
-
-The test does **not** prove that oversubscribed blocks can safely wait at barriers. They cannot. The runtime must only schedule barrier-participating blocks when all their logical warps can be resident.
+This policy is conceptually similar to CUDA’s “first launch is slow” behavior, where driver setup, JIT compilation, module loading, and code upload may occur lazily. For this VC4 backend, that work should be done **eagerly** during runtime/program setup instead of being hidden inside the first kernel launch.
 
 ---
 
@@ -201,21 +118,23 @@ max logical threads per SM:       192
 max logical threads per block:    192
 shared memory per SM:             4096 bytes
 shared memory per block:          up to 4096 bytes, subject to occupancy
-semaphores per SM:                16 hardware counting semaphores
-recommended semaphores per block: 4 if __syncthreads() is used
+persistent program allocations:   1 per compiled program/runtime instance
+kernel code residency:            copied once during setup, reused thereafter
 ```
 
 This is the central abstraction:
 
 ```text
-CUDA-ish device   -> one VC4 V3D/QPU complex
-CUDA SM           -> the whole VC4 general-QPU execution domain
-CUDA warp         -> one QPU user program, 16 SIMD lanes
-CUDA lane         -> one QPU SIMD element
-CUDA thread       -> one SIMD lane in one logical QPU warp
-CUDA thread block -> a cooperative group of 1..12 logical QPU warps
-CUDA shared mem   -> a software allocation in the single global 4 KiB VPM window
-CUDA syncthreads  -> a per-block QPU semaphore barrier among resident logical warps
+CUDA-ish device       -> one VC4 V3D/QPU complex
+CUDA SM               -> the whole VC4 general-QPU execution domain
+CUDA warp             -> one QPU user program, 16 SIMD lanes
+CUDA lane             -> one QPU SIMD element
+CUDA thread           -> one SIMD lane in one logical QPU warp
+CUDA thread block     -> a cooperative group of 1..12 logical QPU warps
+CUDA shared memory    -> a software allocation in the single global 4 KiB VPM window
+CUDA module/program   -> one persistent VC4 program image allocation
+CUDA kernel function  -> one code field / descriptor inside the persistent program image
+CUDA kernel launch    -> rewrite uniforms, enqueue existing code PC, wait or stream according to mode
 ```
 
 Do **not** map VC4 slices to CUDA SMs. Slices are real performance topology, but they are not independent shared-memory domains.
@@ -235,12 +154,16 @@ Do **not** map VC4 slices to CUDA SMs. Slices are real performance topology, but
 | SM | whole VC4 user-QPU system | Treat as one SM for correctness. |
 | slice | group of 4 QPUs sharing I-cache/SFU/TMU/VRI | Performance topology only. Not an SM. |
 | `__shared__` memory | VPM row allocation | One global 4 KiB pool, partitioned by runtime among resident blocks. |
-| `__syncthreads()` | reusable QPU semaphore barrier | Hardware-validated for same-slice, cross-slice, full 12-warp block, repeated iterations, and multi-block partitioning. |
+| `__syncthreads()` | QPU semaphore barrier | Use the validated reusable four-semaphore protocol; all participating warps must already be resident. |
 | global load | TMU direct memory lookup | Natural path for 32-bit reads. |
 | global store | QPU register → VPM → VDW DMA store | Efficient mainly for coalesced/affine vector stores. |
 | private registers | QPU vector registers and accumulators | Respect QPU register hazards and delay restrictions. |
 | atomics | not native in this model | Reject, emulate slowly with global mutex, or lower only special cases. |
 | divergent SIMT control flow | SIMD masks/predication | No native CUDA-style per-lane PCs/reconvergence. |
+| CUDA module / cubin | persistent VC4 program image | One device-visible allocation containing all kernel code blobs and descriptors. |
+| kernel function pointer | `kernel_desc[k].code_gpu_addr` | Stable GPU bus address of copied QPU code. |
+| kernel launch arguments | per-kernel uniform streams | Rewritten in persistent host-visible memory before enqueueing. |
+| launch queue entry | `SRQUA` + `SRQPC` write | `SRQUA = uniform stream bus address`; `SRQPC = resident code bus address`. |
 
 ---
 
@@ -305,8 +228,6 @@ physical_qpu_id  -> QPU_NUMBER, only for diagnostics/performance
 
 The corrected `qpu_num` test used QPU reservations to target individual QPUs. That is useful for tests, not for normal kernel indexing.
 
-The barrier test reinforced this: in the full-block stress run, logical warp IDs were not identical to physical QPU numbers. The logical warp ID came from the test/runtime metadata, while physical QPU numbers were diagnostic observations.
-
 ---
 
 ## 5. SM model and slices
@@ -319,8 +240,7 @@ For correctness, model the device as:
 one SM
 12 QPU warp slots
 one global VPM user window
-16 global QPU semaphores
-one global QPU mutex
+one persistent runtime/program allocation
 ```
 
 The runtime’s block scheduler should act like a CUDA occupancy scheduler for a single SM.
@@ -335,7 +255,7 @@ slice 1: QPU 4, 5, 6, 7
 slice 2: QPU 8, 9, 10, 11
 ```
 
-Each slice shares I-cache, SFU, TMU, and VRI-like resources. This can affect instruction-cache locality, TMU pressure, SFU-heavy code, and possibly resource arbitration. However, slices do not define separate shared-memory scopes and do not define separate block scheduling domains.
+Each slice shares I-cache, SFU, TMU, and VRI-like resources. This can affect instruction-cache locality, TMU pressure, and SFU-heavy code. However, slices do not define separate shared-memory scopes.
 
 ### 5.3 Rule
 
@@ -395,7 +315,7 @@ struct vc4_warp_uniforms {
     uint32_t vpm_rows;              // rows allocated to this block
 
     uint32_t barrier_arrive_sem;    // only if barriers are used
-    uint32_t barrier_release_sem;
+    uint32_t barrier_go_sem;
     uint32_t barrier_depart_sem;
     uint32_t barrier_reset_sem;
 
@@ -405,19 +325,25 @@ struct vc4_warp_uniforms {
 
 The exact layout can be backend-specific, but it must be stable and documented because every QPU request consumes its uniforms sequentially.
 
-### 6.2 Partial last warp
+### 6.2 Kernel-specific uniform layouts
 
-If `block_threads` is not a multiple of 16, the last logical warp still exists and still participates in block-level synchronization. Inactive lanes are masked for computation and memory accesses, but the QPU program representing that logical warp must still execute `__syncthreads()`.
+Different kernels may have different uniform counts and layouts. The compiler should generate one uniform-layout definition per kernel:
 
-Example:
+```c
+#define KERNEL0_NUM_UNIFS  17
+#define KERNEL1_NUM_UNIFS  29
+#define KERNEL2_NUM_UNIFS   8
+```
+
+Uniform storage therefore has a kernel dimension and is usually non-rectangular:
 
 ```text
-block_threads = 130
-warps_per_block = ceil(130 / 16) = 9
-warp 8 active lanes = lanes 0..1
-warp 8 inactive lanes = lanes 2..15
-warp 8 still participates in every __syncthreads()
+kernel 0: NUM_QPUS × KERNEL0_NUM_UNIFS
+kernel 1: NUM_QPUS × KERNEL1_NUM_UNIFS
+kernel 2: NUM_QPUS × KERNEL2_NUM_UNIFS
 ```
+
+The runtime should never assume that all kernels have the same uniform stride.
 
 ---
 
@@ -471,8 +397,6 @@ block 3: rows 48..63
 ```
 
 or any equivalent runtime-chosen row layout.
-
-The `qpu_barrier_syncthreads` two-block partition run validated this idea for two resident blocks with four warps per block. Each block observed only its own four-warp block-local mask after repeated barriers.
 
 ### 7.3 Row layout
 
@@ -579,7 +503,7 @@ rows_per_block    = user_shared_rows + compiler_rows;
 barrier_semas_per_block = needs_barrier ? 4 : 0;
 ```
 
-The locked reusable barrier uses four semaphores per block:
+The validated reusable barrier uses four semaphores per block:
 
 ```text
 arrive
@@ -630,24 +554,6 @@ barrier can never complete
 ```
 
 The runtime must avoid this by scheduling whole resident block waves.
-
-### 8.4 Semaphore count range
-
-Each semaphore is 4-bit, so its count range is:
-
-```text
-0..15
-```
-
-The block maximum is 12 warps, so the barrier releases at most:
-
-```text
-N - 1 <= 11
-```
-
-tokens per phase. That is within the semaphore count range.
-
-The runtime must still ensure semaphores are initially drained to zero before assigning them to a block and must not reuse a semaphore set until all QPU requests for the owning resident block have completed.
 
 ---
 
@@ -722,9 +628,10 @@ For each resident wave:
 ```text
 1. Select resident blocks according to occupancy.
 2. Allocate VPM rows and semaphore IDs for each block.
-3. Queue all QPU warp requests for those blocks.
-4. Wait for all requests in the wave to complete.
-5. Reuse resources for the next wave.
+3. Overwrite the persistent uniform streams for the selected kernel and requests.
+4. Queue all QPU warp requests for those blocks using the already-resident kernel code address.
+5. Wait for all requests in the wave to complete.
+6. Reuse VPM/semaphore/uniform-request slots for the next wave.
 ```
 
 For initial correctness, a one-block-at-a-time cooperative-block mode is acceptable:
@@ -733,52 +640,490 @@ For initial correctness, a one-block-at-a-time cooperative-block mode is accepta
 resident_blocks = 1
 ```
 
-The barrier test now supports moving beyond one block: the `two_block_partition` run validated two resident blocks with disjoint VPM/semaphore resources. More multi-block combinations should still be added as regression coverage before relying on every possible occupancy shape.
-
-### 9.4 User request FIFO
-
-The QPU user-program request FIFO is 16 requests deep. The cooperative-block resource model caps resident warps at 12, so a full resident wave fits within the request FIFO. This is useful: a barrier-enabled resident wave can be enqueued in full without overflowing the scheduler FIFO.
+The barrier test has also validated a two-resident-block partition case. Multi-resident blocks are therefore allowed when the runtime correctly partitions QPU slots, VPM rows, and semaphore IDs.
 
 ---
 
-## 10. Barrier mapping: `__syncthreads()`
+## 10. Persistent program image and one-allocation runtime policy
 
-### 10.1 Locked implementation scope
+### 10.1 Core rule
 
-The following implementation is now the **locked first implementation** of CUDA-like `__syncthreads()`:
-
-```text
-A reusable four-semaphore barrier among all resident logical QPU warps of one block.
-```
-
-It is valid when:
+A VC4 CUDA-like program should perform **one device-visible allocation** for the compiled program/runtime image:
 
 ```text
-1. all participating block warps are resident,
-2. all participating block warps execute the same barrier generation,
-3. each resident block owns distinct semaphore IDs,
-4. each resident block owns a distinct VPM row range,
-5. the semaphore set is initially drained to zero,
-6. the semaphore set is not reused until all QPU requests for that block complete.
+one allocation -> one struct vc4_gpu / struct qpu / program image
 ```
 
-It is not valid for:
+That allocation owns all compiler-generated QPU launch state:
 
 ```text
-oversubscribed blocks,
-barriers in non-uniform/divergent control flow,
-blocks whose warps are not all enqueued as part of the same resident wave,
-blocks sharing semaphore IDs,
-blocks sharing VPM rows by mistake.
+all kernel code blobs
+all kernel descriptors
+all per-kernel uniform streams
+all per-kernel uniform-pointer arrays
+all fixed runtime scheduling metadata
+optional fixed payload/test buffers
 ```
 
-### 10.2 Hardware primitive
+Each compiled kernel is copied into the allocation **exactly once** during runtime/program setup. After that, every launch dispatches to the same resident code location by writing that code address to the QPU scheduler.
+
+### 10.2 Scope of the “one allocation” rule
+
+The hard rule for this backend is:
+
+```text
+No per-kernel-launch mem_alloc/mem_free for QPU code, uniform streams,
+uniform-pointer arrays, kernel descriptors, or launch-control state.
+```
+
+For early tests and compiler bring-up, fixed input/output payloads should also be fields inside the same allocation when practical. If a future CUDA-like memory API supports dynamic user buffers, those buffers may become a separate memory-management layer. That should not change the rule that **kernel code and launch-control state are persistent and not reallocated per launch**.
+
+### 10.3 Naming note: `struct qpu` versus `struct gpu`
+
+If the project currently calls the device-visible launch struct `struct QPU` or `struct qpu`, keep that name for API continuity. Conceptually, though, this struct represents the whole CUDA-like VC4 GPU program image, not one physical QPU.
+
+Recommended conceptual name:
+
+```c
+struct vc4_gpu_program;
+```
+
+Acceptable project-local names:
+
+```c
+struct qpu;
+struct gpu;
+struct vc4_cuda_state;
+struct vc4_program_image;
+```
+
+The important invariant is not the name. The important invariant is:
+
+```text
+one persistent device-visible allocation owns all code + uniform launch state
+```
+
+### 10.4 Fixed-field layout for a known set of kernels
+
+For a compiled program with a statically known kernel set, a fixed-field struct is straightforward and friendly to C:
+
+```c
+#define VC4_MAX_QPUS 12
+
+#define KERNEL0_CODE_WORDS  128
+#define KERNEL0_NUM_UNIFS    17
+
+#define KERNEL1_CODE_WORDS  224
+#define KERNEL1_NUM_UNIFS    29
+
+struct vc4_kernel_desc {
+    uint32_t code_gpu_addr;          // bus address to write to SRQPC
+    uint32_t code_word_count;
+    uint32_t unif_words_per_request;
+    uint32_t max_requests_per_wave;  // usually <= 12
+    uint32_t unif_gpu_addr;          // optional base address for diagnostics
+    uint32_t unif_ptr_gpu_addr;      // optional base address for diagnostics
+    uint32_t flags;
+};
+
+struct vc4_gpu_program {
+    uint32_t magic;
+    uint32_t total_size_bytes;
+    uint32_t num_kernels;
+    uint32_t active_qpus;
+    uint32_t warp_size;
+    uint32_t vpm_rows;
+
+    struct vc4_kernel_desc kernel[2];
+
+    // Kernel 0 code and launch state.
+    uint32_t kernel0_code[KERNEL0_CODE_WORDS] __attribute__((aligned(8)));
+    uint32_t kernel0_unif[VC4_MAX_QPUS][KERNEL0_NUM_UNIFS];
+    uint32_t kernel0_unif_ptr[VC4_MAX_QPUS];
+
+    // Kernel 1 code and launch state.
+    uint32_t kernel1_code[KERNEL1_CODE_WORDS] __attribute__((aligned(8)));
+    uint32_t kernel1_unif[VC4_MAX_QPUS][KERNEL1_NUM_UNIFS];
+    uint32_t kernel1_unif_ptr[VC4_MAX_QPUS];
+
+    // Optional fixed payload / scratch / result fields.
+    uint32_t runtime_scratch[/* ... */];
+};
+```
+
+This layout expresses the new uniform dimension directly:
+
+```text
+kernel_id -> request_id/QPU-warp slot -> uniform word
+```
+
+The arrays are non-rectangular across kernels because `KERNEL0_NUM_UNIFS` and `KERNEL1_NUM_UNIFS` may differ.
+
+### 10.5 Descriptor/offset layout for arbitrary kernel counts
+
+If the compiler wants one generic runtime struct for arbitrary programs, use descriptors plus offsets into a flexible storage area:
+
+```c
+struct vc4_kernel_desc {
+    uint32_t code_word_offset;
+    uint32_t code_word_count;
+
+    uint32_t unif_word_offset;
+    uint32_t unif_words_per_request;
+    uint32_t max_requests_per_wave;
+
+    uint32_t unif_ptr_word_offset;
+
+    uint32_t code_gpu_addr;
+    uint32_t flags;
+};
+
+struct vc4_gpu_program_header {
+    uint32_t magic;
+    uint32_t total_size_bytes;
+    uint32_t num_kernels;
+    uint32_t active_qpus;
+    uint32_t warp_size;
+    uint32_t vpm_rows;
+    struct vc4_kernel_desc kernels[];
+
+    // followed by aligned code/unif/unif_ptr storage
+};
+```
+
+Then compute:
+
+```c
+uint32_t *code     = storage_words + desc->code_word_offset;
+uint32_t *unif     = storage_words + desc->unif_word_offset;
+uint32_t *unif_ptr = storage_words + desc->unif_ptr_word_offset;
+```
+
+The storage required for a kernel’s uniforms is:
+
+```c
+kernel_unif_words = max_requests_per_wave * unif_words_per_request;
+```
+
+The storage required for a kernel’s uniform pointers is:
+
+```c
+kernel_unif_ptr_words = max_requests_per_wave;
+```
+
+### 10.6 Runtime/program setup: eager code upload
+
+Runtime/program setup should do all allocation and code copying eagerly:
+
+```c
+int vc4_cuda_program_setup(struct vc4_cuda_runtime *rt,
+                           struct vc4_gpu_program **out)
+{
+    // 1. Initialize VC4 runtime and decode IDENT1.
+    // 2. Compute total size for one program image allocation.
+    // 3. mem_alloc exactly once for the program image.
+    // 4. mem_lock and map it once.
+    // 5. memset the program image.
+    // 6. Copy each assembled kernel code blob into its assigned field/offset.
+    // 7. Fill kernel descriptors, including code_gpu_addr.
+    // 8. Precompute all unif_ptr[kernel][request] addresses.
+    // 9. Set V3D_VPMBASE = 16 while V3D is idle.
+    // 10. Clear instruction/uniform caches after initial code/uniform image setup.
+    // 11. Return the persistent mapped program image.
+}
+```
+
+After setup, the program image stays allocated and locked for the lifetime of the compiled program/runtime instance.
+
+Do not do this in normal kernel launches:
+
+```text
+mem_alloc
+mem_lock
+copy qasm shader bytes
+recompute code placement
+mem_unlock
+mem_free
+```
+
+### 10.7 Kernel launch: reuse resident code, overwrite uniforms
+
+A kernel launch should be a scheduling operation, not a code-upload operation.
+
+For each launch wave:
+
+```c
+int vc4_cuda_launch_kernel(struct vc4_gpu_program *gpu,
+                           uint32_t kernel_id,
+                           const struct launch_shape *shape,
+                           const struct kernel_args *args)
+{
+    struct vc4_kernel_desc *desc = &gpu->kernel[kernel_id];
+
+    // 1. Compute grid/block wave and occupancy.
+    // 2. Assign VPM rows and semaphores for resident blocks.
+    // 3. Overwrite desc's persistent uniform streams for each request in this wave.
+    // 4. Clear/invalidate the uniforms cache for active slices.
+    // 5. Queue requests:
+    //        PUT32(V3D_SRQUA, unif_ptr[request]);
+    //        PUT32(V3D_SRQPC, desc->code_gpu_addr);
+    // 6. Wait for completions or stream next wave according to scheduling mode.
+}
+```
+
+The code address written to `SRQPC` is stable:
+
+```c
+PUT32(V3D_SRQPC, gpu->kernel[kernel_id].code_gpu_addr);
+```
+
+The uniform address written to `SRQUA` changes by request:
+
+```c
+PUT32(V3D_SRQUA, gpu->kernel[kernel_id].unif_ptr[request]);
+```
+
+The uniform contents may change on every launch:
+
+```c
+gpu->kernel0_unif[request][0] = block_id_x;
+gpu->kernel0_unif[request][1] = logical_warp_id;
+gpu->kernel0_unif[request][2] = vpm_base_row;
+gpu->kernel0_unif[request][3] = barrier_arrive_sem;
+// ... kernel args ...
+```
+
+### 10.8 Uniform storage: kernel dimension, request dimension, word dimension
+
+The old mental model for one test kernel was:
+
+```text
+unif[NUM_QPUS][NUM_UNIFS]
+unif_ptr[NUM_QPUS]
+```
+
+The program-level model is:
+
+```text
+unif[kernel_id][request_id][uniform_word]
+unif_ptr[kernel_id][request_id]
+```
+
+Because kernels can have different uniform counts, this is not naturally rectangular in C. Use one of these two implementations:
+
+```text
+Implementation A:
+    Separate fields per kernel:
+        kernel0_unif[NUM_QPUS][KERNEL0_NUM_UNIFS]
+        kernel1_unif[NUM_QPUS][KERNEL1_NUM_UNIFS]
+        ...
+
+Implementation B:
+    Flat storage plus descriptors:
+        desc[k].unif_word_offset
+        desc[k].unif_words_per_request
+        desc[k].unif_ptr_word_offset
+```
+
+Both are correct. The fixed-field form is easier for generated C tests. The descriptor/offset form is better for a general MLIR runtime.
+
+### 10.9 Multiple kernels in one program image
+
+For a program with multiple kernels:
+
+```text
+kernel 0: elementwise_add
+kernel 1: tiled_matmul
+kernel 2: block_reduce
+```
+
+one allocation should contain all three code blobs:
+
+```c
+struct vc4_gpu_program {
+    ...
+    uint32_t elementwise_add_code[ELEMENTWISE_ADD_CODE_WORDS];
+    uint32_t tiled_matmul_code[TILED_MATMUL_CODE_WORDS];
+    uint32_t block_reduce_code[BLOCK_REDUCE_CODE_WORDS];
+
+    uint32_t elementwise_add_unif[VC4_MAX_QPUS][ELEMENTWISE_ADD_NUM_UNIFS];
+    uint32_t tiled_matmul_unif[VC4_MAX_QPUS][TILED_MATMUL_NUM_UNIFS];
+    uint32_t block_reduce_unif[VC4_MAX_QPUS][BLOCK_REDUCE_NUM_UNIFS];
+
+    uint32_t elementwise_add_unif_ptr[VC4_MAX_QPUS];
+    uint32_t tiled_matmul_unif_ptr[VC4_MAX_QPUS];
+    uint32_t block_reduce_unif_ptr[VC4_MAX_QPUS];
+};
+```
+
+Launching different kernels only changes which code address is enqueued:
+
+```c
+launch kernel 0 -> SRQPC = gpu_addr(program->elementwise_add_code)
+launch kernel 1 -> SRQPC = gpu_addr(program->tiled_matmul_code)
+launch kernel 2 -> SRQPC = gpu_addr(program->block_reduce_code)
+```
+
+No code blob is recopied for repeated calls.
+
+### 10.10 Cache and coherency requirements
+
+Because code and uniforms are reused at stable addresses, cache handling is part of the ABI.
+
+#### Kernel code
+
+After copying kernel code during setup:
+
+```text
+clear instruction caches for active slices
+optionally clear L2 according to the memory/coherency mode
+```
+
+If kernel code is never modified again, the runtime should not need to clear instruction caches merely because the kernel is launched again.
+
+If a kernel is hot-patched or reassembled into the same code field, then the runtime must treat that like a new code upload:
+
+```text
+write code
+flush/clean CPU side if needed
+clear VC4 instruction cache for active slices
+clear relevant L2 state if needed
+```
+
+#### Uniform streams
+
+Uniform streams are intentionally overwritten per launch. Since VC4 has a uniforms cache per slice, the conservative rule is:
+
+```text
+After the host overwrites uniform streams at addresses that may have been used before,
+clear the uniforms cache for active slices before queueing QPU requests.
+```
+
+A conservative launch can clear all slice caches as existing tests often do:
+
+```c
+PUT32(V3D_SLCACTL, 0xffffffffu);
+```
+
+A production runtime can narrow this to the relevant Uniforms Cache Clear bits for active slices once that is tested.
+
+If the runtime uses a ring of never-reused uniform addresses, uniform-cache clearing may be relaxed later. The first implementation should not rely on that optimization.
+
+#### Global data buffers
+
+If the CPU writes global input buffers that TMU reads, the runtime must ensure those writes are visible to VC4 before launch. If the QPUs write output buffers through VDW, the runtime must ensure those writes are visible to the CPU before host-side validation/consumption.
+
+The exact CPU/GPU cache protocol depends on the memory flags and address aliases used by the project. For this backend’s correctness contract, record the chosen policy explicitly in the runtime.
+
+### 10.11 CUDA first-launch analogy
+
+CUDA often has a slow first kernel launch because the driver may initialize context state, JIT compile code, load modules, allocate internal resources, and copy code to the device lazily.
+
+The VC4 backend should not hide that work inside the first launch. It should do it eagerly:
+
+```text
+runtime/program setup:
+    assemble or receive already-assembled QASM
+    allocate one program image
+    copy all kernel code once
+    set up descriptors and uniform arrays
+    configure VPM reservation
+    clear caches after setup
+
+kernel launches:
+    update uniforms
+    assign VPM/semaphore resources
+    enqueue resident code address
+```
+
+The conceptual analogy is still useful:
+
+```text
+CUDA first-launch overhead      ~ VC4 runtime/program setup
+CUDA later kernel launches      ~ VC4 SRQUA/SRQPC scheduling of resident code
+```
+
+### 10.12 Prohibited production launch behavior
+
+Production kernel launch code should not:
+
+```text
+allocate a new struct qpu/gpu per launch
+copy the same kernel code blob per launch
+free the QPU launch allocation after each launch
+compute code placement per launch
+assume all kernels have the same uniform count
+use physical QPU number as logical warp id
+use launch order as physical QPU assignment
+```
+
+### 10.13 Recommended persistent launch-state invariants
+
+The runtime should maintain these invariants:
+
+```text
+program_image != NULL for the lifetime of the VC4 CUDA-like program
+program_image_handle is locked while kernels may launch
+kernel_desc[k].code_gpu_addr is stable after setup
+kernel_desc[k].unif_words_per_request is stable after setup
+kernel_desc[k].unif_ptr[request] is stable after setup
+unif contents may change every launch
+VPM row allocations are assigned per resident wave
+semaphore allocations are assigned per resident wave
+```
+
+---
+
+## 11. Barrier mapping: `__syncthreads()`
+
+### 11.1 Hardware primitive
 
 VC4 provides sixteen system-wide 4-bit counting semaphores. A semaphore increment stalls if the count is 15; a decrement stalls if the count is 0.
 
-The semaphore instruction itself may stall due to external arbitration. It must not be combined with writes to closely coupled peripherals that can also stall. In code generation, emit semaphore operations as standalone synchronization instructions with safe destinations and no simultaneous VPM/TMU/TLB/SFU/mutex side effects.
+### 11.2 Validation status
 
-### 10.3 Recommended reusable barrier
+The first compiler implementation of `__syncthreads()` is locked to the four-semaphore reusable barrier protocol below.
+
+The `qpu_barrier_syncthreads` hardware test passed these cases:
+
+```text
+same_slice_smoke:
+    1 block × 2 warps, repeated 4 times
+    observed mask matched expected mask
+    mismatches = 0
+
+cross_slice_0_1:
+    1 block × 2 warps across slice 0 and slice 1
+    mismatches = 0
+
+cross_slice_0_2:
+    1 block × 2 warps across slice 0 and slice 2
+    mismatches = 0
+
+full_block_stress:
+    1 block × 12 warps
+    all 12 QPUs participated
+    64 barrier iterations
+    every warp saw all 12 rows after every barrier
+    mismatches = 0
+
+two_block_partition:
+    2 resident blocks × 4 warps/block
+    32 barrier iterations
+    block-local VPM/semaphore partitioning worked
+    mismatches = 0
+```
+
+Therefore the compiler/runtime can use this barrier for:
+
+```text
+block-wide ordering among resident logical QPU warps
+VPM shared-memory visibility before/after __syncthreads()
+repeated barriers and loop barriers
+multiple resident blocks when semaphores and VPM rows are partitioned
+```
+
+### 11.3 Recommended reusable barrier
 
 For a block with `N` logical QPU warps:
 
@@ -824,7 +1169,7 @@ else:
 
 This protocol is intentionally more conservative than the minimal one-shot barrier. It is safe for repeated `__syncthreads()` calls and loops because non-leaders cannot enter the next barrier generation until the leader has observed that the previous release tokens were consumed.
 
-### 10.4 Compiler lowering
+### 11.4 Compiler lowering
 
 Lower:
 
@@ -840,7 +1185,7 @@ __syncthreads();
 
 to the above semaphore protocol.
 
-### 10.5 Required scheduling invariant
+### 11.5 Required scheduling invariant
 
 The barrier only works if all participating logical QPU warps are resident. The runtime must guarantee:
 
@@ -850,71 +1195,45 @@ warps_per_block <= available QPU slots assigned to resident blocks
 
 For a block with 12 warps, this means no other barrier-participating block can be resident at the same time.
 
-### 10.6 What the barrier hardware test proved
+### 11.6 Semaphore ownership invariant
 
-The barrier test proved the following directly:
-
-```text
-same-slice synchronization works
-cross-slice synchronization works
-full 12-QPU block synchronization works
-64 repeated barrier generations work
-VPM writes before the barrier are visible after the barrier
-multi-block partitioning works for 2 blocks × 4 warps/block
-```
-
-The full-block stress case is the key compiler-enabling case:
+Each resident block using barriers owns a distinct four-semaphore set:
 
 ```text
-1 block × 12 QPU warps × 64 iterations
-observed_qpu_mask = 0xfff
-every logical warp always saw all 12 block participants
-mismatches = 0
-timeouts = 0
+block 0: semaphores  0..3
+block 1: semaphores  4..7
+block 2: semaphores  8..11
+block 3: semaphores 12..15
 ```
 
-The multi-block case is the key occupancy-enabling case:
+or an equivalent allocator result.
+
+Do not reuse a block’s semaphores until all QPU requests for that block have completed.
+
+### 11.7 Barrier participation invariant
+
+CUDA-like `__syncthreads()` is only valid when every logical warp of the block reaches the same barrier generation.
+
+Allowed:
 
 ```text
-2 blocks × 4 QPU warps/block × 32 iterations
-observed_qpu_mask = 0xff
-each block saw its own 4 block-local warps
-data_mismatches = 0
+barrier in uniform control flow
+barrier reached by all logical warps
+partial final warp participates even if some lanes are inactive
 ```
 
-### 10.7 Barrier memory-ordering interpretation
-
-For the compiler’s first shared-memory implementation, assume:
+Rejected or transformed:
 
 ```text
-VPM writes before __syncthreads() are visible to all block warps after __syncthreads().
+barrier in divergent control flow where some logical threads/warps may skip it
+early return before a later barrier unless the compiler proves all block warps return uniformly
 ```
-
-This interpretation is valid for the tested pattern:
-
-```text
-all block warps write distinct VPM rows
-__syncthreads()
-all block warps read the block's VPM rows
-```
-
-Do not generalize this to arbitrary global memory operations yet. The test validates VPM shared-memory synchronization, not global memory fencing.
-
-### 10.8 Divergent barriers are not supported
-
-CUDA requires `__syncthreads()` to be reached by all non-exited threads in the block. The VC4 implementation is even stricter operationally:
-
-```text
-Every logical QPU warp in the block must execute every barrier generation.
-```
-
-The compiler should reject or conservatively transform barriers inside data-dependent divergent control flow unless it can prove uniform participation.
 
 ---
 
-## 11. Global memory lowering
+## 12. Global memory lowering
 
-### 11.1 Loads
+### 12.1 Loads
 
 The natural path for global memory loads is TMU direct memory lookup. For direct memory lookup:
 
@@ -926,7 +1245,7 @@ consume result from r4
 
 Use this for per-lane 32-bit loads. Optimize coalescing and uniform address patterns later.
 
-### 11.2 Stores
+### 12.2 Stores
 
 VC4 has no CUDA-like native scalar global store instruction. The usual path is:
 
@@ -950,7 +1269,7 @@ uncoalesced byte stores
 atomics
 ```
 
-### 11.3 VDW setup serialization
+### 12.3 VDW setup serialization
 
 VDW/VPM setup registers are shared enough that unprotected concurrent setup/store sequences are unsafe unless proven otherwise by a setup-clobber test.
 
@@ -964,21 +1283,9 @@ This is conservative and may reduce performance, but it avoids false correctness
 
 Later, after a dedicated setup-clobber test, relax this rule if safe.
 
-### 11.4 Global memory ordering
-
-The `__syncthreads()` barrier should be treated as a VPM shared-memory barrier for now. Do not treat it as a complete global memory fence until separate tests establish the desired ordering for:
-
-```text
-TMU loads
-VDW stores
-host-visible memory
-multiple QPUs writing disjoint global regions
-multiple QPUs writing adjacent/global coalesced regions
-```
-
 ---
 
-## 12. Divergence and control flow
+## 13. Divergence and control flow
 
 A QPU is SIMD, not CUDA SIMT with independent per-lane program counters.
 
@@ -995,15 +1302,11 @@ Uniform control flow can branch normally. Per-lane divergent control flow should
 
 Do not claim full CUDA SIMT semantics unless the backend implements a robust reconvergence/masking scheme.
 
-### 12.1 Barrier-specific divergence rule
-
-The compiler must ensure that `__syncthreads()` is executed uniformly by all logical warps in the block. A barrier inside a per-lane conditional is not legal unless the condition is proven uniform across the whole block or rewritten so all warps execute the barrier.
-
 ---
 
-## 13. Register/private memory model
+## 14. Register/private memory model
 
-### 13.1 Private values
+### 14.1 Private values
 
 Per-thread private scalar values become vector registers:
 
@@ -1011,7 +1314,7 @@ Per-thread private scalar values become vector registers:
 one logical scalar per CUDA thread -> one 16-lane QPU vector value
 ```
 
-### 13.2 Register hazards
+### 14.2 Register hazards
 
 The guide documents QPU instruction restrictions, including no immediate read from a physical regfile location written by the previous instruction. Accumulators avoid some of these hazards.
 
@@ -1023,10 +1326,9 @@ The code generator must include a VC4 hazard scheduler that handles:
 - SFU result latency and `r4` restrictions,
 - TMU result latency and `r4` use,
 - VPM read setup latency,
-- final instructions not accessing uniforms/VPM/VDW/VDR,
-- semaphore instructions not simultaneously targeting closely-coupled peripherals that can stall.
+- final instructions not accessing uniforms/VPM/VDW/VDR.
 
-### 13.3 Spills
+### 14.3 Spills
 
 Do not initially promise large private memory. Spills are expensive and likely require either:
 
@@ -1038,9 +1340,9 @@ For an early backend, reject kernels whose register pressure requires spilling.
 
 ---
 
-## 14. MLIR lowering recommendations
+## 15. MLIR lowering recommendations
 
-### 14.1 Target properties
+### 15.1 Target properties
 
 Expose or internally assume:
 
@@ -1049,17 +1351,11 @@ subgroup_size = 16
 max_workgroup_size = 192
 max_workgroup_memory = 4096 bytes minus compiler reserve
 num_multiprocessors = 1
+num_kernel_code_uploads_per_program_setup = num_kernels
+num_kernel_code_uploads_per_launch = 0
 ```
 
-If a public CUDA-like API requires a `warpSize` property, expose:
-
-```text
-warpSize = 16
-```
-
-Do not pretend the warp size is 32 unless the compiler explicitly emulates a 32-lane warp as two QPU warps.
-
-### 14.2 Map MLIR GPU constructs
+### 15.2 Map MLIR GPU constructs
 
 | MLIR construct | VC4 lowering |
 |---|---|
@@ -1067,14 +1363,16 @@ Do not pretend the warp size is 32 unless the compiler explicitly emulates a 32-
 | `gpu.block_id x/y/z` | uniform |
 | `gpu.block_dim x/y/z` | uniform or compile-time constant |
 | `gpu.grid_dim x/y/z` | uniform |
-| `gpu.barrier` | locked four-semaphore reusable QPU barrier |
+| `gpu.barrier` | validated four-semaphore reusable QPU barrier |
 | workgroup memory attribution | VPM row allocation |
 | private memory attribution | QPU registers, reject/spill if too large |
 | subgroup operations | QPU horizontal vector operations/rotates where possible |
 | global loads | TMU direct memory lookup |
 | global stores | VPM + VDW DMA store |
+| kernel symbol | index into persistent `kernel_desc[]` |
+| kernel launch operands | writes to that kernel’s persistent uniform streams |
 
-### 14.3 Preferred kernel shapes
+### 15.3 Preferred kernel shapes
 
 Good first targets:
 
@@ -1086,7 +1384,6 @@ small reductions
 row-wise reductions
 stencils with simple shared-memory halos
 matrix/vector kernels with explicit VPM tiling
-block reductions using __syncthreads()
 ```
 
 Hard targets:
@@ -1099,65 +1396,85 @@ shared-memory atomics
 global atomics
 uncoalesced scatter stores
 large private arrays
-divergent barriers
 ```
 
 ---
 
-## 15. Runtime resource allocation
+## 16. Runtime resource allocation and launch lifecycle
+
+### 16.1 Runtime/program setup lifecycle
+
+Program setup is where allocation and code copying happen:
+
+```text
+1. Decode hardware topology from V3D_IDENT1.
+2. Verify expected QPU/VPM/semaphore resources.
+3. Compute total persistent program-image size.
+4. Allocate exactly one device-visible program image.
+5. Lock/map that allocation for host access.
+6. Copy every assembled kernel code blob into its assigned code field/offset.
+7. Fill kernel descriptors and stable code_gpu_addr values.
+8. Precompute per-kernel uniform-pointer arrays.
+9. Set or verify V3D_VPMBASE = 16 while idle.
+10. Clear relevant VC4 caches after setup.
+11. Keep this allocation alive until program/runtime shutdown.
+```
+
+After this lifecycle completes, kernel code is resident.
+
+### 16.2 Cooperative kernel launch lifecycle
 
 For each cooperative kernel launch:
 
 ```text
-1. Decode hardware topology from V3D_IDENT1.
-2. Assert qpus_per_slice * num_slices >= required active QPUs.
-3. Set or verify V3D_VPMBASE = 16 while idle.
-4. Compute warps_per_block.
-5. Compute rows_per_block.
-6. Compute semaphores_per_block.
-7. Compute resident_blocks.
-8. For each resident block:
+1. Look up kernel descriptor by kernel_id.
+2. Compute warps_per_block.
+3. Compute rows_per_block.
+4. Compute semaphores_per_block.
+5. Compute resident_blocks.
+6. For each resident block:
        assign VPM row range
        assign semaphore IDs
-       prepare one uniform stream per logical QPU warp
-9. Queue all QPU requests in the resident wave.
+       assign logical block IDs
+7. For each logical QPU warp request in the resident wave:
+       overwrite the already-allocated uniform stream for this kernel/request
+8. Clear/invalidate the uniforms cache for active slices.
+9. Queue all QPU requests in the resident wave:
+       SRQUA = persistent unif_ptr[kernel_id][request]
+       SRQPC = persistent kernel_desc[kernel_id].code_gpu_addr
 10. Wait for completions.
-11. Reclaim VPM rows/semaphores.
+11. Reclaim logical VPM row/semaphore allocations for the next wave.
 12. Launch next resident wave.
 ```
 
-For kernels without barriers/shared memory, the runtime can be more relaxed and stream QPU requests through the hardware scheduler.
+### 16.3 Independent-vector launch lifecycle
 
-### 15.1 Resource reclamation rule
-
-For cooperative blocks, reclaim resources only after every QPU request in the resident wave has completed:
+For kernels without barriers/shared memory, the runtime can be more relaxed and stream QPU requests through the hardware scheduler:
 
 ```text
-VPM rows:       reusable after block completion
-semaphore IDs:  reusable after block completion
-uniform memory: reusable after block completion
-output staging: reusable after block completion
+1. Look up resident kernel code address.
+2. Fill persistent uniform streams for a batch of independent vector requests.
+3. Clear uniforms cache for active slices.
+4. Enqueue requests using the resident code address.
+5. Poll completions and continue streaming as appropriate.
 ```
 
-Do not recycle semaphore sets early. A reusable barrier depends on generation counts returning to the expected drained state.
+Still do not allocate or copy code per launch.
 
-### 15.2 Error/status checking
+### 16.4 Shutdown lifecycle
 
-Tests should continue checking:
+At runtime/program shutdown:
 
 ```text
-V3D_SRQCS completion count
-V3D_SRQCS queue error bit
-V3D_ERRSTAT relevant error bits
-QPU host interrupt mask, where useful
-reported physical QPU masks, where useful
+1. Ensure all queued QPU programs have completed.
+2. Clear QPU reservations if the runtime changed them.
+3. Release or restore any persistent V3D state owned by the runtime.
+4. Unlock and free the one persistent program-image allocation.
 ```
-
-The hardware tests have observed `V3D_ERRSTAT = 0x1000` before and after runs. This corresponds to the VCD idle bit in the documented error/status register layout and is not by itself a relevant error. The test harnesses correctly check that relevant error bits do not change.
 
 ---
 
-## 16. Conservative implementation rules
+## 17. Conservative implementation rules
 
 Use these rules until more tests prove they can be relaxed:
 
@@ -1174,228 +1491,77 @@ Use these rules until more tests prove they can be relaxed:
 10. Global stores are limited to coalesced/affine patterns initially.
 11. Kernels requiring native atomics are rejected or explicitly emulated.
 12. Kernels requiring spills are rejected until spill lowering is implemented.
-13. Barriers inside divergent control flow are rejected unless uniform participation is proven.
-14. Semaphore IDs are allocated per resident block and not reused until completion.
-15. VPM rows are allocated per resident block and not shared between blocks except by explicit runtime design.
+13. The runtime/program image uses one persistent device-visible allocation.
+14. Every kernel code blob is copied into that allocation exactly once during setup.
+15. Kernel launches reuse resident code addresses; they do not copy code.
+16. Uniform streams are persistent and may be overwritten per launch.
+17. Uniform cache invalidation/clearing is required after overwriting reused uniform streams.
+18. Uniform storage has a kernel dimension and a request/QPU-warp dimension.
+19. Different kernels may have different uniform counts; do not force a rectangular uniform layout unless using a max-stride padding policy intentionally.
+20. The launch path must not call mem_alloc/mem_free for code or launch-control state.
 ```
 
 ---
 
-## 17. Tests that gate compiler features
+## 18. Tests that should gate compiler features
 
-### 17.1 Already established
+### 18.1 Already established
 
-#### 1. Targeted `qpu_num` test
+1. **Targeted `qpu_num` test**
+   - Confirms individual physical QPUs are runnable.
+   - Confirms `QPU_NUMBER` is read correctly when QPU reservations target one QPU.
+   - Confirms normal kernels should use logical warp IDs from uniforms rather than physical `QPU_NUMBER`.
 
-Confirms:
+2. **VPM slice visibility test**
+   - Confirms user-visible VPM storage is global across slices.
+   - Confirms cross-slice same-row collisions behave as global last-writer-wins.
+   - Confirms slices should not be modeled as independent CUDA SMs.
 
-```text
-individual physical QPUs are runnable
-QPU_NUMBER is read correctly when QPU reservations target one QPU
-short-kernel launch order is not physical QPU order
-```
+3. **Semaphore barrier / `__syncthreads()` test**
+   - Confirms the four-semaphore reusable barrier works same-slice and cross-slice.
+   - Confirms a full 12-warp block can repeatedly synchronize and observe VPM writes.
+   - Confirms two resident blocks can synchronize independently when VPM rows and semaphore IDs are partitioned.
+   - Locks the first compiler implementation of `gpu.barrier` / `__syncthreads()`.
 
-Compiler consequence:
+### 18.2 Required next tests
 
-```text
-Use uniforms for logical warp_id.
-Use QPU_NUMBER only for diagnostics/profiling/tests.
-```
+1. **Persistent program image / resident code reuse test**
+   - Allocate exactly one program image.
+   - Copy at least two kernels into separate code fields during setup.
+   - Launch kernel A, then kernel B, then kernel A again.
+   - Verify no per-launch code copy or allocation occurs.
+   - Verify all launches dispatch using the same stable code addresses.
+   - Verify different arguments are passed by overwriting the already-allocated uniform streams.
+   - Verify cache clearing policy is sufficient when uniforms are overwritten at the same addresses.
 
-#### 2. VPM slice visibility test
+2. **Uniform-cache reuse test**
+   - Use one kernel and one persistent uniform stream address.
+   - Launch with argument value X.
+   - Overwrite the same uniform stream with argument value Y.
+   - Clear uniforms cache according to the runtime policy.
+   - Relaunch and verify the QPU observes Y, not X.
+   - Optionally run a negative/diagnostic variant without uniform-cache clearing to determine whether stale uniform data can be observed.
 
-Confirms:
+3. **VPM setup-clobber test**
+   - Deliberately interleave VPM setup from one QPU with VPM access from another.
+   - Determine whether setup state is per-QPU, per-slice, or global.
+   - Until this passes, keep mutex serialization around VPM setup/access.
 
-```text
-user-visible VPM storage is global across slices
-cross-slice same-row collisions behave as global last-writer-wins
-there are not independent 4 KiB VPM windows per slice
-```
+4. **Global-store correctness test**
+   - Coalesced vector stores through VPM+VDW.
+   - Multiple QPUs store to disjoint output regions.
+   - Verify no VDW setup race under chosen serialization protocol.
 
-Compiler consequence:
+5. **TMU global-load test**
+   - Per-lane direct-address loads.
+   - Coalesced and strided patterns.
+   - Boundary-mask behavior.
 
-```text
-Model shared memory as one 4 KiB per-SM pool.
-Do not map slices to CUDA SMs.
-Partition VPM rows in software across resident blocks.
-```
-
-#### 3. Semaphore barrier / `__syncthreads()` test
-
-Confirms:
-
-```text
-same-slice barrier works
-cross-slice barrier works
-full 12-QPU block barrier works
-64 repeated barrier generations work
-2 resident blocks with partitioned semaphores/VPM rows work
-VPM writes before barrier are visible after barrier under the tested protocol
-```
-
-Compiler consequence:
-
-```text
-Lock the four-semaphore reusable barrier as the first __syncthreads() implementation.
-Barrier-enabled blocks must be scheduled as fully resident resident-block waves.
-Multiple resident barrier blocks are allowed when QPU slots, VPM rows, and semaphore IDs are partitioned.
-```
-
-### 17.2 Required next tests
-
-#### 1. VPM setup-clobber test
-
-Purpose:
-
-```text
-Determine whether VPM read/write setup state is per-QPU, per-slice, or global.
-```
-
-Sketch:
-
-```text
-QPU A writes VPM setup for row A.
-QPU B writes VPM setup for row B.
-QPU A performs VPM_WRITE without reprogramming setup.
-Check whether row A or row B receives QPU A's data.
-```
-
-Until this passes, keep mutex serialization around VPM setup/access and VDW setup/store sequences.
-
-#### 2. Global-store correctness test
-
-Purpose:
-
-```text
-Validate coalesced vector stores through VPM+VDW under the compiler's chosen serialization protocol.
-```
-
-Required cases:
-
-```text
-single QPU stores one row
-multiple QPUs store disjoint rows
-multiple QPUs store adjacent rows
-multiple resident blocks store disjoint output regions
-barrier before store
-barrier after store if needed
-```
-
-#### 3. TMU global-load test
-
-Purpose:
-
-```text
-Validate per-lane direct-address loads through TMU.
-```
-
-Required cases:
-
-```text
-coalesced loads
-strided loads
-boundary-masked loads
-multiple QPUs issuing loads concurrently
-loads followed by VPM shared-memory writes
-loads surrounding __syncthreads() where applicable
-```
-
-#### 4. Shared-memory access-pattern tests
-
-Purpose:
-
-```text
-Decide how much of CUDA-like shared memory can be supported directly.
-```
-
-Required cases:
-
-```text
-row-contiguous stores/loads
-affine row/column accesses
-vertical VPM access modes
-small transpose tile
-block reduction through VPM
-irregular scatter/gather slow path or rejection behavior
-```
-
-### 17.3 Recommended regression expansions
-
-The barrier test has passed the production-critical smoke cases. Add these as regression expansions before aggressively using high occupancy across many block shapes:
-
-```text
-1 block × 1..12 warps
-2 blocks × 1..6 warps/block
-3 blocks × 1..4 warps/block
-4 blocks × 1..3 warps/block
-6 blocks × 1..2 warps/block
-12 blocks × 1 warp/block
-```
-
-For each case:
-
-```text
-repeat many barrier generations
-write distinct VPM rows before each barrier
-read/check block-local rows after each barrier
-verify no cross-block contamination
-verify observed QPU mask is plausible
-verify no timeouts
-verify no relevant ERRSTAT changes
-```
-
----
-
-## 18. `__syncthreads()` implementation contract
-
-This section is the compiler/runtime contract for the locked implementation.
-
-### 18.1 Compiler obligations
-
-The compiler must:
-
-```text
-1. compute warps_per_block = ceil(block_threads / 16),
-2. ensure warps_per_block <= 12,
-3. lower each logical warp to one QPU program instance,
-4. lower lane id to ELEMENT_NUMBER,
-5. lower logical warp id to a uniform,
-6. lower workgroup memory to VPM row/column addresses,
-7. lower gpu.barrier / __syncthreads() to the four-semaphore protocol,
-8. ensure the barrier is reached by every logical warp in the block,
-9. mask inactive lanes in partial final warps,
-10. avoid combining semaphore ops with other closely-coupled peripheral accesses.
-```
-
-### 18.2 Runtime obligations
-
-The runtime must:
-
-```text
-1. allocate a distinct VPM row range per resident block,
-2. allocate four distinct semaphores per resident block that uses barriers,
-3. initialize or require semaphore counts to be drained before use,
-4. prepare one uniform stream per logical warp,
-5. enqueue all warps of all resident barrier blocks as one resident wave,
-6. not enqueue more barrier blocks than resource constraints allow,
-7. wait for all wave QPU requests to complete before reusing VPM/semaphore resources,
-8. treat physical QPU assignment as nondeterministic,
-9. avoid using QPU_NUMBER for normal program indexing.
-```
-
-### 18.3 Kernel author / frontend obligations
-
-If exposing a CUDA-like frontend, document these constraints:
-
-```text
-warpSize is 16, not 32.
-max block size is 192 logical threads.
-shared memory is at most 4 KiB per SM, and may be less per block under occupancy.
-__syncthreads() must be reached uniformly by the block.
-arbitrary shared-memory scatter/gather may be unsupported or slow.
-arbitrary global scatter stores may be unsupported or slow.
-native atomics are not available in the first implementation.
-```
+6. **Persistent multi-kernel ABI test**
+   - Generate a program with kernels that have different uniform counts.
+   - Store them in one persistent program allocation.
+   - Verify `kernel0_unif[request][K0_NUM_UNIFS]` and `kernel1_unif[request][K1_NUM_UNIFS]` or descriptor/offset equivalents are addressed correctly.
+   - Verify launches do not assume a rectangular `num_kernels × NUM_QPUS × max_num_unifs` layout unless the runtime intentionally pads to max stride.
 
 ---
 
@@ -1423,82 +1589,19 @@ A CUDA-like block is:
     assigned semaphore IDs,
     indexed by uniforms plus ELEMENT_NUMBER.
 
-__syncthreads() is:
-    a reusable four-semaphore barrier among all resident logical warps in the block,
-    hardware-validated for same-slice, cross-slice, full-block, repeated-generation,
-    and two-resident-block partition cases.
+A VC4 CUDA-like program image is:
+    one persistent device-visible allocation,
+    containing every kernel's QPU code blob,
+    containing every kernel's uniform streams and uniform-pointer arrays,
+    initialized once during runtime/program setup,
+    reused for every kernel launch.
+
+A kernel launch is:
+    choose a resident kernel descriptor,
+    overwrite persistent uniforms for this launch/wave,
+    clear uniforms cache as required,
+    enqueue SRQUA/SRQPC pairs using the stable resident code address,
+    wait or stream according to independent/cooperative scheduling mode.
 ```
 
-This is the closest CUDA-like abstraction that remains faithful to measured VC4 behavior.
-
----
-
-## 20. One-page implementation checklist
-
-### Device constants
-
-```c
-VC4_CUDA_SM_COUNT              = 1;
-VC4_CUDA_WARP_SIZE             = 16;
-VC4_CUDA_MAX_WARPS_PER_SM      = 12;
-VC4_CUDA_MAX_THREADS_PER_SM    = 192;
-VC4_CUDA_MAX_THREADS_PER_BLOCK = 192;
-VC4_CUDA_SHARED_BYTES_PER_SM   = 4096;
-VC4_CUDA_VPM_ROWS              = 64;
-VC4_CUDA_VPM_ROW_BYTES         = 64;
-VC4_CUDA_SEMAPHORES            = 16;
-VC4_CUDA_BARRIER_SEMS_PER_BLOCK= 4;
-```
-
-### Kernel admission checks
-
-```c
-warps_per_block = ceil(block_threads / 16);
-if (warps_per_block > 12) reject;
-
-rows_per_block = user_shared_rows + compiler_scratch_rows;
-if (rows_per_block > 64) reject;
-
-if (needs_barrier && barrier_is_not_uniform) reject;
-if (needs_barrier && warps_per_block > 12) reject;
-```
-
-### Occupancy
-
-```c
-resident_blocks_by_qpus = 12 / warps_per_block;
-resident_blocks_by_vpm  = 64 / rows_per_block;
-resident_blocks_by_sems = needs_barrier ? 16 / 4 : UINT_MAX;
-
-resident_blocks = min(resident_blocks_by_qpus,
-                      resident_blocks_by_vpm,
-                      resident_blocks_by_sems);
-
-if (resident_blocks == 0) reject;
-```
-
-### Per-wave scheduling
-
-```text
-for each resident wave:
-    allocate VPM rows per resident block
-    allocate semaphore IDs per barrier block
-    build uniforms per logical warp
-    enqueue all logical warps in the wave
-    wait for all completions
-    reclaim VPM rows and semaphore IDs
-```
-
-### Per-QPU warp program
-
-```text
-read uniforms
-lane = ELEMENT_NUMBER
-flat_thread = logical_warp_id * 16 + lane
-active = flat_thread < block_threads
-execute masked computation
-use VPM rows for workgroup memory
-use four-semaphore protocol for __syncthreads()
-terminate cleanly with required delay slots
-```
-
+This is the closest CUDA-like abstraction that remains faithful to measured VC4 behavior while giving the compiler a clean implementation target.

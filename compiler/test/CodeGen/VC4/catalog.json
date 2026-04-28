@@ -109,6 +109,34 @@
       "reference_passed": true,
       "candidate_enabled": false,
       "notes": "Exploratory hardware-run test that queues 16 QPU user-program requests and records the hardware QPU_NUMBER/qpu_num register observed by each dispatched kernel. The oracle requires 16 completed requests, no pending output slots, and observed values in the architectural 4-bit QPU-number range; it deliberately does not pin scheduler assignment order or observed qpu_mask."
+    },
+    {
+      "id": "hardware-run-saxpy-full",
+      "name": "saxpy_full",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "Tail-safe SAXPY hardware-run reference. Computes y[i] = alpha * x[i] + y[i] for varied n values including zero, short tails, vector boundaries, QPU-round boundaries, and n=1000. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launches. Candidate/codegen side remains disabled."
+    },
+    {
+      "id": "hardware-run-matmul-naive",
+      "name": "matmul_naive",
+      "kind": "hardware-run",
+      "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive",
+      "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/input.mlir",
+      "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference",
+      "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/expected.json",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive reference",
+      "requires_hardware": true,
+      "reference_passed": true,
+      "candidate_enabled": false,
+      "notes": "Naive CUDA-shaped matrix multiplication hardware-run reference for C[M,N] = A[M,K] * B[K,N]. Exercises TMU direct loads, QPU floating-point accumulation, tail-safe column stores through VPM/VDW, and logical work distribution across active QPUs. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launch cases. Candidate/codegen side remains disabled."
     }
   ]
 }
