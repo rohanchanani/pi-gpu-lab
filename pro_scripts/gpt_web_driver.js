@@ -544,6 +544,152 @@ function nativePlainTextPaste() {
   throw new Error("native plain paste is only implemented through osascript on macOS");
 }
 
+// Make Chrome the frontmost app on macOS.  Required before sending native
+// keystrokes via osascript -- otherwise Cmd+Shift+V goes to whatever app
+// is actually frontmost (typically Terminal, since that's where the user
+// launched the autorun from).  Both "Google Chrome" and "Chromium" are
+// tried because the user might be running either.
+function activateChromeOnMac() {
+  if (process.platform !== "darwin") return false;
+  for (const appName of ["Google Chrome", "Chromium", "Google Chrome Beta", "Google Chrome Canary"]) {
+    try {
+      child_process.execFileSync(
+        "/usr/bin/osascript",
+        ["-e", `tell application "${appName}" to activate`],
+        { stdio: "ignore" }
+      );
+      return true;
+    } catch (_) {}
+  }
+  return false;
+}
+
+// Playwright-native paste.  Dispatches a real ClipboardEvent with a
+// DataTransfer payload directly at the focused composer.  This is the
+// reliable path: it does NOT depend on OS keyboard focus, app activation,
+// or which window is frontmost -- and ProseMirror's paste plugin handles
+// it correctly because it's a real native paste event, not a synthetic
+// keystroke.  Returns true if the composer ends up with non-empty text.
+async function playwrightPaste(page, fullPrompt) {
+  vlog("playwrightPaste: dispatching synthetic paste event", { len: fullPrompt.length });
+  const ok = await page
+    .evaluate(
+      ({ text, selectors }) => {
+        function findEl() {
+          for (const selector of selectors) {
+            const el = document.querySelector(selector);
+            if (!el) continue;
+            const style = window.getComputedStyle(el);
+            if (style.visibility === "hidden" || style.display === "none") continue;
+            return el;
+          }
+          return null;
+        }
+        const el = findEl();
+        if (!el) return { ok: false, reason: "no composer element found" };
+        el.focus();
+
+        // Select all existing content and remove it.  For contenteditable,
+        // ProseMirror tracks selection via the browser Selection API.
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+          el.value = "";
+        } else {
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          try {
+            document.execCommand("delete", false, null);
+          } catch (_) {}
+        }
+
+        // Build a DataTransfer with both text/plain and text/html so we
+        // cover ProseMirror's preference for HTML-aware paste handling.
+        const dt = new DataTransfer();
+        try {
+          dt.setData("text/plain", text);
+        } catch (_) {}
+        try {
+          // Wrap each line as <p>...</p> so ProseMirror preserves
+          // paragraph structure rather than collapsing newlines.
+          const html = text
+            .split("\n")
+            .map((line) =>
+              line
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+            )
+            .map((line) => `<p>${line || "<br/>"}</p>`)
+            .join("");
+          dt.setData("text/html", html);
+        } catch (_) {}
+
+        const evt = new ClipboardEvent("paste", {
+          bubbles: true,
+          cancelable: true,
+          clipboardData: dt,
+        });
+        // Some implementations don't honor clipboardData passed via the
+        // constructor; reattach defensively.
+        try {
+          Object.defineProperty(evt, "clipboardData", { value: dt });
+        } catch (_) {}
+
+        const dispatched = el.dispatchEvent(evt);
+
+        // For TEXTAREA fallback, also set value directly because the
+        // paste event may be ignored by some controls.
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+          if (!el.value) {
+            el.value = text;
+            el.dispatchEvent(
+              new InputEvent("input", { bubbles: true, inputType: "insertText", data: text })
+            );
+          }
+        }
+
+        // Read back the resulting text length so the caller can decide
+        // whether to fall through to other backups.
+        const len =
+          el.tagName === "TEXTAREA" || el.tagName === "INPUT"
+            ? (el.value || "").length
+            : (el.innerText || el.textContent || "").length;
+        return { ok: len > 0, len, dispatched, tag: el.tagName.toLowerCase() };
+      },
+      { text: fullPrompt, selectors: PROMPT_BOX_SELECTORS }
+    )
+    .catch((err) => ({ ok: false, reason: String(err) }));
+  vlog("playwrightPaste: result", ok);
+  return !!(ok && ok.ok);
+}
+
+// Type the prompt character-by-character via Playwright's keyboard.type API.
+// This is the slow, last-resort fallback -- it does not depend on the
+// clipboard, OS focus, or paste-event handling at all.  insertText is tried
+// first via the strategy-1 path in submitPrompt; this function exists for
+// the cases where insertText itself failed (rare).
+async function typePrompt(page, fullPrompt) {
+  vlog("typePrompt: focusing composer and typing character-by-character", {
+    len: fullPrompt.length,
+  });
+  try {
+    const box = await findPromptBox(page, 5000);
+    await box.click({ timeout: 5000 }).catch(() => {});
+  } catch (err) {
+    vwarn("typePrompt: could not focus composer", { err: err.message });
+    return false;
+  }
+  try {
+    await page.keyboard.type(fullPrompt, { delay: 0 });
+    return true;
+  } catch (err) {
+    vwarn("typePrompt: type() failed", { err: err.message });
+    return false;
+  }
+}
+
 async function domInsertPrompt(page, fullPrompt) {
   return await page
     .evaluate(
@@ -668,6 +814,18 @@ async function dumpComposerState(page, label) {
 
 // ---------------------------------------------------------------------------
 // Submit core
+//
+// The paste strategy is layered.  In order of preference:
+//   1. Playwright-native synthetic paste event (works regardless of OS focus,
+//      handled correctly by ProseMirror).
+//   2. OS-level Cmd+Shift+V on macOS, AFTER explicitly activating Chrome.app
+//      (so the keystroke goes to Chrome, not Terminal).
+//   3. DOM execCommand insertText (older but sometimes works).
+//   4. Playwright keyboard.insertText / keyboard.type (slowest, most direct).
+//
+// We try strategy 1 first because it does not depend on OS-level focus at
+// all.  Strategies 2-4 are only invoked if strategy 1 didn't populate the
+// composer.
 // ---------------------------------------------------------------------------
 async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   vlog("submitPrompt: start", { len: fullPrompt.length, promptTimeoutMs });
@@ -683,34 +841,113 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   await clearPromptBoxInDom(page);
   await page.waitForTimeout(300);
 
-  vlog("submitPrompt: setting clipboard");
+  // Always pre-set the OS clipboard so any OS-level paste fallback has the
+  // text available.  This is independent of which strategy actually fires.
+  vlog("submitPrompt: preloading OS clipboard");
   try {
     setClipboardText(fullPrompt);
   } catch (err) {
     vwarn("submitPrompt: clipboard set failed", { err: err.message });
   }
-  vlog("submitPrompt: sending native Cmd+Shift+V paste", { len: fullPrompt.length });
-  try {
-    nativePlainTextPaste();
-  } catch (err) {
-    vwarn("submitPrompt: native paste failed", { err: err.message });
-  }
-  await page.waitForTimeout(500);
-  await dumpComposerState(page, "post-paste");
 
+  // Strategy 1: Playwright keyboard.insertText (the most reliable mechanism
+  // for ProseMirror -- it inserts text at the focused caret position via a
+  // single input event, with no dependency on OS focus or clipboard
+  // permissions).  We focus the composer first so the insertion lands in
+  // the right element.
+  vlog("submitPrompt: trying Playwright keyboard.insertText");
+  let typeOk = false;
+  try {
+    await promptBox.click({ timeout: 5000 });
+    await page.keyboard.insertText(fullPrompt);
+    typeOk = true;
+  } catch (err) {
+    vwarn("submitPrompt: keyboard.insertText failed", { err: err.message });
+  }
+  await page.waitForTimeout(400);
+  let lenAfter = await composerTextLength(page);
+  vlog("submitPrompt: composer after keyboard.insertText", { len: lenAfter, typeOk });
+
+  // Strategy 2: Playwright synthetic paste event (uses ClipboardEvent +
+  // DataTransfer; works without OS focus, handled by ProseMirror's paste
+  // plugin).
+  let pasteOk = false;
+  if (lenAfter === 0) {
+    vlog("submitPrompt: trying Playwright synthetic paste event");
+    pasteOk = await playwrightPaste(page, fullPrompt);
+    await page.waitForTimeout(400);
+    lenAfter = await composerTextLength(page);
+    vlog("submitPrompt: composer after Playwright paste", { len: lenAfter, pasteOk });
+  }
+
+  // Strategy 3: OS-level Cmd+Shift+V (macOS), after activating Chrome.
+  if (lenAfter === 0 && process.platform === "darwin") {
+    vlog("submitPrompt: trying OS-level Cmd+Shift+V (after activating Chrome)");
+    const activated = activateChromeOnMac();
+    vlog("submitPrompt: activated Chrome.app", { activated });
+    await page.bringToFront().catch(() => {});
+    try {
+      await promptBox.click({ timeout: 5000 });
+    } catch (err) {
+      vwarn("submitPrompt: re-click on prompt box failed", { err: err.message });
+    }
+    await page.waitForTimeout(200);
+    try {
+      nativePlainTextPaste();
+    } catch (err) {
+      vwarn("submitPrompt: native paste failed", { err: err.message });
+    }
+    await page.waitForTimeout(500);
+    lenAfter = await composerTextLength(page);
+    vlog("submitPrompt: composer after OS paste", { len: lenAfter });
+  }
+
+  // Strategy 4: DOM execCommand insert (legacy fallback).
+  let domInsertAttempted = false;
+  let domInsertOk = false;
+  if (lenAfter === 0) {
+    vlog("submitPrompt: trying DOM execCommand insert");
+    domInsertAttempted = true;
+    domInsertOk = await domInsertPrompt(page, fullPrompt);
+    await page.waitForTimeout(400);
+    lenAfter = await composerTextLength(page);
+    vlog("submitPrompt: composer after DOM insert", { len: lenAfter, domInsertOk });
+  }
+
+  // Strategy 5: Playwright keyboard.type (slowest, character-by-character).
+  let typedAttempted = false;
+  let typedOk = false;
+  if (lenAfter === 0) {
+    vlog("submitPrompt: trying Playwright keyboard.type (slow path)");
+    typedAttempted = true;
+    typedOk = await typePrompt(page, fullPrompt);
+    await page.waitForTimeout(400);
+    lenAfter = await composerTextLength(page);
+    vlog("submitPrompt: composer after keyboard typing", { len: lenAfter, typedOk });
+  }
+
+  await dumpComposerState(page, "post-all-paste-strategies");
+
+  if (lenAfter === 0) {
+    throw new Error(
+      `All paste strategies failed to populate the composer. ` +
+        `keyboardInsertText=${typeOk}, playwrightPaste=${pasteOk}, ` +
+        `domInsertAttempted=${domInsertAttempted}, domInsertOk=${domInsertOk}, ` +
+        `keyboardTypeAttempted=${typedAttempted}, keyboardTypeOk=${typedOk}.`
+    );
+  }
+
+  // Composer has text -- now wait for the send button to appear and click
+  // it, falling back to keyboard send if needed.
   const deadline = Date.now() + promptTimeoutMs;
   const startedAt = Date.now();
   let lastShortLog = 0;
   let lastVerboseLog = 0;
   let ready = false;
   let iter = 0;
-  let domInsertAttempted = false;
-  let domInsertOk = false;
   let keyboardSendAttempted = false;
   let keyboardSendOk = false;
 
-  // Capture initial assistantCount so the keyboard fallback can detect that
-  // a send actually went through (count went up).
   const beforeKeyboardCount = await assistantCount(page);
 
   while (Date.now() < deadline) {
@@ -736,8 +973,6 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
       }
     }
 
-    // Detect: the keyboard fallback already submitted (assistantCount went up
-    // or generation started) even though we never found a clickable send btn.
     if (keyboardSendAttempted) {
       const newCount = await assistantCount(page);
       if (newCount > beforeKeyboardCount || generating) {
@@ -754,7 +989,7 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     }
 
     if (Date.now() - lastShortLog > 2000) {
-      vlog("submitPrompt: not yet ready", {
+      vlog("submitPrompt: not yet ready (waiting for send btn)", {
         iter,
         elapsedMs: Date.now() - startedAt,
         composerLen: length,
@@ -774,29 +1009,23 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
       lastVerboseLog = Date.now();
     }
 
-    // Backup #1 (DOM insert): if the composer is still empty after 30s,
-    // ChatGPT didn't pick up the native paste -- try inserting via
-    // execCommand.
-    if (!domInsertAttempted && length === 0 && Date.now() - startedAt > 30000) {
-      vlog("submitPrompt: native paste did not populate composer; trying DOM insert");
-      domInsertAttempted = true;
-      domInsertOk = await domInsertPrompt(page, fullPrompt);
-      vlog("submitPrompt: DOM insert result", { domInsertOk });
-      await page.waitForTimeout(1500);
-      continue;
+    // If the composer somehow ended up empty again (page reload, etc.),
+    // re-paste before trying again.
+    if (length === 0 && Date.now() - startedAt > 5000) {
+      vwarn("submitPrompt: composer has gone empty mid-loop; re-pasting", { iter });
+      await playwrightPaste(page, fullPrompt);
+      await page.waitForTimeout(400);
     }
 
-    // Backup #2 (keyboard): if composer has text but the send button keeps
-    // looking unclickable for >20s, try Cmd+Enter / Ctrl+Enter.
+    // Keyboard fallback: if composer has text but no clickable send button
+    // for >15s, try Cmd+Enter / Ctrl+Enter.
     if (
       !keyboardSendAttempted &&
       length > 0 &&
-      Date.now() - startedAt > 20000 &&
+      Date.now() - startedAt > 15000 &&
       (!sendInfo || sendInfo.disabled)
     ) {
-      vlog(
-        "submitPrompt: send button still unclickable after composer has text; trying keyboard send fallback"
-      );
+      vlog("submitPrompt: send button still unclickable; trying keyboard send fallback");
       keyboardSendAttempted = await sendViaKeyboard(page);
       vlog("submitPrompt: keyboard send fallback initiated", { keyboardSendAttempted });
       await page.waitForTimeout(1500);
@@ -814,7 +1043,6 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
       `Prompt was not ready to send before timeout; composerLen=${length}, ` +
         `sendVisible=${!!sendInfo}, sendDisabled=${sendInfo ? sendInfo.disabled : "n/a"}, ` +
         `sendAria=${sendInfo ? JSON.stringify(sendInfo.aria) : "n/a"}, ` +
-        `domInsertAttempted=${domInsertAttempted}, domInsertOk=${domInsertOk}, ` +
         `keyboardSendAttempted=${keyboardSendAttempted}, keyboardSendOk=${keyboardSendOk}`
     );
   }
@@ -823,7 +1051,6 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     iter,
     elapsedMs: Date.now() - startedAt,
     keyboardSendOk,
-    domInsertOk,
   });
 }
 
