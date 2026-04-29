@@ -1,0 +1,20 @@
+{
+"name": "stencil2d_5point_naive",
+"status": "PASS",
+"required": {
+"cases": 9,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_width": 32,
+"max_height": 32,
+"runtime_allocations": 1,
+"runtime_launches": 9
+},
+"float_max": {
+"max_abs_diff": 0.0005
+}
+}
+
