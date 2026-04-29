@@ -368,20 +368,26 @@ async function lastAssistantText(page) {
   return "";
 }
 
-// Robust generation detection.  The classic stop-button selectors are not
-// always present during reasoning (e.g. ChatGPT Pro / o1 / GPT-5 reasoning
-// emits a "Thinking" pill before any visible Stop button).  We additionally
-// look for textual "Thinking"/"Reasoning"/"Reading" indicators, the absence
-// of an enabled send button while we know a prompt was submitted, and
-// streaming markers on the last assistant message.
+// Detect whether ChatGPT is currently generating a response.  Conservative
+// by design -- a false positive here causes the driver to wait forever for
+// the composer to become "ready", which manifests as "nothing happens".
+//
+// We rely on two narrow, unambiguous signals:
+//   1. A visible Stop button.  This is the canonical signal during ordinary
+//      streaming and is set by ChatGPT itself.
+//   2. A data-testid attribute that explicitly contains "thinking" or
+//      "reasoning".  ChatGPT's reasoning models render a "Thinking" pill
+//      with a stable testid before the first token appears.
+//
+// We deliberately do NOT scan free text on the page (aria-live regions,
+// arbitrary innerText) because the homepage and many idle states contain
+// words like "working", "reading", "planning" in unrelated contexts.
 async function isGenerating(page) {
   const stopSelectors = [
     'button[data-testid="stop-button"]',
-    'button[aria-label*="Stop"]',
-    'button[aria-label*="stop"]',
     'button[aria-label="Stop streaming"]',
     'button[aria-label="Stop generating"]',
-    'button:has-text("Stop generating")',
+    'button[aria-label="Stop generating response"]',
   ];
   for (const selector of stopSelectors) {
     try {
@@ -390,43 +396,18 @@ async function isGenerating(page) {
     } catch (_) {}
   }
 
-  // Reasoning / thinking pill or status text.
-  const thinkingDetected = await page
-    .evaluate(() => {
-      const needles = [
-        "thinking",
-        "reasoning",
-        "analyzing",
-        "analysing",
-        "searching the web",
-        "reading",
-        "working",
-        "planning",
-        "looking up",
-      ];
-      const candidates = document.querySelectorAll(
-        '[aria-live], [data-testid*="thinking"], [data-testid*="reasoning"], [class*="thinking"], [class*="Thinking"], [class*="reasoning"], [class*="Reasoning"]'
-      );
-      for (const el of candidates) {
-        const txt = ((el.innerText || el.textContent || "") + "").trim().toLowerCase();
-        if (!txt) continue;
-        if (needles.some((n) => txt.includes(n))) return true;
-      }
-      // Look for a "..." typing indicator inside the latest assistant message.
-      const assistantNodes = document.querySelectorAll('[data-message-author-role="assistant"]');
-      if (assistantNodes.length > 0) {
-        const last = assistantNodes[assistantNodes.length - 1];
-        const cls = (last.getAttribute("class") || "").toLowerCase();
-        if (cls.includes("streaming") || cls.includes("loading")) return true;
-        const lastTxt = ((last.innerText || last.textContent || "") + "").trim().toLowerCase();
-        // Reasoning models often show only the running status until first
-        // tokens appear.
-        if (lastTxt && needles.some((n) => lastTxt.startsWith(n))) return true;
-      }
-      return false;
-    })
-    .catch(() => false);
-  if (thinkingDetected) return true;
+  // Reasoning pill: ChatGPT marks its "Thinking..." indicator with a
+  // data-testid that contains "thinking" (and on some builds "reasoning").
+  // We require the testid match -- not a free-text match -- to keep this
+  // signal narrow.
+  try {
+    const reasoningTestid = page
+      .locator('[data-testid*="thinking" i], [data-testid*="reasoning" i]')
+      .last();
+    if ((await reasoningTestid.count()) > 0 && (await reasoningTestid.isVisible().catch(() => false))) {
+      return true;
+    }
+  } catch (_) {}
 
   return false;
 }
@@ -449,15 +430,28 @@ async function findSendButton(page) {
 
 async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label = "next prompt") {
   const deadline = Date.now() + timeoutMs;
+  let lastLog = 0;
+  let iter = 0;
   while (Date.now() < deadline) {
+    iter++;
     const generating = await isGenerating(page);
+    let composerVisible = false;
     try {
       await findPromptBox(page, 2000);
-      if (!generating) {
-        console.log(`Composer is visible for ${label}.`);
-        return true;
-      }
+      composerVisible = true;
     } catch (_) {}
+    if (composerVisible && !generating) {
+      console.log(`Composer is visible for ${label}.`);
+      return true;
+    }
+    if (Date.now() - lastLog > 10000) {
+      console.log(
+        `Waiting for composer ready for ${label} (composerVisible=${composerVisible}, ` +
+          `generating=${generating}, iter=${iter}, ` +
+          `remainingMs=${Math.max(0, deadline - Date.now())}).`
+      );
+      lastLog = Date.now();
+    }
     await page.waitForTimeout(1000);
   }
   console.log(`Composer did not become visible for ${label} within ${timeoutMs}ms.`);
@@ -858,16 +852,29 @@ async function run(mode, argv) {
   const composerWaitMs = intArg(args, "composer-wait-ms", 5 * 60 * 1000);
   const allowDuplicateSubmit = boolArg(args, "allow-duplicate-submit");
 
+  console.log(
+    `[gpt_web_driver] starting mode=${mode} promptFile=${promptFile} outDir=${outDir}`
+  );
+  console.log(
+    `[gpt_web_driver] timeouts: connect=${connectTimeoutMs}ms page=${pageTimeoutMs}ms ` +
+      `prompt=${promptTimeoutMs}ms response=${responseTimeoutMs}ms composerWait=${composerWaitMs}ms`
+  );
+
   mkdirp(outDir);
   mkdirp(metaDir);
 
   const repoRoot = resolveRepoRoot(args, outDir);
-  console.log(`Resolved repo root for in-flight marker: ${repoRoot}`);
+  console.log(`[gpt_web_driver] resolved repo root for in-flight marker: ${repoRoot}`);
 
   const userPrompt = readPromptFile(promptFile);
   const promptHash = sha256(userPrompt);
+  console.log(
+    `[gpt_web_driver] prompt loaded: ${userPrompt.length} chars, hash=${promptHash.slice(0, 12)}`
+  );
 
+  console.log(`[gpt_web_driver] connecting to Chrome via CDP at ${CDP_URL}...`);
   const browser = await connectBrowser(connectTimeoutMs);
+  console.log(`[gpt_web_driver] connected to Chrome.`);
   let page = null;
   let resumed = false;
   let token = null;
@@ -912,10 +919,12 @@ async function run(mode, argv) {
 
     // ---- Normal path: no resume -> open tab and submit ----
     if (!resumed) {
+      console.log(`[gpt_web_driver] opening ${mode === "new" ? "new" : "current/fresh"} ChatGPT tab...`);
       page =
         mode === "new"
           ? await newChatPage(browser, pageTimeoutMs)
           : await currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs);
+      console.log(`[gpt_web_driver] tab ready: ${page.url()}`);
 
       const context = page.context();
       context.setDefaultTimeout(Math.min(pageTimeoutMs, 30000));
@@ -937,10 +946,17 @@ async function run(mode, argv) {
         }
       }
 
-      // Make absolutely sure the composer is ready (not just visible) before we
-      // try to send.  `currentOrFreshChatPage` already waits, but this is also
-      // the entry point for `newChatPage`, where we want the same guarantee.
-      await waitForComposerReadyForNextPrompt(page, composerWaitMs, "submit");
+      // For a freshly-opened tab, newChatPage already verified the composer
+      // is visible.  For an existing tab, currentOrFreshChatPage already
+      // waited for composer-ready.  Do a brief 10s composer-visibility
+      // sanity check here -- but DO NOT loop on isGenerating, because
+      // isGenerating is intentionally conservative and we only need the
+      // composer to be present and clickable.
+      try {
+        await findPromptBox(page, 10000);
+      } catch (err) {
+        throw new Error(`Prompt box not visible before submit: ${err.message}`);
+      }
 
       token = randomToken();
       fullPrompt = buildWrappedPrompt(userPrompt, token);
