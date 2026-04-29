@@ -30,6 +30,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import time as _time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
@@ -156,11 +157,20 @@ def run_command(
 ) -> CommandResult:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     shown = display_cmd or shlex.join(cmd)
+    started_at = _time.time()
+
+    print(
+        f"[vc4-auto]   stage={stage}: starting (timeout={timeout_sec}s)\n"
+        f"[vc4-auto]   $ {shown}\n"
+        f"[vc4-auto]   log -> {log_path}",
+        flush=True,
+    )
 
     with log_path.open("w", encoding="utf-8", errors="replace") as log:
         log.write(f"$ {shown}\n")
         log.write(f"# cwd: {repo}\n")
-        log.write(f"# started_utc: {utc_now_iso()}\n\n")
+        log.write(f"# started_utc: {utc_now_iso()}\n")
+        log.write(f"# timeout_sec: {timeout_sec}\n\n")
         log.flush()
 
         proc = subprocess.Popen(
@@ -219,12 +229,21 @@ def run_command(
                 else:
                     proc.kill()
                 exit_code = proc.wait()
+        elapsed = _time.time() - started_at
         log.write(f"\n# finished_utc: {utc_now_iso()}\n")
         log.write(f"# exit_code: {exit_code}\n")
         log.write(f"# timed_out: {int(timed_out)}\n")
+        log.write(f"# elapsed_sec: {elapsed:.1f}\n")
 
     if timed_out and exit_code == 0:
         exit_code = 124
+
+    print(
+        f"[vc4-auto]   stage={stage}: finished exit={exit_code} timed_out={int(timed_out)} "
+        f"elapsed={elapsed:.1f}s",
+        flush=True,
+    )
+
     return CommandResult(
         stage=stage,
         cmd=cmd,
@@ -233,6 +252,28 @@ def run_command(
         exit_code=exit_code,
         timed_out=timed_out,
     )
+
+
+def tail_log_to_terminal(log_path: Path, max_lines: int = 60, label: str = "log") -> None:
+    """Print the last `max_lines` lines of `log_path` to stdout.
+
+    Used when a stage fails so the user can see what went wrong without
+    having to dig into .vc4_auto/logs by hand.
+    """
+    try:
+        if not log_path.exists():
+            print(f"[vc4-auto]   {label}: file does not exist: {log_path}", flush=True)
+            return
+        lines = read_text(log_path).splitlines()
+        tail = lines[-max_lines:]
+        print(
+            f"[vc4-auto]   {label}: showing last {len(tail)} of {len(lines)} lines from {log_path}",
+            flush=True,
+        )
+        for line in tail:
+            print(f"[vc4-auto]   | {line}", flush=True)
+    except Exception as exc:
+        print(f"[vc4-auto]   {label}: could not read {log_path}: {exc}", flush=True)
 
 
 def script_invocation(repo: Path, script_rel: str) -> list[str]:
@@ -768,6 +809,16 @@ def run_attempt(
         str(js_response_timeout_ms),
     ]
 
+    print(
+        f"[vc4-auto] === attempt {attempt_index} for {spec.name} ===\n"
+        f"[vc4-auto] script={'new_tab' if use_new_tab else 'current_tab'} "
+        f"prompt_chars={len(prompt_text)} prompt_path={prompt_path}\n"
+        f"[vc4-auto] stage_dir={stage_dir}\n"
+        f"[vc4-auto] log_dir={log_dir}\n"
+        f"[vc4-auto] tail JS debug log live: tail -f {(stage_dir / '.gpt-web-run' / 'debug.log')}",
+        flush=True,
+    )
+
     chat_result = run_command(
         repo=repo,
         stage="chat",
@@ -776,6 +827,10 @@ def run_attempt(
         timeout_sec=chat_timeout_sec,
     )
     if not chat_result.ok:
+        # Surface the most likely actionable lines from both logs.
+        tail_log_to_terminal(chat_result.log_path, max_lines=40, label="chat.log tail")
+        debug_log = stage_dir / ".gpt-web-run" / "debug.log"
+        tail_log_to_terminal(debug_log, max_lines=40, label="JS debug.log tail")
         return AttemptOutcome(
             passed=False,
             failure=Failure(
@@ -788,6 +843,10 @@ def run_attempt(
             ),
         )
 
+    print(
+        f"[vc4-auto]   chat: copying staged files into repo and validating required paths...",
+        flush=True,
+    )
     try:
         copy_staged_files_into_repo(stage_dir, repo)
         validate_paths_exist(required_material_paths(repo, spec.name))
@@ -799,7 +858,9 @@ def run_attempt(
             log_path=log_path,
             extra="Staged files:\n" + stage_tree_listing(stage_dir),
         )
+        print(f"[vc4-auto]   chat-output-validation FAILED: {exc}", flush=True)
         return AttemptOutcome(passed=False, failure=failure)
+    print(f"[vc4-auto]   chat-output-validation OK", flush=True)
 
     codex_prompt = repo / f"{spec.name}_codex_mechanical_prompt.md"
     codex_text = read_text(codex_prompt)
@@ -821,6 +882,7 @@ def run_attempt(
         timeout_sec=codex_timeout_sec,
     )
     if not codex_result.ok:
+        tail_log_to_terminal(codex_result.log_path, max_lines=40, label="codex.log tail")
         return AttemptOutcome(
             passed=False,
             failure=Failure(
@@ -881,6 +943,7 @@ def run_attempt(
         timeout_sec=step_timeout_sec,
     )
     if not vc4_opt_result.ok:
+        tail_log_to_terminal(vc4_opt_result.log_path, max_lines=30, label="vc4-opt.log tail")
         return AttemptOutcome(
             passed=False,
             failure=Failure(
@@ -902,6 +965,7 @@ def run_attempt(
         timeout_sec=step_timeout_sec,
     )
     if not check_result.ok:
+        tail_log_to_terminal(check_result.log_path, max_lines=40, label="check-vc4.log tail")
         return AttemptOutcome(
             passed=False,
             failure=Failure(
@@ -927,6 +991,7 @@ def run_attempt(
         timeout_sec=step_timeout_sec,
     )
     if not hardware_result.ok:
+        tail_log_to_terminal(hardware_result.log_path, max_lines=60, label="hardware.log tail")
         return AttemptOutcome(
             passed=False,
             failure=Failure(
