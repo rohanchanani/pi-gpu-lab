@@ -45,11 +45,19 @@ VC4_OPT_FLAGS = [
     "/dev/null",
 ]
 
-DEFAULT_CHAT_TIMEOUT_SEC = 20 * 60
+DEFAULT_CHAT_TIMEOUT_SEC = 35 * 60
 DEFAULT_CODEX_TIMEOUT_SEC = 10 * 60
 DEFAULT_STEP_TIMEOUT_SEC = 2 * 60
 DEFAULT_CHAT_INFRA_RETRIES = 3
 DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS = 120000
+# Buffer between the Python-side subprocess timeout and the JS-side
+# response-settle timeout.  We want the JS driver to finish gracefully and
+# write its in-flight marker / finalize the manifest before the Python
+# wrapper kills it for being slow.  The buffer covers browser startup,
+# paste, and post-response composer-restore steps.  With a 35-minute
+# wrapper and a 5-minute buffer, the JS driver has 30 minutes of pure
+# response-wait time -- consistent with "wait up to 30 min for ChatGPT".
+CHAT_RESPONSE_BUFFER_SEC = 5 * 60
 
 TEST_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
 
@@ -441,6 +449,34 @@ def state_paths(repo: Path, name: str) -> tuple[Path, Path]:
     return base / "passed" / f"{name}.json", base / "incomplete" / f"{name}.json"
 
 
+def in_flight_marker_path(repo: Path) -> Path:
+    """Path to the JS driver's in-flight prompt marker.
+
+    The marker is written by gpt_web_driver.js as soon as a prompt is
+    successfully clicked into ChatGPT.  If a subsequent retry of the same
+    prompt finds the marker, the JS driver resumes waiting on the existing
+    tab instead of submitting a duplicate prompt.  See gpt_web_driver.js for
+    the full lifecycle.
+    """
+    return repo / ".vc4_auto" / "in_flight_prompt.json"
+
+
+def clear_in_flight_marker(repo: Path) -> None:
+    """Remove a stale in-flight marker.
+
+    Called at test boundaries and when the prompt text we are about to send
+    changes.  The marker should never survive across logically distinct
+    prompts because the JS driver matches markers by SHA-256 of the prompt
+    text, not by a timestamp.
+    """
+    marker = in_flight_marker_path(repo)
+    try:
+        if marker.exists():
+            marker.unlink()
+    except OSError:
+        pass
+
+
 def is_marked_done(repo: Path, name: str) -> Optional[str]:
     passed, incomplete = state_paths(repo, name)
     if passed.exists():
@@ -707,11 +743,21 @@ def run_attempt(
     write_text(prompt_path, prompt_text)
 
     browser_script = new_tab_script if use_new_tab else current_tab_script
+    # Give the JS driver a slightly tighter response-wait deadline than the
+    # Python-side subprocess timeout so it can finish gracefully (write its
+    # in-flight marker, flush the manifest, etc.) before Python forcibly
+    # kills the process.
+    js_response_timeout_ms = max(
+        60_000,
+        (chat_timeout_sec - CHAT_RESPONSE_BUFFER_SEC) * 1000,
+    )
     chat_cmd = script_invocation(repo, browser_script) + [
         "--prompt-file",
         str(prompt_path.resolve()),
         "--out",
         str(stage_dir.resolve()),
+        "--repo-root",
+        str(repo.resolve()),
         "--connect-timeout-ms",
         str(browser_internal_timeout_ms),
         "--page-timeout-ms",
@@ -719,7 +765,7 @@ def run_attempt(
         "--prompt-timeout-ms",
         str(browser_internal_timeout_ms),
         "--response-timeout-ms",
-        str(chat_timeout_sec * 1000),
+        str(js_response_timeout_ms),
     ]
 
     chat_result = run_command(
@@ -1033,7 +1079,23 @@ def run_one_test(
 ) -> tuple[str, bool]:
     """
     Returns (status, have_context_tab_after), where status is passed/incomplete.
+
+    Chat infrastructure failures are retried with the SAME prompt text.  This
+    is critical for correctness: gpt_web_driver.js writes an in-flight marker
+    keyed on the SHA-256 of the prompt as soon as the prompt is clicked into
+    ChatGPT.  When the next attempt runs the same prompt, the JS driver sees
+    the marker and resumes waiting on the existing tab instead of submitting
+    the prompt a second time.  Submitting again while ChatGPT is still
+    reasoning was the failure mode this design eliminates.
+
+    Whenever the prompt text changes (initial -> failure-fix prompt), we
+    proactively clear the marker so the JS driver does not try to resume on
+    a stale tab.
     """
+    # Starting a fresh logical test: any leftover marker from a previous
+    # invocation (different test, crashed run, etc.) is stale.  Clear it.
+    clear_in_flight_marker(repo)
+
     attempt_index = 0
     fixes_used = 0
     use_new_tab = not have_context_tab
@@ -1047,9 +1109,11 @@ def run_one_test(
     chat_infra_failures = 0
 
     while True:
+        marker_present = in_flight_marker_path(repo).exists()
         print(
             f"[vc4-auto] test={spec.name} attempt={attempt_index} "
             f"script={'new_tab' if use_new_tab else 'current_tab'}"
+            + (" (resume)" if marker_present else "")
         )
         outcome = run_attempt(
             repo=repo,
@@ -1068,6 +1132,7 @@ def run_one_test(
 
         if outcome.passed:
             print(f"[vc4-auto] PASS {spec.name}")
+            clear_in_flight_marker(repo)
             mark_passed(
                 repo=repo,
                 auto=auto,
@@ -1082,15 +1147,21 @@ def run_one_test(
 
         if last_failure.stage == "chat":
             chat_infra_failures += 1
+            marker_now = in_flight_marker_path(repo).exists()
             print(
                 f"[vc4-auto] CHAT INFRA FAILURE {spec.name} "
-                f"retry={chat_infra_failures}/{chat_infra_retries}"
+                f"retry={chat_infra_failures}/{chat_infra_retries} "
+                f"marker={'present (will resume)' if marker_now else 'absent (will resubmit)'}"
             )
             if chat_infra_failures <= chat_infra_retries:
                 attempt_index += 1
-                # Retry the same model prompt. This is a browser/CDP/UI failure,
-                # not a model repair opportunity and not a test failure.
+                # Retry the same model prompt. If the marker is still on
+                # disk, the JS driver will detect it (same prompt hash) and
+                # resume waiting on the existing tab instead of submitting
+                # the prompt a second time.  If the marker is absent, the
+                # JS driver will treat this as a fresh submission.
                 continue
+            clear_in_flight_marker(repo)
             raise DriverError(
                 f"ChatGPT browser automation failed {chat_infra_failures} times for {spec.name}; "
                 "aborting without marking the test incomplete. Check Chrome remote debugging, login state, "
@@ -1098,6 +1169,10 @@ def run_one_test(
             )
 
         chat_infra_failures = 0
+        # Any non-chat failure means we have an answer (or at least a non-
+        # infra problem) and we are about to switch prompts.  The previous
+        # prompt's marker is now stale.
+        clear_in_flight_marker(repo)
         print(
             f"[vc4-auto] FAIL {spec.name} stage={last_failure.stage} "
             f"fixes_used={fixes_used}/{max_fixes}"
@@ -1122,6 +1197,7 @@ def run_one_test(
             test_root=repo / "compiler/test/CodeGen/VC4/Hardware/Run" / spec.name,
         )
         print(f"[vc4-auto] INCOMPLETE {spec.name}")
+        clear_in_flight_marker(repo)
         archive_and_mark_incomplete(
             repo=repo,
             auto=auto,

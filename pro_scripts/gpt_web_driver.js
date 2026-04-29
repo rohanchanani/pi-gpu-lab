@@ -1,10 +1,14 @@
 const { chromium } = require("playwright");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const child_process = require("child_process");
 
 const CDP_URL = process.env.GPT_WEB_CDP_URL || "http://127.0.0.1:9222";
 
+// ---------------------------------------------------------------------------
+// CLI parsing
+// ---------------------------------------------------------------------------
 function parseArgs(argv) {
   const args = {};
   for (let i = 2; i < argv.length; i++) {
@@ -41,6 +45,9 @@ function requireArg(args, name) {
   return args[name];
 }
 
+// ---------------------------------------------------------------------------
+// Filesystem helpers
+// ---------------------------------------------------------------------------
 function mkdirp(p) {
   fs.mkdirSync(p, { recursive: true });
 }
@@ -55,12 +62,18 @@ function escapeRegExp(s) {
 
 function stripOuterQuotes(s) {
   const t = String(s || "").trim();
-  if ((t.startsWith('"') && t.endsWith('"')) ||
-      (t.startsWith("'") && t.endsWith("'")) ||
-      (t.startsWith("`") && t.endsWith("`"))) {
+  if (
+    (t.startsWith('"') && t.endsWith('"')) ||
+    (t.startsWith("'") && t.endsWith("'")) ||
+    (t.startsWith("`") && t.endsWith("`"))
+  ) {
     return t.slice(1, -1);
   }
   return t;
+}
+
+function sha256(text) {
+  return crypto.createHash("sha256").update(String(text || ""), "utf8").digest("hex");
 }
 
 function readPromptFile(promptFile) {
@@ -153,12 +166,80 @@ function writeGeneratedFiles(parsedFiles, outDir) {
   return { written, skipped };
 }
 
+// ---------------------------------------------------------------------------
+// In-flight prompt marker.  The marker is the linchpin of robustness: as soon
+// as we click "send", we record on disk that a prompt is in flight in a
+// specific ChatGPT tab.  If this process is killed/timed-out before the
+// response settles, the next invocation (typically current_tab.js) will see
+// the marker, find the same tab, and RESUME WAITING instead of submitting the
+// prompt a second time.  Sending a duplicate prompt while ChatGPT is still
+// reasoning is the failure mode we are eliminating.
+// ---------------------------------------------------------------------------
+function markerPath(repoRoot) {
+  return path.join(repoRoot, ".vc4_auto", "in_flight_prompt.json");
+}
+
+function readMarker(repoRoot) {
+  try {
+    const p = markerPath(repoRoot);
+    if (!fs.existsSync(p)) return null;
+    const raw = fs.readFileSync(p, "utf8");
+    const obj = JSON.parse(raw);
+    if (!obj || typeof obj !== "object") return null;
+    return obj;
+  } catch (_) {
+    return null;
+  }
+}
+
+function writeMarker(repoRoot, data) {
+  const p = markerPath(repoRoot);
+  mkdirp(path.dirname(p));
+  // Atomic write: write to a sibling temp file and rename.  This prevents
+  // half-written marker files if the process is killed mid-write -- a
+  // truncated marker would otherwise look like a stale-but-valid entry.
+  const tmp = `${p}.tmp.${process.pid}.${Date.now().toString(36)}`;
+  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), "utf8");
+  fs.renameSync(tmp, p);
+}
+
+function clearMarker(repoRoot) {
+  try {
+    const p = markerPath(repoRoot);
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  } catch (_) {}
+}
+
+// ---------------------------------------------------------------------------
+// ChatGPT URL helpers
+// ---------------------------------------------------------------------------
 function isChatGptUrl(url) {
   return /^https?:\/\/(chatgpt\.com|chat\.openai\.com)(\/|$)/i.test(url || "");
 }
 
 function isConversationUrl(url) {
   return /^https?:\/\/(chatgpt\.com|chat\.openai\.com)\/c\/[A-Za-z0-9_-]+/i.test(url || "");
+}
+
+function conversationIdFromUrl(url) {
+  const m = String(url || "").match(/\/c\/([A-Za-z0-9_-]+)/);
+  return m ? m[1] : "";
+}
+
+// After clicking send on a brand-new chat, ChatGPT navigates the tab from
+// "/" to "/c/<convId>" within a few hundred ms.  Capturing the conversation
+// URL lets the resume path identify the tab unambiguously even if the user
+// has multiple ChatGPT tabs open.  Returns the conversation URL if it
+// appears within `timeoutMs`, otherwise returns whatever the current URL
+// is (caller should still write a marker; findTabByUrl tolerates this).
+async function waitForConversationUrl(page, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const url = page.url();
+    if (isConversationUrl(url)) return url;
+    await page.waitForTimeout(200);
+  }
+  return page.url();
 }
 
 async function listChatGptPages(browser) {
@@ -168,21 +249,26 @@ async function listChatGptPages(browser) {
       const url = page.url();
       if (!isChatGptUrl(url)) continue;
       let title = "";
-      try { title = await page.title(); } catch (_) {}
+      try {
+        title = await page.title();
+      } catch (_) {}
       pages.push({ page, url, title, context });
     }
   }
   return pages;
 }
 
+// ---------------------------------------------------------------------------
+// Composer / send / generation detection
+// ---------------------------------------------------------------------------
 async function findPromptBox(page, timeout = 10000) {
   const candidates = [
     '[data-testid="prompt-textarea"]',
-    '#prompt-textarea',
+    "#prompt-textarea",
     'div[contenteditable="true"][id="prompt-textarea"]',
     '.ProseMirror[contenteditable="true"]',
     'textarea[placeholder*="Message"]',
-    'textarea',
+    "textarea",
     'div[contenteditable="true"]',
     '[contenteditable="true"]',
   ];
@@ -197,61 +283,69 @@ async function findPromptBox(page, timeout = 10000) {
 }
 
 async function composerTextLength(page) {
-  return await page.evaluate(() => {
-    const selectors = [
-      '[data-testid="prompt-textarea"]',
-      '#prompt-textarea',
-      '.ProseMirror[contenteditable="true"]',
-      'textarea[placeholder*="Message"]',
-      'textarea',
-      'div[contenteditable="true"]',
-      '[contenteditable="true"]',
-    ];
-    for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (!el) continue;
-      const style = window.getComputedStyle(el);
-      if (style.visibility === "hidden" || style.display === "none") continue;
-      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").length;
-      return (el.innerText || el.textContent || "").length;
-    }
-    return 0;
-  }).catch(() => 0);
+  return await page
+    .evaluate(() => {
+      const selectors = [
+        '[data-testid="prompt-textarea"]',
+        "#prompt-textarea",
+        '.ProseMirror[contenteditable="true"]',
+        'textarea[placeholder*="Message"]',
+        "textarea",
+        'div[contenteditable="true"]',
+        '[contenteditable="true"]',
+      ];
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") continue;
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").length;
+        return (el.innerText || el.textContent || "").length;
+      }
+      return 0;
+    })
+    .catch(() => 0);
 }
 
 async function clearPromptBoxInDom(page) {
-  await page.evaluate(() => {
-    const selectors = [
-      '[data-testid="prompt-textarea"]',
-      '#prompt-textarea',
-      '.ProseMirror[contenteditable="true"]',
-      'textarea[placeholder*="Message"]',
-      'textarea',
-      'div[contenteditable="true"]',
-      '[contenteditable="true"]',
-    ];
-    for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (!el) continue;
-      const style = window.getComputedStyle(el);
-      if (style.visibility === "hidden" || style.display === "none") continue;
-      el.focus();
-      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-        el.value = "";
-        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null }));
+  await page
+    .evaluate(() => {
+      const selectors = [
+        '[data-testid="prompt-textarea"]',
+        "#prompt-textarea",
+        '.ProseMirror[contenteditable="true"]',
+        'textarea[placeholder*="Message"]',
+        "textarea",
+        'div[contenteditable="true"]',
+        '[contenteditable="true"]',
+      ];
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") continue;
+        el.focus();
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+          el.value = "";
+          el.dispatchEvent(
+            new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null })
+          );
+          return true;
+        }
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand("delete", false, null);
+        el.dispatchEvent(
+          new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null })
+        );
         return true;
       }
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand("delete", false, null);
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null }));
-      return true;
-    }
-    return false;
-  }).catch(() => {});
+      return false;
+    })
+    .catch(() => {});
 }
 
 async function assistantCount(page) {
@@ -274,19 +368,66 @@ async function lastAssistantText(page) {
   return "";
 }
 
+// Robust generation detection.  The classic stop-button selectors are not
+// always present during reasoning (e.g. ChatGPT Pro / o1 / GPT-5 reasoning
+// emits a "Thinking" pill before any visible Stop button).  We additionally
+// look for textual "Thinking"/"Reasoning"/"Reading" indicators, the absence
+// of an enabled send button while we know a prompt was submitted, and
+// streaming markers on the last assistant message.
 async function isGenerating(page) {
-  const selectors = [
+  const stopSelectors = [
     'button[data-testid="stop-button"]',
     'button[aria-label*="Stop"]',
     'button[aria-label*="stop"]',
+    'button[aria-label="Stop streaming"]',
+    'button[aria-label="Stop generating"]',
     'button:has-text("Stop generating")',
   ];
-  for (const selector of selectors) {
+  for (const selector of stopSelectors) {
     try {
       const loc = page.locator(selector).last();
-      if ((await loc.count()) > 0 && await loc.isVisible().catch(() => false)) return true;
+      if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) return true;
     } catch (_) {}
   }
+
+  // Reasoning / thinking pill or status text.
+  const thinkingDetected = await page
+    .evaluate(() => {
+      const needles = [
+        "thinking",
+        "reasoning",
+        "analyzing",
+        "analysing",
+        "searching the web",
+        "reading",
+        "working",
+        "planning",
+        "looking up",
+      ];
+      const candidates = document.querySelectorAll(
+        '[aria-live], [data-testid*="thinking"], [data-testid*="reasoning"], [class*="thinking"], [class*="Thinking"], [class*="reasoning"], [class*="Reasoning"]'
+      );
+      for (const el of candidates) {
+        const txt = ((el.innerText || el.textContent || "") + "").trim().toLowerCase();
+        if (!txt) continue;
+        if (needles.some((n) => txt.includes(n))) return true;
+      }
+      // Look for a "..." typing indicator inside the latest assistant message.
+      const assistantNodes = document.querySelectorAll('[data-message-author-role="assistant"]');
+      if (assistantNodes.length > 0) {
+        const last = assistantNodes[assistantNodes.length - 1];
+        const cls = (last.getAttribute("class") || "").toLowerCase();
+        if (cls.includes("streaming") || cls.includes("loading")) return true;
+        const lastTxt = ((last.innerText || last.textContent || "") + "").trim().toLowerCase();
+        // Reasoning models often show only the running status until first
+        // tokens appear.
+        if (lastTxt && needles.some((n) => lastTxt.startsWith(n))) return true;
+      }
+      return false;
+    })
+    .catch(() => false);
+  if (thinkingDetected) return true;
+
   return false;
 }
 
@@ -323,6 +464,9 @@ async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label
   return false;
 }
 
+// ---------------------------------------------------------------------------
+// Clipboard / paste helpers
+// ---------------------------------------------------------------------------
 function setClipboardText(text) {
   if (process.platform === "darwin") {
     child_process.execFileSync("/usr/bin/pbcopy", { input: text, maxBuffer: 1024 * 1024 });
@@ -332,7 +476,10 @@ function setClipboardText(text) {
     child_process.execFileSync("wl-copy", [], { input: text, maxBuffer: 1024 * 1024 });
     return;
   }
-  child_process.execFileSync("xclip", ["-selection", "clipboard"], { input: text, maxBuffer: 1024 * 1024 });
+  child_process.execFileSync("xclip", ["-selection", "clipboard"], {
+    input: text,
+    maxBuffer: 1024 * 1024,
+  });
 }
 
 function nativePlainTextPaste() {
@@ -340,7 +487,7 @@ function nativePlainTextPaste() {
     const script = [
       'tell application "System Events"',
       '  keystroke "v" using {command down, shift down}',
-      'end tell',
+      "end tell",
     ].join("\n");
     child_process.execFileSync("/usr/bin/osascript", ["-e", script], { stdio: "ignore" });
     return;
@@ -351,41 +498,50 @@ function nativePlainTextPaste() {
 }
 
 async function domInsertPrompt(page, fullPrompt) {
-  return await page.evaluate((text) => {
-    const selectors = [
-      '[data-testid="prompt-textarea"]',
-      '#prompt-textarea',
-      '.ProseMirror[contenteditable="true"]',
-      'textarea[placeholder*="Message"]',
-      'textarea',
-      'div[contenteditable="true"]',
-      '[contenteditable="true"]',
-    ];
-    for (const selector of selectors) {
-      const el = document.querySelector(selector);
-      if (!el) continue;
-      const style = window.getComputedStyle(el);
-      if (style.visibility === "hidden" || style.display === "none") continue;
-      el.focus();
-      if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-        el.value = text;
-        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) }));
-        return true;
+  return await page
+    .evaluate((text) => {
+      const selectors = [
+        '[data-testid="prompt-textarea"]',
+        "#prompt-textarea",
+        '.ProseMirror[contenteditable="true"]',
+        'textarea[placeholder*="Message"]',
+        "textarea",
+        'div[contenteditable="true"]',
+        '[contenteditable="true"]',
+      ];
+      for (const selector of selectors) {
+        const el = document.querySelector(selector);
+        if (!el) continue;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") continue;
+        el.focus();
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+          el.value = text;
+          el.dispatchEvent(
+            new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) })
+          );
+          return true;
+        }
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        document.execCommand("delete", false, null);
+        const ok = document.execCommand("insertText", false, text);
+        el.dispatchEvent(
+          new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) })
+        );
+        return ok || (el.innerText || el.textContent || "").length > 0;
       }
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      document.execCommand("delete", false, null);
-      const ok = document.execCommand("insertText", false, text);
-      el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) }));
-      return ok || (el.innerText || el.textContent || "").length > 0;
-    }
-    return false;
-  }, fullPrompt).catch(() => false);
+      return false;
+    }, fullPrompt)
+    .catch(() => false);
 }
 
+// ---------------------------------------------------------------------------
+// Submit / wait core
+// ---------------------------------------------------------------------------
 async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   await page.bringToFront().catch(() => {});
   const promptBox = await findPromptBox(page, Math.min(promptTimeoutMs, 60000));
@@ -441,35 +597,59 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs)
   let previous = "";
   let stableCount = 0;
   let lastNonEmpty = "";
+  let sawNewMessage = false;
+  let lastLog = 0;
   const deadline = Date.now() + responseTimeoutMs;
+
   while (Date.now() < deadline) {
     await page.waitForTimeout(1000);
     const loc = page.locator('[data-message-author-role="assistant"]');
     const count = await loc.count().catch(() => 0);
     let current = "";
     if (count > beforeCount) {
+      sawNewMessage = true;
       current = await loc.nth(count - 1).innerText().catch(() => "");
-    } else if (Date.now() > deadline - responseTimeoutMs + 20000) {
+    } else {
+      // Even before a new assistant block exists (during long reasoning), we
+      // may want to peek at the trailing assistant text for partial output.
       current = await lastAssistantText(page);
     }
     current = current.trim();
     if (current) lastNonEmpty = current;
+
     const generating = await isGenerating(page);
-    if (current && current === previous && !generating) {
+
+    if (Date.now() - lastLog > 30000) {
+      const elapsedMs = responseTimeoutMs - (deadline - Date.now());
+      console.log(
+        `Waiting for response to settle (elapsed=${Math.round(elapsedMs / 1000)}s, ` +
+          `assistantCount=${count}, sawNew=${sawNewMessage}, generating=${generating}, ` +
+          `currentLen=${current.length}, stable=${stableCount}).`
+      );
+      lastLog = Date.now();
+    }
+
+    if (current && current === previous && !generating && sawNewMessage) {
       stableCount++;
       if (stableCount >= 5) {
         await waitForComposerReadyForNextPrompt(page, 120000, "follow-up prompt after response");
-        return current;
+        return { text: current, settled: true, sawNewMessage };
       }
     } else {
       stableCount = 0;
       previous = current;
     }
   }
+  console.log(
+    `Response did not settle within ${responseTimeoutMs}ms (sawNew=${sawNewMessage}, lastLen=${lastNonEmpty.length}).`
+  );
   await waitForComposerReadyForNextPrompt(page, 30000, "follow-up prompt after response timeout");
-  return lastNonEmpty;
+  return { text: lastNonEmpty, settled: false, sawNewMessage };
 }
 
+// ---------------------------------------------------------------------------
+// Browser / tab handling
+// ---------------------------------------------------------------------------
 async function denyMicIfPossible(browser) {
   try {
     const session = await browser.newBrowserCDPSession();
@@ -487,25 +667,32 @@ async function denyMicIfPossible(browser) {
 
 async function dumpDebugState(page, metaDir) {
   await page.screenshot({ path: path.join(metaDir, "after-generation.png"), fullPage: false }).catch(() => {});
-  const candidates = await page.evaluate(() => {
-    const els = [...document.querySelectorAll("a, button")];
-    return els.map((el, i) => {
-      const rect = el.getBoundingClientRect();
-      return {
-        i,
-        tag: el.tagName.toLowerCase(),
-        text: (el.innerText || el.textContent || "").trim().slice(0, 250),
-        aria: el.getAttribute("aria-label") || "",
-        title: el.getAttribute("title") || "",
-        href: el.getAttribute("href") || "",
-        download: el.getAttribute("download") || "",
-        testid: el.getAttribute("data-testid") || "",
-        className: String(el.getAttribute("class") || "").slice(0, 250),
-        visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
-        rect: { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) },
-      };
-    });
-  }).catch(() => []);
+  const candidates = await page
+    .evaluate(() => {
+      const els = [...document.querySelectorAll("a, button")];
+      return els.map((el, i) => {
+        const rect = el.getBoundingClientRect();
+        return {
+          i,
+          tag: el.tagName.toLowerCase(),
+          text: (el.innerText || el.textContent || "").trim().slice(0, 250),
+          aria: el.getAttribute("aria-label") || "",
+          title: el.getAttribute("title") || "",
+          href: el.getAttribute("href") || "",
+          download: el.getAttribute("download") || "",
+          testid: el.getAttribute("data-testid") || "",
+          className: String(el.getAttribute("class") || "").slice(0, 250),
+          visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
+          rect: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            width: Math.round(rect.width),
+            height: Math.round(rect.height),
+          },
+        };
+      });
+    })
+    .catch(() => []);
   fs.writeFileSync(path.join(metaDir, "click-candidates.json"), JSON.stringify(candidates, null, 2), "utf8");
 }
 
@@ -525,7 +712,13 @@ async function newChatPage(browser, pageTimeoutMs) {
   return page;
 }
 
-async function currentOrClonedChatPage(browser, pageTimeoutMs) {
+// Find the most recent ChatGPT tab to reuse.  Unlike the previous version,
+// we DO NOT clone the conversation URL into a brand-new tab when the
+// composer is missing -- cloning combined with the Python orchestrator's
+// retry logic is what caused duplicate prompts to be submitted while
+// ChatGPT was still reasoning.  Instead we simply wait, with a generous
+// timeout, for the original tab to become ready, or open a fresh one.
+async function currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs) {
   const candidates = await listChatGptPages(browser);
   if (candidates.length === 0) {
     console.log("No open ChatGPT tab found; opening a fresh ChatGPT tab.");
@@ -538,30 +731,62 @@ async function currentOrClonedChatPage(browser, pageTimeoutMs) {
     try {
       await page.bringToFront();
       await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      if (await waitForComposerReadyForNextPrompt(page, 20000, "current tab reuse")) {
+      if (await waitForComposerReadyForNextPrompt(page, composerWaitMs, "current tab reuse")) {
         console.log(`Using existing ChatGPT tab: ${candidate.title || "(untitled)"}`);
         console.log(`URL: ${page.url()}`);
         return page;
       }
     } catch (_) {}
-
-    const url = page.url();
-    if (isConversationUrl(url)) {
-      console.log(`Prompt box missing/hidden on current ChatGPT tab; opening clone: ${url}`);
-      const clone = await candidate.context.newPage();
-      await clone.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
-      await clone.goto(url, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs }).catch(() => {});
-      await clone.waitForTimeout(4000);
-      await findPromptBox(clone, Math.min(pageTimeoutMs, 60000));
-      await clone.bringToFront();
-      return clone;
-    }
   }
 
-  console.log("No reusable ChatGPT tab had a visible composer; opening a fresh ChatGPT tab.");
+  console.log("No reusable ChatGPT tab had a ready composer; opening a fresh ChatGPT tab.");
   return await newChatPage(browser, pageTimeoutMs);
 }
 
+// Locate a tab by exact URL match (used during marker resume).  Returns null
+// if not found.  We try (in order):
+//   1. Exact URL match (best when user has multiple ChatGPT tabs)
+//   2. Conversation-id match (handles the case where the tab's URL has been
+//      updated since the marker was written, e.g. user navigated within the
+//      same conversation, or our captured URL was already a conv URL)
+//   3. If the marker URL is not a conversation URL AND there is exactly
+//      ONE open ChatGPT tab, use that tab.  This covers the brief window
+//      after a brand-new send where the tab URL is still "/" instead of
+//      "/c/<id>" -- there's no ambiguity in that case.
+async function findTabByUrl(browser, targetUrl) {
+  if (!targetUrl) return null;
+  const targetConv = conversationIdFromUrl(targetUrl);
+  const pages = await listChatGptPages(browser);
+  // Exact URL match first.
+  for (const candidate of pages) {
+    if (candidate.page.isClosed()) continue;
+    if (candidate.url === targetUrl) return candidate.page;
+  }
+  if (targetConv) {
+    for (const candidate of pages) {
+      if (candidate.page.isClosed()) continue;
+      if (conversationIdFromUrl(candidate.url) === targetConv) return candidate.page;
+    }
+  }
+  // Last resort: if the marker's URL is a non-conversation URL (typically
+  // "/" captured before ChatGPT redirected) and there is exactly one open
+  // ChatGPT tab, that tab is unambiguously the one we sent the prompt to.
+  if (!isConversationUrl(targetUrl)) {
+    const open = pages.filter((c) => !c.page.isClosed());
+    if (open.length === 1) {
+      console.log(
+        `Marker URL (${targetUrl}) is not a conversation URL, but there is exactly one ` +
+          `open ChatGPT tab (${open[0].url}); using it for resume.`
+      );
+      return open[0].page;
+    }
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Prompt wrapper
+// ---------------------------------------------------------------------------
 function buildWrappedPrompt(userPrompt, token) {
   return `
 You are generating files for local automation.
@@ -593,6 +818,31 @@ ${userPrompt}
 `.trim();
 }
 
+// ---------------------------------------------------------------------------
+// Repo root resolution.  The marker lives at <repoRoot>/.vc4_auto/, but this
+// driver is invoked with --out pointing at .vc4_auto/staging/<test>/<attempt>.
+// We prefer an explicit --repo-root, otherwise we walk up from --out looking
+// for .vc4_auto, otherwise we fall back to cwd.
+// ---------------------------------------------------------------------------
+function resolveRepoRoot(args, outDir) {
+  if (args["repo-root"]) {
+    const explicit = path.resolve(args["repo-root"]);
+    return explicit;
+  }
+  let candidate = path.resolve(outDir);
+  for (let i = 0; i < 10; i++) {
+    if (fs.existsSync(path.join(candidate, ".vc4_auto"))) return candidate;
+    if (fs.existsSync(path.join(candidate, ".git"))) return candidate;
+    const parent = path.dirname(candidate);
+    if (parent === candidate) break;
+    candidate = parent;
+  }
+  return process.cwd();
+}
+
+// ---------------------------------------------------------------------------
+// Main run
+// ---------------------------------------------------------------------------
 async function run(mode, argv) {
   const args = parseArgs(argv);
   const promptFile = requireArg(args, "prompt-file");
@@ -602,76 +852,272 @@ async function run(mode, argv) {
   const connectTimeoutMs = intArg(args, "connect-timeout-ms", 120000);
   const pageTimeoutMs = intArg(args, "page-timeout-ms", 120000);
   const promptTimeoutMs = intArg(args, "prompt-timeout-ms", 120000);
-  const responseTimeoutMs = intArg(args, "response-timeout-ms", 1200000);
+  // 30 minutes of model wallclock by default.  The Python orchestrator passes
+  // its own value here; this is just the standalone fallback.
+  const responseTimeoutMs = intArg(args, "response-timeout-ms", 30 * 60 * 1000);
+  const composerWaitMs = intArg(args, "composer-wait-ms", 5 * 60 * 1000);
+  const allowDuplicateSubmit = boolArg(args, "allow-duplicate-submit");
 
   mkdirp(outDir);
   mkdirp(metaDir);
 
+  const repoRoot = resolveRepoRoot(args, outDir);
+  console.log(`Resolved repo root for in-flight marker: ${repoRoot}`);
+
   const userPrompt = readPromptFile(promptFile);
-  const token = randomToken();
-  const fullPrompt = buildWrappedPrompt(userPrompt, token);
+  const promptHash = sha256(userPrompt);
 
   const browser = await connectBrowser(connectTimeoutMs);
   let page = null;
+  let resumed = false;
+  let token = null;
+  let fullPrompt = null;
+
   try {
     await denyMicIfPossible(browser);
-    page = mode === "new" ? await newChatPage(browser, pageTimeoutMs) : await currentOrClonedChatPage(browser, pageTimeoutMs);
 
-    const context = page.context();
-    context.setDefaultTimeout(Math.min(pageTimeoutMs, 30000));
-    await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
-    await page.bringToFront();
-
-    const beforeCount = await assistantCount(page);
-    await submitPrompt(page, fullPrompt, promptTimeoutMs);
-    console.log(`Prompt submitted in ${mode === "new" ? "new" : "current"} ChatGPT tab. Waiting for response to settle...`);
-    const answer = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
-
-    const answerPath = path.join(metaDir, "answer.md");
-    fs.writeFileSync(answerPath, answer || "", "utf8");
-    const parsedFiles = parseFileBlocks(answer || "", token);
-    const { written, skipped } = writeGeneratedFiles(parsedFiles, outDir);
-
-    if (written.length === 0 || skipped.length > 0) {
-      await dumpDebugState(page, metaDir);
-    } else {
-      // Leave the ChatGPT tab ready for current_tab.js.  In practice the
-      // composer can briefly disappear after a response even after the answer
-      // text has stabilized; wait for it here instead of forcing the next
-      // invocation to clone/reload the conversation.
-      if (!(await waitForComposerReadyForNextPrompt(page, 60000, "next automation step after file parse"))) {
-        const restoreUrl = page.url();
-        if (isChatGptUrl(restoreUrl)) {
-          console.log(`Composer still hidden; reloading current chat before returning control: ${restoreUrl}`);
-          await page.goto(restoreUrl, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs }).catch(() => {});
-          await page.waitForTimeout(4000);
-          await waitForComposerReadyForNextPrompt(page, 60000, "next automation step after reload");
-        }
+    // ---- Resume path: an in-flight marker for the same prompt hash exists ----
+    const marker = readMarker(repoRoot);
+    if (marker && marker.promptHash === promptHash && marker.tabUrl && marker.token) {
+      const ageMs = Date.now() - Number(marker.submittedAt || 0);
+      console.log(
+        `Found in-flight marker: tabUrl=${marker.tabUrl}, ageMs=${ageMs}, token=${marker.token}`
+      );
+      const existing = await findTabByUrl(browser, marker.tabUrl);
+      if (existing) {
+        console.log(
+          "Reusing existing ChatGPT tab to RESUME WAITING on the previously-submitted prompt. " +
+            "No new prompt will be sent."
+        );
+        page = existing;
+        token = marker.token;
+        fullPrompt = null;
+        resumed = true;
+        await page.bringToFront().catch(() => {});
+      } else {
+        console.log(
+          "In-flight marker present but the matching ChatGPT tab is gone; discarding marker."
+        );
+        clearMarker(repoRoot);
       }
+    } else if (marker && marker.promptHash !== promptHash) {
+      // Different prompt -- the previous run is unrelated to this one.  Leave
+      // the marker alone so a future invocation with the matching hash can
+      // still resume; just don't try to resume here.
+      console.log(
+        `In-flight marker exists for a different prompt hash (have ${marker.promptHash}, want ${promptHash}). ` +
+          "Proceeding with normal submit; the marker will be replaced."
+      );
     }
 
-    const manifest = {
-      ok: written.length > 0,
-      mode: mode === "new" ? "new-chatgpt-tab-gptweb-file-parser" : "existing-or-cloned-chatgpt-tab-gptweb-file-parser",
-      promptFile: path.resolve(promptFile),
+    // ---- Normal path: no resume -> open tab and submit ----
+    if (!resumed) {
+      page =
+        mode === "new"
+          ? await newChatPage(browser, pageTimeoutMs)
+          : await currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs);
+
+      const context = page.context();
+      context.setDefaultTimeout(Math.min(pageTimeoutMs, 30000));
+      await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
+      await page.bringToFront();
+
+      // Refuse to submit if a different in-flight prompt is recorded and the
+      // user hasn't explicitly waived the safety.  This protects against the
+      // duplicate-submit failure mode the orchestrator used to trigger.
+      const existingMarker = readMarker(repoRoot);
+      if (existingMarker && existingMarker.promptHash !== promptHash && !allowDuplicateSubmit) {
+        const existingPage = await findTabByUrl(browser, existingMarker.tabUrl);
+        if (existingPage && (await isGenerating(existingPage).catch(() => false))) {
+          throw new Error(
+            "Refusing to submit a new prompt while a different in-flight prompt is still " +
+              "generating in another ChatGPT tab. Wait for it to finish, clear " +
+              `${markerPath(repoRoot)}, or pass --allow-duplicate-submit.`
+          );
+        }
+      }
+
+      // Make absolutely sure the composer is ready (not just visible) before we
+      // try to send.  `currentOrFreshChatPage` already waits, but this is also
+      // the entry point for `newChatPage`, where we want the same guarantee.
+      await waitForComposerReadyForNextPrompt(page, composerWaitMs, "submit");
+
+      token = randomToken();
+      fullPrompt = buildWrappedPrompt(userPrompt, token);
+
+      const beforeCount = await assistantCount(page);
+      await submitPrompt(page, fullPrompt, promptTimeoutMs);
+      // After the send click, ChatGPT navigates the tab from "/" to
+      // "/c/<convId>" once the conversation is created server-side.  This
+      // happens within a few hundred ms in normal cases but can take a few
+      // seconds.  We want the marker to capture the conversation URL so a
+      // resume invocation can find the right tab even if the user has
+      // switched tabs around.  Wait up to 15s for the URL to become a
+      // conversation URL; if it doesn't, fall back to the current URL --
+      // findTabByUrl tolerates non-conversation URLs in single-tab cases.
+      const tabUrl = await waitForConversationUrl(page, 15000);
+      writeMarker(repoRoot, {
+        promptHash,
+        token,
+        tabUrl,
+        outDir,
+        mode,
+        beforeCount,
+        submittedAt: Date.now(),
+      });
+      console.log(
+        `Prompt submitted in ${mode === "new" ? "new" : "current"} ChatGPT tab. ` +
+          `In-flight marker written (tabUrl=${tabUrl}). Waiting for response to settle...`
+      );
+
+      // Settle wait.
+      const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
+      await finalizeAnswer({
+        page,
+        repoRoot,
+        outDir,
+        metaDir,
+        token,
+        answer: result.text,
+        settled: result.settled,
+        promptFile,
+        mode,
+        closeTab,
+        pageTimeoutMs,
+      });
+      return;
+    }
+
+    // ---- Resume branch: keep waiting on the existing tab ----
+    // We don't know `beforeCount` from the original submission with full
+    // certainty (the marker stores it, but the count may have advanced if
+    // ChatGPT already produced text).  Use the stored value when available,
+    // otherwise fall back to "current count - 1" so we still treat the most
+    // recent assistant block as the response under construction.
+    let beforeCount = Number(marker.beforeCount);
+    if (!Number.isFinite(beforeCount) || beforeCount < 0) {
+      const cur = await assistantCount(page);
+      beforeCount = Math.max(0, cur - 1);
+    }
+    console.log(`Resume: waiting for assistant message #${beforeCount + 1} to settle.`);
+    const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
+    await finalizeAnswer({
+      page,
+      repoRoot,
       outDir,
       metaDir,
-      answerPath,
       token,
-      files: written,
-      skipped,
-      parsedBlockCount: parsedFiles.length,
-      keptChatGptTabOpen: !closeTab,
-      chatGptTabUrl: page.url(),
-      note: written.length === 0 ? "No files were written. Check .gpt-web-run/answer.md and .gpt-web-run/after-generation.png." : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
-    };
-    fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
-    console.log(JSON.stringify(manifest, null, 2));
-    if (written.length === 0) process.exitCode = 2;
+      answer: result.text,
+      settled: result.settled,
+      promptFile,
+      mode,
+      closeTab,
+      pageTimeoutMs,
+    });
   } finally {
     if (closeTab && page) await page.close().catch(() => {});
     if (browser && typeof browser.disconnect === "function") await browser.disconnect().catch(() => {});
     setTimeout(() => process.exit(process.exitCode || 0), 50);
+  }
+}
+
+async function finalizeAnswer({
+  page,
+  repoRoot,
+  outDir,
+  metaDir,
+  token,
+  answer,
+  settled,
+  promptFile,
+  mode,
+  closeTab,
+  pageTimeoutMs,
+}) {
+  const answerPath = path.join(metaDir, "answer.md");
+  fs.writeFileSync(answerPath, answer || "", "utf8");
+  const parsedFiles = parseFileBlocks(answer || "", token);
+  const { written, skipped } = writeGeneratedFiles(parsedFiles, outDir);
+
+  if (written.length === 0 || skipped.length > 0) {
+    await dumpDebugState(page, metaDir);
+  } else {
+    if (
+      !(await waitForComposerReadyForNextPrompt(
+        page,
+        60000,
+        "next automation step after file parse"
+      ))
+    ) {
+      const restoreUrl = page.url();
+      if (isChatGptUrl(restoreUrl)) {
+        console.log(
+          `Composer still hidden; reloading current chat before returning control: ${restoreUrl}`
+        );
+        await page
+          .goto(restoreUrl, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs })
+          .catch(() => {});
+        await page.waitForTimeout(4000);
+        await waitForComposerReadyForNextPrompt(page, 60000, "next automation step after reload");
+      }
+    }
+  }
+
+  // Marker lifecycle:
+  //   - If the response settled (settled=true), the prompt is "done" --
+  //     either successfully (files written) or unrecoverably (model returned
+  //     prose instead of GPTWEB_FILE blocks).  Either way, a future retry
+  //     should NOT resume waiting on this prompt.  Clear the marker.
+  //   - If the wait did NOT settle (settled=false), ChatGPT is probably still
+  //     reasoning when our internal timeout fired.  Leave the marker on disk
+  //     so the next invocation can resume waiting on the same tab instead of
+  //     re-submitting the prompt.
+  if (settled) {
+    clearMarker(repoRoot);
+  } else {
+    console.log(
+      "Wait timed out without a settled response; leaving the in-flight marker so a follow-up " +
+        "invocation can resume waiting on the same ChatGPT tab."
+    );
+  }
+
+  const manifest = {
+    ok: written.length > 0,
+    settled: !!settled,
+    mode:
+      mode === "new"
+        ? "new-chatgpt-tab-gptweb-file-parser"
+        : "existing-or-fresh-chatgpt-tab-gptweb-file-parser",
+    promptFile: path.resolve(promptFile),
+    outDir,
+    metaDir,
+    answerPath,
+    token,
+    files: written,
+    skipped,
+    parsedBlockCount: parsedFiles.length,
+    keptChatGptTabOpen: !closeTab,
+    chatGptTabUrl: page.url(),
+    note:
+      written.length === 0
+        ? "No files were written. Check .gpt-web-run/answer.md and .gpt-web-run/after-generation.png."
+        : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
+  };
+  fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
+  console.log(JSON.stringify(manifest, null, 2));
+  // Exit code semantics, deliberately distinguishing between "infra failure
+  // (Python should retry the same prompt, possibly resuming via the marker)"
+  // and "model produced an answer that the orchestrator can act on
+  // (Python should validate via copy_staged_files_into_repo and, if
+  // empty/incomplete, run its chat-output-validation -> fix prompt flow)":
+  //
+  //   - exit 0: response settled.  Whether or not files were written, the
+  //     orchestrator owns the next decision based on the staging dir.
+  //   - exit 2: response did NOT settle.  This is an infra-level failure
+  //     and the orchestrator should treat it as such (the in-flight marker
+  //     has been preserved so a retry will resume waiting on the same tab).
+  if (!settled) {
+    process.exitCode = 2;
   }
 }
 
