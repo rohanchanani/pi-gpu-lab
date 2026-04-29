@@ -1,0 +1,10 @@
+{
+  "name": "conv1d_3tap",
+  "status": "passed",
+  "completed_utc": "2026-04-29T21:43:06.874898+00:00",
+  "attempts_used": 1,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/conv1d_3tap",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/conv1d_3tap/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/conv1d_3tap/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=conv1d_3tap status=PASS cases=13 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_n=511 max_abs_diff=0.0 runtime_allocations=1 runtime_launches=13 checksum_accum=-384000 elapsed_usec=139460"
+}
