@@ -316,12 +316,17 @@ async function listChatGptPages(browser) {
 // Composer / send / generation detection
 // ---------------------------------------------------------------------------
 const PROMPT_BOX_SELECTORS = [
-  '[data-testid="prompt-textarea"]',
-  "#prompt-textarea",
+  // Put the selectors that actually match the current ChatGPT composer first.
+  // The previous driver waited 60s on [data-testid="prompt-textarea"] before
+  // ever trying #prompt-textarea, which is why every fresh tab burned a minute.
+  '#prompt-textarea[contenteditable="true"]',
   'div[contenteditable="true"][id="prompt-textarea"]',
   '.ProseMirror[contenteditable="true"]',
+  '[data-testid="prompt-textarea"]',
+  '#prompt-textarea',
   'textarea[placeholder*="Message"]',
-  "textarea",
+  'textarea[data-testid="prompt-textarea"]',
+  'textarea',
   'div[contenteditable="true"]',
   '[contenteditable="true"]',
 ];
@@ -331,6 +336,7 @@ const SEND_BUTTON_SELECTORS = [
   'button[aria-label="Send prompt"]',
   'button[aria-label="Send message"]',
   'button[aria-label*="Send"]',
+  'form button[type="submit"]',
 ];
 
 const STOP_BUTTON_SELECTORS = [
@@ -340,32 +346,94 @@ const STOP_BUTTON_SELECTORS = [
   'button[aria-label="Stop generating response"]',
 ];
 
+const BIG_PROMPT_PASTE_WAIT_MS = 45000;
+const SMALL_PROMPT_INSERT_TEXT_MAX_CHARS = Number(process.env.GPT_WEB_INSERTTEXT_MAX_CHARS || 20000);
+
+function promptLoadThreshold(expectedLen) {
+  if (!expectedLen || expectedLen < 10000) return 1;
+  // textContent can differ from the source string because contenteditable
+  // paragraphs add/drop line separators.  85% is strict enough to reject a
+  // one-character/partial paste but tolerant of DOM normalization.
+  return Math.floor(expectedLen * 0.85);
+}
+
 async function findPromptBox(page, timeout = 10000) {
-  vlog("findPromptBox: searching", { timeoutPerSelector: timeout });
-  for (const selector of PROMPT_BOX_SELECTORS) {
-    const loc = page.locator(selector).last();
-    try {
-      await loc.waitFor({ state: "visible", timeout });
-      vlog("findPromptBox: matched", { selector });
-      return loc;
-    } catch (_) {
-      vlog("findPromptBox: selector did not match", { selector });
-    }
-  }
-  vwarn("findPromptBox: no selector matched");
-  throw new Error("Could not find ChatGPT prompt box.");
+  const startedAt = Date.now();
+  const handle = await page
+    .waitForFunction(
+      ({ selectors }) => {
+        function isCandidateVisible(el) {
+          if (!el) return false;
+          const style = window.getComputedStyle(el);
+          if (style.visibility === "hidden" || style.display === "none") return false;
+          const rect = el.getBoundingClientRect();
+          if (rect.width <= 0 || rect.height <= 0) return false;
+          if (el.closest('[aria-hidden="true"]')) return false;
+          const tag = el.tagName;
+          return el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT";
+        }
+        for (const selector of selectors) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const el = nodes[i];
+            if (isCandidateVisible(el)) return el;
+          }
+        }
+        return null;
+      },
+      { selectors: PROMPT_BOX_SELECTORS },
+      { timeout, polling: 100 }
+    )
+    .catch((err) => {
+      throw new Error(`Could not find ChatGPT prompt box within ${timeout}ms: ${err.message}`);
+    });
+  const el = handle.asElement();
+  if (!el) throw new Error("Could not find ChatGPT prompt box: waitForFunction returned no element");
+  const desc = await el
+    .evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        tag: node.tagName.toLowerCase(),
+        id: node.id || "",
+        testid: node.getAttribute("data-testid") || "",
+        className: String(node.getAttribute("class") || "").slice(0, 80),
+        elapsedMs: 0,
+        rect: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          w: Math.round(rect.width),
+          h: Math.round(rect.height),
+        },
+      };
+    })
+    .catch(() => ({}));
+  desc.elapsedMs = Date.now() - startedAt;
+  vlog("findPromptBox: matched", desc);
+  return el;
 }
 
 async function composerTextLength(page) {
   return await page
     .evaluate((selectors) => {
-      for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (!el) continue;
+      function visibleEditable(el) {
+        if (!el) return false;
         const style = window.getComputedStyle(el);
-        if (style.visibility === "hidden" || style.display === "none") continue;
-        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").length;
-        return (el.innerText || el.textContent || "").length;
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        const tag = el.tagName;
+        return el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT";
+      }
+      for (const selector of selectors) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const el = nodes[i];
+          if (!visibleEditable(el)) continue;
+          if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") return (el.value || "").length;
+          // textContent is much cheaper than innerText for 500k+ character
+          // prompts because it does not force layout.
+          return (el.textContent || "").length;
+        }
       }
       return 0;
     }, PROMPT_BOX_SELECTORS)
@@ -375,29 +443,39 @@ async function composerTextLength(page) {
 async function clearPromptBoxInDom(page) {
   await page
     .evaluate((selectors) => {
-      for (const selector of selectors) {
-        const el = document.querySelector(selector);
-        if (!el) continue;
+      function visibleEditable(el) {
+        if (!el) return false;
         const style = window.getComputedStyle(el);
-        if (style.visibility === "hidden" || style.display === "none") continue;
-        el.focus();
-        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-          el.value = "";
-          el.dispatchEvent(
-            new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null })
-          );
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) return false;
+        const tag = el.tagName;
+        return el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT";
+      }
+      for (const selector of selectors) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        for (let i = nodes.length - 1; i >= 0; i--) {
+          const el = nodes[i];
+          if (!visibleEditable(el)) continue;
+          el.focus();
+          if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+            el.value = "";
+            el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+            return true;
+          }
+          const sel = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          sel.removeAllRanges();
+          sel.addRange(range);
+          try {
+            document.execCommand("delete", false, null);
+          } catch (_) {
+            el.textContent = "";
+          }
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
           return true;
         }
-        const sel = window.getSelection();
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        document.execCommand("delete", false, null);
-        el.dispatchEvent(
-          new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward", data: null })
-        );
-        return true;
       }
       return false;
     }, PROMPT_BOX_SELECTORS)
@@ -428,56 +506,107 @@ async function lastAssistantText(page) {
 // free-text matching (which previously caused infinite waits because of
 // homepage chrome).
 async function isGenerating(page) {
-  for (const selector of STOP_BUTTON_SELECTORS) {
-    try {
-      const loc = page.locator(selector).last();
-      if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) {
-        vlog("isGenerating: stop button visible", { selector });
-        return true;
+  return await page
+    .evaluate((stopSelectors) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
       }
-    } catch (_) {}
-  }
-  try {
-    const loc = page.locator('[data-testid*="thinking" i], [data-testid*="reasoning" i]').last();
-    if ((await loc.count()) > 0 && (await loc.isVisible().catch(() => false))) {
-      vlog("isGenerating: thinking/reasoning pill visible");
-      return true;
-    }
-  } catch (_) {}
-  return false;
+      for (const selector of stopSelectors) {
+        const nodes = Array.from(document.querySelectorAll(selector));
+        if (nodes.some(visible)) return true;
+      }
+      const thinking = document.querySelectorAll('[data-testid*="thinking" i], [data-testid*="reasoning" i]');
+      if (Array.from(thinking).some(visible)) return true;
+      return false;
+    }, STOP_BUTTON_SELECTORS)
+    .catch(() => false);
 }
 
 async function inspectSendButton(page) {
-  for (const selector of SEND_BUTTON_SELECTORS) {
-    const loc = page.locator(selector).last();
-    const count = await loc.count().catch(() => 0);
-    if (count === 0) continue;
-    const visible = await loc.isVisible().catch(() => false);
-    if (!visible) continue;
-    let disabled = true;
-    try {
-      disabled = await loc.isDisabled();
-    } catch (_) {}
-    let aria = "";
-    try {
-      aria = (await loc.getAttribute("aria-label")) || "";
-    } catch (_) {}
-    let testid = "";
-    try {
-      testid = (await loc.getAttribute("data-testid")) || "";
-    } catch (_) {}
-    let ariaDisabled = "";
-    try {
-      ariaDisabled = (await loc.getAttribute("aria-disabled")) || "";
-    } catch (_) {}
-    return { selector, locator: loc, visible, disabled, aria, testid, ariaDisabled };
-  }
-  return null;
+  return await page
+    .evaluate((selectors) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      const seen = new Set();
+      const candidates = [];
+      for (const selector of selectors) {
+        for (const b of document.querySelectorAll(selector)) {
+          if (!seen.has(b)) {
+            seen.add(b);
+            candidates.push({ button: b, selector });
+          }
+        }
+      }
+      for (const { button: b, selector } of candidates.reverse()) {
+        if (!visible(b)) continue;
+        const aria = b.getAttribute("aria-label") || "";
+        const testid = b.getAttribute("data-testid") || "";
+        const txt = ((b.textContent || "") + "").trim();
+        if (/stop/i.test(aria) || /stop/i.test(testid) || /^stop$/i.test(txt)) continue;
+        const ariaDisabled = b.getAttribute("aria-disabled") || "";
+        const disabled = !!b.disabled || ariaDisabled === "true";
+        return {
+          selector,
+          visible: true,
+          disabled,
+          aria,
+          testid,
+          ariaDisabled,
+          textPreview: txt.slice(0, 40),
+        };
+      }
+      return null;
+    }, SEND_BUTTON_SELECTORS)
+    .catch(() => null);
+}
+
+async function clickSendButton(page) {
+  return await page
+    .evaluate((selectors) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      const seen = new Set();
+      const candidates = [];
+      for (const selector of selectors) {
+        for (const b of document.querySelectorAll(selector)) {
+          if (!seen.has(b)) {
+            seen.add(b);
+            candidates.push({ button: b, selector });
+          }
+        }
+      }
+      for (const { button: b, selector } of candidates.reverse()) {
+        if (!visible(b)) continue;
+        const aria = b.getAttribute("aria-label") || "";
+        const testid = b.getAttribute("data-testid") || "";
+        if (/stop/i.test(aria) || /stop/i.test(testid)) continue;
+        const ariaDisabled = b.getAttribute("aria-disabled") || "";
+        const disabled = !!b.disabled || ariaDisabled === "true";
+        if (disabled) continue;
+        b.click();
+        return { ok: true, selector, aria, testid };
+      }
+      return { ok: false, reason: "no enabled visible send button" };
+    }, SEND_BUTTON_SELECTORS)
+    .catch((err) => ({ ok: false, reason: String(err) }));
 }
 
 async function findSendButton(page) {
-  const info = await inspectSendButton(page);
-  return info ? info.locator : null;
+  return await inspectSendButton(page);
 }
 
 async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label = "next prompt") {
@@ -490,7 +619,7 @@ async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label
     const generating = await isGenerating(page);
     let composerVisible = false;
     try {
-      await findPromptBox(page, 2000);
+      await findPromptBox(page, 750);
       composerVisible = true;
     } catch (_) {}
     if (composerVisible && !generating) {
@@ -507,7 +636,7 @@ async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label
       });
       lastLog = Date.now();
     }
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(750);
   }
   vwarn("waitForComposerReadyForNextPrompt: timed out", { label, timeoutMs });
   return false;
@@ -517,171 +646,235 @@ async function waitForComposerReadyForNextPrompt(page, timeoutMs = 120000, label
 // Clipboard / paste
 // ---------------------------------------------------------------------------
 function setClipboardText(text) {
+  const maxBuffer = Math.max(64 * 1024 * 1024, Buffer.byteLength(String(text || ""), "utf8") + 1024);
   if (process.platform === "darwin") {
-    child_process.execFileSync("/usr/bin/pbcopy", { input: text, maxBuffer: 1024 * 1024 });
+    child_process.execFileSync("/usr/bin/pbcopy", { input: text, maxBuffer });
     return;
   }
   if (process.env.WAYLAND_DISPLAY) {
-    child_process.execFileSync("wl-copy", [], { input: text, maxBuffer: 1024 * 1024 });
+    child_process.execFileSync("wl-copy", [], { input: text, maxBuffer });
     return;
   }
-  child_process.execFileSync("xclip", ["-selection", "clipboard"], {
-    input: text,
-    maxBuffer: 1024 * 1024,
-  });
+  child_process.execFileSync("xclip", ["-selection", "clipboard"], { input: text, maxBuffer });
 }
 
-function nativePlainTextPaste() {
+function nativePlainTextPaste(usePlain = false) {
   if (process.platform === "darwin") {
+    const modifiers = usePlain ? "{command down, shift down}" : "{command down}";
     const script = [
       'tell application "System Events"',
-      '  keystroke "v" using {command down, shift down}',
+      `  keystroke "v" using ${modifiers}`,
       "end tell",
     ].join("\n");
     child_process.execFileSync("/usr/bin/osascript", ["-e", script], { stdio: "ignore" });
     return;
   }
-  throw new Error("native plain paste is only implemented through osascript on macOS");
+  throw new Error("native paste is only implemented through osascript on macOS");
 }
 
 // Make Chrome the frontmost app on macOS.  Required before sending native
-// keystrokes via osascript -- otherwise Cmd+Shift+V goes to whatever app
-// is actually frontmost (typically Terminal, since that's where the user
-// launched the autorun from).  Both "Google Chrome" and "Chromium" are
-// tried because the user might be running either.
+// keystrokes via osascript -- otherwise Cmd+V goes to Terminal.  The primary
+// path below uses Playwright keyboard events and normally does not need this;
+// it is retained only as an OS-level fallback.
 function activateChromeOnMac() {
   if (process.platform !== "darwin") return false;
   for (const appName of ["Google Chrome", "Chromium", "Google Chrome Beta", "Google Chrome Canary"]) {
     try {
-      child_process.execFileSync(
-        "/usr/bin/osascript",
-        ["-e", `tell application "${appName}" to activate`],
-        { stdio: "ignore" }
-      );
+      child_process.execFileSync("/usr/bin/osascript", ["-e", `tell application "${appName}" to activate`], {
+        stdio: "ignore",
+      });
       return true;
     } catch (_) {}
   }
   return false;
 }
 
-// Playwright-native paste.  Dispatches a real ClipboardEvent with a
-// DataTransfer payload directly at the focused composer.  This is the
-// reliable path: it does NOT depend on OS keyboard focus, app activation,
-// or which window is frontmost -- and ProseMirror's paste plugin handles
-// it correctly because it's a real native paste event, not a synthetic
-// keystroke.  Returns true if the composer ends up with non-empty text.
+async function grantClipboardPermissions(page) {
+  try {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: "https://chatgpt.com",
+    });
+  } catch (_) {}
+  try {
+    await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: "https://chat.openai.com",
+    });
+  } catch (_) {}
+}
+
+async function focusPromptBox(page, timeout = 5000) {
+  const box = await findPromptBox(page, timeout);
+  await box.scrollIntoViewIfNeeded().catch(() => {});
+  await box.click({ timeout: Math.min(timeout, 5000), force: true }).catch(async () => {
+    await box.evaluate((el) => el.focus()).catch(() => {});
+  });
+  return box;
+}
+
+async function waitForPromptLoaded(page, expectedLen, timeoutMs = BIG_PROMPT_PASTE_WAIT_MS) {
+  const deadline = Date.now() + timeoutMs;
+  const threshold = promptLoadThreshold(expectedLen);
+  let lastLen = 0;
+  let lastLog = 0;
+  while (Date.now() < deadline) {
+    const len = await composerTextLength(page);
+    if (len >= threshold) return { ok: true, len, threshold };
+    lastLen = len;
+    if (Date.now() - lastLog > 3000) {
+      vlog("waitForPromptLoaded: waiting", {
+        len,
+        threshold,
+        expectedLen,
+        remainingMs: Math.max(0, deadline - Date.now()),
+      });
+      lastLog = Date.now();
+    }
+    await page.waitForTimeout(250);
+  }
+  return { ok: false, len: lastLen, threshold };
+}
+
+async function playwrightClipboardKeyPaste(page, fullPrompt) {
+  const combos = process.platform === "darwin" ? ["Meta+V", "Meta+Shift+V"] : ["Control+V", "Control+Shift+V"];
+  for (const combo of combos) {
+    vlog("playwrightClipboardKeyPaste: pressing paste shortcut", { combo, len: fullPrompt.length });
+    await focusPromptBox(page, 5000).catch(() => {});
+    try {
+      await page.keyboard.press(combo);
+    } catch (err) {
+      vwarn("playwrightClipboardKeyPaste: keyboard paste failed", { combo, err: err.message });
+      continue;
+    }
+    const loaded = await waitForPromptLoaded(page, fullPrompt.length, BIG_PROMPT_PASTE_WAIT_MS);
+    vlog("playwrightClipboardKeyPaste: load result", { combo, ...loaded });
+    if (loaded.ok) return true;
+    if (loaded.len > 0) return true;
+    await clearPromptBoxInDom(page);
+  }
+  return false;
+}
+
+// Dispatch a ClipboardEvent directly at the focused composer.  This is not
+// the first choice because some ProseMirror builds intentionally ignore
+// synthetic clipboard events, but it is fast and independent of OS focus.
 async function playwrightPaste(page, fullPrompt) {
   vlog("playwrightPaste: dispatching synthetic paste event", { len: fullPrompt.length });
-  const ok = await page
+  const result = await page
     .evaluate(
       ({ text, selectors }) => {
         function findEl() {
           for (const selector of selectors) {
-            const el = document.querySelector(selector);
-            if (!el) continue;
-            const style = window.getComputedStyle(el);
-            if (style.visibility === "hidden" || style.display === "none") continue;
-            return el;
+            const nodes = Array.from(document.querySelectorAll(selector));
+            for (let i = nodes.length - 1; i >= 0; i--) {
+              const el = nodes[i];
+              const style = window.getComputedStyle(el);
+              const rect = el.getBoundingClientRect();
+              if (style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0) {
+                return el;
+              }
+            }
           }
           return null;
         }
         const el = findEl();
         if (!el) return { ok: false, reason: "no composer element found" };
         el.focus();
-
-        // Select all existing content and remove it.  For contenteditable,
-        // ProseMirror tracks selection via the browser Selection API.
-        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-          el.value = "";
-        } else {
-          const sel = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          sel.removeAllRanges();
-          sel.addRange(range);
-          try {
-            document.execCommand("delete", false, null);
-          } catch (_) {}
-        }
-
-        // Build a DataTransfer with both text/plain and text/html so we
-        // cover ProseMirror's preference for HTML-aware paste handling.
         const dt = new DataTransfer();
-        try {
-          dt.setData("text/plain", text);
-        } catch (_) {}
-        try {
-          // Wrap each line as <p>...</p> so ProseMirror preserves
-          // paragraph structure rather than collapsing newlines.
-          const html = text
-            .split("\n")
-            .map((line) =>
-              line
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-            )
-            .map((line) => `<p>${line || "<br/>"}</p>`)
-            .join("");
-          dt.setData("text/html", html);
-        } catch (_) {}
-
-        const evt = new ClipboardEvent("paste", {
-          bubbles: true,
-          cancelable: true,
-          clipboardData: dt,
-        });
-        // Some implementations don't honor clipboardData passed via the
-        // constructor; reattach defensively.
+        dt.setData("text/plain", text);
+        const evt = new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt });
         try {
           Object.defineProperty(evt, "clipboardData", { value: dt });
         } catch (_) {}
-
         const dispatched = el.dispatchEvent(evt);
-
-        // For TEXTAREA fallback, also set value directly because the
-        // paste event may be ignored by some controls.
         if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
           if (!el.value) {
             el.value = text;
-            el.dispatchEvent(
-              new InputEvent("input", { bubbles: true, inputType: "insertText", data: text })
-            );
+            el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: text.slice(0, 1) }));
           }
         }
-
-        // Read back the resulting text length so the caller can decide
-        // whether to fall through to other backups.
-        const len =
-          el.tagName === "TEXTAREA" || el.tagName === "INPUT"
-            ? (el.value || "").length
-            : (el.innerText || el.textContent || "").length;
+        const len = el.tagName === "TEXTAREA" || el.tagName === "INPUT" ? (el.value || "").length : (el.textContent || "").length;
         return { ok: len > 0, len, dispatched, tag: el.tagName.toLowerCase() };
       },
       { text: fullPrompt, selectors: PROMPT_BOX_SELECTORS }
     )
     .catch((err) => ({ ok: false, reason: String(err) }));
-  vlog("playwrightPaste: result", ok);
-  return !!(ok && ok.ok);
+  vlog("playwrightPaste: result", result);
+  return !!(result && result.ok);
 }
 
-// Type the prompt character-by-character via Playwright's keyboard.type API.
-// This is the slow, last-resort fallback -- it does not depend on the
-// clipboard, OS focus, or paste-event handling at all.  insertText is tried
-// first via the strategy-1 path in submitPrompt; this function exists for
-// the cases where insertText itself failed (rare).
+// Direct DOM fallback.  This is intentionally fast: it avoids execCommand on
+// very large prompts unless explicitly requested through GPT_WEB_USE_EXEC_INSERT=1.
+async function domInsertPrompt(page, fullPrompt) {
+  const result = await page
+    .evaluate(
+      ({ text, selectors, useExec }) => {
+        function findEl() {
+          for (const selector of selectors) {
+            const nodes = Array.from(document.querySelectorAll(selector));
+            for (let i = nodes.length - 1; i >= 0; i--) {
+              const el = nodes[i];
+              const style = window.getComputedStyle(el);
+              const rect = el.getBoundingClientRect();
+              if (style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0) return el;
+            }
+          }
+          return null;
+        }
+        const el = findEl();
+        if (!el) return { ok: false, reason: "no composer element" };
+        el.focus();
+        if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
+          el.value = text;
+          el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertFromPaste", data: text.slice(0, 1) }));
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: text.slice(0, 1) }));
+          el.dispatchEvent(new Event("change", { bubbles: true }));
+          return { ok: true, len: (el.value || "").length, mode: "textarea-value" };
+        }
+        const sel = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        try {
+          document.execCommand("delete", false, null);
+        } catch (_) {
+          el.textContent = "";
+        }
+        if (useExec) {
+          const ok = document.execCommand("insertText", false, text);
+          el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) }));
+          return { ok: ok || (el.textContent || "").length > 0, len: (el.textContent || "").length, mode: "execCommand" };
+        }
+        el.textContent = text;
+        // Place the caret at the end so ChatGPT sees a normal focused editor.
+        const endRange = document.createRange();
+        endRange.selectNodeContents(el);
+        endRange.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(endRange);
+        el.dispatchEvent(new InputEvent("beforeinput", { bubbles: true, inputType: "insertFromPaste", data: text.slice(0, 1) }));
+        el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertFromPaste", data: text.slice(0, 1) }));
+        el.dispatchEvent(new Event("change", { bubbles: true }));
+        return { ok: (el.textContent || "").length > 0, len: (el.textContent || "").length, mode: "textContent" };
+      },
+      { text: fullPrompt, selectors: PROMPT_BOX_SELECTORS, useExec: /^(1|true|yes)$/i.test(process.env.GPT_WEB_USE_EXEC_INSERT || "") }
+    )
+    .catch((err) => ({ ok: false, reason: String(err) }));
+  vlog("domInsertPrompt: result", result);
+  return !!(result && result.ok);
+}
+
 async function typePrompt(page, fullPrompt) {
-  vlog("typePrompt: focusing composer and typing character-by-character", {
-    len: fullPrompt.length,
-  });
-  try {
-    const box = await findPromptBox(page, 5000);
-    await box.click({ timeout: 5000 }).catch(() => {});
-  } catch (err) {
-    vwarn("typePrompt: could not focus composer", { err: err.message });
+  if (fullPrompt.length > SMALL_PROMPT_INSERT_TEXT_MAX_CHARS) {
+    vwarn("typePrompt: refusing slow character-by-character fallback for large prompt", {
+      len: fullPrompt.length,
+      max: SMALL_PROMPT_INSERT_TEXT_MAX_CHARS,
+    });
     return false;
   }
+  vlog("typePrompt: focusing composer and typing", { len: fullPrompt.length });
   try {
+    await focusPromptBox(page, 5000);
     await page.keyboard.type(fullPrompt, { delay: 0 });
     return true;
   } catch (err) {
@@ -690,64 +883,23 @@ async function typePrompt(page, fullPrompt) {
   }
 }
 
-async function domInsertPrompt(page, fullPrompt) {
-  return await page
-    .evaluate(
-      ({ text, selectors }) => {
-        for (const selector of selectors) {
-          const el = document.querySelector(selector);
-          if (!el) continue;
-          const style = window.getComputedStyle(el);
-          if (style.visibility === "hidden" || style.display === "none") continue;
-          el.focus();
-          if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-            el.value = text;
-            el.dispatchEvent(
-              new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) })
-            );
-            return true;
-          }
-          const sel = window.getSelection();
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          sel.removeAllRanges();
-          sel.addRange(range);
-          document.execCommand("delete", false, null);
-          const ok = document.execCommand("insertText", false, text);
-          el.dispatchEvent(
-            new InputEvent("input", { bubbles: true, inputType: "insertText", data: text.slice(0, 1) })
-          );
-          return ok || (el.innerText || el.textContent || "").length > 0;
-        }
-        return false;
-      },
-      { text: fullPrompt, selectors: PROMPT_BOX_SELECTORS }
-    )
-    .catch(() => false);
-}
-
-// Press Cmd+Enter / Ctrl+Enter on the composer.  ChatGPT accepts this as
-// "send" in many UI states, including some where the send button itself is
-// in a state our locators don't recognize.  Used as a backup when
-// inspectSendButton can't find a clickable send button.
-async function sendViaKeyboard(page) {
-  const isMac = process.platform === "darwin";
-  // Focus the composer first.  Use the same selectors as findPromptBox.
+async function sendViaKeyboard(page, allowBareEnter = false) {
   try {
-    const box = await findPromptBox(page, 5000);
-    await box.click({ timeout: 5000 }).catch(() => {});
+    await focusPromptBox(page, 5000);
   } catch (err) {
     vwarn("sendViaKeyboard: could not focus composer", { err: err.message });
     return false;
   }
-  const combos = isMac ? ["Meta+Enter", "Enter"] : ["Control+Enter", "Enter"];
+  const combos = allowBareEnter
+    ? ["Enter"]
+    : process.platform === "darwin"
+      ? ["Meta+Enter"]
+      : ["Control+Enter"];
   for (const combo of combos) {
     try {
       vlog("sendViaKeyboard: pressing", { combo });
       await page.keyboard.press(combo);
-      // Tiny pause so the page can react; the caller will detect generation
-      // via assistantCount / Stop button.
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(400);
       return true;
     } catch (err) {
       vwarn("sendViaKeyboard: combo failed", { combo, err: err.message });
@@ -770,10 +922,7 @@ async function dumpComposerState(page, label) {
         const style = window.getComputedStyle(el);
         const rect = el.getBoundingClientRect();
         const visible = style.visibility !== "hidden" && style.display !== "none";
-        const text =
-          el.tagName === "TEXTAREA" || el.tagName === "INPUT"
-            ? el.value || ""
-            : el.innerText || el.textContent || "";
+        const text = el.tagName === "TEXTAREA" || el.tagName === "INPUT" ? el.value || "" : el.textContent || "";
         out.candidates.push({
           selector,
           tag: el.tagName.toLowerCase(),
@@ -789,12 +938,11 @@ async function dumpComposerState(page, label) {
           },
         });
       }
-      const buttons = document.querySelectorAll(
-        'button[data-testid], button[aria-label], button[type="submit"], form button'
-      );
+      const buttons = document.querySelectorAll('button[data-testid], button[aria-label], button[type="submit"], form button');
       for (const b of buttons) {
         const style = window.getComputedStyle(b);
-        const visible = style.visibility !== "hidden" && style.display !== "none" && b.offsetWidth > 0;
+        const rect = b.getBoundingClientRect();
+        const visible = style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
         if (!visible) continue;
         out.buttons.push({
           testid: b.getAttribute("data-testid") || "",
@@ -802,7 +950,7 @@ async function dumpComposerState(page, label) {
           type: b.getAttribute("type") || "",
           disabled: !!b.disabled,
           ariaDisabled: b.getAttribute("aria-disabled") || "",
-          textPreview: ((b.innerText || b.textContent || "") + "").trim().slice(0, 60),
+          textPreview: ((b.textContent || "") + "").trim().slice(0, 60),
         });
       }
       return out;
@@ -815,243 +963,235 @@ async function dumpComposerState(page, label) {
 // ---------------------------------------------------------------------------
 // Submit core
 //
-// The paste strategy is layered.  In order of preference:
-//   1. Playwright-native synthetic paste event (works regardless of OS focus,
-//      handled correctly by ProseMirror).
-//   2. OS-level Cmd+Shift+V on macOS, AFTER explicitly activating Chrome.app
-//      (so the keystroke goes to Chrome, not Terminal).
-//   3. DOM execCommand insertText (older but sometimes works).
-//   4. Playwright keyboard.insertText / keyboard.type (slowest, most direct).
-//
-// We try strategy 1 first because it does not depend on OS-level focus at
-// all.  Strategies 2-4 are only invoked if strategy 1 didn't populate the
-// composer.
+// The fast path is OS clipboard + Playwright keyboard paste (Meta/Ctrl+V).
+// It is much faster for 500k+ character prompts than keyboard.insertText, and
+// unlike osascript it does not depend on which macOS app is frontmost.
+// Fallback order: synthetic ClipboardEvent, native macOS paste, direct DOM set,
+// and only for small prompts keyboard.insertText/type.
 // ---------------------------------------------------------------------------
 async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   vlog("submitPrompt: start", { len: fullPrompt.length, promptTimeoutMs });
   await page.bringToFront().catch(() => {});
+  await grantClipboardPermissions(page);
 
-  vlog("submitPrompt: locating prompt box");
-  const promptBox = await findPromptBox(page, Math.min(promptTimeoutMs, 60000));
-  await promptBox.scrollIntoViewIfNeeded().catch(() => {});
-  await promptBox.click({ timeout: 10000 }).catch((err) => {
-    vwarn("submitPrompt: click on prompt box failed", { err: err.message });
-  });
+  vlog("submitPrompt: locating/focusing prompt box");
+  const promptBox = await focusPromptBox(page, Math.min(promptTimeoutMs, 15000));
   vlog("submitPrompt: clearing composer");
   await clearPromptBoxInDom(page);
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(100);
 
-  // Always pre-set the OS clipboard so any OS-level paste fallback has the
-  // text available.  This is independent of which strategy actually fires.
+  const beforeCount = await assistantCount(page);
+  const insertStartedAt = Date.now();
+  let lenAfter = await composerTextLength(page);
+  const strategyResults = [];
+
   vlog("submitPrompt: preloading OS clipboard");
   try {
     setClipboardText(fullPrompt);
+    strategyResults.push("clipboard:set-ok");
   } catch (err) {
+    strategyResults.push(`clipboard:set-failed:${err.message}`);
     vwarn("submitPrompt: clipboard set failed", { err: err.message });
   }
 
-  // Strategy 1: Playwright keyboard.insertText (the most reliable mechanism
-  // for ProseMirror -- it inserts text at the focused caret position via a
-  // single input event, with no dependency on OS focus or clipboard
-  // permissions).  We focus the composer first so the insertion lands in
-  // the right element.
-  vlog("submitPrompt: trying Playwright keyboard.insertText");
-  let typeOk = false;
-  try {
-    await promptBox.click({ timeout: 5000 });
-    await page.keyboard.insertText(fullPrompt);
-    typeOk = true;
-  } catch (err) {
-    vwarn("submitPrompt: keyboard.insertText failed", { err: err.message });
-  }
-  await page.waitForTimeout(400);
-  let lenAfter = await composerTextLength(page);
-  vlog("submitPrompt: composer after keyboard.insertText", { len: lenAfter, typeOk });
-
-  // Strategy 2: Playwright synthetic paste event (uses ClipboardEvent +
-  // DataTransfer; works without OS focus, handled by ProseMirror's paste
-  // plugin).
-  let pasteOk = false;
+  // Strategy 1: real browser paste via Playwright keyboard events.  This is
+  // dramatically faster than keyboard.insertText for 500k+ chars and does not
+  // depend on Terminal/Chrome being frontmost.
+  let keyPasteOk = false;
   if (lenAfter === 0) {
-    vlog("submitPrompt: trying Playwright synthetic paste event");
-    pasteOk = await playwrightPaste(page, fullPrompt);
-    await page.waitForTimeout(400);
+    keyPasteOk = await playwrightClipboardKeyPaste(page, fullPrompt);
     lenAfter = await composerTextLength(page);
-    vlog("submitPrompt: composer after Playwright paste", { len: lenAfter, pasteOk });
+    strategyResults.push(`keyPaste:${keyPasteOk}:${lenAfter}`);
   }
 
-  // Strategy 3: OS-level Cmd+Shift+V (macOS), after activating Chrome.
-  if (lenAfter === 0 && process.platform === "darwin") {
-    vlog("submitPrompt: trying OS-level Cmd+Shift+V (after activating Chrome)");
+  // Strategy 2: synthetic ClipboardEvent fallback.
+  let pasteOk = false;
+  if (lenAfter < promptLoadThreshold(fullPrompt.length)) {
+    await clearPromptBoxInDom(page);
+    pasteOk = await playwrightPaste(page, fullPrompt);
+    const loaded = await waitForPromptLoaded(page, fullPrompt.length, 10000);
+    lenAfter = Math.max(loaded.len, await composerTextLength(page));
+    strategyResults.push(`syntheticPaste:${pasteOk}:${lenAfter}`);
+  }
+
+  // Strategy 3: OS-level paste on macOS after activating Chrome.  This is only
+  // a fallback; the primary path above avoids OS focus entirely.
+  if (lenAfter < promptLoadThreshold(fullPrompt.length) && process.platform === "darwin") {
+    await clearPromptBoxInDom(page);
+    vlog("submitPrompt: trying OS-level paste fallback after activating Chrome");
     const activated = activateChromeOnMac();
     vlog("submitPrompt: activated Chrome.app", { activated });
     await page.bringToFront().catch(() => {});
-    try {
-      await promptBox.click({ timeout: 5000 });
-    } catch (err) {
-      vwarn("submitPrompt: re-click on prompt box failed", { err: err.message });
+    await focusPromptBox(page, 5000).catch(() => {});
+    for (const usePlain of [false, true]) {
+      try {
+        nativePlainTextPaste(usePlain);
+      } catch (err) {
+        vwarn("submitPrompt: native paste failed", { usePlain, err: err.message });
+      }
+      const loaded = await waitForPromptLoaded(page, fullPrompt.length, 15000);
+      lenAfter = Math.max(loaded.len, await composerTextLength(page));
+      strategyResults.push(`nativePaste:${usePlain ? "plain" : "normal"}:${lenAfter}`);
+      if (lenAfter >= promptLoadThreshold(fullPrompt.length)) break;
+      await clearPromptBoxInDom(page);
     }
-    await page.waitForTimeout(200);
-    try {
-      nativePlainTextPaste();
-    } catch (err) {
-      vwarn("submitPrompt: native paste failed", { err: err.message });
-    }
-    await page.waitForTimeout(500);
-    lenAfter = await composerTextLength(page);
-    vlog("submitPrompt: composer after OS paste", { len: lenAfter });
   }
 
-  // Strategy 4: DOM execCommand insert (legacy fallback).
-  let domInsertAttempted = false;
+  // Strategy 4: direct DOM insertion.  Fast, but less preferred because it
+  // bypasses the normal paste path.  Useful when browser paste is blocked.
   let domInsertOk = false;
-  if (lenAfter === 0) {
-    vlog("submitPrompt: trying DOM execCommand insert");
-    domInsertAttempted = true;
+  if (lenAfter < promptLoadThreshold(fullPrompt.length)) {
+    await clearPromptBoxInDom(page);
     domInsertOk = await domInsertPrompt(page, fullPrompt);
-    await page.waitForTimeout(400);
-    lenAfter = await composerTextLength(page);
-    vlog("submitPrompt: composer after DOM insert", { len: lenAfter, domInsertOk });
+    const loaded = await waitForPromptLoaded(page, fullPrompt.length, 5000);
+    lenAfter = Math.max(loaded.len, await composerTextLength(page));
+    strategyResults.push(`domInsert:${domInsertOk}:${lenAfter}`);
   }
 
-  // Strategy 5: Playwright keyboard.type (slowest, character-by-character).
-  let typedAttempted = false;
+  // Strategy 5: keyboard.insertText/type only for small prompts.  For your
+  // 600k+ prompt this path is intentionally skipped so it cannot block for
+  // minutes before we ever reach submit.
+  let insertTextOk = false;
   let typedOk = false;
-  if (lenAfter === 0) {
-    vlog("submitPrompt: trying Playwright keyboard.type (slow path)");
-    typedAttempted = true;
-    typedOk = await typePrompt(page, fullPrompt);
-    await page.waitForTimeout(400);
+  if (lenAfter === 0 && fullPrompt.length <= SMALL_PROMPT_INSERT_TEXT_MAX_CHARS) {
+    try {
+      await focusPromptBox(page, 5000);
+      await page.keyboard.insertText(fullPrompt);
+      insertTextOk = true;
+    } catch (err) {
+      vwarn("submitPrompt: keyboard.insertText failed", { err: err.message });
+    }
     lenAfter = await composerTextLength(page);
-    vlog("submitPrompt: composer after keyboard typing", { len: lenAfter, typedOk });
+    if (lenAfter === 0) {
+      typedOk = await typePrompt(page, fullPrompt);
+      lenAfter = await composerTextLength(page);
+    }
+    strategyResults.push(`keyboardSmall:${insertTextOk}/${typedOk}:${lenAfter}`);
   }
 
-  await dumpComposerState(page, "post-all-paste-strategies");
+  await dumpComposerState(page, "post-insert");
 
   if (lenAfter === 0) {
-    throw new Error(
-      `All paste strategies failed to populate the composer. ` +
-        `keyboardInsertText=${typeOk}, playwrightPaste=${pasteOk}, ` +
-        `domInsertAttempted=${domInsertAttempted}, domInsertOk=${domInsertOk}, ` +
-        `keyboardTypeAttempted=${typedAttempted}, keyboardTypeOk=${typedOk}.`
-    );
+    throw new Error(`All paste strategies failed to populate the composer. strategies=${strategyResults.join(",")}`);
   }
 
-  // Composer has text -- now wait for the send button to appear and click
-  // it, falling back to keyboard send if needed.
+  const threshold = promptLoadThreshold(fullPrompt.length);
+  if (fullPrompt.length >= 10000 && lenAfter < threshold) {
+    vwarn("submitPrompt: composer length is below expected threshold; proceeding only because it is non-empty", {
+      lenAfter,
+      fullPromptLen: fullPrompt.length,
+      threshold,
+      strategyResults,
+    });
+  }
+
+  vlog("submitPrompt: composer populated", {
+    lenAfter,
+    fullPromptLen: fullPrompt.length,
+    threshold,
+    insertElapsedMs: Date.now() - insertStartedAt,
+    strategyResults,
+  });
+
   const deadline = Date.now() + promptTimeoutMs;
   const startedAt = Date.now();
+  let iter = 0;
   let lastShortLog = 0;
   let lastVerboseLog = 0;
-  let ready = false;
-  let iter = 0;
+  let clickAttempts = 0;
   let keyboardSendAttempted = false;
-  let keyboardSendOk = false;
-
-  const beforeKeyboardCount = await assistantCount(page);
+  let bareEnterAttempted = false;
 
   while (Date.now() < deadline) {
     iter++;
     const length = await composerTextLength(page);
     const sendInfo = await inspectSendButton(page);
     const generating = await isGenerating(page);
+    const currentAssistantCount = await assistantCount(page);
+
+    if (generating || currentAssistantCount > beforeCount) {
+      vlog("submitPrompt: submission detected", {
+        iter,
+        generating,
+        currentAssistantCount,
+        beforeCount,
+        clickAttempts,
+        keyboardSendAttempted,
+      });
+      return;
+    }
+
+    if (clickAttempts > 0 && length === 0) {
+      vlog("submitPrompt: composer cleared after click -> treating as submitted", { iter, clickAttempts });
+      return;
+    }
 
     if (sendInfo && length > 0 && !sendInfo.disabled) {
-      vlog("submitPrompt: send conditions met -> clicking", {
+      clickAttempts++;
+      vlog("submitPrompt: enabled send button found -> clicking", {
         iter,
+        clickAttempts,
         length,
         sendSelector: sendInfo.selector,
         aria: sendInfo.aria,
         testid: sendInfo.testid,
       });
-      try {
-        await sendInfo.locator.click({ timeout: 10000 });
-        ready = true;
-        break;
-      } catch (err) {
-        vwarn("submitPrompt: send button click threw", { err: err.message });
-      }
+      const clickResult = await clickSendButton(page);
+      vlog("submitPrompt: clickSendButton result", clickResult);
+      await page.waitForTimeout(650);
+      continue;
     }
 
-    if (keyboardSendAttempted) {
-      const newCount = await assistantCount(page);
-      if (newCount > beforeKeyboardCount || generating) {
-        vlog("submitPrompt: keyboard send appears to have submitted", {
-          iter,
-          newCount,
-          beforeKeyboardCount,
-          generating,
-        });
-        keyboardSendOk = true;
-        ready = true;
-        break;
-      }
+    const elapsedMs = Date.now() - startedAt;
+    if (!keyboardSendAttempted && length > 0 && elapsedMs > 2500) {
+      vlog("submitPrompt: send button not enabled quickly; trying Cmd/Ctrl+Enter fallback");
+      keyboardSendAttempted = await sendViaKeyboard(page, false);
+      await page.waitForTimeout(800);
+      continue;
+    }
+
+    if (!bareEnterAttempted && keyboardSendAttempted && length > 0 && elapsedMs > 9000 && (!sendInfo || sendInfo.disabled)) {
+      vlog("submitPrompt: trying bare Enter fallback after Cmd/Ctrl+Enter did not submit");
+      bareEnterAttempted = await sendViaKeyboard(page, true);
+      await page.waitForTimeout(800);
+      continue;
     }
 
     if (Date.now() - lastShortLog > 2000) {
-      vlog("submitPrompt: not yet ready (waiting for send btn)", {
+      vlog("submitPrompt: waiting for submit to take", {
         iter,
-        elapsedMs: Date.now() - startedAt,
+        elapsedMs,
         composerLen: length,
         sendVisible: !!sendInfo,
         sendDisabled: sendInfo ? sendInfo.disabled : null,
         sendAria: sendInfo ? sendInfo.aria : null,
         sendTestid: sendInfo ? sendInfo.testid : null,
-        sendAriaDisabled: sendInfo ? sendInfo.ariaDisabled : null,
         generating,
+        clickAttempts,
         keyboardSendAttempted,
+        bareEnterAttempted,
       });
       lastShortLog = Date.now();
     }
 
-    if (Date.now() - lastVerboseLog > 15000) {
+    if (Date.now() - lastVerboseLog > 20000) {
       await dumpComposerState(page, `submit-loop-iter-${iter}`);
       lastVerboseLog = Date.now();
     }
 
-    // If the composer somehow ended up empty again (page reload, etc.),
-    // re-paste before trying again.
-    if (length === 0 && Date.now() - startedAt > 5000) {
-      vwarn("submitPrompt: composer has gone empty mid-loop; re-pasting", { iter });
-      await playwrightPaste(page, fullPrompt);
-      await page.waitForTimeout(400);
-    }
-
-    // Keyboard fallback: if composer has text but no clickable send button
-    // for >15s, try Cmd+Enter / Ctrl+Enter.
-    if (
-      !keyboardSendAttempted &&
-      length > 0 &&
-      Date.now() - startedAt > 15000 &&
-      (!sendInfo || sendInfo.disabled)
-    ) {
-      vlog("submitPrompt: send button still unclickable; trying keyboard send fallback");
-      keyboardSendAttempted = await sendViaKeyboard(page);
-      vlog("submitPrompt: keyboard send fallback initiated", { keyboardSendAttempted });
-      await page.waitForTimeout(1500);
-      continue;
-    }
-
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(250);
   }
 
-  if (!ready) {
-    const length = await composerTextLength(page);
-    const sendInfo = await inspectSendButton(page);
-    await dumpComposerState(page, "submit-timeout");
-    throw new Error(
-      `Prompt was not ready to send before timeout; composerLen=${length}, ` +
-        `sendVisible=${!!sendInfo}, sendDisabled=${sendInfo ? sendInfo.disabled : "n/a"}, ` +
-        `sendAria=${sendInfo ? JSON.stringify(sendInfo.aria) : "n/a"}, ` +
-        `keyboardSendAttempted=${keyboardSendAttempted}, keyboardSendOk=${keyboardSendOk}`
-    );
-  }
-
-  vlog("submitPrompt: send complete", {
-    iter,
-    elapsedMs: Date.now() - startedAt,
-    keyboardSendOk,
-  });
+  const length = await composerTextLength(page);
+  const sendInfo = await inspectSendButton(page);
+  await dumpComposerState(page, "submit-timeout");
+  throw new Error(
+    `Prompt was not submitted before timeout; composerLen=${length}, ` +
+      `sendVisible=${!!sendInfo}, sendDisabled=${sendInfo ? sendInfo.disabled : "n/a"}, ` +
+      `sendAria=${sendInfo ? JSON.stringify(sendInfo.aria) : "n/a"}, ` +
+      `clickAttempts=${clickAttempts}, keyboardSendAttempted=${keyboardSendAttempted}, ` +
+      `bareEnterAttempted=${bareEnterAttempted}, strategies=${strategyResults.join(",")}`
+  );
 }
 
 async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs) {
@@ -1186,11 +1326,12 @@ async function newChatPage(browser, pageTimeoutMs) {
   context.setDefaultTimeout(Math.min(pageTimeoutMs, 30000));
   const page = await context.newPage();
   await page.setViewportSize({ width: 1400, height: 1000 }).catch(() => {});
+  await grantClipboardPermissions(page).catch(() => {});
   vlog("newChatPage: navigating to chatgpt.com");
   await page.goto("https://chatgpt.com/", { waitUntil: "domcontentloaded", timeout: pageTimeoutMs });
-  vlog("newChatPage: dom loaded, sleeping 3s for hydration");
-  await page.waitForTimeout(3000);
-  await findPromptBox(page, Math.min(pageTimeoutMs, 60000));
+  // No fixed hydration sleep.  Wait directly for the composer with the fast
+  // parallel selector finder.
+  await findPromptBox(page, Math.min(pageTimeoutMs, 30000));
   vlog("newChatPage: prompt box visible", { url: page.url() });
   return page;
 }
@@ -1210,8 +1351,9 @@ async function currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs) {
     if (page.isClosed()) continue;
     try {
       await page.bringToFront();
-      await page.waitForLoadState("domcontentloaded", { timeout: 5000 }).catch(() => {});
-      if (await waitForComposerReadyForNextPrompt(page, composerWaitMs, "current-tab reuse")) {
+      await page.waitForLoadState("domcontentloaded", { timeout: 3000 }).catch(() => {});
+      await grantClipboardPermissions(page).catch(() => {});
+      if (await waitForComposerReadyForNextPrompt(page, Math.min(composerWaitMs, 30000), "current-tab reuse")) {
         vlog("currentOrFreshChatPage: reusing tab", { url: page.url(), title: candidate.title });
         return page;
       }
