@@ -346,7 +346,7 @@ const STOP_BUTTON_SELECTORS = [
   'button[aria-label="Stop generating response"]',
 ];
 
-const BIG_PROMPT_PASTE_WAIT_MS = 45000;
+const BIG_PROMPT_PASTE_WAIT_MS = Number(process.env.GPT_WEB_BIG_PASTE_WAIT_MS || 15000);
 const SMALL_PROMPT_INSERT_TEXT_MAX_CHARS = Number(process.env.GPT_WEB_INSERTTEXT_MAX_CHARS || 20000);
 
 function promptLoadThreshold(expectedLen) {
@@ -438,6 +438,221 @@ async function composerTextLength(page) {
       return 0;
     }, PROMPT_BOX_SELECTORS)
     .catch(() => 0);
+}
+
+
+function hasPromptMaterialState(state) {
+  return !!(state && (state.composerLen > 0 || state.attachmentCount > 0 || state.showInTextFieldCount > 0));
+}
+
+// ChatGPT can convert a huge rich paste into an attachment chip with a
+// "Show in text field" affordance.  The submitter must treat that as prompt
+// material rather than as a failed paste, and it should try to expand the chip
+// into the text field before falling back to attachment submission.
+async function promptMaterialState(page) {
+  return await page
+    .evaluate((selectors) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      function findComposer() {
+        for (const selector of selectors) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const el = nodes[i];
+            const tag = el.tagName;
+            if (visible(el) && (el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT")) return el;
+          }
+        }
+        return null;
+      }
+      function labelFor(el) {
+        return [
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || "",
+          el.getAttribute("data-testid") || "",
+          el.getAttribute("class") || "",
+          ((el.textContent || "") + "").trim(),
+        ].join(" ").replace(/\s+/g, " ").trim();
+      }
+
+      const composer = findComposer();
+      const root =
+        (composer && (composer.closest("form") || composer.closest('[data-testid*="composer" i]'))) ||
+        (composer && composer.parentElement && composer.parentElement.parentElement) ||
+        document.body;
+      const state = {
+        composerLen: 0,
+        composerTag: composer ? composer.tagName.toLowerCase() : "",
+        composerId: composer ? composer.id || "" : "",
+        attachmentCount: 0,
+        showInTextFieldCount: 0,
+        attachmentHints: [],
+        showHints: [],
+      };
+      if (composer) {
+        state.composerLen =
+          composer.tagName === "TEXTAREA" || composer.tagName === "INPUT"
+            ? (composer.value || "").length
+            : (composer.textContent || "").length;
+      }
+
+      const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer|insert\s+(?:into|in)\s+(?:the\s+)?(?:text\s+field|composer)/i;
+      const removeFileRe = /(?:remove|delete|discard|detach).{0,40}(?:file|attachment|upload)|(?:file|attachment|upload).{0,40}(?:remove|delete|discard|detach)/i;
+      const attachmentClassRe = /attachment|uploaded[-_ ]?file|file[-_ ]?chip|upload[-_ ]?preview|composer[-_ ]?file|file[-_ ]?preview/i;
+      const attachmentTextRe = /attached\s+file|uploaded\s+file|file\s+attached|attachment|show\s+in\s+text\s+field|\.txt\b|\.md\b|\.json\b/i;
+      const skipRe = /add\s+files\s+and\s+more|start\s+a\s+group\s+chat|turn\s+on\s+temporary\s+chat|open\s+sidebar|close\s+sidebar|model\s*$/i;
+
+      const nodes = Array.from(root.querySelectorAll('button, [role="button"], [role="menuitem"], a, [aria-label], [data-testid], [class]'));
+      const seen = new Set();
+      for (const el of nodes) {
+        if (seen.has(el) || !visible(el)) continue;
+        seen.add(el);
+        if (composer && el === composer) continue;
+        const blob = labelFor(el);
+        if (!blob || skipRe.test(blob)) continue;
+        if (showRe.test(blob)) {
+          state.showInTextFieldCount++;
+          if (state.showHints.length < 8) state.showHints.push(blob.slice(0, 160));
+        }
+        if (showRe.test(blob) || removeFileRe.test(blob) || attachmentClassRe.test(blob) || attachmentTextRe.test(blob)) {
+          state.attachmentCount++;
+          if (state.attachmentHints.length < 12) state.attachmentHints.push(blob.slice(0, 160));
+        }
+      }
+      return state;
+    }, PROMPT_BOX_SELECTORS)
+    .catch((err) => ({
+      composerLen: 0,
+      composerTag: "",
+      composerId: "",
+      attachmentCount: 0,
+      showInTextFieldCount: 0,
+      attachmentHints: [],
+      showHints: [],
+      error: String(err),
+    }));
+}
+
+async function tryShowAttachmentInTextField(page) {
+  async function clickVisibleShowButton(phase) {
+    return await page
+      .evaluate((selectors) => {
+        function visible(el) {
+          if (!el) return false;
+          const style = window.getComputedStyle(el);
+          if (style.visibility === "hidden" || style.display === "none") return false;
+          const rect = el.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        }
+        function findComposer() {
+          for (const selector of selectors) {
+            const nodes = Array.from(document.querySelectorAll(selector));
+            for (let i = nodes.length - 1; i >= 0; i--) {
+              const el = nodes[i];
+              const tag = el.tagName;
+              if (visible(el) && (el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT")) return el;
+            }
+          }
+          return null;
+        }
+        function labelFor(el) {
+          return [
+            el.getAttribute("aria-label") || "",
+            el.getAttribute("title") || "",
+            el.getAttribute("data-testid") || "",
+            ((el.textContent || "") + "").trim(),
+          ].join(" ").replace(/\s+/g, " ").trim();
+        }
+        const composer = findComposer();
+        const root =
+          (composer && (composer.closest("form") || composer.closest('[data-testid*="composer" i]'))) ||
+          (composer && composer.parentElement && composer.parentElement.parentElement) ||
+          document.body;
+        const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer|insert\s+(?:into|in)\s+(?:the\s+)?(?:text\s+field|composer)/i;
+        const nodes = Array.from(root.querySelectorAll('button, [role="button"], [role="menuitem"], a'));
+        for (const el of nodes) {
+          if (!visible(el)) continue;
+          const blob = labelFor(el);
+          if (!showRe.test(blob)) continue;
+          el.click();
+          return { ok: true, phase, blob: blob.slice(0, 180) };
+        }
+        return { ok: false, phase, reason: "no visible Show in text field control" };
+      }, PROMPT_BOX_SELECTORS)
+      .catch((err) => ({ ok: false, phase, reason: String(err) }));
+  }
+
+  let result = await clickVisibleShowButton("direct");
+  if (result.ok) {
+    vlog("tryShowAttachmentInTextField: clicked direct control", result);
+    await page.waitForTimeout(1000);
+    return true;
+  }
+
+  const menuResult = await page
+    .evaluate((selectors) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      function findComposer() {
+        for (const selector of selectors) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const el = nodes[i];
+            const tag = el.tagName;
+            if (visible(el) && (el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT")) return el;
+          }
+        }
+        return null;
+      }
+      function labelFor(el) {
+        return [
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || "",
+          el.getAttribute("data-testid") || "",
+          ((el.textContent || "") + "").trim(),
+        ].join(" ").replace(/\s+/g, " ").trim();
+      }
+      const composer = findComposer();
+      const root =
+        (composer && (composer.closest("form") || composer.closest('[data-testid*="composer" i]'))) ||
+        (composer && composer.parentElement && composer.parentElement.parentElement) ||
+        document.body;
+      const menuRe = /(?:attachment|file|upload|more|options|menu|\.txt\b|\.md\b|\.json\b)/i;
+      const skipRe = /add\s+files\s+and\s+more|send\s+(prompt|message)|model|start\s+voice|start\s+dictation|open\s+sidebar|close\s+sidebar/i;
+      const nodes = Array.from(root.querySelectorAll('button, [role="button"], [aria-haspopup="menu"]'));
+      for (const el of nodes) {
+        if (!visible(el)) continue;
+        const blob = labelFor(el);
+        if (skipRe.test(blob)) continue;
+        if (!menuRe.test(blob)) continue;
+        el.click();
+        return { ok: true, blob: blob.slice(0, 180) };
+      }
+      return { ok: false, reason: "no likely attachment menu" };
+    }, PROMPT_BOX_SELECTORS)
+    .catch((err) => ({ ok: false, reason: String(err) }));
+  vlog("tryShowAttachmentInTextField: menu probe", menuResult);
+  if (menuResult.ok) {
+    await page.waitForTimeout(350);
+    result = await clickVisibleShowButton("after-menu");
+    if (result.ok) {
+      vlog("tryShowAttachmentInTextField: clicked after opening menu", result);
+      await page.waitForTimeout(1000);
+      return true;
+    }
+  }
+  vlog("tryShowAttachmentInTextField: no show-in-text-field action taken", result);
+  return false;
 }
 
 async function clearPromptBoxInDom(page) {
@@ -704,8 +919,11 @@ async function grantClipboardPermissions(page) {
 
 async function focusPromptBox(page, timeout = 5000) {
   const box = await findPromptBox(page, timeout);
-  await box.scrollIntoViewIfNeeded().catch(() => {});
-  await box.click({ timeout: Math.min(timeout, 5000), force: true }).catch(async () => {
+  // Avoid Playwright's default 30s action timeout here; a visible composer is
+  // normally already in view, and focus via DOM is enough for the paste paths.
+  await box.evaluate((el) => el.focus()).catch(() => {});
+  await box.scrollIntoViewIfNeeded({ timeout: 1000 }).catch(() => {});
+  await box.click({ timeout: Math.min(timeout, 1500), force: true }).catch(async () => {
     await box.evaluate((el) => el.focus()).catch(() => {});
   });
   return box;
@@ -714,28 +932,69 @@ async function focusPromptBox(page, timeout = 5000) {
 async function waitForPromptLoaded(page, expectedLen, timeoutMs = BIG_PROMPT_PASTE_WAIT_MS) {
   const deadline = Date.now() + timeoutMs;
   const threshold = promptLoadThreshold(expectedLen);
+  const startedAt = Date.now();
   let lastLen = 0;
+  let lastState = null;
   let lastLog = 0;
+  let sawAttachment = false;
+  let triedShow = false;
   while (Date.now() < deadline) {
-    const len = await composerTextLength(page);
-    if (len >= threshold) return { ok: true, len, threshold };
+    const state = await promptMaterialState(page);
+    lastState = state;
+    const len = state.composerLen || 0;
+    if (len >= threshold) return { ok: true, len, threshold, material: state };
+    if (len > 0 && expectedLen < 10000) return { ok: true, len, threshold, material: state };
     lastLen = len;
+
+    if (!triedShow && state.showInTextFieldCount > 0) {
+      sawAttachment = true;
+      triedShow = true;
+      vlog("waitForPromptLoaded: attachment has Show in text field; clicking it", {
+        len,
+        showInTextFieldCount: state.showInTextFieldCount,
+        attachmentHints: state.attachmentHints,
+      });
+      await tryShowAttachmentInTextField(page);
+      await page.waitForTimeout(700);
+      continue;
+    }
+
+    if (state.attachmentCount > 0) {
+      sawAttachment = true;
+      // An attachment chip is real prompt material.  Do not burn the entire
+      // paste timeout waiting for textbox length to change; the submit loop is
+      // attachment-aware and can click Show in text field or submit if enabled.
+      if (Date.now() - startedAt > 1800) {
+        return { ok: false, len, threshold, attachment: true, material: state };
+      }
+    }
+
     if (Date.now() - lastLog > 3000) {
       vlog("waitForPromptLoaded: waiting", {
         len,
         threshold,
         expectedLen,
+        attachmentCount: state.attachmentCount,
+        showInTextFieldCount: state.showInTextFieldCount,
         remainingMs: Math.max(0, deadline - Date.now()),
       });
       lastLog = Date.now();
     }
     await page.waitForTimeout(250);
   }
-  return { ok: false, len: lastLen, threshold };
+  return { ok: false, len: lastLen, threshold, attachment: sawAttachment, material: lastState };
 }
 
 async function playwrightClipboardKeyPaste(page, fullPrompt) {
-  const combos = process.platform === "darwin" ? ["Meta+V", "Meta+Shift+V"] : ["Control+V", "Control+Shift+V"];
+  // Plain-text paste first.  On current ChatGPT, normal Cmd/Ctrl+V can turn a
+  // very large clipboard payload into an attachment chip.  Cmd/Ctrl+Shift+V is
+  // the accessibility-friendly path: it behaves like "paste as plain text" and
+  // lands in the actual text field.  Rich paste is opt-in because it is the
+  // path that created the attachment-only state in your log.
+  const allowRichPaste = /^(1|true|yes)$/i.test(process.env.GPT_WEB_ALLOW_RICH_PASTE || "");
+  const combos = process.platform === "darwin" ? ["Meta+Shift+V"] : ["Control+Shift+V"];
+  if (allowRichPaste) combos.push(process.platform === "darwin" ? "Meta+V" : "Control+V");
+
   for (const combo of combos) {
     vlog("playwrightClipboardKeyPaste: pressing paste shortcut", { combo, len: fullPrompt.length });
     await focusPromptBox(page, 5000).catch(() => {});
@@ -746,9 +1005,9 @@ async function playwrightClipboardKeyPaste(page, fullPrompt) {
       continue;
     }
     const loaded = await waitForPromptLoaded(page, fullPrompt.length, BIG_PROMPT_PASTE_WAIT_MS);
-    vlog("playwrightClipboardKeyPaste: load result", { combo, ...loaded });
-    if (loaded.ok) return true;
-    if (loaded.len > 0) return true;
+    const material = loaded.material || (await promptMaterialState(page));
+    vlog("playwrightClipboardKeyPaste: load result", { combo, ...loaded, material });
+    if (loaded.ok || hasPromptMaterialState(material)) return true;
     await clearPromptBoxInDom(page);
   }
   return false;
@@ -915,7 +1174,7 @@ async function sendViaKeyboard(page, allowBareEnter = false) {
 async function dumpComposerState(page, label) {
   const info = await page
     .evaluate((selectors) => {
-      const out = { url: location.href, candidates: [], buttons: [] };
+      const out = { url: location.href, candidates: [], buttons: [], attachmentLike: [] };
       for (const selector of selectors) {
         const el = document.querySelector(selector);
         if (!el) continue;
@@ -953,6 +1212,25 @@ async function dumpComposerState(page, label) {
           textPreview: ((b.textContent || "") + "").trim().slice(0, 60),
         });
       }
+      const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer/i;
+      const attachRe = /attachment|attached|uploaded[-_ ]?file|file[-_ ]?chip|upload[-_ ]?preview|show\s+in\s+text\s+field|remove.{0,30}(file|attachment)/i;
+      for (const el of document.querySelectorAll('button, [role="button"], [role="menuitem"], [aria-label], [data-testid], [class]')) {
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        const visible = style.visibility !== "hidden" && style.display !== "none" && rect.width > 0 && rect.height > 0;
+        if (!visible) continue;
+        const blob = [
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || "",
+          el.getAttribute("data-testid") || "",
+          el.getAttribute("class") || "",
+          ((el.textContent || "") + "").trim(),
+        ].join(" ").replace(/\s+/g, " ").trim();
+        if ((showRe.test(blob) || attachRe.test(blob)) && !/add\s+files\s+and\s+more/i.test(blob)) {
+          out.attachmentLike.push(blob.slice(0, 160));
+          if (out.attachmentLike.length >= 16) break;
+        }
+      }
       return out;
     }, PROMPT_BOX_SELECTORS)
     .catch((err) => ({ error: String(err) }));
@@ -963,11 +1241,11 @@ async function dumpComposerState(page, label) {
 // ---------------------------------------------------------------------------
 // Submit core
 //
-// The fast path is OS clipboard + Playwright keyboard paste (Meta/Ctrl+V).
-// It is much faster for 500k+ character prompts than keyboard.insertText, and
-// unlike osascript it does not depend on which macOS app is frontmost.
-// Fallback order: synthetic ClipboardEvent, native macOS paste, direct DOM set,
-// and only for small prompts keyboard.insertText/type.
+// The fast path is OS clipboard + Playwright plain-text keyboard paste
+// (Cmd/Ctrl+Shift+V).  It is much faster for 500k+ character prompts than
+// keyboard.insertText and avoids ChatGPT's attachment conversion for normal
+// rich paste.  Fallback order: synthetic ClipboardEvent, native macOS plain
+// paste, direct DOM set, and only for small prompts keyboard.insertText/type.
 // ---------------------------------------------------------------------------
 async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   vlog("submitPrompt: start", { len: fullPrompt.length, promptTimeoutMs });
@@ -975,15 +1253,41 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   await grantClipboardPermissions(page);
 
   vlog("submitPrompt: locating/focusing prompt box");
-  const promptBox = await focusPromptBox(page, Math.min(promptTimeoutMs, 15000));
+  await focusPromptBox(page, Math.min(promptTimeoutMs, 15000));
   vlog("submitPrompt: clearing composer");
   await clearPromptBoxInDom(page);
   await page.waitForTimeout(100);
 
   const beforeCount = await assistantCount(page);
   const insertStartedAt = Date.now();
-  let lenAfter = await composerTextLength(page);
+  const threshold = promptLoadThreshold(fullPrompt.length);
   const strategyResults = [];
+  let materialState = await promptMaterialState(page);
+  let lenAfter = materialState.composerLen || 0;
+
+  async function refreshMaterial(label) {
+    materialState = await promptMaterialState(page);
+    lenAfter = materialState.composerLen || 0;
+    strategyResults.push(
+      `${label}:${lenAfter}:attachments=${materialState.attachmentCount}:show=${materialState.showInTextFieldCount}`
+    );
+    return materialState;
+  }
+
+  async function showAttachmentIfAvailable(label) {
+    const state = await promptMaterialState(page);
+    if (state.showInTextFieldCount <= 0) return false;
+    vlog("submitPrompt: Show in text field available; clicking", {
+      label,
+      composerLen: state.composerLen,
+      attachmentCount: state.attachmentCount,
+      showInTextFieldCount: state.showInTextFieldCount,
+      attachmentHints: state.attachmentHints,
+    });
+    const clicked = await tryShowAttachmentInTextField(page);
+    await refreshMaterial(`${label}:showClicked=${clicked}`);
+    return clicked;
+  }
 
   vlog("submitPrompt: preloading OS clipboard");
   try {
@@ -994,45 +1298,52 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     vwarn("submitPrompt: clipboard set failed", { err: err.message });
   }
 
-  // Strategy 1: real browser paste via Playwright keyboard events.  This is
-  // dramatically faster than keyboard.insertText for 500k+ chars and does not
-  // depend on Terminal/Chrome being frontmost.
+  // Strategy 1: plain-text browser paste via Playwright keyboard events.
+  // Normal Cmd/Ctrl+V is intentionally opt-in because it can create attachment
+  // chips for huge payloads.  Cmd/Ctrl+Shift+V is the accessibility-oriented
+  // text-field path.
   let keyPasteOk = false;
-  if (lenAfter === 0) {
+  if (!hasPromptMaterialState(materialState)) {
     keyPasteOk = await playwrightClipboardKeyPaste(page, fullPrompt);
-    lenAfter = await composerTextLength(page);
-    strategyResults.push(`keyPaste:${keyPasteOk}:${lenAfter}`);
+    await refreshMaterial(`keyPaste:${keyPasteOk}`);
+    if (lenAfter < threshold) await showAttachmentIfAvailable("after-key-paste");
   }
 
-  // Strategy 2: synthetic ClipboardEvent fallback.
+  // Strategy 2: synthetic ClipboardEvent fallback.  Only run if the page still
+  // has no prompt material at all; if ChatGPT already created an attachment chip
+  // then the submit loop can handle it without deleting the material.
   let pasteOk = false;
-  if (lenAfter < promptLoadThreshold(fullPrompt.length)) {
+  if (lenAfter < threshold && !hasPromptMaterialState(materialState)) {
     await clearPromptBoxInDom(page);
     pasteOk = await playwrightPaste(page, fullPrompt);
     const loaded = await waitForPromptLoaded(page, fullPrompt.length, 10000);
-    lenAfter = Math.max(loaded.len, await composerTextLength(page));
-    strategyResults.push(`syntheticPaste:${pasteOk}:${lenAfter}`);
+    materialState = loaded.material || (await promptMaterialState(page));
+    lenAfter = Math.max(loaded.len || 0, materialState.composerLen || 0);
+    strategyResults.push(`syntheticPaste:${pasteOk}:${lenAfter}:attachments=${materialState.attachmentCount}`);
+    if (lenAfter < threshold) await showAttachmentIfAvailable("after-synthetic-paste");
   }
 
-  // Strategy 3: OS-level paste on macOS after activating Chrome.  This is only
-  // a fallback; the primary path above avoids OS focus entirely.
-  if (lenAfter < promptLoadThreshold(fullPrompt.length) && process.platform === "darwin") {
+  // Strategy 3: native macOS paste after activating Chrome.  Plain-text
+  // Cmd+Shift+V is tried before rich Cmd+V.
+  if (lenAfter < threshold && !hasPromptMaterialState(materialState) && process.platform === "darwin") {
     await clearPromptBoxInDom(page);
     vlog("submitPrompt: trying OS-level paste fallback after activating Chrome");
     const activated = activateChromeOnMac();
     vlog("submitPrompt: activated Chrome.app", { activated });
     await page.bringToFront().catch(() => {});
     await focusPromptBox(page, 5000).catch(() => {});
-    for (const usePlain of [false, true]) {
+    for (const usePlain of [true, false]) {
       try {
         nativePlainTextPaste(usePlain);
       } catch (err) {
         vwarn("submitPrompt: native paste failed", { usePlain, err: err.message });
       }
       const loaded = await waitForPromptLoaded(page, fullPrompt.length, 15000);
-      lenAfter = Math.max(loaded.len, await composerTextLength(page));
-      strategyResults.push(`nativePaste:${usePlain ? "plain" : "normal"}:${lenAfter}`);
-      if (lenAfter >= promptLoadThreshold(fullPrompt.length)) break;
+      materialState = loaded.material || (await promptMaterialState(page));
+      lenAfter = Math.max(loaded.len || 0, materialState.composerLen || 0);
+      strategyResults.push(`nativePaste:${usePlain ? "plain" : "normal"}:${lenAfter}:attachments=${materialState.attachmentCount}`);
+      if (lenAfter < threshold) await showAttachmentIfAvailable(`after-native-${usePlain ? "plain" : "normal"}`);
+      if (lenAfter >= threshold || hasPromptMaterialState(materialState)) break;
       await clearPromptBoxInDom(page);
     }
   }
@@ -1040,12 +1351,13 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   // Strategy 4: direct DOM insertion.  Fast, but less preferred because it
   // bypasses the normal paste path.  Useful when browser paste is blocked.
   let domInsertOk = false;
-  if (lenAfter < promptLoadThreshold(fullPrompt.length)) {
+  if (lenAfter < threshold && !hasPromptMaterialState(materialState)) {
     await clearPromptBoxInDom(page);
     domInsertOk = await domInsertPrompt(page, fullPrompt);
     const loaded = await waitForPromptLoaded(page, fullPrompt.length, 5000);
-    lenAfter = Math.max(loaded.len, await composerTextLength(page));
-    strategyResults.push(`domInsert:${domInsertOk}:${lenAfter}`);
+    materialState = loaded.material || (await promptMaterialState(page));
+    lenAfter = Math.max(loaded.len || 0, materialState.composerLen || 0);
+    strategyResults.push(`domInsert:${domInsertOk}:${lenAfter}:attachments=${materialState.attachmentCount}`);
   }
 
   // Strategy 5: keyboard.insertText/type only for small prompts.  For your
@@ -1053,7 +1365,7 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   // minutes before we ever reach submit.
   let insertTextOk = false;
   let typedOk = false;
-  if (lenAfter === 0 && fullPrompt.length <= SMALL_PROMPT_INSERT_TEXT_MAX_CHARS) {
+  if (!hasPromptMaterialState(materialState) && fullPrompt.length <= SMALL_PROMPT_INSERT_TEXT_MAX_CHARS) {
     try {
       await focusPromptBox(page, 5000);
       await page.keyboard.insertText(fullPrompt);
@@ -1061,34 +1373,44 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     } catch (err) {
       vwarn("submitPrompt: keyboard.insertText failed", { err: err.message });
     }
-    lenAfter = await composerTextLength(page);
-    if (lenAfter === 0) {
+    await refreshMaterial(`keyboardInsertText:${insertTextOk}`);
+    if (!hasPromptMaterialState(materialState)) {
       typedOk = await typePrompt(page, fullPrompt);
-      lenAfter = await composerTextLength(page);
+      await refreshMaterial(`keyboardType:${typedOk}`);
     }
-    strategyResults.push(`keyboardSmall:${insertTextOk}/${typedOk}:${lenAfter}`);
   }
+
+  // Last chance: if an attachment chip exists and exposes Show in text field,
+  // expand it before the submit phase.
+  if (lenAfter < threshold) await showAttachmentIfAvailable("final-pre-submit");
 
   await dumpComposerState(page, "post-insert");
+  materialState = await promptMaterialState(page);
+  lenAfter = materialState.composerLen || 0;
+  vlog("submitPrompt: prompt material after insert", materialState);
 
-  if (lenAfter === 0) {
-    throw new Error(`All paste strategies failed to populate the composer. strategies=${strategyResults.join(",")}`);
+  if (!hasPromptMaterialState(materialState)) {
+    throw new Error(`All paste strategies failed to populate the composer or create prompt material. strategies=${strategyResults.join(",")}`);
   }
 
-  const threshold = promptLoadThreshold(fullPrompt.length);
   if (fullPrompt.length >= 10000 && lenAfter < threshold) {
-    vwarn("submitPrompt: composer length is below expected threshold; proceeding only because it is non-empty", {
+    vwarn("submitPrompt: composer text is below expected threshold; proceeding because prompt material exists", {
       lenAfter,
       fullPromptLen: fullPrompt.length,
       threshold,
+      attachmentCount: materialState.attachmentCount,
+      showInTextFieldCount: materialState.showInTextFieldCount,
+      attachmentHints: materialState.attachmentHints,
       strategyResults,
     });
   }
 
-  vlog("submitPrompt: composer populated", {
+  vlog("submitPrompt: prompt material ready", {
     lenAfter,
     fullPromptLen: fullPrompt.length,
     threshold,
+    attachmentCount: materialState.attachmentCount,
+    showInTextFieldCount: materialState.showInTextFieldCount,
     insertElapsedMs: Date.now() - insertStartedAt,
     strategyResults,
   });
@@ -1101,10 +1423,13 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   let clickAttempts = 0;
   let keyboardSendAttempted = false;
   let bareEnterAttempted = false;
+  let loopShowAttempted = false;
 
   while (Date.now() < deadline) {
     iter++;
-    const length = await composerTextLength(page);
+    const loopMaterial = await promptMaterialState(page);
+    const length = loopMaterial.composerLen || 0;
+    const hasMaterial = hasPromptMaterialState(loopMaterial);
     const sendInfo = await inspectSendButton(page);
     const generating = await isGenerating(page);
     const currentAssistantCount = await assistantCount(page);
@@ -1121,17 +1446,33 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
       return;
     }
 
-    if (clickAttempts > 0 && length === 0) {
-      vlog("submitPrompt: composer cleared after click -> treating as submitted", { iter, clickAttempts });
+    if (clickAttempts > 0 && !hasMaterial) {
+      vlog("submitPrompt: prompt material cleared after click -> treating as submitted", { iter, clickAttempts });
       return;
     }
 
-    if (sendInfo && length > 0 && !sendInfo.disabled) {
+    if (!loopShowAttempted && loopMaterial.showInTextFieldCount > 0 && length < threshold) {
+      loopShowAttempted = true;
+      vlog("submitPrompt: attachment still has Show in text field; trying before send", {
+        iter,
+        length,
+        attachmentCount: loopMaterial.attachmentCount,
+        showInTextFieldCount: loopMaterial.showInTextFieldCount,
+        attachmentHints: loopMaterial.attachmentHints,
+      });
+      await tryShowAttachmentInTextField(page);
+      await page.waitForTimeout(700);
+      continue;
+    }
+
+    if (sendInfo && hasMaterial && !sendInfo.disabled) {
       clickAttempts++;
       vlog("submitPrompt: enabled send button found -> clicking", {
         iter,
         clickAttempts,
         length,
+        attachmentCount: loopMaterial.attachmentCount,
+        showInTextFieldCount: loopMaterial.showInTextFieldCount,
         sendSelector: sendInfo.selector,
         aria: sendInfo.aria,
         testid: sendInfo.testid,
@@ -1143,14 +1484,14 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     }
 
     const elapsedMs = Date.now() - startedAt;
-    if (!keyboardSendAttempted && length > 0 && elapsedMs > 2500) {
+    if (!keyboardSendAttempted && hasMaterial && elapsedMs > 2500) {
       vlog("submitPrompt: send button not enabled quickly; trying Cmd/Ctrl+Enter fallback");
       keyboardSendAttempted = await sendViaKeyboard(page, false);
       await page.waitForTimeout(800);
       continue;
     }
 
-    if (!bareEnterAttempted && keyboardSendAttempted && length > 0 && elapsedMs > 9000 && (!sendInfo || sendInfo.disabled)) {
+    if (!bareEnterAttempted && keyboardSendAttempted && hasMaterial && elapsedMs > 9000 && (!sendInfo || sendInfo.disabled)) {
       vlog("submitPrompt: trying bare Enter fallback after Cmd/Ctrl+Enter did not submit");
       bareEnterAttempted = await sendViaKeyboard(page, true);
       await page.waitForTimeout(800);
@@ -1162,6 +1503,9 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
         iter,
         elapsedMs,
         composerLen: length,
+        hasMaterial,
+        attachmentCount: loopMaterial.attachmentCount,
+        showInTextFieldCount: loopMaterial.showInTextFieldCount,
         sendVisible: !!sendInfo,
         sendDisabled: sendInfo ? sendInfo.disabled : null,
         sendAria: sendInfo ? sendInfo.aria : null,
@@ -1182,11 +1526,13 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     await page.waitForTimeout(250);
   }
 
-  const length = await composerTextLength(page);
+  const timeoutMaterial = await promptMaterialState(page);
+  const length = timeoutMaterial.composerLen || 0;
   const sendInfo = await inspectSendButton(page);
   await dumpComposerState(page, "submit-timeout");
   throw new Error(
     `Prompt was not submitted before timeout; composerLen=${length}, ` +
+      `attachmentCount=${timeoutMaterial.attachmentCount}, showInTextFieldCount=${timeoutMaterial.showInTextFieldCount}, ` +
       `sendVisible=${!!sendInfo}, sendDisabled=${sendInfo ? sendInfo.disabled : "n/a"}, ` +
       `sendAria=${sendInfo ? JSON.stringify(sendInfo.aria) : "n/a"}, ` +
       `clickAttempts=${clickAttempts}, keyboardSendAttempted=${keyboardSendAttempted}, ` +
