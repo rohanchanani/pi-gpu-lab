@@ -388,13 +388,51 @@ def ensure_clean_repo(repo: Path, *, allow_dirty: bool) -> None:
         )
 
 
+def git_commit_stage_paths(repo: Path, add_paths: list[str]) -> list[str]:
+    """Return pathspecs that are safe to pass to `git add -A --`.
+
+    A missing path can be a real tracked deletion, which should be staged, or it
+    can be an untracked/generated directory that has already been quarantined or
+    removed. Plain `git add -A -- missing/untracked/path` aborts with
+    "pathspec did not match any files"; that was preventing incomplete tests
+    from being marked and letting the autorun continue. For missing paths, add
+    the tracked files underneath the path if any exist; otherwise skip it.
+    """
+    stage_paths: list[str] = []
+    seen: set[str] = set()
+
+    def add_once(p: str) -> None:
+        p = str(p).strip()
+        if not p or p in seen:
+            return
+        seen.add(p)
+        stage_paths.append(p)
+
+    for raw_path in add_paths:
+        rel = str(raw_path).strip()
+        if not rel:
+            continue
+        abs_path = repo / rel
+        if abs_path.exists() or abs_path.is_symlink():
+            add_once(rel)
+            continue
+
+        tracked = git(repo, ["ls-files", "--", rel], check=False, capture=True)
+        tracked_paths = [line.strip() for line in tracked.stdout.splitlines() if line.strip()]
+        if tracked_paths:
+            for tracked_path in tracked_paths:
+                add_once(tracked_path)
+            continue
+
+        print(f"[vc4-auto] git add: skipping missing untracked path {rel}")
+
+    return stage_paths
+
+
 def git_commit(repo: Path, message: str, add_paths: list[str]) -> None:
-    if add_paths:
-        existing_or_deleted = []
-        for path in add_paths:
-            # git add -A can stage deletions even if the path no longer exists.
-            existing_or_deleted.append(path)
-        git(repo, ["add", "-A", "--", *existing_or_deleted], check=True, capture=True)
+    stage_paths = git_commit_stage_paths(repo, add_paths) if add_paths else []
+    if stage_paths:
+        git(repo, ["add", "-A", "--", *stage_paths], check=True, capture=True)
 
     staged_clean = git(
         repo,

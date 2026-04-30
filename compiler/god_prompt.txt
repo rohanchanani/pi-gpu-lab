@@ -19641,6 +19641,28 @@ Do NOT create sandbox links.
 Do NOT say you attached files.
 Do NOT wrap generated files in Markdown fences.
 
+Plaintext fidelity / Markdown-rendering guard:
+
+The ChatGPT UI may render this response as Markdown before my local parser extracts the visible plaintext. Therefore, inside GPT_WEB_FILE file-content bodies only, make the rendered/copied plaintext exactly equal to the intended file bytes by using Markdown-neutral HTML entity shielding where needed.
+
+Do not entity-encode BEGIN_GPTWEB_FILE or END_GPTWEB_FILE lines. Those marker lines must remain literal ASCII exactly as specified.
+
+Inside file contents, when a literal character could be interpreted by Markdown or HTML instead of preserved as text, emit a decimal HTML entity for that character so the rendered/plaintext extraction decodes back to the intended character. In particular:
+
+* Encode every literal ampersand as &#38; first.
+* Encode every literal less-than sign as &#60; and greater-than sign as &#62;.
+* Encode every literal backtick as &#96;.
+* Encode Markdown control characters when they could affect rendering: leading #, leading -, leading *, leading +, leading >, leading |, table | characters, emphasis * or _, link/image brackets, and ordered-list dots in lines like 1. or 2.
+* For a literal line that should begin with #, emit &#35; at the start of that file-content line.
+* For a literal line that should begin with -, emit &#45; at the start of that file-content line.
+* For a literal line that should begin with *, emit &#42; at the start of that file-content line.
+* For a literal line that should begin with >, emit &#62; at the start of that file-content line.
+* For a literal shell/C/comment line containing <, >, &, or backticks, entity-shield those characters.
+
+The intended invariant is: after the ChatGPT message is rendered and copied/extracted as visible plaintext, every GPT_WEB_FILE block body is exactly the intended file content, including literal #, *, _, <, >, &, backticks, tables, comments, shell scripts, and Markdown README headings.
+
+Never use Markdown code fences to solve this. The marker lines must remain parseable, and the decoded visible plaintext of file bodies must be the source of truth.
+
 Instead, emit generated files directly in this exact format:
 
 BEGIN_GPTWEB_FILE token=abc123 path=<relative/path>
@@ -19656,6 +19678,12 @@ Rules for GPT_WEB_FILE blocks:
 * You may emit multiple file blocks.
 * Do not put Markdown fences around file blocks.
 * Do not add explanations inside file blocks.
+
+When using entity shielding inside file contents, add encoding=html-entities to the BEGIN_GPTWEB_FILE line, for example:
+
+BEGIN_GPTWEB_FILE token=abc123 encoding=html-entities path=<relative/path>
+
+Do not add encoding=html-entities unless the file body actually uses entity shielding.
 
 The user will parse the GPT_WEB_FILE blocks into real files, save them into the repo, run the generated Codex mechanical prompt, then run local verification and the hardware runner. Your response must therefore include:
 

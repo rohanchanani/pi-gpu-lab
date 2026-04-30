@@ -166,8 +166,40 @@ function parseHeaderPath(header) {
   if (pathFromKv) return normalizeRelativePath(pathFromKv);
   let h = String(header || "").trim();
   h = h.replace(/(?:^|\s)token=(?:"[^"]*"|'[^']*'|\S+)/g, "").trim();
+  h = h.replace(/(?:^|\s)(?:encoding|content_encoding)=(?:"[^"]*"|'[^']*'|\S+)/g, "").trim();
   h = h.replace(/^path=/, "").trim();
   return normalizeRelativePath(h);
+}
+
+function headerWantsEntityDecode(header) {
+  const enc = String(parseKv(header, "encoding") || parseKv(header, "content_encoding") || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  return enc === "html-entities" || enc === "html-entity-shielded" || enc === "entity-shielded";
+}
+
+function decodeHtmlEntitiesForFileContent(text) {
+  const named = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: "\u00a0",
+  };
+  return String(text || "").replace(/&(?:#x([0-9a-fA-F]+)|#([0-9]+)|([A-Za-z][A-Za-z0-9]+));/g, (match, hex, dec, name) => {
+    if (hex !== undefined) {
+      const cp = Number.parseInt(hex, 16);
+      return Number.isFinite(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : match;
+    }
+    if (dec !== undefined) {
+      const cp = Number.parseInt(dec, 10);
+      return Number.isFinite(cp) && cp >= 0 && cp <= 0x10ffff ? String.fromCodePoint(cp) : match;
+    }
+    const key = String(name || "").toLowerCase();
+    return Object.prototype.hasOwnProperty.call(named, key) ? named[key] : match;
+  });
 }
 
 function parseFileBlocks(answer, expectedToken) {
@@ -177,7 +209,7 @@ function parseFileBlocks(answer, expectedToken) {
   let m;
   while ((m = re.exec(text)) !== null) {
     const header = String(m[1] || "").trim();
-    const content = m[2] ?? "";
+    let content = m[2] ?? "";
     const footer = String(m[3] || "").trim();
     const headerToken = parseKv(header, "token");
     const footerToken = parseKv(footer, "token");
@@ -192,7 +224,14 @@ function parseFileBlocks(answer, expectedToken) {
       files.push({ error: err.message, header, skipped: true });
       continue;
     }
-    files.push({ relPath, content, header });
+    const entityDecoded = headerWantsEntityDecode(header);
+    if (entityDecoded) {
+      content = decodeHtmlEntitiesForFileContent(content);
+    }
+    if (!content.endsWith("\n")) {
+      content += "\n";
+    }
+    files.push({ relPath, content, header, entityDecoded });
   }
   return files;
 }
@@ -541,7 +580,7 @@ async function promptMaterialState(page) {
 async function tryShowAttachmentInTextField(page) {
   async function clickVisibleShowButton(phase) {
     return await page
-      .evaluate((selectors) => {
+      .evaluate(({ selectors, phase }) => {
         function visible(el) {
           if (!el) return false;
           const style = window.getComputedStyle(el);
@@ -583,7 +622,7 @@ async function tryShowAttachmentInTextField(page) {
           return { ok: true, phase, blob: blob.slice(0, 180) };
         }
         return { ok: false, phase, reason: "no visible Show in text field control" };
-      }, PROMPT_BOX_SELECTORS)
+      }, { selectors: PROMPT_BOX_SELECTORS, phase })
       .catch((err) => ({ ok: false, phase, reason: String(err) }));
   }
 
@@ -1755,6 +1794,14 @@ BEGIN_GPTWEB_FILE token=${token} path=<relative/path>
 <complete file contents>
 END_GPTWEB_FILE token=${token}
 
+Optional Markdown-rendering-safe file-block format:
+
+BEGIN_GPTWEB_FILE token=${token} encoding=html-entities path=<relative/path>
+<complete file contents with Markdown/HTML-sensitive characters entity-shielded>
+END_GPTWEB_FILE token=${token}
+
+When encoding=html-entities is present, my local parser decodes decimal/hex/named HTML entities once before writing the file. Use that encoding for file contents that contain Markdown-sensitive leading characters or HTML-sensitive characters, but never entity-encode the BEGIN/END marker lines themselves.
+
 Rules:
 - Output only GPTWEB_FILE blocks.
 - You may output one file block or many file blocks.
@@ -1766,6 +1813,8 @@ Rules:
 - Do not wrap the file blocks in Markdown fences.
 - Do not add explanations outside the file blocks.
 - Preserve the exact requested source/code/markdown content inside each block.
+- Every generated file must end with a final newline. The parser also enforces a final newline as a safety net.
+- If encoding=html-entities is used, the decoded file content must be the intended source of truth.
 
 User prompt:
 ${userPrompt}
