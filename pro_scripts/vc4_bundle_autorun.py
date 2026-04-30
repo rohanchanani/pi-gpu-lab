@@ -4,8 +4,10 @@ Deterministic VC4 hardware-test bundle autorunner.
 
 This script drives the unattended protocol:
 
-  1. Generate a test bundle from ChatGPT using pro_scripts/current_tab.js.
-     This orchestrator is current-tab-only: it never selects new_tab.js.
+  1. Generate a test bundle from ChatGPT using pro_scripts/current_tab.js by default.
+     If --new is passed, only the first runnable test opens a fresh tab and
+     includes the god prompt / extra context; all continuation and fix prompts
+     use current_tab.js without resending the god prompt.
   2. Stage GPT_WEB_FILE output first.
   3. Copy staged files into the repo only after path validation.
   4. Run the generated Codex mechanical prompt.
@@ -821,12 +823,10 @@ def run_attempt(
     prompt_path = prompt_dir / f"{attempt_name}.md"
     write_text(prompt_path, prompt_text)
 
-    # Current-tab-only orchestration: never invoke new_tab.js from Python.
-    # Keep the use_new_tab parameter only for backwards-compatible function
-    # signatures/logical retries; force it false here so future call-site
-    # mistakes cannot select the new-tab wrapper.
-    use_new_tab = False
-    browser_script = current_tab_script
+    # Default orchestration is current-tab-only.  The only time Python may
+    # select new_tab.js is when run_one_test() explicitly passes use_new_tab
+    # for the initial --new bootstrap prompt.
+    browser_script = new_tab_script if use_new_tab else current_tab_script
     # Give the JS driver a slightly tighter response-wait deadline than the
     # Python-side subprocess timeout so it can finish gracefully (write its
     # in-flight marker, flush the manifest, etc.) before Python forcibly
@@ -1207,15 +1207,18 @@ def run_one_test(
     attempt_index = 0
     fixes_used = 0
 
-    # Current-tab-only workflow.
-    #
-    # Always send the compact continuation/spec prompt and always use
-    # current_tab.js. Do not send the god prompt from the Python autorun in
-    # current-tab mode: the active chat is expected to already contain the
-    # workflow context. This remains true for the first runnable manifest item,
-    # after passed tests, and after incomplete tests.
-    use_new_tab = False
-    prompt_text = build_next_prompt(spec)
+    # Default workflow is compact current-tab continuation with no god prompt.
+    # If main() was invoked with --new, it starts exactly one fresh logical
+    # context by passing have_context_tab=False for the first runnable test.
+    # That first attempt opens new_tab.js and includes the god prompt.  All
+    # retries/fixes/subsequent tests return to current_tab.js and do not resend
+    # the god prompt.
+    if have_context_tab:
+        use_new_tab = False
+        prompt_text = build_next_prompt(spec)
+    else:
+        use_new_tab = True
+        prompt_text = build_initial_prompt(god_prompt, extra_contexts, spec)
 
     last_failure: Optional[Failure] = None
     chat_infra_failures = 0
@@ -1293,7 +1296,7 @@ def run_one_test(
         if fixes_used < max_fixes:
             fixes_used += 1
             attempt_index += 1
-            use_new_tab = False  # current-tab-only: keep fix prompts in the active chat
+            use_new_tab = False  # Keep fix prompts in the active chat; do not resend the god prompt.
             prompt_text = build_failure_prompt(
                 spec=spec,
                 attempt_index=attempt_index,
@@ -1329,9 +1332,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".", help="repo root, default: current directory")
     parser.add_argument("--manifest", default="vc4_test_specs/manifest.tsv")
-    parser.add_argument("--god-prompt", default="vc4_test_specs/god_prompt.md", help="accepted for compatibility; not sent in current-tab-only mode")
-    parser.add_argument("--extra-context-file", action="append", default=[], help="accepted for compatibility; not sent in current-tab-only mode")
-    parser.add_argument("--new-tab", default="pro_scripts/new_tab.js", help="accepted for compatibility; ignored in current-tab-only mode")
+    parser.add_argument("--new", action="store_true", help="open a new ChatGPT tab for the first runnable test and include --god-prompt/--extra-context-file context")
+    parser.add_argument("--god-prompt", default="vc4_test_specs/god_prompt.md", help="sent only when --new is present")
+    parser.add_argument("--extra-context-file", action="append", default=[], help="extra file pasted only into the --new bootstrap prompt, e.g. compiler/dialect.txt")
+    parser.add_argument("--new-tab", default="pro_scripts/new_tab.js", help="used only when --new is present")
     parser.add_argument("--current-tab", default="pro_scripts/current_tab.js")
     parser.add_argument("--max-fixes", type=int, default=3)
     parser.add_argument("--chat-timeout-sec", type=int, default=DEFAULT_CHAT_TIMEOUT_SEC)
@@ -1368,16 +1372,33 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     manifest = (repo / args.manifest).resolve()
 
-    # Current-tab-only mode intentionally does not load or send the god prompt
-    # or fresh-tab extra-context files.  The active ChatGPT conversation is the
-    # context source of truth; every test prompt is a compact continuation/spec
-    # prompt built by build_next_prompt().
-    god_prompt = ""
-    extra_contexts: list[ExtraContext] = []
-    if args.god_prompt:
-        print(f"[vc4-auto] current-tab-only: not sending god prompt {args.god_prompt}")
-    if args.extra_context_file:
-        print("[vc4-auto] current-tab-only: ignoring --extra-context-file values")
+    # By default, never load or send the god prompt: the active ChatGPT
+    # conversation is the context source of truth and each test uses a compact
+    # continuation/spec prompt.  The sole exception is --new, which bootstraps
+    # exactly one fresh tab for the first runnable test.
+    if args.new:
+        god_prompt_path = (repo / args.god_prompt).resolve()
+        if not god_prompt_path.exists():
+            raise DriverError(f"missing god prompt file: {god_prompt_path}")
+        god_prompt = read_text(god_prompt_path)
+        if "REPLACE_WITH_THE_GOD_PROMPT" in god_prompt:
+            raise DriverError(
+                f"{god_prompt_path} still contains the placeholder marker. "
+                "Paste the full god prompt into that file before running."
+            )
+        extra_contexts = load_extra_contexts(repo, args.extra_context_file)
+        print(f"[vc4-auto] --new: first runnable test will open a new tab and send god prompt {god_prompt_path}")
+        if extra_contexts:
+            print("[vc4-auto] --new extra context files:")
+            for ctx in extra_contexts:
+                print("  -", ctx.label)
+    else:
+        god_prompt = ""
+        extra_contexts: list[ExtraContext] = []
+        if args.god_prompt:
+            print(f"[vc4-auto] current-tab default: not sending god prompt {args.god_prompt}; pass --new to send it")
+        if args.extra_context_file:
+            print("[vc4-auto] current-tab default: ignoring --extra-context-file values; pass --new to send them")
 
     specs = parse_manifest(repo, manifest)
     only = {name.strip() for name in args.only.split(",") if name.strip()}
@@ -1392,10 +1413,10 @@ def main(argv: Optional[list[str]] = None) -> int:
         print("[vc4-auto] manifest has no runnable tests")
         return 0
 
-    # Default to the current-tab continuation workflow from the first runnable
-    # manifest entry onward.  run_one_test() also returns True after incomplete
-    # tests, so incomplete status never pushes the next test to a fresh/new tab.
-    have_context_tab = True
+    # Default to the current-tab continuation workflow.  With --new, only the
+    # first runnable test starts a fresh tab and gets the god prompt;
+    # run_one_test() returns True after that, including after incomplete tests.
+    have_context_tab = not args.new
 
     for spec in specs:
         marker = is_marked_done(repo, spec.name)

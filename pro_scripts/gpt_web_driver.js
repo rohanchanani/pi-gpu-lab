@@ -1721,33 +1721,72 @@ async function newChatPage(browser, pageTimeoutMs) {
   return page;
 }
 
-async function currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs) {
+async function currentExistingChatPage(browser, pageTimeoutMs, composerWaitMs) {
   const candidates = await listChatGptPages(browser);
-  vlog("currentOrFreshChatPage: candidate ChatGPT tabs", {
+  const targetUrl = process.env.GPT_WEB_CURRENT_CHAT_URL || "";
+  const targetConv = conversationIdFromUrl(targetUrl);
+  const conversationCandidates = candidates.filter((c) => isConversationUrl(c.url));
+  vlog("currentExistingChatPage: candidate ChatGPT tabs", {
     count: candidates.length,
+    conversationCount: conversationCandidates.length,
+    targetUrl,
     urls: candidates.map((c) => c.url),
   });
-  if (candidates.length === 0) {
-    vlog("currentOrFreshChatPage: no candidates; opening fresh tab");
-    return await newChatPage(browser, pageTimeoutMs);
+
+  if (conversationCandidates.length === 0) {
+    throw new Error(
+      "current_tab mode requires an already-open ChatGPT conversation tab (/c/<chat-id>). " +
+        "Open the existing chat in Chrome, then rerun; or pass --new if you intentionally want a fresh chat."
+    );
   }
-  for (const candidate of candidates.slice().reverse()) {
+
+  const ordered = conversationCandidates.slice().reverse().sort((a, b) => {
+    if (!targetConv) return 0;
+    const aMatch = conversationIdFromUrl(a.url) === targetConv ? 1 : 0;
+    const bMatch = conversationIdFromUrl(b.url) === targetConv ? 1 : 0;
+    return bMatch - aMatch;
+  });
+
+  const failures = [];
+  for (const candidate of ordered) {
     const page = candidate.page;
     if (page.isClosed()) continue;
+    const originalUrl = page.url();
     try {
       await page.bringToFront();
       await page.waitForLoadState("domcontentloaded", { timeout: 3000 }).catch(() => {});
       await grantClipboardPermissions(page).catch(() => {});
-      if (await waitForComposerReadyForNextPrompt(page, Math.min(composerWaitMs, 30000), "current-tab reuse")) {
-        vlog("currentOrFreshChatPage: reusing tab", { url: page.url(), title: candidate.title });
+      if (await waitForComposerReadyForNextPrompt(page, Math.min(composerWaitMs, 30000), "existing-chat reuse")) {
+        vlog("currentExistingChatPage: reusing existing conversation tab", { url: page.url(), title: candidate.title });
         return page;
       }
+
+      // If the composer is stale/hidden in an existing conversation, reload the
+      // same conversation URL.  Do not open a fresh tab or navigate to /.
+      if (isConversationUrl(originalUrl)) {
+        vlog("currentExistingChatPage: composer not ready; reloading same existing conversation", { url: originalUrl });
+        await page.goto(originalUrl, { waitUntil: "domcontentloaded", timeout: pageTimeoutMs }).catch((err) => {
+          failures.push(`${originalUrl}: reload failed: ${err.message}`);
+        });
+        await page.waitForTimeout(2500);
+        await grantClipboardPermissions(page).catch(() => {});
+        if (await waitForComposerReadyForNextPrompt(page, Math.min(composerWaitMs, 30000), "existing-chat after reload")) {
+          vlog("currentExistingChatPage: reusing existing conversation after reload", { url: page.url(), title: candidate.title });
+          return page;
+        }
+      }
+      failures.push(`${originalUrl}: composer not ready`);
     } catch (err) {
-      vwarn("currentOrFreshChatPage: candidate threw", { err: err.message });
+      failures.push(`${originalUrl}: ${err.message}`);
+      vwarn("currentExistingChatPage: candidate threw", { url: originalUrl, err: err.message });
     }
   }
-  vlog("currentOrFreshChatPage: no reusable tab; opening fresh tab");
-  return await newChatPage(browser, pageTimeoutMs);
+
+  throw new Error(
+    "Found ChatGPT conversation tab(s), but none had a ready composer. " +
+      "The driver will not open a fresh chat in current_tab mode. " +
+      `Candidates: ${failures.join(" | ")}`
+  );
 }
 
 async function findTabByUrl(browser, targetUrl) {
@@ -1929,7 +1968,7 @@ async function run(mode, argv) {
       page =
         mode === "new"
           ? await newChatPage(browser, pageTimeoutMs)
-          : await currentOrFreshChatPage(browser, pageTimeoutMs, composerWaitMs);
+          : await currentExistingChatPage(browser, pageTimeoutMs, composerWaitMs);
       vlog("tab ready", { url: page.url() });
 
       const context = page.context();
@@ -2084,7 +2123,7 @@ async function finalizeAnswer({
     mode:
       mode === "new"
         ? "new-chatgpt-tab-gptweb-file-parser"
-        : "existing-or-fresh-chatgpt-tab-gptweb-file-parser",
+        : "existing-chatgpt-tab-gptweb-file-parser",
     promptFile: path.resolve(promptFile),
     outDir,
     metaDir,
