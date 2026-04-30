@@ -1,0 +1,6 @@
+objs/
+*.bin
+*.elf
+*.list
+*_host
+run.log
