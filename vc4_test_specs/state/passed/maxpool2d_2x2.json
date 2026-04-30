@@ -1,0 +1,10 @@
+{
+  "name": "maxpool2d_2x2",
+  "status": "passed",
+  "completed_utc": "2026-04-30T05:06:00.317368+00:00",
+  "attempts_used": 1,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/maxpool2d_2x2",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/maxpool2d_2x2/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/maxpool2d_2x2/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=maxpool2d_2x2 status=PASS cases=8 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_width=31 max_height=19 checksum_accum=1436800 max_abs_diff=0.000000 runtime_allocations=1 runtime_launches=8 elapsed_usec=15"
+}
