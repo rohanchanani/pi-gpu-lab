@@ -1,0 +1,20 @@
+{
+"name": "softmax_row",
+"status": "PASS",
+"required": {
+"cases": 7,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"row_sum_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_rows": 13,
+"max_width": 16,
+"runtime_allocations": 1,
+"runtime_launches": 7
+},
+"float_max": {
+"max_abs_diff": 0.03
+}
+}
