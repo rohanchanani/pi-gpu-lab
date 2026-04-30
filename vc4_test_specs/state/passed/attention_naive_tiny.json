@@ -1,0 +1,10 @@
+{
+  "name": "attention_naive_tiny",
+  "status": "passed",
+  "completed_utc": "2026-04-30T05:35:02.802561+00:00",
+  "attempts_used": 1,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/attention_naive_tiny",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/attention_naive_tiny/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/attention_naive_tiny/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=attention_naive_tiny status=PASS cases=6 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_q_len=5 max_k_len=7 max_d=16 checksum_accum=239 max_abs_diff=0.000000 runtime_allocations=1 runtime_launches=6 elapsed_usec=21"
+}
