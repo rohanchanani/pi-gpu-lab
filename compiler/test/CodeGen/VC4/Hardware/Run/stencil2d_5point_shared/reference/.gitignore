@@ -1,0 +1,8 @@
+objs/
+*.bin
+*.elf
+*.list
+*.o
+*.d
+stencil2d_5point_shared_harness
+run.log
