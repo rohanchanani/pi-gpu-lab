@@ -1,0 +1,17 @@
+{
+"name": "mandelbrot_masked_loop",
+"status": "PASS",
+"required": {
+"cases": 5,
+"total_mismatches": 0,
+"sentinel_mismatches": 0,
+"launch_failures": 0,
+"active_qpus": 12,
+"lanes": 16,
+"max_width": 32,
+"max_height": 32,
+"max_iter": 64,
+"runtime_allocations": 1,
+"runtime_launches": 5
+}
+}
