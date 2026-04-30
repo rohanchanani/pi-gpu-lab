@@ -1,0 +1,10 @@
+{
+  "name": "image_boxblur_shared",
+  "status": "passed",
+  "completed_utc": "2026-04-30T04:59:54.811076+00:00",
+  "attempts_used": 1,
+  "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/image_boxblur_shared",
+  "expected_json": "compiler/test/CodeGen/VC4/Hardware/Run/image_boxblur_shared/expected.json",
+  "reference_run_log_archive": ".vc4_auto/passed/image_boxblur_shared/reference_run.log",
+  "result_line": "VC4_TEST_RESULT name=image_boxblur_shared status=PASS cases=3 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 warps_per_block=12 runtime_allocations=1 runtime_launches=3 timeouts=0 errstat_relevant_changed=0 checksum_accum=56764 elapsed_usec=22"
+}
