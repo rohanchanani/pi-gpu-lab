@@ -1,0 +1,7 @@
+{
+  "name": "shared_transpose_16x16",
+  "status": "passed",
+  "completed_utc": "2026-05-01T06:45:06.659036+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/input.mlir"
+}
