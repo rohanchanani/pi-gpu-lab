@@ -43,7 +43,7 @@ input.mlir
 expected.json
 candidate/README.md
 reference/.gitignore
-reference/_harness.c
+reference/vpm_setup_clobber_harness.c
 reference/vpm_setup_clobber.qasm
 reference/vpm_setup_clobber_launch.c
 reference/vpm_setup_clobber_launch.h
@@ -51,4 +51,3 @@ reference/vpm_setup_clobber_launch.h
 A mechanical Codex step copies/adapts the donor Makefile, run.sh, mailbox.c, mailbox.h, and share/ tree.
 
 Do not add this test to compiler/test/CodeGen/VC4/catalog.json until a reference hardware run has passed and the result line has been validated against expected.json.
-

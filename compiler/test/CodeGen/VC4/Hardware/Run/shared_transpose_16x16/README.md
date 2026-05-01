@@ -31,7 +31,7 @@ compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/
   expected.json
   candidate/README.md
   reference/.gitignore
-  reference/_harness.c
+  reference/shared_transpose_16x16_harness.c
   reference/shared_transpose_16x16.qasm
   reference/shared_transpose_16x16_launch.c
   reference/shared_transpose_16x16_launch.h
@@ -80,4 +80,3 @@ cmake --build compiler/build --target check-vc4
 compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
   compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16 \
   reference
-
