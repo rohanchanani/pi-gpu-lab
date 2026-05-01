@@ -1,0 +1,7 @@
+{
+  "name": "attention_qk_naive",
+  "status": "passed",
+  "completed_utc": "2026-05-01T07:09:04.068173+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/attention_qk_naive/input.mlir"
+}
