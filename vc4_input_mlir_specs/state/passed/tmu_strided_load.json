@@ -1,0 +1,7 @@
+{
+  "name": "tmu_strided_load",
+  "status": "passed",
+  "completed_utc": "2026-05-01T06:18:52.840678+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/input.mlir"
+}
