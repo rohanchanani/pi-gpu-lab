@@ -11,12 +11,20 @@ This is the narrowed companion to the VC4 bundle autorunner:
   * default browser mode: current ChatGPT tab, with no god prompt
   * --new: open a new tab and send the god prompt only for the first runnable test
 
-Manifest format:
+Test-spec source:
 
-    TEST_NAME<TAB>SPEC_PATH
+    By default this script reuses the original bundle-generation manifest at
+    vc4_test_specs/manifest.tsv.  That manifest has the same format as the
+    bundle autorunner:
 
-The spec path may be absolute or relative to the repo root.  The script also
-collects trusted files from:
+        TEST_NAME<TAB>SPEC_PATH
+
+    If the manifest is absent, the script falls back to discovering text specs
+    under --spec-dir, defaulting to vc4_test_specs/.  Discovered specs are
+    expected to contain a TEST_NAME: line; otherwise the file stem is used.
+
+    The spec path may be absolute or relative to the repo root.  The script also
+    collects trusted files from:
 
     compiler/test/CodeGen/VC4/Hardware/Run/TEST_NAME/
 
@@ -52,6 +60,8 @@ VC4_OPT_FLAGS = [
 ]
 
 RUN_ROOT = Path("compiler/test/CodeGen/VC4/Hardware/Run")
+SPEC_ROOT = Path("vc4_test_specs")
+DEFAULT_MANIFEST = SPEC_ROOT / "manifest.tsv"
 STATE_ROOT = Path("vc4_input_mlir_specs/state")
 AUTO_ROOT = Path(".vc4_auto/input_mlir")
 TEST_NAME_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_-]*$")
@@ -247,6 +257,11 @@ def git_commit(repo: Path, message: str, paths: list[str], no_commit: bool) -> N
         git(repo, ["commit", "-m", message])
 
 
+def parse_test_name_from_text(text: str) -> Optional[str]:
+    m = re.search(r"(?m)^\s*TEST_NAME\s*:\s*([A-Za-z0-9_][A-Za-z0-9_-]*)\s*$", text)
+    return m.group(1) if m else None
+
+
 def parse_manifest(repo: Path, manifest: Path) -> list[Spec]:
     if not manifest.exists():
         raise DriverError(f"missing manifest: {manifest}")
@@ -266,8 +281,76 @@ def parse_manifest(repo: Path, manifest: Path) -> list[Spec]:
             path = repo / path
         if not path.exists():
             raise DriverError(f"{manifest}:{line_no}: missing spec file {path}")
-        specs.append(Spec(name=name, path=path, text=read_text(path), line_no=line_no))
+        text = read_text(path)
+        embedded_name = parse_test_name_from_text(text)
+        if embedded_name and embedded_name != name:
+            raise DriverError(f"{path}: TEST_NAME is {embedded_name!r}, but manifest says {name!r}")
+        specs.append(Spec(name=name, path=path, text=text, line_no=line_no))
     return specs
+
+
+def is_probable_spec_file(path: Path) -> bool:
+    if path.name.startswith("."):
+        return False
+    if path.name in {"manifest.tsv", "status.json"}:
+        return False
+    if path.name.startswith("god_prompt"):
+        return False
+    if path.suffix.lower() not in {".md", ".txt", ".spec", ".prompt"}:
+        return False
+    return True
+
+
+def discover_specs(repo: Path, spec_dir: Path) -> list[Spec]:
+    if not spec_dir.exists():
+        raise DriverError(f"missing spec directory: {spec_dir}")
+    if not spec_dir.is_dir():
+        raise DriverError(f"--spec-dir is not a directory: {spec_dir}")
+    specs: list[Spec] = []
+    seen: dict[str, Path] = {}
+    for path in sorted(spec_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        rel_parts = path.relative_to(spec_dir).parts
+        if any(part in {"state", "passed", "incomplete", "__pycache__"} or part.startswith(".") for part in rel_parts[:-1]):
+            continue
+        if not is_probable_spec_file(path):
+            continue
+        text = read_text(path)
+        name = parse_test_name_from_text(text) or path.stem
+        if not TEST_NAME_RE.match(name):
+            raise DriverError(f"{path}: invalid derived test name {name!r}; add a TEST_NAME: line")
+        if name in seen:
+            raise DriverError(f"duplicate TEST_NAME {name!r}: {seen[name]} and {path}")
+        seen[name] = path
+        # Use the physical file index only as a stable diagnostic value.
+        specs.append(Spec(name=name, path=path, text=text, line_no=len(specs) + 1))
+    if not specs:
+        raise DriverError(f"no test specs found under {spec_dir}; expected manifest.tsv or .md/.txt/.spec files")
+    return specs
+
+
+def load_specs(repo: Path, args: argparse.Namespace) -> list[Spec]:
+    manifest_raw = (args.manifest or "").strip()
+    if manifest_raw:
+        manifest = Path(manifest_raw)
+        if not manifest.is_absolute():
+            manifest = repo / manifest
+        if manifest.exists():
+            print(f"[vc4-input-mlir-auto] using test-spec manifest {manifest}")
+            return parse_manifest(repo, manifest)
+        raise DriverError(f"missing manifest: {manifest}")
+
+    default_manifest = repo / DEFAULT_MANIFEST
+    if default_manifest.exists():
+        print(f"[vc4-input-mlir-auto] using original bundle test-spec manifest {default_manifest}")
+        return parse_manifest(repo, default_manifest)
+
+    spec_dir = Path(args.spec_dir)
+    if not spec_dir.is_absolute():
+        spec_dir = repo / spec_dir
+    print(f"[vc4-input-mlir-auto] {default_manifest} not found; discovering specs under {spec_dir}")
+    return discover_specs(repo, spec_dir)
 
 
 def state_paths(repo: Path, name: str) -> tuple[Path, Path]:
@@ -661,7 +744,8 @@ def run_one(repo: Path, spec: Spec, all_specs: list[Spec], args: argparse.Namesp
 def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--repo", default=".", help="repo root; default: current directory")
-    ap.add_argument("--manifest", default="vc4_input_mlir_specs/manifest.tsv", help="TEST_NAME<TAB>SPEC_PATH manifest")
+    ap.add_argument("--manifest", default="", help="optional TEST_NAME<TAB>SPEC_PATH manifest; default uses vc4_test_specs/manifest.tsv if present")
+    ap.add_argument("--spec-dir", default=str(SPEC_ROOT), help="fallback directory for discovering specs when no manifest is supplied/found")
     ap.add_argument("--new", action="store_true", help="open a fresh ChatGPT tab and send god prompt only for the first runnable test")
     ap.add_argument("--god-prompt", default="vc4_input_mlir_specs/god_prompt.md", help="god prompt used only with --new")
     ap.add_argument("--extra-context-file", action="append", default=[], help="dialect/source/example context file; repeatable; used only with --new")
@@ -673,7 +757,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--browser-internal-timeout-ms", type=int, default=DEFAULT_BROWSER_TIMEOUT_MS)
     ap.add_argument("--chat-infra-retries", type=int, default=3)
     ap.add_argument("--max-file-chars", type=int, default=DEFAULT_MAX_FILE_CHARS)
-    ap.add_argument("--only", default="", help="comma-separated subset of tests from the manifest")
+    ap.add_argument("--only", default="", help="comma-separated subset of discovered/manifest test names")
     ap.add_argument("--allow-dirty", action="store_true", help="allow starting with dirty repo state")
     ap.add_argument("--no-commit", action="store_true", help="do not create pass/incomplete/reset git commits")
     ap.add_argument("--reset-test", action="append", default=[], help="delete passed/incomplete state marker for a test; repeatable")
@@ -694,13 +778,13 @@ def main(argv: Optional[list[str]] = None) -> int:
         if not args.continue_after_reset:
             return 0
 
-    specs = parse_manifest(repo, (repo / args.manifest).resolve())
+    specs = load_specs(repo, args)
     only = {x.strip() for x in args.only.split(",") if x.strip()}
     if only:
         known = {s.name for s in specs}
         missing = sorted(only - known)
         if missing:
-            raise DriverError("--only requested names not in manifest: " + ", ".join(missing))
+            raise DriverError("--only requested names not in loaded specs: " + ", ".join(missing))
         specs = [s for s in specs if s.name in only]
     write_status(repo, specs)
 
