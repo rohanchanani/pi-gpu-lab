@@ -1,0 +1,7 @@
+{
+  "name": "warp_prefix_sum",
+  "status": "passed",
+  "completed_utc": "2026-05-01T06:39:50.384790+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/input.mlir"
+}
