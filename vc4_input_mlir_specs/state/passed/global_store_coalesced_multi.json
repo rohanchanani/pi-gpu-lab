@@ -1,0 +1,7 @@
+{
+  "name": "global_store_coalesced_multi",
+  "status": "passed",
+  "completed_utc": "2026-05-01T06:09:32.936584+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/input.mlir"
+}
