@@ -1,7 +1,0 @@
-{
-  "name": "flash_attention_tiny",
-  "status": "passed",
-  "completed_utc": "2026-05-01T07:11:20.357088+00:00",
-  "attempts_used": 1,
-  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/flash_attention_tiny/input.mlir"
-}

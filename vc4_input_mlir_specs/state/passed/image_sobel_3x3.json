@@ -1,7 +1,0 @@
-{
-  "name": "image_sobel_3x3",
-  "status": "passed",
-  "completed_utc": "2026-05-01T07:00:40.190899+00:00",
-  "attempts_used": 1,
-  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/image_sobel_3x3/input.mlir"
-}
