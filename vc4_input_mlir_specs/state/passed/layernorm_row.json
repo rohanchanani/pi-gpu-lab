@@ -1,0 +1,7 @@
+{
+  "name": "layernorm_row",
+  "status": "passed",
+  "completed_utc": "2026-05-04T07:30:40.303599+00:00",
+  "attempts_used": 2,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/layernorm_row/input.mlir"
+}
