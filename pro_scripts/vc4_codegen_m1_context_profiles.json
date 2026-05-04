@@ -1,0 +1,375 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m1",
+  "defaults": {
+    "max_chars": 140000,
+    "always_include": [
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_codegen_m1/constitution.md"
+      },
+      {
+        "kind": "worklist_slice"
+      },
+      {
+        "kind": "output_contract",
+        "path": "pro_scripts/prompts/vc4_codegen_m1/output_contract.md"
+      },
+      {
+        "kind": "slice_contract",
+        "path": "pro_scripts/prompts/vc4_codegen_m1/slice_contract.md"
+      }
+    ],
+    "failure_includes": [
+      {
+        "kind": "failure_packet"
+      },
+      {
+        "kind": "git_diff_summary"
+      },
+      {
+        "kind": "changed_files_excerpt"
+      }
+    ]
+  },
+  "profiles": {
+    "preflight": {
+      "max_chars": 60000,
+      "purpose": "No-GPT context for human/state reporting only.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_worklist.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_context_profiles.json"
+        }
+      ],
+      "extractors": []
+    },
+    "bootstrap_tool": {
+      "max_chars": 150000,
+      "purpose": "Add vc4-codegen tool skeleton and reusable Target/VC4 library surface.",
+      "include": [
+        {
+          "kind": "repo_tree_excerpt",
+          "roots": [
+            "compiler/tools",
+            "compiler/lib",
+            "compiler/include/vc4"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/tools/vc4-opt/vc4-opt.cpp",
+          "focus": [
+            "dialect registration",
+            "verifier pass names",
+            "MlirOptMain usage"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu.* ops"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp",
+          "focus": [
+            "verifyLaunchAbi",
+            "FuncOp verifier",
+            "scheduled op verifiers"
+          ]
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        }
+      ],
+      "extractors": [
+        "cmake_neighbors",
+        "vc4_dialect_registration",
+        "launch_abi_summary",
+        "scheduled_sink_summary"
+      ]
+    },
+    "emit_contract": {
+      "max_chars": 140000,
+      "purpose": "Local tests for Milestone 1 input boundary.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/tools/vc4-opt/vc4-opt.cpp",
+          "focus": [
+            "VC4VerifyEmitContractPass",
+            "scheduled verifier pass arguments"
+          ]
+        },
+        {
+          "kind": "tests",
+          "paths": [
+            "compiler/test/Dialect/VC4/verify-emit-contract.mlir",
+            "compiler/test/Dialect/VC4/verify-emit-contract-invalid.mlir",
+            "compiler/test/Dialect/VC4/launch-abi-roundtrip.mlir",
+            "compiler/test/Dialect/VC4/launch-abi-invalid.mlir"
+          ]
+        }
+      ],
+      "extractors": [
+        "verify_emit_contract_summary",
+        "launch_abi_summary",
+        "minimal_thrend_input"
+      ]
+    },
+    "qasm_minimal": {
+      "max_chars": 130000,
+      "purpose": "Emit and assemble thrend/nop/nop qasm.",
+      "include": [
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend.qasm"
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_QPUBundleOp"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
+          "focus": [
+            "VC4_QPUSignal",
+            "VC4_AddOpcode",
+            "VC4_MulOpcode",
+            "VC4_Cond",
+            "VC4_QPUMux"
+          ]
+        }
+      ],
+      "extractors": [
+        "minimal_thrend_input",
+        "minimal_thrend_reference_qasm",
+        "scheduled_epilogue_summary"
+      ]
+    },
+    "qpu_bundle": {
+      "max_chars": 160000,
+      "purpose": "Emit vc4.qpu.bundle canonical qasm.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_QPUBundleOp"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
+          "focus": [
+            "VC4_QPUSignal",
+            "VC4_AddOpcode",
+            "VC4_MulOpcode",
+            "VC4_Cond",
+            "VC4_QPUMux",
+            "pack",
+            "unpack"
+          ]
+        },
+        {
+          "kind": "tests",
+          "paths": [
+            "compiler/test/Dialect/VC4/qpu-bundle-roundtrip.mlir",
+            "compiler/test/Dialect/VC4/qpu-bundle-invalid.mlir"
+          ]
+        }
+      ],
+      "extractors": [
+        "scheduled_sink_summary",
+        "qpu_bundle_verifier_summary",
+        "existing_codegen_files"
+      ]
+    },
+    "qpu_ldi_sema": {
+      "max_chars": 150000,
+      "purpose": "Emit vc4.qpu.ldi and vc4.qpu.sema canonical qasm.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_QPULDIOp",
+            "VC4_QPUSemaOp"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
+          "focus": [
+            "VC4_LoadImmMode",
+            "VC4_SemaphoreMode",
+            "VC4_Cond",
+            "pack"
+          ]
+        },
+        {
+          "kind": "tests",
+          "paths": [
+            "compiler/test/Dialect/VC4/qpu-ldi-sema-roundtrip.mlir",
+            "compiler/test/Dialect/VC4/qpu-ldi-sema-invalid.mlir"
+          ]
+        }
+      ],
+      "extractors": [
+        "qpu_ldi_verifier_summary",
+        "qpu_sema_verifier_summary",
+        "existing_codegen_files"
+      ]
+    },
+    "qpu_branch": {
+      "max_chars": 150000,
+      "purpose": "Emit vc4.qpu.branch labels and delay-slot qasm.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_QPUBranchOp"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
+          "focus": [
+            "VC4_BranchCond"
+          ]
+        },
+        {
+          "kind": "tests",
+          "paths": [
+            "compiler/test/Dialect/VC4/qpu-branch-roundtrip.mlir",
+            "compiler/test/Dialect/VC4/qpu-branch-invalid.mlir"
+          ]
+        }
+      ],
+      "extractors": [
+        "qpu_branch_verifier_summary",
+        "scheduled_instruction_stream_flattening",
+        "existing_codegen_files"
+      ]
+    },
+    "launch_abi": {
+      "max_chars": 150000,
+      "purpose": "Parse vc4.launch_abi and generate semantic launcher API/C packing.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp",
+          "focus": [
+            "verifyLaunchAbi",
+            "verifyLaunchAbiArg",
+            "verifyLaunchAbiBuiltin",
+            "verifyLaunchAbiUniformLayout"
+          ]
+        },
+        {
+          "kind": "tests",
+          "paths": [
+            "compiler/test/Dialect/VC4/launch-abi-roundtrip.mlir",
+            "compiler/test/Dialect/VC4/launch-abi-invalid.mlir"
+          ]
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.c"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.h"
+        }
+      ],
+      "extractors": [
+        "launch_abi_summary",
+        "expected_json_schema",
+        "existing_codegen_files"
+      ]
+    },
+    "candidate_runner": {
+      "max_chars": 150000,
+      "purpose": "Generate/build candidate bundle without touching reference bundles.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md",
+          "focus": [
+            "reference side",
+            "candidate side",
+            "expected.json",
+            "no exact qasm matching"
+          ]
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+        }
+      ],
+      "extractors": [
+        "hardware_contract_summary",
+        "candidate_vs_reference_summary",
+        "expected_json_schema",
+        "existing_codegen_files"
+      ]
+    },
+    "hardware_failure": {
+      "max_chars": 170000,
+      "purpose": "Diagnose required hardware candidate failures with full logs and generated artifacts.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md",
+          "focus": [
+            "semantic oracle",
+            "VC4_TEST_RESULT",
+            "candidate generation"
+          ]
+        },
+        {
+          "kind": "failure_packet"
+        },
+        {
+          "kind": "generated_artifacts",
+          "paths": [
+            "candidate/kernel.qasm",
+            "candidate/kernel_launch.c",
+            "candidate/kernel_launch.h",
+            "candidate/manifest.json",
+            "candidate/build.log",
+            "candidate/run.log"
+          ]
+        }
+      ],
+      "extractors": [
+        "hardware_contract_summary",
+        "expected_json_schema",
+        "generated_artifact_summary",
+        "git_diff_summary"
+      ]
+    }
+  }
+}

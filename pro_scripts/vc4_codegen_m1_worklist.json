@@ -1,0 +1,639 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m1",
+  "title": "Milestone 1: final scheduled vc4 kernel to candidate bundle",
+  "locked_goal": "Given a vc4.module with exactly one kernel vc4.func where domain=qpu, form=scheduled, vc4.launch_abi exists, and the body contains only vc4.qpu.bundle/ldi/sema/branch, emit a candidate bundle that builds and runs for minimal_thrend-like and simple memory-output-like tests.",
+  "defaults": {
+    "repo_script_dir": "pro_scripts",
+    "gpt_web_driver": "pro_scripts/gpt_web_driver.js",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/codegen_m1",
+    "auto_commit_on_pass": true,
+    "hardware_gates_required_by_default": true,
+    "gpt_output_files": [
+      "response.json",
+      "changes.patch"
+    ],
+    "build_commands": {
+      "build_vc4_opt": "ninja -C compiler/build vc4-opt",
+      "check_vc4": "ninja -C compiler/build check-vc4"
+    },
+    "required_verifier_pipeline": [
+      "--vc4-verify-emit-contract",
+      "--vc4-verify-scheduled-hardware-rules",
+      "--vc4-verify-scheduled-adjacent-hazards",
+      "--vc4-verify-scheduled-io-spacing",
+      "--vc4-verify-scheduled-peripheral-accesses"
+    ],
+    "forbidden_paths": [
+      "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+      "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+      "compiler/test/CodeGen/VC4/catalog.json",
+      "pro_scripts/gpt_web_driver.js",
+      ".vc4_auto/**"
+    ],
+    "path_policy": {
+      "paths_are_repo_relative": true,
+      "reject_absolute_paths": true,
+      "reject_parent_directory_components": true,
+      "reject_binary_patches": true,
+      "reject_reference_bundle_mutation": true,
+      "reject_expected_json_mutation_by_default": true,
+      "reject_catalog_mutation_by_default": true
+    }
+  },
+  "slices": [
+    {
+      "id": "m1-00-preflight",
+      "title": "Preflight repo and toolchain checks",
+      "depends_on": [],
+      "context_profile": "preflight",
+      "intent": "Verify that the repo, build directory, existing VC4 tests, GPT web transport path, and minimal_thrend fixture are present before any GPT-generated compiler patch is requested.",
+      "non_goals": [
+        "Do not contact GPT Pro.",
+        "Do not run Codex.",
+        "Do not modify compiler sources.",
+        "Do not run hardware."
+      ],
+      "allowed_paths": [
+        "pro_scripts/vc4_codegen_m1_worklist.json",
+        "pro_scripts/vc4_codegen_m1_context_profiles.json",
+        "pro_scripts/prompts/vc4_codegen_m1/**",
+        "pro_scripts/README_vc4_codegen_m1.md"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "git:clean-or-confirm",
+        "json:worklist",
+        "json:context-profiles",
+        "tool:gpt-web-driver-exists",
+        "build:vc4-opt",
+        "build:check-vc4",
+        "fixture:minimal-thrend-exists"
+      ],
+      "hardware_required": false,
+      "codex_policy": "never",
+      "max_gpt_attempts": 0,
+      "max_codex_attempts": 0,
+      "commit_message": "vc4 codegen m1: preflight repo and toolchain checks"
+    },
+    {
+      "id": "m1-01-artifact-tool-skeleton",
+      "title": "Add vc4-codegen artifact tool skeleton",
+      "depends_on": [
+        "m1-00-preflight"
+      ],
+      "context_profile": "bootstrap_tool",
+      "intent": "Add a standalone vc4-codegen executable backed by reusable Target/VC4 library stubs. It must parse MLIR, find exactly one eligible kernel, reject invalid inputs cleanly, and write placeholder kernel.qasm, kernel_launch.c, kernel_launch.h, and manifest.json files into --emit-bundle.",
+      "non_goals": [
+        "Do not implement real qasm emission beyond placeholders.",
+        "Do not implement launcher ABI packing.",
+        "Do not implement hardware runner integration.",
+        "Do not change existing dialect semantics."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "tool:vc4-codegen-help",
+        "tool:vc4-codegen-skeleton-valid",
+        "tool:vc4-codegen-skeleton-invalid",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: add vc4-codegen artifact tool skeleton"
+    },
+    {
+      "id": "m1-02-emit-contract-local-tests",
+      "title": "Lock Milestone 1 input-boundary tests",
+      "depends_on": [
+        "m1-01-artifact-tool-skeleton"
+      ],
+      "context_profile": "emit_contract",
+      "intent": "Add local non-hardware tests for the exact Milestone 1 input boundary: one vc4.module, one kernel qpu scheduled vc4.func, vc4.launch_abi present, allowed scheduled sink ops only, and explicit thrend plus two following delay slots.",
+      "non_goals": [
+        "Do not implement new qasm features.",
+        "Do not broaden the accepted input subset.",
+        "Do not change reference hardware bundles."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:codegen-emit-contract",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: lock milestone 1 input-boundary tests"
+    },
+    {
+      "id": "m1-03-minimal-thrend-qasm",
+      "title": "Emit assembling qasm for minimal thrend",
+      "depends_on": [
+        "m1-02-emit-contract-local-tests"
+      ],
+      "context_profile": "qasm_minimal",
+      "intent": "Implement qasm emission for the smallest legal scheduled epilogue: thrend, nop, nop. The generated kernel.qasm must assemble with vc4asm.",
+      "non_goals": [
+        "Do not implement full ALU formatting.",
+        "Do not implement launcher uniform packing yet.",
+        "Do not require candidate hardware execution yet."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "tool:vc4-codegen-generate:minimal_thrend",
+        "lit:emit-minimal-thrend",
+        "tool:vc4asm-candidate:minimal_thrend",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: emit assembling qasm for minimal thrend"
+    },
+    {
+      "id": "m1-04-qpu-bundle-basic",
+      "title": "Emit canonical qpu.bundle qasm for basic ALU slots",
+      "depends_on": [
+        "m1-03-minimal-thrend-qasm"
+      ],
+      "context_profile": "qpu_bundle",
+      "intent": "Implement deterministic qasm printing for vc4.qpu.bundle covering nop, basic ADD/MUL shapes, muxes, read addresses, write addresses, conditions, set_flags/write_swap, small_imm, and non-load-immediate signals.",
+      "non_goals": [
+        "Do not implement vc4.qpu.ldi.",
+        "Do not implement vc4.qpu.sema.",
+        "Do not implement branch labels/delay-slot flattening."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-bundle-basic",
+        "tool:vc4asm-candidate:qpu_bundle_basic",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: emit canonical qpu.bundle qasm for basic alu slots"
+    },
+    {
+      "id": "m1-05-qpu-ldi-sema",
+      "title": "Emit qpu.ldi and qpu.sema qasm",
+      "depends_on": [
+        "m1-04-qpu-bundle-basic"
+      ],
+      "context_profile": "qpu_ldi_sema",
+      "intent": "Implement deterministic qasm printing for vc4.qpu.ldi and vc4.qpu.sema, including splat32 load-immediate, pack/pm paths, conditions, write addresses, and semaphore acquire/release IDs.",
+      "non_goals": [
+        "Do not implement branch emission.",
+        "Do not broaden to structured vc4.load_imm.",
+        "Defer per-element ldi syntax if vc4asm acceptance is uncertain and split into a follow-up slice."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-ldi-sema",
+        "tool:vc4asm-candidate:qpu_ldi_sema",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: emit qpu.ldi and qpu.sema qasm"
+    },
+    {
+      "id": "m1-06-qpu-branch-delay-slots",
+      "title": "Emit qpu.branch with labels and delay slots",
+      "depends_on": [
+        "m1-05-qpu-ldi-sema"
+      ],
+      "context_profile": "qpu_branch",
+      "intent": "Implement qasm emission for vc4.qpu.branch with deterministic labels, supported branch condition/mode fields, and explicit three-op delay-slot flattening.",
+      "non_goals": [
+        "Do not implement control-flow restructuring.",
+        "Do not infer missing delay slots.",
+        "Do not modify the verifier contract."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-branch-delay-slots",
+        "tool:vc4asm-candidate:qpu_branch",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: emit qpu.branch with labels and delay slots"
+    },
+    {
+      "id": "m1-07-launch-abi-model-header",
+      "title": "Parse launch ABI and emit semantic header",
+      "depends_on": [
+        "m1-06-qpu-branch-delay-slots"
+      ],
+      "context_profile": "launch_abi",
+      "intent": "Parse vc4.launch_abi into a typed internal model and generate kernel_launch.h with a semantic public API using public_name and argument metadata.",
+      "non_goals": [
+        "Do not expose raw uniform arrays in the public API.",
+        "Do not expose qpu_id or num_qpus as public user arguments.",
+        "Do not implement full launcher C uniform packing in this slice."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:emit-launch-abi-header",
+        "cc:generated-header-minimal",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: parse launch abi and emit semantic header"
+    },
+    {
+      "id": "m1-08-launcher-c-uniform-packing",
+      "title": "Emit launcher C with uniform packing",
+      "depends_on": [
+        "m1-07-launch-abi-model-header"
+      ],
+      "context_profile": "launch_abi",
+      "intent": "Generate kernel_launch.c from vc4.launch_abi, packing buffer/scalar arguments and uniform_suffix builtins in dense uniform_index order while keeping the public API semantic.",
+      "non_goals": [
+        "Do not change launch_abi verifier semantics.",
+        "Do not expose qpu_id or num_qpus publicly.",
+        "Do not implement candidate hardware runner integration yet."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "lit:emit-launcher-uniform-packing",
+        "cc:generated-launcher-minimal",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: emit launcher c with uniform packing"
+    },
+    {
+      "id": "m1-09-candidate-bundle-runner",
+      "title": "Add candidate bundle runner integration",
+      "depends_on": [
+        "m1-08-launcher-c-uniform-packing"
+      ],
+      "context_profile": "candidate_runner",
+      "intent": "Connect vc4-codegen output to a candidate-side test directory and support runner that can generate, assemble, and build candidate artifacts without touching the reference bundle.",
+      "non_goals": [
+        "Do not require candidate hardware success yet.",
+        "Do not mutate reference/.",
+        "Do not update expected.json or catalog.json."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/lit.local.cfg",
+        "compiler/test/CodeGen/VC4/lit.cfg.py",
+        "compiler/test/CodeGen/VC4/CMakeLists.txt",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "build:vc4-codegen",
+        "candidate:generate:minimal_thrend",
+        "candidate:assemble:minimal_thrend",
+        "candidate:build:minimal_thrend",
+        "build:check-vc4"
+      ],
+      "hardware_required": false,
+      "codex_policy": "compile_only_once",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: add candidate bundle runner integration"
+    },
+    {
+      "id": "m1-10-hardware-smoke-minimal",
+      "title": "Run minimal_thrend candidate on hardware",
+      "depends_on": [
+        "m1-09-candidate-bundle-runner"
+      ],
+      "context_profile": "hardware_failure",
+      "intent": "Prove the generated minimal_thrend candidate bundle builds and runs on the Pi, and the candidate result satisfies expected.json through VC4_TEST_RESULT checking.",
+      "non_goals": [
+        "Do not skip hardware.",
+        "Do not accept local-only substitute results.",
+        "Do not compare qasm text exactly.",
+        "Do not mutate reference/ or expected.json."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "hardware:reference:minimal_thrend",
+        "build:vc4-codegen",
+        "candidate:generate:minimal_thrend",
+        "candidate:assemble:minimal_thrend",
+        "candidate:build:minimal_thrend",
+        "hardware:candidate:minimal_thrend",
+        "result:expected-json:minimal_thrend"
+      ],
+      "hardware_required": true,
+      "codex_policy": "never_for_hardware",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: run minimal_thrend candidate on hardware"
+    },
+    {
+      "id": "m1-11-simple-memory-output",
+      "title": "Run first simple memory-output candidate on hardware",
+      "depends_on": [
+        "m1-10-hardware-smoke-minimal"
+      ],
+      "context_profile": "hardware_failure",
+      "intent": "Complete Milestone 1 by passing a simple memory-output-like hardware candidate test using the same semantic oracle as the reference bundle.",
+      "non_goals": [
+        "Do not implement structured lowering.",
+        "Do not implement gpu-to-vc4 lowering.",
+        "Do not update expected.json to fit candidate output.",
+        "Do not accept exact qasm matching as a pass criterion."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Target/**/CMakeLists.txt",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Target/**/CMakeLists.txt",
+        "compiler/tools/CMakeLists.txt",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/candidate/**"
+      ],
+      "forbidden_paths": [
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "pro_scripts/gpt_web_driver.js",
+        ".vc4_auto/**"
+      ],
+      "gates": [
+        "hardware:reference:simple_memory_output",
+        "build:vc4-codegen",
+        "candidate:generate:simple_memory_output",
+        "candidate:assemble:simple_memory_output",
+        "candidate:build:simple_memory_output",
+        "hardware:candidate:simple_memory_output",
+        "result:expected-json:simple_memory_output"
+      ],
+      "hardware_required": true,
+      "codex_policy": "never_for_hardware",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m1: pass simple memory-output candidate"
+    }
+  ]
+}
