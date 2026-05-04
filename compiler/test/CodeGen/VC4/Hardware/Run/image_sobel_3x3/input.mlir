@@ -14,28 +14,31 @@
 // Public API:
 // image_sobel_3x3_prepare(rt, state, max_width, max_height)
 // image_sobel_3x3_launch(state, input, output, width, height)
+// image_sobel_3x3_shutdown(state)
 //
-// Physical/reference-kernel note:
-// The trusted qasm currently has no data movement and consists only of a
-// safe program-end sequence:
-//
+// Trusted hardware source of truth:
+// The reference qasm for this committed bundle is a launchable no-op program:
 // nop; thrend
 // nop
 // nop
 //
-// The committed reference launcher implements the exact integer Sobel
-// semantics on the host side and tracks the one-allocation / repeated-launch
-// diagnostics. This input.mlir therefore models the launchable QPU entry as
-// the exact scheduled no-op kernel from the trusted qasm while preserving the
-// semantic launcher ABI in vc4.launch_abi. The full direct-TMU Sobel QPU
-// algorithm described by the test plan is intentionally not invented here
-// because it is not present in the trusted qasm source of truth.
+// The reference launcher implements the exact integer Sobel semantics on the
+// host side and tracks the one-allocation/repeated-launch diagnostics. This
+// final-stage input.mlir therefore models the trusted launchable QPU entry
+// exactly as scheduled VC4 sink operations while preserving the public
+// semantic launcher ABI in vc4.launch_abi. The direct-TMU raster Sobel QPU
+// algorithm described by the test plan is not invented here because it is not
+// present in the trusted qasm.
 //
-// Uniform stream layout represented for the semantic launcher ABI:
+// Semantic uniform stream represented for the launcher ABI:
 // [0] input image buffer
 // [1] output image buffer
 // [2] width
 // [3] height
+//
+// The public API does not expose total_pixels, qpu_id, num_qpus, raw uniform
+// arrays, scratch layout, or QPU scheduling internals in the committed
+// reference launcher. Those values remain private runtime policy.
 
 vc4.module @image_sobel_3x3 {
 vc4.func @image_sobel_3x3_kernel() attributes {
