@@ -1,7 +1,0 @@
-{
-  "name": "mandelbrot_masked_loop",
-  "status": "passed",
-  "completed_utc": "2026-05-04T07:36:54.941941+00:00",
-  "attempts_used": 1,
-  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/mandelbrot_masked_loop/input.mlir"
-}
