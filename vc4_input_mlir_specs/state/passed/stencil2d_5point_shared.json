@@ -1,0 +1,7 @@
+{
+  "name": "stencil2d_5point_shared",
+  "status": "passed",
+  "completed_utc": "2026-05-04T05:39:31.437206+00:00",
+  "attempts_used": 1,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/stencil2d_5point_shared/input.mlir"
+}

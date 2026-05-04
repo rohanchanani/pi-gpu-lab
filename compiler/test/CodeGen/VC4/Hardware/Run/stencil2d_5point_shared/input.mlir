@@ -16,24 +16,22 @@
 // tile_origin_x, tile_origin_y,
 // center_weight, neighbor_weight)
 //
-// Physical/reference-kernel note:
-// The trusted qasm currently has no data movement and consists only of a
-// safe program-end sequence:
-//
+// Trusted hardware source of truth:
+// The reference qasm for this bundle is intentionally a launchable no-op:
 // nop
 // thrend
 // nop
 // nop
 //
-// The committed reference launcher implements the semantic stencil on the
-// host side and tracks the one-allocation / repeated-launch diagnostics.
-// This input.mlir therefore models the launchable QPU entry as the exact
-// scheduled no-op kernel from the trusted qasm while preserving the semantic
-// launcher ABI in vc4.launch_abi. The shared-memory VPM/barrier algorithm
-// described by the test plan is intentionally not invented here because it
-// is not present in the trusted qasm source of truth.
+// The committed launcher performs the semantic stencil on the host side while
+// preserving the one-allocation/repeated-launch runtime diagnostics. This
+// final-stage input.mlir therefore models the trusted launchable QPU entry
+// exactly as scheduled VC4 sink operations and records the semantic public
+// launcher ABI. VPM rows, semaphore IDs, scratch allocation details, and the
+// planned shared-memory implementation are private to the reference bundle and
+// are not invented here because they are absent from the trusted qasm.
 //
-// Uniform stream layout represented for the semantic launcher ABI:
+// Physical uniform stream represented for the semantic launcher ABI:
 // [0] input image buffer
 // [1] output image buffer
 // [2] width
@@ -44,6 +42,12 @@
 // [7] neighbor_weight
 // [8] qpu_id builtin suffix
 // [9] num_qpus builtin suffix
+//
+// Shape restriction:
+// The trusted launcher computes at most a fixed 14-column by 10-row output
+// tile from the requested origin, clipping at image edges. The harness uses
+// max_width=31, max_height=19, active_qpus=12, lanes=16, and one cooperative
+// block per case.
 
 vc4.module @stencil2d_5point_shared {
 vc4.func @stencil2d_5point_shared_kernel() attributes {
@@ -89,7 +93,7 @@ mul_a = #vc4.qpu_mux<r0>,
 mul_b = #vc4.qpu_mux<r1>
 }
 
-// Reference qasm instruction 1: thrend.
+// Reference qasm instruction 1: thrend / Program End.
 vc4.qpu.bundle {
   sig = #vc4.qpu_signal<thrend>,
   pm = false,
