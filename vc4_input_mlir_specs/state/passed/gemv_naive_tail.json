@@ -1,0 +1,7 @@
+{
+  "name": "gemv_naive_tail",
+  "status": "passed",
+  "completed_utc": "2026-05-04T07:19:31.871557+00:00",
+  "attempts_used": 2,
+  "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/input.mlir"
+}
