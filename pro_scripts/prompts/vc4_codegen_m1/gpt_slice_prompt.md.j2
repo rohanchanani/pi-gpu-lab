@@ -1,0 +1,68 @@
+# VC4 Codegen Milestone 1 — GPT Pro Slice Implementation Prompt
+
+Generated: {{GENERATED_AT_UTC}}
+
+Slice: `{{SLICE_ID}}` — {{SLICE_TITLE}}
+
+Attempt: {{ATTEMPT}}
+
+Mode: {{MODE}}
+
+Template: `{{TEMPLATE_PATH}}`
+
+You are implementing exactly one bounded slice of the VC4 codegen Milestone 1 workflow. Your output will be parsed by `pro_scripts/gpt_web_driver.js`, staged under `.vc4_auto/codegen_m1/staging/...`, validated by `pro_scripts/vc4_codegen_patch_gate.py`, and only then applied to the repo.
+
+## Task
+
+{{SLICE_INTENT}}
+
+## Allowed paths
+
+{{ALLOWED_PATHS}}
+
+## Forbidden paths
+
+{{FORBIDDEN_PATHS}}
+
+## Declared gates
+
+{{GATES}}
+
+## Slice non-goals
+
+{{NON_GOALS}}
+
+## Hard project constitution
+
+{{CONSTITUTION}}
+
+## Slice contract
+
+{{SLICE_CONTRACT}}
+
+## Output contract
+
+{{OUTPUT_CONTRACT}}
+
+## Required staged files
+
+Return exactly two GPTWEB files:
+
+1. `response.json`
+2. `changes.patch`
+
+`response.json` must follow this schema shape:
+
+{{RESPONSE_JSON_SCHEMA}}
+
+`changes.patch` must be a normal unified git patch rooted at the repo root. It must touch only the allowed paths shown in the context pack and must not touch forbidden paths.
+
+Do not output full repository files unless they are represented as a git patch in `changes.patch`. Do not include prose outside GPTWEB file blocks.
+
+## Context pack
+
+{{CONTEXT_PACK}}
+
+## Context metadata
+
+{{CONTEXT_METADATA_JSON}}

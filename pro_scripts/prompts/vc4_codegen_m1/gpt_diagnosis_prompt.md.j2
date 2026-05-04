@@ -1,0 +1,62 @@
+# VC4 Codegen Milestone 1 — GPT Pro Diagnosis-Only Prompt
+
+Generated: {{GENERATED_AT_UTC}}
+
+Slice: `{{SLICE_ID}}` — {{SLICE_TITLE}}
+
+Attempt: {{ATTEMPT}}
+
+Mode: {{MODE}}
+
+Template: `{{TEMPLATE_PATH}}`
+
+You are diagnosing a VC4 codegen Milestone 1 failure. This is a diagnosis-only prompt unless the driver later asks for a patch. Do not emit `changes.patch` for this prompt.
+
+## Current task
+
+{{SLICE_INTENT}}
+
+
+## Allowed paths
+
+{{ALLOWED_PATHS}}
+
+## Forbidden paths
+
+{{FORBIDDEN_PATHS}}
+
+## Declared gates
+
+{{GATES}}
+
+## Slice non-goals
+
+{{NON_GOALS}}
+
+## Hard project constitution
+
+{{CONSTITUTION}}
+
+## Failure packet
+
+{{FAILURE_PACKET_JSON}}
+
+## Required staged files
+
+Return exactly one GPTWEB file:
+
+1. `response.json`
+
+`response.json` must follow this schema shape:
+
+{{RESPONSE_JSON_SCHEMA}}
+
+Do not include prose outside GPTWEB file blocks. Do not output a patch.
+
+## Context pack
+
+{{CONTEXT_PACK}}
+
+## Context metadata
+
+{{CONTEXT_METADATA_JSON}}

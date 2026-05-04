@@ -1,0 +1,74 @@
+# VC4 Codegen Milestone 1 — GPT Pro Failure-Fix Prompt
+
+Generated: {{GENERATED_AT_UTC}}
+
+Slice: `{{SLICE_ID}}` — {{SLICE_TITLE}}
+
+Attempt: {{ATTEMPT}}
+
+Mode: {{MODE}}
+
+Template: `{{TEMPLATE_PATH}}`
+
+You are fixing a deterministic failure for exactly one bounded VC4 codegen Milestone 1 slice. The previous attempt has already been rejected by a gate, patch guard, chat transport failure, or deterministic classifier. Do not broaden scope.
+
+## Current task
+
+{{SLICE_INTENT}}
+
+## Allowed paths
+
+{{ALLOWED_PATHS}}
+
+## Forbidden paths
+
+{{FORBIDDEN_PATHS}}
+
+## Declared gates
+
+{{GATES}}
+
+## Slice non-goals
+
+{{NON_GOALS}}
+
+## Hard project constitution
+
+{{CONSTITUTION}}
+
+## Slice contract
+
+{{SLICE_CONTRACT}}
+
+## Output contract
+
+{{OUTPUT_CONTRACT}}
+
+## Failure packet
+
+{{FAILURE_PACKET_JSON}}
+
+## Required staged files
+
+Return exactly two GPTWEB files:
+
+1. `response.json`
+2. `changes.patch`
+
+`response.json` must follow this schema shape:
+
+{{RESPONSE_JSON_SCHEMA}}
+
+`changes.patch` must be a surgical unified git patch rooted at the repo root. It must touch only the active slice allowed paths and must not touch forbidden paths.
+
+If the correct conclusion is that the previous task was underspecified or the slice needs a smaller prerequisite test, encode that in `response.json` and provide the smallest safe patch that adds that test or diagnostic, still respecting allowed paths. Do not edit reference bundles or weaken tests.
+
+Do not include prose outside GPTWEB file blocks.
+
+## Context pack
+
+{{CONTEXT_PACK}}
+
+## Context metadata
+
+{{CONTEXT_METADATA_JSON}}

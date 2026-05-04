@@ -599,6 +599,59 @@ def cmd_gates(args: argparse.Namespace) -> int:
     return 0 if all(r.ok for r in results) else 1
 
 
+def cmd_context(args: argparse.Namespace) -> int:
+    repo, config, state = load_config_and_state(args)
+    context_script = repo / "pro_scripts/vc4_codegen_context_pack.py"
+    if not context_script.exists():
+        raise DriverError(f"Stage 3 context packer is not installed: {relpath(repo, context_script)}")
+    out = Path(args.out).resolve() if args.out else state.root / "prompts" / args.slice / "manual-context.md"
+    meta = Path(args.metadata_out).resolve() if args.metadata_out else out.with_suffix(out.suffix + ".metadata.json")
+    cmd = [
+        sys.executable,
+        str(context_script),
+        "build",
+        "--slice",
+        args.slice,
+        "--mode",
+        args.mode,
+        "--out",
+        str(out),
+        "--metadata-out",
+        str(meta),
+    ]
+    if args.failure_packet:
+        cmd += ["--failure-packet", args.failure_packet]
+    if args.max_chars:
+        cmd += ["--max-chars", str(args.max_chars)]
+    if args.allow_large_context:
+        cmd += ["--allow-large-context"]
+    log_path = out.with_suffix(out.suffix + ".context.log")
+    result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, timeout_sec=300, verbose=args.verbose)
+    if not result.ok:
+        raise DriverError(f"context generation failed; see {relpath(repo, result.log_path)}")
+    log(f"context: {relpath(repo, out)}")
+    log(f"metadata: {relpath(repo, meta)}")
+    return 0
+
+
+def cmd_render_prompt(args: argparse.Namespace) -> int:
+    repo, config, state = load_config_and_state(args)
+    attempt = args.attempt if args.attempt else state.next_attempt_index(args.slice)
+    out = Path(args.out).resolve() if args.out else state.root / "prompts" / args.slice / f"manual-attempt-{attempt:02d}.md"
+    failure_packet = Path(args.failure_packet) if args.failure_packet else None
+    render_prompt(
+        repo=repo,
+        slice_id=args.slice,
+        attempt=attempt,
+        mode=args.mode,
+        out_path=out,
+        failure_packet=failure_packet,
+        verbose=args.verbose,
+    )
+    log(f"prompt: {relpath(repo, out)}")
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     repo, config, state = load_config_and_state(args)
     if args.next:
@@ -701,6 +754,27 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--gate-timeout-sec", type=int, default=DEFAULT_GATE_TIMEOUT_SEC)
     p_run.add_argument("--browser-internal-timeout-ms", type=int, default=DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS)
     p_run.set_defaults(func=cmd_run)
+
+
+    p_context = sub.add_parser("context", help="build a deterministic context pack for one slice")
+    p_context.add_argument("--slice", required=True)
+    p_context.add_argument("--mode", choices=["initial", "failure", "diagnosis"], default="initial")
+    p_context.add_argument("--failure-packet", default="")
+    p_context.add_argument("--out", default="")
+    p_context.add_argument("--metadata-out", default="")
+    p_context.add_argument("--max-chars", type=int, default=0)
+    p_context.add_argument("--allow-large-context", action="store_true")
+    p_context.add_argument("--verbose", action="store_true")
+    p_context.set_defaults(func=cmd_context)
+
+    p_prompt = sub.add_parser("render-prompt", help="render a GPT Pro prompt for one slice without invoking GPT")
+    p_prompt.add_argument("--slice", required=True)
+    p_prompt.add_argument("--attempt", type=int, default=0)
+    p_prompt.add_argument("--mode", choices=["initial", "failure", "diagnosis"], default="initial")
+    p_prompt.add_argument("--failure-packet", default="")
+    p_prompt.add_argument("--out", default="")
+    p_prompt.add_argument("--verbose", action="store_true")
+    p_prompt.set_defaults(func=cmd_render_prompt)
 
     p_reset = sub.add_parser("reset-slice")
     p_reset.add_argument("--slice", required=True)
