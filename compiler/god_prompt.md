@@ -81,3 +81,98 @@ Style expectations
 Failure-retry behavior
 
 If a previous attempt failed, the next prompt will include the verifier/check log and the current generated input. Provide only a surgical replacement `input.mlir`. Do not redesign the bundle, do not request Codex, do not update qasm/C/H/catalog/compiler files, and do not ask to rerun hardware.
+
+Additional non-negotiable clarification: functional scheduled body required
+
+For this workflow, the generated `input.mlir` is not allowed to be merely ABI metadata plus a smoke-test instruction stream unless the trusted launcher/harness semantics are truly no-op and the harness does not expect any data-dependent output writes.
+
+A test with a public launcher API, input/output buffers, CPU reference semantics, sentinel checks, expected output checks, or comments describing a non-trivial computation is a functional hardware-run test. For every functional hardware-run test, the generated final-stage scheduled VC4 body must contain a real executable implementation of the described computation, using existing low-level scheduled VC4 operations. Comments and `vc4.launch_abi` metadata do not count as implementation.
+
+Important source-of-truth clarification for intentionally minimal qasm
+
+Some checked-in qasm files may be intentionally minimal placeholders such as:
+
+nop
+thrend
+nop
+nop
+
+or may explicitly say that the qasm-visible stream is minimal while the launcher/harness comments describe future or intended semantics. In that situation, do not conclude that the correct `input.mlir` should also be minimal. Treat that qasm only as evidence for the safe thread-end epilogue pattern and for verifier-clean syntax. The semantic source of truth becomes the launcher API, uniform packing, harness CPU reference computation, expected outputs, README, and closely related successful hardware-run examples.
+
+A minimal qasm body may be mirrored only when all of the following are true:
+
+* the public semantic operation is actually no-op or termination-only;
+* there are no meaningful output-buffer writes expected by the harness;
+* the harness does not compare computed output values against a CPU reference;
+* the test comments do not describe a non-trivial computation to be implemented.
+
+If any of those conditions is false, a no-op-only scheduled body is invalid, even if it preserves the current checked-in qasm-visible stream.
+
+Hard rejection rule for placeholder bodies
+
+Before emitting the GPT_WEB_FILE block, inspect the candidate MLIR. Reject and regenerate it if a functional test body has any of these properties:
+
+* fewer than several dozen scheduled operations for a non-trivial data-parallel kernel;
+* no sequential uniform reads for the public ABI words that affect computation;
+* no arithmetic corresponding to the CPU reference formula;
+* no output memory store path;
+* no VPM/VDW, TMU, or other currently supported low-level mechanism needed by the trusted reference style;
+* only `nop`, `thrend`, branch-delay nops, or metadata;
+* comments that describe a computation but scheduled ops that do not perform it;
+* a launch ABI that lists output buffers but no scheduled output write;
+* a kernel whose behavior would leave the output buffer unchanged when the harness expects computed values.
+
+Functional completeness checklist
+
+For every generated functional `input.mlir`, mentally verify all of the following before final output:
+
+1. Public launcher ABI matches the trusted launcher `.h` and launcher `.c` uniform stream.
+2. Builtin suffix uniforms physically packed by the launcher are represented as builtins, not public user arguments.
+3. Each semantic input uniform that affects computation is read in the correct physical order.
+4. The scheduled body computes the same reference formula checked by the harness.
+5. The scheduled body writes every output element or tile element that the harness expects.
+6. Boundary, clamp, tail, stride, tile-origin, qpu-id, num-qpus, and fixed-shape restrictions from the trusted launcher/harness are implemented or explicitly encoded by the scheduled control flow.
+7. Thread-end uses the established safe epilogue pattern.
+8. Branches include valid VC4 delay-slot structure.
+9. Peripheral accesses obey the scheduled verifier spacing rules.
+10. The result is parseable current `vc4` dialect MLIR, not pseudocode and not an invented abstraction.
+
+When functional qasm is absent or intentionally minimal
+
+If the provided qasm is missing, trivial, intentionally minimal, or incompatible with the harness semantics, synthesize a conservative final-stage scheduled implementation from the semantic reference and from the closest known-good non-empty hardware-run `input.mlir` examples supplied in context.
+
+Prefer correctness, verifier cleanliness, and semantic coverage over preserving a placeholder qasm stream. It is acceptable for the synthesized scheduled body to be conservative, scalarized, serialized, less optimized, or structurally closer to a known-good related kernel than to an aspirational shared-memory design, as long as it matches the public launcher ABI and the harness-visible semantics.
+
+Use related successful examples aggressively
+
+If a closely related working `input.mlir` is supplied in context, use it as the structural template for the scheduled body rather than falling back to a no-op skeleton. In particular:
+
+* If a “naive” version of the same algorithm exists and is fully scheduled, use its uniform-read, loop, TMU-load, arithmetic, tail, VPM/VDW store, branch, and thread-end patterns as the starting point.
+* Adapt only what the current test requires: public ABI names, uniform indices, tile shape, origin coordinates, fixed dimensions, qpu-id/num-qpus policy, and output coverage.
+* Preserve verifier-clean spacing and delay-slot patterns from the working example.
+* Do not replace a working functional structure with metadata-only documentation.
+
+For any 1D, 2D, convolution, stencil, map, reduction, copy, fill, SAXPY, or elementwise hardware-run test whose harness checks numerical output, the body must implement the numerical operation.
+
+using the actual launcher-provided base addresses, dimensions, tile origins, weights, and builtin suffix values. A body containing only `nop; thrend; nop; nop` is invalid for such a test.
+
+For tiled/shared stencil tests with an aspirational cooperative shape
+
+If the test description says the intended optimized implementation uses shared VPM tiling, resident logical warps, halo rows/columns, or semaphores, but the only trusted qasm currently provided is intentionally minimal, still generate a functional scheduled implementation. A conservative direct-memory TMU implementation that computes the same tile outputs is better than a placeholder. Preserve the public semantic API and fixed tile coverage. Document the intended cooperative shape in comments, but do not let the lack of optimized shared-VPM qasm justify a no-op body.
+
+The generated file may be less optimized than the intended shared-memory algorithm, but it must be semantically functional and future-codegen-useful.
+
+Output-size expectation
+
+For non-trivial functional tests, the final `input.mlir` is expected to be comparable in substance to existing successful files such as `read_nop_write`, `saxpy_basic`, `conv1d_3tap`, or `stencil2d_5point_naive`, depending on complexity. A tiny file is acceptable only for a truly tiny no-op or smoke test.
+
+When in doubt, generate the real scheduled body
+
+If there is any ambiguity between:
+
+* preserving a short placeholder qasm stream, and
+* producing a longer verifier-clean scheduled implementation that matches the launcher/harness semantics,
+
+choose the longer functional scheduled implementation.
+
+Do not apologize, do not explain, and do not emit a placeholder. Emit exactly one GPT_WEB_FILE block containing the complete functional `input.mlir`.
