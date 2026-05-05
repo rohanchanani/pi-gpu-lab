@@ -92,3 +92,8 @@ add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools/vc4-opt)
 add_subdirectory(test)
+add_subdirectory(tools/vc4-codegen)
+
+if(TARGET check-vc4)
+ add_dependencies(check-vc4 vc4-codegen)
+endif()
