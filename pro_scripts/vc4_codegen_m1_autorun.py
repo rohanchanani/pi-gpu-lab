@@ -308,14 +308,42 @@ def write_gate_failure_packet(
 def commit_slice_if_needed(config: MilestoneConfig, slice_entry: Mapping[str, Any], *, no_commit: bool) -> bool:
     if no_commit or not config.auto_commit_on_pass():
         return False
-    changed = git_changed_paths(config.repo, include_untracked=True)
+
+    # Final guard before any automatic commit.  Patch application already checks
+    # GPT-produced paths, and Codex edits are path-guarded after each mechanical
+    # attempt, but gates can still create files as side effects.  Never let a
+    # passing slice auto-commit side-effect files outside the slice allowlist,
+    # and never commit forbidden paths such as reference bundles, expected.json,
+    # catalog.json, gpt_web_driver.js, or .vc4_auto.
+    guard = guard_worktree(
+        repo=config.repo,
+        config=config,
+        slice_entry=slice_entry,
+        restore_disallowed=False,
+    )
+    changed = [str(p) for p in guard.get("changed_paths", [])]
     if not changed:
         log("auto-commit: no repo changes to commit")
         return False
+
+    if not guard.get("ok"):
+        report = {
+            "slice_id": slice_entry.get("id"),
+            "changed_paths": changed,
+            "disallowed_paths": guard.get("disallowed_paths", []),
+            "forbidden_paths": guard.get("forbidden_paths", []),
+        }
+        raise DriverError(
+            "refusing to auto-commit: worktree contains paths outside the "
+            "current slice policy. Inspect the report below, restore or move "
+            "the side-effect files, then rerun the slice.\n"
+            + json.dumps(report, indent=2, sort_keys=True)
+        )
+
     message = str(slice_entry.get("commit_message") or f"vc4 codegen m1: {slice_entry.get('id')}")
     committed = stage_and_commit(config.repo, paths=changed, message=message, allow_empty=False)
     if committed:
-        log(f"auto-commit: committed {len(changed)} changed path(s) with message: {message}")
+        log(f"auto-commit: committed {len(changed)} allowlisted changed path(s) with message: {message}")
     return committed
 
 
@@ -524,6 +552,246 @@ def run_gpt_slice(
     log(f"FAIL {slice_id}: exhausted {max_gpt} GPT attempt(s)")
     return 1
 
+
+
+# ---------------------------------------------------------------------------
+# Safe integration dry-run
+# ---------------------------------------------------------------------------
+
+
+def _dry_run_record(records: list[dict[str, Any]], name: str, ok: bool, **details: Any) -> None:
+    rec = {"name": name, "ok": bool(ok), **details}
+    records.append(rec)
+    status = "OK" if ok else "FAIL"
+    log(f"dry-run {status}: {name}")
+
+
+def _write_stage5_valid_smoke_patch(staging: Path) -> None:
+    staging.mkdir(parents=True, exist_ok=True)
+    (staging / "response.json").write_text(json.dumps({"summary": "stage5 valid patch-gate smoke"}, indent=2) + "\n", encoding="utf-8")
+    (staging / "changes.patch").write_text(
+        """diff --git a/compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir b/compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir
+new file mode 100644
+index 0000000..a9c1a15
+--- /dev/null
++++ b/compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir
+@@ -0,0 +1 @@
++// stage5 dry-run patch gate smoke test
+""",
+        encoding="utf-8",
+    )
+
+
+def _write_stage5_forbidden_smoke_patch(staging: Path) -> None:
+    staging.mkdir(parents=True, exist_ok=True)
+    (staging / "response.json").write_text(json.dumps({"summary": "stage5 forbidden patch-gate smoke"}, indent=2) + "\n", encoding="utf-8")
+    (staging / "changes.patch").write_text(
+        """diff --git a/compiler/test/CodeGen/VC4/catalog.json b/compiler/test/CodeGen/VC4/catalog.json
+--- a/compiler/test/CodeGen/VC4/catalog.json
++++ b/compiler/test/CodeGen/VC4/catalog.json
+@@ -1 +1 @@
+-{}
++{"forbidden": true}
+""",
+        encoding="utf-8",
+    )
+
+
+def cmd_dry_run(args: argparse.Namespace) -> int:
+    """Exercise the automation plumbing without contacting GPT Pro or Codex."""
+
+    repo, config, state = load_config_and_state(args)
+    state.ensure_dirs()
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    root = state.root / "dry_run" / timestamp
+    logs = root / "logs"
+    staging = root / "staging"
+    prompts = root / "prompts"
+    root.mkdir(parents=True, exist_ok=True)
+    logs.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, Any]] = []
+
+    log(f"dry-run root: {relpath(repo, root)}")
+    log("dry-run will not invoke GPT Pro, Codex, git apply, or hardware candidate gates")
+
+    if not args.skip_preflight:
+        preflight_slice = config.get_slice("m1-00-preflight")
+        ok, results = run_slice_gates(
+            config=config,
+            slice_entry=preflight_slice,
+            log_dir=logs / "preflight",
+            allow_dirty=args.allow_dirty,
+            verbose=args.verbose,
+            timeout_sec=args.gate_timeout_sec,
+        )
+        _dry_run_record(records, "preflight-gates", ok, results=[r.as_json(repo) for r in results])
+        if not ok and not args.keep_going:
+            write_json_file(root / "summary.json", {"ok": False, "records": records})
+            return 1
+
+    # Context pack generation.
+    context_out = root / "m1-01.context.md"
+    context_meta = root / "m1-01.context.metadata.json"
+    context_cmd = [
+        sys.executable,
+        str(repo / "pro_scripts/vc4_codegen_context_pack.py"),
+        "build",
+        "--slice",
+        "m1-01-artifact-tool-skeleton",
+        "--out",
+        str(context_out),
+        "--metadata-out",
+        str(context_meta),
+    ]
+    context_result = run_subprocess(repo=repo, cmd=context_cmd, log_path=logs / "context.log", timeout_sec=300, verbose=args.verbose)
+    context_ok = context_result.ok and context_out.exists() and context_out.stat().st_size > 0 and context_meta.exists()
+    _dry_run_record(
+        records,
+        "context-pack-m1-01",
+        context_ok,
+        command=context_result.command,
+        log=relpath(repo, context_result.log_path),
+        context=relpath(repo, context_out),
+        metadata=relpath(repo, context_meta),
+        bytes=context_out.stat().st_size if context_out.exists() else 0,
+    )
+    if not context_ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
+    # Prompt rendering.
+    prompt_out = prompts / "m1-01-attempt-01.md"
+    prompt_meta = prompts / "m1-01-attempt-01.metadata.json"
+    render_cmd = [
+        sys.executable,
+        str(repo / "pro_scripts/vc4_codegen_prompt_render.py"),
+        "--slice",
+        "m1-01-artifact-tool-skeleton",
+        "--attempt",
+        "1",
+        "--mode",
+        "initial",
+        "--out",
+        str(prompt_out),
+        "--metadata-out",
+        str(prompt_meta),
+    ]
+    render_result = run_subprocess(repo=repo, cmd=render_cmd, log_path=logs / "render_prompt.log", timeout_sec=300, verbose=args.verbose)
+    prompt_text = prompt_out.read_text(encoding="utf-8") if prompt_out.exists() else ""
+    required_prompt_needles = [
+        "Slice: `m1-01-artifact-tool-skeleton`",
+        "Allowed paths",
+        "Forbidden paths",
+        "response.json",
+        "changes.patch",
+        "Context pack",
+        "BEGIN_GPTWEB_FILE",
+    ]
+    missing_needles = [needle for needle in required_prompt_needles if needle not in prompt_text]
+    render_ok = render_result.ok and prompt_out.exists() and not missing_needles
+    _dry_run_record(
+        records,
+        "prompt-render-m1-01",
+        render_ok,
+        command=render_result.command,
+        log=relpath(repo, render_result.log_path),
+        prompt=relpath(repo, prompt_out),
+        metadata=relpath(repo, prompt_meta),
+        bytes=len(prompt_text),
+        missing=missing_needles,
+    )
+    if not render_ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
+    # Patch gate check-only acceptance smoke.
+    slice_entry = config.get_slice("m1-01-artifact-tool-skeleton")
+    valid_staging = staging / "valid_patch"
+    _write_stage5_valid_smoke_patch(valid_staging)
+    try:
+        valid_report = validate_and_apply(
+            repo=repo,
+            config=config,
+            slice_entry=slice_entry,
+            staging_dir=valid_staging,
+            apply_patch=False,
+            write_report=logs / "valid_patch_gate_report.json",
+        )
+        valid_ok = bool(valid_report.get("ok")) and not bool(valid_report.get("applied"))
+    except Exception as exc:  # pragma: no cover - surfaced in dry-run output
+        valid_report = {"error": str(exc)}
+        valid_ok = False
+    _dry_run_record(records, "patch-gate-valid-check-only", valid_ok, report=valid_report)
+    if not valid_ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
+    # Patch gate forbidden-path rejection smoke. This must fail before git apply.
+    forbidden_staging = staging / "forbidden_patch"
+    _write_stage5_forbidden_smoke_patch(forbidden_staging)
+    try:
+        forbidden_report = validate_and_apply(
+            repo=repo,
+            config=config,
+            slice_entry=slice_entry,
+            staging_dir=forbidden_staging,
+            apply_patch=False,
+            write_report=logs / "forbidden_patch_gate_report.json",
+        )
+        forbidden_ok = False
+        forbidden_details: dict[str, Any] = {"unexpected_report": forbidden_report}
+    except Exception as exc:
+        msg = str(exc)
+        forbidden_ok = "catalog.json" in msg or "forbidden" in msg.lower() or "not allowed" in msg.lower()
+        forbidden_details = {"expected_error": msg}
+    _dry_run_record(records, "patch-gate-forbidden-reject", forbidden_ok, **forbidden_details)
+    if not forbidden_ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
+    # Failure classifier smoke checks.
+    route_compile = classify_failure(
+        slice_entry=slice_entry,
+        stage="gate",
+        gate="build:vc4-codegen",
+        log_text="compiler error: missing include",
+        codex_attempts_used=0,
+    )
+    route_qasm = classify_failure(
+        slice_entry=config.get_slice("m1-03-minimal-thrend-qasm"),
+        stage="gate",
+        gate="tool:vc4asm-candidate:minimal_thrend",
+        log_text="vc4asm rejected qasm syntax",
+        codex_attempts_used=0,
+    )
+    classifier_ok = route_compile.get("route") == "codex" and route_qasm.get("route") in {"gpt", "gpt_pro"}
+    _dry_run_record(records, "failure-classifier-routes", classifier_ok, compile_route=route_compile, qasm_route=route_qasm)
+    if not classifier_ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
+    # Confirm candidate support scripts are present but do not run candidate generation yet.
+    support_paths = [
+        repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+        repo / "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+        repo / "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh",
+    ]
+    support_ok = all(p.exists() for p in support_paths)
+    _dry_run_record(records, "candidate-support-files-present", support_ok, paths=[relpath(repo, p) for p in support_paths])
+
+    ok_all = all(bool(r.get("ok")) for r in records)
+    summary = {
+        "ok": ok_all,
+        "repo": str(repo),
+        "dry_run_root": relpath(repo, root),
+        "next_runnable_slice": state.next_pending_slice().get("id") if state.next_pending_slice() else None,
+        "records": records,
+        "note": "No GPT Pro, Codex, git apply, or candidate hardware gates were invoked by this dry run.",
+    }
+    write_json_file(root / "summary.json", summary)
+    print(json.dumps(summary, indent=2, sort_keys=True))
+    log(f"dry-run summary: {relpath(repo, root / 'summary.json')}")
+    return 0 if ok_all else 1
 
 # ---------------------------------------------------------------------------
 # CLI commands
@@ -775,6 +1043,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_prompt.add_argument("--out", default="")
     p_prompt.add_argument("--verbose", action="store_true")
     p_prompt.set_defaults(func=cmd_render_prompt)
+
+
+    p_dry = sub.add_parser("dry-run", help="safe no-GPT integration dry run of Milestone 1 automation plumbing")
+    p_dry.add_argument("--allow-dirty", action="store_true", help="allow dirty repo during preflight gate")
+    p_dry.add_argument("--skip-preflight", action="store_true", help="skip build/check preflight gates during the dry run")
+    p_dry.add_argument("--keep-going", action="store_true", help="continue dry-run checks after a failed check")
+    p_dry.add_argument("--verbose", action="store_true")
+    p_dry.add_argument("--gate-timeout-sec", type=int, default=DEFAULT_GATE_TIMEOUT_SEC)
+    p_dry.set_defaults(func=cmd_dry_run)
 
     p_reset = sub.add_parser("reset-slice")
     p_reset.add_argument("--slice", required=True)

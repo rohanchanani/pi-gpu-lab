@@ -178,3 +178,55 @@ The final Milestone 1 memory-output gate is grounded in the existing
 name. Its reference bundle and `expected.json` remain immutable; the candidate
 side is generated from `saxpy_full/input.mlir` and checked against the same
 semantic oracle.
+
+## Stage 5 final dry run
+
+Stage 5 adds a safe no-GPT integration dry run:
+
+```bash
+python3 pro_scripts/vc4_codegen_m1_autorun.py dry-run --allow-dirty --verbose --gate-timeout-sec 7200
+```
+
+The dry run exercises:
+
+- preflight gates, unless `--skip-preflight` is passed
+- context-pack generation for `m1-01-artifact-tool-skeleton`
+- GPT Pro prompt rendering for `m1-01-artifact-tool-skeleton`
+- patch-gate acceptance of an allowlisted check-only patch
+- patch-gate rejection of a forbidden-path patch
+- deterministic failure-classifier routing for compile-like and qasm-like failures
+- presence of candidate support scripts
+
+It intentionally does not invoke GPT Pro, Codex, `git apply`, or candidate hardware gates.
+Outputs are written under `.vc4_auto/codegen_m1/dry_run/<timestamp>/`.
+
+After Stage 5 is committed and the repo is clean, the handoff commands are:
+
+```bash
+python3 pro_scripts/vc4_codegen_m1_autorun.py run \
+  --slice m1-00-preflight \
+  --verbose \
+  --gate-timeout-sec 7200
+
+python3 pro_scripts/vc4_codegen_m1_autorun.py run \
+  --next \
+  --verbose \
+  --gpt-mode current_tab \
+  --chat-timeout-sec 5400 \
+  --gate-timeout-sec 7200
+```
+
+The first command records the preflight slice as passed in `.vc4_auto` state.
+The second command starts the first GPT-driven compiler implementation slice.
+Keep an existing ChatGPT conversation tab open when using the default
+`--gpt-mode current_tab`.
+
+## Auto-commit safety hardening
+
+After a slice passes its gates, the autorun script performs one final worktree
+path-policy check before committing.  This protects against gate side effects
+being accidentally committed: only changed paths that are inside the current
+slice `allowed_paths` and outside `forbidden_paths` are eligible for the
+automatic commit.  If any disallowed or forbidden path is dirty, the slice stops
+instead of committing; inspect the reported paths, restore or move the side
+effects, and rerun the slice.
