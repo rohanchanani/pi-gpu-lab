@@ -154,3 +154,27 @@ git add pro_scripts/vc4_codegen_m1_worklist.json \
 
 git commit -m "add vc4 codegen milestone 1 workflow contracts"
 ```
+
+## Stage 4 candidate hardware support
+
+Stage 4 adds candidate hardware support helpers under `compiler/test/CodeGen/VC4/Support/`.
+The support runner writes generated candidate source artifacts and hardware work
+directories under `.vc4_auto/codegen_m1/` so reference bundles remain read-only.
+
+Useful manual commands from the repo root:
+
+```bash
+bash compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh reference
+bash compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh candidate
+bash compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh minimal_thrend assemble
+bash compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh minimal_thrend build
+bash compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py \
+  compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json \
+  path/to/run.log
+```
+
+The final Milestone 1 memory-output gate is grounded in the existing
+`saxpy_full` hardware ground-truth fixture rather than a placeholder fixture
+name. Its reference bundle and `expected.json` remain immutable; the candidate
+side is generated from `saxpy_full/input.mlir` and checked against the same
+semantic oracle.

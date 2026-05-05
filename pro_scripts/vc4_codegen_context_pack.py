@@ -263,7 +263,7 @@ def include_generated_artifacts(repo: Path, item: Mapping[str, Any], slice_entry
     configured = [str(p) for p in item.get("paths", [])]
     roots: list[Path] = []
     # Candidate directories used by the gate runner.
-    for name in ["minimal_thrend", "qpu_bundle_basic", "qpu_ldi_sema", "qpu_branch", "simple_memory_output"]:
+    for name in ["minimal_thrend", "qpu_bundle_basic", "qpu_ldi_sema", "qpu_branch", "saxpy_full"]:
         roots.append(repo / ".vc4_auto/codegen_m1/candidates" / name)
     if failure_packet:
         for key in ["candidate_dir", "output_dir", "staging_dir"]:

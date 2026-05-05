@@ -1,7 +1,15 @@
-# Candidate side placeholder
+# minimal_thrend candidate output
 
-This side is intentionally empty until VC4 codegen can emit a candidate
-qasm/C/H bundle from `../input.mlir`.
+Milestone 1 automation does not commit generated candidate bundles here.
+Candidate source artifacts and hardware work directories are generated under:
 
-The implemented catalog entry for this test must keep `candidate_enabled`
-set to `false` until candidate generation and hardware execution exist.
+```text
+.vc4_auto/codegen_m1/candidates/minimal_thrend/
+.vc4_auto/codegen_m1/hardware/minimal_thrend/candidate_work/
+```
+
+Use the fixture dispatcher from this directory's parent:
+
+```bash
+bash run.sh candidate
+```

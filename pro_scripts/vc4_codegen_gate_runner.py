@@ -451,6 +451,10 @@ class GateRunner:
         return self.write_check_log(gate=gate + ":expect-failure", log_dir=log_dir, ok=True, message="invalid input was rejected as expected")
 
     def _gate_vc4asm_candidate(self, gate: str, log_dir: Path, name: str) -> CommandResult:
+        support = self.repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        if support.exists():
+            return self.run_command(gate=gate, cmd=["bash", str(support), name, "assemble"], log_dir=log_dir)
+
         out_dir = self.candidate_dir(name)
         qasm = out_dir / "kernel.qasm"
         if not qasm.exists():

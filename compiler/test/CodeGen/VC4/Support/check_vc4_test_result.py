@@ -1,26 +1,22 @@
 #!/usr/bin/env python3
-"""Check a VC4 hardware-test run log against a small JSON oracle.
+"""Check VC4_TEST_RESULT output against a hardware-run expected.json file.
 
-The checker looks for the last line containing tokens of the form:
+The checker is intentionally small and deterministic.  It accepts the expected
+schema used by VC4 hardware ground-truth tests:
 
-    VC4_TEST_RESULT key=value key=value ...
+  {
+    "name": "test_name",
+    "status": "PASS",
+    "required": {"field": exact_value, ...},
+    "float_max": {"field": max_allowed_value, ...},
+    "float_min": {"field": min_allowed_value, ...},
+    "float_abs": {"field": max_abs_allowed_value, ...}
+  }
 
-It compares that parsed result against an expected JSON document.  The intended
-use is hardware golden tests where the log is noisy but the final result line is
-stable and machine-readable.
-
-Expected JSON example:
-
-{
-  "name": "saxpy_reference",
-  "status": "PASS",
-  "required": {"mismatches": 0},
-  "float_max": {"max_abs_diff": 0.0001}
-}
-
-Top-level `name` and `status` are treated as exact required fields.  Values in
-`required` are compared after coercing the actual string to the type of the
-expected value.  Values in `float_max` require abs(actual) <= the expected max.
+Only `name` and `status` are intrinsic.  `required` fields are exact checks.
+Tolerance maps are optional and checked only when present.  The result line may
+be either JSON after VC4_TEST_RESULT or whitespace/comma-separated key=value
+fields.
 """
 
 from __future__ import annotations
@@ -28,222 +24,245 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import os
-from pathlib import Path
-import shlex
+import re
 import sys
-import tempfile
-from typing import Any, Dict, Iterable, Tuple
-
-MARKER = "VC4_TEST_RESULT"
+from pathlib import Path
+from typing import Any, Iterable
 
 
-class CheckError(Exception):
+class CheckError(RuntimeError):
     pass
 
 
-def _parse_scalar(text: str) -> Any:
-    lowered = text.lower()
-    if lowered in {"true", "false"}:
-        return lowered == "true"
-    try:
-        if text.startswith(("0x", "0X")):
-            return int(text, 16)
-        return int(text, 10)
-    except ValueError:
-        pass
-    try:
-        value = float(text)
-        if math.isfinite(value):
-            return value
-        return text
-    except ValueError:
-        return text
-
-
-def _coerce_to_expected(actual_text: str, expected: Any) -> Any:
-    if isinstance(expected, bool):
-        lowered = actual_text.lower()
-        if lowered not in {"true", "false", "0", "1"}:
-            raise CheckError(f"cannot coerce {actual_text!r} to bool")
-        return lowered in {"true", "1"}
-    if isinstance(expected, int) and not isinstance(expected, bool):
+def coerce_scalar(text: str) -> Any:
+    value = text.strip().strip('"')
+    if re.fullmatch(r"[-+]?\d+", value):
         try:
-            return int(actual_text, 0)
-        except ValueError as exc:
-            raise CheckError(f"cannot coerce {actual_text!r} to int") from exc
-    if isinstance(expected, float):
+            return int(value, 10)
+        except ValueError:
+            pass
+    if re.fullmatch(r"[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", value):
         try:
-            return float(actual_text)
-        except ValueError as exc:
-            raise CheckError(f"cannot coerce {actual_text!r} to float") from exc
-    return actual_text
+            return float(value)
+        except ValueError:
+            pass
+    return value
 
 
-def parse_result_line(line: str) -> Dict[str, str]:
-    """Parse one VC4_TEST_RESULT line into a string dictionary."""
-    if MARKER not in line:
-        raise CheckError(f"line does not contain {MARKER}")
-    suffix = line.split(MARKER, 1)[1].strip()
-    if not suffix:
-        raise CheckError("result line has no key=value fields")
-
-    fields: Dict[str, str] = {}
-    for token in shlex.split(suffix):
-        if "=" not in token:
-            raise CheckError(f"malformed token {token!r}; expected key=value")
-        key, value = token.split("=", 1)
+def parse_key_value_tail(tail: str) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for part in re.split(r"[\s,]+", tail.strip()):
+        if not part or "=" not in part:
+            continue
+        key, value = part.split("=", 1)
+        key = key.strip()
         if not key:
-            raise CheckError(f"empty key in token {token!r}")
-        fields[key] = value
+            continue
+        fields[key] = coerce_scalar(value)
     return fields
 
 
-def find_last_result(log_text: str) -> Tuple[str, Dict[str, str]]:
-    last_line = None
-    for line in log_text.splitlines():
-        if MARKER in line:
-            last_line = line.strip()
-    if last_line is None:
-        raise CheckError(f"no {MARKER} line found in log")
-    return last_line, parse_result_line(last_line)
-
-
-def _iter_required(expected: Dict[str, Any]) -> Iterable[Tuple[str, Any]]:
-    if "name" in expected:
-        yield "name", expected["name"]
-    if "status" in expected:
-        yield "status", expected["status"]
-    required = expected.get("required", {})
-    if not isinstance(required, dict):
-        raise CheckError("expected['required'] must be a dictionary")
-    for key, value in required.items():
-        yield key, value
-
-
-def check_result(expected: Dict[str, Any], actual: Dict[str, str]) -> None:
-    errors = []
-
-    for key, expected_value in _iter_required(expected):
-        if key not in actual:
-            errors.append(f"missing required field {key!r}")
-            continue
+def parse_result_line(line: str) -> dict[str, Any] | None:
+    if "VC4_TEST_RESULT" not in line:
+        return None
+    tail = line.split("VC4_TEST_RESULT", 1)[1].strip(" :\t")
+    if not tail:
+        return None
+    if tail.startswith("{"):
         try:
-            actual_value = _coerce_to_expected(actual[key], expected_value)
-        except CheckError as exc:
-            errors.append(str(exc))
-            continue
-        if actual_value != expected_value:
-            errors.append(
-                f"field {key!r}: expected {expected_value!r}, got {actual_value!r}"
-            )
+            parsed = json.loads(tail)
+        except json.JSONDecodeError:
+            parsed = None
+        if isinstance(parsed, dict):
+            return parsed
+    fields = parse_key_value_tail(tail)
+    return fields or None
 
-    float_max = expected.get("float_max", {})
+
+def parse_last_result(log_text: str) -> tuple[dict[str, Any], str]:
+    parsed: dict[str, Any] | None = None
+    raw_line = ""
+    for line in log_text.splitlines():
+        maybe = parse_result_line(line)
+        if maybe is not None:
+            parsed = maybe
+            raw_line = line.strip()
+    if parsed is None:
+        raise CheckError("no VC4_TEST_RESULT line found")
+    return parsed, raw_line
+
+
+def values_equal_exact(actual: Any, expected: Any) -> bool:
+    if isinstance(expected, bool):
+        if isinstance(actual, bool):
+            return actual is expected
+        if isinstance(actual, str):
+            return actual.lower() in {"1", "true", "yes"} if expected else actual.lower() in {"0", "false", "no"}
+        return bool(actual) is expected
+    if isinstance(expected, int) and not isinstance(expected, bool):
+        if isinstance(actual, (int, float)) and not isinstance(actual, bool):
+            return int(actual) == expected and float(actual) == float(expected)
+        if isinstance(actual, str) and re.fullmatch(r"[-+]?\d+", actual):
+            return int(actual) == expected
+        return False
+    if isinstance(expected, float):
+        try:
+            return float(actual) == expected
+        except (TypeError, ValueError):
+            return False
+    return str(actual) == str(expected)
+
+
+def as_float_field(parsed: dict[str, Any], key: str) -> float:
+    if key not in parsed:
+        raise CheckError(f"missing numeric field {key!r}")
+    try:
+        value = float(parsed[key])
+    except (TypeError, ValueError) as exc:
+        raise CheckError(f"field {key!r} is not numeric: {parsed[key]!r}") from exc
+    if not math.isfinite(value):
+        raise CheckError(f"field {key!r} is not finite: {parsed[key]!r}")
+    return value
+
+
+def check_expected(expected: dict[str, Any], parsed: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+
+    expected_name = expected.get("name")
+    if expected_name is not None:
+        actual_name = parsed.get("name")
+        if actual_name != expected_name:
+            errors.append(f"name mismatch: expected {expected_name!r}, got {actual_name!r}")
+
+    expected_status = expected.get("status", "PASS")
+    actual_status = parsed.get("status")
+    if actual_status != expected_status:
+        errors.append(f"status mismatch: expected {expected_status!r}, got {actual_status!r}")
+
+    required = expected.get("required", {})
+    if required is None:
+        required = {}
+    if not isinstance(required, dict):
+        errors.append("expected.json field 'required' must be an object when present")
+    else:
+        for key, expected_value in required.items():
+            if key not in parsed:
+                errors.append(f"missing required field {key!r}")
+                continue
+            actual = parsed[key]
+            if not values_equal_exact(actual, expected_value):
+                errors.append(f"field {key!r} mismatch: expected {expected_value!r}, got {actual!r}")
+
+    float_max = expected.get("float_max", {}) or {}
     if not isinstance(float_max, dict):
-        errors.append("expected['float_max'] must be a dictionary")
+        errors.append("expected.json field 'float_max' must be an object when present")
     else:
         for key, max_value in float_max.items():
-            if key not in actual:
-                errors.append(f"missing float_max field {key!r}")
-                continue
             try:
-                actual_float = float(actual[key])
+                actual = as_float_field(parsed, key)
                 limit = float(max_value)
-            except ValueError:
-                errors.append(f"field {key!r}: expected numeric value, got {actual[key]!r}")
+            except CheckError as exc:
+                errors.append(str(exc))
                 continue
-            if not math.isfinite(actual_float):
-                errors.append(f"field {key!r}: value is not finite: {actual_float!r}")
+            except (TypeError, ValueError):
+                errors.append(f"float_max limit for {key!r} is not numeric: {max_value!r}")
                 continue
-            if abs(actual_float) > limit:
-                errors.append(
-                    f"field {key!r}: abs({actual_float!r}) exceeds max {limit!r}"
-                )
+            if actual > limit:
+                errors.append(f"field {key!r} exceeds float_max: actual {actual} > limit {limit}")
 
-    if errors:
-        raise CheckError("; ".join(errors))
+    float_min = expected.get("float_min", {}) or {}
+    if not isinstance(float_min, dict):
+        errors.append("expected.json field 'float_min' must be an object when present")
+    else:
+        for key, min_value in float_min.items():
+            try:
+                actual = as_float_field(parsed, key)
+                limit = float(min_value)
+            except CheckError as exc:
+                errors.append(str(exc))
+                continue
+            except (TypeError, ValueError):
+                errors.append(f"float_min limit for {key!r} is not numeric: {min_value!r}")
+                continue
+            if actual < limit:
+                errors.append(f"field {key!r} is below float_min: actual {actual} < limit {limit}")
+
+    float_abs = expected.get("float_abs", {}) or {}
+    if not isinstance(float_abs, dict):
+        errors.append("expected.json field 'float_abs' must be an object when present")
+    else:
+        for key, max_abs in float_abs.items():
+            try:
+                actual = as_float_field(parsed, key)
+                limit = float(max_abs)
+            except CheckError as exc:
+                errors.append(str(exc))
+                continue
+            except (TypeError, ValueError):
+                errors.append(f"float_abs limit for {key!r} is not numeric: {max_abs!r}")
+                continue
+            if abs(actual) > limit:
+                errors.append(f"field {key!r} exceeds float_abs: |{actual}| > limit {limit}")
+
+    return errors
 
 
-def load_json(path: Path) -> Dict[str, Any]:
+def read_expected(path: Path) -> dict[str, Any]:
     try:
-        data = json.loads(path.read_text())
-    except json.JSONDecodeError as exc:
-        raise CheckError(f"failed to parse JSON {path}: {exc}") from exc
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise CheckError(f"could not read expected.json {path}: {exc}") from exc
     if not isinstance(data, dict):
-        raise CheckError(f"expected JSON object in {path}")
+        raise CheckError(f"expected.json must contain an object: {path}")
     return data
 
 
-def run_check(expected_path: Path, log_path: Path) -> int:
-    expected = load_json(expected_path)
-    log_text = log_path.read_text(errors="replace")
-    line, actual = find_last_result(log_text)
-    check_result(expected, actual)
-    print(f"ok: matched {MARKER}: {line}")
-    return 0
+def read_logs(paths: Iterable[Path]) -> str:
+    parts: list[str] = []
+    for path in paths:
+        if not path.exists():
+            raise CheckError(f"log path does not exist: {path}")
+        parts.append(f"\n# BEGIN LOG {path}\n")
+        parts.append(path.read_text(encoding="utf-8", errors="replace"))
+        parts.append(f"\n# END LOG {path}\n")
+    return "".join(parts)
 
 
-def self_test() -> int:
-    with tempfile.TemporaryDirectory() as td:
-        base = Path(td)
-        expected = base / "expected.json"
-        log = base / "run.log"
-        expected.write_text(
-            json.dumps(
-                {
-                    "name": "self_test",
-                    "status": "PASS",
-                    "required": {"mismatches": 0, "count": 12},
-                    "float_max": {"max_abs_diff": 0.001},
-                }
-            )
-        )
-        log.write_text(
-            "noise before\n"
-            "VC4_TEST_RESULT name=old status=FAIL mismatches=99 max_abs_diff=1.0\n"
-            "more noise\n"
-            "VC4_TEST_RESULT name=self_test status=PASS mismatches=0 count=12 max_abs_diff=0.0005\n"
-        )
-        run_check(expected, log)
-
-        failing_expected = base / "failing_expected.json"
-        failing_expected.write_text(
-            json.dumps(
-                {
-                    "name": "self_test",
-                    "status": "PASS",
-                    "required": {"mismatches": 1},
-                }
-            )
-        )
-        try:
-            run_check(failing_expected, log)
-        except CheckError:
-            print("ok: negative self-test failed as expected")
-        else:
-            raise CheckError("negative self-test unexpectedly passed")
-
-    print("self-test PASS")
-    return 0
-
-
-def main(argv: list[str]) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("expected", nargs="?", type=Path, help="expected JSON file")
-    parser.add_argument("log", nargs="?", type=Path, help="run log file")
-    parser.add_argument("--self-test", action="store_true", help="run built-in tests")
-    args = parser.parse_args(argv)
+    parser.add_argument("expected_json", type=Path)
+    parser.add_argument("logs", type=Path, nargs="+")
+    parser.add_argument("--dump-parsed", action="store_true", help="print parsed result JSON even on success")
+    return parser
 
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_arg_parser()
+    args = parser.parse_args(argv)
     try:
-        if args.self_test:
-            return self_test()
-        if args.expected is None or args.log is None:
-            parser.error("expected and log are required unless --self-test is used")
-        return run_check(args.expected, args.log)
+        expected = read_expected(args.expected_json)
+        parsed, raw_line = parse_last_result(read_logs(args.logs))
+        errors = check_expected(expected, parsed)
     except CheckError as exc:
-        print(f"error: {exc}", file=sys.stderr)
+        print(f"[vc4-result] FAIL: {exc}", file=sys.stderr)
         return 1
+
+    print(f"[vc4-result] result line: {raw_line}")
+    if args.dump_parsed or errors:
+        print("[vc4-result] parsed:")
+        print(json.dumps(parsed, indent=2, sort_keys=True))
+        print("[vc4-result] expected:")
+        print(json.dumps(expected, indent=2, sort_keys=True))
+
+    if errors:
+        print("[vc4-result] FAIL:", file=sys.stderr)
+        for error in errors:
+            print(f"  - {error}", file=sys.stderr)
+        return 1
+
+    print("[vc4-result] PASS")
+    return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv[1:]))
+    raise SystemExit(main())

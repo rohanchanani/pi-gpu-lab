@@ -584,12 +584,12 @@
     },
     {
       "id": "m1-11-simple-memory-output",
-      "title": "Run first simple memory-output candidate on hardware",
+      "title": "Run first simple memory-output candidate on hardware (saxpy_full)",
       "depends_on": [
         "m1-10-hardware-smoke-minimal"
       ],
       "context_profile": "hardware_failure",
-      "intent": "Complete Milestone 1 by passing a simple memory-output-like hardware candidate test using the same semantic oracle as the reference bundle.",
+      "intent": "Use the existing saxpy_full hardware ground-truth bundle as the first memory-output semantic candidate gate. The reference bundle remains immutable; candidate artifacts are generated from saxpy_full/input.mlir and checked against saxpy_full/expected.json.",
       "non_goals": [
         "Do not implement structured lowering.",
         "Do not implement gpu-to-vc4 lowering.",
@@ -611,7 +611,9 @@
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/**",
         "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh",
-        "compiler/test/CodeGen/VC4/Hardware/Run/*/candidate/**"
+        "compiler/test/CodeGen/VC4/Hardware/Run/*/candidate/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/candidate/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh"
       ],
       "forbidden_paths": [
         "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
@@ -621,19 +623,19 @@
         ".vc4_auto/**"
       ],
       "gates": [
-        "hardware:reference:simple_memory_output",
+        "hardware:reference:saxpy_full",
         "build:vc4-codegen",
-        "candidate:generate:simple_memory_output",
-        "candidate:assemble:simple_memory_output",
-        "candidate:build:simple_memory_output",
-        "hardware:candidate:simple_memory_output",
-        "result:expected-json:simple_memory_output"
+        "candidate:generate:saxpy_full",
+        "candidate:assemble:saxpy_full",
+        "candidate:build:saxpy_full",
+        "hardware:candidate:saxpy_full",
+        "result:expected-json:saxpy_full"
       ],
       "hardware_required": true,
       "codex_policy": "never_for_hardware",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: pass simple memory-output candidate"
+      "commit_message": "complete vc4 codegen milestone 1 memory-output smoke gate"
     }
   ]
 }
