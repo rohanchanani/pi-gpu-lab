@@ -202,6 +202,47 @@ function decodeHtmlEntitiesForFileContent(text) {
   });
 }
 
+function headerWantsGitPatchLinesDecode(header) {
+  const enc = String(parseKv(header, "encoding") || parseKv(header, "content_encoding") || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  return enc === "git-patch-lines" || enc === "patch-lines" || enc === "unified-diff-lines";
+}
+
+function decodeGitPatchLinesForFileContent(text) {
+  const out = [];
+  const lines = String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+  if (lines.length > 0 && lines[lines.length - 1] === "") {
+    lines.pop();
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/^([RACD])\|(.*)$/);
+    if (!m) {
+      throw new Error(
+        `Invalid git-patch-lines record at encoded line ${i + 1}: expected R|, A|, C|, or D|`
+      );
+    }
+
+    const kind = m[1];
+    const payload = decodeHtmlEntitiesForFileContent(m[2] || "");
+
+    if (kind === "R") {
+      out.push(payload);
+    } else if (kind === "A") {
+      out.push(`+${payload}`);
+    } else if (kind === "D") {
+      out.push(`-${payload}`);
+    } else if (kind === "C") {
+      out.push(` ${payload}`);
+    }
+  }
+
+  return `${out.join("\n")}\n`;
+}
+
 function parseFileBlocks(answer, expectedToken) {
   const files = [];
   const text = String(answer || "");
@@ -225,13 +266,21 @@ function parseFileBlocks(answer, expectedToken) {
       continue;
     }
     const entityDecoded = headerWantsEntityDecode(header);
-    if (entityDecoded) {
-      content = decodeHtmlEntitiesForFileContent(content);
+    const gitPatchLinesDecoded = headerWantsGitPatchLinesDecode(header);
+    try {
+      if (gitPatchLinesDecoded) {
+        content = decodeGitPatchLinesForFileContent(content);
+      } else if (entityDecoded) {
+        content = decodeHtmlEntitiesForFileContent(content);
+      }
+    } catch (err) {
+      files.push({ relPath, error: err.message, header, skipped: true });
+      continue;
     }
     if (!content.endsWith("\n")) {
       content += "\n";
     }
-    files.push({ relPath, content, header, entityDecoded });
+    files.push({ relPath, content, header, entityDecoded, gitPatchLinesDecoded });
   }
   return files;
 }
@@ -1840,6 +1889,25 @@ BEGIN_GPTWEB_FILE token=${token} encoding=html-entities path=<relative/path>
 END_GPTWEB_FILE token=${token}
 
 When encoding=html-entities is present, my local parser decodes decimal/hex/named HTML entities once before writing the file. Use that encoding for file contents that contain Markdown-sensitive leading characters or HTML-sensitive characters, but never entity-encode the BEGIN/END marker lines themselves.
+
+Patch/diff-safe file-block format. Use this for changes.patch and other .patch/.diff files:
+
+BEGIN_GPTWEB_FILE token=${token} encoding=git-patch-lines path=<relative/path>
+R|diff --git a/path/to/file b/path/to/file
+R|--- a/path/to/file
+R|+++ b/path/to/file
+R|@@ -1 +1,2 @@
+C|unchanged original line payload, without the leading context space
+D|deleted original line payload, without the leading minus sign
+A|added new line payload, without the leading plus sign
+END_GPTWEB_FILE token=${token}
+
+When encoding=git-patch-lines is present, my local parser decodes each record into a real unified diff line:
+- R|payload writes payload exactly.
+- C|payload writes one leading context space plus payload.
+- D|payload writes '-' plus payload.
+- A|payload writes '+' plus payload.
+For payload text, entity-shield Markdown/HTML-sensitive characters such as &, <, and > as &amp;, &lt;, and &gt;. Never put raw C++ template syntax like <mlir::...> in a git-patch-lines payload.
 
 Rules:
 - Output only GPTWEB_FILE blocks.

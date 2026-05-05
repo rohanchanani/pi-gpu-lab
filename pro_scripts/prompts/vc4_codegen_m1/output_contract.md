@@ -41,7 +41,7 @@ For implementation and fix attempts, `changes.patch` is required. For a diagnosi
 
 ## Required `changes.patch` shape
 
-`changes.patch` must be a unified git diff relative to the repository root:
+The decoded staged `changes.patch` file must be a unified git diff relative to the repository root:
 
 ```diff
 diff --git a/path/to/file b/path/to/file
@@ -50,6 +50,27 @@ diff --git a/path/to/file b/path/to/file
 @@ ...
 ```
 
+Patch transport requirement:
+
+- GPT Pro must not transport `changes.patch` as raw diff text.
+- GPT Pro must emit the `changes.patch` GPTWEB block with `encoding=git-patch-lines`.
+- The web driver decodes `encoding=git-patch-lines` into the actual staged `changes.patch` file before patch-gate validation.
+- Each encoded body line must use exactly one record prefix:
+
+```text
+R|payload   -> payload
+C|payload   -> one leading context space, then payload
+D|payload   -> -, then payload
+A|payload   -> +, then payload
+```
+
+Use `R|` for diff metadata lines such as `diff --git`, `index`, `---`, `+++`, and `@@`.
+Use `C|` for unchanged hunk body lines.
+Use `D|` for deleted hunk body lines.
+Use `A|` for added hunk body lines.
+
+For payload text, entity-shield Markdown/HTML-sensitive characters such as `&`, `<`, and `>` as `&amp;`, `&lt;`, and `&gt;`. This is mandatory for C++ template syntax such as `llvm::cl::opt<std::string>`.
+
 Patch requirements:
 
 - Paths must be repo-relative.
@@ -57,9 +78,9 @@ Patch requirements:
 - Paths must not contain `..`.
 - Paths must match the current slice's `allowed_paths`.
 - Paths must not match the current slice's `forbidden_paths`.
-- The patch must apply with `git apply --check`.
-- The patch must not include binary blobs.
-- The patch must not mutate reference bundles, `expected.json`, or `catalog.json` unless explicitly allowed by the slice.
+- The decoded staged patch must apply with `git apply --check`.
+- The decoded staged patch must not include binary blobs.
+- The decoded staged patch must not mutate reference bundles, `expected.json`, or `catalog.json` unless explicitly allowed by the slice.
 
 ## GPTWEB block reminder
 
@@ -70,8 +91,13 @@ BEGIN_GPTWEB_FILE path=response.json
 ...
 END_GPTWEB_FILE
 
-BEGIN_GPTWEB_FILE path=changes.patch
-...
+BEGIN_GPTWEB_FILE encoding=git-patch-lines path=changes.patch
+R|diff --git a/path/to/file b/path/to/file
+R|--- a/path/to/file
+R|+++ b/path/to/file
+R|@@ -1 +1,2 @@
+C|unchanged line
+A|added line
 END_GPTWEB_FILE
 ```
 
