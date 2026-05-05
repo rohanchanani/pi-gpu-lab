@@ -29,6 +29,12 @@ You are diagnosing a VC4 codegen Milestone 1 failure. This is a diagnosis-only p
 
 {{GATES}}
 
+## Repository capability snapshot
+
+The following machine-generated snapshot is the executable contract for local tool, CMake target, and lit substitution availability. Do not guess tool names or lit substitutions; use this snapshot and the slice gates. Any changed RUN line that uses a custom `%token` must define that token in lit config, and any bare project tool must be resolvable through PATH, `compiler/build/bin`, or a CMake tool target.
+
+{{REPO_CAPABILITY_SNAPSHOT}}
+
 ## Slice non-goals
 
 {{NON_GOALS}}
@@ -36,6 +42,17 @@ You are diagnosing a VC4 codegen Milestone 1 failure. This is a diagnosis-only p
 ## Hard project constitution
 
 {{CONSTITUTION}}
+
+
+## Deterministic repo capability snapshot
+
+{{REPO_CAPABILITIES_MARKDOWN}}
+
+{{REPO_CAPABILITIES_JSON}}
+
+## Executable workflow invariants
+
+After your patch is applied, deterministic preflight will inspect changed tests, lit RUN lines, lit config syntax, patch metadata, and tool/CMake wiring before expensive gates run. Do not rely on prompt prose alone. Make the repo contract true in files.
 
 ## Failure packet
 

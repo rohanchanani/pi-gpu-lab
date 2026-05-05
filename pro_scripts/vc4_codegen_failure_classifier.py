@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Deterministic failure routing for VC4 codegen Milestone 1.
 
-The classifier never asks a model to decide ownership.  It routes only narrow,
-recognizable infrastructure/mechanical failures to Codex.  Slice 1 exposed two
-important plumbing classes that must not consume another GPT Pro implementation
-attempt: lit PATH/tool lookup failures and lit config syntax failures.
+Classify by normalized failure signature first, not by broad gate name.  Codex
+is available only for narrow mechanical classes and only within per-category
+budgets.  Semantic, hardware, qasm, verifier, and ordinary FileCheck failures
+route to GPT Pro.
 """
 
 from __future__ import annotations
@@ -17,39 +17,10 @@ from pathlib import Path
 from typing import Any, Mapping
 
 try:
-    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, tail_file, write_json_file
+    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, write_json_file
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, tail_file, write_json_file  # type: ignore
-
-
-MECHANICAL_COMPILE_RE = re.compile(
-    r"(CMake Error|ninja: build stopped|fatal error: .*file not found|fatal error: .*No such file|"
-    r"undefined reference to|ld: .*undefined|error: use of undeclared|error: no member named|"
-    r"error: unknown type name|error: expected|cannot find -l|no viable conversion|no matching function)",
-    re.IGNORECASE,
-)
-CMAKE_WIRING_RE = re.compile(
-    r"(unknown target|target .* not built|cannot find source file|No rule to make target|add_subdirectory|CMake Error)",
-    re.IGNORECASE,
-)
-TOOL_MISSING_RE = re.compile(
-    r"(command not found|No such file or directory|unable to find [`']?[^`'\s]+[`']? in PATH|not found in PATH)",
-    re.IGNORECASE,
-)
-LIT_TOOL_PATH_RE = re.compile(
-    r"(unable to find [`']?vc4-codegen[`']? in PATH|vc4-codegen: command not found|line \d+: vc4-codegen: command not found|No such file or directory.*vc4-codegen)",
-    re.IGNORECASE,
-)
-LIT_CONFIG_SYNTAX_RE = re.compile(
-    r"(unable to parse config file|IndentationError|SyntaxError|TabError|NameError: name 'config' is not defined)",
-    re.IGNORECASE,
-)
-FILECHECK_RE = re.compile(r"(FileCheck|CHECK-|not found in input|possible intended match)", re.IGNORECASE)
-COMMAND_NOT_FOUND_FILECHECK_RE = re.compile(
-    r"(CHECK: expected string not found[\s\S]{0,1200}(unable to find|command not found|No such file or directory))",
-    re.IGNORECASE,
-)
+    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, write_json_file  # type: ignore
 
 
 class Route:
@@ -59,79 +30,109 @@ class Route:
     ABORT = "abort"
 
 
-CODEX_POLICIES_ALLOWING_MECHANICAL = {
-    "compile_only_once",
-    "compile_only",
-    "mechanical_once",
-    "mechanical",
-    "mechanical_per_category",
-    "compile_and_plumbing",
-}
+CODEX_POLICIES_ALLOWING_MECHANICAL = {"compile_only_once", "compile_only", "mechanical_once", "mechanical_by_category"}
 CODEX_POLICIES_NEVER = {"never", "never_for_hardware", "none", ""}
 
-# Defaults intentionally override the old global max_codex_attempts=1 behavior
-# for independent mechanical classes.  Each listed class gets its own budget.
-DEFAULT_CATEGORY_BUDGETS = {
+MECHANICAL_COMPILE_RE = re.compile(
+    r"(CMake Error|ninja: build stopped|fatal error: .*file not found|fatal error: .*No such file|"
+    r"undefined reference to|ld: .*undefined|error: use of undeclared|error: no member named|"
+    r"error: unknown type name|error: expected|cannot find -l|no rule to make target|unknown target)",
+    re.IGNORECASE,
+)
+LIT_CONFIG_SYNTAX_RE = re.compile(r"(fatal: unable to parse config file|IndentationError|SyntaxError|NameError: name 'config'|lit\.local\.cfg)", re.IGNORECASE)
+LIT_TOOL_RESOLUTION_RE = re.compile(r"(unable to find [`']?%?[-A-Za-z0-9_+.]+[`']? in PATH|command not found|fg: no job control|No such file or directory)", re.IGNORECASE)
+FILECHECK_RE = re.compile(r"(FileCheck|CHECK-|expected string not found|not found in input|possible intended match)", re.IGNORECASE)
+PATCH_ALREADY_APPLIED_RE = re.compile(r"(patch already appears applied|--reverse.*would apply|already exists in working directory|patch does not apply)", re.IGNORECASE)
+TRANSPORT_RE = re.compile(r"(Could not find ChatGPT prompt box|web-driver|browser|timeout|playwright|CDP|conversation URL)", re.IGNORECASE)
+
+DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_compile": 1,
-    "mechanical_build": 1,
+    "mechanical_cmake_or_target": 1,
+    "mechanical_test_invocation": 1,
+    "mechanical_lit_config": 1,
     "mechanical_candidate_build": 1,
-    "cmake_wiring": 1,
-    "tool_missing": 1,
-    "lit_tool_path": 1,
-    "lit_config_syntax": 1,
 }
-SAFE_CODEX_CATEGORIES = set(DEFAULT_CATEGORY_BUDGETS)
 
 
-def _category_attempts_used(category: str, codex_attempts_used: int, codex_attempts_by_category: Mapping[str, Any] | None) -> int:
+def _category_attempts_used(category: str, *, codex_attempts_used: int, codex_attempts_by_category: Mapping[str, Any] | None) -> int:
     if codex_attempts_by_category is None:
-        return codex_attempts_used
-    raw = codex_attempts_by_category.get(category, 0)
+        return int(codex_attempts_used)
     try:
-        return int(raw)
+        return int(codex_attempts_by_category.get(category, 0) or 0)
     except Exception:
-        return 0
+        return int(codex_attempts_used)
 
 
-def _category_budget(slice_entry: Mapping[str, Any], category: str) -> int:
-    raw_budgets = slice_entry.get("mechanical_codex_budgets", {})
-    if isinstance(raw_budgets, Mapping) and category in raw_budgets:
+def _category_budget(category: str, slice_entry: Mapping[str, Any], *, max_codex: int) -> int:
+    raw = slice_entry.get("mechanical_budgets", {})
+    if isinstance(raw, Mapping) and category in raw:
         try:
-            return max(0, int(raw_budgets[category]))
+            return int(raw.get(category, 0) or 0)
         except Exception:
             return 0
-    legacy_max = int(slice_entry.get("max_codex_attempts", 0) or 0)
-    default = DEFAULT_CATEGORY_BUDGETS.get(category, 0)
-    # Legacy worklists often set max_codex_attempts=1.  Treat that as one per
-    # safe category, not one globally, so compile fixes do not consume the lit
-    # PATH/syntax repair budget.
-    if legacy_max > 0 and default > 0:
-        return default
-    return default if str(slice_entry.get("codex_policy", "")) in CODEX_POLICIES_ALLOWING_MECHANICAL else 0
+    if category in DEFAULT_MECHANICAL_BUDGETS:
+        return min(max_codex, DEFAULT_MECHANICAL_BUDGETS[category]) if max_codex > 0 else 0
+    return 0
 
 
-def _can_use_codex(
-    *,
-    slice_entry: Mapping[str, Any],
-    policy: str,
-    hardware_required: bool,
-    category: str,
-    codex_attempts_used: int,
-    codex_attempts_by_category: Mapping[str, Any] | None,
-) -> tuple[bool, int, int, str]:
-    if hardware_required:
-        return False, 0, 0, "hardware-required slice disables mechanical Codex routing"
-    if policy in CODEX_POLICIES_NEVER:
-        return False, 0, 0, "codex_policy disables Codex"
-    if policy not in CODEX_POLICIES_ALLOWING_MECHANICAL:
-        return False, 0, 0, f"codex_policy={policy!r} is not a mechanical policy"
-    if category not in SAFE_CODEX_CATEGORIES:
-        return False, 0, 0, f"category {category!r} is not safe for Codex"
-    used = _category_attempts_used(category, codex_attempts_used, codex_attempts_by_category)
-    budget = _category_budget(slice_entry, category)
-    if budget <= used:
-        return False, used, budget, f"Codex budget exhausted for {category}: used {used}, budget {budget}"
-    return True, used, budget, f"Codex budget available for {category}: used {used}, budget {budget}"
+def _is_mechanical_category(category: str) -> bool:
+    return category.startswith("mechanical_")
+
+
+def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_required: bool) -> tuple[str, str]:
+    s = stage.lower()
+    g = gate.lower()
+    log = log_text or ""
+
+    if s in {"chat", "gpt-web-driver", "browser"} or TRANSPORT_RE.search(log) and "chat" in s:
+        return "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs"
+    if s in {"gpt-output-validation", "chat-output-validation", "patch-output-validation"}:
+        return "malformed_gpt_output", "GPT output did not satisfy response.json + changes.patch contract"
+    if s in {"patch-guard", "path-guard", "forbidden-path", "git-apply"}:
+        if PATCH_ALREADY_APPLIED_RE.search(log):
+            return "repo_state_or_idempotence", "Patch could not apply cleanly and may already be applied or based on stale repo state"
+        return "patch_policy_or_apply", "Patch failed deterministic path/apply validation"
+    if s.startswith("preflight") or g.startswith("preflight:"):
+        if LIT_CONFIG_SYNTAX_RE.search(log):
+            return "mechanical_lit_config", "Changed lit config has a mechanical syntax/config issue"
+        if "lit_tool_resolution" in log or LIT_TOOL_RESOLUTION_RE.search(log):
+            return "mechanical_test_invocation", "Changed test invocation/tool-resolution invariant failed"
+        return "patch_preflight_invariant", "Patch failed deterministic repository invariant checks"
+
+    if g.startswith("hardware:") or g.startswith("result:") or hardware_required:
+        return "hardware_or_result", "Hardware/result failures require semantic diagnosis"
+    if "vc4asm" in g:
+        return "qasm_assembler", "vc4asm rejection is qasm syntax/semantics, not a mechanical edit"
+    if g.startswith("candidate:build:"):
+        if MECHANICAL_COMPILE_RE.search(log) or LIT_TOOL_RESOLUTION_RE.search(log):
+            return "mechanical_candidate_build", "Candidate build log looks like C/CMake/include/linkage/tool issue"
+        return "candidate_build_semantic", "Candidate build failure is not a safe mechanical class"
+    if g.startswith("cc:"):
+        return "mechanical_compile", "C syntax-only gate is a narrow mechanical compile check"
+    if g.startswith("build:"):
+        if g == "build:check-vc4":
+            if LIT_CONFIG_SYNTAX_RE.search(log):
+                return "mechanical_lit_config", "lit config parse/syntax failure is mechanical test plumbing"
+            if LIT_TOOL_RESOLUTION_RE.search(log):
+                return "mechanical_test_invocation", "lit command/substitution/tool resolution failure is mechanical test plumbing"
+            if FILECHECK_RE.search(log):
+                return "lit_filecheck", "lit/FileCheck content mismatch is semantic"
+            return "verifier_or_regression", "VC4 regression failure is semantic by default"
+        if MECHANICAL_COMPILE_RE.search(log) or g in {"build:vc4-codegen", "build:vc4-opt"}:
+            return "mechanical_compile", "Compile-like gate under mechanical Codex policy"
+        return "mechanical_build", "Build-like gate failed"
+    if g.startswith("lit:"):
+        if LIT_CONFIG_SYNTAX_RE.search(log):
+            return "mechanical_lit_config", "lit config parse/syntax failure is mechanical test plumbing"
+        if LIT_TOOL_RESOLUTION_RE.search(log):
+            return "mechanical_test_invocation", "lit command/substitution/tool resolution failure is mechanical test plumbing"
+        if FILECHECK_RE.search(log):
+            return "lit_filecheck", "lit/FileCheck content mismatch is semantic"
+        return "lit_failure", "lit failure is routed to GPT Pro by default"
+    if "verify" in g:
+        return "verifier_or_regression", "VC4 verifier failures are semantic by default"
+
+    return "semantic_or_ambiguous", "Ambiguous failures route to GPT Pro"
 
 
 def classify_failure(
@@ -144,87 +145,39 @@ def classify_failure(
     codex_attempts_by_category: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     policy = str(slice_entry.get("codex_policy", "never"))
-    legacy_max_codex = int(slice_entry.get("max_codex_attempts", 0) or 0)
+    max_codex = int(slice_entry.get("max_codex_attempts", 0) or 0)
     hardware_required = bool(slice_entry.get("hardware_required", False))
+    category, reason = _normalized_category(stage=stage, gate=gate, log_text=log_text, hardware_required=hardware_required)
+    used_for_category = _category_attempts_used(category, codex_attempts_used=codex_attempts_used, codex_attempts_by_category=codex_attempts_by_category)
+    budget_for_category = _category_budget(category, slice_entry, max_codex=max_codex)
 
-    def result(route: str, category: str, reason: str) -> dict[str, Any]:
-        used = _category_attempts_used(category, codex_attempts_used, codex_attempts_by_category)
-        budget = _category_budget(slice_entry, category)
-        return {
-            "route": route,
-            "category": category,
-            "reason": reason,
-            "codex_policy": policy,
-            "codex_attempts_used": codex_attempts_used,
-            "codex_attempts_by_category": dict(codex_attempts_by_category or {}),
-            "category_attempts_used": used,
-            "category_budget": budget,
-            "max_codex_attempts": legacy_max_codex,
-            "stage": stage,
-            "gate": gate,
-        }
+    route = Route.GPT
+    if category == "chat_transport":
+        route = Route.SCRIPT
+    elif _is_mechanical_category(category) and policy in CODEX_POLICIES_ALLOWING_MECHANICAL and budget_for_category > used_for_category:
+        route = Route.CODEX
+    elif policy in CODEX_POLICIES_NEVER or not _is_mechanical_category(category):
+        route = Route.GPT
 
-    def codex_result(category: str, reason: str) -> dict[str, Any]:
-        ok, used, budget, budget_reason = _can_use_codex(
-            slice_entry=slice_entry,
-            policy=policy,
-            hardware_required=hardware_required,
-            category=category,
-            codex_attempts_used=codex_attempts_used,
-            codex_attempts_by_category=codex_attempts_by_category,
-        )
-        if ok:
-            return result(Route.CODEX, category, reason + "; " + budget_reason)
-        return result(Route.GPT, category, reason + "; " + budget_reason)
-
-    s = stage.lower()
-    g = gate.lower()
-    text = log_text or ""
-
-    # Transport/output validation failures are not repo semantics.  Browser
-    # transport goes to script/retry; malformed model output goes back to GPT
-    # with an output-contract failure packet.
-    if s in {"chat", "gpt-web-driver", "browser"}:
-        return result(Route.SCRIPT, "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs")
-    if s in {"gpt-output-validation", "chat-output-validation", "patch-output-validation"}:
-        return result(Route.GPT, "malformed_gpt_output", "GPT output did not satisfy response.json + encoded changes.patch contract")
-    if s in {"patch-guard", "path-guard", "forbidden-path", "git-apply"}:
-        return result(Route.GPT, "patch_policy_or_apply", "Patch failed deterministic path/apply/transport validation")
-
-    # Hardware/qasm/result failures are semantic by default.
-    if g.startswith("hardware:") or g.startswith("result:") or hardware_required:
-        return result(Route.GPT, "hardware_or_result", "Hardware/result failures require semantic diagnosis")
-    if "vc4asm" in g:
-        return result(Route.GPT, "qasm_assembler", "vc4asm rejection is qasm syntax/semantics, not a mechanical edit")
-
-    # lit/check-vc4 failures have both semantic and infrastructure subtypes.
-    if g.startswith("lit:") or "check-vc4" in g:
-        if LIT_CONFIG_SYNTAX_RE.search(text):
-            return codex_result("lit_config_syntax", "lit config failed to parse; this is deterministic test plumbing")
-        if LIT_TOOL_PATH_RE.search(text) or COMMAND_NOT_FOUND_FILECHECK_RE.search(text):
-            return codex_result("lit_tool_path", "lit could not find vc4-codegen; this is PATH/substitution plumbing")
-        if FILECHECK_RE.search(text):
-            return result(Route.GPT, "lit_filecheck", "lit/FileCheck mismatch without command-not-found evidence is semantic")
-        return result(Route.GPT, "lit_failure", "lit failure is semantic/ambiguous by default")
-
-    # Tool missing and CMake wiring failures are mechanical when the policy allows.
-    if CMAKE_WIRING_RE.search(text):
-        return codex_result("cmake_wiring", "log matches CMake/target wiring failure")
-    if TOOL_MISSING_RE.search(text) and (g.startswith("tool:") or g.startswith("build:") or g.startswith("candidate:")):
-        return codex_result("tool_missing", "required local tool/target was missing from PATH or expected build location")
-
-    if g == "build:vc4-codegen" or g.startswith("cc:"):
-        return codex_result("mechanical_compile", "compile-like gate under mechanical Codex policy")
-    if g.startswith("candidate:build:") and MECHANICAL_COMPILE_RE.search(text):
-        return codex_result("mechanical_candidate_build", "candidate build log looks like C/CMake/include/linkage issue")
-    if g.startswith("build:") and MECHANICAL_COMPILE_RE.search(text):
-        return codex_result("mechanical_build", "build log matches conservative compile/build regex")
-
-    return result(Route.GPT, "semantic_or_ambiguous", "Ambiguous failures route to GPT Pro")
+    return {
+        "route": route,
+        "category": category,
+        "reason": reason,
+        "codex_policy": policy,
+        "codex_attempts_used": int(codex_attempts_used),
+        "codex_attempts_by_category": dict(codex_attempts_by_category or {}),
+        "category_attempts_used": used_for_category,
+        "category_budget": budget_for_category,
+        "max_codex_attempts": max_codex,
+        "stage": stage,
+        "gate": gate,
+    }
 
 
 def classify_from_packet(packet: Mapping[str, Any], slice_entry: Mapping[str, Any], *, codex_attempts_used: int = 0, codex_attempts_by_category: Mapping[str, Any] | None = None) -> dict[str, Any]:
     log_text = str(packet.get("log_tail", ""))
+    if not log_text and isinstance(packet.get("extra"), Mapping):
+        log_text = json.dumps(packet.get("extra"), sort_keys=True)
     return classify_failure(
         slice_entry=slice_entry,
         stage=str(packet.get("stage", "")),
@@ -235,33 +188,13 @@ def classify_from_packet(packet: Mapping[str, Any], slice_entry: Mapping[str, An
     )
 
 
-def _json_mapping_arg(raw: str) -> dict[str, Any]:
-    if not raw:
-        return {}
-    try:
-        value = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise DriverError(f"invalid JSON mapping: {exc}") from exc
-    if not isinstance(value, dict):
-        raise DriverError("expected a JSON object")
-    return value
-
-
 def cmd_classify(args: argparse.Namespace) -> int:
     repo = find_repo_root(args.repo)
     config = MilestoneConfig.load(repo, worklist_path=args.worklist, context_profiles_path=args.context_profiles)
     slice_entry = config.get_slice(args.slice)
-    log_text = ""
-    if args.log:
-        log_text = Path(args.log).read_text(encoding="utf-8", errors="replace") if Path(args.log).exists() else ""
-    route = classify_failure(
-        slice_entry=slice_entry,
-        stage=args.stage,
-        gate=args.gate,
-        log_text=log_text,
-        codex_attempts_used=args.codex_attempts_used,
-        codex_attempts_by_category=_json_mapping_arg(args.codex_attempts_by_category_json),
-    )
+    log_text = Path(args.log).read_text(encoding="utf-8", errors="replace") if args.log and Path(args.log).exists() else ""
+    by_cat = json.loads(args.codex_attempts_by_category) if args.codex_attempts_by_category else None
+    route = classify_failure(slice_entry=slice_entry, stage=args.stage, gate=args.gate, log_text=log_text, codex_attempts_used=args.codex_attempts_used, codex_attempts_by_category=by_cat)
     print(json.dumps(route, indent=2, sort_keys=True))
     if args.out:
         write_json_file(Path(args.out), route)
@@ -277,13 +210,8 @@ def cmd_classify_packet(args: argparse.Namespace) -> int:
     slice_id = args.slice or str(packet.get("slice_id", ""))
     if not slice_id:
         raise DriverError("slice id missing; pass --slice")
-    slice_entry = config.get_slice(slice_id)
-    route = classify_from_packet(
-        packet,
-        slice_entry,
-        codex_attempts_used=args.codex_attempts_used,
-        codex_attempts_by_category=_json_mapping_arg(args.codex_attempts_by_category_json),
-    )
+    by_cat = json.loads(args.codex_attempts_by_category) if args.codex_attempts_by_category else None
+    route = classify_from_packet(packet, config.get_slice(slice_id), codex_attempts_used=args.codex_attempts_used, codex_attempts_by_category=by_cat)
     print(json.dumps(route, indent=2, sort_keys=True))
     if args.out:
         write_json_file(Path(args.out), route)
@@ -303,7 +231,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument("--gate", default="")
     p.add_argument("--log", default="")
     p.add_argument("--codex-attempts-used", type=int, default=0)
-    p.add_argument("--codex-attempts-by-category-json", default="")
+    p.add_argument("--codex-attempts-by-category", default="")
     p.add_argument("--out", default="")
     p.set_defaults(func=cmd_classify)
 
@@ -311,7 +239,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     pp.add_argument("--packet", required=True)
     pp.add_argument("--slice", default="")
     pp.add_argument("--codex-attempts-used", type=int, default=0)
-    pp.add_argument("--codex-attempts-by-category-json", default="")
+    pp.add_argument("--codex-attempts-by-category", default="")
     pp.add_argument("--out", default="")
     pp.set_defaults(func=cmd_classify_packet)
     return parser

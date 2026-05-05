@@ -11,12 +11,15 @@ Forbidden paths:
 {{FORBIDDEN_PATHS}}
 
 Rules:
-- Fix only the mechanical compile/build issue shown by the failed command/log.
+- Fix only the narrow mechanical issue shown by the failed command/log and classifier category.
+- Test invocation plumbing, lit config syntax, CMake target wiring, and compile/link errors are mechanical only when the log proves that category.
 - Do not change qasm semantics.
 - Do not change launch ABI semantics.
 - Do not change hardware behavior.
 - Do not touch reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, or .vc4_auto.
+- Do not make semantic changes to qasm emission, launch ABI, verifier behavior, runtime scheduling, or hardware expectations.
 - Do not refactor.
+- Test edits are allowed only for mechanical invocation/config plumbing when the classifier category says so.
 - Make the smallest local change needed.
 
 Failed command:

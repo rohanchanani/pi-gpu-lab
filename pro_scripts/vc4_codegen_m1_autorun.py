@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -32,7 +33,6 @@ try:
         find_repo_root,
         git_changed_paths,
         git_head,
-        match_any_path,
         normalize_relpath,
         relpath,
         restore_paths,
@@ -55,7 +55,6 @@ except ModuleNotFoundError:  # pragma: no cover
         find_repo_root,
         git_changed_paths,
         git_head,
-        match_any_path,
         normalize_relpath,
         relpath,
         restore_paths,
@@ -221,13 +220,12 @@ Rules:
 - Fix only the narrow mechanical issue shown below.
 - Do not change qasm semantics.
 - Do not change launch ABI semantics.
-- Do not change tests unless the failure is purely test invocation plumbing and the path is allowlisted.
+- Do not change tests unless the failure is purely mechanical test invocation plumbing and the path is allowlisted.
 - Do not touch reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, or .vc4_auto.
 - Do not refactor.
 - Make the smallest local change needed.
 
 Failed gate: {failed_result.gate}
-Mechanical category: {route.get('category')}
 Command: {shlex.join(failed_result.command)}
 Exit code: {failed_result.exit_code}
 Log path: {relpath(repo, failed_result.log_path)}
@@ -273,10 +271,26 @@ def run_slice_gates(
     allow_dirty: bool,
     verbose: bool,
     timeout_sec: int,
+    patch_preflight: bool = False,
 ) -> tuple[bool, list[CommandResult]]:
+    results: list[CommandResult] = []
+    if patch_preflight:
+        preflight = run_patch_preflight_gate(
+            config=config,
+            slice_entry=slice_entry,
+            log_dir=log_dir,
+            verbose=verbose,
+            timeout_sec=timeout_sec,
+        )
+        results.append(preflight)
+        if not preflight.ok:
+            write_json_file(log_dir / "gate_summary.json", [r.as_json(config.repo) for r in results])
+            return False, results
     runner = GateRunner(config, verbose=verbose, timeout_sec=timeout_sec)
     gates = [str(g) for g in slice_entry.get("gates", [])]
-    results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=allow_dirty, stop_on_failure=True)
+    gate_results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=allow_dirty, stop_on_failure=True)
+    results.extend(gate_results)
+    write_json_file(log_dir / "gate_summary.json", [r.as_json(config.repo) for r in results])
     return all(r.ok for r in results), results
 
 
@@ -287,13 +301,111 @@ def first_failed(results: Sequence[CommandResult]) -> CommandResult | None:
     return None
 
 
+
+def _git_capture(repo: Path, args: Sequence[str], *, max_chars: int = 60000) -> str:
+    try:
+        proc = subprocess.run(["git", *args], cwd=str(repo), text=True, capture_output=True)
+    except Exception as exc:
+        return f"<git {' '.join(args)} failed to start: {exc}>"
+    text = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
+    if len(text) > max_chars:
+        half = max_chars // 2
+        text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
+    return text
+
+
+def collect_candidate_change_report(repo: Path) -> dict[str, Any]:
+    """Capture candidate diff/excerpts before failed attempts are cleaned."""
+    changed = git_changed_paths(repo, include_untracked=True)
+    report: dict[str, Any] = {
+        "candidate_changed_paths": changed,
+        "candidate_diff_stat": _git_capture(repo, ["diff", "--stat"]),
+        "candidate_diff": _git_capture(repo, ["diff"]),
+        "candidate_untracked_file_excerpts": {},
+    }
+    excerpts: dict[str, str] = {}
+    for rel in changed:
+        path = repo / rel
+        if not path.exists() or not path.is_file():
+            continue
+        tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel], cwd=str(repo), text=True, capture_output=True)
+        if tracked.returncode == 0:
+            continue
+        try:
+            data = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        excerpts[rel] = data[:4000]
+    report["candidate_untracked_file_excerpts"] = excerpts
+    return report
+
+
+def cleanup_failed_attempt_changes(repo: Path, *, baseline_paths: Sequence[str], log_dir: Path | None = None) -> list[str]:
+    """Restore changes introduced by a failed attempt, preserving baseline dirt."""
+    baseline = set(baseline_paths)
+    current = set(git_changed_paths(repo, include_untracked=True))
+    to_restore = sorted(current - baseline)
+    if to_restore:
+        restore_paths(repo, to_restore)
+        if log_dir is not None:
+            write_json_file(log_dir / "failed_attempt_cleanup.json", {"restored_paths": to_restore})
+        log(f"cleaned failed candidate changes: {len(to_restore)} path(s)")
+    return to_restore
+
+
+def run_patch_preflight_gate(
+    *,
+    config: MilestoneConfig,
+    slice_entry: Mapping[str, Any],
+    log_dir: Path,
+    verbose: bool,
+    timeout_sec: int,
+) -> CommandResult:
+    preflight = config.repo / "pro_scripts/vc4_codegen_preflight.py"
+    report = log_dir / "preflight_patch_invariants_report.json"
+    cmd = [
+        sys.executable,
+        str(preflight),
+        "patch-invariants",
+        "--slice",
+        str(slice_entry["id"]),
+        "--report",
+        str(report),
+    ]
+    runner = GateRunner(config, verbose=verbose, timeout_sec=min(timeout_sec, 300))
+    return runner.run_command(gate="preflight:patch-invariants", cmd=cmd, log_dir=log_dir, timeout_sec=min(timeout_sec, 300))
+
+
+def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 60000) -> dict[str, Any]:
+    report: dict[str, Any] = {"staged_files": []}
+    if not staging_dir.exists():
+        return report
+    files = []
+    for path in sorted(staging_dir.rglob("*")):
+        if path.is_file():
+            files.append(path.relative_to(staging_dir).as_posix())
+    report["staged_files"] = files
+    response = staging_dir / "response.json"
+    if response.exists():
+        try:
+            report["staged_response_json"] = json.loads(response.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            report["staged_response_json"] = response.read_text(encoding="utf-8", errors="replace")[:max_chars]
+    patch = staging_dir / "changes.patch"
+    if patch.exists():
+        text = patch.read_text(encoding="utf-8", errors="replace")
+        if len(text) > max_chars:
+            half = max_chars // 2
+            text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
+        report["staged_changes_patch"] = text
+    return report
+
 def write_gate_failure_packet(
     *,
     state: StateStore,
     paths: Any,
     slice_entry: Mapping[str, Any],
     failed: CommandResult,
-    extra: Mapping[str, Any] | None = None,
 ) -> Path:
     packet = write_failure_packet(
         paths.failure_packet_path,
@@ -304,119 +416,11 @@ def write_gate_failure_packet(
         exit_code=failed.exit_code,
         timed_out=failed.timed_out,
         log_path=failed.log_path,
-        extra={"gate": failed.gate, **dict(extra or {})},
+        extra={"gate": failed.gate, **collect_candidate_change_report(state.config.repo)},
     )
     packet["gate"] = failed.gate
     write_json_file(paths.failure_packet_path, packet)
     return paths.failure_packet_path
-
-
-MAX_FAILURE_CONTEXT_CHARS = 70000
-
-
-def _truncate_text(text: str, limit: int = MAX_FAILURE_CONTEXT_CHARS) -> str:
-    if len(text) <= limit:
-        return text
-    keep = max(0, limit // 2)
-    return text[:keep].rstrip() + "\n\n[... truncated ...]\n\n" + text[-keep:].lstrip()
-
-
-def _git_capture(repo: Path, args: Sequence[str]) -> str:
-    proc = subprocess.run(["git", *args], cwd=str(repo), text=True, capture_output=True)
-    text = (proc.stdout or "") + (("\n" if proc.stdout and proc.stderr else "") + (proc.stderr or ""))
-    if proc.returncode != 0:
-        text = f"git {' '.join(args)} failed with exit {proc.returncode}\n" + text
-    return text
-
-
-def _read_optional_excerpt(path: Path, *, limit: int = 24000) -> str:
-    if not path.exists():
-        return ""
-    return _truncate_text(path.read_text(encoding="utf-8", errors="replace"), limit)
-
-
-def _is_git_tracked(repo: Path, rel: str) -> bool:
-    proc = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel], cwd=str(repo), text=True, capture_output=True)
-    return proc.returncode == 0
-
-
-def _untracked_file_excerpts(repo: Path, changed: Sequence[str], *, per_file_limit: int = 10000, max_files: int = 12) -> dict[str, str]:
-    out: dict[str, str] = {}
-    for rel in changed:
-        if len(out) >= max_files:
-            break
-        path = repo / rel
-        if not path.exists() or path.is_dir() or _is_git_tracked(repo, rel):
-            continue
-        try:
-            out[rel] = _read_optional_excerpt(path, limit=per_file_limit)
-        except Exception as exc:
-            out[rel] = f"<could not read untracked file: {exc}>"
-    return out
-
-
-def candidate_failure_extra(repo: Path, paths: Any, *, note: str = "") -> dict[str, Any]:
-    changed = git_changed_paths(repo, include_untracked=True)
-    # Include enough candidate state for the next GPT attempt to learn from the
-    # failed patch even though the autorunner will clean the worktree before the
-    # next attempt.  git diff does not show untracked new files, so include
-    # bounded excerpts separately.
-    return {
-        "note": note,
-        "candidate_changed_paths": changed,
-        "candidate_diff_stat": _truncate_text(_git_capture(repo, ["diff", "--stat"]), 12000),
-        "candidate_diff": _truncate_text(_git_capture(repo, ["diff", "--"]), MAX_FAILURE_CONTEXT_CHARS),
-        "candidate_untracked_file_excerpts": _untracked_file_excerpts(repo, changed),
-        "staged_response_json": _read_optional_excerpt(paths.staging_dir / "response.json", limit=20000),
-        "staged_changes_patch": _read_optional_excerpt(paths.staging_dir / "changes.patch", limit=MAX_FAILURE_CONTEXT_CHARS),
-    }
-
-
-def cleanup_failed_candidate(
-    *,
-    config: MilestoneConfig,
-    slice_entry: Mapping[str, Any],
-    paths: Any,
-    allow_dirty: bool,
-    reason: str,
-) -> None:
-    if allow_dirty:
-        warn("failed-candidate cleanup skipped because --allow-dirty was passed")
-        return
-    changed = git_changed_paths(config.repo, include_untracked=True)
-    if not changed:
-        return
-    allowed = config.allowed_paths_for_slice(slice_entry)
-    forbidden = config.forbidden_paths_for_slice(slice_entry)
-    # Restore only paths governed by the active slice policy.  .vc4_auto logs are
-    # ignored by git_changed_paths by default and are preserved.
-    to_restore = [p for p in changed if match_any_path(p, allowed) or match_any_path(p, forbidden)]
-    if not to_restore:
-        return
-    report = {"reason": reason, "restored_paths": to_restore}
-    write_json_file(paths.log_dir / "failed_candidate_cleanup.json", report)
-    restore_paths(config.repo, to_restore)
-    log(f"cleaned failed candidate changes: {len(to_restore)} path(s)")
-
-
-def codex_counts_total(codex_counts: Mapping[str, int]) -> int:
-    return sum(int(v) for v in codex_counts.values())
-
-
-def classify_gate_failure_route(
-    *,
-    slice_entry: Mapping[str, Any],
-    failed: CommandResult,
-    codex_counts: Mapping[str, int],
-) -> dict[str, Any]:
-    return classify_failure(
-        slice_entry=slice_entry,
-        stage="gate",
-        gate=failed.gate,
-        log_text=tail_file(failed.log_path, max_lines=240),
-        codex_attempts_used=codex_counts_total(codex_counts),
-        codex_attempts_by_category=codex_counts,
-    )
 
 
 def commit_slice_if_needed(config: MilestoneConfig, slice_entry: Mapping[str, Any], *, no_commit: bool) -> bool:
@@ -496,124 +500,6 @@ def run_gate_only_slice(
     return 1
 
 
-def run_codex_repair_loop(
-    *,
-    config: MilestoneConfig,
-    state: StateStore,
-    slice_entry: Mapping[str, Any],
-    paths: Any,
-    initial_failed: CommandResult,
-    codex_counts: dict[str, int],
-    allow_dirty: bool,
-    no_commit: bool,
-    verbose: bool,
-    codex_timeout_sec: int,
-    gate_timeout_sec: int,
-) -> tuple[bool, Path | None, list[CommandResult] | None]:
-    """Run repeated narrow Codex repairs while the classifier says mechanical.
-
-    Slice 1 needed a compile fix, then a lit PATH fix, then a lit config syntax
-    fix.  The old runner allowed only one global Codex repair and then burned
-    GPT Pro attempts on deterministic plumbing.  This loop budgets Codex per
-    mechanical category and reclassifies after every repaired gate run.
-    """
-
-    failed = initial_failed
-    repair_index = 0
-    while True:
-        route = classify_gate_failure_route(slice_entry=slice_entry, failed=failed, codex_counts=codex_counts)
-        write_json_file(paths.log_dir / "failure_route.json", route)
-        write_json_file(paths.log_dir / f"failure_route_{repair_index:02d}.json", route)
-        log(f"failure route: {route['route']} ({route['category']})")
-
-        if route.get("route") != "codex":
-            fp = write_gate_failure_packet(
-                state=state,
-                paths=paths,
-                slice_entry=slice_entry,
-                failed=failed,
-                extra={
-                    "route": route,
-                    **candidate_failure_extra(config.repo, paths, note="gate failed; routing to next GPT attempt"),
-                },
-            )
-            return False, fp, None
-
-        category = str(route.get("category") or "mechanical")
-        repair_index += 1
-        codex_prompt = paths.log_dir / f"codex_mechanical_{repair_index:02d}_{category}.md"
-        render_codex_prompt(repo=config.repo, slice_entry=slice_entry, failed_result=failed, route=route, out_path=codex_prompt)
-        codex = invoke_codex(repo=config.repo, prompt_path=codex_prompt, log_dir=paths.log_dir, timeout_sec=codex_timeout_sec, verbose=verbose)
-        codex_counts[category] = codex_counts.get(category, 0) + 1
-        if not codex.ok:
-            fp = paths.failure_packet_path
-            write_failure_packet(
-                fp,
-                slice_entry=slice_entry,
-                stage="codex",
-                message="Codex mechanical fix failed",
-                command=codex.command,
-                exit_code=codex.exit_code,
-                timed_out=codex.timed_out,
-                log_path=codex.log_path,
-                extra={"route": route, **candidate_failure_extra(config.repo, paths, note="Codex failed")},
-            )
-            state.record_attempt(slice_id=str(slice_entry["id"]), attempt=paths.attempt, status="codex-failed", details={"category": category})
-            return False, fp, None
-
-        guard = guard_worktree(repo=config.repo, config=config, slice_entry=slice_entry, restore_disallowed=True)
-        write_json_file(paths.log_dir / f"codex_path_guard_{repair_index:02d}.json", guard)
-        if not guard.get("ok"):
-            fp = paths.failure_packet_path
-            write_failure_packet(
-                fp,
-                slice_entry=slice_entry,
-                stage="path-guard",
-                message="Codex changed paths outside the slice policy; disallowed paths were restored",
-                log_path=paths.log_dir / f"codex_path_guard_{repair_index:02d}.json",
-                extra={"route": route, **candidate_failure_extra(config.repo, paths, note="Codex path guard failed")},
-            )
-            state.record_attempt(slice_id=str(slice_entry["id"]), attempt=paths.attempt, status="codex-path-guard-failed", details={"category": category})
-            return False, fp, None
-
-        ok_after, results_after = run_slice_gates(
-            config=config,
-            slice_entry=slice_entry,
-            log_dir=paths.log_dir / f"after-codex-{repair_index:02d}",
-            allow_dirty=allow_dirty,
-            verbose=verbose,
-            timeout_sec=gate_timeout_sec,
-        )
-        if ok_after:
-            commit_slice_if_needed(config, slice_entry, no_commit=no_commit)
-            state.mark_slice_passed(
-                slice_id=str(slice_entry["id"]),
-                gate_results=[r.as_json(config.repo) for r in results_after],
-                repo_head=git_head(config.repo, allow_missing=True),
-            )
-            state.record_attempt(
-                slice_id=str(slice_entry["id"]),
-                attempt=paths.attempt,
-                status="passed-after-codex",
-                details={"codex_attempts_by_category": dict(codex_counts)},
-            )
-            log(f"PASS {slice_entry['id']} after Codex mechanical fix(es)")
-            return True, None, results_after
-
-        failed_after = first_failed(results_after)
-        if failed_after is None:
-            fp = paths.failure_packet_path
-            write_failure_packet(
-                fp,
-                slice_entry=slice_entry,
-                stage="gate",
-                message="Gates reported failure but no failed gate was found",
-                extra={"route": route, **candidate_failure_extra(config.repo, paths, note="inconsistent gate failure")},
-            )
-            return False, fp, results_after
-        failed = failed_after
-
-
 def run_gpt_slice(
     *,
     config: MilestoneConfig,
@@ -630,7 +516,8 @@ def run_gpt_slice(
 ) -> int:
     slice_id = str(slice_entry["id"])
     max_gpt = int(slice_entry.get("max_gpt_attempts", 1) or 1)
-    codex_counts: dict[str, int] = {}
+    codex_attempts_used = 0
+    codex_attempts_by_category: dict[str, int] = {}
     failure_packet: Path | None = None
 
     for _ in range(max_gpt):
@@ -676,6 +563,8 @@ def run_gpt_slice(
             log(f"chat failed; retrying same slice with failure packet {relpath(config.repo, failure_packet)}")
             continue
 
+        attempt_baseline_paths = git_changed_paths(config.repo, include_untracked=True)
+
         try:
             report = validate_and_apply(
                 repo=config.repo,
@@ -684,7 +573,6 @@ def run_gpt_slice(
                 staging_dir=paths.staging_dir,
                 apply_patch=True,
                 write_report=paths.log_dir / "patch_gate_report.json",
-                require_encoded_patch=True,
             )
             log("patch applied: " + ", ".join(report.get("changed_paths", [])))
         except Exception as exc:
@@ -695,9 +583,8 @@ def run_gpt_slice(
                 stage="patch-guard",
                 message=str(exc),
                 log_path=paths.log_dir / "patch_gate_report.json" if (paths.log_dir / "patch_gate_report.json").exists() else None,
-                extra=candidate_failure_extra(config.repo, paths, note="patch gate rejected staged GPT output"),
+                extra=collect_staged_output_report(paths.staging_dir),
             )
-            cleanup_failed_candidate(config=config, slice_entry=slice_entry, paths=paths, allow_dirty=allow_dirty, reason="patch-gate failure")
             state.record_attempt(slice_id=slice_id, attempt=attempt, status="patch-rejected")
             log(f"patch rejected; failure packet {relpath(config.repo, failure_packet)}")
             continue
@@ -709,42 +596,86 @@ def run_gpt_slice(
             allow_dirty=allow_dirty,
             verbose=verbose,
             timeout_sec=gate_timeout_sec,
+            patch_preflight=True,
         )
         if ok:
             commit_slice_if_needed(config, slice_entry, no_commit=no_commit)
             state.mark_slice_passed(slice_id=slice_id, gate_results=[r.as_json(config.repo) for r in results], repo_head=git_head(config.repo, allow_missing=True))
-            state.record_attempt(slice_id=slice_id, attempt=attempt, status="passed", details={"codex_attempts_by_category": dict(codex_counts)})
+            state.record_attempt(slice_id=slice_id, attempt=attempt, status="passed")
             log(f"PASS {slice_id}")
             return 0
 
         failed = first_failed(results)
         assert failed is not None
-        passed_after_codex, failure_packet, _results_after_codex = run_codex_repair_loop(
-            config=config,
-            state=state,
+        failure_packet = write_gate_failure_packet(state=state, paths=paths, slice_entry=slice_entry, failed=failed)
+        route = classify_failure(
             slice_entry=slice_entry,
-            paths=paths,
-            initial_failed=failed,
-            codex_counts=codex_counts,
-            allow_dirty=allow_dirty,
-            no_commit=no_commit,
-            verbose=verbose,
-            codex_timeout_sec=codex_timeout_sec,
-            gate_timeout_sec=gate_timeout_sec,
+            stage="gate",
+            gate=failed.gate,
+            log_text=tail_file(failed.log_path, max_lines=200),
+            codex_attempts_used=codex_attempts_used,
+            codex_attempts_by_category=codex_attempts_by_category,
         )
-        if passed_after_codex:
-            return 0
+        write_json_file(paths.log_dir / "failure_route.json", route)
+        log(f"failure route: {route['route']} ({route['category']})")
 
-        state.record_attempt(
-            slice_id=slice_id,
-            attempt=attempt,
-            status="needs-gpt-fix",
-            details={
-                "failure_packet": relpath(config.repo, failure_packet) if failure_packet else "",
-                "codex_attempts_by_category": dict(codex_counts),
-            },
-        )
-        cleanup_failed_candidate(config=config, slice_entry=slice_entry, paths=paths, allow_dirty=allow_dirty, reason="failed GPT/Codex candidate")
+        if route.get("route") == "codex":
+            codex_prompt = paths.log_dir / "codex_mechanical_prompt.md"
+            render_codex_prompt(repo=config.repo, slice_entry=slice_entry, failed_result=failed, route=route, out_path=codex_prompt)
+            codex = invoke_codex(repo=config.repo, prompt_path=codex_prompt, log_dir=paths.log_dir, timeout_sec=codex_timeout_sec, verbose=verbose)
+            codex_attempts_used += 1
+            category = str(route.get("category", "mechanical"))
+            codex_attempts_by_category[category] = codex_attempts_by_category.get(category, 0) + 1
+            if not codex.ok:
+                state.record_attempt(slice_id=slice_id, attempt=attempt, status="codex-failed")
+                failure_packet = paths.failure_packet_path
+                write_failure_packet(
+                    failure_packet,
+                    slice_entry=slice_entry,
+                    stage="codex",
+                    message="Codex mechanical fix failed",
+                    command=codex.command,
+                    exit_code=codex.exit_code,
+                    timed_out=codex.timed_out,
+                    log_path=codex.log_path,
+                )
+                cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
+                continue
+            guard = guard_worktree(repo=config.repo, config=config, slice_entry=slice_entry, restore_disallowed=True)
+            write_json_file(paths.log_dir / "codex_path_guard.json", guard)
+            if not guard.get("ok"):
+                failure_packet = paths.failure_packet_path
+                write_failure_packet(
+                    failure_packet,
+                    slice_entry=slice_entry,
+                    stage="path-guard",
+                    message="Codex changed paths outside the slice policy; disallowed paths were restored",
+                    log_path=paths.log_dir / "codex_path_guard.json",
+                )
+                state.record_attempt(slice_id=slice_id, attempt=attempt, status="codex-path-guard-failed")
+                cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
+                continue
+            ok_after_codex, results_after_codex = run_slice_gates(
+                config=config,
+                slice_entry=slice_entry,
+                log_dir=paths.log_dir / "after-codex",
+                allow_dirty=allow_dirty,
+                verbose=verbose,
+                timeout_sec=gate_timeout_sec,
+                patch_preflight=True,
+            )
+            if ok_after_codex:
+                commit_slice_if_needed(config, slice_entry, no_commit=no_commit)
+                state.mark_slice_passed(slice_id=slice_id, gate_results=[r.as_json(config.repo) for r in results_after_codex], repo_head=git_head(config.repo, allow_missing=True))
+                state.record_attempt(slice_id=slice_id, attempt=attempt, status="passed-after-codex")
+                log(f"PASS {slice_id} after Codex mechanical fix")
+                return 0
+            failed_after = first_failed(results_after_codex)
+            if failed_after:
+                failure_packet = write_gate_failure_packet(state=state, paths=paths, slice_entry=slice_entry, failed=failed_after)
+
+        cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
+        state.record_attempt(slice_id=slice_id, attempt=attempt, status="needs-gpt-fix", details={"failure_packet": relpath(config.repo, failure_packet) if failure_packet else ""})
         log(f"attempt did not pass; next GPT attempt will receive {relpath(config.repo, failure_packet) if failure_packet else '<none>'}")
 
     state.mark_slice_failed(slice_id=slice_id, failure_packet=relpath(config.repo, failure_packet) if failure_packet else None)
@@ -765,42 +696,9 @@ def _dry_run_record(records: list[dict[str, Any]], name: str, ok: bool, **detail
     log(f"dry-run {status}: {name}")
 
 
-def _write_transport_metadata(staging: Path, *, encoded_patch: bool = True) -> None:
-    meta = staging / ".gpt-web-run"
-    meta.mkdir(parents=True, exist_ok=True)
-    manifest = {
-        "ok": True,
-        "fileMetadata": [
-            {"relPath": "response.json", "gitPatchLinesDecoded": False},
-            {"relPath": "changes.patch", "gitPatchLinesDecoded": encoded_patch},
-        ],
-    }
-    (meta / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    (meta / "answer.md").write_text(
-        "BEGIN_GPTWEB_FILE token=dryrun path=response.json\n{}\nEND_GPTWEB_FILE token=dryrun\n"
-        "BEGIN_GPTWEB_FILE token=dryrun encoding=git-patch-lines path=changes.patch\n"
-        "R|diff --git a/example b/example\n"
-        "END_GPTWEB_FILE token=dryrun\n",
-        encoding="utf-8",
-    )
-
-
 def _write_stage5_valid_smoke_patch(staging: Path) -> None:
     staging.mkdir(parents=True, exist_ok=True)
-    (staging / "response.json").write_text(
-        json.dumps(
-            {
-                "summary": "stage5 valid patch-gate smoke",
-                "changed_paths": ["compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir"],
-                "diagnosis": [],
-                "tests_to_run": [],
-                "risk_notes": [],
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    (staging / "response.json").write_text(json.dumps({"slice_id": "m1-01-artifact-tool-skeleton", "summary": "stage5 valid patch-gate smoke", "changed_paths": ["compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir"], "tests_to_run": []}, indent=2) + "\n", encoding="utf-8")
     (staging / "changes.patch").write_text(
         """diff --git a/compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir b/compiler/test/CodeGen/VC4/Emit/stage5-dry-run-smoke.mlir
 new file mode 100644
@@ -812,25 +710,11 @@ index 0000000..a9c1a15
 """,
         encoding="utf-8",
     )
-    _write_transport_metadata(staging, encoded_patch=True)
 
 
 def _write_stage5_forbidden_smoke_patch(staging: Path) -> None:
     staging.mkdir(parents=True, exist_ok=True)
-    (staging / "response.json").write_text(
-        json.dumps(
-            {
-                "summary": "stage5 forbidden patch-gate smoke",
-                "changed_paths": ["compiler/test/CodeGen/VC4/catalog.json"],
-                "diagnosis": [],
-                "tests_to_run": [],
-                "risk_notes": [],
-            },
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    (staging / "response.json").write_text(json.dumps({"slice_id": "m1-01-artifact-tool-skeleton", "summary": "stage5 forbidden patch-gate smoke", "changed_paths": ["compiler/test/CodeGen/VC4/catalog.json"], "tests_to_run": []}, indent=2) + "\n", encoding="utf-8")
     (staging / "changes.patch").write_text(
         """diff --git a/compiler/test/CodeGen/VC4/catalog.json b/compiler/test/CodeGen/VC4/catalog.json
 --- a/compiler/test/CodeGen/VC4/catalog.json
@@ -841,7 +725,6 @@ def _write_stage5_forbidden_smoke_patch(staging: Path) -> None:
 """,
         encoding="utf-8",
     )
-    _write_transport_metadata(staging, encoded_patch=True)
 
 
 def cmd_dry_run(args: argparse.Namespace) -> int:
@@ -1167,6 +1050,41 @@ def cmd_render_prompt(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def probe_already_satisfied(
+    *,
+    config: MilestoneConfig,
+    state: StateStore,
+    slice_entry: Mapping[str, Any],
+    allow_dirty: bool,
+    no_commit: bool,
+    verbose: bool,
+    gate_timeout_sec: int,
+) -> bool:
+    """Run declared gates once before GPT to detect already-landed slices."""
+    if bool(slice_entry.get("hardware_required", False)):
+        return False
+    slice_id = str(slice_entry["id"])
+    log_dir = state.root / "logs" / slice_id / "already-satisfied-probe"
+    ok, results = run_slice_gates(
+        config=config,
+        slice_entry=slice_entry,
+        log_dir=log_dir,
+        allow_dirty=allow_dirty,
+        verbose=verbose,
+        timeout_sec=gate_timeout_sec,
+        patch_preflight=False,
+    )
+    if not ok:
+        if verbose:
+            log(f"already-satisfied probe did not pass for {slice_id}; continuing to GPT workflow")
+        return False
+    commit_slice_if_needed(config, slice_entry, no_commit=no_commit)
+    state.mark_slice_passed(slice_id=slice_id, gate_results=[r.as_json(config.repo) for r in results], repo_head=git_head(config.repo, allow_missing=True))
+    state.record_attempt(slice_id=slice_id, attempt=state.next_attempt_index(slice_id), status="already-satisfied", details={"probe_log_dir": relpath(config.repo, log_dir)})
+    log(f"PASS {slice_id}: declared gates already pass; marked slice as already satisfied without GPT")
+    return True
+
 def cmd_run(args: argparse.Namespace) -> int:
     repo, config, state = load_config_and_state(args)
     if args.next:
@@ -1187,6 +1105,17 @@ def cmd_run(args: argparse.Namespace) -> int:
     ensure_clean_repo(repo, allow_dirty=args.allow_dirty)
 
     max_gpt = int(slice_entry.get("max_gpt_attempts", 0) or 0)
+    if max_gpt > 0 and not args.skip_already_landed_probe:
+        if probe_already_satisfied(
+            config=config,
+            state=state,
+            slice_entry=slice_entry,
+            allow_dirty=args.allow_dirty,
+            no_commit=args.no_commit,
+            verbose=args.verbose,
+            gate_timeout_sec=args.gate_timeout_sec,
+        ):
+            return 0
     if max_gpt <= 0:
         return run_gate_only_slice(
             config=config,
@@ -1215,6 +1144,12 @@ def cmd_run(args: argparse.Namespace) -> int:
 def cmd_reset_slice(args: argparse.Namespace) -> int:
     repo, _config, state = load_config_and_state(args)
     state.reset_slice(args.slice)
+    if args.purge_files:
+        for child in ["prompts", "staging", "logs", "failure_packets"]:
+            path = state.root / child / args.slice
+            if path.exists():
+                shutil.rmtree(path, ignore_errors=True)
+        log(f"purged stored attempts/logs for {args.slice}")
     log(f"reset state for {args.slice}")
     return 0
 
@@ -1268,6 +1203,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--codex-timeout-sec", type=int, default=DEFAULT_CODEX_TIMEOUT_SEC)
     p_run.add_argument("--gate-timeout-sec", type=int, default=DEFAULT_GATE_TIMEOUT_SEC)
     p_run.add_argument("--browser-internal-timeout-ms", type=int, default=DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS)
+    p_run.add_argument("--skip-already-landed-probe", action="store_true", help="do not run declared gates before GPT to detect an already-landed slice")
     p_run.set_defaults(func=cmd_run)
 
 
@@ -1302,6 +1238,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
     p_reset = sub.add_parser("reset-slice")
     p_reset.add_argument("--slice", required=True)
+    p_reset.add_argument("--purge-files", action="store_true", help="also remove .vc4_auto prompts/staging/logs/failure_packets for the slice")
     p_reset.set_defaults(func=cmd_reset_slice)
 
     p_list = sub.add_parser("list-gates")

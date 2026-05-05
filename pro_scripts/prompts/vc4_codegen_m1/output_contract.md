@@ -1,104 +1,82 @@
-# GPT Pro Output Contract for VC4 Codegen Milestone 1
+# VC4 Codegen Milestone 1 GPT Output Contract
 
-GPT Pro responses are transported through `pro_scripts/gpt_web_driver.js`. The driver wraps the prompt and requires `BEGIN_GPTWEB_FILE` / `END_GPTWEB_FILE` blocks. It writes the parsed files into a staging directory; the autorun script then validates and applies them.
+GPT Pro must return exactly the files requested by the active prompt in GPTWEB file blocks.  For implementation/failure-fix prompts that means exactly:
 
-For normal implementation and fix attempts, GPT Pro must produce exactly these staged files:
+1. `response.json`
+2. `changes.patch`
 
-```text
-response.json
-changes.patch
-```
+Do not include prose outside GPTWEB file blocks.
 
-No compiler source file should be emitted as a direct GPTWEB file in normal Milestone 1 implementation attempts. Compiler changes must be represented in `changes.patch`.
+## Required file block format
 
-## Required `response.json` shape
-
-`response.json` must be valid JSON and must use this shape:
-
-```json
-{
-  "slice_id": "m1-03-minimal-thrend-qasm",
-  "attempt_kind": "implementation",
-  "summary": ["Short human-readable summary."],
-  "diagnosis": ["Why this patch is the right scoped change."],
-  "changed_paths": ["repo/relative/path"],
-  "tests_added_or_updated": ["repo/relative/path"],
-  "expected_gates": ["gate:name"],
-  "codex_hint": null,
-  "risk_notes": []
-}
-```
-
-Allowed `attempt_kind` values:
-
-```text
-implementation
-fix
-diagnosis
-```
-
-For implementation and fix attempts, `changes.patch` is required. For a diagnosis-only prompt, `changes.patch` is omitted only if the prompt explicitly requests diagnosis-only output.
-
-## Required `changes.patch` shape
-
-The decoded staged `changes.patch` file must be a unified git diff relative to the repository root:
-
-```diff
-diff --git a/path/to/file b/path/to/file
---- a/path/to/file
-+++ b/path/to/file
-@@ ...
-```
-
-Patch transport requirement:
-
-- GPT Pro must not transport `changes.patch` as raw diff text.
-- GPT Pro must emit the `changes.patch` GPTWEB block with `encoding=git-patch-lines`.
-- The web driver decodes `encoding=git-patch-lines` into the actual staged `changes.patch` file before patch-gate validation.
-- Each encoded body line must use exactly one record prefix:
-
-```text
-R|payload   -> payload
-C|payload   -> one leading context space, then payload
-D|payload   -> -, then payload
-A|payload   -> +, then payload
-```
-
-Use `R|` for diff metadata lines such as `diff --git`, `index`, `---`, `+++`, and `@@`.
-Use `C|` for unchanged hunk body lines.
-Use `D|` for deleted hunk body lines.
-Use `A|` for added hunk body lines.
-
-For payload text, entity-shield Markdown/HTML-sensitive characters such as `&`, `<`, and `>` as `&amp;`, `&lt;`, and `&gt;`. This is mandatory for C++ template syntax such as `llvm::cl::opt<std::string>`.
-
-Patch requirements:
-
-- Paths must be repo-relative.
-- Paths must not be absolute.
-- Paths must not contain `..`.
-- Paths must match the current slice's `allowed_paths`.
-- Paths must not match the current slice's `forbidden_paths`.
-- The decoded staged patch must apply with `git apply --check`.
-- The decoded staged patch must not include binary blobs.
-- The decoded staged patch must not mutate reference bundles, `expected.json`, or `catalog.json` unless explicitly allowed by the slice.
-
-## GPTWEB block reminder
-
-The final response to the web driver must contain only GPTWEB file blocks. The intended block names are:
+Use this exact outer form:
 
 ```text
 BEGIN_GPTWEB_FILE path=response.json
-...
+{ ... valid JSON ... }
 END_GPTWEB_FILE
 
-BEGIN_GPTWEB_FILE encoding=git-patch-lines path=changes.patch
-R|diff --git a/path/to/file b/path/to/file
-R|--- a/path/to/file
-R|+++ b/path/to/file
-R|@@ -1 +1,2 @@
-C|unchanged line
-A|added line
+BEGIN_GPTWEB_FILE path=changes.patch encoding=git-patch-lines
+R|diff --git a/path b/path
+R|--- a/path
+R|+++ b/path
+R|@@ ...
+C| unchanged context line payload
+D|deleted line payload without the leading minus
+A|added line payload without the leading plus
 END_GPTWEB_FILE
 ```
 
-The driver may add a token in its wrapper. Obey the exact wrapper format when present.
+`changes.patch` must use `encoding=git-patch-lines`.  In that encoding each physical output line starts with one of:
+
+- `R|` for raw diff metadata lines such as `diff --git`, `index`, `---`, `+++`, `@@`, `new file mode`, `deleted file mode`.
+- `C|` for context lines; the driver decodes this to a leading space.
+- `D|` for deletion lines; the driver decodes this to a leading `-`.
+- `A|` for addition lines; the driver decodes this to a leading `+`.
+
+Inside the payload, HTML-sensitive characters may be entity-shielded.  The driver decodes entities before writing the patch.  Do not use Markdown fences inside GPTWEB file blocks.
+
+## `response.json` schema
+
+Implementation and failure-fix responses must be a JSON object with these keys:
+
+```json
+{
+  "summary": "one-sentence patch summary",
+  "diagnosis": ["concise user-visible diagnosis bullets"],
+  "changed_paths": ["repo/relative/path/from/changes.patch"],
+  "tests_to_run": ["declared gates or deterministic commands expected to pass"],
+  "risk_notes": ["known limitations or assumptions"]
+}
+```
+
+`changed_paths` must exactly match the repo-relative paths changed by `changes.patch`.  The patch gate rejects mismatches before applying the patch.
+
+## Patch constraints
+
+The patch must be a normal unified git patch rooted at the repo root.  It must touch only the active slice allowed paths and must not touch forbidden paths.  Binary patches are rejected.  Do not mutate reference bundles, `expected.json`, `catalog.json`, `.vc4_auto/**`, or the GPT web driver unless the slice explicitly allows it.
+
+## Executable repo/test/tool contract
+
+Prompt text is not the source of truth; deterministic preflight checks enforce this contract after every patch:
+
+- Changed lit tests must not use unresolved `%tool` tokens.
+- A new repo-built tool used in a lit `RUN:` line must have proven lit substitution or proven lit PATH/tool-dir wiring.
+- Changed lit config files must be valid Python syntax.
+- CMake/tool/test wiring must be local to the slice and allowed by path policy.
+- The full declared gates still run after preflight.
+
+Prefer direct build-bin paths in deterministic shell gates, and prefer `%tool` substitutions only when the patch also wires them in lit in a way preflight can detect.
+
+
+## Deterministic post-patch invariants
+
+After `changes.patch` applies, the autorunner runs cheap preflight invariants before expensive gates:
+
+- `response.json.changed_paths` must exactly match the decoded `changes.patch` paths.
+- Changed lit configs such as `lit.cfg.py` and `lit.local.cfg` must parse as Python.
+- Every custom `%token` used in a changed lit `RUN:` line must be defined by lit config before `check-vc4` runs.
+- Every bare project tool used in a changed lit `RUN:` line must be resolvable through PATH, `compiler/build/bin`, or a CMake tool target introduced by the patch.
+- A patch that is already applied is treated as an idempotence/state issue; do not regenerate equivalent add-file patches against an already-landed slice.
+
+These invariants are enforced by deterministic scripts, not by reviewer interpretation. Satisfy them in the patch itself.

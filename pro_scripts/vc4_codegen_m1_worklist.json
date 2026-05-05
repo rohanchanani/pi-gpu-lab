@@ -40,6 +40,21 @@
       "reject_reference_bundle_mutation": true,
       "reject_expected_json_mutation_by_default": true,
       "reject_catalog_mutation_by_default": true
+    },
+    "mechanical_budgets": {
+      "mechanical_compile": 1,
+      "mechanical_build": 1,
+      "cmake_or_target": 1,
+      "lit_config_syntax": 1,
+      "lit_tool_resolution": 1,
+      "tool_resolution": 1,
+      "test_invocation": 1
+    },
+    "gate_environment_contract": {
+      "path_prefix": [
+        "compiler/build/bin"
+      ],
+      "lit_run_line_contract": "Every %token in changed RUN lines must be defined by lit config or be a lit builtin. The gate runner also prepends compiler/build/bin to PATH for bare repo-built tools."
     }
   },
   "slices": [
@@ -81,7 +96,19 @@
       "codex_policy": "never",
       "max_gpt_attempts": 0,
       "max_codex_attempts": 0,
-      "commit_message": "vc4 codegen m1: preflight repo and toolchain checks"
+      "commit_message": "vc4 codegen m1: preflight repo and toolchain checks",
+      "mechanical_budgets": {},
+      "products": {},
+      "success_probes": [
+        "git:clean-or-confirm",
+        "json:worklist",
+        "json:context-profiles",
+        "tool:gpt-web-driver-exists",
+        "build:vc4-opt",
+        "build:check-vc4",
+        "fixture:minimal-thrend-exists"
+      ],
+      "probe_already_satisfied": false
     },
     {
       "id": "m1-01-artifact-tool-skeleton",
@@ -129,10 +156,43 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: add vc4-codegen artifact tool skeleton"
+      "commit_message": "vc4 codegen m1: add vc4-codegen artifact tool skeleton",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ],
+        "artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "tool:vc4-codegen-help",
+        "tool:vc4-codegen-skeleton-valid",
+        "tool:vc4-codegen-skeleton-invalid",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-02-emit-contract-local-tests",
@@ -177,10 +237,32 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: lock milestone 1 input-boundary tests"
+      "commit_message": "vc4 codegen m1: lock milestone 1 input-boundary tests",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:codegen-emit-contract",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-03-minimal-thrend-qasm",
@@ -227,10 +309,34 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: emit assembling qasm for minimal thrend"
+      "commit_message": "vc4 codegen m1: emit assembling qasm for minimal thrend",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "tool:vc4-codegen-generate:minimal_thrend",
+        "lit:emit-minimal-thrend",
+        "tool:vc4asm-candidate:minimal_thrend",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-04-qpu-bundle-basic",
@@ -276,10 +382,33 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: emit canonical qpu.bundle qasm for basic alu slots"
+      "commit_message": "vc4 codegen m1: emit canonical qpu.bundle qasm for basic alu slots",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-bundle-basic",
+        "tool:vc4asm-candidate:qpu_bundle_basic",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-05-qpu-ldi-sema",
@@ -325,10 +454,33 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: emit qpu.ldi and qpu.sema qasm"
+      "commit_message": "vc4 codegen m1: emit qpu.ldi and qpu.sema qasm",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-ldi-sema",
+        "tool:vc4asm-candidate:qpu_ldi_sema",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-06-qpu-branch-delay-slots",
@@ -374,10 +526,33 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: emit qpu.branch with labels and delay slots"
+      "commit_message": "vc4 codegen m1: emit qpu.branch with labels and delay slots",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:emit-qpu-branch-delay-slots",
+        "tool:vc4asm-candidate:qpu_branch",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-07-launch-abi-model-header",
@@ -423,10 +598,33 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: parse launch abi and emit semantic header"
+      "commit_message": "vc4 codegen m1: parse launch abi and emit semantic header",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:emit-launch-abi-header",
+        "cc:generated-header-minimal",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-08-launcher-c-uniform-packing",
@@ -472,10 +670,33 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: emit launcher c with uniform packing"
+      "commit_message": "vc4 codegen m1: emit launcher c with uniform packing",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "lit:emit-launcher-uniform-packing",
+        "cc:generated-launcher-minimal",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-09-candidate-bundle-runner",
@@ -525,10 +746,34 @@
         "build:check-vc4"
       ],
       "hardware_required": false,
-      "codex_policy": "compile_only_once",
+      "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: add candidate bundle runner integration"
+      "commit_message": "vc4 codegen m1: add candidate bundle runner integration",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "cmake_or_target": 1,
+        "lit_config_syntax": 1,
+        "lit_tool_resolution": 1,
+        "tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "candidate:generate:minimal_thrend",
+        "candidate:assemble:minimal_thrend",
+        "candidate:build:minimal_thrend",
+        "build:check-vc4"
+      ]
     },
     {
       "id": "m1-10-hardware-smoke-minimal",
@@ -580,7 +825,31 @@
       "codex_policy": "never_for_hardware",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "vc4 codegen m1: run minimal_thrend candidate on hardware"
+      "commit_message": "vc4 codegen m1: run minimal_thrend candidate on hardware",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_cmake_or_target": 1,
+        "mechanical_test_invocation": 1,
+        "mechanical_lit_config": 1,
+        "mechanical_candidate_build": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "hardware:reference:minimal_thrend",
+        "build:vc4-codegen",
+        "candidate:generate:minimal_thrend",
+        "candidate:assemble:minimal_thrend",
+        "candidate:build:minimal_thrend",
+        "hardware:candidate:minimal_thrend",
+        "result:expected-json:minimal_thrend"
+      ]
     },
     {
       "id": "m1-11-simple-memory-output",
@@ -635,7 +904,31 @@
       "codex_policy": "never_for_hardware",
       "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
-      "commit_message": "complete vc4 codegen milestone 1 memory-output smoke gate"
+      "commit_message": "complete vc4 codegen milestone 1 memory-output smoke gate",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_cmake_or_target": 1,
+        "mechanical_test_invocation": 1,
+        "mechanical_lit_config": 1,
+        "mechanical_candidate_build": 1
+      },
+      "products": {
+        "build_targets": [
+          "vc4-codegen"
+        ],
+        "tools": [
+          "vc4-codegen"
+        ]
+      },
+      "success_probes": [
+        "hardware:reference:saxpy_full",
+        "build:vc4-codegen",
+        "candidate:generate:saxpy_full",
+        "candidate:assemble:saxpy_full",
+        "candidate:build:saxpy_full",
+        "hardware:candidate:saxpy_full",
+        "result:expected-json:saxpy_full"
+      ]
     }
   ]
 }
