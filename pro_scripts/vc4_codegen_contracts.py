@@ -13,7 +13,7 @@ except ModuleNotFoundError:  # pragma: no cover
     from vc4_codegen_state import DriverError, git_changed_paths, normalize_relpath, relpath  # type: ignore
 
 RUN_LINE_RE = re.compile(r"^\s*(?://|#)\s*RUN:\s*(.*)$")
-PERCENT_TOKEN_RE = re.compile(r"%(?!\{)([A-Za-z_][A-Za-z0-9_.-]*)")
+PERCENT_TOKEN_RE = re.compile(r"%(?!\{)([A-Za-z_][A-Za-z0-9_-]*)")
 TOOL_SUBST_RE = re.compile(r"ToolSubst\(\s*['\"](%[A-Za-z_][A-Za-z0-9_.-]*)['\"]")
 SUBST_APPEND_RE = re.compile(r"(?:config\.)?substitutions\.append\(\s*\(\s*['\"](%[A-Za-z_][A-Za-z0-9_.-]*)['\"]")
 ADD_TOOL_RE = re.compile(r"\b(?:add_mlir_tool|add_llvm_tool|add_llvm_executable|add_executable)\s*\(\s*([A-Za-z0-9_.+-]+)")
@@ -233,22 +233,3 @@ def render_capabilities_markdown(snapshot: Mapping[str, Any]) -> str:
 def render_repo_capabilities_markdown(repo: Path) -> str:
     return render_capabilities_markdown(build_repo_capabilities(repo))
 
-# Backwards-compatible names used by older prompt/gate runner code.
-def build_repo_capabilities(repo: Path) -> dict[str, Any]:
-    return build_repo_capability_snapshot(repo, None)
-
-
-def render_capabilities_markdown(report: Mapping[str, Any]) -> str:
-    lines = ["### Repository capability snapshot", ""]
-    for key in ["build_bin_tools", "path_tools_detected", "cmake_tool_targets", "lit_substitutions"]:
-        values = report.get(key, [])
-        if isinstance(values, list):
-            shown = ", ".join(str(x) for x in values[:80]) or "<none>"
-            lines.append(f"- **{key}**: {shown}")
-    contracts = report.get("contracts", [])
-    if isinstance(contracts, list) and contracts:
-        lines.append("")
-        lines.append("Executable contracts:")
-        for item in contracts:
-            lines.append(f"- {item}")
-    return "\n".join(lines)

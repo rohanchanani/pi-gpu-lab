@@ -87,6 +87,7 @@
         "git:clean-or-confirm",
         "json:worklist",
         "json:context-profiles",
+        "prompt:templates",
         "tool:gpt-web-driver-exists",
         "build:vc4-opt",
         "build:check-vc4",

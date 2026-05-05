@@ -28,6 +28,37 @@ except ModuleNotFoundError:  # pragma: no cover
 
 TEMPLATE_DIR = Path("pro_scripts/prompts/vc4_codegen_m1")
 
+SUPPORTED_TEMPLATE_KEYS = {
+    "GENERATED_AT_UTC",
+    "SLICE_ID",
+    "SLICE_TITLE",
+    "SLICE_INTENT",
+    "ALLOWED_PATHS",
+    "FORBIDDEN_PATHS",
+    "GATES",
+    "NON_GOALS",
+    "ATTEMPT",
+    "MODE",
+    "TEMPLATE_PATH",
+    "CONSTITUTION",
+    "OUTPUT_CONTRACT",
+    "SLICE_CONTRACT",
+    "CODEX_CONTRACT",
+    "RESPONSE_JSON_SCHEMA",
+    "FAILURE_PACKET_JSON",
+    "REPO_CAPABILITY_SNAPSHOT",
+    "REPO_CAPABILITIES",
+    "REPO_CAPABILITIES_MARKDOWN",
+    "REPO_CAPABILITIES_JSON",
+    "CONTEXT_PACK",
+    "CONTEXT_METADATA_JSON",
+    # Codex mechanical prompt placeholders are validated here too. They are
+    # rendered by vc4_codegen_m1_autorun.py, not by this GPT renderer.
+    "FAILED_GATE",
+    "FAILED_COMMAND",
+    "FAILED_LOG_TAIL",
+}
+
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -102,6 +133,33 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     return fenced(json.dumps(data, indent=2, sort_keys=True), "json")
 
 
+def discover_template_placeholders(template: str) -> set[str]:
+    import re
+    return {m.group(1) for m in re.finditer(r"\{\{([A-Z0-9_]+)\}\}", template)}
+
+
+def validate_prompt_templates(repo: Path) -> dict[str, Any]:
+    templates = sorted((repo / TEMPLATE_DIR).glob("*.md.j2"))
+    reports: list[dict[str, Any]] = []
+    missing: dict[str, list[str]] = {}
+    supported = set(SUPPORTED_TEMPLATE_KEYS)
+    for path in templates:
+        rel = relpath(repo, path)
+        placeholders = sorted(discover_template_placeholders(path.read_text(encoding="utf-8", errors="replace")))
+        unresolved = sorted(set(placeholders) - supported)
+        if unresolved:
+            missing[rel] = unresolved
+        reports.append({"path": rel, "placeholders": placeholders, "unsupported": unresolved})
+    return {
+        "schema_version": 1,
+        "ok": not missing,
+        "template_count": len(templates),
+        "supported_keys": sorted(supported),
+        "templates": reports,
+        "unsupported_placeholders": missing,
+    }
+
+
 def simple_render(template: str, values: Mapping[str, str]) -> str:
     out = template
     for key, value in values.items():
@@ -170,6 +228,9 @@ def render_prompt(
         "RESPONSE_JSON_SCHEMA": response_schema(mode),
         "FAILURE_PACKET_JSON": failure_packet_json(repo, failure_packet),
         "REPO_CAPABILITY_SNAPSHOT": fenced(json.dumps(repo_capability_snapshot, indent=2, sort_keys=True), "json"),
+        # Backward-compatible alias for older templates. Keep this provider
+        # even after templates migrate to the explicit MARKDOWN/JSON split.
+        "REPO_CAPABILITIES": render_capabilities_markdown(repo_capabilities),
         "CONTEXT_PACK": context_pack.rstrip(),
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
         "REPO_CAPABILITIES_MARKDOWN": render_capabilities_markdown(repo_capabilities),

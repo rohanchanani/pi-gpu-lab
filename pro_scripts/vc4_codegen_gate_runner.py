@@ -255,6 +255,20 @@ class GateRunner:
             return self._gate_json_file(gate, self.config.worklist_path, log_dir)
         if gate == "json:context-profiles":
             return self._gate_json_file(gate, self.config.context_profiles_path, log_dir)
+        if gate == "prompt:templates":
+            report = log_dir / "prompt_templates_report.json"
+            return self.run_command(
+                gate=gate,
+                cmd=[
+                    sys.executable,
+                    str(self.repo / "pro_scripts/vc4_codegen_preflight.py"),
+                    "prompt-templates",
+                    "--report",
+                    str(report),
+                ],
+                log_dir=log_dir,
+                timeout_sec=min(self.timeout_sec, 300),
+            )
         if gate == "tool:gpt-web-driver-exists":
             path = self.config.gpt_web_driver()
             ok = path.exists() and path.is_file()

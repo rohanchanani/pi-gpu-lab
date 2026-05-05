@@ -51,6 +51,20 @@ def cmd_patch_invariants(args: argparse.Namespace) -> int:
     return 0 if report.get("ok") else 1
 
 
+def cmd_prompt_templates(args: argparse.Namespace) -> int:
+    repo, _config, _slice_entry = _load(args)
+    try:
+        from vc4_codegen_prompt_render import validate_prompt_templates
+    except ModuleNotFoundError:  # pragma: no cover
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from vc4_codegen_prompt_render import validate_prompt_templates  # type: ignore
+    report = validate_prompt_templates(repo)
+    if args.report:
+        write_report(Path(args.report), report)
+    print(json.dumps(report, indent=2, sort_keys=True))
+    return 0 if report.get("ok") else 1
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".")
@@ -66,6 +80,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     q.add_argument("--changed-path", action="append", default=[])
     q.add_argument("--report", default="")
     q.set_defaults(func=cmd_patch_invariants)
+    r = sub.add_parser("prompt-templates")
+    r.add_argument("--slice", default="")
+    r.add_argument("--report", default="")
+    r.set_defaults(func=cmd_prompt_templates)
     return parser
 
 
