@@ -67,6 +67,37 @@ def load_optional_file(repo: Path, rel: str) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+
+def hardened_output_contract() -> str:
+    return """
+
+## Autorunner hard requirements learned from slice 1 failures
+
+These requirements override any ambiguous wording elsewhere in this prompt.
+
+1. Emit exactly two user-facing GPTWEB files for implementation/fix attempts: `response.json` and `changes.patch`.
+2. Do not emit direct compiler/source/test files such as `compiler/.../*.cpp`, `compiler/.../*.mlir`, or `CMakeLists.txt` as GPTWEB files. All repo edits must be represented only inside `changes.patch`.
+3. The `changes.patch` GPTWEB file must use `encoding=git-patch-lines` in the BEGIN header:
+
+````text
+BEGIN_GPTWEB_FILE token=<token> encoding=git-patch-lines path=changes.patch
+R|diff --git a/path b/path
+R|--- a/path
+R|+++ b/path
+R|@@ -1 +1 @@
+D|old line without the leading minus
+A|new line without the leading plus
+END_GPTWEB_FILE token=<token>
+````
+
+4. For git-patch-lines records, use exactly these prefixes: `R|` for raw diff metadata, `C|` for context lines, `D|` for deleted lines, and `A|` for added lines. Do not put raw unified-diff lines directly in the GPT response.
+5. Entity-shield Markdown/HTML-sensitive payload characters in git-patch-lines records, especially `&`, `<`, and `>`, as `&amp;`, `&lt;`, and `&gt;`. This prevents C++ templates, includes, JSON strings, and string literals from being mangled by the web UI.
+6. `response.json.changed_paths` must exactly match the repo-relative paths changed by `changes.patch`.
+7. Do not rely on bare tool names in new lit tests unless the patch also wires the tool into lit PATH/substitutions. Prefer `%vc4-codegen`-style substitutions when they exist; otherwise make the CMake/lit PATH wiring explicit.
+8. Treat command-not-found, CMake target missing, and lit config syntax issues as mechanical plumbing. Keep fixes narrow and local.
+""".rstrip()
+
+
 def response_schema(mode: str) -> str:
     if mode == "diagnosis":
         schema = {
@@ -142,6 +173,7 @@ def render_prompt(
         context_out.parent.mkdir(parents=True, exist_ok=True)
         context_out.write_text(context_pack, encoding="utf-8")
     output_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/output_contract.md")
+    output_contract = output_contract.rstrip() + "\n\n" + hardened_output_contract()
     slice_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/slice_contract.md")
     constitution = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/constitution.md")
     codex_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/codex_contract.md")

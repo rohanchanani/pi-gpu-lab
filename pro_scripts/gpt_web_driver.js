@@ -288,6 +288,7 @@ function parseFileBlocks(answer, expectedToken) {
 function writeGeneratedFiles(parsedFiles, outDir) {
   const written = [];
   const skipped = [];
+  const fileMetadata = [];
   const root = path.resolve(outDir);
   for (const f of parsedFiles) {
     if (f.skipped) {
@@ -303,12 +304,19 @@ function writeGeneratedFiles(parsedFiles, outDir) {
       mkdirp(path.dirname(dest));
       fs.writeFileSync(dest, String(f.content ?? ""), "utf8");
       written.push(dest);
-      vlog("wrote file", { dest });
+      fileMetadata.push({
+        relPath,
+        dest,
+        header: String(f.header || ""),
+        entityDecoded: !!f.entityDecoded,
+        gitPatchLinesDecoded: !!f.gitPatchLinesDecoded,
+      });
+      vlog("wrote file", { dest, relPath, gitPatchLinesDecoded: !!f.gitPatchLinesDecoded });
     } catch (err) {
       skipped.push({ relPath: f.relPath, error: err.message });
     }
   }
-  return { written, skipped };
+  return { written, skipped, fileMetadata };
 }
 
 // ---------------------------------------------------------------------------
@@ -2156,8 +2164,8 @@ async function finalizeAnswer({
 
   const parsedFiles = parseFileBlocks(answer || "", token);
   vlog("finalizeAnswer: parsed file blocks", { count: parsedFiles.length });
-  const { written, skipped } = writeGeneratedFiles(parsedFiles, outDir);
-  vlog("finalizeAnswer: write summary", { written: written.length, skipped: skipped.length });
+  const { written, skipped, fileMetadata } = writeGeneratedFiles(parsedFiles, outDir);
+  vlog("finalizeAnswer: write summary", { written: written.length, skipped: skipped.length, fileMetadata });
 
   if (written.length === 0 || skipped.length > 0) {
     await dumpDebugState(page, metaDir);
@@ -2198,6 +2206,7 @@ async function finalizeAnswer({
     answerPath,
     token,
     files: written,
+    fileMetadata,
     skipped,
     parsedBlockCount: parsedFiles.length,
     keptChatGptTabOpen: !closeTab,

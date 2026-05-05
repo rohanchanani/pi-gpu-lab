@@ -104,6 +104,24 @@ class GateRunner:
     def build_bin(self, name: str) -> Path:
         return self.build_dir / "bin" / name
 
+    def tool_env(self) -> dict[str, str]:
+        """Environment for gates that may invoke lit/RUN lines.
+
+        Slice 1 exposed that newly-created tools can build successfully but then
+        be invisible to lit tests that use bare tool names.  Prepending the
+        build bin directory here makes `ninja check-vc4` and direct lit gates see
+        freshly-built tools such as vc4-codegen without requiring ad-hoc local
+        PATH edits.
+        """
+
+        current = os.environ.get("PATH", "")
+        build_bin = str(self.build_dir / "bin")
+        if current.startswith(build_bin + os.pathsep) or current == build_bin:
+            path = current
+        else:
+            path = build_bin + (os.pathsep + current if current else "")
+        return {"PATH": path}
+
     def candidate_dir(self, name: str) -> Path:
         return self.state.root / "candidates" / name
 
@@ -255,9 +273,15 @@ class GateRunner:
         if gate == "build:vc4-opt":
             return self._gate_configured_command(gate, log_dir, ["ninja", "-C", "compiler/build", "vc4-opt"])
         if gate == "build:check-vc4":
-            return self._gate_configured_command(gate, log_dir, ["ninja", "-C", "compiler/build", "check-vc4"], timeout_sec=max(self.timeout_sec, 3600))
+            return self._gate_configured_command(
+                gate,
+                log_dir,
+                ["ninja", "-C", "compiler/build", "check-vc4"],
+                timeout_sec=max(self.timeout_sec, 3600),
+                env=self.tool_env(),
+            )
         if gate == "build:vc4-codegen":
-            return self._gate_configured_command(gate, log_dir, ["ninja", "-C", "compiler/build", "vc4-codegen"])
+            return self._gate_configured_command(gate, log_dir, ["ninja", "-C", "compiler/build", "vc4-codegen"], env=self.tool_env())
 
         if gate == "tool:vc4-codegen-help":
             return self.run_command(gate=gate, cmd=[self._vc4_codegen(), "--help"], log_dir=log_dir)
@@ -370,15 +394,23 @@ class GateRunner:
                 msg += "all optional contract/support files are also present"
         return self.write_check_log(gate=gate, log_dir=log_dir, ok=ok, message=msg)
 
-    def _gate_configured_command(self, gate: str, log_dir: Path, fallback: list[str], timeout_sec: int | None = None) -> CommandResult:
+    def _gate_configured_command(
+        self,
+        gate: str,
+        log_dir: Path,
+        fallback: list[str],
+        timeout_sec: int | None = None,
+        env: Mapping[str, str] | None = None,
+    ) -> CommandResult:
         defaults = self.config.defaults.get("build_commands", {}) if isinstance(self.config.defaults, dict) else {}
         key_map = {
             "build:vc4-opt": "build_vc4_opt",
+            "build:vc4-codegen": "build_vc4_codegen",
             "build:check-vc4": "check_vc4",
         }
         raw = defaults.get(key_map.get(gate, "")) if isinstance(defaults, dict) else None
         cmd = shlex.split(str(raw)) if raw else fallback
-        return self.run_command(gate=gate, cmd=cmd, log_dir=log_dir, timeout_sec=timeout_sec)
+        return self.run_command(gate=gate, cmd=cmd, log_dir=log_dir, timeout_sec=timeout_sec, env=env)
 
     def _vc4_codegen(self) -> str:
         path = self.build_bin("vc4-codegen")
@@ -481,7 +513,7 @@ class GateRunner:
         target = emit_dir
         if not target.exists():
             return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"lit target does not exist yet: {relpath(self.repo, target)}")
-        return self.run_command(gate=gate, cmd=[lit_cmd, "-v", str(target)], log_dir=log_dir)
+        return self.run_command(gate=gate, cmd=[lit_cmd, "-v", str(target)], log_dir=log_dir, env=self.tool_env())
 
     def _gate_cc_generated(self, gate: str, log_dir: Path, *, compile_launcher: bool) -> CommandResult:
         name = "minimal_thrend"
