@@ -1,82 +1,91 @@
 # VC4 Codegen Milestone 1 GPT Output Contract
 
-GPT Pro must return exactly the files requested by the active prompt in GPTWEB file blocks.  For implementation/failure-fix prompts that means exactly:
+Implementation and failure-fix prompts use the **downloadable bundle transport**. Do not paste compiler source, C++ string literals, shell scripts, or unified diffs into chat text.
 
-1. `response.json`
-2. `changes.patch`
-
-Do not include prose outside GPTWEB file blocks.
-
-## Required file block format
-
-Use this exact outer form:
+The downloadable transport is named:
 
 ```text
-BEGIN_GPTWEB_FILE path=response.json
-{ ... valid JSON ... }
-END_GPTWEB_FILE
-
-BEGIN_GPTWEB_FILE path=changes.patch encoding=git-patch-lines
-R|diff --git a/path b/path
-R|--- a/path
-R|+++ b/path
-R|@@ ...
-C| unchanged context line payload
-D|deleted line payload without the leading minus
-A|added line payload without the leading plus
-END_GPTWEB_FILE
+vc4_codegen_download_bundle_v1
 ```
 
-`changes.patch` must use `encoding=git-patch-lines`.  In that encoding each physical output line starts with one of:
+The active prompt gives exact filenames for two downloadable artifacts:
 
-- `R|` for raw diff metadata lines such as `diff --git`, `index`, `---`, `+++`, `@@`, `new file mode`, `deleted file mode`.
-- `C|` for context lines; the driver decodes this to a leading space.
-- `D|` for deletion lines; the driver decodes this to a leading `-`.
-- `A|` for addition lines; the driver decodes this to a leading `+`.
+1. a zip file
+2. a tiny shell launcher
 
-Inside the payload, HTML-sensitive characters may be entity-shielded.  The driver decodes entities before writing the patch.  Do not use Markdown fences inside GPTWEB file blocks.
+The local driver downloads or collects those exact files, then validates and applies the zip with trusted local code. The GPT-generated shell launcher is validated as a narrow manual-recovery launcher; it is not trusted for arbitrary repo mutation.
 
-## `response.json` schema
+## Zip layout
 
-Implementation and failure-fix responses must be a JSON object with these keys:
+The zip must contain exactly this source-bearing layout:
+
+```text
+manifest.json
+repo/<repo-relative changed file 1>
+repo/<repo-relative changed file 2>
+...
+```
+
+No absolute paths, no parent-directory components, no symlinks, no `.git/**`, no `.vc4_auto/**`, and no hidden source-bearing files outside `repo/`.
+
+## `manifest.json` schema
 
 ```json
 {
+  "schema_version": 1,
+  "transport": "vc4_codegen_download_bundle_v1",
+  "slice_id": "active slice id",
+  "slice_title": "active slice title",
+  "attempt": 1,
+  "changed_paths": [
+    {
+      "path": "repo/relative/path",
+      "action": "write",
+      "sha256": "64 lowercase hex characters of repo/<path> bytes",
+      "mode": "0644"
+    }
+  ],
+  "deleted_paths": [],
   "summary": "one-sentence patch summary",
   "diagnosis": ["concise user-visible diagnosis bullets"],
-  "changed_paths": ["repo/relative/path/from/changes.patch"],
   "tests_to_run": ["declared gates or deterministic commands expected to pass"],
   "risk_notes": ["known limitations or assumptions"]
 }
 ```
 
-`changed_paths` must exactly match the repo-relative paths changed by `changes.patch`.  The patch gate rejects mismatches before applying the patch.
+`changed_paths` may include `action = "write"` or `action = "delete"`. Write entries must have a corresponding file at `repo/<path>` in the zip. Delete entries must not have a corresponding file. `deleted_paths` is optional and is treated as extra delete entries.
 
-## Patch constraints
+The local applier rejects the bundle unless:
 
-The patch must be a normal unified git patch rooted at the repo root.  It must touch only the active slice allowed paths and must not touch forbidden paths.  Binary patches are rejected.  Do not mutate reference bundles, `expected.json`, `catalog.json`, `.vc4_auto/**`, or the GPT web driver unless the slice explicitly allows it.
+- `transport` is exactly `vc4_codegen_download_bundle_v1`.
+- `slice_id` matches the active slice.
+- every path is repo-relative and allowlisted for the active slice.
+- no path matches the forbidden-path policy.
+- every listed write file exists in the zip and its SHA-256 matches the manifest.
+- no unlisted `repo/` file exists in the zip.
+- file modes are only `0644` or `0755`.
+- file contents are text-like and do not contain NUL bytes.
 
-## Executable repo/test/tool contract
+## Shell launcher
 
-Prompt text is not the source of truth; deterministic preflight checks enforce this contract after every patch:
+The shell launcher must be tiny and must delegate to the trusted local applier. It must not contain source code. It must not run `rm -rf`, network commands, `eval`, `source`, Python one-liners, or arbitrary repo mutation.
 
-- Changed lit tests must not use unresolved `%tool` tokens.
-- A new repo-built tool used in a lit `RUN:` line must have proven lit substitution or proven lit PATH/tool-dir wiring.
-- Changed lit config files must be valid Python syntax.
-- CMake/tool/test wiring must be local to the slice and allowed by path policy.
-- The full declared gates still run after preflight.
+Expected shape:
 
-Prefer direct build-bin paths in deterministic shell gates, and prefer `%tool` substitutions only when the patch also wires them in lit in a way preflight can detect.
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+REPO_ROOT="${1:-$(pwd)}"
+BUNDLE_ZIP="${HOME}/Downloads/<exact bundle zip filename>"
+APPLY_SCRIPT="${HOME}/Downloads/<exact shell filename>"
+python3 "${REPO_ROOT}/pro_scripts/vc4_codegen_download_bundle_apply.py" validate-apply \
+  --repo "${REPO_ROOT}" \
+  --slice "<active slice id>" \
+  --bundle "${BUNDLE_ZIP}" \
+  --apply-script "${APPLY_SCRIPT}" \
+  --expect-attempt "<attempt>"
+```
 
+## Legacy fallback
 
-## Deterministic post-patch invariants
-
-After `changes.patch` applies, the autorunner runs cheap preflight invariants before expensive gates:
-
-- `response.json.changed_paths` must exactly match the decoded `changes.patch` paths.
-- Changed lit configs such as `lit.cfg.py` and `lit.local.cfg` must parse as Python.
-- Every custom `%token` used in a changed lit `RUN:` line must be defined by lit config before `check-vc4` runs.
-- Every bare project tool used in a changed lit `RUN:` line must be resolvable through PATH, `compiler/build/bin`, or a CMake tool target introduced by the patch.
-- A patch that is already applied is treated as an idempotence/state issue; do not regenerate equivalent add-file patches against an already-landed slice.
-
-These invariants are enforced by deterministic scripts, not by reviewer interpretation. Satisfy them in the patch itself.
+Older tooling may still accept `response.json` + `changes.patch` GPTWEB file blocks, but new implementation and failure-fix prompts should not use that path. The bundle transport exists specifically to avoid quote, backslash, markdown, and patch-rendering corruption.

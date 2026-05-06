@@ -44,6 +44,7 @@ LIT_TOOL_RESOLUTION_RE = re.compile(r"(unable to find [`']?%?[-A-Za-z0-9_+.]+[`'
 FILECHECK_RE = re.compile(r"(FileCheck|CHECK-|expected string not found|not found in input|possible intended match)", re.IGNORECASE)
 PATCH_ALREADY_APPLIED_RE = re.compile(r"(patch already appears applied|--reverse.*would apply|already exists in working directory|patch does not apply)", re.IGNORECASE)
 TRANSPORT_RE = re.compile(r"(Could not find ChatGPT prompt box|web-driver|browser|timeout|playwright|CDP|conversation URL)", re.IGNORECASE)
+ARTIFACT_RE = re.compile(r"(downloadable artifact|artifact_transport|bundle\.zip|apply_bundle|vc4_codegen_download_bundle_v1|bundle manifest|sha256 mismatch|missing downloadable)", re.IGNORECASE)
 
 DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_compile": 1,
@@ -86,8 +87,10 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
 
     if s in {"chat", "gpt-web-driver", "browser"} or TRANSPORT_RE.search(log) and "chat" in s:
         return "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs"
+    if ARTIFACT_RE.search(log):
+        return "artifact_transport", "Downloadable bundle transport or bundle manifest validation failed"
     if s in {"gpt-output-validation", "chat-output-validation", "patch-output-validation"}:
-        return "malformed_gpt_output", "GPT output did not satisfy response.json + changes.patch contract"
+        return "malformed_gpt_output", "GPT output did not satisfy the required staged output contract"
     if s in {"patch-guard", "path-guard", "forbidden-path", "git-apply"}:
         if PATCH_ALREADY_APPLIED_RE.search(log):
             return "repo_state_or_idempotence", "Patch could not apply cleanly and may already be applied or based on stale repo state"

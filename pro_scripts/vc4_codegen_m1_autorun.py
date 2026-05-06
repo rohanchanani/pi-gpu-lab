@@ -69,6 +69,7 @@ DEFAULT_CHAT_TIMEOUT_SEC = 45 * 60
 DEFAULT_CODEX_TIMEOUT_SEC = 20 * 60
 DEFAULT_GATE_TIMEOUT_SEC = 30 * 60
 DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS = 5 * 60 * 1000
+DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000
 
 
 # ---------------------------------------------------------------------------
@@ -133,7 +134,16 @@ def render_prompt(
         raise DriverError(f"prompt renderer succeeded but did not create {relpath(repo, out_path)}")
 
 
-def gpt_driver_command(repo: Path, *, mode: str, prompt_path: Path, out_dir: Path, response_timeout_sec: int, browser_timeout_ms: int) -> list[str]:
+def gpt_driver_command(
+    repo: Path,
+    *,
+    mode: str,
+    prompt_path: Path,
+    out_dir: Path,
+    response_timeout_sec: int,
+    browser_timeout_ms: int,
+    artifact_download_timeout_ms: int = 180000,
+) -> list[str]:
     driver = repo / "pro_scripts/gpt_web_driver.js"
     if not driver.exists():
         raise DriverError(f"missing GPT web driver: {relpath(repo, driver)}")
@@ -166,6 +176,8 @@ def gpt_driver_command(repo: Path, *, mode: str, prompt_path: Path, out_dir: Pat
         str(browser_timeout_ms),
         "--response-timeout-ms",
         str(max(60, response_timeout_sec - 60) * 1000),
+        "--artifact-download-timeout-ms",
+        str(artifact_download_timeout_ms),
     ]
 
 
@@ -178,6 +190,7 @@ def invoke_gpt(
     log_dir: Path,
     chat_timeout_sec: int,
     browser_internal_timeout_ms: int,
+    artifact_download_timeout_ms: int,
     verbose: bool,
 ) -> CommandResult:
     cmd = gpt_driver_command(
@@ -187,6 +200,7 @@ def invoke_gpt(
         out_dir=staging_dir,
         response_timeout_sec=chat_timeout_sec,
         browser_timeout_ms=browser_internal_timeout_ms,
+        artifact_download_timeout_ms=artifact_download_timeout_ms,
     )
     runner = GateRunner(MilestoneConfig.load(repo), verbose=verbose, timeout_sec=chat_timeout_sec)
     return runner.run_command(gate="chat:gpt-pro", cmd=cmd, log_dir=log_dir, timeout_sec=chat_timeout_sec)
@@ -398,6 +412,26 @@ def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 60000) -
             half = max_chars // 2
             text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
         report["staged_changes_patch"] = text
+    artifact = staging_dir / "artifact_transport.json"
+    if artifact.exists():
+        try:
+            report["artifact_transport_json"] = json.loads(artifact.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            report["artifact_transport_json"] = artifact.read_text(encoding="utf-8", errors="replace")[:max_chars]
+    bundle = staging_dir / "bundle.zip"
+    if bundle.exists():
+        report["bundle_zip"] = {"path": str(bundle), "bytes": bundle.stat().st_size}
+        try:
+            import zipfile
+            with zipfile.ZipFile(bundle) as zf:
+                report["bundle_zip_members"] = sorted(zf.namelist())[:200]
+                if "manifest.json" in zf.namelist():
+                    report["bundle_manifest_json"] = json.loads(zf.read("manifest.json").decode("utf-8", "replace"))
+        except Exception as exc:
+            report["bundle_zip_error"] = str(exc)
+    apply_script = staging_dir / "apply_bundle.sh"
+    if apply_script.exists():
+        report["apply_bundle_sh"] = apply_script.read_text(encoding="utf-8", errors="replace")[:4000]
     return report
 
 def write_gate_failure_packet(
@@ -513,6 +547,7 @@ def run_gpt_slice(
     codex_timeout_sec: int,
     gate_timeout_sec: int,
     browser_internal_timeout_ms: int,
+    artifact_download_timeout_ms: int = DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS,
 ) -> int:
     slice_id = str(slice_entry["id"])
     max_gpt = int(slice_entry.get("max_gpt_attempts", 1) or 1)
@@ -545,6 +580,7 @@ def run_gpt_slice(
             log_dir=paths.log_dir,
             chat_timeout_sec=chat_timeout_sec,
             browser_internal_timeout_ms=browser_internal_timeout_ms,
+            artifact_download_timeout_ms=artifact_download_timeout_ms,
             verbose=verbose,
         )
         if not chat.ok:
@@ -1138,6 +1174,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         codex_timeout_sec=args.codex_timeout_sec,
         gate_timeout_sec=args.gate_timeout_sec,
         browser_internal_timeout_ms=args.browser_internal_timeout_ms,
+        artifact_download_timeout_ms=args.artifact_download_timeout_ms,
     )
 
 
@@ -1203,6 +1240,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--codex-timeout-sec", type=int, default=DEFAULT_CODEX_TIMEOUT_SEC)
     p_run.add_argument("--gate-timeout-sec", type=int, default=DEFAULT_GATE_TIMEOUT_SEC)
     p_run.add_argument("--browser-internal-timeout-ms", type=int, default=DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS)
+    p_run.add_argument("--artifact-download-timeout-ms", type=int, default=DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS)
     p_run.add_argument("--skip-already-landed-probe", action="store_true", help="do not run declared gates before GPT to detect an already-landed slice")
     p_run.set_defaults(func=cmd_run)
 

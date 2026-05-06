@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """Validate and apply GPT Pro patches for VC4 codegen Milestone 1.
 
-Normal implementation/fix attempts must stage exactly:
+Normal implementation/fix attempts should use the downloadable bundle transport:
 
-  response.json
-  changes.patch
+  artifact_transport.json
+  bundle.zip
+  apply_bundle.sh
 
-Compiler edits must be represented by changes.patch.  This gate validates the
-response metadata, path policy, binary-patch policy, and git-apply state before
-any patch is applied to the repository.
+The legacy response.json + changes.patch transport is still accepted as a
+fallback for manual recovery and old prompts.  In both transports this gate
+validates metadata, path policy, forbidden paths, and repository state before
+any candidate change is applied.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
+    from vc4_codegen_download_bundle_apply import BundleApplyError, apply_bundle
     from vc4_codegen_state import (
         DriverError,
         MilestoneConfig,
@@ -39,6 +42,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from vc4_codegen_download_bundle_apply import BundleApplyError, apply_bundle  # type: ignore
     from vc4_codegen_state import (  # type: ignore
         DriverError,
         MilestoneConfig,
@@ -107,7 +111,43 @@ def reject_binary_patch(patch_text: str) -> None:
             raise PatchGateError(f"binary patch marker rejected: {marker!r}")
 
 
-def validate_staging_file_set(staging_dir: Path) -> None:
+def _ignored_staging_file(rel: str) -> bool:
+    ignored_prefixes = (".gpt-web-run/", "metadata/", "logs/", "downloads/")
+    return any(rel.startswith(prefix) for prefix in ignored_prefixes)
+
+
+def detect_staging_transport(staging_dir: Path) -> str:
+    if (staging_dir / "artifact_transport.json").exists() or (staging_dir / "bundle.zip").exists():
+        return "download_bundle"
+    if (staging_dir / "response.json").exists() or (staging_dir / "changes.patch").exists():
+        return "legacy_patch"
+    return "unknown"
+
+
+def validate_staging_file_set(staging_dir: Path, *, transport: str = "legacy_patch") -> None:
+    if transport == "download_bundle":
+        allowed = {"artifact_transport.json", "bundle.zip", "apply_bundle.sh"}
+        unexpected: list[str] = []
+        for path in staging_dir.rglob("*"):
+            if path.is_dir():
+                continue
+            rel = path.relative_to(staging_dir).as_posix()
+            if rel in allowed or _ignored_staging_file(rel):
+                continue
+            # Legacy answer/debug files may appear if ChatGPT also emitted text blocks;
+            # keep them for diagnostics but do not let source changes ride through them.
+            if rel in {"response.json", "changes.patch"}:
+                unexpected.append(rel)
+                continue
+            unexpected.append(rel)
+        if unexpected:
+            raise PatchGateError(
+                "download-bundle staging directory contains unexpected source-bearing files; "
+                "the bundle transport must carry candidate edits only through bundle.zip:\n"
+                + "\n".join(sorted(unexpected)[:200])
+            )
+        return
+
     allowed = {"response.json", "changes.patch"}
     ignored_prefixes = (".gpt-web-run/", "metadata/", "logs/")
     unexpected: list[str] = []
@@ -121,10 +161,38 @@ def validate_staging_file_set(staging_dir: Path) -> None:
     if unexpected:
         raise PatchGateError(
             "staging directory contains direct GPTWEB files outside response.json + changes.patch; "
-            "normal Milestone 1 attempts must transport compiler changes only through changes.patch:\n"
+            "legacy Milestone 1 patch attempts must transport compiler changes only through changes.patch:\n"
             + "\n".join(sorted(unexpected)[:200])
         )
 
+
+def load_download_bundle_transport(staging_dir: Path) -> tuple[Path, Path | None, dict[str, Any]]:
+    validate_staging_file_set(staging_dir, transport="download_bundle")
+    transport_path = staging_dir / "artifact_transport.json"
+    transport: dict[str, Any] = {}
+    if transport_path.exists():
+        data = read_json_file(transport_path)
+        if not isinstance(data, dict):
+            raise PatchGateError("artifact_transport.json must contain a JSON object")
+        transport = dict(data)
+
+    def resolve_candidate(value: Any, fallback: str) -> Path:
+        if isinstance(value, str) and value.strip():
+            candidate = staging_dir / normalize_relpath(value)
+            if candidate.exists():
+                return candidate
+        return staging_dir / fallback
+
+    downloaded = transport.get("downloaded_files") if isinstance(transport.get("downloaded_files"), dict) else {}
+    bundle_value = downloaded.get("bundle_zip") or transport.get("bundle_zip_path") or transport.get("bundle_zip")
+    script_value = downloaded.get("apply_script") or transport.get("apply_script_path") or transport.get("apply_script")
+    bundle_path = resolve_candidate(bundle_value, "bundle.zip")
+    script_path = resolve_candidate(script_value, "apply_bundle.sh") if script_value or (staging_dir / "apply_bundle.sh").exists() else (staging_dir / "apply_bundle.sh")
+    if not bundle_path.exists():
+        raise PatchGateError(f"download bundle transport is missing bundle.zip: looked for {bundle_path}")
+    if not script_path.exists():
+        raise PatchGateError(f"download bundle transport is missing apply_bundle.sh: looked for {script_path}")
+    return bundle_path, script_path, transport
 
 def load_staged_output(staging_dir: Path) -> tuple[dict[str, Any], Path, str]:
     validate_staging_file_set(staging_dir)
@@ -198,6 +266,32 @@ def validate_and_apply(
     apply_patch: bool,
     write_report: Path | None = None,
 ) -> dict[str, Any]:
+    transport = detect_staging_transport(staging_dir)
+    if transport == "download_bundle":
+        bundle_path, script_path, transport_meta = load_download_bundle_transport(staging_dir)
+        try:
+            report = apply_bundle(
+                repo=repo,
+                config=config,
+                slice_entry=slice_entry,
+                bundle_path=bundle_path,
+                apply_script=script_path,
+                expect_attempt=None,
+                check_only=not apply_patch,
+                write_report=write_report,
+            )
+        except BundleApplyError as exc:
+            raise PatchGateError(str(exc)) from exc
+        report["staging_dir"] = str(staging_dir)
+        report["artifact_transport_json"] = transport_meta
+        if write_report:
+            write_json_file(write_report, report)
+        return report
+    if transport == "unknown":
+        raise PatchGateError(
+            f"staging directory contains neither downloadable bundle artifacts nor legacy response.json + changes.patch: {staging_dir}"
+        )
+
     response, patch_path, patch_text = load_staged_output(staging_dir)
     reject_binary_patch(patch_text)
     patch_paths = extract_patch_paths(patch_text)
@@ -238,6 +332,7 @@ def validate_and_apply(
 
     report = {
         "ok": True,
+        "transport": "legacy_patch",
         "slice_id": slice_entry.get("id"),
         "staging_dir": str(staging_dir),
         "response_json": dict(response),

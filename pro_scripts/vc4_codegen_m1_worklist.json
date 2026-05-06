@@ -11,8 +11,9 @@
     "auto_commit_on_pass": true,
     "hardware_gates_required_by_default": true,
     "gpt_output_files": [
-      "response.json",
-      "changes.patch"
+      "artifact_transport.json",
+      "bundle.zip",
+      "apply_bundle.sh"
     ],
     "build_commands": {
       "build_vc4_opt": "ninja -C compiler/build vc4-opt",
@@ -55,6 +56,22 @@
         "compiler/build/bin"
       ],
       "lit_run_line_contract": "Every %token in changed RUN lines must be defined by lit config or be a lit builtin. The gate runner also prepends compiler/build/bin to PATH for bare repo-built tools."
+    },
+    "gpt_output_transport": "download_bundle",
+    "download_bundle_transport": {
+      "schema_version": 1,
+      "transport": "vc4_codegen_download_bundle_v1",
+      "staged_files": [
+        "artifact_transport.json",
+        "bundle.zip",
+        "apply_bundle.sh"
+      ],
+      "zip_layout": [
+        "manifest.json",
+        "repo/<repo-relative changed files>"
+      ],
+      "trusted_applier": "pro_scripts/vc4_codegen_download_bundle_apply.py",
+      "legacy_patch_transport_retained": true
     }
   },
   "slices": [
@@ -104,6 +121,7 @@
         "git:clean-or-confirm",
         "json:worklist",
         "json:context-profiles",
+        "prompt:templates",
         "tool:gpt-web-driver-exists",
         "build:vc4-opt",
         "build:check-vc4",

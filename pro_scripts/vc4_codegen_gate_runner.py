@@ -163,10 +163,23 @@ class GateRunner:
         if self.verbose:
             print(f"[vc4-gate] RUN {gate}: {shown}", flush=True)
         try:
+            base_env = {**os.environ, **dict(env or {})}
+            path_prefix = []
+            gate_env = self.config.defaults.get("gate_environment_contract", {}) if isinstance(self.config.defaults, dict) else {}
+            if isinstance(gate_env, Mapping):
+                for raw in gate_env.get("path_prefix", []) if isinstance(gate_env.get("path_prefix", []), list) else []:
+                    prefix_path = self.repo / str(raw)
+                    path_prefix.append(str(prefix_path))
+            # Always expose repo-built tools to subprocesses and lit RUN lines.
+            default_bin = str(self.build_dir / "bin")
+            if default_bin not in path_prefix:
+                path_prefix.insert(0, default_bin)
+            old_path = base_env.get("PATH", "")
+            base_env["PATH"] = os.pathsep.join([*path_prefix, old_path]) if old_path else os.pathsep.join(path_prefix)
             proc = subprocess.run(
                 [str(x) for x in cmd],
                 cwd=str(cwd),
-                env={**os.environ, **dict(env or {})},
+                env=base_env,
                 text=True,
                 capture_output=True,
                 timeout=timeout_sec or self.timeout_sec,

@@ -50,10 +50,32 @@ The following machine-generated snapshot is the executable contract for local to
 
 {{OUTPUT_CONTRACT}}
 
+## Downloadable artifact contract
+
+{{DOWNLOAD_CONTRACT_MARKDOWN}}
+
+Machine-readable contract:
+
+{{DOWNLOAD_CONTRACT_JSON}}
+
+You must create these exact downloadable files:
+
+1. `{{BUNDLE_ZIP_FILENAME}}`
+2. `{{APPLY_SCRIPT_FILENAME}}`
+
+Do **not** paste a patch. Do **not** paste full source files. Do **not** use GPTWEB file blocks for this failure-fix response. The zip is the source of truth.
+
+The zip must contain `manifest.json` and `repo/<changed paths>`. `manifest.json` must follow this schema shape:
+
+{{RESPONSE_JSON_SCHEMA}}
+
+The shell script must be only a tiny launcher delegating to `pro_scripts/vc4_codegen_download_bundle_apply.py` with the exact zip filename, active slice id, and attempt number. Do not put source code in the shell script.
+
+If the correct conclusion is that the previous task was underspecified or the slice needs a smaller prerequisite test, encode that in the bundle manifest and provide the smallest safe repo changes that add that test or diagnostic, still respecting allowed paths. Do not edit reference bundles or weaken tests.
+
 ## Executable repo/test/tool contract
 
 {{REPO_CAPABILITIES}}
-
 
 ## Deterministic repo capability snapshot
 
@@ -63,28 +85,11 @@ The following machine-generated snapshot is the executable contract for local to
 
 ## Executable workflow invariants
 
-After your patch is applied, deterministic preflight will inspect changed tests, lit RUN lines, lit config syntax, patch metadata, and tool/CMake wiring before expensive gates run. Do not rely on prompt prose alone. Make the repo contract true in files.
+After your bundle is applied, deterministic preflight will inspect changed tests, lit RUN lines, lit config syntax, metadata, and tool/CMake wiring before expensive gates run. Do not rely on prompt prose alone. Make the repo contract true in files.
 
 ## Failure packet
 
 {{FAILURE_PACKET_JSON}}
-
-## Required staged files
-
-Return exactly two GPTWEB files:
-
-1. `response.json`
-2. `changes.patch`
-
-`response.json` must follow this schema shape:
-
-{{RESPONSE_JSON_SCHEMA}}
-
-`changes.patch` must be a surgical unified git patch rooted at the repo root. It must touch only the active slice allowed paths and must not touch forbidden paths.
-
-If the correct conclusion is that the previous task was underspecified or the slice needs a smaller prerequisite test, encode that in `response.json` and provide the smallest safe patch that adds that test or diagnostic, still respecting allowed paths. Do not edit reference bundles or weaken tests.
-
-Do not include prose outside GPTWEB file blocks.
 
 ## Context pack
 

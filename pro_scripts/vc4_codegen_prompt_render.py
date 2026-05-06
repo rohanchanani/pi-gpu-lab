@@ -50,6 +50,11 @@ SUPPORTED_TEMPLATE_KEYS = {
     "REPO_CAPABILITIES",
     "REPO_CAPABILITIES_MARKDOWN",
     "REPO_CAPABILITIES_JSON",
+    "ARTIFACT_PREFIX",
+    "BUNDLE_ZIP_FILENAME",
+    "APPLY_SCRIPT_FILENAME",
+    "DOWNLOAD_CONTRACT_JSON",
+    "DOWNLOAD_CONTRACT_MARKDOWN",
     "CONTEXT_PACK",
     "CONTEXT_METADATA_JSON",
     # Codex mechanical prompt placeholders are validated here too. They are
@@ -62,6 +67,40 @@ SUPPORTED_TEMPLATE_KEYS = {
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def artifact_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def safe_artifact_component(value: str) -> str:
+    out = []
+    for ch in value:
+        out.append(ch if ch.isalnum() or ch in {"-", "_", "."} else "-")
+    return "".join(out).strip("-._") or "slice"
+
+
+def build_download_contract(slice_id: str, attempt: int) -> dict[str, Any]:
+    prefix = f"vc4_codegen_m1__{safe_artifact_component(slice_id)}__attempt-{attempt:02d}__{artifact_stamp()}"
+    return {
+        "schema_version": 1,
+        "transport": "vc4_codegen_download_bundle_v1",
+        "artifact_prefix": prefix,
+        "bundle_zip": f"{prefix}.zip",
+        "apply_script": f"{prefix}.sh",
+    }
+
+
+def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
+    return "\n".join([
+        "## Required downloadable artifact names",
+        "",
+        f"Artifact prefix: `{contract['artifact_prefix']}`",
+        f"Bundle zip: `{contract['bundle_zip']}`",
+        f"Apply script: `{contract['apply_script']}`",
+        "",
+        "The local driver looks for these exact filenames in ChatGPT downloads / `~/Downloads` after the response settles.",
+    ]) + "\n"
 
 
 def fenced(text: str, language: str = "") -> str:
@@ -111,9 +150,16 @@ def response_schema(mode: str) -> str:
         }
     else:
         schema = {
+            "schema_version": 1,
+            "transport": "vc4_codegen_download_bundle_v1",
+            "slice_id": "active slice id",
+            "attempt": "integer attempt number",
+            "changed_paths": [
+                {"path": "repo/relative/path", "action": "write", "sha256": "64 lowercase hex chars", "mode": "0644"}
+            ],
+            "deleted_paths": [],
             "summary": "one-sentence patch summary",
             "diagnosis": ["concise, user-visible diagnosis bullets"],
-            "changed_paths": ["repo/relative/path/from/changes.patch"],
             "tests_to_run": ["deterministic gates or commands expected to pass"],
             "risk_notes": ["known limitations or assumptions, if any"],
         }
@@ -208,6 +254,7 @@ def render_prompt(
 
     repo_capabilities = build_repo_capabilities(repo)
     repo_capability_snapshot = repo_capabilities
+    download_contract = build_download_contract(slice_id, attempt)
 
     values = {
         "GENERATED_AT_UTC": utc_now(),
@@ -235,6 +282,11 @@ def render_prompt(
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
         "REPO_CAPABILITIES_MARKDOWN": render_capabilities_markdown(repo_capabilities),
         "REPO_CAPABILITIES_JSON": fenced(json.dumps(repo_capabilities, indent=2, sort_keys=True), "json"),
+        "ARTIFACT_PREFIX": str(download_contract["artifact_prefix"]),
+        "BUNDLE_ZIP_FILENAME": str(download_contract["bundle_zip"]),
+        "APPLY_SCRIPT_FILENAME": str(download_contract["apply_script"]),
+        "DOWNLOAD_CONTRACT_JSON": fenced(json.dumps(download_contract, indent=2, sort_keys=True), "json"),
+        "DOWNLOAD_CONTRACT_MARKDOWN": render_download_contract_markdown(download_contract),
     }
     return simple_render(template, values)
 

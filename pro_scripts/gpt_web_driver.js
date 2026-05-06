@@ -3,6 +3,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const child_process = require("child_process");
+const os = require("os");
 
 const CDP_URL = process.env.GPT_WEB_CDP_URL || "http://127.0.0.1:9222";
 
@@ -1873,14 +1874,240 @@ async function findTabByUrl(browser, targetUrl) {
   return null;
 }
 
+
+// ---------------------------------------------------------------------------
+// Download-bundle artifact transport
+// ---------------------------------------------------------------------------
+const DOWNLOAD_TRANSPORT = "vc4_codegen_download_bundle_v1";
+
+function parseDownloadBundleContract(promptText) {
+  const text = String(promptText || "");
+  if (!text.includes(DOWNLOAD_TRANSPORT)) return null;
+  function firstString(keys, suffixRe) {
+    for (const key of keys) {
+      const re = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"([^"]+)"`, "m");
+      const m = text.match(re);
+      if (m && (!suffixRe || suffixRe.test(m[1]))) return m[1];
+    }
+    return "";
+  }
+  let artifactPrefix = firstString(["artifact_prefix"], null);
+  let bundleZip = firstString(["bundle_zip", "bundle_zip_filename"], /\.zip$/);
+  let applyScript = firstString(["apply_script", "apply_script_filename"], /\.sh$/);
+
+  if (!artifactPrefix) {
+    const m = text.match(/ARTIFACT_PREFIX\s*[:=]\s*([A-Za-z0-9_.-]+)/);
+    if (m) artifactPrefix = m[1];
+  }
+  if (!bundleZip && artifactPrefix) bundleZip = `${artifactPrefix}.zip`;
+  if (!applyScript && artifactPrefix) applyScript = `${artifactPrefix}.sh`;
+
+  if (!bundleZip || !applyScript) {
+    return {
+      transport: DOWNLOAD_TRANSPORT,
+      error: "prompt mentions downloadable bundle transport but does not contain bundle_zip/apply_script filenames",
+      artifactPrefix,
+      bundleZip,
+      applyScript,
+    };
+  }
+  for (const name of [bundleZip, applyScript]) {
+    if (name !== path.basename(name) || name.includes("..") || name.includes("/") || name.includes("\\")) {
+      return { transport: DOWNLOAD_TRANSPORT, error: `unsafe artifact filename in prompt: ${name}` };
+    }
+  }
+  return { transport: DOWNLOAD_TRANSPORT, artifactPrefix, bundleZip, applyScript };
+}
+
+function statStableEnough(filePath, minMtimeMs) {
+  try {
+    const st1 = fs.statSync(filePath);
+    if (!st1.isFile()) return null;
+    if (st1.mtimeMs < minMtimeMs) return null;
+    const size1 = st1.size;
+    const st2 = fs.statSync(filePath);
+    if (st2.size !== size1) return null;
+    return { path: filePath, bytes: st2.size, mtimeMs: st2.mtimeMs };
+  } catch (_) {
+    return null;
+  }
+}
+
+function copyIfRecentDownload(filename, dest, minMtimeMs) {
+  const downloadsDir = path.join(os.homedir(), "Downloads");
+  const exact = path.join(downloadsDir, filename);
+  const exactStat = statStableEnough(exact, minMtimeMs);
+  if (exactStat) {
+    mkdirp(path.dirname(dest));
+    fs.copyFileSync(exact, dest);
+    return { ok: true, method: "downloads-folder-exact", source: exact, dest, ...exactStat };
+  }
+  return { ok: false, method: "downloads-folder-exact", filename, lookedIn: downloadsDir };
+}
+
+async function waitForDownloadFile(filename, dest, minMtimeMs, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  let lastLog = 0;
+  while (Date.now() < deadline) {
+    const copied = copyIfRecentDownload(filename, dest, minMtimeMs);
+    if (copied.ok) return copied;
+    if (Date.now() - lastLog > 5000) {
+      vlog("artifact download poll: waiting for file in ~/Downloads", {
+        filename,
+        remainingMs: Math.max(0, deadline - Date.now()),
+      });
+      lastLog = Date.now();
+    }
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return { ok: false, method: "downloads-folder-timeout", filename, timeoutMs };
+}
+
+async function findAndClickDownloadLink(page, filename) {
+  return await page
+    .evaluate((filename) => {
+      function visible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.visibility === "hidden" || style.display === "none") return false;
+        const rect = el.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }
+      function label(el) {
+        return [
+          el.getAttribute("download") || "",
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || "",
+          el.getAttribute("href") || "",
+          ((el.innerText || el.textContent || "") + "").trim(),
+        ]
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+      }
+      const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]'));
+      for (const el of candidates) {
+        if (!visible(el)) continue;
+        const hay = label(el);
+        if (!hay || !hay.includes(filename)) continue;
+        el.scrollIntoView({ block: "center", inline: "center" });
+        el.click();
+        return { ok: true, tag: el.tagName.toLowerCase(), label: hay.slice(0, 250) };
+      }
+      return { ok: false, reason: `no visible link/button containing ${filename}` };
+    }, filename)
+    .catch((err) => ({ ok: false, reason: String(err) }));
+}
+
+async function clickDownloadAndSave(page, filename, dest, timeoutMs) {
+  mkdirp(path.dirname(dest));
+  const downloadPromise = page.waitForEvent("download", { timeout: timeoutMs }).catch((err) => ({ __downloadError: err }));
+  const clickResult = await findAndClickDownloadLink(page, filename);
+  if (!clickResult.ok) {
+    return { ok: false, method: "click-download", filename, clickResult };
+  }
+  const download = await downloadPromise;
+  if (download && download.__downloadError) {
+    return {
+      ok: false,
+      method: "click-download",
+      filename,
+      clickResult,
+      error: download.__downloadError.message || String(download.__downloadError),
+    };
+  }
+  try {
+    await download.saveAs(dest);
+    const st = fs.statSync(dest);
+    return {
+      ok: true,
+      method: "click-download",
+      filename,
+      dest,
+      bytes: st.size,
+      suggestedFilename: download.suggestedFilename ? download.suggestedFilename() : "",
+      clickResult,
+    };
+  } catch (err) {
+    return { ok: false, method: "click-download", filename, clickResult, error: err.message || String(err) };
+  }
+}
+
+async function collectDownloadBundleArtifacts({ page, contract, outDir, metaDir, sinceMs, timeoutMs }) {
+  const downloadDir = path.join(outDir, "downloads");
+  mkdirp(downloadDir);
+  const minMtimeMs = Math.max(0, sinceMs - 1000);
+  const wanted = [
+    { role: "bundle_zip", filename: contract.bundleZip, canonical: "bundle.zip" },
+    { role: "apply_script", filename: contract.applyScript, canonical: "apply_bundle.sh" },
+  ];
+  const files = {};
+  const attempts = [];
+
+  for (const item of wanted) {
+    const dest = path.join(downloadDir, item.filename);
+    const canonicalDest = path.join(outDir, item.canonical);
+    let result = await clickDownloadAndSave(page, item.filename, dest, Math.min(timeoutMs, 45000));
+    attempts.push({ role: item.role, filename: item.filename, phase: "click", result });
+    if (!result.ok) {
+      result = await waitForDownloadFile(item.filename, dest, minMtimeMs, timeoutMs);
+      attempts.push({ role: item.role, filename: item.filename, phase: "poll-downloads", result });
+    }
+    if (!result.ok) {
+      return {
+        ok: false,
+        error: `missing downloadable artifact ${item.filename}`,
+        contract,
+        attempts,
+        downloaded_files: files,
+      };
+    }
+    fs.copyFileSync(dest, canonicalDest);
+    if (item.canonical.endsWith(".sh")) {
+      try { fs.chmodSync(canonicalDest, 0o755); } catch (_) {}
+      try { fs.chmodSync(dest, 0o755); } catch (_) {}
+    }
+    files[item.role] = path.relative(outDir, dest).replace(/\\/g, "/");
+    files[`${item.role}_canonical`] = item.canonical;
+  }
+
+  const transport = {
+    schema_version: 1,
+    transport: DOWNLOAD_TRANSPORT,
+    artifact_prefix: contract.artifactPrefix,
+    bundle_zip: contract.bundleZip,
+    apply_script: contract.applyScript,
+    downloaded_files: files,
+    attempts,
+    downloads_dir: path.join(os.homedir(), "Downloads"),
+    collected_at: new Date().toISOString(),
+  };
+  fs.writeFileSync(path.join(outDir, "artifact_transport.json"), JSON.stringify(transport, null, 2) + "\n", "utf8");
+  fs.writeFileSync(path.join(metaDir, "artifact_transport.json"), JSON.stringify(transport, null, 2) + "\n", "utf8");
+  return { ok: true, ...transport };
+}
+
 // ---------------------------------------------------------------------------
 // Prompt wrapper
 // ---------------------------------------------------------------------------
 function buildWrappedPrompt(userPrompt, token) {
+  const wantsDownloadBundle = String(userPrompt || "").includes(DOWNLOAD_TRANSPORT);
+  if (wantsDownloadBundle) {
+    return `
+You are generating downloadable files for local automation.
+
+The user prompt below contains a VC4 downloadable bundle contract (${DOWNLOAD_TRANSPORT}). Follow that contract exactly:
+- Create the required downloadable zip and shell script with the exact filenames named in the prompt.
+- Do not paste source files, patches, or large code blocks into the chat response.
+- Do not use GPTWEB_FILE blocks for implementation patches when the downloadable bundle contract is present.
+- A short status JSON or sentence in the chat is fine, but the downloadable files are the source of truth.
+
+User prompt:
+${userPrompt}
+`.trim();
+  }
   return `
 You are generating files for local automation.
-
-Do NOT use ChatGPT's attachment UI, upload UI, microphone, voice mode, dictation, canvas, or special download button.
 
 Generate the requested file or files as plain text using the exact block format below. My local automation will parse these blocks and write them to disk.
 
@@ -1889,33 +2116,6 @@ Required file-block format:
 BEGIN_GPTWEB_FILE token=${token} path=<relative/path>
 <complete file contents>
 END_GPTWEB_FILE token=${token}
-
-Optional Markdown-rendering-safe file-block format:
-
-BEGIN_GPTWEB_FILE token=${token} encoding=html-entities path=<relative/path>
-<complete file contents with Markdown/HTML-sensitive characters entity-shielded>
-END_GPTWEB_FILE token=${token}
-
-When encoding=html-entities is present, my local parser decodes decimal/hex/named HTML entities once before writing the file. Use that encoding for file contents that contain Markdown-sensitive leading characters or HTML-sensitive characters, but never entity-encode the BEGIN/END marker lines themselves.
-
-Patch/diff-safe file-block format. Use this for changes.patch and other .patch/.diff files:
-
-BEGIN_GPTWEB_FILE token=${token} encoding=git-patch-lines path=<relative/path>
-R|diff --git a/path/to/file b/path/to/file
-R|--- a/path/to/file
-R|+++ b/path/to/file
-R|@@ -1 +1,2 @@
-C|unchanged original line payload, without the leading context space
-D|deleted original line payload, without the leading minus sign
-A|added new line payload, without the leading plus sign
-END_GPTWEB_FILE token=${token}
-
-When encoding=git-patch-lines is present, my local parser decodes each record into a real unified diff line:
-- R|payload writes payload exactly.
-- C|payload writes one leading context space plus payload.
-- D|payload writes '-' plus payload.
-- A|payload writes '+' plus payload.
-For payload text, entity-shield Markdown/HTML-sensitive characters such as &, <, and > as &amp;, &lt;, and &gt;. Never put raw C++ template syntax like <mlir::...> in a git-patch-lines payload.
 
 Rules:
 - Output only GPTWEB_FILE blocks.
@@ -1928,8 +2128,6 @@ Rules:
 - Do not wrap the file blocks in Markdown fences.
 - Do not add explanations outside the file blocks.
 - Preserve the exact requested source/code/markdown content inside each block.
-- Every generated file must end with a final newline. The parser also enforces a final newline as a safety net.
-- If encoding=html-entities is used, the decoded file content must be the intended source of truth.
 
 User prompt:
 ${userPrompt}
@@ -1966,6 +2164,7 @@ async function run(mode, argv) {
   const responseTimeoutMs = intArg(args, "response-timeout-ms", 30 * 60 * 1000);
   const composerWaitMs = intArg(args, "composer-wait-ms", 5 * 60 * 1000);
   const allowDuplicateSubmit = boolArg(args, "allow-duplicate-submit");
+  const artifactDownloadTimeoutMs = intArg(args, "artifact-download-timeout-ms", 3 * 60 * 1000);
 
   mkdirp(outDir);
   mkdirp(metaDir);
@@ -1987,6 +2186,7 @@ async function run(mode, argv) {
     promptTimeoutMs,
     responseTimeoutMs,
     composerWaitMs,
+    artifactDownloadTimeoutMs,
   });
 
   const repoRoot = resolveRepoRoot(args, outDir);
@@ -2110,6 +2310,8 @@ async function run(mode, argv) {
         mode,
         closeTab,
         pageTimeoutMs,
+        artifactDownloadTimeoutMs,
+        submittedAtMs: Number((readMarker(repoRoot) || {}).submittedAt || Date.now()),
       });
       return;
     }
@@ -2137,6 +2339,8 @@ async function run(mode, argv) {
       mode,
       closeTab,
       pageTimeoutMs,
+      artifactDownloadTimeoutMs,
+      submittedAtMs: Number((readMarker(repoRoot) || {}).submittedAt || Date.now()),
     });
   } finally {
     if (closeTab && page) await page.close().catch(() => {});
@@ -2157,17 +2361,48 @@ async function finalizeAnswer({
   mode,
   closeTab,
   pageTimeoutMs,
+  artifactDownloadTimeoutMs,
+  submittedAtMs,
 }) {
   const answerPath = path.join(metaDir, "answer.md");
   fs.writeFileSync(answerPath, answer || "", "utf8");
   vlog("finalizeAnswer: wrote answer.md", { path: answerPath, len: (answer || "").length });
 
-  const parsedFiles = parseFileBlocks(answer || "", token);
+  const originalPromptText = readPromptFile(promptFile);
+  const downloadContract = parseDownloadBundleContract(originalPromptText);
+  let artifactResult = null;
+  if (downloadContract) {
+    if (downloadContract.error) {
+      artifactResult = { ok: false, error: downloadContract.error, contract: downloadContract };
+      fs.writeFileSync(path.join(metaDir, "artifact_transport_error.json"), JSON.stringify(artifactResult, null, 2) + "\n", "utf8");
+      await dumpDebugState(page, metaDir);
+      process.exitCode = 4;
+    } else {
+      vlog("finalizeAnswer: collecting downloadable bundle artifacts", downloadContract);
+      artifactResult = await collectDownloadBundleArtifacts({
+        page,
+        contract: downloadContract,
+        outDir,
+        metaDir,
+        sinceMs: Number(submittedAtMs || Date.now()),
+        timeoutMs: artifactDownloadTimeoutMs,
+      });
+      vlog("finalizeAnswer: artifact collection result", artifactResult);
+      if (!artifactResult.ok) {
+        fs.writeFileSync(path.join(metaDir, "artifact_transport_error.json"), JSON.stringify(artifactResult, null, 2) + "\n", "utf8");
+        await dumpDebugState(page, metaDir);
+        process.exitCode = 4;
+      }
+    }
+  }
+
+  const parsedFiles = downloadContract ? [] : parseFileBlocks(answer || "", token);
   vlog("finalizeAnswer: parsed file blocks", { count: parsedFiles.length });
   const { written, skipped, fileMetadata } = writeGeneratedFiles(parsedFiles, outDir);
   vlog("finalizeAnswer: write summary", { written: written.length, skipped: skipped.length, fileMetadata });
 
-  if (written.length === 0 || skipped.length > 0) {
+  const artifactOk = !!(artifactResult && artifactResult.ok);
+  if ((!artifactOk && written.length === 0) || skipped.length > 0) {
     await dumpDebugState(page, metaDir);
   } else {
     if (
@@ -2194,7 +2429,7 @@ async function finalizeAnswer({
   }
 
   const manifest = {
-    ok: written.length > 0,
+    ok: artifactOk || written.length > 0,
     settled: !!settled,
     mode:
       mode === "new"
@@ -2206,6 +2441,7 @@ async function finalizeAnswer({
     answerPath,
     token,
     files: written,
+    artifactResult,
     fileMetadata,
     skipped,
     parsedBlockCount: parsedFiles.length,
@@ -2213,15 +2449,19 @@ async function finalizeAnswer({
     chatGptTabUrl: page.url(),
     note:
       written.length === 0
-        ? "No files were written. Check .gpt-web-run/answer.md, debug.log, after-generation.png."
-        : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
+        ? "No files or downloadable bundle artifacts were written. Check .gpt-web-run/answer.md, debug.log, after-generation.png, and click-candidates.json."
+        : artifactOk
+          ? "Downloaded bundle artifacts and staged bundle.zip/apply_bundle.sh for the local bundle applier."
+          : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
   };
   fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
   vlog("manifest written", manifest);
 
   if (!settled) {
     vlog("exit code 2 (settled=false)");
-    process.exitCode = 2;
+    process.exitCode = process.exitCode || 2;
+  } else if (process.exitCode) {
+    vlog("exit code preserved from artifact/file validation", { exitCode: process.exitCode });
   } else {
     vlog("exit code 0 (settled=true)");
   }

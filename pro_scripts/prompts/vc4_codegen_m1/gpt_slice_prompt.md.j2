@@ -10,7 +10,7 @@ Mode: {{MODE}}
 
 Template: `{{TEMPLATE_PATH}}`
 
-You are implementing exactly one bounded slice of the VC4 codegen Milestone 1 workflow. Your output will be parsed by `pro_scripts/gpt_web_driver.js`, staged under `.vc4_auto/codegen_m1/staging/...`, validated by `pro_scripts/vc4_codegen_patch_gate.py`, and only then applied to the repo.
+You are implementing exactly one bounded slice of the VC4 codegen Milestone 1 workflow. Your output will be staged under `.vc4_auto/codegen_m1/staging/...`, validated by `pro_scripts/vc4_codegen_patch_gate.py`, and only then applied to the repo.
 
 ## Task
 
@@ -50,10 +50,30 @@ The following machine-generated snapshot is the executable contract for local to
 
 {{OUTPUT_CONTRACT}}
 
+## Downloadable artifact contract
+
+{{DOWNLOAD_CONTRACT_MARKDOWN}}
+
+Machine-readable contract:
+
+{{DOWNLOAD_CONTRACT_JSON}}
+
+You must create these exact downloadable files:
+
+1. `{{BUNDLE_ZIP_FILENAME}}`
+2. `{{APPLY_SCRIPT_FILENAME}}`
+
+Do **not** paste a patch. Do **not** paste full source files. Do **not** use GPTWEB file blocks for this implementation response. The zip is the source of truth.
+
+The zip must contain `manifest.json` and `repo/<changed paths>`. `manifest.json` must follow this schema shape:
+
+{{RESPONSE_JSON_SCHEMA}}
+
+The shell script must be only a tiny launcher delegating to `pro_scripts/vc4_codegen_download_bundle_apply.py` with the exact zip filename, active slice id, and attempt number. Do not put source code in the shell script.
+
 ## Executable repo/test/tool contract
 
 {{REPO_CAPABILITIES}}
-
 
 ## Deterministic repo capability snapshot
 
@@ -63,22 +83,7 @@ The following machine-generated snapshot is the executable contract for local to
 
 ## Executable workflow invariants
 
-After your patch is applied, deterministic preflight will inspect changed tests, lit RUN lines, lit config syntax, patch metadata, and tool/CMake wiring before expensive gates run. Do not rely on prompt prose alone. Make the repo contract true in files.
-
-## Required staged files
-
-Return exactly two GPTWEB files:
-
-1. `response.json`
-2. `changes.patch`
-
-`response.json` must follow this schema shape:
-
-{{RESPONSE_JSON_SCHEMA}}
-
-`changes.patch` must be a normal unified git patch rooted at the repo root. It must touch only the allowed paths shown in the context pack and must not touch forbidden paths.
-
-Do not output full repository files unless they are represented as a git patch in `changes.patch`. Do not include prose outside GPTWEB file blocks.
+After your bundle is applied, deterministic preflight will inspect changed tests, lit RUN lines, lit config syntax, metadata, and tool/CMake wiring before expensive gates run. Do not rely on prompt prose alone. Make the repo contract true in files.
 
 ## Context pack
 
