@@ -71,6 +71,18 @@ The zip must contain `manifest.json` and `repo/<changed paths>`. `manifest.json`
 
 The shell script must be only a tiny launcher delegating to `pro_scripts/vc4_codegen_download_bundle_apply.py` with the exact zip filename, active slice id, and attempt number. Do not put source code in the shell script.
 
+
+## Final download-link labeling rule
+
+After creating the downloadable artifacts, the final chat response must include the status JSON and downloadable links/attachments whose visible labels are exactly these filenames:
+
+```text
+{{BUNDLE_ZIP_FILENAME}}
+{{APPLY_SCRIPT_FILENAME}}
+```
+
+Do not use generic link labels such as `Download bundle zip` or `Download apply script`. The local driver matches the exact filename text from the JSON contract so it can distinguish this attempt from older links in the same chat.
+
 ## Executable repo/test/tool contract
 
 {{REPO_CAPABILITIES}}

@@ -73,6 +73,18 @@ The shell script must be only a tiny launcher delegating to `pro_scripts/vc4_cod
 
 If the correct conclusion is that the previous task was underspecified or the slice needs a smaller prerequisite test, encode that in the bundle manifest and provide the smallest safe repo changes that add that test or diagnostic, still respecting allowed paths. Do not edit reference bundles or weaken tests.
 
+
+## Final download-link labeling rule
+
+After creating the downloadable artifacts, the final chat response must include the status JSON and downloadable links/attachments whose visible labels are exactly these filenames:
+
+```text
+{{BUNDLE_ZIP_FILENAME}}
+{{APPLY_SCRIPT_FILENAME}}
+```
+
+Do not use generic link labels such as `Download bundle zip` or `Download apply script`. The local driver matches the exact filename text from the JSON contract so it can distinguish this attempt from older links in the same chat.
+
 ## Executable repo/test/tool contract
 
 {{REPO_CAPABILITIES}}

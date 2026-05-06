@@ -86,6 +86,26 @@ python3 "${REPO_ROOT}/pro_scripts/vc4_codegen_download_bundle_apply.py" validate
   --expect-attempt "<attempt>"
 ```
 
+
+## Download link labels
+
+The final visible ChatGPT response must expose both downloadable artifacts with link/attachment labels that are byte-for-byte equal to the exact filenames from the active prompt.
+
+Required final response shape:
+
+```json
+{"status":"ok","bundle_zip":"<exact bundle zip filename>","apply_script":"<exact shell filename>","source":""}
+```
+
+Then show exactly these two downloadable links/attachments, with no generic labels:
+
+```text
+<exact bundle zip filename>
+<exact shell filename>
+```
+
+Do not label the links `Download bundle zip`, `Download apply script`, `bundle`, `script`, or any other descriptive text. The local browser driver matches the unique filenames from the JSON contract to avoid clicking stale links in accumulated chats.
+
 ## Legacy fallback
 
 Older tooling may still accept `response.json` + `changes.patch` GPTWEB file blocks, but new implementation and failure-fix prompts should not use that path. The bundle transport exists specifically to avoid quote, backslash, markdown, and patch-rendering corruption.

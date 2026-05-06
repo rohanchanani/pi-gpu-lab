@@ -598,7 +598,8 @@ async function promptMaterialState(page) {
             : (composer.textContent || "").length;
       }
 
-      const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer|insert\s+(?:into|in)\s+(?:the\s+)?(?:text\s+field|composer)/i;
+      const showRe = /(?:^|\b)(?:show|insert)\s+(?:in|as|into)\s+(?:the\s+)?(?:text\s+field|composer)\b/i;
+      const showBlockedRe = /too\s+long\s+to\s+show\s+in\s+(?:the\s+)?text\s+field|open\s+pasted\s+text\s+attachment/i;
       const removeFileRe = /(?:remove|delete|discard|detach).{0,40}(?:file|attachment|upload)|(?:file|attachment|upload).{0,40}(?:remove|delete|discard|detach)/i;
       const attachmentClassRe = /attachment|uploaded[-_ ]?file|file[-_ ]?chip|upload[-_ ]?preview|composer[-_ ]?file|file[-_ ]?preview/i;
       const attachmentTextRe = /attached\s+file|uploaded\s+file|file\s+attached|attachment|show\s+in\s+text\s+field|\.txt\b|\.md\b|\.json\b/i;
@@ -612,11 +613,12 @@ async function promptMaterialState(page) {
         if (composer && el === composer) continue;
         const blob = labelFor(el);
         if (!blob || skipRe.test(blob)) continue;
-        if (showRe.test(blob)) {
+        const isShowInTextFieldAction = showRe.test(blob) && !showBlockedRe.test(blob);
+        if (isShowInTextFieldAction) {
           state.showInTextFieldCount++;
           if (state.showHints.length < 8) state.showHints.push(blob.slice(0, 160));
         }
-        if (showRe.test(blob) || removeFileRe.test(blob) || attachmentClassRe.test(blob) || attachmentTextRe.test(blob)) {
+        if (isShowInTextFieldAction || removeFileRe.test(blob) || attachmentClassRe.test(blob) || attachmentTextRe.test(blob)) {
           state.attachmentCount++;
           if (state.attachmentHints.length < 12) state.attachmentHints.push(blob.slice(0, 160));
         }
@@ -670,12 +672,13 @@ async function tryShowAttachmentInTextField(page) {
           (composer && (composer.closest("form") || composer.closest('[data-testid*="composer" i]'))) ||
           (composer && composer.parentElement && composer.parentElement.parentElement) ||
           document.body;
-        const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer|insert\s+(?:into|in)\s+(?:the\s+)?(?:text\s+field|composer)/i;
+        const showRe = /(?:^|\b)(?:show|insert)\s+(?:in|as|into)\s+(?:the\s+)?(?:text\s+field|composer)\b/i;
+        const showBlockedRe = /too\s+long\s+to\s+show\s+in\s+(?:the\s+)?text\s+field|open\s+pasted\s+text\s+attachment/i;
         const nodes = Array.from(root.querySelectorAll('button, [role="button"], [role="menuitem"], a'));
         for (const el of nodes) {
           if (!visible(el)) continue;
           const blob = labelFor(el);
-          if (!showRe.test(blob)) continue;
+          if (!showRe.test(blob) || showBlockedRe.test(blob)) continue;
           el.click();
           return { ok: true, phase, blob: blob.slice(0, 180) };
         }
@@ -1309,7 +1312,8 @@ async function dumpComposerState(page, label) {
           textPreview: ((b.textContent || "") + "").trim().slice(0, 60),
         });
       }
-      const showRe = /show\s+(?:in|as)\s+(?:the\s+)?text\s+field|show\s+in\s+composer/i;
+      const showRe = /(?:^|\b)(?:show|insert)\s+(?:in|as|into)\s+(?:the\s+)?(?:text\s+field|composer)\b/i;
+      const showBlockedRe = /too\s+long\s+to\s+show\s+in\s+(?:the\s+)?text\s+field|open\s+pasted\s+text\s+attachment/i;
       const attachRe = /attachment|attached|uploaded[-_ ]?file|file[-_ ]?chip|upload[-_ ]?preview|show\s+in\s+text\s+field|remove.{0,30}(file|attachment)/i;
       for (const el of document.querySelectorAll('button, [role="button"], [role="menuitem"], [aria-label], [data-testid], [class]')) {
         const style = window.getComputedStyle(el);
@@ -1323,7 +1327,8 @@ async function dumpComposerState(page, label) {
           el.getAttribute("class") || "",
           ((el.textContent || "") + "").trim(),
         ].join(" ").replace(/\s+/g, " ").trim();
-        if ((showRe.test(blob) || attachRe.test(blob)) && !/add\s+files\s+and\s+more/i.test(blob)) {
+        const isShowInTextFieldAction = showRe.test(blob) && !showBlockedRe.test(blob);
+        if ((isShowInTextFieldAction || attachRe.test(blob)) && !/add\s+files\s+and\s+more/i.test(blob)) {
           out.attachmentLike.push(blob.slice(0, 160));
           if (out.attachmentLike.length >= 16) break;
         }
@@ -1973,28 +1978,76 @@ async function findAndClickDownloadLink(page, filename) {
         const rect = el.getBoundingClientRect();
         return rect.width > 0 && rect.height > 0;
       }
-      function label(el) {
+      function labelParts(el) {
+        const href = el.getAttribute("href") || "";
+        const text = ((el.innerText || el.textContent || "") + "").trim();
         return [
           el.getAttribute("download") || "",
           el.getAttribute("aria-label") || "",
           el.getAttribute("title") || "",
-          el.getAttribute("href") || "",
-          ((el.innerText || el.textContent || "") + "").trim(),
-        ]
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim();
+          href,
+          (() => {
+            try {
+              const u = new URL(href, location.href);
+              return decodeURIComponent((u.pathname || "").split("/").pop() || "");
+            } catch (_) {
+              return "";
+            }
+          })(),
+          text,
+        ].map((s) => String(s || "").replace(/\s+/g, " ").trim()).filter(Boolean);
       }
-      const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]'));
-      for (const el of candidates) {
-        if (!visible(el)) continue;
-        const hay = label(el);
-        if (!hay || !hay.includes(filename)) continue;
-        el.scrollIntoView({ block: "center", inline: "center" });
-        el.click();
-        return { ok: true, tag: el.tagName.toLowerCase(), label: hay.slice(0, 250) };
+      function candidateBlob(el) {
+        return labelParts(el).join(" ").replace(/\s+/g, " ").trim();
       }
-      return { ok: false, reason: `no visible link/button containing ${filename}` };
+      function filenameMatches(el) {
+        const parts = labelParts(el);
+        return parts.some((part) => part === filename || part.includes(filename));
+      }
+      function scan(root, scope) {
+        const candidates = Array.from(root.querySelectorAll('a, button, [role="button"]'));
+        for (const el of candidates) {
+          if (!visible(el)) continue;
+          if (!filenameMatches(el)) continue;
+          el.scrollIntoView({ block: "center", inline: "center" });
+          el.click();
+          return {
+            ok: true,
+            scope,
+            tag: el.tagName.toLowerCase(),
+            label: candidateBlob(el).slice(0, 300),
+          };
+        }
+        return null;
+      }
+
+      // Prefer the newest assistant turn.  Exact filenames are unique per
+      // attempt, but scoping avoids stale controls in long accumulated chats.
+      const assistantTurns = Array.from(document.querySelectorAll('[data-message-author-role="assistant"]'));
+      if (assistantTurns.length) {
+        for (let i = assistantTurns.length - 1; i >= 0; --i) {
+          const found = scan(assistantTurns[i], `assistant-turn-${i}`);
+          if (found) return found;
+          // Only scan older assistant turns when their text mentions the exact
+          // filename; this keeps retries from clicking a generic stale download.
+          const text = ((assistantTurns[i].innerText || assistantTurns[i].textContent || "") + "");
+          if (!text.includes(filename)) break;
+        }
+      }
+
+      const globalFound = scan(document.body, "document");
+      if (globalFound) return globalFound;
+
+      const visibleLabels = Array.from(document.querySelectorAll('a, button, [role="button"]'))
+        .filter(visible)
+        .map((el) => candidateBlob(el).slice(0, 160))
+        .filter(Boolean)
+        .slice(-40);
+      return {
+        ok: false,
+        reason: `no visible link/button containing exact filename ${filename}`,
+        visibleLabels,
+      };
     }, filename)
     .catch((err) => ({ ok: false, reason: String(err) }));
 }
@@ -2093,14 +2146,23 @@ async function collectDownloadBundleArtifacts({ page, contract, outDir, metaDir,
 function buildWrappedPrompt(userPrompt, token) {
   const wantsDownloadBundle = String(userPrompt || "").includes(DOWNLOAD_TRANSPORT);
   if (wantsDownloadBundle) {
+    const downloadContract = parseDownloadBundleContract(userPrompt) || {};
+    const bundleZip = downloadContract.bundleZip || "<exact bundle zip filename from the prompt>";
+    const applyScript = downloadContract.applyScript || "<exact apply shell filename from the prompt>";
     return `
 You are generating downloadable files for local automation.
 
 The user prompt below contains a VC4 downloadable bundle contract (${DOWNLOAD_TRANSPORT}). Follow that contract exactly:
 - Create the required downloadable zip and shell script with the exact filenames named in the prompt.
+- The visible download link or attachment label for the zip MUST be exactly: ${bundleZip}
+- The visible download link or attachment label for the shell script MUST be exactly: ${applyScript}
+- Do not use generic link labels such as "Download bundle zip" or "Download apply script".
+- Repeat the same exact filenames in the final status JSON fields "bundle_zip" and "apply_script".
 - Do not paste source files, patches, or large code blocks into the chat response.
 - Do not use GPTWEB_FILE blocks for implementation patches when the downloadable bundle contract is present.
-- A short status JSON or sentence in the chat is fine, but the downloadable files are the source of truth.
+- A short status JSON in the chat is fine, but the downloadable files are the source of truth.
+
+The final chat response should contain only a compact status JSON plus the two downloadable file links/attachments labeled with the exact filenames above.
 
 User prompt:
 ${userPrompt}
