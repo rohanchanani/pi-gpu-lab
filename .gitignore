@@ -34,3 +34,4 @@ old_compiler/build/
 compiler/build*
 compiler/context.txt
 *__pycache__/
+.DS_Store
