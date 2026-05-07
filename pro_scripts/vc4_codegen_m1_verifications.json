@@ -1,0 +1,1046 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m1",
+  "title": "Typed deterministic verification specs for VC4 Codegen Milestone 1",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/codegen_m1/verifier",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 7200
+  },
+  "notes": [
+    "Each slice has an expected_end_state and a list of typed verifications consumed by pro_scripts/vc4_codegen_m1_verifier.py.",
+    "The specs intentionally verify source products by exact paths so missing tests or missing fixture inputs fail deterministically before semantic gates are mistaken for success.",
+    "Hardware verifications are marked requires_hardware and can be skipped only with the verifier's explicit --no-hardware option."
+  ],
+  "slices": {
+    "m1-00-preflight": {
+      "title": "Preflight repo and toolchain checks",
+      "expected_end_state": "The repo has the worklist/context/prompt inputs, the ChatGPT transport driver, a built compiler tree, and the minimal_thrend hardware fixture before any compiler-codegen patch is requested.",
+      "verifications": [
+        {
+          "id": "existing-workflow-files",
+          "mechanism": "source_products",
+          "description": "Existing workflow files required for autorun/preflight are present",
+          "files": [
+            "pro_scripts/vc4_codegen_m1_worklist.json",
+            "pro_scripts/vc4_codegen_m1_context_profiles.json",
+            "pro_scripts/gpt_web_driver.js",
+            "pro_scripts/prompts/vc4_codegen_m1/constitution.md",
+            "pro_scripts/prompts/vc4_codegen_m1/output_contract.md",
+            "pro_scripts/prompts/vc4_codegen_m1/slice_contract.md",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+          ]
+        },
+        {
+          "id": "toolchain-tools",
+          "mechanism": "tool_available",
+          "description": "Core local tools resolve",
+          "tools": [
+            "ninja"
+          ],
+          "any_tools": [
+            "lit",
+            "llvm-lit"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4-opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt target",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-01-artifact-tool-skeleton": {
+      "title": "Add vc4-codegen artifact tool skeleton",
+      "expected_end_state": "A standalone vc4-codegen tool and Target/VC4 artifact-emitter library exist, parse MLIR, reject invalid inputs, and emit the four required placeholder artifact files for a valid scheduled kernel.",
+      "verifications": [
+        {
+          "id": "skeleton-source-products",
+          "mechanism": "source_products",
+          "description": "Skeleton tool/library and local tests exist",
+          "files": [
+            "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h",
+            "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+            "compiler/lib/Target/VC4/CMakeLists.txt",
+            "compiler/tools/vc4-codegen/CMakeLists.txt",
+            "compiler/tools/vc4-codegen/vc4-codegen.cpp",
+            "compiler/test/CodeGen/VC4/Emit/vc4-codegen-skeleton.mlir",
+            "compiler/test/CodeGen/VC4/Emit/vc4-codegen-skeleton-invalid.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "vc4-codegen-help",
+          "mechanism": "command",
+          "description": "vc4-codegen exposes help text and --emit-bundle option",
+          "argv": [
+            "vc4-codegen",
+            "--help"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "emit-bundle"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-skeleton-tests",
+          "mechanism": "lit",
+          "description": "Run skeleton lit tests through CodeGen/VC4/Emit root",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-skeleton-bundle",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/verifier/candidates/skeleton",
+          "input": "compiler/test/CodeGen/VC4/Emit/vc4-codegen-skeleton.mlir",
+          "bundle": ".vc4_auto/codegen_m1/verifier/candidates/skeleton",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-skeleton-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/verifier/candidates/skeleton",
+          "bundle": ".vc4_auto/codegen_m1/verifier/candidates/skeleton",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "check-skeleton-qasm",
+          "mechanism": "qasm_text",
+          "description": "The skeleton-valid bundle emits qasm text without TODO markers; later slices may replace placeholder qasm with real qasm.",
+          "path": ".vc4_auto/codegen_m1/verifier/candidates/skeleton/kernel.qasm",
+          "not_contains": [
+            "TODO"
+          ]
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-02-emit-contract-local-tests": {
+      "title": "Lock Milestone 1 input-boundary tests",
+      "expected_end_state": "The codegen boundary is locked by verifier-clean local tests named vc4-codegen-emit-contract-*.mlir, and vc4-codegen rejects modules/functions/launch ABI/sink-op/thrend-epilogue violations with deterministic diagnostics.",
+      "verifications": [
+        {
+          "id": "emit-contract-test-products",
+          "mechanism": "source_products",
+          "description": "Emit-contract product tests exist under the exact required prefix",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-*.mlir"
+          ],
+          "min_glob_matches": {
+            "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-*.mlir": 1
+          }
+        },
+        {
+          "id": "forbid-old-boundary-names",
+          "mechanism": "forbidden_absent",
+          "description": "Old boundary-* names do not satisfy the product gate and must not linger",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Emit/vc4-codegen-boundary-*.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-contract",
+          "mechanism": "lit",
+          "description": "Run all emit-contract lit tests",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-03-minimal-thrend-qasm": {
+      "title": "Emit assembling qasm for minimal thrend",
+      "expected_end_state": "vc4-codegen emits assembling qasm for the smallest legal epilogue, exactly the semantic thrend/nop/nop shape, with all artifact files present.",
+      "verifications": [
+        {
+          "id": "minimal-thrend-test-product",
+          "mechanism": "source_products",
+          "description": "The minimal thrend local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-minimal-thrend.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-minimal-thrend-candidate",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-minimal-thrend-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "check-minimal-thrend-qasm",
+          "mechanism": "qasm_text",
+          "description": "Check qasm text .vc4_auto/codegen_m1/candidates/minimal_thrend/kernel.qasm",
+          "path": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel.qasm",
+          "not_contains": [
+            "placeholder",
+            "TODO"
+          ],
+          "ordered_contains": [
+            "thrend",
+            "nop",
+            "nop"
+          ]
+        },
+        {
+          "id": "lit-emit-minimal-thrend",
+          "mechanism": "lit",
+          "description": "Run emit minimal-thrend lit test",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "assemble-minimal-thrend",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase assemble for minimal_thrend",
+          "name": "minimal_thrend",
+          "phase": "assemble",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-04-qpu-bundle-basic": {
+      "title": "Emit canonical qpu.bundle qasm for basic ALU slots",
+      "expected_end_state": "vc4.qpu.bundle instructions print deterministic vc4asm-accepted qasm for the basic ALU/mux/address/condition/signal surface covered by the local product test.",
+      "verifications": [
+        {
+          "id": "qpu-bundle-test-product",
+          "mechanism": "source_products",
+          "description": "The qpu.bundle basic local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-qpu-bundle-basic",
+          "mechanism": "lit",
+          "description": "Run lit over compiler/build/test/CodeGen/VC4/Emit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-qpu-bundle-basic",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/qpu_bundle_basic",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-qpu-bundle-basic-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/qpu_bundle_basic",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "check-qpu-bundle-basic-qasm",
+          "mechanism": "qasm_text",
+          "description": "Check qasm text .vc4_auto/codegen_m1/candidates/qpu_bundle_basic/kernel.qasm",
+          "path": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic/kernel.qasm",
+          "contains": [
+            "thrend"
+          ],
+          "not_contains": [
+            "placeholder",
+            "TODO"
+          ]
+        },
+        {
+          "id": "assemble-qpu-bundle-basic",
+          "mechanism": "vc4asm_assemble",
+          "description": "Assemble generated qasm for qpu_bundle_basic",
+          "qasm": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic/kernel.qasm",
+          "out_c": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic/kernelshader.c",
+          "out_h": ".vc4_auto/codegen_m1/candidates/qpu_bundle_basic/kernelshader.h",
+          "cwd": ".",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-05-qpu-ldi-sema": {
+      "title": "Emit qpu.ldi and qpu.sema qasm",
+      "expected_end_state": "vc4.qpu.ldi splat32 and vc4.qpu.sema acquire/release forms print deterministic vc4asm-accepted qasm without regressing bundle or branch boundary tests.",
+      "verifications": [
+        {
+          "id": "qpu-ldi-sema-test-product",
+          "mechanism": "source_products",
+          "description": "The qpu.ldi/sema local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-qpu-ldi-sema",
+          "mechanism": "lit",
+          "description": "Run lit over compiler/build/test/CodeGen/VC4/Emit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-qpu-ldi-sema",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/qpu_ldi_sema",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-qpu-ldi-sema-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/qpu_ldi_sema",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "check-qpu-ldi-sema-qasm",
+          "mechanism": "qasm_text",
+          "description": "Check qasm text .vc4_auto/codegen_m1/candidates/qpu_ldi_sema/kernel.qasm",
+          "path": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema/kernel.qasm",
+          "contains": [
+            "ldi",
+            "sema",
+            "thrend"
+          ],
+          "not_contains": [
+            "placeholder",
+            "TODO"
+          ]
+        },
+        {
+          "id": "assemble-qpu-ldi-sema",
+          "mechanism": "vc4asm_assemble",
+          "description": "Assemble generated qasm for qpu_ldi_sema",
+          "qasm": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema/kernel.qasm",
+          "out_c": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema/kernelshader.c",
+          "out_h": ".vc4_auto/codegen_m1/candidates/qpu_ldi_sema/kernelshader.h",
+          "cwd": ".",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-06-qpu-branch-delay-slots": {
+      "title": "Emit qpu.branch with labels and delay slots",
+      "expected_end_state": "vc4.qpu.branch emits labels/branch text with explicit delay-slot flattening, and the generated qasm assembles without weakening earlier bundle/ldi/sema support.",
+      "verifications": [
+        {
+          "id": "qpu-branch-test-product",
+          "mechanism": "source_products",
+          "description": "The qpu.branch delay-slot local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-qpu-branch-delay-slots",
+          "mechanism": "lit",
+          "description": "Run lit over compiler/build/test/CodeGen/VC4/Emit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-qpu-branch",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/qpu_branch",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_branch",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-qpu-branch-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/qpu_branch",
+          "bundle": ".vc4_auto/codegen_m1/candidates/qpu_branch",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "check-qpu-branch-qasm",
+          "mechanism": "qasm_text",
+          "description": "Check qasm text .vc4_auto/codegen_m1/candidates/qpu_branch/kernel.qasm",
+          "path": ".vc4_auto/codegen_m1/candidates/qpu_branch/kernel.qasm",
+          "contains": [
+            "thrend"
+          ],
+          "not_contains": [
+            "placeholder",
+            "TODO"
+          ]
+        },
+        {
+          "id": "assemble-qpu-branch",
+          "mechanism": "vc4asm_assemble",
+          "description": "Assemble generated qasm for qpu_branch",
+          "qasm": ".vc4_auto/codegen_m1/candidates/qpu_branch/kernel.qasm",
+          "out_c": ".vc4_auto/codegen_m1/candidates/qpu_branch/kernelshader.c",
+          "out_h": ".vc4_auto/codegen_m1/candidates/qpu_branch/kernelshader.h",
+          "cwd": ".",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-07-launch-abi-model-header": {
+      "title": "Parse launch ABI and emit semantic header",
+      "expected_end_state": "The emitter parses vc4.launch_abi into a typed model and kernel_launch.h exposes the semantic public_name API without raw uniform arrays or hidden qpu_id/num_qpus parameters.",
+      "verifications": [
+        {
+          "id": "launch-abi-header-test-product",
+          "mechanism": "source_products",
+          "description": "The launch ABI header local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-launch-abi-header",
+          "mechanism": "lit",
+          "description": "Run lit over compiler/build/test/CodeGen/VC4/Emit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-minimal-for-header-api",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-header-api-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "launch-abi-public-api-minimal",
+          "mechanism": "launch_abi_public_api",
+          "description": "Generated header/source/manifest agree with minimal_thrend launch ABI public API",
+          "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "manifest": ".vc4_auto/codegen_m1/candidates/minimal_thrend/manifest.json",
+          "header": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.h",
+          "source": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.c",
+          "forbid_public_param_names": [
+            "qpu_id",
+            "num_qpus",
+            "uniforms",
+            "uniform_words",
+            "uniform_ptrs"
+          ]
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-08-launcher-c-uniform-packing": {
+      "title": "Emit launcher C uniform packing",
+      "expected_end_state": "kernel_launch.c packs launch_abi args and hidden uniform-suffix builtins into a dense uniform stream while preserving the semantic public API and compiling as host C.",
+      "verifications": [
+        {
+          "id": "launcher-uniform-packing-test-product",
+          "mechanism": "source_products",
+          "description": "The launcher uniform-packing local product test exists",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-emit-launcher-uniform-packing",
+          "mechanism": "lit",
+          "description": "Run lit over compiler/build/test/CodeGen/VC4/Emit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-minimal-for-uniform-layout",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "check-uniform-layout-bundle",
+          "mechanism": "artifact_bundle",
+          "description": "Check artifact bundle .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "manifest_required_keys": [
+            "kind",
+            "kernel",
+            "public_name",
+            "scheduled_sink_ops"
+          ]
+        },
+        {
+          "id": "launch-abi-public-api-still-semantic",
+          "mechanism": "launch_abi_public_api",
+          "description": "Uniform packing does not regress the public semantic API",
+          "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "manifest": ".vc4_auto/codegen_m1/candidates/minimal_thrend/manifest.json",
+          "header": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.h",
+          "source": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.c"
+        },
+        {
+          "id": "launch-abi-uniform-layout-minimal",
+          "mechanism": "launch_abi_uniform_layout",
+          "description": "Generated launcher packs dense uniform suffix builtins for minimal_thrend",
+          "input_mlir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "source": ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.c",
+          "require_index_writes": true
+        },
+        {
+          "id": "syntax-check-generated-launcher",
+          "mechanism": "c_syntax",
+          "description": "Generated launcher C parses as host C",
+          "files": [
+            ".vc4_auto/codegen_m1/candidates/minimal_thrend/kernel_launch.c"
+          ],
+          "include_dirs": [
+            ".vc4_auto/codegen_m1/candidates/minimal_thrend"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-09-candidate-bundle-runner": {
+      "title": "Add candidate bundle runner integration",
+      "expected_end_state": "The support runner can generate, assemble, and build a minimal_thrend candidate bundle without mutating reference bundles or accepting exact qasm text as the semantic oracle.",
+      "verifications": [
+        {
+          "id": "candidate-runner-source-products",
+          "mechanism": "source_products",
+          "description": "Candidate runner support and minimal_thrend dispatchers exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/run.sh"
+          ]
+        },
+        {
+          "id": "minimal-reference-clean-before-runner",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for minimal_thrend remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-minimal-runner-candidate",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-assemble-minimal",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase assemble for minimal_thrend",
+          "name": "minimal_thrend",
+          "phase": "assemble",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-build-minimal",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase build for minimal_thrend",
+          "name": "minimal_thrend",
+          "phase": "build",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "minimal-reference-clean-after-runner",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for minimal_thrend remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4 target",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-10-hardware-smoke-minimal": {
+      "title": "Run minimal_thrend candidate on hardware",
+      "expected_end_state": "The immutable minimal_thrend reference passes, the generated minimal_thrend candidate builds and runs on hardware, and its VC4_TEST_RESULT satisfies expected.json.",
+      "verifications": [
+        {
+          "id": "minimal-hardware-source-products",
+          "mechanism": "source_products",
+          "description": "Minimal hardware fixture and candidate runner files exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/candidate/run.sh",
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+          ]
+        },
+        {
+          "id": "minimal-reference-clean-before-hardware",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for minimal_thrend remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "hardware-reference-minimal",
+          "mechanism": "hardware_run",
+          "description": "Run reference hardware side for minimal_thrend",
+          "fixture": "minimal_thrend",
+          "side": "reference",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-minimal-hardware-candidate",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/minimal_thrend",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-assemble-minimal-hw",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase assemble for minimal_thrend",
+          "name": "minimal_thrend",
+          "phase": "assemble",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-build-minimal-hw",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase build for minimal_thrend",
+          "name": "minimal_thrend",
+          "phase": "build",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "hardware-candidate-minimal",
+          "mechanism": "hardware_run",
+          "description": "Run candidate hardware side for minimal_thrend",
+          "fixture": "minimal_thrend",
+          "side": "candidate",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "expected-json-minimal",
+          "mechanism": "expected_json_result",
+          "description": "Check minimal_thrend hardware result against expected.json",
+          "expected": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
+          "log": ".vc4_auto/codegen_m1/verifier/logs/m1-10-hardware-smoke-minimal_hardware-candidate-minimal.log",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "minimal-reference-clean-after-hardware",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for minimal_thrend remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    },
+    "m1-11-simple-memory-output": {
+      "title": "Run first simple memory-output candidate on hardware (saxpy_full)",
+      "expected_end_state": "saxpy_full has a real input.mlir source product; the generated saxpy_full candidate builds and runs on hardware against the immutable semantic expected.json oracle without mutating reference outputs.",
+      "verifications": [
+        {
+          "id": "saxpy-full-source-products",
+          "mechanism": "source_products",
+          "description": "saxpy_full fixture, candidate hooks, and support files exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/candidate/run.sh",
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+          ]
+        },
+        {
+          "id": "saxpy-full-reference-clean-before-hardware",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for saxpy_full remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "hardware-reference-saxpy-full",
+          "mechanism": "hardware_run",
+          "description": "Run reference hardware side for saxpy_full",
+          "fixture": "saxpy_full",
+          "side": "reference",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy-full-candidate",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate .vc4_auto/codegen_m1/candidates/saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m1/candidates/saxpy_full",
+          "required_files": [
+            "kernel.qasm",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-assemble-saxpy-full",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase assemble for saxpy_full",
+          "name": "saxpy_full",
+          "phase": "assemble",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-build-saxpy-full",
+          "mechanism": "candidate_phase",
+          "description": "Run candidate phase build for saxpy_full",
+          "name": "saxpy_full",
+          "phase": "build",
+          "requires_hardware": false,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "hardware-candidate-saxpy-full",
+          "mechanism": "hardware_run",
+          "description": "Run candidate hardware side for saxpy_full",
+          "fixture": "saxpy_full",
+          "side": "candidate",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "expected-json-saxpy-full",
+          "mechanism": "expected_json_result",
+          "description": "Check saxpy_full hardware result against expected.json",
+          "expected": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json",
+          "log": ".vc4_auto/codegen_m1/verifier/logs/m1-11-simple-memory-output_hardware-candidate-saxpy-full.log",
+          "requires_hardware": true,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "saxpy-full-reference-clean-after-hardware",
+          "mechanism": "reference_immutable",
+          "description": "Reference/oracle files for saxpy_full remain immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
+          ],
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    }
+  }
+}

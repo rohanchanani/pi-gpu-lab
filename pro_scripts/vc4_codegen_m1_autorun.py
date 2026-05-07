@@ -300,10 +300,22 @@ def run_slice_gates(
         if not preflight.ok:
             write_json_file(log_dir / "gate_summary.json", [r.as_json(config.repo) for r in results])
             return False, results
+
     runner = GateRunner(config, verbose=verbose, timeout_sec=timeout_sec)
     gates = [str(g) for g in slice_entry.get("gates", [])]
     gate_results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=allow_dirty, stop_on_failure=True)
     results.extend(gate_results)
+
+    # The typed verifier is the final deterministic source-of-truth gate for
+    # every slice.  The legacy gates still run first because they provide useful
+    # targeted logs and preserve existing failure routing, but a slice is not
+    # complete unless its declarative verifier spec also passes.  This is what
+    # prevents weak generic gates from marking slices such as m1-07/m1-08 as
+    # already satisfied when their product tests are missing.
+    if all(r.ok for r in results):
+        verifier_result = runner.run_typed_verifier(str(slice_entry["id"]), log_dir=log_dir)
+        results.append(verifier_result)
+
     write_json_file(log_dir / "gate_summary.json", [r.as_json(config.repo) for r in results])
     return all(r.ok for r in results), results
 
@@ -434,6 +446,43 @@ def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 60000) -
         report["apply_bundle_sh"] = apply_script.read_text(encoding="utf-8", errors="replace")[:4000]
     return report
 
+def _decode_first_json_object(text: str) -> Mapping[str, Any] | None:
+    decoder = json.JSONDecoder()
+    for index, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
+    if not str(failed.gate).startswith("typed-verifier:"):
+        return {}
+    if not failed.log_path.exists():
+        return {"typed_verifier": {"error": "typed verifier log is missing"}}
+    text = failed.log_path.read_text(encoding="utf-8", errors="replace")
+    report = _decode_first_json_object(text)
+    if not isinstance(report, Mapping):
+        return {"typed_verifier": {"error": "could not parse typed verifier JSON report from log"}}
+    failures = report.get("failures", [])
+    results = report.get("results", [])
+    first_failure = failures[0] if isinstance(failures, list) and failures else None
+    return {
+        "typed_verifier": {
+            "ok": bool(report.get("ok")),
+            "slice_ids": report.get("slice_ids"),
+            "first_failure": first_failure,
+            "failure_count": len(failures) if isinstance(failures, list) else None,
+            "result_count": len(results) if isinstance(results, list) else None,
+        }
+    }
+
+
 def write_gate_failure_packet(
     *,
     state: StateStore,
@@ -441,6 +490,8 @@ def write_gate_failure_packet(
     slice_entry: Mapping[str, Any],
     failed: CommandResult,
 ) -> Path:
+    extra = {"gate": failed.gate, **collect_candidate_change_report(state.config.repo)}
+    extra.update(collect_typed_verifier_report(failed))
     packet = write_failure_packet(
         paths.failure_packet_path,
         slice_entry=slice_entry,
@@ -450,7 +501,7 @@ def write_gate_failure_packet(
         exit_code=failed.exit_code,
         timed_out=failed.timed_out,
         log_path=failed.log_path,
-        extra={"gate": failed.gate, **collect_candidate_change_report(state.config.repo)},
+        extra=extra,
     )
     packet["gate"] = failed.gate
     write_json_file(paths.failure_packet_path, packet)
@@ -936,6 +987,15 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
         write_json_file(root / "summary.json", {"ok": False, "records": records})
         return 1
 
+    # Typed verifier contract audit.  This does not run slice tools/hardware; it
+    # proves the central verifier and per-slice specs are syntactically usable.
+    verifier_runner = GateRunner(config, verbose=args.verbose, timeout_sec=args.gate_timeout_sec)
+    verifier_audit = verifier_runner.run_typed_audit(log_dir=logs)
+    _dry_run_record(records, "typed-verifier-audit-contract", verifier_audit.ok, command=verifier_audit.command, log=relpath(repo, verifier_audit.log_path))
+    if not verifier_audit.ok and not args.keep_going:
+        write_json_file(root / "summary.json", {"ok": False, "records": records})
+        return 1
+
     # Confirm candidate support scripts are present but do not run candidate generation yet.
     support_paths = [
         repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
@@ -1024,11 +1084,29 @@ def cmd_gates(args: argparse.Namespace) -> int:
     gates = [str(g) for g in slice_entry.get("gates", [])]
     if args.only_gate:
         selected = set(args.only_gate)
-        missing = selected - set(gates)
+        typed_allowed = {f"typed-verifier:{slice_entry['id']}", "typed-verifier:audit-contract"}
+        missing = selected - set(gates) - typed_allowed
         if missing:
             raise DriverError(f"requested --only-gate entries are not in slice: {sorted(missing)}")
         gates = [g for g in gates if g in selected]
-    results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=args.allow_dirty, stop_on_failure=not args.keep_going)
+        if f"typed-verifier:{slice_entry['id']}" in selected:
+            gates.append(f"typed-verifier:{slice_entry['id']}")
+        if "typed-verifier:audit-contract" in selected:
+            gates.append("typed-verifier:audit-contract")
+    if args.only_gate:
+        results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=args.allow_dirty, stop_on_failure=not args.keep_going)
+        if all(r.ok for r in results) and any(g.startswith("typed-verifier:") for g in args.only_gate):
+            pass
+    else:
+        ok, results = run_slice_gates(
+            config=config,
+            slice_entry=slice_entry,
+            log_dir=log_dir,
+            allow_dirty=args.allow_dirty,
+            verbose=args.verbose,
+            timeout_sec=args.gate_timeout_sec,
+            patch_preflight=False,
+        )
     print(json.dumps([r.as_json(repo) for r in results], indent=2, sort_keys=True))
     return 0 if all(r.ok for r in results) else 1
 

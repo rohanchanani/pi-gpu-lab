@@ -55,6 +55,80 @@ DEFAULT_MECHANICAL_BUDGETS = {
 }
 
 
+def _decode_first_json_object(text: str) -> Mapping[str, Any] | None:
+    decoder = json.JSONDecoder()
+    for index, ch in enumerate(text or ""):
+        if ch != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def _typed_verifier_first_failure(log_text: str) -> Mapping[str, Any] | None:
+    report = _decode_first_json_object(log_text)
+    if not isinstance(report, Mapping):
+        return None
+    failures = report.get("failures")
+    if isinstance(failures, list) and failures and isinstance(failures[0], Mapping):
+        return failures[0]
+    # Failure packets may embed the summarized verifier report under extra.
+    extra = report.get("extra")
+    if isinstance(extra, Mapping):
+        typed = extra.get("typed_verifier")
+        if isinstance(typed, Mapping) and isinstance(typed.get("first_failure"), Mapping):
+            return typed["first_failure"]
+    return None
+
+
+def _typed_verifier_category(gate: str, log_text: str) -> tuple[str, str] | None:
+    if not gate.lower().startswith("typed-verifier:"):
+        return None
+    failure = _typed_verifier_first_failure(log_text)
+    if not failure:
+        return "typed_verifier", "Typed verifier failed but no structured failure packet was found"
+    mechanism = str(failure.get("mechanism", ""))
+    vid = str(failure.get("verification_id", ""))
+    message = str(failure.get("message", ""))
+    reason = f"Typed verifier failed at {vid or '<unknown>'} ({mechanism or '<unknown>'}): {message}"
+
+    # Keep semantic/product checks on GPT Pro, but allow narrowly mechanical
+    # verifier mechanisms to use existing Codex budgets.  This preserves the
+    # original routing principle: FileCheck/content, qasm semantics, hardware,
+    # and source-product holes go to GPT; compiler/toolchain plumbing can go to
+    # Codex once.
+    if mechanism == "build":
+        return "mechanical_compile", reason
+    if mechanism == "c_syntax":
+        return "mechanical_compile", reason
+    if mechanism == "tool_available":
+        return "mechanical_test_invocation", reason
+    if mechanism == "command" and LIT_TOOL_RESOLUTION_RE.search(json.dumps(failure)):
+        return "mechanical_test_invocation", reason
+    if mechanism == "lit":
+        blob = json.dumps(failure)
+        if LIT_CONFIG_SYNTAX_RE.search(blob):
+            return "mechanical_lit_config", reason
+        if LIT_TOOL_RESOLUTION_RE.search(blob):
+            return "mechanical_test_invocation", reason
+        if FILECHECK_RE.search(blob):
+            return "lit_filecheck", reason
+        return "lit_failure", reason
+    if mechanism == "vc4asm_assemble":
+        return "qasm_assembler", reason
+    if mechanism == "candidate_phase":
+        return "candidate_build_semantic", reason
+    if mechanism == "hardware_run" or mechanism == "expected_json_result":
+        return "hardware_or_result", reason
+    if mechanism == "reference_immutable":
+        return "patch_policy_or_apply", reason
+    return "typed_verifier", reason
+
+
 def _category_attempts_used(category: str, *, codex_attempts_used: int, codex_attempts_by_category: Mapping[str, Any] | None) -> int:
     if codex_attempts_by_category is None:
         return int(codex_attempts_used)
@@ -84,6 +158,10 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
     s = stage.lower()
     g = gate.lower()
     log = log_text or ""
+
+    typed_category = _typed_verifier_category(gate, log)
+    if typed_category is not None:
+        return typed_category
 
     if s in {"chat", "gpt-web-driver", "browser"} or TRANSPORT_RE.search(log) and "chat" in s:
         return "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs"

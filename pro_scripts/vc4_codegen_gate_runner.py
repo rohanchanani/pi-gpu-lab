@@ -10,6 +10,7 @@ the static worklist.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import dataclasses
 import json
 import os
@@ -110,6 +111,18 @@ class GateRunner:
         return self.state.root / "candidates" / name
 
     def test_input(self, name: str) -> Path:
+        # Product-declared candidate/test inputs take precedence when present.
+        for slice_entry in self.config.slices:
+            products = slice_entry.get("products") or {}
+            if not isinstance(products, Mapping):
+                continue
+            for key in ("candidate_input_files", "candidate_fixture_inputs", "hardware_fixture_inputs"):
+                mapping = products.get(key)
+                if isinstance(mapping, Mapping) and name in mapping:
+                    candidate = self.repo / str(mapping[name])
+                    if candidate.exists():
+                        return candidate
+
         # Hardware fixtures take precedence.
         hw = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "input.mlir"
         if hw.exists():
@@ -128,6 +141,151 @@ class GateRunner:
         if direct.exists():
             return direct
         raise DriverError(f"cannot find input.mlir fixture for candidate/test name {name!r}")
+
+
+    def _slice_for_gate(self, gate: str) -> Mapping[str, Any] | None:
+        for slice_entry in self.config.slices:
+            gates = [str(g) for g in slice_entry.get("gates", [])]
+            if gate in gates:
+                return slice_entry
+        return None
+
+    def _product_list(self, value: Any) -> list[str]:
+        if value is None:
+            return []
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            return [str(v) for v in value]
+        return []
+
+    def _product_mapping_values(self, value: Any) -> list[str]:
+        if not isinstance(value, Mapping):
+            return []
+        return [str(v) for v in value.values() if isinstance(v, str)]
+
+    def _product_glob_matches(self, pattern: str) -> list[Path]:
+        matches: list[Path] = []
+        for path in self.repo.glob("**/*"):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(self.repo).as_posix()
+            if fnmatch.fnmatchcase(rel, pattern):
+                matches.append(path)
+        return sorted(matches)
+
+    def _check_source_products_for_gate(self, gate: str, log_dir: Path) -> CommandResult | None:
+        slice_entry = self._slice_for_gate(gate)
+        if not slice_entry:
+            return None
+        products = slice_entry.get("products") or {}
+        if not isinstance(products, Mapping):
+            return None
+
+        required_files: list[str] = []
+        for key in ("required_source_files", "required_existing_files", "support_files", "semantic_oracle_files"):
+            required_files.extend(self._product_list(products.get(key)))
+        for key in ("candidate_input_files", "candidate_fixture_inputs", "hardware_fixture_inputs"):
+            required_files.extend(self._product_mapping_values(products.get(key)))
+
+        required_globs: list[str] = []
+        for key in ("required_source_globs", "lit_test_globs"):
+            required_globs.extend(self._product_list(products.get(key)))
+
+        missing_files = [rel for rel in sorted(set(required_files)) if not (self.repo / rel).is_file()]
+        missing_globs = [pattern for pattern in sorted(set(required_globs)) if not self._product_glob_matches(pattern)]
+        if missing_files or missing_globs:
+            return self.write_check_log(
+                gate=gate + ":source-products",
+                log_dir=log_dir,
+                ok=False,
+                message=(
+                    "active slice source products are missing; use exact paths/globs from products\n"
+                    f"slice={slice_entry.get('id')}\n"
+                    f"missing_files={missing_files}\n"
+                    f"missing_globs={missing_globs}"
+                ),
+            )
+        return None
+
+    def _typed_verifier_script(self) -> Path:
+        return self.repo / "pro_scripts/vc4_codegen_m1_verifier.py"
+
+    def _typed_verifier_spec(self) -> Path:
+        return self.repo / "pro_scripts/vc4_codegen_m1_verifications.json"
+
+    def run_typed_verifier(
+        self,
+        slice_id: str,
+        *,
+        log_dir: Path,
+        keep_going: bool = True,
+        no_hardware: bool = False,
+    ) -> CommandResult:
+        """Run the central typed slice verifier as the final source-of-truth gate."""
+        verifier = self._typed_verifier_script()
+        spec = self._typed_verifier_spec()
+        gate = f"typed-verifier:{slice_id}"
+        if not verifier.exists():
+            return self.write_check_log(
+                gate=gate,
+                log_dir=log_dir,
+                ok=False,
+                message=f"typed verifier script is missing: {relpath(self.repo, verifier)}",
+            )
+        if not spec.exists():
+            return self.write_check_log(
+                gate=gate,
+                log_dir=log_dir,
+                ok=False,
+                message=f"typed verifier spec is missing: {relpath(self.repo, spec)}",
+            )
+
+        report_path = log_dir / "typed_verifier_report.json"
+        cmd = [
+            sys.executable,
+            str(verifier),
+            "verify",
+            "--repo",
+            str(self.repo),
+            "--spec",
+            str(spec),
+            "--slice",
+            slice_id,
+            "--out",
+            str(report_path),
+            "--timeout-sec",
+            str(self.timeout_sec),
+        ]
+        if keep_going:
+            cmd.append("--keep-going")
+        if no_hardware:
+            cmd.append("--no-hardware")
+        return self.run_command(gate=gate, cmd=cmd, log_dir=log_dir, cwd=self.repo, timeout_sec=max(self.timeout_sec, 3600))
+
+    def run_typed_audit(self, *, log_dir: Path) -> CommandResult:
+        verifier = self._typed_verifier_script()
+        spec = self._typed_verifier_spec()
+        gate = "typed-verifier:audit-contract"
+        if not verifier.exists():
+            return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"typed verifier script is missing: {relpath(self.repo, verifier)}")
+        if not spec.exists():
+            return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"typed verifier spec is missing: {relpath(self.repo, spec)}")
+        report_path = log_dir / "typed_verifier_audit.json"
+        cmd = [
+            sys.executable,
+            str(verifier),
+            "audit-contract",
+            "--repo",
+            str(self.repo),
+            "--spec",
+            str(spec),
+            "--worklist",
+            str(self.config.worklist_path),
+            "--out",
+            str(report_path),
+        ]
+        return self.run_command(gate=gate, cmd=cmd, log_dir=log_dir, cwd=self.repo, timeout_sec=min(self.timeout_sec, 300))
 
     # ------------------------------------------------------------------
     # Command execution
@@ -340,6 +498,12 @@ class GateRunner:
         if gate == "dialect:verify-minimal-thrend-input":
             return self._gate_verify_minimal_thrend(log_dir)
 
+        if gate == "typed-verifier:audit-contract":
+            return self.run_typed_audit(log_dir=log_dir)
+        if gate.startswith("typed-verifier:"):
+            slice_id = gate.split(":", 1)[1]
+            return self.run_typed_verifier(slice_id, log_dir=log_dir)
+
         return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"unknown gate name: {gate}")
 
     def run_gates(self, gates: Sequence[str], *, log_dir: Path, allow_dirty: bool = False, stop_on_failure: bool = True) -> list[CommandResult]:
@@ -437,6 +601,9 @@ class GateRunner:
         return str(path)
 
     def _gate_vc4_codegen_generate(self, gate: str, log_dir: Path, name: str) -> CommandResult:
+        candidate_source_check = self._check_source_products_for_gate(gate, log_dir)
+        if candidate_source_check is not None:
+            return candidate_source_check
         out_dir = self.candidate_dir(name)
         if out_dir.exists():
             shutil.rmtree(out_dir)
@@ -488,8 +655,12 @@ class GateRunner:
         return self.write_check_log(gate=gate + ":expect-failure", log_dir=log_dir, ok=True, message="invalid input was rejected as expected")
 
     def _gate_vc4asm_candidate(self, gate: str, log_dir: Path, name: str) -> CommandResult:
+        vc4asm_source_check = self._check_source_products_for_gate(gate, log_dir)
+        if vc4asm_source_check is not None:
+            return vc4asm_source_check
         support = self.repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
-        if support.exists():
+        hardware_input = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "input.mlir"
+        if support.exists() and hardware_input.exists():
             return self.run_command(gate=gate, cmd=["bash", str(support), name, "assemble"], log_dir=log_dir)
 
         out_dir = self.candidate_dir(name)
@@ -507,18 +678,107 @@ class GateRunner:
             log_dir=log_dir,
         )
 
-    def _gate_lit(self, gate: str, log_dir: Path) -> CommandResult:
+    def _configured_lit_command(self, target: Path) -> tuple[list[str], Path, str]:
+        """Return the same configured lit invocation used by check-vc4.
+
+        Running llvm-lit directly on compiler/test/... bypasses CMake's generated
+        lit site configuration, so config.llvm_tools_dir is missing and tests can
+        also write Output/ and .lit_test_times.txt into the source tree.  The
+        targeted lit gates must instead use the configured build-tree lit setup
+        that ninja check-vc4 uses.
+        """
+        build_test = self.build_dir / "test"
+
+        # Prefer the exact lit executable/interpreter chosen by CMake.  This
+        # normally looks like:
+        #   cd <build>/test && <python> <lit> -sv <build>/test
+        probe = subprocess.run(
+            ["ninja", "-C", str(self.build_dir), "-t", "commands", "check-vc4"],
+            cwd=str(self.repo),
+            text=True,
+            capture_output=True,
+        )
+        if probe.returncode == 0:
+            for raw_line in probe.stdout.splitlines():
+                line = raw_line.strip()
+                if "lit" not in line or str(build_test) not in line:
+                    continue
+                cwd = build_test
+                command_part = line
+                if "&&" in line:
+                    cd_part, command_part = line.split("&&", 1)
+                    cd_part = cd_part.strip()
+                    if cd_part.startswith("cd "):
+                        try:
+                            cwd = Path(shlex.split(cd_part[3:].strip())[0])
+                        except Exception:
+                            cwd = build_test
+                try:
+                    cmd = shlex.split(command_part.strip())
+                except ValueError:
+                    continue
+                if not cmd:
+                    continue
+
+                replaced_target = False
+                build_test_s = str(build_test)
+                for i in range(len(cmd) - 1, -1, -1):
+                    token = cmd[i]
+                    if token == build_test_s or token.rstrip("/") == build_test_s.rstrip("/"):
+                        cmd[i] = str(target)
+                        replaced_target = True
+                        break
+                if not replaced_target:
+                    cmd.append(str(target))
+                return cmd, cwd, "ninja-check-vc4-lit-command"
+
         lit = self.build_bin("llvm-lit")
-        if not lit.exists():
-            found = executable_in_path("llvm-lit") or executable_in_path("lit")
-            lit_cmd = found or str(lit)
-        else:
-            lit_cmd = str(lit)
-        emit_dir = self.repo / "compiler/test/CodeGen/VC4/Emit"
-        target = emit_dir
-        if not target.exists():
-            return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"lit target does not exist yet: {relpath(self.repo, target)}")
-        return self.run_command(gate=gate, cmd=[lit_cmd, "-v", str(target)], log_dir=log_dir)
+        if lit.exists():
+            return [str(lit), "-v", str(target)], build_test, "build-bin-llvm-lit"
+
+        found = executable_in_path("llvm-lit") or executable_in_path("lit")
+        if found:
+            return [found, "-v", str(target)], build_test, "path-lit-build-tree"
+
+        # Last-resort fallback keeps the gate deterministic and configured even
+        # if we cannot locate a standalone lit binary.
+        return ["ninja", "-C", "compiler/build", "check-vc4"], self.repo, "ninja-check-vc4-fallback"
+
+    def _gate_lit(self, gate: str, log_dir: Path) -> CommandResult:
+        build_test = self.build_dir / "test"
+        if not build_test.exists():
+            return self.write_check_log(
+                gate=gate,
+                log_dir=log_dir,
+                ok=False,
+                message=f"configured lit build tree does not exist yet: {relpath(self.repo, build_test)}",
+            )
+
+        # Product-presence checks keep already-satisfied probes honest.  Without
+        # this, m1-02 can look satisfied simply because the existing m1-01 Emit
+        # tests pass.  The gate name is the stable contract for the expected
+        # test family; the command below still runs the configured lit tree.
+        if gate == "lit:codegen-emit-contract":
+            emit_source = self.repo / "compiler" / "test" / "CodeGen" / "VC4" / "Emit"
+            matches = sorted(emit_source.glob("vc4-codegen-emit-contract-*.mlir"))
+            if not matches:
+                return self.write_check_log(
+                    gate=gate,
+                    log_dir=log_dir,
+                    ok=False,
+                    message=(
+                        "m1-02 product tests are not present yet: expected at least one "
+                        f"{relpath(self.repo, emit_source)}/vc4-codegen-emit-contract-*.mlir"
+                    ),
+                )
+
+        emit_target = build_test / "CodeGen" / "VC4" / "Emit"
+        target = emit_target if emit_target.exists() else build_test
+        cmd, cwd, source = self._configured_lit_command(target)
+        result = self.run_command(gate=gate, cmd=cmd, log_dir=log_dir, cwd=cwd)
+        if result.ok and self.verbose:
+            print(f"[vc4-gate] {gate}: lit command source={source} target={relpath(self.repo, target)}", flush=True)
+        return result
 
     def _gate_cc_generated(self, gate: str, log_dir: Path, *, compile_launcher: bool) -> CommandResult:
         name = "minimal_thrend"
@@ -541,6 +801,9 @@ class GateRunner:
         return self.run_command(gate=gate, cmd=[cc, "-std=c11", "-fsyntax-only", "-I", str(out_dir), str(tmp)], log_dir=log_dir)
 
     def _gate_candidate_support(self, gate: str, log_dir: Path, name: str, phase: str) -> CommandResult:
+        support_source_check = self._check_source_products_for_gate(gate, log_dir)
+        if support_source_check is not None:
+            return support_source_check
         support = self.repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
         if support.exists():
             return self.run_command(gate=gate, cmd=["bash", str(support), name, phase], log_dir=log_dir)
@@ -559,6 +822,9 @@ class GateRunner:
         )
 
     def _gate_hardware_reference(self, gate: str, log_dir: Path, name: str) -> CommandResult:
+        hardware_source_check = self._check_source_products_for_gate(gate, log_dir)
+        if hardware_source_check is not None:
+            return hardware_source_check
         ref_dir = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "reference"
         run_sh = ref_dir / "run.sh"
         if not run_sh.exists():
@@ -566,6 +832,9 @@ class GateRunner:
         return self.run_command(gate=gate, cmd=["bash", "run.sh"], log_dir=log_dir, cwd=ref_dir, timeout_sec=max(self.timeout_sec, 3600))
 
     def _gate_expected_json(self, gate: str, log_dir: Path, name: str) -> CommandResult:
+        expected_source_check = self._check_source_products_for_gate(gate, log_dir)
+        if expected_source_check is not None:
+            return expected_source_check
         expected = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "expected.json"
         if not expected.exists():
             return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"missing expected.json: {relpath(self.repo, expected)}")
@@ -667,12 +936,20 @@ def cmd_run(args: argparse.Namespace) -> int:
     gates = [str(g) for g in slice_entry.get("gates", [])]
     if args.only_gate:
         selected = set(args.only_gate)
-        gates = [g for g in gates if g in selected]
-        missing = selected - set(gates)
+        typed_allowed = {f"typed-verifier:{slice_entry['id']}", "typed-verifier:audit-contract"}
+        selected_declared = selected & set(gates)
+        gates = [g for g in gates if g in selected_declared]
+        if f"typed-verifier:{slice_entry['id']}" in selected:
+            gates.append(f"typed-verifier:{slice_entry['id']}")
+        if "typed-verifier:audit-contract" in selected:
+            gates.append("typed-verifier:audit-contract")
+        missing = selected - selected_declared - typed_allowed
         if missing:
             raise DriverError(f"requested --only-gate entries are not in slice gate list: {sorted(missing)}")
     log_dir = Path(args.log_dir).resolve() if args.log_dir else runner.state.root / "logs" / str(slice_entry["id"]) / "manual-gates"
     results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=args.allow_dirty, stop_on_failure=not args.keep_going)
+    if all(r.ok for r in results):
+        results.append(runner.run_typed_verifier(str(slice_entry["id"]), log_dir=log_dir))
     ok = all(r.ok for r in results)
     print(json.dumps([r.as_json(repo) for r in results], indent=2, sort_keys=True), flush=True)
     return 0 if ok else 1
