@@ -20,6 +20,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -63,6 +64,8 @@ class VerificationResult:
     stdout_tail: Optional[str] = None
     stderr_tail: Optional[str] = None
     details: Optional[Dict[str, Any]] = None
+    timed_out: bool = False
+    timeout_sec: Optional[int] = None
 
     def to_packet(self) -> Dict[str, Any]:
         packet: Dict[str, Any] = {
@@ -97,6 +100,10 @@ class VerificationResult:
             packet["stdout_tail"] = self.stdout_tail
         if self.stderr_tail is not None:
             packet["stderr_tail"] = self.stderr_tail
+        if self.timed_out:
+            packet["timed_out"] = True
+        if self.timeout_sec is not None:
+            packet["timeout_sec"] = self.timeout_sec
         if self.details:
             packet["details"] = self.details
         return packet
@@ -112,6 +119,8 @@ class CommandResult:
     stderr: str
     log_path: Optional[Path]
     duration_sec: float
+    timed_out: bool = False
+    timeout_sec: Optional[int] = None
 
 
 class VerifierContext:
@@ -130,6 +139,11 @@ class VerifierContext:
             prefix_paths = [str((self.repo / p).resolve()) for p in path_prefix]
             self.env["PATH"] = os.pathsep.join(prefix_paths + [self.env.get("PATH", "")])
         self.timeout_sec = int(args.timeout_sec or defaults.get("timeout_sec", 7200))
+        self.hardware_timeout_sec = int(
+            args.hardware_timeout_sec
+            or os.environ.get("VC4_HARDWARE_TIMEOUT_SEC")
+            or defaults.get("hardware_timeout_sec", 120)
+        )
         self.dry_run = bool(args.dry_run)
         self.no_hardware = bool(args.no_hardware)
         self.keep_going = bool(args.keep_going)
@@ -184,37 +198,109 @@ class VerifierContext:
         real_cwd.mkdir(parents=True, exist_ok=True)
         if log_path:
             log_path.parent.mkdir(parents=True, exist_ok=True)
-        proc = subprocess.run(
+        effective_timeout = timeout_sec or self.timeout_sec
+        proc = subprocess.Popen(
             cmd,
             cwd=str(real_cwd),
             env=self.env,
-            input=input_text,
-            text=True,
+            stdin=subprocess.PIPE if input_text is not None else None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            timeout=timeout_sec or self.timeout_sec,
+            text=True,
+            start_new_session=True,
         )
+        timed_out = False
+        try:
+            stdout, stderr = proc.communicate(input=input_text, timeout=effective_timeout)
+            exit_code = proc.returncode
+        except subprocess.TimeoutExpired as e:
+            timed_out = True
+            stdout = coerce_process_text(e.stdout)
+            stderr = coerce_process_text(e.stderr)
+            try:
+                os.killpg(proc.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+            except PermissionError:
+                proc.terminate()
+            try:
+                more_stdout, more_stderr = proc.communicate(timeout=2.0)
+                stdout += coerce_process_text(more_stdout)
+                stderr += coerce_process_text(more_stderr)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                except PermissionError:
+                    proc.kill()
+                more_stdout, more_stderr = proc.communicate()
+                stdout += coerce_process_text(more_stdout)
+                stderr += coerce_process_text(more_stderr)
+            exit_code = 124
+
         duration = time.time() - started
+        stdout = coerce_process_text(stdout)
+        stderr = coerce_process_text(stderr)
         if log_path:
             with log_path.open("w", encoding="utf-8") as f:
                 f.write(f"# cwd: {real_cwd}\n")
                 f.write("# command: " + " ".join(shell_quote(x) for x in cmd) + "\n")
-                f.write(f"# exit_code: {proc.returncode}\n")
+                f.write(f"# exit_code: {exit_code}\n")
+                if timed_out:
+                    f.write("# timed_out: true\n")
+                    f.write(f"# timeout_sec: {effective_timeout}\n")
                 f.write(f"# duration_sec: {duration:.3f}\n")
                 f.write("\n## stdout\n")
-                f.write(proc.stdout)
+                f.write(stdout)
                 f.write("\n## stderr\n")
-                f.write(proc.stderr)
+                f.write(stderr)
         return CommandResult(
-            ok=proc.returncode == 0,
+            ok=(exit_code == 0 and not timed_out),
             argv=cmd,
             cwd=real_cwd,
-            exit_code=proc.returncode,
-            stdout=proc.stdout,
-            stderr=proc.stderr,
+            exit_code=exit_code,
+            stdout=stdout,
+            stderr=stderr,
             log_path=log_path,
             duration_sec=duration,
+            timed_out=timed_out,
+            timeout_sec=int(effective_timeout) if timed_out else None,
         )
+
+
+def coerce_process_text(value: Any) -> str:
+    """Normalize subprocess stdout/stderr, including timeout byte payloads."""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if isinstance(value, bytearray):
+        return bytes(value).decode("utf-8", errors="replace")
+    return str(value)
+
+
+def is_hardware_like_verification(v: Mapping[str, Any]) -> bool:
+    """Return true for verifications likely to own pi-install/serial hangs."""
+    mechanism = str(v.get("mechanism", ""))
+    if mechanism == "hardware_run":
+        return True
+    if bool(v.get("requires_hardware", False)):
+        return True
+    if mechanism == "candidate_phase" and str(v.get("phase", "")) in {"build", "run"}:
+        # The build phase should avoid pi-install, but older fixture Makefiles or
+        # runner regressions can accidentally invoke it.  Treat it as
+        # hardware-adjacent so timeout reports route to the semantic owner.
+        return True
+    return False
+
+
+def verification_timeout_sec(ctx: "VerifierContext", v: Mapping[str, Any]) -> int:
+    if "timeout_sec" in v:
+        return int(v.get("timeout_sec", ctx.timeout_sec))
+    if is_hardware_like_verification(v):
+        return int(ctx.hardware_timeout_sec)
+    return int(ctx.timeout_sec)
 
 
 def shell_quote(s: str) -> str:
@@ -483,6 +569,11 @@ def make_success(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any], *, m
 
 def make_failure(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any], message: str, *, expected: Any = None, actual: Any = None, details: Optional[Dict[str, Any]] = None, command_result: Optional[CommandResult] = None, duration: float = 0.0) -> VerificationResult:
     kwargs: Dict[str, Any] = {}
+    timed_out = False
+    timeout_value: Optional[int] = None
+    category = str(v.get("category", v.get("mechanism", "verification_failed")))
+    route_hint = str(v.get("route_hint", "gpt_pro"))
+
     if command_result is not None:
         kwargs.update(
             command=command_result.argv,
@@ -493,23 +584,57 @@ def make_failure(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any], mess
             stderr_tail=tail(command_result.stderr),
         )
         duration = command_result.duration_sec
+        if command_result.timed_out:
+            timed_out = True
+            timeout_value = command_result.timeout_sec
+            hardware_like = is_hardware_like_verification(v)
+            category = "hardware_timeout" if hardware_like else "command_timeout"
+            route_hint = "gpt_pro" if hardware_like else route_hint
+            if hardware_like:
+                message = (
+                    f"hardware verification command timed out after "
+                    f"{timeout_value}s; likely pi-install/serial hardware hang"
+                )
+            else:
+                message = f"verification command timed out after {timeout_value}s"
+
+            timeout_actual = {
+                "exit_code": command_result.exit_code,
+                "timeout_sec": timeout_value,
+                "cmd": command_result.argv,
+            }
+            if actual is None:
+                actual = timeout_actual
+            elif isinstance(actual, dict):
+                actual = {**actual, **timeout_actual}
+
+            timeout_details = {
+                "stdout_tail": tail(command_result.stdout),
+                "stderr_tail": tail(command_result.stderr),
+            }
+            if details is None:
+                details = timeout_details
+            else:
+                details = {**details, **timeout_details}
+
     return VerificationResult(
         ok=False,
         slice_id=slice_id,
         verification_id=str(v.get("id", "<unnamed>")),
         mechanism=str(v.get("mechanism", "<unknown>")),
         description=str(v.get("description", "")),
-        category=str(v.get("category", v.get("mechanism", "verification_failed"))),
-        route_hint=str(v.get("route_hint", "gpt_pro")),
+        category=category,
+        route_hint=route_hint,
         required=bool(v.get("required", True)),
         duration_sec=duration,
         message=message,
         expected=expected,
         actual=actual,
         details=details,
+        timed_out=timed_out,
+        timeout_sec=timeout_value,
         **kwargs,
     )
-
 
 def skip_result(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any], reason: str) -> VerificationResult:
     return VerificationResult(
@@ -628,7 +753,7 @@ def mechanism_command(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any])
     cmd = expand_command(ctx, argv, v)
     cwd = ctx.repo_path(str(v.get("cwd", "."))) if v.get("cwd") else ctx.repo
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "command")))
-    result = ctx.run_command(cmd, cwd=cwd, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(cmd, cwd=cwd, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     expected_exit = int(v.get("expect_exit_code", 0))
     stdout_contains = [str(x) for x in as_list(v.get("stdout_contains"))]
     stderr_contains = [str(x) for x in as_list(v.get("stderr_contains"))]
@@ -653,7 +778,7 @@ def mechanism_build(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -
         return make_failure(ctx, slice_id, v, "build verification requires target")
     argv = ["ninja", "-C", str(ctx.build_dir), target]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", f"build_{target}")))
-    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, f"build target failed: {target}", expected={"target": target}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message=f"build target passed: {target}", duration=result.duration_sec, details={"log_path": str(log_path)})
@@ -670,7 +795,7 @@ def mechanism_lit(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> 
         lit = ctx.resolve_tool("llvm-lit")
     argv = [lit, "-sv", str(ctx.repo_path(root))]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "lit")))
-    result = ctx.run_command(argv, cwd=ctx.repo / "compiler/build/test" if (ctx.repo / "compiler/build/test").exists() else ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo / "compiler/build/test" if (ctx.repo / "compiler/build/test").exists() else ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, "lit suite failed", expected={"root": root}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message="lit suite passed", duration=result.duration_sec, details={"root": root, "log_path": str(log_path)})
@@ -696,7 +821,7 @@ def mechanism_vc4_codegen_generate(ctx: VerifierContext, slice_id: str, v: Mappi
         return make_failure(ctx, slice_id, v, str(e), expected={"tool": tool}, actual=e.details)
     argv = [exe, str(input_abs), "--emit-bundle", str(bundle_abs)]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "vc4_codegen_generate")))
-    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     required_files = [str(x) for x in as_list(v.get("required_files"))] or ["kernel.qasm", "kernel_launch.c", "kernel_launch.h", "manifest.json"]
     missing = [f for f in required_files if not (bundle_abs / f).exists()]
     if not result.ok or missing:
@@ -785,7 +910,7 @@ def mechanism_vc4asm_assemble(ctx: VerifierContext, slice_id: str, v: Mapping[st
         cwd = ctx.repo / cwd
     argv = [exe, "-c", str(out_c_abs), "-h", str(out_h_abs), str(qasm_abs)]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "vc4asm_assemble")))
-    result = ctx.run_command(argv, cwd=cwd, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=cwd, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     missing = [str(p) for p in [out_c_abs, out_h_abs] if not p.exists()]
     if not result.ok or missing:
         return make_failure(ctx, slice_id, v, "vc4asm assembly failed", expected={"outputs": [str(out_c_abs), str(out_h_abs)]}, actual={"missing_outputs": missing, "exit_code": result.exit_code}, command_result=result)
@@ -801,7 +926,7 @@ def mechanism_c_syntax(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]
     flags = [str(x) for x in as_list(v.get("flags"))] or ["-std=c11", "-fsyntax-only"]
     argv = [cc] + flags + [f"-I{d}" for d in include_dirs] + [str(ctx.repo_path(p) if not p.startswith(".vc4_auto/") else ctx.repo / p) for p in files]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "c_syntax")))
-    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, "C syntax check failed", expected={"files": files}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message="C syntax check passed", duration=result.duration_sec, details={"log_path": str(log_path)})
@@ -817,7 +942,7 @@ def mechanism_candidate_phase(ctx: VerifierContext, slice_id: str, v: Mapping[st
         return make_failure(ctx, slice_id, v, "candidate runner script missing", expected=str(script), actual={"exists": False})
     argv = ["bash", str(script), name, phase]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", f"candidate_{phase}_{name}")))
-    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, f"candidate phase failed: {name} {phase}", expected={"name": name, "phase": phase}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message=f"candidate phase passed: {name} {phase}", duration=result.duration_sec, details={"log_path": str(log_path)})
@@ -841,7 +966,7 @@ def mechanism_hardware_run(ctx: VerifierContext, slice_id: str, v: Mapping[str, 
     else:
         return make_failure(ctx, slice_id, v, "hardware_run side must be reference or candidate", expected=["reference", "candidate"], actual=side)
     log_path = ctx.command_log_path(slice_id, str(v.get("id", f"hardware_{side}_{fixture}")))
-    result = ctx.run_command(argv, cwd=cwd, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=cwd, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, f"hardware run failed: {fixture} {side}", expected={"fixture": fixture, "side": side}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message=f"hardware run passed: {fixture} {side}", duration=result.duration_sec, details={"log_path": str(log_path)})
@@ -861,7 +986,7 @@ def mechanism_expected_json_result(ctx: VerifierContext, slice_id: str, v: Mappi
         return make_failure(ctx, slice_id, v, "hardware log missing", expected=log, actual={"exists": False})
     argv = [sys.executable, str(script), str(expected_abs), str(log_abs)]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "expected_json_result")))
-    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=int(v.get("timeout_sec", ctx.timeout_sec)), log_path=log_path)
+    result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not result.ok:
         return make_failure(ctx, slice_id, v, "expected.json result check failed", expected={"expected_json": expected, "run_log": log}, actual={"exit_code": result.exit_code}, command_result=result)
     return make_success(ctx, slice_id, v, message="expected.json result check passed", duration=result.duration_sec, details={"log_path": str(log_path)})
@@ -1051,7 +1176,7 @@ def verify_one(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> Ver
     try:
         return fn(ctx, slice_id, v)
     except subprocess.TimeoutExpired as e:
-        return make_failure(ctx, slice_id, v, "verification command timed out", actual={"timeout_sec": e.timeout, "cmd": e.cmd}, details={"stdout_tail": tail(e.stdout or ""), "stderr_tail": tail(e.stderr or "")})
+        return make_failure(ctx, slice_id, v, "verification command timed out", actual={"timeout_sec": e.timeout, "cmd": e.cmd, "exit_code": 124}, details={"stdout_tail": tail(coerce_process_text(e.stdout)), "stderr_tail": tail(coerce_process_text(e.stderr))})
     except VerificationError as e:
         return make_failure(ctx, slice_id, v, str(e), details=e.details)
     except Exception as e:
@@ -1311,6 +1436,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--out", help="write JSON report to this path")
     parser.add_argument("--state-root", help="override generated verifier state root")
     parser.add_argument("--timeout-sec", type=int, default=0)
+    parser.add_argument("--hardware-timeout-sec", type=int, default=0, help="default timeout for hardware-like verifications (default: spec defaults.hardware_timeout_sec, env VC4_HARDWARE_TIMEOUT_SEC, or 120)")
     parser.add_argument("--keep-going", action="store_true", help="run all requested verifications even after failures")
     parser.add_argument("--no-hardware", action="store_true", help="skip verifications marked requires_hardware")
     parser.add_argument("--dry-run", action="store_true", help="validate command construction without running external commands")
@@ -1343,8 +1469,44 @@ def selected_slices(spec: Dict[str, Any], args: argparse.Namespace) -> List[str]
     return deduped
 
 
+
+def _json_safe_for_report(value):
+    """Recursively coerce verifier reports to JSON-serializable values.
+
+    TimeoutExpired and some subprocess paths can carry raw bytes in stdout/stderr.
+    The verifier must never crash while reporting a failure; it should surface the
+    failure packet deterministically.
+    """
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+
+    if isinstance(value, bytearray):
+        return bytes(value).decode("utf-8", errors="replace")
+
+    if isinstance(value, tuple):
+        return [_json_safe_for_report(v) for v in value]
+
+    if isinstance(value, list):
+        return [_json_safe_for_report(v) for v in value]
+
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if isinstance(k, bytes):
+                kk = k.decode("utf-8", errors="replace")
+            else:
+                kk = str(k)
+            out[kk] = _json_safe_for_report(v)
+        return out
+
+    # pathlib.Path, enums, exceptions, and any accidental custom objects.
+    return str(value)
+
 def emit_report(report: Dict[str, Any], args: argparse.Namespace) -> None:
-    text = json.dumps(report, indent=2, sort_keys=False) + "\n"
+    text = json.dumps(_json_safe_for_report(report), indent=2, sort_keys=False) + "\n"
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
