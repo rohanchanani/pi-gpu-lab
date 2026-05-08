@@ -83,6 +83,7 @@ check_fixture() {
   require_file "$INPUT_MLIR"
   require_file "$EXPECTED_JSON"
   require_dir "$REFERENCE_DIR"
+  require_file "$REFERENCE_DIR/Makefile"
   require_file "$REFERENCE_DIR/mailbox.c"
   require_file "$REFERENCE_DIR/mailbox.h"
   require_dir "$TEST_ROOT/share"
@@ -96,6 +97,18 @@ copy_assembler_share() {
     rm -rf "$AUTO_ROOT/candidates/share" "$GENERATED_DIR/share"
     cp -R "$TEST_ROOT/share" "$AUTO_ROOT/candidates/share"
     cp -R "$TEST_ROOT/share" "$GENERATED_DIR/share"
+  fi
+}
+
+copy_workdir_assembler_share() {
+  # The generated hardware workdir re-runs vc4asm from candidate_work.
+  # vc4asm -c resolves ../share/vc4tmpl/template.h from that directory,
+  # so provide HARDWARE_ROOT/share in addition to the generated-bundle share.
+  if [[ -d "$TEST_ROOT/share" ]]; then
+    mkdir -p "$HARDWARE_ROOT"
+    rm -rf "$HARDWARE_ROOT/share" "$WORK_DIR/share"
+    cp -R "$TEST_ROOT/share" "$HARDWARE_ROOT/share"
+    cp -R "$TEST_ROOT/share" "$WORK_DIR/share"
   fi
 }
 
@@ -173,23 +186,25 @@ print(public)
 PY_PUBLIC
 }
 
-write_candidate_harness() {
-  local public_name="$1"
-  local harness_name="$2"
-  cat > "$WORK_DIR/$harness_name" <<EOF
-#include "kernel_launch.h"
-
-/*
- * Compile-time candidate harness for $TEST_NAME.
- *
- * This slice only proves that vc4-codegen output can be generated, assembled,
- * and built into a candidate-side workdir.  Real runtime binding and hardware
- * execution are deliberately left to the hardware-smoke slice.
- */
-void notmain(void) {
-  (void)&$public_name;
+c_identifier_from_string() {
+  python3 - "$1" <<'PY_IDENT'
+import re
+import sys
+value = sys.argv[1]
+value = re.sub(r"[^0-9A-Za-z_]", "_", value)
+if not value or not re.match(r"[A-Za-z_]", value[0]):
+    value = "vc4_" + value
+print(value)
+PY_IDENT
 }
-EOF
+
+derive_kernel_base() {
+  local public_name="$1"
+  if [[ "$public_name" == *_launch ]]; then
+    printf '%s\n' "${public_name%_launch}"
+  else
+    printf '%s\n' "$TEST_NAME"
+  fi
 }
 
 find_reference_harness_basename() {
@@ -201,80 +216,102 @@ find_reference_harness_basename() {
   basename "${matches[0]}"
 }
 
-write_candidate_makefile() {
-  local harness_name="$1"
-  cat > "$WORK_DIR/Makefile" <<EOF
-CC ?= arm-none-eabi-gcc
-CFLAGS ?= -std=gnu99 -O2 -Wall -ffreestanding -I.
-OBJDIR := objs
-OBJS := \
-  \$(OBJDIR)/${harness_name%.c}.o \
-  \$(OBJDIR)/kernel_launch.o \
-  \$(OBJDIR)/kernelshader.o
+write_launch_header_wrapper() {
+  local kernel_base="$1"
+  local public_name="$2"
+  local guard
+  guard="$(c_identifier_from_string "${kernel_base}_launch_h")"
+  guard="$(printf '%s' "$guard" | tr '[:lower:]' '[:upper:]')"
+  cat > "$WORK_DIR/${kernel_base}_launch.h" <<EOF_WRAP
+#ifndef ${guard}
+#define ${guard}
 
-.PHONY: all clean run
+#include "mailbox.h"
+#include "kernel_launch.h"
 
-all: \$(OBJS)
-
-\$(OBJDIR):
-	mkdir -p \$(OBJDIR)
-
-\$(OBJDIR)/%.o: %.c | \$(OBJDIR)
-	\$(CC) \$(CFLAGS) -c \$< -o \$@
-
-run: all
-	@echo "candidate hardware execution is intentionally not run by the m1-09 build gate" >&2
-	@exit 1
-
-clean:
-	rm -rf \$(OBJDIR)
-EOF
+#endif /* ${guard} */
+EOF_WRAP
+  : "$public_name"
 }
 
 write_workdir_run_sh() {
-  cat > "$WORK_DIR/run.sh" <<'EOF'
+  local kernel_base="$1"
+  local bin_name="$2"
+  cat > "$WORK_DIR/run.sh" <<EOF_RUN
 #!/usr/bin/env bash
 set -euo pipefail
-make run
-EOF
+
+if ! out=\$(vc4asm -c kernelshader.c -h kernelshader.h kernel.qasm 2>&1); then
+  echo "ASSEMBLY FAILED WITH OUTPUT" >&2
+  printf '%s\n' "\$out" >&2
+  exit 1
+fi
+if [[ -n "\$out" ]]; then
+  echo "ASSEMBLY PRODUCED UNEXPECTED OUTPUT" >&2
+  printf '%s\n' "\$out" >&2
+  exit 1
+fi
+cp kernelshader.c ${kernel_base}shader.c
+cp kernelshader.h ${kernel_base}shader.h
+
+echo "RUNNING MAKE"
+make
+
+echo "RUNNING PI INSTALL"
+"\${VC4_PI_INSTALL_CMD:-pi-install}" "./${bin_name}"
+EOF_RUN
   chmod +x "$WORK_DIR/run.sh"
 }
 
 prepare_workdir() {
   assemble_candidate
-  local public_name harness_name
+  local public_name kernel_base harness_name bin_name
   public_name="$(extract_public_name)"
   if ! [[ "$public_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
     fail "generated public_name is not a valid C identifier: $public_name"
   fi
+  kernel_base="$(derive_kernel_base "$public_name")"
+  if ! [[ "$kernel_base" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+    fail "derived kernel base is not a valid C identifier: $kernel_base"
+  fi
   harness_name="$(find_reference_harness_basename)"
+  bin_name="${harness_name%.c}.bin"
 
   log "preparing candidate workdir $(relpath "$WORK_DIR")"
   rm -rf "$WORK_DIR"
   mkdir -p "$WORK_DIR"
+  copy_workdir_assembler_share
 
+  cp "$REFERENCE_DIR/Makefile" "$WORK_DIR/Makefile"
+  cp "$REFERENCE_DIR/$harness_name" "$WORK_DIR/$harness_name"
   cp "$REFERENCE_DIR/mailbox.c" "$WORK_DIR/mailbox.c"
   cp "$REFERENCE_DIR/mailbox.h" "$WORK_DIR/mailbox.h"
+
   cp "$GENERATED_DIR/kernel.qasm" "$WORK_DIR/kernel.qasm"
+  cp "$GENERATED_DIR/kernel.qasm" "$WORK_DIR/${kernel_base}.qasm"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
+  cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
+  write_launch_header_wrapper "$kernel_base" "$public_name"
   cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/kernelshader.c"
   cp "$GENERATED_DIR/kernelshader.h" "$WORK_DIR/kernelshader.h"
+  cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/${kernel_base}shader.c"
+  cp "$GENERATED_DIR/kernelshader.h" "$WORK_DIR/${kernel_base}shader.h"
 
-  write_candidate_harness "$public_name" "$harness_name"
-  write_candidate_makefile "$harness_name"
-  write_workdir_run_sh
+  write_workdir_run_sh "$kernel_base" "$bin_name"
 
-  cat > "$WORK_DIR/README.generated.md" <<EOF
-# Generated candidate workdir
+  cat > "$WORK_DIR/README.generated.md" <<EOF_README
+# Generated candidate hardware workdir
 
 This directory is generated by compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh.
 It is intentionally under .vc4_auto and should not be committed.
 
 Test: $TEST_NAME
 Public launcher: $public_name
+Kernel base: $kernel_base
 Harness: $harness_name
-EOF
+Binary: $bin_name
+EOF_README
   log "candidate workdir ready: $(relpath "$WORK_DIR")"
 }
 
@@ -289,7 +326,7 @@ build_candidate() {
 
 run_candidate() {
   prepare_workdir
-  log "running candidate hardware hook from $(relpath "$WORK_DIR")"
+  log "running candidate hardware workdir $(relpath "$WORK_DIR")"
   (
     cd "$WORK_DIR"
     bash run.sh

@@ -1677,19 +1677,22 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   llvm::raw_string_ostream os(source);
 
   os << "#include \"kernel_launch.h\"\n\n";
+  os << "#include \"rpi.h\"\n";
+  os << "#include \"mailbox.h\"\n";
+  os << "#include \"kernelshader.h\"\n\n";
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
-  if (launchABIRequiresF32Packing(kernel.launchABI))
-    os << "#include <string.h>\n";
-  os << "\n";
+  os << "#include <string.h>\n\n";
 
   os << "#ifndef VC4_RUNTIME_MAX_QPUS\n";
   os << "#define VC4_RUNTIME_MAX_QPUS 12u\n";
   os << "#endif\n\n";
+  os << "#define GPU_MEM_FLG 0xCu\n";
+  os << "#define GPU_BASE 0x40000000u\n";
   os << "#define NUM_UNIFS " << kernel.launchABI.uniformWordsPerQPU
      << "u\n\n";
 
-  os << "extern uint32_t vc4_runtime_active_qpus(struct vc4_runtime *rt);\n\n";
+  os << "/* extern uint32_t vc4_runtime_active_qpus(struct vc4_runtime *rt); */\n\n";
 
   if (launchABIRequiresF32Packing(kernel.launchABI)) {
     os << "static uint32_t vc4_codegen_pack_f32(float value) {\n";
@@ -1700,21 +1703,39 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   }
 
   os << "struct " << kernel.launchABI.publicName << "_state {\n";
+  os << "  uint32_t code[sizeof(kernelshader) / sizeof(uint32_t)];\n";
   os << "  uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];\n";
   os << "  uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];\n";
+  os << "  uint32_t handle;\n";
   os << "};\n\n";
 
   appendLauncherPrototype(os, kernel.launchABI);
   os << " {\n";
-  os << "  if (!rt)\n";
+  os << "  if (!rt || !rt->isInitialized)\n";
   os << "    return -1;\n\n";
   os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
   os << "  if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
   os << "    return -1;\n\n";
-  os << "  struct " << kernel.launchABI.publicName
-     << "_state backing = {0};\n";
-  os << "  struct " << kernel.launchABI.publicName
-     << "_state *state = &backing;\n\n";
+  os << "  uint32_t handle = mem_alloc((uint32_t)sizeof(struct "
+     << kernel.launchABI.publicName << "_state), 4096u, GPU_MEM_FLG);\n";
+  os << "  if (!handle)\n";
+  os << "    return -1;\n\n";
+  os << "  uint32_t vc = mem_lock(handle);\n";
+  os << "  if (!vc) {\n";
+  os << "    mem_free(handle);\n";
+  os << "    return -1;\n";
+  os << "  }\n\n";
+  os << "  volatile struct " << kernel.launchABI.publicName
+     << "_state *state =\n";
+  os << "      (volatile struct " << kernel.launchABI.publicName
+     << "_state *)(vc - GPU_BASE);\n";
+  os << "  if (!state) {\n";
+  os << "    mem_unlock(handle);\n";
+  os << "    mem_free(handle);\n";
+  os << "    return -1;\n";
+  os << "  }\n\n";
+  os << "  state->handle = handle;\n";
+  os << "  memcpy((void *)state->code, kernelshader, sizeof state->code);\n\n";
   appendLauncherUniformLayoutComment(os, kernel.launchABI);
   os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
   for (int64_t index = 0; index != kernel.launchABI.uniformWordsPerQPU;
@@ -1726,7 +1747,12 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "    state->unif_ptr[qpu] = "
      << "(uint32_t)(uintptr_t)&state->unif[qpu][0];\n";
   os << "  }\n\n";
-  os << "  (void)state;\n";
+  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu)\n";
+  os << "    state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu][0];\n\n";
+  os << "  gpu_fft_base_exec_direct((uint32_t)state->code,\n";
+  os << "                           (uint32_t *)state->unif_ptr, activeQpus);\n\n";
+  os << "  mem_unlock(handle);\n";
+  os << "  mem_free(handle);\n";
   os << "  return 0;\n";
   os << "}\n";
   os.flush();
