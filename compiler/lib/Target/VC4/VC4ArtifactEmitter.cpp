@@ -831,8 +831,8 @@ static LogicalResult appendSignalInstruction(mlir::vc4::QPUBundleOp bundle,
               "a scheduled vc4.qpu.ldi operation for artifact emission";
   case mlir::vc4::QPUSignal::branch:
     return bundle.emitOpError()
-           << "sig = #vc4.qpu_signal<branch> must be emitted by "
-              "vc4.qpu.branch, which is outside this slice";
+           << "sig = #vc4.qpu_signal<branch> must be represented as "
+              "a scheduled vc4.qpu.branch operation for artifact emission";
   }
 
   if (needSeparator)
@@ -1027,11 +1027,138 @@ static LogicalResult emitQPUSemaQASM(mlir::vc4::QPUSemaOp sema,
   return success();
 }
 
+static const char *getBranchConditionSuffix(mlir::vc4::BranchCond cond) {
+  switch (cond) {
+  case mlir::vc4::BranchCond::all_z_set:
+    return ".allz";
+  case mlir::vc4::BranchCond::all_z_clear:
+    return ".allnz";
+  case mlir::vc4::BranchCond::any_z_set:
+    return ".anyz";
+  case mlir::vc4::BranchCond::any_z_clear:
+    return ".anynz";
+  case mlir::vc4::BranchCond::all_n_set:
+    return ".alln";
+  case mlir::vc4::BranchCond::all_n_clear:
+    return ".allnn";
+  case mlir::vc4::BranchCond::any_n_set:
+    return ".anyn";
+  case mlir::vc4::BranchCond::any_n_clear:
+    return ".anynn";
+  case mlir::vc4::BranchCond::all_c_set:
+    return ".allc";
+  case mlir::vc4::BranchCond::all_c_clear:
+    return ".allnc";
+  case mlir::vc4::BranchCond::any_c_set:
+    return ".anyc";
+  case mlir::vc4::BranchCond::any_c_clear:
+    return ".anync";
+  case mlir::vc4::BranchCond::always:
+    return "";
+  }
+  return "";
+}
+
+static const char *getBranchModeMnemonic(bool relative) {
+  return relative ? "brr" : "bra";
+}
+
+static bool getBoolAttrValue(mlir::Operation *op, llvm::StringRef attrName) {
+  if (auto attr = op->getAttrOfType<mlir::BoolAttr>(attrName))
+    return attr.getValue();
+  return false;
+}
+
+static std::string getQPUInstructionLabel(unsigned slotIndex) {
+  return "vc4_qpu_slot_" + std::to_string(slotIndex);
+}
+
+static bool hasBranchInstruction(llvm::ArrayRef<mlir::Operation *> stream) {
+  for (mlir::Operation *op : stream) {
+    if (llvm::isa<mlir::vc4::QPUBranchOp>(op))
+      return true;
+  }
+  return false;
+}
+
+static LogicalResult buildBranchDestinationList(mlir::vc4::QPUBranchOp branch,
+                                                std::string &destinations) {
+  mlir::Operation *op = branch.getOperation();
+  const bool writeSwap = op->hasAttr("write_swap");
+  std::string addDest = formatWriteAddress(getIntegerAttrValue(op, "waddr_add"),
+                                           /*forAddALU=*/true, writeSwap);
+  std::string mulDest = formatWriteAddress(getIntegerAttrValue(op, "waddr_mul"),
+                                           /*forAddALU=*/false, writeSwap);
+
+  // The VC4 branch encoding has independent ADD/MUL-side link destinations.
+  // Emit both deterministically so the scheduled write-address contract is not
+  // silently narrowed at the artifact boundary.
+  destinations = addDest + ", " + mulDest;
+  return success();
+}
+
+static LogicalResult buildBranchTargetList(mlir::vc4::QPUBranchOp branch,
+                                           std::string &targets) {
+  mlir::Operation *op = branch.getOperation();
+  const bool useReg = getBoolAttrValue(op, "use_reg");
+  int64_t immediate = getIntegerAttrValue(op, "immediate");
+
+  if (useReg) {
+    int64_t raddrA = getIntegerAttrValue(op, "raddr_a");
+    targets = formatRegFileAddress('a', raddrA) + ", " +
+              std::to_string(immediate);
+    return success();
+  }
+
+  // vc4asm accepts '-' as the unused branch target addend in two-destination
+  // branch forms.  Keeping the immediate as the second target avoids inventing
+  // a register dependency while preserving both link write destinations.
+  targets = std::string("-, ") + std::to_string(immediate);
+  return success();
+}
+
+static LogicalResult emitQPUBranchQASM(mlir::vc4::QPUBranchOp branch,
+                                       unsigned slotIndex,
+                                       llvm::raw_ostream &os) {
+  mlir::Operation *op = branch.getOperation();
+  std::string destinations;
+  if (failed(buildBranchDestinationList(branch, destinations)))
+    return failure();
+
+  std::string targets;
+  if (failed(buildBranchTargetList(branch, targets)))
+    return failure();
+
+  const bool relative = getBoolAttrValue(op, "relative");
+  std::string opcode = getBranchModeMnemonic(relative);
+  opcode += getBranchConditionSuffix(branch.getCond());
+
+  os << opcode << " " << destinations << ", " << targets
+     << " # qpu.branch label=" << getQPUInstructionLabel(slotIndex)
+     << " target=" << (relative ? "relative" : "absolute") << ":"
+     << getIntegerAttrValue(op, "immediate") << " delay_slots=3\n";
+  return success();
+}
+
 static LogicalResult writeQASM(KernelRecord &kernel,
                                llvm::StringRef bundleDir) {
   std::string qasm;
   llvm::raw_string_ostream qasmOS(qasm);
-  for (mlir::Operation *op : kernel.scheduledStream) {
+  const bool emitInstructionLabels = hasBranchInstruction(kernel.scheduledStream);
+
+  for (unsigned slotIndex = 0; slotIndex != kernel.scheduledStream.size();
+       ++slotIndex) {
+    mlir::Operation *op = kernel.scheduledStream[slotIndex];
+
+    if (emitInstructionLabels)
+      qasmOS << ":" << getQPUInstructionLabel(slotIndex) << "\n";
+
+    if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
+      if (failed(emitQPUBranchQASM(branch, slotIndex, qasmOS)))
+        return failure();
+      continue;
+    }
+
     if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
       if (failed(emitQPUBundleQASM(bundle, qasmOS)))
         return failure();
@@ -1051,7 +1178,7 @@ static LogicalResult writeQASM(KernelRecord &kernel,
     }
 
     return op->emitOpError()
-           << "cannot be emitted as qasm in this qpu.ldi/sema slice";
+           << "cannot be emitted as qasm by the VC4 artifact emitter";
   }
   qasmOS.flush();
 
