@@ -36,6 +36,7 @@ struct KernelRecord {
 
   mlir::vc4::FuncOp func;
   mlir::vc4::VC4ArtifactKernelInfo info;
+  llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
 };
 
 static bool isScheduledQPUKernel(mlir::vc4::FuncOp func) {
@@ -224,6 +225,8 @@ static LogicalResult populateScheduledSinkInfo(KernelRecord &kernel) {
     return failure();
 
   kernel.info.scheduledOpCount = static_cast<unsigned>(stream.size());
+  kernel.scheduledStream.clear();
+  kernel.scheduledStream.append(stream.begin(), stream.end());
   return success();
 }
 
@@ -282,15 +285,12 @@ collectSingleKernel(mlir::vc4::ModuleOp vc4Module,
   return success();
 }
 
-static LogicalResult writeBundleFile(
-    mlir::Operation *diagOp, llvm::StringRef bundleDir, llvm::StringRef fileName,
+static LogicalResult writeTextFile(
+    mlir::Operation *diagOp, llvm::StringRef path,
     llvm::function_ref<void(llvm::raw_ostream &)> emit) {
-  llvm::SmallString<256> path(bundleDir);
-  llvm::sys::path::append(path, fileName);
-
   std::error_code ec;
   llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::CD_CreateAlways,
-                           llvm::sys::fs::FA_Write, llvm::sys::fs::OF_Text);
+                          llvm::sys::fs::FA_Write, llvm::sys::fs::OF_Text);
   if (ec) {
     return diagOp->emitError()
            << "failed to open artifact file '" << path << "': "
@@ -310,16 +310,133 @@ static LogicalResult writeBundleFile(
   return success();
 }
 
+static LogicalResult writeBundleFile(
+    mlir::Operation *diagOp, llvm::StringRef bundleDir, llvm::StringRef fileName,
+    llvm::function_ref<void(llvm::raw_ostream &)> emit) {
+  llvm::SmallString<256> path(bundleDir);
+  llvm::sys::path::append(path, fileName);
+  return writeTextFile(diagOp, path, emit);
+}
+
+static LogicalResult ensureAdjacentVC4ASMTemplates(mlir::Operation *diagOp,
+                                                   llvm::StringRef bundleDir) {
+  llvm::SmallString<256> templateDir(bundleDir);
+  llvm::sys::path::remove_filename(templateDir);
+  llvm::sys::path::append(templateDir, "share", "vc4tmpl");
+
+  std::error_code ec = llvm::sys::fs::create_directories(templateDir);
+  if (ec) {
+    return diagOp->emitError()
+           << "failed to create vc4asm template directory '" << templateDir
+           << "': " << ec.message();
+  }
+
+  llvm::SmallString<256> templateHeader(templateDir);
+  llvm::sys::path::append(templateHeader, "template.h");
+  if (failed(writeTextFile(diagOp, templateHeader, [](llvm::raw_ostream &os) {
+        os << "#ifndef ___SYMBOLNAME____H\n";
+        os << "#define ___SYMBOLNAME____H\n\n";
+        os << "#include <stdint.h>\n\n";
+        os << "#ifdef __cplusplus\n";
+        os << "extern \"C\" {\n";
+        os << "#endif\n\n";
+        os << "extern uint32_t ___SYMBOLNAME___[___INSTCOUNT2___];\n";
+        os << "___SYMBOLDEFS___\n";
+        os << "#ifdef __cplusplus\n";
+        os << "}\n";
+        os << "#endif\n\n";
+        os << "#endif\n";
+      })))
+    return failure();
+
+  llvm::SmallString<256> templateSource(templateDir);
+  llvm::sys::path::append(templateSource, "template.c");
+  if (failed(writeTextFile(diagOp, templateSource, [](llvm::raw_ostream &os) {
+        os << "#include \"___HEADERNAME___\"\n\n";
+        os << "#ifdef __cplusplus\n";
+        os << "extern \"C\" {\n";
+        os << "#endif\n\n";
+        os << "#ifdef _MSC_VER\n";
+        os << "__declspec(align(8))\n";
+        os << "#elif defined(__GNUC__)\n";
+        os << "__attribute__((aligned(8)))\n";
+        os << "#endif\n";
+        os << "uint32_t ___SYMBOLNAME___[___INSTCOUNT2___] = {\n";
+        os << "___HEXDATA___";
+        os << "};\n\n";
+        os << "#ifdef __cplusplus\n";
+        os << "}\n";
+        os << "#endif\n";
+      })))
+    return failure();
+
+  llvm::SmallString<256> templateHeaderNoInline(templateDir);
+  llvm::sys::path::append(templateHeaderNoInline, "template2.h");
+  if (failed(writeTextFile(diagOp, templateHeaderNoInline,
+                           [](llvm::raw_ostream &os) {
+                             os << "#ifndef ___SYMBOLNAME____H\n";
+                             os << "#define ___SYMBOLNAME____H\n\n";
+                             os << "#include <stdint.h>\n\n";
+                             os << "struct unspecified__;\n\n";
+                             os << "#ifdef __cplusplus\n";
+                             os << "extern \"C\" {\n";
+                             os << "#endif\n\n";
+                             os << "___SYMBOLIMPORTS___\n";
+                             os << "#ifdef __cplusplus\n";
+                             os << "}\n";
+                             os << "#endif\n\n";
+                             os << "___SYMBOLPROXIES___\n";
+                             os << "#endif\n";
+                           })))
+    return failure();
+
+  return success();
+}
+
+static bool isMinimalQASMNopBundle(mlir::vc4::QPUBundleOp bundle,
+                                      mlir::vc4::QPUSignal expectedSignal) {
+  return bundle && bundle.getSig() == expectedSignal &&
+         bundle.getOpAdd() == mlir::vc4::AddOpcode::nop &&
+         bundle.getOpMul() == mlir::vc4::MulOpcode::nop;
+}
+
+static LogicalResult verifyMinimalThreadEndQASM(KernelRecord &kernel) {
+  llvm::ArrayRef<mlir::Operation *> stream = kernel.scheduledStream;
+  if (stream.size() != 3) {
+    return kernel.func.emitOpError()
+           << "is not directly emittable by the minimal qasm emitter: "
+              "expected exactly three vc4.qpu.bundle nop slots encoding "
+              "thrend, nop, nop";
+  }
+
+  if (!isMinimalQASMNopBundle(
+          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[0]),
+          mlir::vc4::QPUSignal::thrend) ||
+      !isMinimalQASMNopBundle(
+          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[1]),
+          mlir::vc4::QPUSignal::none) ||
+      !isMinimalQASMNopBundle(
+          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[2]),
+          mlir::vc4::QPUSignal::none)) {
+    return kernel.func.emitOpError()
+           << "is not directly emittable by the minimal qasm emitter: "
+              "expected exactly three vc4.qpu.bundle nop slots encoding "
+              "thrend, nop, nop";
+  }
+
+  return success();
+}
+
 static LogicalResult writeQASM(KernelRecord &kernel,
                                llvm::StringRef bundleDir) {
+  if (failed(verifyMinimalThreadEndQASM(kernel)))
+    return failure();
+
   return writeBundleFile(kernel.func.getOperation(), bundleDir, "kernel.qasm",
                          [&](llvm::raw_ostream &os) {
-                           os << "# vc4-codegen skeleton qasm\n";
-                           os << "# kernel: " << kernel.info.symbolName << "\n";
-                           os << "# public_name: " << kernel.info.publicName
-                              << "\n";
-                           os << "# scheduled_sink_ops: "
-                              << kernel.info.scheduledOpCount << "\n";
+                           os << "thrend\n";
+                           os << "nop\n";
+                           os << "nop\n";
                          });
 }
 
@@ -415,6 +532,9 @@ LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
     return module.emitError() << "failed to create artifact bundle directory '"
                               << bundleDir << "': " << ec.message();
   }
+
+  if (failed(ensureAdjacentVC4ASMTemplates(module.getOperation(), bundleDir)))
+    return failure();
 
   if (failed(writeQASM(kernel, bundleDir)))
     return failure();

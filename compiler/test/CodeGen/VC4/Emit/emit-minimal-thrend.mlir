@@ -1,30 +1,29 @@
+// RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
 // RUN: test -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernel.qasm
+// RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
-// MANIFEST: "kind": "vc4-codegen-artifact-bundle-v0"
-// MANIFEST: "bundle_format": "vc4-codegen-artifact-bundle-v0"
-// MANIFEST: "kernel": "skeleton_kernel"
-// MANIFEST: "symbol_name": "skeleton_kernel"
-// MANIFEST: "public_name": "skeleton_launch"
-// MANIFEST: "scheduled_sink_ops": 3
 // QASM: thrend
 // QASM-NEXT: nop
 // QASM-NEXT: nop
 
-vc4.module @vc4_codegen_skeleton {
-  vc4.func @skeleton_kernel() attributes {
+// MANIFEST: "kernel": "minimal_thrend_kernel"
+// MANIFEST: "public_name": "minimal_thrend_launch"
+// MANIFEST: "scheduled_sink_ops": 3
+
+vc4.module @minimal_thrend {
+  vc4.func @minimal_thrend_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "skeleton_launch",
+      public_name = "minimal_thrend_launch",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
