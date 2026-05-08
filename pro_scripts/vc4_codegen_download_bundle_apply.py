@@ -75,6 +75,8 @@ class BundleEntry:
     sha256: str | None = None
     mode: str = "0644"
     zip_name: str | None = None
+    manifest_path: str | None = None
+    normalized_manifest_repo_prefix: bool = False
 
 
 def sha256_bytes(data: bytes) -> str:
@@ -124,6 +126,32 @@ def _normalize_bundle_repo_path(raw: str) -> str:
     return rel
 
 
+def _normalize_manifest_repo_path(raw: str) -> tuple[str, bool]:
+    """Normalize a manifest path and repair one legacy transport mistake.
+
+    Bundle zip members are intentionally named repo/<repo-relative path>, but
+    manifest changed_paths[].path must be just the repo-relative path.  GPT has
+    repeatedly confused those two layers and emitted manifest paths like
+    repo/compiler/..., while still placing the actual zip member at
+    repo/compiler/... .  This is a deterministic transport-shape error, not a
+    compiler patch decision, so the trusted local applier strips exactly one
+    leading repo/ prefix from manifest paths before allowlist/forbidden checks.
+
+    This does not relax zip validation: write entries still source bytes from
+    repo/<normalized path>, unlisted repo/ members are still rejected, hashes are
+    still checked, and the target path remains subject to the slice path policy.
+    """
+    rel = _normalize_bundle_repo_path(raw)
+    if rel == REPO_PREFIX.rstrip("/"):
+        raise BundleApplyError("manifest path 'repo/' does not name a repository file")
+    if rel.startswith(REPO_PREFIX):
+        stripped = rel[len(REPO_PREFIX):]
+        if not stripped:
+            raise BundleApplyError("manifest path 'repo/' does not name a repository file")
+        return _normalize_bundle_repo_path(stripped), True
+    return rel, False
+
+
 def _normalize_mode(raw: Any) -> str:
     value = str(raw if raw is not None else "0644").strip()
     if value in {"100644", "0644", "644"}:
@@ -137,14 +165,20 @@ def _normalize_mode(raw: Any) -> str:
 
 def _entry_from_manifest_item(item: Any) -> BundleEntry:
     if isinstance(item, str):
-        path = _normalize_bundle_repo_path(item)
-        return BundleEntry(path=path, action="write", zip_name=REPO_PREFIX + path)
+        path, normalized_manifest_repo_prefix = _normalize_manifest_repo_path(item)
+        return BundleEntry(
+            path=path,
+            action="write",
+            zip_name=REPO_PREFIX + path,
+            manifest_path=item,
+            normalized_manifest_repo_prefix=normalized_manifest_repo_prefix,
+        )
     if not isinstance(item, Mapping):
         raise BundleApplyError("manifest changed_paths entries must be strings or objects")
     path_raw = item.get("path")
     if not isinstance(path_raw, str) or not path_raw.strip():
         raise BundleApplyError("manifest changed_paths object missing non-empty string path")
-    path = _normalize_bundle_repo_path(path_raw)
+    path, normalized_manifest_repo_prefix = _normalize_manifest_repo_path(path_raw)
     action = str(item.get("action", "write")).strip().lower()
     if action not in {"write", "delete"}:
         raise BundleApplyError(f"unsupported manifest action for {path}: {action!r}")
@@ -158,7 +192,15 @@ def _entry_from_manifest_item(item: Any) -> BundleEntry:
     zip_name = _safe_zip_member(str(zip_name_raw)) if action == "write" else None
     if zip_name and not zip_name.startswith(REPO_PREFIX):
         raise BundleApplyError(f"write entry for {path} must source from repo/: {zip_name}")
-    return BundleEntry(path=path, action=action, sha256=digest, mode=mode, zip_name=zip_name)
+    return BundleEntry(
+        path=path,
+        action=action,
+        sha256=digest,
+        mode=mode,
+        zip_name=zip_name,
+        manifest_path=path_raw,
+        normalized_manifest_repo_prefix=normalized_manifest_repo_prefix,
+    )
 
 
 def _manifest_entries(manifest: Mapping[str, Any]) -> list[BundleEntry]:
@@ -171,7 +213,15 @@ def _manifest_entries(manifest: Mapping[str, Any]) -> list[BundleEntry]:
         if not isinstance(raw_deleted, list) or not all(isinstance(x, str) for x in raw_deleted):
             raise BundleApplyError("manifest.deleted_paths must be an array of strings when present")
         for raw in raw_deleted:
-            entries.append(BundleEntry(path=_normalize_bundle_repo_path(raw), action="delete"))
+            path, normalized_manifest_repo_prefix = _normalize_manifest_repo_path(raw)
+            entries.append(
+                BundleEntry(
+                    path=path,
+                    action="delete",
+                    manifest_path=raw,
+                    normalized_manifest_repo_prefix=normalized_manifest_repo_prefix,
+                )
+            )
 
     seen: dict[str, str] = {}
     deduped: list[BundleEntry] = []
@@ -285,6 +335,11 @@ def validate_bundle(
             reject_if_forbidden(entry.path, forbidden)
             require_allowed(entry.path, allowed)
             item: dict[str, Any] = {"path": entry.path, "action": entry.action, "mode": entry.mode}
+            if entry.normalized_manifest_repo_prefix:
+                item.update({
+                    "manifest_path": entry.manifest_path,
+                    "normalized_manifest_repo_prefix": True,
+                })
             if entry.action == "write":
                 assert entry.zip_name is not None
                 data = zf.read(entry.zip_name)
@@ -307,6 +362,15 @@ def validate_bundle(
         "manifest": dict(manifest),
         "entries": entry_reports,
         "changed_paths": [e.path for e in entries],
+        "manifest_path_rewrites": [
+            {
+                "from": e.manifest_path,
+                "to": e.path,
+                "reason": "stripped legacy leading repo/ prefix from manifest path",
+            }
+            for e in entries
+            if e.normalized_manifest_repo_prefix
+        ],
     }
 
 

@@ -45,6 +45,7 @@ FILECHECK_RE = re.compile(r"(FileCheck|CHECK-|expected string not found|not foun
 PATCH_ALREADY_APPLIED_RE = re.compile(r"(patch already appears applied|--reverse.*would apply|already exists in working directory|patch does not apply)", re.IGNORECASE)
 TRANSPORT_RE = re.compile(r"(Could not find ChatGPT prompt box|web-driver|browser|timeout|playwright|CDP|conversation URL)", re.IGNORECASE)
 ARTIFACT_RE = re.compile(r"(downloadable artifact|artifact_transport|bundle\.zip|apply_bundle|vc4_codegen_download_bundle_v1|bundle manifest|sha256 mismatch|missing downloadable)", re.IGNORECASE)
+ARTIFACT_SCHEMA_RE = re.compile(r"(manifest.*changed_paths|changed_paths.*manifest|path is outside allowed_paths: repo/|manifest path.*repo/|repo/repo/|bundle repo/ members|zip member.*repo/)", re.IGNORECASE)
 
 DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_compile": 1,
@@ -52,6 +53,7 @@ DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_test_invocation": 1,
     "mechanical_lit_config": 1,
     "mechanical_candidate_build": 1,
+    "mechanical_artifact_transport": 1,
 }
 
 
@@ -168,6 +170,8 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
     if s in {"chat", "gpt-web-driver", "browser"} or TRANSPORT_RE.search(log) and "chat" in s:
         return "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs"
     if ARTIFACT_RE.search(log):
+        if ARTIFACT_SCHEMA_RE.search(log):
+            return "mechanical_artifact_transport", "Downloadable bundle manifest/zip schema issue is mechanical transport plumbing"
         return "artifact_transport", "Downloadable bundle transport or bundle manifest validation failed"
     if s in {"gpt-output-validation", "chat-output-validation", "patch-output-validation"}:
         return "malformed_gpt_output", "GPT output did not satisfy the required staged output contract"
