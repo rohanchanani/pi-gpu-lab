@@ -18,6 +18,7 @@
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/Twine.h"
 #include "llvm/Support/Casting.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Path.h"
@@ -28,16 +29,45 @@
 #include <optional>
 #include <string>
 #include <system_error>
+#include <utility>
 
 using namespace mlir;
 
 namespace {
+
+enum class LaunchABIArgumentKind { Scalar, Buffer };
+
+struct LaunchABIArgumentModel {
+  std::string name;
+  LaunchABIArgumentKind kind = LaunchABIArgumentKind::Scalar;
+  std::string direction;
+  std::string scalarType;
+  std::string elementType;
+  std::string cType;
+  int64_t uniformIndex = -1;
+};
+
+struct LaunchABIBuiltinModel {
+  std::string name;
+  std::string kind;
+  std::string materialization;
+  std::optional<int64_t> uniformIndex;
+};
+
+struct LaunchABIModel {
+  std::string publicName;
+  std::string tailPolicy;
+  int64_t uniformWordsPerQPU = 0;
+  llvm::SmallVector<LaunchABIArgumentModel, 8> arguments;
+  llvm::SmallVector<LaunchABIBuiltinModel, 4> builtins;
+};
 
 struct KernelRecord {
   explicit KernelRecord(mlir::vc4::FuncOp func) : func(func) {}
 
   mlir::vc4::FuncOp func;
   mlir::vc4::VC4ArtifactKernelInfo info;
+  LaunchABIModel launchABI;
   llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
 };
 
@@ -71,6 +101,272 @@ static bool isCIdentifier(llvm::StringRef value) {
       return false;
   }
   return true;
+}
+
+static LogicalResult emitLaunchABIModelError(mlir::vc4::FuncOp func,
+                                             const llvm::Twine &message) {
+  return func.emitOpError() << "vc4.launch_abi " << message;
+}
+
+static mlir::StringAttr getDictionaryStringAttr(mlir::DictionaryAttr dict,
+                                                llvm::StringRef name) {
+  return llvm::dyn_cast_or_null<mlir::StringAttr>(dict.get(name));
+}
+
+static std::optional<int64_t>
+getDictionaryIntegerAttrValue(mlir::DictionaryAttr dict,
+                              llvm::StringRef name) {
+  auto integerAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(dict.get(name));
+  if (!integerAttr)
+    return std::nullopt;
+  return integerAttr.getInt();
+}
+
+static std::optional<std::string> getScalarCType(llvm::StringRef type) {
+  if (type == "i32")
+    return std::string("int32_t");
+  if (type == "u32" || type == "index")
+    return std::string("uint32_t");
+  if (type == "f32")
+    return std::string("float");
+  return std::nullopt;
+}
+
+static std::optional<std::string> getElementCType(llvm::StringRef elemType) {
+  if (elemType == "i8")
+    return std::string("int8_t");
+  if (elemType == "u8")
+    return std::string("uint8_t");
+  if (elemType == "i16")
+    return std::string("int16_t");
+  if (elemType == "u16")
+    return std::string("uint16_t");
+  if (elemType == "i32")
+    return std::string("int32_t");
+  if (elemType == "u32")
+    return std::string("uint32_t");
+  if (elemType == "f32")
+    return std::string("float");
+  return std::nullopt;
+}
+
+static std::optional<std::string>
+getBufferCType(llvm::StringRef direction, llvm::StringRef elemType) {
+  std::optional<std::string> base = getElementCType(elemType);
+  if (!base)
+    return std::nullopt;
+  if (direction == "in")
+    return std::string("const ") + *base + " *";
+  if (direction == "out" || direction == "inout")
+    return *base + " *";
+  return std::nullopt;
+}
+
+static bool hasLaunchABIArgumentName(const LaunchABIModel &launchABI,
+                                     llvm::StringRef name) {
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (arg.name == name)
+      return true;
+  }
+  return false;
+}
+
+static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
+                                            mlir::DictionaryAttr argDict,
+                                            LaunchABIModel &launchABI) {
+  auto nameAttr = getDictionaryStringAttr(argDict, "name");
+  if (!nameAttr || nameAttr.getValue().empty())
+    return emitLaunchABIModelError(
+        func, "argument entry requires a non-empty string 'name'");
+
+  llvm::StringRef name = nameAttr.getValue();
+  if (!isCIdentifier(name)) {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("argument '") + name +
+                  "' requires a C identifier name for generated launcher API");
+  }
+  if (name == "rt" || name == "qpu_id" || name == "num_qpus") {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("argument '") + name +
+                  "' uses a reserved launcher/runtime or builtin name");
+  }
+  if (hasLaunchABIArgumentName(launchABI, name)) {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("argument '") + name +
+                  "' duplicates a generated public API parameter name");
+  }
+
+  auto kindAttr = getDictionaryStringAttr(argDict, "kind");
+  auto directionAttr = getDictionaryStringAttr(argDict, "direction");
+  if (!kindAttr || !directionAttr) {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("argument '") + name +
+                  "' requires string 'kind' and 'direction' metadata");
+  }
+
+  std::optional<int64_t> uniformIndex =
+      getDictionaryIntegerAttrValue(argDict, "uniform_index");
+  if (!uniformIndex) {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("argument '") + name +
+                  "' requires signless i32 'uniform_index'");
+  }
+
+  LaunchABIArgumentModel parsed;
+  parsed.name = name.str();
+  parsed.direction = directionAttr.getValue().str();
+  parsed.uniformIndex = *uniformIndex;
+
+  llvm::StringRef kind = kindAttr.getValue();
+  if (kind == "scalar") {
+    if (directionAttr.getValue() != "by_value") {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("scalar argument '") + name +
+                    "' requires direction = \"by_value\"");
+    }
+    auto typeAttr = getDictionaryStringAttr(argDict, "type");
+    if (!typeAttr) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("scalar argument '") + name +
+                    "' requires string 'type'");
+    }
+    std::optional<std::string> cType = getScalarCType(typeAttr.getValue());
+    if (!cType) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("scalar argument '") + name +
+                    "' has unsupported type for generated launcher API");
+    }
+    parsed.kind = LaunchABIArgumentKind::Scalar;
+    parsed.scalarType = typeAttr.getValue().str();
+    parsed.cType = *cType;
+    launchABI.arguments.push_back(std::move(parsed));
+    return success();
+  }
+
+  if (kind == "buffer") {
+    auto elemTypeAttr = getDictionaryStringAttr(argDict, "elem_type");
+    if (!elemTypeAttr) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("buffer argument '") + name +
+                    "' requires string 'elem_type'");
+    }
+    std::optional<std::string> cType =
+        getBufferCType(directionAttr.getValue(), elemTypeAttr.getValue());
+    if (!cType) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("buffer argument '") + name +
+                    "' has unsupported direction or elem_type for generated "
+                    "launcher API");
+    }
+    parsed.kind = LaunchABIArgumentKind::Buffer;
+    parsed.elementType = elemTypeAttr.getValue().str();
+    parsed.cType = *cType;
+    launchABI.arguments.push_back(std::move(parsed));
+    return success();
+  }
+
+  return emitLaunchABIModelError(
+      func, llvm::Twine("argument '") + name +
+                "' requires kind = \"scalar\" or \"buffer\"");
+}
+
+static const char *getBuiltinKindName(mlir::vc4::BuiltinKind kind) {
+  switch (kind) {
+  case mlir::vc4::BuiltinKind::qpu_num:
+    return "qpu_num";
+  case mlir::vc4::BuiltinKind::num_qpus:
+    return "num_qpus";
+  case mlir::vc4::BuiltinKind::elem_num:
+    return "elem_num";
+  }
+  return "unknown";
+}
+
+static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
+                                           mlir::DictionaryAttr builtinDict,
+                                           LaunchABIModel &launchABI) {
+  auto nameAttr = getDictionaryStringAttr(builtinDict, "name");
+  auto materializationAttr =
+      getDictionaryStringAttr(builtinDict, "materialization");
+  auto kindAttr = llvm::dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(
+      builtinDict.get("kind"));
+  if (!nameAttr || nameAttr.getValue().empty() || !materializationAttr ||
+      !kindAttr) {
+    return emitLaunchABIModelError(
+        func, "builtin entry requires name, kind, and materialization metadata");
+  }
+
+  LaunchABIBuiltinModel parsed;
+  parsed.name = nameAttr.getValue().str();
+  parsed.kind = getBuiltinKindName(kindAttr.getValue());
+  parsed.materialization = materializationAttr.getValue().str();
+  parsed.uniformIndex = getDictionaryIntegerAttrValue(builtinDict,
+                                                      "uniform_index");
+  launchABI.builtins.push_back(std::move(parsed));
+  return success();
+}
+
+static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
+                                         mlir::DictionaryAttr launchABIDict,
+                                         LaunchABIModel &launchABI) {
+  auto publicName = getDictionaryStringAttr(launchABIDict, "public_name");
+  if (!publicName || publicName.getValue().empty()) {
+    return emitLaunchABIModelError(
+        func, "requires non-empty string 'public_name'");
+  }
+  if (!isCIdentifier(publicName.getValue())) {
+    return emitLaunchABIModelError(
+        func, "public_name must be a C identifier for generated launcher API");
+  }
+
+  auto tailPolicy = getDictionaryStringAttr(launchABIDict, "tail_policy");
+  if (!tailPolicy || tailPolicy.getValue().empty()) {
+    return emitLaunchABIModelError(func,
+                                   "requires string 'tail_policy' metadata");
+  }
+
+  std::optional<int64_t> uniformWords =
+      getDictionaryIntegerAttrValue(launchABIDict, "uniform_words_per_qpu");
+  if (!uniformWords || *uniformWords <= 0) {
+    return emitLaunchABIModelError(
+        func, "requires positive signless i32 'uniform_words_per_qpu'");
+  }
+
+  auto args = llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("args"));
+  auto builtins =
+      llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("builtins"));
+  if (!args || !builtins) {
+    return emitLaunchABIModelError(func,
+                                   "requires array 'args' and 'builtins'");
+  }
+
+  LaunchABIModel parsed;
+  parsed.publicName = publicName.getValue().str();
+  parsed.tailPolicy = tailPolicy.getValue().str();
+  parsed.uniformWordsPerQPU = *uniformWords;
+
+  for (mlir::Attribute argAttr : args) {
+    auto argDict = llvm::dyn_cast<mlir::DictionaryAttr>(argAttr);
+    if (!argDict) {
+      return emitLaunchABIModelError(
+          func, "argument entries must be dictionary attributes");
+    }
+    if (failed(parseLaunchABIArgument(func, argDict, parsed)))
+      return failure();
+  }
+
+  for (mlir::Attribute builtinAttr : builtins) {
+    auto builtinDict = llvm::dyn_cast<mlir::DictionaryAttr>(builtinAttr);
+    if (!builtinDict) {
+      return emitLaunchABIModelError(
+          func, "builtin entries must be dictionary attributes");
+    }
+    if (failed(parseLaunchABIBuiltin(func, builtinDict, parsed)))
+      return failure();
+  }
+
+  launchABI = std::move(parsed);
+  return success();
 }
 
 static void appendJSONEscapedString(llvm::raw_ostream &os,
@@ -240,29 +536,12 @@ static LogicalResult populateLaunchABIInfo(KernelRecord &kernel) {
            << "requires a dictionary \"vc4.launch_abi\" attribute";
   }
 
-  auto publicName =
-      llvm::dyn_cast_or_null<mlir::StringAttr>(launchABI.get("public_name"));
-  if (!publicName || publicName.getValue().empty()) {
-    return kernel.func.emitOpError()
-           << "requires \"vc4.launch_abi\" public_name for artifact emission";
-  }
-
-  if (!isCIdentifier(publicName.getValue())) {
-    return kernel.func.emitOpError()
-           << "requires \"vc4.launch_abi\" public_name to be a C identifier "
-              "for the skeleton launcher";
-  }
-
-  auto uniformWords = llvm::dyn_cast_or_null<mlir::IntegerAttr>(
-      launchABI.get("uniform_words_per_qpu"));
-  if (!uniformWords || uniformWords.getInt() <= 0) {
-    return kernel.func.emitOpError()
-           << "requires positive \"vc4.launch_abi\" uniform_words_per_qpu";
-  }
+  if (failed(parseLaunchABIModel(kernel.func, launchABI, kernel.launchABI)))
+    return failure();
 
   kernel.info.symbolName = kernel.func.getSymName().str();
-  kernel.info.publicName = publicName.getValue().str();
-  kernel.info.uniformWordsPerQPU = uniformWords.getInt();
+  kernel.info.publicName = kernel.launchABI.publicName;
+  kernel.info.uniformWordsPerQPU = kernel.launchABI.uniformWordsPerQPU;
   return success();
 }
 
@@ -1186,16 +1465,38 @@ static LogicalResult writeQASM(KernelRecord &kernel,
                          [&](llvm::raw_ostream &os) { os << qasm; });
 }
 
+static void appendLauncherParameter(llvm::raw_ostream &os,
+                                    const LaunchABIArgumentModel &arg) {
+  os << arg.cType;
+  if (!arg.cType.empty() && arg.cType.back() == '*')
+    os << arg.name;
+  else
+    os << " " << arg.name;
+}
+
+static void appendLauncherPrototype(llvm::raw_ostream &os,
+                                    const LaunchABIModel &launchABI) {
+  os << "int " << launchABI.publicName << "(struct vc4_runtime *rt";
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    os << ", ";
+    appendLauncherParameter(os, arg);
+  }
+  os << ")";
+}
+
 static LogicalResult writeLauncherHeader(KernelRecord &kernel,
                                          llvm::StringRef bundleDir) {
   return writeBundleFile(kernel.func.getOperation(), bundleDir,
                          "kernel_launch.h", [&](llvm::raw_ostream &os) {
                            os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_H\n";
                            os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
+                           os << "#include <stdint.h>\n\n";
+                           os << "struct vc4_runtime;\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "extern \"C\" {\n";
                            os << "#endif\n\n";
-                           os << "int " << kernel.info.publicName << "(void);\n\n";
+                           appendLauncherPrototype(os, kernel.launchABI);
+                           os << ";\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "}\n";
                            os << "#endif\n\n";
@@ -1208,10 +1509,117 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   return writeBundleFile(kernel.func.getOperation(), bundleDir,
                          "kernel_launch.c", [&](llvm::raw_ostream &os) {
                            os << "#include \"kernel_launch.h\"\n\n";
-                           os << "int " << kernel.info.publicName << "(void) {\n";
+                           appendLauncherPrototype(os, kernel.launchABI);
+                           os << " {\n";
+                           os << "  (void)rt;\n";
+                           for (const LaunchABIArgumentModel &arg :
+                                kernel.launchABI.arguments)
+                             os << "  (void)" << arg.name << ";\n";
                            os << "  return 0;\n";
                            os << "}\n";
                          });
+}
+
+static void appendManifestPublicParameter(llvm::raw_ostream &os,
+                                          llvm::StringRef name,
+                                          llvm::StringRef cType,
+                                          llvm::StringRef role,
+                                          bool trailingComma) {
+  os << "      {\"name\": ";
+  appendJSONEscapedString(os, name);
+  os << ", \"c_type\": ";
+  appendJSONEscapedString(os, cType);
+  os << ", \"role\": ";
+  appendJSONEscapedString(os, role);
+  os << "}";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static void appendManifestLaunchABIArgument(llvm::raw_ostream &os,
+                                            const LaunchABIArgumentModel &arg,
+                                            bool trailingComma) {
+  os << "      {\"name\": ";
+  appendJSONEscapedString(os, arg.name);
+  os << ", \"kind\": ";
+  appendJSONEscapedString(os, arg.kind == LaunchABIArgumentKind::Scalar
+                                  ? "scalar"
+                                  : "buffer");
+  os << ", \"direction\": ";
+  appendJSONEscapedString(os, arg.direction);
+  if (arg.kind == LaunchABIArgumentKind::Scalar) {
+    os << ", \"type\": ";
+    appendJSONEscapedString(os, arg.scalarType);
+  } else {
+    os << ", \"elem_type\": ";
+    appendJSONEscapedString(os, arg.elementType);
+  }
+  os << ", \"c_type\": ";
+  appendJSONEscapedString(os, arg.cType);
+  os << ", \"uniform_index\": " << arg.uniformIndex << "}";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static void appendManifestLaunchABIBuiltin(llvm::raw_ostream &os,
+                                           const LaunchABIBuiltinModel &builtin,
+                                           bool trailingComma) {
+  os << "      {\"name\": ";
+  appendJSONEscapedString(os, builtin.name);
+  os << ", \"kind\": ";
+  appendJSONEscapedString(os, builtin.kind);
+  os << ", \"materialization\": ";
+  appendJSONEscapedString(os, builtin.materialization);
+  if (builtin.uniformIndex)
+    os << ", \"uniform_index\": " << *builtin.uniformIndex;
+  os << "}";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static void appendManifestLaunchABI(llvm::raw_ostream &os,
+                                    const LaunchABIModel &launchABI) {
+  os << "  \"launch_abi\": {\n";
+  os << "    \"public_name\": ";
+  appendJSONEscapedString(os, launchABI.publicName);
+  os << ",\n";
+  os << "    \"tail_policy\": ";
+  appendJSONEscapedString(os, launchABI.tailPolicy);
+  os << ",\n";
+  os << "    \"uniform_words_per_qpu\": "
+     << launchABI.uniformWordsPerQPU << ",\n";
+  os << "    \"arg_count\": " << launchABI.arguments.size() << ",\n";
+  os << "    \"args\": [\n";
+  for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
+    appendManifestLaunchABIArgument(os, launchABI.arguments[i],
+                                    i + 1 != launchABI.arguments.size());
+  }
+  os << "    ],\n";
+  os << "    \"builtins\": [\n";
+  for (size_t i = 0; i != launchABI.builtins.size(); ++i) {
+    appendManifestLaunchABIBuiltin(os, launchABI.builtins[i],
+                                   i + 1 != launchABI.builtins.size());
+  }
+  os << "    ],\n";
+  os << "    \"public_api\": {\n";
+  os << "      \"function_name\": ";
+  appendJSONEscapedString(os, launchABI.publicName);
+  os << ",\n";
+  os << "      \"return_type\": \"int\",\n";
+  os << "      \"parameters\": [\n";
+  appendManifestPublicParameter(os, "rt", "struct vc4_runtime *", "runtime",
+                                !launchABI.arguments.empty());
+  for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
+    const LaunchABIArgumentModel &arg = launchABI.arguments[i];
+    appendManifestPublicParameter(os, arg.name, arg.cType, "kernel_arg",
+                                  i + 1 != launchABI.arguments.size());
+  }
+  os << "      ]\n";
+  os << "    }\n";
+  os << "  }";
 }
 
 static LogicalResult writeManifest(KernelRecord &kernel,
@@ -1246,6 +1654,8 @@ static LogicalResult writeManifest(KernelRecord &kernel,
                            os << "    \"scheduled_sink_ops\": "
                               << kernel.info.scheduledOpCount << "\n";
                            os << "  },\n";
+                           appendManifestLaunchABI(os, kernel.launchABI);
+                           os << ",\n";
                            os << "  \"artifacts\": [\n";
                            os << "    \"kernel.qasm\",\n";
                            os << "    \"kernel_launch.c\",\n";
