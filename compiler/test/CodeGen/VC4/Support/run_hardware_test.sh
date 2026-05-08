@@ -16,6 +16,7 @@ environment:
   VC4_PI_POWER_CYCLE_SLEEP_SEC  default: 1
   VC4_SKIP_POWER_CYCLE=1        skip power cycle, for self-test/manual debug only
   VC4_RUN_SH_MAX_ATTEMPTS       default: 3
+  VC4_HW_ATTEMPT_TIMEOUT_SEC   default: 120; timeout for one side run.sh attempt
 USAGE
 }
 
@@ -38,6 +39,51 @@ run_power_cycle() {
   sleep "${VC4_PI_POWER_CYCLE_SLEEP_SEC:-1}"
 }
 
+
+run_side_with_timeout() {
+  local side_dir="$1"
+  local timeout_sec="$2"
+  local test_root="$3"
+  local side="$4"
+  local input_mlir="$5"
+  local expected_json="$6"
+
+  python3 - "$side_dir" "$timeout_sec" "$test_root" "$side" "$input_mlir" "$expected_json" <<'PY_RUN_TIMEOUT'
+import os
+import signal
+import subprocess
+import sys
+
+side_dir, timeout_s, test_root, side, input_mlir, expected_json = sys.argv[1:]
+timeout = float(timeout_s)
+env = os.environ.copy()
+env["VC4_TEST_ROOT"] = test_root
+env["VC4_TEST_SIDE"] = side
+env["VC4_TEST_INPUT_MLIR"] = input_mlir
+env["VC4_TEST_EXPECTED_JSON"] = expected_json
+
+proc = subprocess.Popen(["bash", "run.sh"], cwd=side_dir, env=env, start_new_session=True)
+try:
+    sys.exit(proc.wait(timeout=timeout))
+except subprocess.TimeoutExpired:
+    print(f"[vc4-hw] ERROR: run.sh timed out after {int(timeout)} seconds; terminating hardware process group", file=sys.stderr)
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        print("[vc4-hw] ERROR: run.sh did not exit after SIGTERM; sending SIGKILL", file=sys.stderr)
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+    sys.exit(124)
+PY_RUN_TIMEOUT
+}
+
 run_one() {
   local test_root="$1"
   local side="${2:-reference}"
@@ -45,12 +91,15 @@ run_one() {
   local log_path="${4:-$test_root/$side/run.log}"
   local side_dir="$test_root/$side"
   local max_attempts="${VC4_RUN_SH_MAX_ATTEMPTS:-3}"
+  local attempt_timeout="${VC4_HW_ATTEMPT_TIMEOUT_SEC:-120}"
+  local input_mlir="$test_root/input.mlir"
 
   [[ "$side" == "reference" || "$side" == "candidate" ]] || fail "side must be reference or candidate"
   [[ -f "$test_root/input.mlir" ]] || fail "missing input.mlir under $test_root"
   [[ -f "$expected_json" ]] || fail "missing expected json: $expected_json"
   [[ -f "$side_dir/run.sh" ]] || fail "missing side runner: $side_dir/run.sh"
   [[ "$max_attempts" =~ ^[0-9]+$ && "$max_attempts" -ge 1 ]] || max_attempts=1
+  [[ "$attempt_timeout" =~ ^[0-9]+$ && "$attempt_timeout" -ge 1 ]] || attempt_timeout=120
 
   mkdir -p "$(dirname "$log_path")"
   run_power_cycle
@@ -59,16 +108,19 @@ run_one() {
   for ((attempt = 1; attempt <= max_attempts; ++attempt)); do
     printf '[vc4-hw] running %s side attempt %d/%d\n' "$side" "$attempt" "$max_attempts"
     set +e
-    (
-      cd "$side_dir"
-      bash run.sh
-    ) 2>&1 | tee "$log_path"
+    run_side_with_timeout "$side_dir" "$attempt_timeout" "$test_root" "$side" "$input_mlir" "$expected_json" 2>&1 | tee "$log_path"
     status=${PIPESTATUS[0]}
     set -e
 
     if [[ "$status" -eq 0 ]]; then
       python3 "$CHECKER" "$expected_json" "$log_path"
       return 0
+    fi
+
+    if [[ "$status" -eq 124 && "$attempt" -lt "$max_attempts" ]]; then
+      printf '[vc4-hw] run.sh attempt timed out after %s seconds; power-cycling and retrying\n' "$attempt_timeout" >&2
+      run_power_cycle
+      continue
     fi
 
     if grep -Fq "$TTY_READ_ZERO_PATTERN" "$log_path" && [[ "$attempt" -lt "$max_attempts" ]]; then

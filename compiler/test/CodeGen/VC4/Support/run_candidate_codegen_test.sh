@@ -255,7 +255,7 @@ cp kernelshader.c ${kernel_base}shader.c
 cp kernelshader.h ${kernel_base}shader.h
 
 echo "RUNNING MAKE"
-make
+make RUN=0 ${bin_name}
 
 echo "RUNNING PI INSTALL"
 "\${VC4_PI_INSTALL_CMD:-pi-install}" "./${bin_name}"
@@ -317,11 +317,15 @@ EOF_README
 
 build_candidate() {
   prepare_workdir
-  log "building candidate in $(relpath "$WORK_DIR")"
+  local harness_name bin_name
+  harness_name="$(find_reference_harness_basename)"
+  bin_name="${harness_name%.c}.bin"
+  log "building candidate binary in $(relpath "$WORK_DIR") without hardware execution"
   (
     cd "$WORK_DIR"
-    make
+    make RUN=0 "$bin_name"
   )
+  require_file "$WORK_DIR/$bin_name"
 }
 
 run_candidate() {

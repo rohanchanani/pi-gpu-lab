@@ -897,16 +897,54 @@ class GateRunner:
         return self.run_command(gate=gate, cmd=[cc, "-std=c11", "-fsyntax-only", "-I", str(out_dir), str(tmp)], log_dir=log_dir)
 
     def _gate_candidate_support(self, gate: str, log_dir: Path, name: str, phase: str) -> CommandResult:
-        support_source_check = self._check_source_products_for_gate(gate, log_dir)
-        if support_source_check is not None:
-            return support_source_check
         support = self.repo / "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
         if support.exists():
-            return self.run_command(gate=gate, cmd=["bash", str(support), name, phase], log_dir=log_dir)
+            if phase == "run":
+                test_root = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name
+                expected = test_root / "expected.json"
+                candidate_run = test_root / "candidate" / "run.sh"
+                hardware_runner = self.repo / "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+                missing = [
+                    p for p in [test_root / "input.mlir", expected, candidate_run, hardware_runner]
+                    if not p.exists()
+                ]
+                if missing:
+                    return self.write_check_log(
+                        gate=gate,
+                        log_dir=log_dir,
+                        ok=False,
+                        message="missing candidate hardware runner prerequisite(s): "
+                        + ", ".join(relpath(self.repo, p) for p in missing),
+                    )
+                # Run candidate hardware through the same wrapper as references so
+                # each hardware execution gets power-cycle/retry/expected-json
+                # handling.  The checked-in candidate/run.sh delegates back to
+                # run_candidate_codegen_test.sh after the wrapper has reset the Pi.
+                return self.run_command(
+                    gate=gate,
+                    cmd=["bash", str(hardware_runner), str(test_root), "candidate", str(expected)],
+                    log_dir=log_dir,
+                    timeout_sec=self.timeout_sec,
+                )
+            return self.run_command(
+                gate=gate,
+                cmd=["bash", str(support), name, phase],
+                log_dir=log_dir,
+                timeout_sec=self.timeout_sec,
+            )
         candidate_dir = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "candidate"
         run_sh = candidate_dir / "run.sh"
         if phase == "run" and run_sh.exists():
-            return self.run_command(gate=gate, cmd=["bash", "run.sh"], log_dir=log_dir, cwd=candidate_dir, timeout_sec=max(self.timeout_sec, 3600))
+            test_root = candidate_dir.parent
+            expected = test_root / "expected.json"
+            hardware_runner = self.repo / "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+            if hardware_runner.exists() and expected.exists():
+                return self.run_command(
+                    gate=gate,
+                    cmd=["bash", str(hardware_runner), str(test_root), "candidate", str(expected)],
+                    log_dir=log_dir,
+                    timeout_sec=self.timeout_sec,
+                )
         return self.write_check_log(
             gate=gate,
             log_dir=log_dir,
@@ -918,14 +956,38 @@ class GateRunner:
         )
 
     def _gate_hardware_reference(self, gate: str, log_dir: Path, name: str) -> CommandResult:
-        hardware_source_check = self._check_source_products_for_gate(gate, log_dir)
-        if hardware_source_check is not None:
-            return hardware_source_check
-        ref_dir = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name / "reference"
-        run_sh = ref_dir / "run.sh"
-        if not run_sh.exists():
-            return self.write_check_log(gate=gate, log_dir=log_dir, ok=False, message=f"missing reference run.sh: {relpath(self.repo, run_sh)}")
-        return self.run_command(gate=gate, cmd=["bash", "run.sh"], log_dir=log_dir, cwd=ref_dir, timeout_sec=max(self.timeout_sec, 3600))
+        test_root = self.repo / "compiler/test/CodeGen/VC4/Hardware/Run" / name
+        top_run_sh = test_root / "run.sh"
+        hardware_runner = self.repo / "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        expected = test_root / "expected.json"
+
+        # Use the fixture-level wrapper instead of reference/run.sh directly.
+        # The wrapper delegates to run_hardware_test.sh, which power-cycles the
+        # Pi and retries transient serial read-zero failures before deciding the
+        # reference side is unhealthy.
+        if top_run_sh.exists():
+            return self.run_command(
+                gate=gate,
+                cmd=["bash", "run.sh"],
+                log_dir=log_dir,
+                cwd=test_root,
+                timeout_sec=self.timeout_sec,
+            )
+
+        if hardware_runner.exists() and expected.exists() and (test_root / "reference" / "run.sh").exists():
+            return self.run_command(
+                gate=gate,
+                cmd=["bash", str(hardware_runner), str(test_root), "reference", str(expected)],
+                log_dir=log_dir,
+                timeout_sec=self.timeout_sec,
+            )
+
+        return self.write_check_log(
+            gate=gate,
+            log_dir=log_dir,
+            ok=False,
+            message=f"missing hardware reference wrapper: {relpath(self.repo, top_run_sh)}",
+        )
 
     def _gate_expected_json(self, gate: str, log_dir: Path, name: str) -> CommandResult:
         expected_source_check = self._check_source_products_for_gate(gate, log_dir)
