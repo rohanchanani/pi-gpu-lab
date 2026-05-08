@@ -890,12 +890,45 @@ static std::string formatRegFileAddress(char regFile, int64_t address) {
   return result;
 }
 
+static std::string formatReadAddress(char regFile, int64_t address) {
+  // vc4asm names several read-side peripheral addresses symbolically.  Do not
+  // print them as ordinary regfile locations: e.g. ra32 is not a uniform read
+  // in the source language the hardware reference uses.
+  switch (address) {
+  case 32:
+    return "unif";
+  case 38:
+    return "elem_num";
+  default:
+    return formatRegFileAddress(regFile, address);
+  }
+}
+
 static std::string formatWriteAddress(int64_t address, bool forAddALU,
                                       bool writeSwap) {
   if (address >= 32 && address <= 36)
     return "r" + std::to_string(address - 32);
   if (address == 37)
     return "r5quad";
+  if (address == 39)
+    return "-";
+
+  // vc4asm also requires symbolic names for side-effecting peripheral writes.
+  // Printing these as raN/rbN assembles to the wrong artifact boundary for the
+  // saxpy_full kernel: uniform/TMU/VPM/VDW traffic then silently disappears or
+  // hits the wrong endpoint.
+  switch (address) {
+  case 48:
+    return "vpm";
+  case 49:
+    return "vw_setup";
+  case 50:
+    return "vw_addr";
+  case 56:
+    return "t0s";
+  default:
+    break;
+  }
 
   char regFile = forAddALU ? (writeSwap ? 'b' : 'a')
                            : (writeSwap ? 'a' : 'b');
@@ -1003,7 +1036,7 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
     out = "r5";
     return success();
   case mlir::vc4::QPUMux::a:
-    out = formatRegFileAddress('a', raddrA) + unpackSuffix;
+    out = formatReadAddress('a', raddrA) + unpackSuffix;
     return success();
   case mlir::vc4::QPUMux::b:
     if (smallImm) {
@@ -1020,7 +1053,7 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
              << "cannot emit source mux #vc4.qpu_mux<b> without raddr_b or "
                 "small_imm";
     }
-    out = formatRegFileAddress('b', *raddrB);
+    out = formatReadAddress('b', *raddrB);
     return success();
   }
   return bundle.emitOpError() << "cannot emit unknown qpu source mux";
@@ -1061,7 +1094,12 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   needSeparator = true;
 
   mlir::vc4::Cond cond = bundle.getCondAdd();
-  line += getAddOpcodeMnemonic(opcode);
+  const bool useMovAlias =
+      opcode == mlir::vc4::AddOpcode::bit_or && src0 == src1 &&
+      cond == mlir::vc4::Cond::always &&
+      !bundle.getOperation()->hasAttr("set_flags");
+
+  line += useMovAlias ? "mov" : getAddOpcodeMnemonic(opcode);
   if (bundle.getOperation()->hasAttr("set_flags"))
     line += ".setf";
   if (cond != mlir::vc4::Cond::never)
@@ -1079,7 +1117,7 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   line += dest;
   line += ", ";
   line += src0;
-  if (!isUnaryAddOpcode(opcode)) {
+  if (!useMovAlias && !isUnaryAddOpcode(opcode)) {
     line += ", ";
     line += src1;
   }
@@ -1191,6 +1229,41 @@ static LogicalResult appendSignalInstruction(mlir::vc4::QPUBundleOp bundle,
   return success();
 }
 
+static std::optional<std::string>
+formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle) {
+  // Some scheduled sink slots intentionally perform only a read-side effect.
+  // In saxpy_full these are the VDW wait slots represented as inactive
+  // qpu.bundle ops with raddr_b = 50.  Emitting them as plain "nop" drops the
+  // wait and lets the kernel finish before the VDW store is complete.
+  mlir::Operation *op = bundle.getOperation();
+  if (bundle.getSig() != mlir::vc4::QPUSignal::none ||
+      bundle.getOpAdd() != mlir::vc4::AddOpcode::nop ||
+      bundle.getOpMul() != mlir::vc4::MulOpcode::nop ||
+      bundle.getCondAdd() != mlir::vc4::Cond::never ||
+      bundle.getCondMul() != mlir::vc4::Cond::never ||
+      op->hasAttr("set_flags")) {
+    return std::nullopt;
+  }
+
+  auto formatPseudoRead = [](int64_t raddr) -> std::optional<std::string> {
+    switch (raddr) {
+    case 50:
+      return std::string("read vw_wait");
+    case 51:
+      return std::string("read mutex_acq");
+    default:
+      return std::nullopt;
+    }
+  };
+
+  if (std::optional<int64_t> raddrB = getOptionalIntegerAttrValue(op, "raddr_b")) {
+    if (std::optional<std::string> read = formatPseudoRead(*raddrB))
+      return read;
+  }
+
+  return formatPseudoRead(getIntegerAttrValue(op, "raddr_a"));
+}
+
 static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
                                        llvm::raw_ostream &os) {
   std::string line;
@@ -1204,8 +1277,13 @@ static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
   if (failed(appendSignalInstruction(bundle, line, needSeparator)))
     return failure();
 
-  if (!needSeparator)
-    line = "nop";
+  if (!needSeparator) {
+    if (std::optional<std::string> readOnlyAccess =
+            formatReadOnlyRegisterAccess(bundle))
+      line = *readOnlyAccess;
+    else
+      line = "nop";
+  }
 
   os << line << "\n";
   return success();
@@ -1440,52 +1518,101 @@ static LogicalResult buildBranchDestinationList(mlir::vc4::QPUBranchOp branch,
                                            /*forAddALU=*/false, writeSwap);
 
   // The VC4 branch encoding has independent ADD/MUL-side link destinations.
-  // Emit both deterministically so the scheduled write-address contract is not
-  // silently narrowed at the artifact boundary.
+  // Emit both deterministically for non-no-link branches so the scheduled
+  // write-address contract is not silently narrowed at the artifact boundary.
   destinations = addDest + ", " + mulDest;
   return success();
 }
 
-static LogicalResult buildBranchTargetList(mlir::vc4::QPUBranchOp branch,
-                                           std::string &targets) {
-  mlir::Operation *op = branch.getOperation();
-  const bool useReg = getBoolAttrValue(op, "use_reg");
-  int64_t immediate = getIntegerAttrValue(op, "immediate");
+static bool isBranchNoLinkDestination(mlir::Operation *op) {
+  // The scheduled IR uses write-address 39 on both sides as the ordinary
+  // no-link sentinel.  Use vc4asm's compact no-link branch syntax for this
+  // case so generated kernels match the hardware reference style:
+  //   brr.anync -, :target
+  // instead of materializing sentinel write addresses as real ra39/rb39 link
+  // destinations.
+  return getIntegerAttrValue(op, "waddr_add") == 39 &&
+         getIntegerAttrValue(op, "waddr_mul") == 39;
+}
 
-  if (useReg) {
-    int64_t raddrA = getIntegerAttrValue(op, "raddr_a");
-    targets = formatRegFileAddress('a', raddrA) + ", " +
-              std::to_string(immediate);
-    return success();
+static std::optional<unsigned>
+resolveRelativeBranchImmediateToSlot(unsigned slotIndex, int64_t immediate,
+                                     unsigned streamSize) {
+  // The scheduled MLIR carries relative branch immediates in bytes.  The
+  // flattened stream is one 64-bit QPU instruction per slot, so exact multiples
+  // of 8 can be resolved to deterministic instruction labels.  Let vc4asm do
+  // the final PC-relative encoding from the label; do not bake our own relative
+  // PC convention into the qasm text.
+  if (immediate % 8 != 0)
+    return std::nullopt;
+
+  const int64_t targetSlot = static_cast<int64_t>(slotIndex) + immediate / 8;
+  if (targetSlot < 0 || targetSlot >= static_cast<int64_t>(streamSize))
+    return std::nullopt;
+
+  return static_cast<unsigned>(targetSlot);
+}
+
+static std::string formatBranchTargetExpression(bool relative, bool useReg,
+                                                int64_t immediate,
+                                                unsigned slotIndex,
+                                                unsigned streamSize,
+                                                std::optional<unsigned> &targetSlot) {
+  targetSlot = std::nullopt;
+  if (relative && !useReg) {
+    targetSlot =
+        resolveRelativeBranchImmediateToSlot(slotIndex, immediate, streamSize);
+    if (targetSlot)
+      return ":" + getQPUInstructionLabel(*targetSlot);
   }
 
-  // vc4asm accepts '-' as the unused branch target addend in two-destination
-  // branch forms.  Keeping the immediate as the second target avoids inventing
-  // a register dependency while preserving both link write destinations.
-  targets = std::string("-, ") + std::to_string(immediate);
-  return success();
+  return std::to_string(immediate);
 }
 
 static LogicalResult emitQPUBranchQASM(mlir::vc4::QPUBranchOp branch,
                                        unsigned slotIndex,
+                                       unsigned streamSize,
                                        llvm::raw_ostream &os) {
   mlir::Operation *op = branch.getOperation();
-  std::string destinations;
-  if (failed(buildBranchDestinationList(branch, destinations)))
-    return failure();
-
-  std::string targets;
-  if (failed(buildBranchTargetList(branch, targets)))
-    return failure();
-
   const bool relative = getBoolAttrValue(op, "relative");
+  const bool useReg = getBoolAttrValue(op, "use_reg");
+  const int64_t immediate = getIntegerAttrValue(op, "immediate");
+
   std::string opcode = getBranchModeMnemonic(relative);
   opcode += getBranchConditionSuffix(branch.getCond());
 
-  os << opcode << " " << destinations << ", " << targets
-     << " # qpu.branch label=" << getQPUInstructionLabel(slotIndex)
+  std::optional<unsigned> targetSlot;
+  std::string targetExpr = formatBranchTargetExpression(
+      relative, useReg, immediate, slotIndex, streamSize, targetSlot);
+
+  if (isBranchNoLinkDestination(op)) {
+    os << opcode << " -";
+    if (useReg) {
+      int64_t raddrA = getIntegerAttrValue(op, "raddr_a");
+      os << ", " << formatReadAddress('a', raddrA);
+    }
+    os << ", " << targetExpr;
+  } else {
+    std::string destinations;
+    if (failed(buildBranchDestinationList(branch, destinations)))
+      return failure();
+
+    os << opcode << " " << destinations << ", ";
+    if (useReg) {
+      int64_t raddrA = getIntegerAttrValue(op, "raddr_a");
+      os << formatReadAddress('a', raddrA) << ", ";
+    } else {
+      os << "-, ";
+    }
+    os << targetExpr;
+  }
+
+  os << " # qpu.branch label=" << getQPUInstructionLabel(slotIndex)
      << " target=" << (relative ? "relative" : "absolute") << ":"
-     << getIntegerAttrValue(op, "immediate") << " delay_slots=3\n";
+     << immediate;
+  if (targetSlot)
+    os << " target_label=" << getQPUInstructionLabel(*targetSlot);
+  os << " delay_slots=3\n";
   return success();
 }
 
@@ -1503,7 +1630,7 @@ static LogicalResult writeQASM(KernelRecord &kernel,
       qasmOS << ":" << getQPUInstructionLabel(slotIndex) << "\n";
 
     if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-      if (failed(emitQPUBranchQASM(branch, slotIndex, qasmOS)))
+      if (failed(emitQPUBranchQASM(branch, slotIndex, static_cast<unsigned>(kernel.scheduledStream.size()), qasmOS)))
         return failure();
       continue;
     }
@@ -1554,19 +1681,117 @@ static void appendLauncherPrototype(llvm::raw_ostream &os,
   os << ")";
 }
 
+static std::string getLaunchAPIBaseName(const LaunchABIModel &launchABI) {
+  std::string base = launchABI.publicName;
+  constexpr const char *suffix = "_launch";
+  constexpr size_t suffixLen = 7;
+  if (base.size() > suffixLen &&
+      base.compare(base.size() - suffixLen, suffixLen, suffix) == 0) {
+    base.resize(base.size() - suffixLen);
+  }
+  return base;
+}
+
+static std::string getPrepareFunctionName(const LaunchABIModel &launchABI) {
+  return getLaunchAPIBaseName(launchABI) + "_prepare";
+}
+
+static std::string getReleaseFunctionName(const LaunchABIModel &launchABI) {
+  return getLaunchAPIBaseName(launchABI) + "_release";
+}
+
+static std::string
+getRuntimeAllocationsFunctionName(const LaunchABIModel &launchABI) {
+  return getLaunchAPIBaseName(launchABI) + "_runtime_allocations";
+}
+
+static std::string
+getRuntimeLaunchesFunctionName(const LaunchABIModel &launchABI) {
+  return getLaunchAPIBaseName(launchABI) + "_runtime_launches";
+}
+
+static std::string
+getRuntimeCapacityFunctionName(const LaunchABIModel &launchABI) {
+  return getLaunchAPIBaseName(launchABI) + "_runtime_capacity";
+}
+
+static bool isLaunchABIBufferArgument(const LaunchABIArgumentModel &arg) {
+  return arg.kind == LaunchABIArgumentKind::Buffer;
+}
+
+static bool isInputLikeBufferDirection(llvm::StringRef direction) {
+  return direction == "in" || direction == "inout";
+}
+
+static bool isOutputLikeBufferDirection(llvm::StringRef direction) {
+  return direction == "out" || direction == "inout";
+}
+
+static llvm::SmallVector<const LaunchABIArgumentModel *, 4>
+collectLaunchABIBufferArguments(const LaunchABIModel &launchABI) {
+  llvm::SmallVector<const LaunchABIArgumentModel *, 4> buffers;
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (isLaunchABIBufferArgument(arg))
+      buffers.push_back(&arg);
+  }
+  return buffers;
+}
+
+static const LaunchABIArgumentModel *
+findLaunchABILogicalCountArgument(const LaunchABIModel &launchABI) {
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (arg.kind == LaunchABIArgumentKind::Scalar && arg.name == "n")
+      return &arg;
+  }
+  return nullptr;
+}
+
+static std::string getBufferElementCTypeForCodegen(
+    const LaunchABIArgumentModel &arg) {
+  std::optional<std::string> elemType = getElementCType(arg.elementType);
+  if (elemType)
+    return *elemType;
+  return "uint32_t";
+}
+
+static void appendPreparePrototype(llvm::raw_ostream &os,
+                                   const LaunchABIModel &launchABI) {
+  os << "int " << getPrepareFunctionName(launchABI)
+     << "(struct vc4_runtime *rt, uint32_t max_n)";
+}
+
+static void appendReleasePrototype(llvm::raw_ostream &os,
+                                   const LaunchABIModel &launchABI) {
+  os << "void " << getReleaseFunctionName(launchABI)
+     << "(struct vc4_runtime *rt)";
+}
+
 static LogicalResult writeLauncherHeader(KernelRecord &kernel,
                                          llvm::StringRef bundleDir) {
   return writeBundleFile(kernel.func.getOperation(), bundleDir,
                          "kernel_launch.h", [&](llvm::raw_ostream &os) {
                            os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_H\n";
                            os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
-                           os << "#include <stdint.h>\n\n";
-                           os << "struct vc4_runtime;\n\n";
+                           os << "#include <stdint.h>\n";
+                           os << "#include \"mailbox.h\"\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "extern \"C\" {\n";
                            os << "#endif\n\n";
+                           appendPreparePrototype(os, kernel.launchABI);
+                           os << ";\n\n";
                            appendLauncherPrototype(os, kernel.launchABI);
                            os << ";\n\n";
+                           appendReleasePrototype(os, kernel.launchABI);
+                           os << ";\n\n";
+                           os << "uint32_t "
+                              << getRuntimeAllocationsFunctionName(kernel.launchABI)
+                              << "(void);\n";
+                           os << "uint32_t "
+                              << getRuntimeLaunchesFunctionName(kernel.launchABI)
+                              << "(void);\n";
+                           os << "uint32_t "
+                              << getRuntimeCapacityFunctionName(kernel.launchABI)
+                              << "(void);\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "}\n";
                            os << "#endif\n\n";
@@ -1642,39 +1867,22 @@ static void appendLauncherUniformLayoutComment(
   os << "   */\n";
 }
 
-static LogicalResult appendLauncherUniformAssignment(
-    mlir::vc4::FuncOp func, llvm::raw_ostream &os,
-    const LaunchABIModel &launchABI, int64_t uniformIndex) {
-  if (const LaunchABIArgumentModel *arg =
-          findLaunchABIArgumentForUniformIndex(launchABI, uniformIndex)) {
-    os << "    state->unif[qpu][" << uniformIndex << "] = "
-       << getArgumentUniformExpression(*arg) << "; /* arg " << arg->name
-       << " */\n";
-    return success();
-  }
-
-  if (const LaunchABIBuiltinModel *builtin =
-          findLaunchABIBuiltinForUniformIndex(launchABI, uniformIndex)) {
-    std::optional<std::string> expression = getBuiltinUniformExpression(*builtin);
-    if (!expression) {
-      return emitLaunchABIModelError(
-          func, llvm::Twine("builtin '") + builtin->name +
-                    "' has unsupported kind for launcher uniform packing");
-    }
-    os << "    state->unif[qpu][" << uniformIndex << "] = " << *expression
-       << "; /* builtin " << builtin->name << " */\n";
-    return success();
-  }
-
-  return emitLaunchABIModelError(
-      func, llvm::Twine("missing launcher uniform assignment for index ") +
-                std::to_string(uniformIndex));
-}
-
 static LogicalResult writeLauncherSource(KernelRecord &kernel,
                                          llvm::StringRef bundleDir) {
   std::string source;
   llvm::raw_string_ostream os(source);
+
+  const LaunchABIModel &launchABI = kernel.launchABI;
+  const std::string apiBase = getLaunchAPIBaseName(launchABI);
+  const std::string stateName = apiBase + "_launch_state";
+  const std::string prepareName = getPrepareFunctionName(launchABI);
+  const std::string allocationsName = getRuntimeAllocationsFunctionName(launchABI);
+  const std::string launchesName = getRuntimeLaunchesFunctionName(launchABI);
+  const std::string capacityName = getRuntimeCapacityFunctionName(launchABI);
+  llvm::SmallVector<const LaunchABIArgumentModel *, 4> bufferArgs =
+      collectLaunchABIBufferArguments(launchABI);
+  const LaunchABIArgumentModel *logicalCountArg =
+      findLaunchABILogicalCountArgument(launchABI);
 
   os << "#include \"kernel_launch.h\"\n\n";
   os << "#include \"rpi.h\"\n";
@@ -1684,17 +1892,11 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "#include <stdint.h>\n";
   os << "#include <string.h>\n\n";
 
-  os << "#ifndef VC4_RUNTIME_MAX_QPUS\n";
-  os << "#define VC4_RUNTIME_MAX_QPUS 12u\n";
-  os << "#endif\n\n";
   os << "#define GPU_MEM_FLG 0xCu\n";
   os << "#define GPU_BASE 0x40000000u\n";
-  os << "#define NUM_UNIFS " << kernel.launchABI.uniformWordsPerQPU
-     << "u\n\n";
+  os << "#define NUM_UNIFS " << launchABI.uniformWordsPerQPU << "u\n\n";
 
-  os << "/* extern uint32_t vc4_runtime_active_qpus(struct vc4_runtime *rt); */\n\n";
-
-  if (launchABIRequiresF32Packing(kernel.launchABI)) {
+  if (launchABIRequiresF32Packing(launchABI)) {
     os << "static uint32_t vc4_codegen_pack_f32(float value) {\n";
     os << "  uint32_t bits = 0;\n";
     os << "  memcpy(&bits, &value, sizeof(bits));\n";
@@ -1702,22 +1904,99 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
     os << "}\n\n";
   }
 
-  os << "struct " << kernel.launchABI.publicName << "_state {\n";
+  os << "struct " << stateName << " {\n";
   os << "  uint32_t code[sizeof(kernelshader) / sizeof(uint32_t)];\n";
   os << "  uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];\n";
   os << "  uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];\n";
   os << "  uint32_t handle;\n";
+  os << "  uint32_t max_n;\n";
+  os << "  uint32_t padded_capacity_n;\n";
+  os << "  uint32_t launch_count;\n";
+  os << "  uint8_t payload[];\n";
   os << "};\n\n";
 
-  appendLauncherPrototype(os, kernel.launchABI);
+  os << "static volatile struct " << stateName << " *g_state;\n";
+  os << "static uint32_t g_handle;\n";
+  os << "static uint32_t g_allocations;\n\n";
+
+  os << "static size_t " << apiBase
+     << "_align_up_size(size_t value, size_t alignment) {\n";
+  os << "  if (alignment <= 1u)\n";
+  os << "    return value;\n";
+  os << "  return (value + alignment - 1u) & ~(alignment - 1u);\n";
+  os << "}\n\n";
+
+  os << "static uint32_t " << apiBase << "_round_up_to_lane_width(uint32_t n) {\n";
+  os << "  const uint32_t laneWidth = VC4_RUNTIME_LANE_WIDTH;\n";
+  os << "  if (n == 0u)\n";
+  os << "    return 0u;\n";
+  os << "  return (n + laneWidth - 1u) & ~(laneWidth - 1u);\n";
+  os << "}\n\n";
+
+  os << "static size_t " << apiBase
+     << "_payload_bytes(uint32_t padded_capacity_n) {\n";
+  os << "  size_t offset = 0u;\n";
+  for (const LaunchABIArgumentModel *arg : bufferArgs) {
+    std::string elemType = getBufferElementCTypeForCodegen(*arg);
+    os << "  offset = " << apiBase << "_align_up_size(offset, sizeof("
+       << elemType << "));\n";
+    os << "  offset += (size_t)padded_capacity_n * sizeof(" << elemType
+       << ");\n";
+  }
+  os << "  return offset;\n";
+  os << "}\n\n";
+
+  for (size_t i = 0; i != bufferArgs.size(); ++i) {
+    const LaunchABIArgumentModel &arg = *bufferArgs[i];
+    std::string elemType = getBufferElementCTypeForCodegen(arg);
+    os << "static size_t " << apiBase << "_" << arg.name
+       << "_offset(uint32_t padded_capacity_n) {\n";
+    os << "  size_t offset = 0u;\n";
+    for (size_t j = 0; j != i; ++j) {
+      const LaunchABIArgumentModel &prev = *bufferArgs[j];
+      std::string prevElemType = getBufferElementCTypeForCodegen(prev);
+      os << "  offset = " << apiBase << "_align_up_size(offset, sizeof("
+         << prevElemType << "));\n";
+      os << "  offset += (size_t)padded_capacity_n * sizeof(" << prevElemType
+         << ");\n";
+    }
+    os << "  return " << apiBase << "_align_up_size(offset, sizeof("
+       << elemType << "));\n";
+    os << "}\n\n";
+
+    os << "static " << elemType << " *" << apiBase << "_" << arg.name
+       << "_ptr(volatile struct " << stateName << " *state) {\n";
+    os << "  return (" << elemType << " *)(state->payload + " << apiBase
+       << "_" << arg.name << "_offset(state->padded_capacity_n));\n";
+    os << "}\n\n";
+  }
+
+  os << "static size_t " << apiBase << "_state_size(uint32_t padded_capacity_n) {\n";
+  os << "  return offsetof(struct " << stateName << ", payload) + "
+     << apiBase << "_payload_bytes(padded_capacity_n);\n";
+  os << "}\n\n";
+
+  appendPreparePrototype(os, launchABI);
   os << " {\n";
   os << "  if (!rt || !rt->isInitialized)\n";
   os << "    return -1;\n\n";
   os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
-  os << "  if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
+  os << "  if (activeQpus == 0u || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
   os << "    return -1;\n\n";
-  os << "  uint32_t handle = mem_alloc((uint32_t)sizeof(struct "
-     << kernel.launchABI.publicName << "_state), 4096u, GPU_MEM_FLG);\n";
+  os << "  uint32_t paddedCapacity = " << apiBase
+     << "_round_up_to_lane_width(max_n);\n";
+  os << "  if (paddedCapacity < max_n)\n";
+  os << "    return -1;\n\n";
+  os << "  if (g_state) {\n";
+  os << "    if (max_n <= g_state->max_n)\n";
+  os << "      return 0;\n";
+  os << "    return -1;\n";
+  os << "  }\n\n";
+  os << "  size_t allocSize = " << apiBase
+     << "_state_size(paddedCapacity);\n";
+  os << "  if (allocSize > 0xffffffffu)\n";
+  os << "    return -1;\n\n";
+  os << "  uint32_t handle = mem_alloc((uint32_t)allocSize, 4096u, GPU_MEM_FLG);\n";
   os << "  if (!handle)\n";
   os << "    return -1;\n\n";
   os << "  uint32_t vc = mem_lock(handle);\n";
@@ -1725,35 +2004,153 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "    mem_free(handle);\n";
   os << "    return -1;\n";
   os << "  }\n\n";
-  os << "  volatile struct " << kernel.launchABI.publicName
-     << "_state *state =\n";
-  os << "      (volatile struct " << kernel.launchABI.publicName
-     << "_state *)(vc - GPU_BASE);\n";
+  os << "  volatile struct " << stateName << " *state =\n";
+  os << "      (volatile struct " << stateName << " *)(vc - GPU_BASE);\n";
   os << "  if (!state) {\n";
   os << "    mem_unlock(handle);\n";
   os << "    mem_free(handle);\n";
   os << "    return -1;\n";
   os << "  }\n\n";
+  os << "  memset((void *)state, 0, allocSize);\n";
   os << "  state->handle = handle;\n";
-  os << "  memcpy((void *)state->code, kernelshader, sizeof state->code);\n\n";
-  appendLauncherUniformLayoutComment(os, kernel.launchABI);
-  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
-  for (int64_t index = 0; index != kernel.launchABI.uniformWordsPerQPU;
-       ++index) {
-    if (failed(appendLauncherUniformAssignment(kernel.func, os,
-                                               kernel.launchABI, index)))
-      return failure();
-  }
-  os << "    state->unif_ptr[qpu] = "
-     << "(uint32_t)(uintptr_t)&state->unif[qpu][0];\n";
-  os << "  }\n\n";
-  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu)\n";
+  os << "  state->max_n = max_n;\n";
+  os << "  state->padded_capacity_n = paddedCapacity;\n";
+  os << "  memcpy((void *)state->code, kernelshader, sizeof state->code);\n";
+  os << "  for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; ++qpu)\n";
   os << "    state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu][0];\n\n";
-  os << "  gpu_fft_base_exec_direct((uint32_t)state->code,\n";
-  os << "                           (uint32_t *)state->unif_ptr, activeQpus);\n\n";
-  os << "  mem_unlock(handle);\n";
-  os << "  mem_free(handle);\n";
+  os << "  g_handle = handle;\n";
+  os << "  g_state = state;\n";
+  os << "  g_allocations++;\n";
   os << "  return 0;\n";
+  os << "}\n\n";
+
+  appendLauncherPrototype(os, launchABI);
+  os << " {\n";
+  os << "  if (!rt || !rt->isInitialized)\n";
+  os << "    return -1;\n\n";
+  os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
+  os << "  if (activeQpus == 0u || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
+  os << "    return -1;\n\n";
+  if (logicalCountArg) {
+    os << "  uint32_t logicalN = (uint32_t)" << logicalCountArg->name << ";\n";
+  } else {
+    os << "  uint32_t logicalN = g_state ? g_state->max_n : 0u;\n";
+  }
+  for (const LaunchABIArgumentModel *arg : bufferArgs) {
+    os << "  if (logicalN != 0u && !" << arg->name << ")\n";
+    os << "    return -1;\n";
+  }
+  os << "  if (!g_state) {\n";
+  os << "    if (" << prepareName << "(rt, logicalN) < 0)\n";
+  os << "      return -1;\n";
+  os << "  }\n";
+  os << "  if (logicalN > g_state->max_n)\n";
+  os << "    return -1;\n\n";
+  os << "  uint32_t paddedN = " << apiBase << "_round_up_to_lane_width(logicalN);\n";
+  os << "  if (paddedN < logicalN || paddedN > g_state->padded_capacity_n)\n";
+  os << "    return -1;\n\n";
+
+  for (const LaunchABIArgumentModel *arg : bufferArgs) {
+    std::string elemType = getBufferElementCTypeForCodegen(*arg);
+    os << "  " << elemType << " *gpu_" << arg->name << " = " << apiBase
+       << "_" << arg->name << "_ptr(g_state);\n";
+  }
+  if (!bufferArgs.empty())
+    os << "\n";
+
+  for (const LaunchABIArgumentModel *arg : bufferArgs) {
+    std::string elemType = getBufferElementCTypeForCodegen(*arg);
+    if (isInputLikeBufferDirection(arg->direction)) {
+      os << "  if (logicalN != 0u)\n";
+      os << "    memcpy(gpu_" << arg->name << ", " << arg->name
+         << ", (size_t)logicalN * sizeof(" << elemType << "));\n";
+    }
+    os << "  for (uint32_t i = logicalN; i < paddedN; ++i)\n";
+    os << "    gpu_" << arg->name << "[i] = (" << elemType << ")0;\n";
+  }
+  if (!bufferArgs.empty())
+    os << "\n";
+
+  appendLauncherUniformLayoutComment(os, launchABI);
+  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
+  for (int64_t index = 0; index != launchABI.uniformWordsPerQPU; ++index) {
+    if (const LaunchABIArgumentModel *arg =
+            findLaunchABIArgumentForUniformIndex(launchABI, index)) {
+      if (arg->kind == LaunchABIArgumentKind::Buffer) {
+        os << "    g_state->unif[qpu][" << index << "] = GPU_BASE + "
+           << "(uint32_t)gpu_" << arg->name << "; /* arg " << arg->name
+           << " */\n";
+      } else {
+        os << "    g_state->unif[qpu][" << index << "] = "
+           << getArgumentUniformExpression(*arg) << "; /* arg " << arg->name
+           << " */\n";
+      }
+      continue;
+    }
+
+    if (const LaunchABIBuiltinModel *builtin =
+            findLaunchABIBuiltinForUniformIndex(launchABI, index)) {
+      std::optional<std::string> expression = getBuiltinUniformExpression(*builtin);
+      if (!expression) {
+        return emitLaunchABIModelError(
+            kernel.func, llvm::Twine("builtin '") + builtin->name +
+                         "' has unsupported kind for launcher uniform packing");
+      }
+      os << "    g_state->unif[qpu][" << index << "] = " << *expression
+         << "; /* builtin " << builtin->name << " */\n";
+      continue;
+    }
+
+    return emitLaunchABIModelError(
+        kernel.func, llvm::Twine("missing launcher uniform assignment for index ") +
+                         std::to_string(index));
+  }
+  os << "    g_state->unif_ptr[qpu] = GPU_BASE + "
+        "(uint32_t)&g_state->unif[qpu][0];\n";
+  os << "  }\n\n";
+  os << "  gpu_fft_base_exec_direct((uint32_t)g_state->code,\n";
+  os << "                           (uint32_t *)g_state->unif_ptr, activeQpus);\n\n";
+
+  for (const LaunchABIArgumentModel *arg : bufferArgs) {
+    std::string elemType = getBufferElementCTypeForCodegen(*arg);
+    if (!isOutputLikeBufferDirection(arg->direction))
+      continue;
+    os << "  if (logicalN != 0u)\n";
+    os << "    memcpy(" << arg->name << ", gpu_" << arg->name
+       << ", (size_t)logicalN * sizeof(" << elemType << "));\n";
+  }
+  if (!bufferArgs.empty())
+    os << "\n";
+
+  os << "  g_state->launch_count++;\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  appendReleasePrototype(os, launchABI);
+  os << " {\n";
+  os << "  (void)rt;\n";
+  os << "  if (!g_state)\n";
+  os << "    return;\n";
+  os << "  mem_unlock(g_handle);\n";
+  os << "  mem_free(g_handle);\n";
+  os << "  g_state = 0;\n";
+  os << "  g_handle = 0;\n";
+  os << "}\n\n";
+
+  os << "uint32_t " << allocationsName << "(void) {\n";
+  os << "  return g_allocations;\n";
+  os << "}\n\n";
+
+  os << "uint32_t " << launchesName << "(void) {\n";
+  os << "  if (!g_state)\n";
+  os << "    return 0u;\n";
+  os << "  return g_state->launch_count;\n";
+  os << "}\n\n";
+
+  os << "uint32_t " << capacityName << "(void) {\n";
+  os << "  if (!g_state)\n";
+  os << "    return 0u;\n";
+  os << "  return g_state->max_n;\n";
   os << "}\n";
   os.flush();
 

@@ -216,22 +216,34 @@ find_reference_harness_basename() {
   basename "${matches[0]}"
 }
 
-write_launch_header_wrapper() {
+install_public_launch_header() {
   local kernel_base="$1"
   local public_name="$2"
-  local guard
-  guard="$(c_identifier_from_string "${kernel_base}_launch_h")"
-  guard="$(printf '%s' "$guard" | tr '[:lower:]' '[:upper:]')"
-  cat > "$WORK_DIR/${kernel_base}_launch.h" <<EOF_WRAP
-#ifndef ${guard}
-#define ${guard}
-
-#include "mailbox.h"
-#include "kernel_launch.h"
-
-#endif /* ${guard} */
-EOF_WRAP
+  cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/${kernel_base}_launch.h"
   : "$public_name"
+}
+
+write_candidate_makefile() {
+  local harness_name="$1"
+  cat > "$WORK_DIR/Makefile" <<EOF_MAKE
+LIBS += \$(CS240LX_2025_PATH)/lib/libgcc.a \$(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := mailbox.c kernel_launch.c kernelshader.c
+
+PROGS := ${harness_name}
+
+STAFF_OBJS += \$(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += \$(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
+
+RUN ?= 0
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|VC4_TEST_RESULT\|NRF:'
+include \$(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+EOF_MAKE
 }
 
 write_workdir_run_sh() {
@@ -282,7 +294,7 @@ prepare_workdir() {
   mkdir -p "$WORK_DIR"
   copy_workdir_assembler_share
 
-  cp "$REFERENCE_DIR/Makefile" "$WORK_DIR/Makefile"
+  write_candidate_makefile "$harness_name"
   cp "$REFERENCE_DIR/$harness_name" "$WORK_DIR/$harness_name"
   cp "$REFERENCE_DIR/mailbox.c" "$WORK_DIR/mailbox.c"
   cp "$REFERENCE_DIR/mailbox.h" "$WORK_DIR/mailbox.h"
@@ -292,7 +304,7 @@ prepare_workdir() {
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
-  write_launch_header_wrapper "$kernel_base" "$public_name"
+  install_public_launch_header "$kernel_base" "$public_name"
   cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/kernelshader.c"
   cp "$GENERATED_DIR/kernelshader.h" "$WORK_DIR/kernelshader.h"
   cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/${kernel_base}shader.c"

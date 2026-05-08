@@ -8,7 +8,7 @@
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: :vc4_qpu_slot_0
-// QASM-NEXT: brr.anynz r0, r1, -, 16 # qpu.branch label=vc4_qpu_slot_0 target=relative:16 delay_slots=3
+// QASM-NEXT: brr.anynz r0, r1, -, :vc4_qpu_slot_2 # qpu.branch label=vc4_qpu_slot_0 target=relative:16 target_label=vc4_qpu_slot_2 delay_slots=3
 // QASM-NEXT: :vc4_qpu_slot_1
 // QASM-NEXT: ldi r0, 0x00000001
 // QASM-NEXT: :vc4_qpu_slot_2
