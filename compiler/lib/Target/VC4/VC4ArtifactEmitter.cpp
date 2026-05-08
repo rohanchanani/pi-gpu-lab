@@ -827,8 +827,8 @@ static LogicalResult appendSignalInstruction(mlir::vc4::QPUBundleOp bundle,
     break;
   case mlir::vc4::QPUSignal::load_imm:
     return bundle.emitOpError()
-           << "sig = #vc4.qpu_signal<load_imm> must be emitted by "
-              "vc4.qpu.ldi, which is outside this slice";
+           << "sig = #vc4.qpu_signal<load_imm> must be represented as "
+              "a scheduled vc4.qpu.ldi operation for artifact emission";
   case mlir::vc4::QPUSignal::branch:
     return bundle.emitOpError()
            << "sig = #vc4.qpu_signal<branch> must be emitted by "
@@ -862,18 +862,196 @@ static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
   return success();
 }
 
+static std::string formatU32Immediate(int64_t signedValue) {
+  static constexpr char hexDigits[] = "0123456789abcdef";
+  uint32_t value = static_cast<uint32_t>(signedValue);
+  std::string result = "0x00000000";
+  for (unsigned i = 0; i != 8; ++i)
+    result[2 + i] = hexDigits[(value >> ((7 - i) * 4)) & 0xf];
+  return result;
+}
+
+static LogicalResult buildLoadLikeDestinationList(
+    mlir::Operation *op, mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
+    bool pm, llvm::StringRef packSuffix, std::string &destList,
+    mlir::vc4::Cond &emittedCond) {
+  const bool addWrites = condAdd != mlir::vc4::Cond::never;
+  const bool mulWrites = condMul != mlir::vc4::Cond::never;
+  const bool writeSwap = op->hasAttr("write_swap");
+
+  if (!addWrites && !mulWrites) {
+    destList = "-";
+    emittedCond = mlir::vc4::Cond::always;
+    return success();
+  }
+
+  if (addWrites && mulWrites && condAdd != condMul) {
+    return op->emitOpError()
+           << "cannot emit load-immediate/semaphore qasm when ADD and MUL "
+              "conditions differ; split this into separately scheduled "
+              "instructions before the artifact boundary";
+  }
+
+  std::string addDest = formatWriteAddress(
+      getIntegerAttrValue(op, "waddr_add"), /*forAddALU=*/true, writeSwap);
+  if (!pm)
+    addDest += packSuffix.str();
+
+  std::string mulDest = formatWriteAddress(
+      getIntegerAttrValue(op, "waddr_mul"), /*forAddALU=*/false, writeSwap);
+  if (pm)
+    mulDest += packSuffix.str();
+
+  if (addWrites && mulWrites) {
+    destList = addDest + ", " + mulDest;
+    emittedCond = condAdd;
+    return success();
+  }
+
+  if (addWrites) {
+    destList = addDest;
+    emittedCond = condAdd;
+    return success();
+  }
+
+  // vc4asm's two-destination load-immediate/mov forms let a single scheduled
+  // operation target only the MUL write path by discarding the ADD-side result.
+  destList = std::string("-, ") + mulDest;
+  emittedCond = condMul;
+  return success();
+}
+
+static void appendLoadLikeOpcodeSuffix(mlir::Operation *op,
+                                       mlir::vc4::Cond cond,
+                                       std::string &opcode) {
+  if (op->hasAttr("set_flags"))
+    opcode += ".setf";
+  if (cond != mlir::vc4::Cond::never)
+    opcode += getConditionSuffix(cond);
+}
+
+static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
+                                    llvm::raw_ostream &os) {
+  if (ldi.getMode() != mlir::vc4::LoadImmMode::splat32) {
+    return ldi.emitOpError()
+           << "only splat32 vc4.qpu.ldi qasm emission is supported in this "
+              "slice";
+  }
+
+  auto valueAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(
+      ldi.getOperation()->getAttr("value"));
+  if (!valueAttr) {
+    return ldi.emitOpError()
+           << "requires an integer 'value' attribute for splat32 qasm "
+              "emission";
+  }
+
+  std::optional<std::string> packSuffix =
+      getPackSuffix(ldi.getOperation()->getAttr("pack"));
+  if (!packSuffix) {
+    return ldi.emitOpError()
+           << "cannot emit unsupported vc4.qpu.ldi pack attribute '"
+           << ldi.getOperation()->getAttr("pack") << "'";
+  }
+
+  std::string destinations;
+  mlir::vc4::Cond emittedCond = mlir::vc4::Cond::always;
+  if (failed(buildLoadLikeDestinationList(ldi.getOperation(), ldi.getCondAdd(),
+                                          ldi.getCondMul(), ldi.getPm(),
+                                          *packSuffix, destinations,
+                                          emittedCond)))
+    return failure();
+
+  std::string opcode = "ldi";
+  appendLoadLikeOpcodeSuffix(ldi.getOperation(), emittedCond, opcode);
+
+  os << opcode << " " << destinations << ", "
+     << formatU32Immediate(valueAttr.getInt()) << "\n";
+  return success();
+}
+
+static const char *getSemaphoreSourceMnemonic(mlir::vc4::SemaphoreMode mode) {
+  switch (mode) {
+  case mlir::vc4::SemaphoreMode::acquire:
+    return "sacq";
+  case mlir::vc4::SemaphoreMode::release:
+    return "srel";
+  }
+  return "sema";
+}
+
+static const char *getSemaphoreCommentName(mlir::vc4::SemaphoreMode mode) {
+  switch (mode) {
+  case mlir::vc4::SemaphoreMode::acquire:
+    return "acquire";
+  case mlir::vc4::SemaphoreMode::release:
+    return "release";
+  }
+  return "unknown";
+}
+
+static LogicalResult emitQPUSemaQASM(mlir::vc4::QPUSemaOp sema,
+                                     llvm::raw_ostream &os) {
+  int64_t id = getIntegerAttrValue(sema.getOperation(), "id");
+  if (id < 0 || id > 15) {
+    return sema.emitOpError()
+           << "cannot emit semaphore id " << id
+           << "; vc4asm semaphore immediates must be in range [0, 15]";
+  }
+
+  std::optional<std::string> packSuffix =
+      getPackSuffix(sema.getOperation()->getAttr("pack"));
+  if (!packSuffix) {
+    return sema.emitOpError()
+           << "cannot emit unsupported vc4.qpu.sema pack attribute '"
+           << sema.getOperation()->getAttr("pack") << "'";
+  }
+
+  std::string destinations;
+  mlir::vc4::Cond emittedCond = mlir::vc4::Cond::always;
+  if (failed(buildLoadLikeDestinationList(
+          sema.getOperation(), sema.getCondAdd(), sema.getCondMul(),
+          sema.getPm(), *packSuffix, destinations, emittedCond)))
+    return failure();
+
+  // vc4asm documents both the direct `sacq`/`srel` syntax and the Broadcom
+  // compatible `mov dest, sacqN` form.  Use the latter uniformly so conditions,
+  // flags, pack suffixes, write-swap, and dual ADD/MUL destinations share the
+  // same deterministic printer path as ordinary load-immediate output.
+  std::string opcode = "mov";
+  appendLoadLikeOpcodeSuffix(sema.getOperation(), emittedCond, opcode);
+
+  os << opcode << " " << destinations << ", "
+     << getSemaphoreSourceMnemonic(sema.getMode()) << id << " # sema "
+     << getSemaphoreCommentName(sema.getMode()) << " " << id << "\n";
+  return success();
+}
+
 static LogicalResult writeQASM(KernelRecord &kernel,
                                llvm::StringRef bundleDir) {
   std::string qasm;
   llvm::raw_string_ostream qasmOS(qasm);
   for (mlir::Operation *op : kernel.scheduledStream) {
-    auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op);
-    if (!bundle) {
-      return op->emitOpError()
-             << "cannot be emitted as qasm in this qpu.bundle slice";
+    if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+      if (failed(emitQPUBundleQASM(bundle, qasmOS)))
+        return failure();
+      continue;
     }
-    if (failed(emitQPUBundleQASM(bundle, qasmOS)))
-      return failure();
+
+    if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
+      if (failed(emitQPULDIQASM(ldi, qasmOS)))
+        return failure();
+      continue;
+    }
+
+    if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
+      if (failed(emitQPUSemaQASM(sema, qasmOS)))
+        return failure();
+      continue;
+    }
+
+    return op->emitOpError()
+           << "cannot be emitted as qasm in this qpu.ldi/sema slice";
   }
   qasmOS.flush();
 
