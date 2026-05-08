@@ -1,36 +1,38 @@
 #!/usr/bin/env bash
-# Dispatcher for the minimal_thrend hardware smoke fixture.
+# Convenience dispatcher for the minimal_thrend hardware/codegen fixture.
 #
-# Usage:
-#   bash run.sh reference   # run checked-in reference bundle
-#   bash run.sh candidate   # run generated candidate bundle through support
-#   bash run.sh both        # run reference then candidate
+#   ./run.sh reference   # run immutable reference side through the hardware runner
+#   ./run.sh candidate   # run generated candidate side through the hardware runner
+#   ./run.sh generate    # generate candidate artifacts under .vc4_auto
+#   ./run.sh assemble    # assemble generated candidate qasm
+#   ./run.sh build       # build generated candidate workdir without hardware execution
 
 set -euo pipefail
 
-MODE="${1:-reference}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "$REPO_ROOT" ]]; then
-  echo "[minimal_thrend] ERROR: could not locate git repo root" >&2
-  exit 1
+  REPO_ROOT="$(cd "$SCRIPT_DIR/../../../../../../.." && pwd)"
 fi
+SUPPORT_DIR="$REPO_ROOT/compiler/test/CodeGen/VC4/Support"
+PHASE="${1:-reference}"
+shift || true
 
-case "$MODE" in
-  reference|ref)
-    cd "$SCRIPT_DIR/reference"
-    bash run.sh
+usage() {
+  cat >&2 <<'EOF'
+usage: run.sh [reference|candidate|generate|assemble|build|run|workdir|clean|all]
+EOF
+}
+
+case "$PHASE" in
+  reference|candidate)
+    exec bash "$SUPPORT_DIR/run_hardware_test.sh" "$SCRIPT_DIR" "$PHASE" "$@"
     ;;
-  candidate|cand)
-    bash "$REPO_ROOT/compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh" minimal_thrend run
-    ;;
-  both)
-    cd "$SCRIPT_DIR/reference"
-    bash run.sh
-    bash "$REPO_ROOT/compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh" minimal_thrend run
+  generate|assemble|build|run|workdir|clean|all)
+    exec bash "$SUPPORT_DIR/run_candidate_codegen_test.sh" minimal_thrend "$PHASE" "$@"
     ;;
   *)
-    echo "usage: bash run.sh [reference|candidate|both]" >&2
+    usage
     exit 2
     ;;
 esac
