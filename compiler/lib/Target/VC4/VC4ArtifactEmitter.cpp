@@ -24,7 +24,9 @@
 #include "llvm/Support/raw_ostream.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <string>
 #include <system_error>
 
 using namespace mlir;
@@ -393,51 +395,490 @@ static LogicalResult ensureAdjacentVC4ASMTemplates(mlir::Operation *diagOp,
   return success();
 }
 
-static bool isMinimalQASMNopBundle(mlir::vc4::QPUBundleOp bundle,
-                                      mlir::vc4::QPUSignal expectedSignal) {
-  return bundle && bundle.getSig() == expectedSignal &&
-         bundle.getOpAdd() == mlir::vc4::AddOpcode::nop &&
-         bundle.getOpMul() == mlir::vc4::MulOpcode::nop;
+
+static int64_t getIntegerAttrValue(mlir::Operation *op,
+                                   llvm::StringRef attrName) {
+  return llvm::cast<mlir::IntegerAttr>(op->getAttr(attrName)).getInt();
 }
 
-static LogicalResult verifyMinimalThreadEndQASM(KernelRecord &kernel) {
-  llvm::ArrayRef<mlir::Operation *> stream = kernel.scheduledStream;
-  if (stream.size() != 3) {
-    return kernel.func.emitOpError()
-           << "is not directly emittable by the minimal qasm emitter: "
-              "expected exactly three vc4.qpu.bundle nop slots encoding "
-              "thrend, nop, nop";
+static std::optional<int64_t> getOptionalIntegerAttrValue(
+    mlir::Operation *op, llvm::StringRef attrName) {
+  auto attr = op->getAttrOfType<mlir::IntegerAttr>(attrName);
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static const char *getAddOpcodeMnemonic(mlir::vc4::AddOpcode opcode) {
+  switch (opcode) {
+  case mlir::vc4::AddOpcode::nop:
+    return "nop";
+  case mlir::vc4::AddOpcode::fadd:
+    return "fadd";
+  case mlir::vc4::AddOpcode::fsub:
+    return "fsub";
+  case mlir::vc4::AddOpcode::fmin:
+    return "fmin";
+  case mlir::vc4::AddOpcode::fmax:
+    return "fmax";
+  case mlir::vc4::AddOpcode::fminabs:
+    return "fminabs";
+  case mlir::vc4::AddOpcode::fmaxabs:
+    return "fmaxabs";
+  case mlir::vc4::AddOpcode::ftoi:
+    return "ftoi";
+  case mlir::vc4::AddOpcode::itof:
+    return "itof";
+  case mlir::vc4::AddOpcode::add:
+    return "add";
+  case mlir::vc4::AddOpcode::sub:
+    return "sub";
+  case mlir::vc4::AddOpcode::shr:
+    return "shr";
+  case mlir::vc4::AddOpcode::asr:
+    return "asr";
+  case mlir::vc4::AddOpcode::ror:
+    return "ror";
+  case mlir::vc4::AddOpcode::shl:
+    return "shl";
+  case mlir::vc4::AddOpcode::min:
+    return "min";
+  case mlir::vc4::AddOpcode::max:
+    return "max";
+  case mlir::vc4::AddOpcode::bit_and:
+    return "and";
+  case mlir::vc4::AddOpcode::bit_or:
+    return "or";
+  case mlir::vc4::AddOpcode::bit_xor:
+    return "xor";
+  case mlir::vc4::AddOpcode::bit_not:
+    return "not";
+  case mlir::vc4::AddOpcode::clz:
+    return "clz";
+  case mlir::vc4::AddOpcode::v8adds:
+    return "v8adds";
+  case mlir::vc4::AddOpcode::v8subs:
+    return "v8subs";
+  }
+  return "unknown";
+}
+
+static const char *getMulOpcodeMnemonic(mlir::vc4::MulOpcode opcode) {
+  switch (opcode) {
+  case mlir::vc4::MulOpcode::nop:
+    return "nop";
+  case mlir::vc4::MulOpcode::fmul:
+    return "fmul";
+  case mlir::vc4::MulOpcode::mul24:
+    return "mul24";
+  case mlir::vc4::MulOpcode::v8muld:
+    return "v8muld";
+  case mlir::vc4::MulOpcode::v8min:
+    return "v8min";
+  case mlir::vc4::MulOpcode::v8max:
+    return "v8max";
+  case mlir::vc4::MulOpcode::v8adds:
+    return "v8adds";
+  case mlir::vc4::MulOpcode::v8subs:
+    return "v8subs";
+  }
+  return "unknown";
+}
+
+static bool isUnaryAddOpcode(mlir::vc4::AddOpcode opcode) {
+  return opcode == mlir::vc4::AddOpcode::ftoi ||
+         opcode == mlir::vc4::AddOpcode::itof ||
+         opcode == mlir::vc4::AddOpcode::bit_not ||
+         opcode == mlir::vc4::AddOpcode::clz;
+}
+
+static const char *getConditionSuffix(mlir::vc4::Cond cond) {
+  switch (cond) {
+  case mlir::vc4::Cond::never:
+  case mlir::vc4::Cond::always:
+    return "";
+  case mlir::vc4::Cond::zs:
+    return ".ifz";
+  case mlir::vc4::Cond::zc:
+    return ".ifnz";
+  case mlir::vc4::Cond::ns:
+    return ".ifn";
+  case mlir::vc4::Cond::nc:
+    return ".ifnn";
+  case mlir::vc4::Cond::cs:
+    return ".ifc";
+  case mlir::vc4::Cond::cc:
+    return ".ifcc";
+  }
+  return "";
+}
+
+static std::string formatSmallImmSelector(int64_t selector) {
+  if (selector >= 0 && selector <= 15)
+    return std::to_string(selector);
+  if (selector >= 16 && selector <= 31)
+    return std::to_string(selector - 32);
+  if (selector >= 32 && selector <= 39) {
+    int64_t value = int64_t{1} << (selector - 32);
+    return std::to_string(value) + ".0";
+  }
+  if (selector >= 40 && selector <= 47) {
+    int64_t denominator = int64_t{1} << (48 - selector);
+    return "1./" + std::to_string(denominator);
+  }
+  return "<unsupported-vector-rotate-small-imm>";
+}
+
+static bool isUnsupportedVectorRotateSmallImm(int64_t selector) {
+  return selector >= 48 && selector <= 63;
+}
+
+static std::string formatRegFileAddress(char regFile, int64_t address) {
+  std::string result;
+  result.push_back('r');
+  result.push_back(regFile);
+  result += std::to_string(address);
+  return result;
+}
+
+static std::string formatWriteAddress(int64_t address, bool forAddALU,
+                                      bool writeSwap) {
+  if (address >= 32 && address <= 36)
+    return "r" + std::to_string(address - 32);
+  if (address == 37)
+    return "r5quad";
+
+  char regFile = forAddALU ? (writeSwap ? 'b' : 'a')
+                           : (writeSwap ? 'a' : 'b');
+  return formatRegFileAddress(regFile, address);
+}
+
+static std::string printAttributeToString(mlir::Attribute attr) {
+  std::string result;
+  llvm::raw_string_ostream os(result);
+  attr.print(os);
+  return result;
+}
+
+static std::optional<std::string> getPackSuffix(mlir::Attribute attr) {
+  if (!attr)
+    return std::string();
+  std::string text = printAttributeToString(attr);
+  if (text.find("<none>") != std::string::npos)
+    return std::string();
+  if (text.find("<to_16a>") != std::string::npos)
+    return std::string(".16a");
+  if (text.find("<to_16b>") != std::string::npos)
+    return std::string(".16b");
+  if (text.find("<to_8888>") != std::string::npos)
+    return std::string(".8888");
+  if (text.find("<to_8a>") != std::string::npos)
+    return std::string(".8a");
+  if (text.find("<to_8b>") != std::string::npos)
+    return std::string(".8b");
+  if (text.find("<to_8c>") != std::string::npos)
+    return std::string(".8c");
+  if (text.find("<to_8d>") != std::string::npos)
+    return std::string(".8d");
+  if (text.find("<sat32>") != std::string::npos)
+    return std::string(".32s");
+  if (text.find("<sat16a>") != std::string::npos)
+    return std::string(".16as");
+  if (text.find("<sat16b>") != std::string::npos)
+    return std::string(".16bs");
+  if (text.find("<sat8888>") != std::string::npos)
+    return std::string(".8888s");
+  if (text.find("<sat8a>") != std::string::npos)
+    return std::string(".8as");
+  if (text.find("<sat8b>") != std::string::npos)
+    return std::string(".8bs");
+  if (text.find("<sat8c>") != std::string::npos)
+    return std::string(".8cs");
+  if (text.find("<sat8d>") != std::string::npos)
+    return std::string(".8ds");
+  return std::nullopt;
+}
+
+static std::optional<std::string> getUnpackSuffix(mlir::Attribute attr) {
+  if (!attr)
+    return std::string();
+  std::string text = printAttributeToString(attr);
+  if (text.find("<none>") != std::string::npos)
+    return std::string();
+  if (text.find("<f16a_or_i16a>") != std::string::npos ||
+      text.find("<f16a>") != std::string::npos)
+    return std::string(".16a");
+  if (text.find("<f16b_or_i16b>") != std::string::npos ||
+      text.find("<f16b>") != std::string::npos)
+    return std::string(".16b");
+  if (text.find("<replicate_8d>") != std::string::npos)
+    return std::string(".8dr");
+  if (text.find("<color8a>") != std::string::npos)
+    return std::string(".8a");
+  if (text.find("<color8b>") != std::string::npos)
+    return std::string(".8b");
+  if (text.find("<color8c>") != std::string::npos)
+    return std::string(".8c");
+  if (text.find("<color8d>") != std::string::npos)
+    return std::string(".8d");
+  return std::nullopt;
+}
+
+static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
+                                     mlir::vc4::QPUMux mux,
+                                     std::string unpackSuffix,
+                                     std::string &out) {
+  int64_t raddrA = getIntegerAttrValue(bundle.getOperation(), "raddr_a");
+  std::optional<int64_t> raddrB =
+      getOptionalIntegerAttrValue(bundle.getOperation(), "raddr_b");
+  std::optional<int64_t> smallImm =
+      getOptionalIntegerAttrValue(bundle.getOperation(), "small_imm");
+
+  switch (mux) {
+  case mlir::vc4::QPUMux::r0:
+    out = "r0";
+    return success();
+  case mlir::vc4::QPUMux::r1:
+    out = "r1";
+    return success();
+  case mlir::vc4::QPUMux::r2:
+    out = "r2";
+    return success();
+  case mlir::vc4::QPUMux::r3:
+    out = "r3";
+    return success();
+  case mlir::vc4::QPUMux::r4:
+    out = "r4" + unpackSuffix;
+    return success();
+  case mlir::vc4::QPUMux::r5:
+    out = "r5";
+    return success();
+  case mlir::vc4::QPUMux::a:
+    out = formatRegFileAddress('a', raddrA) + unpackSuffix;
+    return success();
+  case mlir::vc4::QPUMux::b:
+    if (smallImm) {
+      if (isUnsupportedVectorRotateSmallImm(*smallImm)) {
+        return bundle.emitOpError()
+               << "cannot emit vector-rotate small_imm selector " << *smallImm
+               << " in this qpu.bundle qasm slice";
+      }
+      out = formatSmallImmSelector(*smallImm);
+      return success();
+    }
+    if (!raddrB) {
+      return bundle.emitOpError()
+             << "cannot emit source mux #vc4.qpu_mux<b> without raddr_b or "
+                "small_imm";
+    }
+    out = formatRegFileAddress('b', *raddrB);
+    return success();
+  }
+  return bundle.emitOpError() << "cannot emit unknown qpu source mux";
+}
+
+static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
+                                          std::string &line,
+                                          bool &needSeparator) {
+  mlir::vc4::AddOpcode opcode = bundle.getOpAdd();
+  if (opcode == mlir::vc4::AddOpcode::nop)
+    return success();
+
+  std::optional<std::string> packSuffix =
+      getPackSuffix(bundle.getOperation()->getAttr("pack"));
+  std::optional<std::string> unpackSuffix =
+      getUnpackSuffix(bundle.getOperation()->getAttr("unpack"));
+  if (!packSuffix) {
+    return bundle.emitOpError()
+           << "cannot emit unsupported qpu.bundle pack attribute '"
+           << bundle.getOperation()->getAttr("pack") << "'";
+  }
+  if (!unpackSuffix) {
+    return bundle.emitOpError()
+           << "cannot emit unsupported qpu.bundle unpack attribute '"
+           << bundle.getOperation()->getAttr("unpack") << "'";
   }
 
-  if (!isMinimalQASMNopBundle(
-          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[0]),
-          mlir::vc4::QPUSignal::thrend) ||
-      !isMinimalQASMNopBundle(
-          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[1]),
-          mlir::vc4::QPUSignal::none) ||
-      !isMinimalQASMNopBundle(
-          llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[2]),
-          mlir::vc4::QPUSignal::none)) {
-    return kernel.func.emitOpError()
-           << "is not directly emittable by the minimal qasm emitter: "
-              "expected exactly three vc4.qpu.bundle nop slots encoding "
-              "thrend, nop, nop";
+  std::string src0;
+  std::string src1;
+  if (failed(formatMuxSource(bundle, bundle.getAddA(), *unpackSuffix, src0)))
+    return failure();
+  if (!isUnaryAddOpcode(opcode) &&
+      failed(formatMuxSource(bundle, bundle.getAddB(), std::string(), src1)))
+    return failure();
+
+  if (needSeparator)
+    line += "; ";
+  needSeparator = true;
+
+  mlir::vc4::Cond cond = bundle.getCondAdd();
+  line += getAddOpcodeMnemonic(opcode);
+  if (bundle.getOperation()->hasAttr("set_flags"))
+    line += ".setf";
+  if (cond != mlir::vc4::Cond::never)
+    line += getConditionSuffix(cond);
+
+  std::string dest =
+      cond == mlir::vc4::Cond::never
+          ? std::string("-")
+          : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
+                                                   "waddr_add"),
+                               /*forAddALU=*/true,
+                               bundle.getOperation()->hasAttr("write_swap")) +
+                *packSuffix;
+  line += " ";
+  line += dest;
+  line += ", ";
+  line += src0;
+  if (!isUnaryAddOpcode(opcode)) {
+    line += ", ";
+    line += src1;
+  }
+  return success();
+}
+
+static LogicalResult appendMulInstruction(mlir::vc4::QPUBundleOp bundle,
+                                          std::string &line,
+                                          bool &needSeparator,
+                                          bool setFlagsAlreadyUsed) {
+  mlir::vc4::MulOpcode opcode = bundle.getOpMul();
+  if (opcode == mlir::vc4::MulOpcode::nop)
+    return success();
+
+  std::optional<std::string> packSuffix =
+      getPackSuffix(bundle.getOperation()->getAttr("pack"));
+  std::optional<std::string> unpackSuffix =
+      getUnpackSuffix(bundle.getOperation()->getAttr("unpack"));
+  if (!packSuffix) {
+    return bundle.emitOpError()
+           << "cannot emit unsupported qpu.bundle pack attribute '"
+           << bundle.getOperation()->getAttr("pack") << "'";
+  }
+  if (!unpackSuffix) {
+    return bundle.emitOpError()
+           << "cannot emit unsupported qpu.bundle unpack attribute '"
+           << bundle.getOperation()->getAttr("unpack") << "'";
   }
 
+  std::string src0;
+  std::string src1;
+  // The r4 unpack path is selected by pm=true.  Regfile-A unpack suffixes do
+  // not apply to MUL accumulator operands, so only pass the textual unpack
+  // suffix through when the pm-selected r4 path could use it.
+  std::string maybeR4Unpack = bundle.getPm() ? *unpackSuffix : std::string();
+  if (failed(formatMuxSource(bundle, bundle.getMulA(), maybeR4Unpack, src0)))
+    return failure();
+  if (failed(formatMuxSource(bundle, bundle.getMulB(), maybeR4Unpack, src1)))
+    return failure();
+
+  if (needSeparator)
+    line += "; ";
+  needSeparator = true;
+
+  mlir::vc4::Cond cond = bundle.getCondMul();
+  line += getMulOpcodeMnemonic(opcode);
+  if (bundle.getOperation()->hasAttr("set_flags") && !setFlagsAlreadyUsed)
+    line += ".setf";
+  if (cond != mlir::vc4::Cond::never)
+    line += getConditionSuffix(cond);
+
+  std::string dest =
+      cond == mlir::vc4::Cond::never
+          ? std::string("-")
+          : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
+                                                   "waddr_mul"),
+                               /*forAddALU=*/false,
+                               bundle.getOperation()->hasAttr("write_swap")) +
+                *packSuffix;
+  line += " ";
+  line += dest;
+  line += ", ";
+  line += src0;
+  line += ", ";
+  line += src1;
+  return success();
+}
+
+static LogicalResult appendSignalInstruction(mlir::vc4::QPUBundleOp bundle,
+                                             std::string &line,
+                                             bool &needSeparator) {
+  const char *signal = nullptr;
+  switch (bundle.getSig()) {
+  case mlir::vc4::QPUSignal::none:
+  case mlir::vc4::QPUSignal::small_imm:
+    return success();
+  case mlir::vc4::QPUSignal::bkpt:
+    signal = "bkpt";
+    break;
+  case mlir::vc4::QPUSignal::thrsw:
+    signal = "thrsw";
+    break;
+  case mlir::vc4::QPUSignal::thrend:
+    signal = "thrend";
+    break;
+  case mlir::vc4::QPUSignal::last_thread_switch:
+    signal = "lthrsw";
+    break;
+  case mlir::vc4::QPUSignal::ldtmu0:
+    signal = "ldtmu0";
+    break;
+  case mlir::vc4::QPUSignal::ldtmu1:
+    signal = "ldtmu1";
+    break;
+  case mlir::vc4::QPUSignal::load_imm:
+    return bundle.emitOpError()
+           << "sig = #vc4.qpu_signal<load_imm> must be emitted by "
+              "vc4.qpu.ldi, which is outside this slice";
+  case mlir::vc4::QPUSignal::branch:
+    return bundle.emitOpError()
+           << "sig = #vc4.qpu_signal<branch> must be emitted by "
+              "vc4.qpu.branch, which is outside this slice";
+  }
+
+  if (needSeparator)
+    line += "; ";
+  needSeparator = true;
+  line += signal;
+  return success();
+}
+
+static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
+                                       llvm::raw_ostream &os) {
+  std::string line;
+  bool needSeparator = false;
+
+  const bool addActive = bundle.getOpAdd() != mlir::vc4::AddOpcode::nop;
+  if (failed(appendAddInstruction(bundle, line, needSeparator)))
+    return failure();
+  if (failed(appendMulInstruction(bundle, line, needSeparator, addActive)))
+    return failure();
+  if (failed(appendSignalInstruction(bundle, line, needSeparator)))
+    return failure();
+
+  if (!needSeparator)
+    line = "nop";
+
+  os << line << "\n";
   return success();
 }
 
 static LogicalResult writeQASM(KernelRecord &kernel,
                                llvm::StringRef bundleDir) {
-  if (failed(verifyMinimalThreadEndQASM(kernel)))
-    return failure();
+  std::string qasm;
+  llvm::raw_string_ostream qasmOS(qasm);
+  for (mlir::Operation *op : kernel.scheduledStream) {
+    auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op);
+    if (!bundle) {
+      return op->emitOpError()
+             << "cannot be emitted as qasm in this qpu.bundle slice";
+    }
+    if (failed(emitQPUBundleQASM(bundle, qasmOS)))
+      return failure();
+  }
+  qasmOS.flush();
 
   return writeBundleFile(kernel.func.getOperation(), bundleDir, "kernel.qasm",
-                         [&](llvm::raw_ostream &os) {
-                           os << "thrend\n";
-                           os << "nop\n";
-                           os << "nop\n";
-                         });
+                         [&](llvm::raw_ostream &os) { os << qasm; });
 }
 
 static LogicalResult writeLauncherHeader(KernelRecord &kernel,
