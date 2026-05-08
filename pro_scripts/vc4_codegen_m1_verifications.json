@@ -31,7 +31,9 @@
             "pro_scripts/prompts/vc4_codegen_m1/constitution.md",
             "pro_scripts/prompts/vc4_codegen_m1/output_contract.md",
             "pro_scripts/prompts/vc4_codegen_m1/slice_contract.md",
-            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+            "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "pro_scripts/vc4_codegen_m1_verifications.json"
           ]
         },
         {

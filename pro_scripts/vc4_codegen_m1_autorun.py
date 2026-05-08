@@ -302,6 +302,12 @@ def run_slice_gates(
             return False, results
 
     runner = GateRunner(config, verbose=verbose, timeout_sec=timeout_sec)
+    source_products = runner.run_source_products_for_slice(slice_entry, log_dir=log_dir, gate="pre-gates")
+    results.append(source_products)
+    if not source_products.ok:
+        write_json_file(log_dir / "gate_summary.json", [r.as_json(config.repo) for r in results])
+        return False, results
+
     gates = [str(g) for g in slice_entry.get("gates", [])]
     gate_results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=allow_dirty, stop_on_failure=True)
     results.extend(gate_results)

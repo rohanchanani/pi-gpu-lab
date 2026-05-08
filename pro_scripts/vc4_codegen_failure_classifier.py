@@ -163,6 +163,8 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
     if typed_category is not None:
         return typed_category
 
+    if "source-products" in g or "source_product" in log.lower():
+        return "source_product_missing", "Required slice source products are missing; GPT must use the exact paths/globs from the worklist and typed verifier contract"
     if s in {"chat", "gpt-web-driver", "browser"} or TRANSPORT_RE.search(log) and "chat" in s:
         return "chat_transport", "Chat/browser transport failed; retry same prompt or inspect web-driver logs"
     if ARTIFACT_RE.search(log):

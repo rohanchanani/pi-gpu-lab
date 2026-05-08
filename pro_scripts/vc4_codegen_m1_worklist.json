@@ -31,7 +31,9 @@
       "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json",
       "compiler/test/CodeGen/VC4/catalog.json",
       "pro_scripts/gpt_web_driver.js",
-      ".vc4_auto/**"
+      ".vc4_auto/**",
+      "compiler/test/**/Output/**",
+      "compiler/test/**/.lit_test_times.txt"
     ],
     "path_policy": {
       "paths_are_repo_relative": true,
@@ -72,6 +74,28 @@
       ],
       "trusted_applier": "pro_scripts/vc4_codegen_download_bundle_apply.py",
       "legacy_patch_transport_retained": true
+    },
+    "test_design_contract": {
+      "vc4_codegen_verifies_before_emission": true,
+      "emitter_negative_tests_must_be_dialect_verifier_clean": true,
+      "generated_lit_side_effects_forbidden": [
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt"
+      ],
+      "source_products_are_executable": true,
+      "source_product_fields": [
+        "products.required_source_files",
+        "products.required_existing_files",
+        "products.required_source_globs",
+        "products.candidate_input_files",
+        "products.candidate_fixture_inputs",
+        "products.hardware_fixture_inputs",
+        "products.support_files",
+        "products.semantic_oracle_files",
+        "products.forbidden_source_globs",
+        "products.immutable_reference_globs"
+      ],
+      "exact_source_product_paths_required": true
     }
   },
   "slices": [
@@ -116,7 +140,17 @@
       "max_codex_attempts": 0,
       "commit_message": "vc4 codegen m1: preflight repo and toolchain checks",
       "mechanical_budgets": {},
-      "products": {},
+      "products": {
+        "required_existing_files": [
+          "pro_scripts/vc4_codegen_m1_worklist.json",
+          "pro_scripts/vc4_codegen_m1_context_profiles.json",
+          "pro_scripts/gpt_web_driver.js",
+          "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
+          "pro_scripts/vc4_codegen_m1_verifier.py",
+          "pro_scripts/vc4_codegen_m1_verifications.json"
+        ],
+        "source_product_note": "Preflight has no generated source product; it verifies existing repo/toolchain inputs by exact path."
+      },
       "success_probes": [
         "git:clean-or-confirm",
         "json:worklist",
@@ -203,7 +237,20 @@
         ],
         "lit_roots": [
           "compiler/test/CodeGen/VC4/Emit"
-        ]
+        ],
+        "required_source_files": [
+          "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h",
+          "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "compiler/lib/Target/VC4/CMakeLists.txt",
+          "compiler/tools/vc4-codegen/CMakeLists.txt",
+          "compiler/tools/vc4-codegen/vc4-codegen.cpp",
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-skeleton.mlir",
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-skeleton-invalid.mlir"
+        ],
+        "candidate_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        },
+        "source_product_note": "The skeleton slice owns the vc4-codegen tool/library surface and its two local skeleton tests by exact filename."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -220,11 +267,18 @@
         "m1-01-artifact-tool-skeleton"
       ],
       "context_profile": "emit_contract",
-      "intent": "Add local non-hardware tests for the exact Milestone 1 input boundary: one vc4.module, one kernel qpu scheduled vc4.func, vc4.launch_abi present, allowed scheduled sink ops only, and explicit thrend plus two following delay slots.",
+      "intent": "Add local non-hardware tests, and tighten vc4-codegen validation only as needed, for the exact Milestone 1 input boundary: exactly one vc4.module in the parsed MLIR module, exactly one kernel qpu scheduled vc4.func, vc4.launch_abi present, allowed scheduled sink ops only, and a flattened scheduled instruction stream whose final three slots are one explicit thrend followed by two non-branch delay-slot instructions. Local product tests must be named compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-*.mlir so the deterministic product gate can prove the slice exists. Emitter-level negative tests must be dialect-verifier-clean; if the dialect verifier intentionally rejects the IR first, FileCheck must match that verifier diagnostic instead of an emitter diagnostic. Branch epilogue tests must keep each vc4.qpu.branch operation verifier-clean with exactly three delay-slot ops unless the test is explicitly about branch verifier precedence.",
       "non_goals": [
         "Do not implement new qasm features.",
         "Do not broaden the accepted input subset.",
-        "Do not change reference hardware bundles."
+        "Do not silently repair invalid scheduled IR; reject boundary violations with clear diagnostics.",
+        "Do not change reference hardware bundles.",
+        "Do not expect emitter diagnostics for IR that the dialect verifier rejects first; use dialect-verifier-clean IR for emitter-boundary tests.",
+        "Do not add generated lit Output files or .lit_test_times.txt files.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -275,7 +329,41 @@
         ],
         "tools": [
           "vc4-codegen"
-        ]
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "contract_cases": [
+          "valid minimal_thrend-like scheduled kernel emits all placeholder bundle artifacts",
+          "reject no eligible kernel",
+          "reject multiple vc4.module or multiple eligible kernels",
+          "reject missing or malformed vc4.launch_abi/public_name",
+          "reject non-sink or structured operations in the scheduled kernel body",
+          "reject missing, early, repeated, or trailing thrend that is not exactly slot N-3",
+          "reject branch operations in slots N-2 or N-1 of the flattened stream"
+        ],
+        "lit_test_globs": [
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-*.mlir"
+        ],
+        "required_test_prefix": "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-",
+        "forbidden_test_prefixes": [
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-boundary-"
+        ],
+        "verifier_precedence_notes": [
+          "vc4-codegen verifies MLIR before artifact emission.",
+          "Structured vc4.* operations in scheduled functions are rejected by the dialect verifier before emitter validation.",
+          "vc4.qpu.branch must have exactly three delay-slot ops before flattened epilogue validation can inspect it.",
+          "Emitter-level negative tests must be dialect-verifier-clean unless intentionally checking verifier precedence."
+        ],
+        "required_source_globs": [
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-*.mlir"
+        ],
+        "forbidden_source_globs": [
+          "compiler/test/CodeGen/VC4/Emit/vc4-codegen-boundary-*.mlir",
+          "compiler/test/**/Output/**",
+          "compiler/test/**/.lit_test_times.txt"
+        ],
+        "source_product_note": "The emit-contract local product tests are the vc4-codegen-emit-contract-*.mlir files; boundary-* names do not satisfy the deterministic product gate."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -294,7 +382,11 @@
       "non_goals": [
         "Do not implement full ALU formatting.",
         "Do not implement launcher uniform packing yet.",
-        "Do not require candidate hardware execution yet."
+        "Do not require candidate hardware execution yet.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -346,8 +438,36 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
-        ]
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-minimal-thrend.mlir"
+        ],
+        "candidate_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        },
+        "generated_candidate_names": [
+          "minimal_thrend"
+        ],
+        "artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "kernel_qasm_required_sequence": [
+          "thrend",
+          "nop"
+        ],
+        "kernel_qasm_forbidden_substrings": [
+          "VC4 codegen placeholder QASM",
+          "Real VC4 QPU instruction emission is implemented by later slices"
+        ],
+        "source_product_note": "The local lit product is exactly emit-minimal-thrend.mlir; the tool/vc4asm candidate gates still consume the minimal_thrend hardware fixture input."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -368,7 +488,11 @@
       "non_goals": [
         "Do not implement vc4.qpu.ldi.",
         "Do not implement vc4.qpu.sema.",
-        "Do not implement branch labels/delay-slot flattening."
+        "Do not implement branch labels/delay-slot flattening.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -419,8 +543,28 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
-        ]
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        ],
+        "candidate_input_files": {
+          "qpu_bundle_basic": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        },
+        "generated_candidate_names": [
+          "qpu_bundle_basic"
+        ],
+        "artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "source_product_note": "The qpu_bundle_basic candidate gate opens emit-qpu-bundle-basic.mlir by exact filename."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -440,7 +584,11 @@
       "non_goals": [
         "Do not implement branch emission.",
         "Do not broaden to structured vc4.load_imm.",
-        "Defer per-element ldi syntax if vc4asm acceptance is uncertain and split into a follow-up slice."
+        "Defer per-element ldi syntax if vc4asm acceptance is uncertain and split into a follow-up slice.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -491,8 +639,28 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
-        ]
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        ],
+        "candidate_input_files": {
+          "qpu_ldi_sema": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        },
+        "generated_candidate_names": [
+          "qpu_ldi_sema"
+        ],
+        "artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "source_product_note": "The qpu_ldi_sema candidate gate opens emit-qpu-ldi-sema.mlir by exact filename."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -512,7 +680,11 @@
       "non_goals": [
         "Do not implement control-flow restructuring.",
         "Do not infer missing delay slots.",
-        "Do not modify the verifier contract."
+        "Do not modify the verifier contract.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -563,8 +735,28 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
-        ]
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        ],
+        "candidate_input_files": {
+          "qpu_branch": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        "generated_candidate_names": [
+          "qpu_branch"
+        ],
+        "artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "source_product_note": "The qpu_branch candidate gate opens emit-qpu-branch-delay-slots.mlir by exact filename."
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -584,7 +776,11 @@
       "non_goals": [
         "Do not expose raw uniform arrays in the public API.",
         "Do not expose qpu_id or num_qpus as public user arguments.",
-        "Do not implement full launcher C uniform packing in this slice."
+        "Do not implement full launcher C uniform packing in this slice.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -636,7 +832,32 @@
         ],
         "tools": [
           "vc4-codegen"
-        ]
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_globs": [
+          "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header*.mlir"
+        ],
+        "generated_candidate_names": [
+          "minimal_thrend"
+        ],
+        "generated_header_files": [
+          "kernel_launch.h"
+        ],
+        "public_api_constraints": [
+          "semantic arguments only",
+          "do not expose qpu_id",
+          "do not expose num_qpus",
+          "do not expose raw uniform arrays"
+        ],
+        "source_product_note": "lit:emit-launch-abi-header is backed by exactly emit-launch-abi-header.mlir.",
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+        ],
+        "candidate_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        }
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -656,7 +877,11 @@
       "non_goals": [
         "Do not change launch_abi verifier semantics.",
         "Do not expose qpu_id or num_qpus publicly.",
-        "Do not implement candidate hardware runner integration yet."
+        "Do not implement candidate hardware runner integration yet.",
+        "Do not write CodeGen negative tests that are rejected by dialect verification before exercising this slice; keep emitter/codegen tests verifier-clean unless intentionally checking verifier precedence.",
+        "Do not include generated lit Output files or .lit_test_times.txt files.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files or products.required_source_globs.",
+        "Do not substitute semantically similar filenames for files declared in products.required_source_files, products.required_source_globs, or products.candidate_input_files."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -708,7 +933,34 @@
         ],
         "tools": [
           "vc4-codegen"
-        ]
+        ],
+        "lit_roots": [
+          "compiler/test/CodeGen/VC4/Emit"
+        ],
+        "required_source_globs": [
+          "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing*.mlir"
+        ],
+        "generated_candidate_names": [
+          "minimal_thrend"
+        ],
+        "generated_launcher_files": [
+          "kernel_launch.c",
+          "kernel_launch.h"
+        ],
+        "public_api_constraints": [
+          "semantic arguments only",
+          "uniform suffix builtins are packed internally",
+          "do not expose qpu_id",
+          "do not expose num_qpus",
+          "do not expose raw uniform arrays"
+        ],
+        "source_product_note": "lit:emit-launcher-uniform-packing is backed by exactly emit-launcher-uniform-packing.mlir.",
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+        ],
+        "candidate_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        }
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -783,8 +1035,27 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
-        ]
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "support_files": [
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+          "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        ],
+        "candidate_names": [
+          "minimal_thrend"
+        ],
+        "candidate_artifact_files": [
+          "kernel.qasm",
+          "kernel_launch.c",
+          "kernel_launch.h",
+          "manifest.json"
+        ],
+        "source_product_note": "Runner integration owns support scripts and reads fixture inputs; generated candidate artifacts are runtime outputs under .vc4_auto or candidate workdirs, not source products.",
+        "candidate_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        }
       },
       "success_probes": [
         "build:vc4-codegen",
@@ -857,7 +1128,26 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "hardware_fixture_inputs": {
+          "minimal_thrend": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir"
+        },
+        "semantic_oracle_files": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json"
+        ],
+        "immutable_reference_globs": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/**"
+        ],
+        "source_product_note": "Hardware success is through generated candidate execution and expected.json checking, not reference mutation or exact qasm text matching.",
+        "support_files": [
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+          "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        ],
+        "candidate_names": [
+          "minimal_thrend"
         ]
       },
       "success_probes": [
@@ -936,7 +1226,26 @@
           "vc4-codegen"
         ],
         "tools": [
-          "vc4-codegen"
+          "vc4-codegen",
+          "vc4asm"
+        ],
+        "hardware_fixture_inputs": {
+          "saxpy_full": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        },
+        "semantic_oracle_files": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
+        ],
+        "immutable_reference_globs": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/**"
+        ],
+        "source_product_note": "The first memory-output gate uses saxpy_full/input.mlir and saxpy_full/expected.json as exact products/oracles while keeping reference bundles immutable.",
+        "support_files": [
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+          "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        ],
+        "candidate_names": [
+          "saxpy_full"
         ]
       },
       "success_probes": [

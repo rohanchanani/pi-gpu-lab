@@ -13,6 +13,7 @@ The script intentionally depends only on the Python standard library.
 from __future__ import annotations
 
 import argparse
+import copy
 import dataclasses
 import fnmatch
 import json
@@ -132,6 +133,7 @@ class VerifierContext:
         self.dry_run = bool(args.dry_run)
         self.no_hardware = bool(args.no_hardware)
         self.keep_going = bool(args.keep_going)
+        self.only_mechanisms = set(str(x) for x in getattr(args, "only_mechanism", []) or [])
         self.verbose = bool(args.verbose)
         self.report_dir = self.state_root / "reports"
         self.log_dir = self.state_root / "logs"
@@ -1079,6 +1081,8 @@ def run_verify(ctx: VerifierContext, slice_ids: List[str]) -> Dict[str, Any]:
                 if not ctx.keep_going:
                     break
                 continue
+            if ctx.only_mechanisms and str(v.get("mechanism", "")) not in ctx.only_mechanisms:
+                continue
             result = verify_one(ctx, slice_id, v)
             all_results.append(result)
             if ctx.verbose:
@@ -1099,6 +1103,105 @@ def run_verify(ctx: VerifierContext, slice_ids: List[str]) -> Dict[str, Any]:
         "failures": [r.to_packet() for r in all_results if not r.ok and r.required],
         "results": [r.to_packet() for r in all_results],
     }
+
+
+SOURCE_PRODUCT_FILE_KEYS = (
+    "required_source_files",
+    "required_existing_files",
+    "support_files",
+    "semantic_oracle_files",
+)
+SOURCE_PRODUCT_MAPPING_KEYS = (
+    "candidate_input_files",
+    "candidate_fixture_inputs",
+    "hardware_fixture_inputs",
+)
+SOURCE_PRODUCT_GLOB_KEYS = (
+    "required_source_globs",
+    "lit_test_globs",
+)
+
+
+def _extend_unique(dst: List[str], values: Iterable[str]) -> None:
+    seen = set(dst)
+    for value in values:
+        if value not in seen:
+            dst.append(value)
+            seen.add(value)
+
+
+def worklist_source_products(wslice: Mapping[str, Any]) -> Tuple[List[str], List[str]]:
+    """Return exact source-product files/globs declared by a worklist slice.
+
+    The worklist is the human-facing slice contract and the verifier spec is the
+    executable mechanism list.  Keep them connected by deriving source-product
+    checks from worklist ``products`` instead of relying on every spec author to
+    duplicate the same filenames perfectly.
+    """
+    products = wslice.get("products") if isinstance(wslice.get("products"), Mapping) else {}
+    files: List[str] = []
+    globs: List[str] = []
+    for key in SOURCE_PRODUCT_FILE_KEYS:
+        value = products.get(key)
+        if isinstance(value, str):
+            _extend_unique(files, [value])
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            _extend_unique(files, [str(x) for x in value])
+    for key in SOURCE_PRODUCT_MAPPING_KEYS:
+        value = products.get(key)
+        if isinstance(value, Mapping):
+            _extend_unique(files, [str(x) for x in value.values() if isinstance(x, str)])
+    for key in SOURCE_PRODUCT_GLOB_KEYS:
+        value = products.get(key)
+        if isinstance(value, str):
+            _extend_unique(globs, [value])
+        elif isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+            _extend_unique(globs, [str(x) for x in value])
+    return files, globs
+
+
+def augment_spec_with_worklist_source_products(spec: Dict[str, Any], worklist: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Return a spec copy whose source_products checks include worklist products."""
+    if not worklist:
+        return spec
+    augmented = copy.deepcopy(spec)
+    spec_slices = get_slices(augmented)
+    work_slices = get_slices(worklist)
+    for sid, wslice in work_slices.items():
+        if sid not in spec_slices:
+            continue
+        files, globs = worklist_source_products(wslice)
+        if not files and not globs:
+            continue
+        sspec = spec_slices[sid]
+        verifications = sspec.setdefault("verifications", [])
+        if not isinstance(verifications, list):
+            continue
+        source_v = None
+        for v in verifications:
+            if isinstance(v, dict) and v.get("mechanism") == "source_products":
+                source_v = v
+                break
+        if source_v is None:
+            source_v = {
+                "id": "worklist-source-products",
+                "mechanism": "source_products",
+                "description": "Exact source products declared by the worklist products contract.",
+                "category": "source_product_missing",
+                "route_hint": "gpt_pro",
+                "files": [],
+                "globs": [],
+            }
+            verifications.insert(0, source_v)
+        cur_files = [str(x) for x in as_list(source_v.get("files"))]
+        cur_globs = [str(x) for x in as_list(source_v.get("globs"))]
+        _extend_unique(cur_files, files)
+        _extend_unique(cur_globs, globs)
+        if cur_files:
+            source_v["files"] = cur_files
+        if cur_globs:
+            source_v["globs"] = cur_globs
+    return augmented
 
 
 def audit_contract(spec: Dict[str, Any], *, worklist: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -1152,7 +1255,7 @@ def audit_contract(spec: Dict[str, Any], *, worklist: Optional[Dict[str, Any]] =
                 elif isinstance(val, dict):
                     declared_source_files.extend(str(x) for x in val.values())
             declared_globs: List[str] = []
-            for key in ["required_source_globs", "forbidden_source_globs", "immutable_reference_globs"]:
+            for key in ["required_source_globs", "lit_test_globs"]:
                 val = products.get(key)
                 if isinstance(val, list):
                     declared_globs.extend(str(x) for x in val)
@@ -1163,12 +1266,11 @@ def audit_contract(spec: Dict[str, Any], *, worklist: Optional[Dict[str, Any]] =
                     spec_source_files.extend(str(x) for x in as_list(v.get("files")))
                     spec_source_globs.extend(str(x) for x in as_list(v.get("globs")))
             missing_declared_files = sorted(set(declared_source_files) - set(spec_source_files))
-            # Only warn: some checks are generated artifacts rather than source products.
             if missing_declared_files:
-                warnings.append({"slice_id": sid, "category": "declared_source_files_not_in_source_products_verification", "paths": missing_declared_files})
+                errors.append({"slice_id": sid, "category": "declared_source_files_not_in_source_products_verification", "paths": missing_declared_files})
             missing_declared_globs = sorted(set(declared_globs) - set(spec_source_globs))
             if missing_declared_globs:
-                warnings.append({"slice_id": sid, "category": "declared_source_globs_not_in_source_products_verification", "globs": missing_declared_globs})
+                errors.append({"slice_id": sid, "category": "declared_source_globs_not_in_source_products_verification", "globs": missing_declared_globs})
     return {"schema_version": SCHEMA_VERSION, "ok": not errors, "errors": errors, "warnings": warnings, "mechanisms": sorted(MECHANISMS)}
 
 
@@ -1212,6 +1314,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--keep-going", action="store_true", help="run all requested verifications even after failures")
     parser.add_argument("--no-hardware", action="store_true", help="skip verifications marked requires_hardware")
     parser.add_argument("--dry-run", action="store_true", help="validate command construction without running external commands")
+    parser.add_argument("--only-mechanism", action="append", default=[], help="verify only entries with this mechanism; repeatable")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--json", action="store_true", help="print JSON output (default for verify/audit)")
     return parser.parse_args(argv)
@@ -1255,6 +1358,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     spec_path = repo / args.spec if not Path(args.spec).is_absolute() else Path(args.spec)
     spec = load_json(spec_path)
     args.spec = str(spec_path)
+    worklist_path = repo / args.worklist if not Path(args.worklist).is_absolute() else Path(args.worklist)
+    worklist = load_json(worklist_path) if worklist_path.exists() else None
+    if args.command in {"explain", "verify", "audit-contract"}:
+        spec = augment_spec_with_worklist_source_products(spec, worklist)
 
     if args.command == "list":
         report = {"schema_version": SCHEMA_VERSION, "slices": [{"id": sid, "title": s.get("title", "")} for sid, s in get_slices(spec).items()]}
@@ -1267,8 +1374,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 0
 
     if args.command == "audit-contract":
-        worklist_path = repo / args.worklist if not Path(args.worklist).is_absolute() else Path(args.worklist)
-        worklist = load_json(worklist_path) if worklist_path.exists() else None
         report = audit_contract(spec, worklist=worklist)
         emit_report(report, args)
         return 0 if report.get("ok") else 1

@@ -208,6 +208,100 @@ class GateRunner:
             )
         return None
 
+    def _append_unique(self, dst: list[str], values: Sequence[str]) -> None:
+        seen = set(dst)
+        for value in values:
+            if value not in seen:
+                dst.append(value)
+                seen.add(value)
+
+    def _source_products_from_products(self, products: Mapping[str, Any]) -> tuple[list[str], list[str]]:
+        required_files: list[str] = []
+        for key in ("required_source_files", "required_existing_files", "support_files", "semantic_oracle_files"):
+            self._append_unique(required_files, self._product_list(products.get(key)))
+        for key in ("candidate_input_files", "candidate_fixture_inputs", "hardware_fixture_inputs"):
+            self._append_unique(required_files, self._product_mapping_values(products.get(key)))
+
+        required_globs: list[str] = []
+        for key in ("required_source_globs", "lit_test_globs"):
+            self._append_unique(required_globs, self._product_list(products.get(key)))
+        return required_files, required_globs
+
+    def _source_products_from_typed_spec(self, slice_id: str) -> tuple[list[str], list[str]]:
+        spec_path = self._typed_verifier_spec()
+        if not spec_path.exists():
+            return [], []
+        try:
+            spec = json.loads(spec_path.read_text(encoding="utf-8"))
+        except Exception:
+            return [], []
+        raw_slices = spec.get("slices")
+        if isinstance(raw_slices, Mapping):
+            sspec = raw_slices.get(slice_id)
+        elif isinstance(raw_slices, list):
+            sspec = next((s for s in raw_slices if isinstance(s, Mapping) and s.get("id") == slice_id), None)
+        else:
+            sspec = None
+        if not isinstance(sspec, Mapping):
+            return [], []
+        files: list[str] = []
+        globs: list[str] = []
+        verifications = sspec.get("verifications")
+        if isinstance(verifications, list):
+            for v in verifications:
+                if not isinstance(v, Mapping) or v.get("mechanism") != "source_products":
+                    continue
+                self._append_unique(files, self._product_list(v.get("files")))
+                self._append_unique(globs, self._product_list(v.get("globs")))
+        return files, globs
+
+    def run_source_products_for_slice(self, slice_entry: Mapping[str, Any], *, log_dir: Path, gate: str = "source-products") -> CommandResult:
+        """Check exact source products before expensive legacy gates.
+
+        This is intentionally slice-scoped rather than gate-scoped: generic gates
+        such as build:vc4-codegen appear in many slices, and selecting the first
+        matching slice would check the wrong product contract.  Worklist
+        products and typed verifier source_products are both treated as source
+        of truth so drift surfaces immediately.
+        """
+        slice_id = str(slice_entry.get("id", "<unknown>"))
+        required_files: list[str] = []
+        required_globs: list[str] = []
+        products = slice_entry.get("products") or {}
+        if isinstance(products, Mapping):
+            files, globs = self._source_products_from_products(products)
+            self._append_unique(required_files, files)
+            self._append_unique(required_globs, globs)
+        files, globs = self._source_products_from_typed_spec(slice_id)
+        self._append_unique(required_files, files)
+        self._append_unique(required_globs, globs)
+
+        missing_files = [rel for rel in sorted(set(required_files)) if not (self.repo / rel).is_file()]
+        missing_globs = [pattern for pattern in sorted(set(required_globs)) if not self._product_glob_matches(pattern)]
+        if missing_files or missing_globs:
+            return self.write_check_log(
+                gate=f"{gate}:source-products",
+                log_dir=log_dir,
+                ok=False,
+                message=(
+                    "active slice source products are missing; use exact paths/globs from the worklist and typed verifier contracts\n"
+                    f"slice={slice_id}\n"
+                    f"missing_files={missing_files}\n"
+                    f"missing_globs={missing_globs}"
+                ),
+            )
+        return self.write_check_log(
+            gate=f"{gate}:source-products",
+            log_dir=log_dir,
+            ok=True,
+            message=(
+                "active slice source products are present\n"
+                f"slice={slice_id}\n"
+                f"files={sorted(set(required_files))}\n"
+                f"globs={sorted(set(required_globs))}"
+            ),
+        )
+
     def _typed_verifier_script(self) -> Path:
         return self.repo / "pro_scripts/vc4_codegen_m1_verifier.py"
 
@@ -250,6 +344,8 @@ class GateRunner:
             str(self.repo),
             "--spec",
             str(spec),
+            "--worklist",
+            str(self.config.worklist_path),
             "--slice",
             slice_id,
             "--out",
@@ -947,7 +1043,9 @@ def cmd_run(args: argparse.Namespace) -> int:
         if missing:
             raise DriverError(f"requested --only-gate entries are not in slice gate list: {sorted(missing)}")
     log_dir = Path(args.log_dir).resolve() if args.log_dir else runner.state.root / "logs" / str(slice_entry["id"]) / "manual-gates"
-    results = runner.run_gates(gates, log_dir=log_dir, allow_dirty=args.allow_dirty, stop_on_failure=not args.keep_going)
+    results = [runner.run_source_products_for_slice(slice_entry, log_dir=log_dir, gate="manual-gates")]
+    if results[-1].ok or args.keep_going:
+        results.extend(runner.run_gates(gates, log_dir=log_dir, allow_dirty=args.allow_dirty, stop_on_failure=not args.keep_going))
     if all(r.ok for r in results):
         results.append(runner.run_typed_verifier(str(slice_entry["id"]), log_dir=log_dir))
     ok = all(r.ok for r in results)
