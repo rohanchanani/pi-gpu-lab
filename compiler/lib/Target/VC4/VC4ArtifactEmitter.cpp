@@ -369,6 +369,74 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
   return success();
 }
 
+static LogicalResult markLaunchABIUniformIndex(
+    mlir::vc4::FuncOp func, const llvm::Twine &ownerName,
+    int64_t uniformIndex, llvm::SmallVectorImpl<char> &seenUniformIndices) {
+  if (uniformIndex < 0 ||
+      uniformIndex >= static_cast<int64_t>(seenUniformIndices.size())) {
+    return emitLaunchABIModelError(
+        func, ownerName +
+                  " uniform_index is outside [0, uniform_words_per_qpu)");
+  }
+
+  if (seenUniformIndices[uniformIndex]) {
+    return emitLaunchABIModelError(
+        func, ownerName + " duplicates another physical uniform_index");
+  }
+
+  seenUniformIndices[uniformIndex] = 1;
+  return success();
+}
+
+static LogicalResult validateLaunchABIUniformPacking(
+    mlir::vc4::FuncOp func, const LaunchABIModel &launchABI) {
+  llvm::SmallVector<char, 16> seenUniformIndices;
+  seenUniformIndices.resize(
+      static_cast<size_t>(launchABI.uniformWordsPerQPU));
+  for (char &seen : seenUniformIndices)
+    seen = 0;
+
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (failed(markLaunchABIUniformIndex(
+            func, llvm::Twine("argument '") + arg.name + "'",
+            arg.uniformIndex, seenUniformIndices)))
+      return failure();
+  }
+
+  for (const LaunchABIBuiltinModel &builtin : launchABI.builtins) {
+    if (builtin.materialization != "uniform_suffix") {
+      if (builtin.uniformIndex) {
+        return emitLaunchABIModelError(
+            func, llvm::Twine("non-uniform builtin '") + builtin.name +
+                      "' must not carry a uniform_index for launcher packing");
+      }
+      continue;
+    }
+
+    if (!builtin.uniformIndex) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("uniform_suffix builtin '") + builtin.name +
+                    "' requires a uniform_index for launcher packing");
+    }
+
+    if (failed(markLaunchABIUniformIndex(
+            func, llvm::Twine("builtin '") + builtin.name + "'",
+            *builtin.uniformIndex, seenUniformIndices)))
+      return failure();
+  }
+
+  for (size_t index = 0; index != seenUniformIndices.size(); ++index) {
+    if (seenUniformIndices[index])
+      continue;
+    return emitLaunchABIModelError(
+        func, llvm::Twine("launcher packing requires dense physical "
+                          "uniform_index coverage; missing index ") +
+                  llvm::Twine(static_cast<unsigned>(index)));
+  }
+
+  return success();
+}
+
 static void appendJSONEscapedString(llvm::raw_ostream &os,
                                     llvm::StringRef value) {
   static constexpr char hex[] = "0123456789abcdef";
@@ -537,6 +605,8 @@ static LogicalResult populateLaunchABIInfo(KernelRecord &kernel) {
   }
 
   if (failed(parseLaunchABIModel(kernel.func, launchABI, kernel.launchABI)))
+    return failure();
+  if (failed(validateLaunchABIUniformPacking(kernel.func, kernel.launchABI)))
     return failure();
 
   kernel.info.symbolName = kernel.func.getSymName().str();
@@ -1504,20 +1574,166 @@ static LogicalResult writeLauncherHeader(KernelRecord &kernel,
                          });
 }
 
+static bool launchABIRequiresF32Packing(const LaunchABIModel &launchABI) {
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (arg.kind == LaunchABIArgumentKind::Scalar && arg.scalarType == "f32")
+      return true;
+  }
+  return false;
+}
+
+static const LaunchABIArgumentModel *
+findLaunchABIArgumentForUniformIndex(const LaunchABIModel &launchABI,
+                                     int64_t uniformIndex) {
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (arg.uniformIndex == uniformIndex)
+      return &arg;
+  }
+  return nullptr;
+}
+
+static const LaunchABIBuiltinModel *
+findLaunchABIBuiltinForUniformIndex(const LaunchABIModel &launchABI,
+                                    int64_t uniformIndex) {
+  for (const LaunchABIBuiltinModel &builtin : launchABI.builtins) {
+    if (builtin.materialization == "uniform_suffix" && builtin.uniformIndex &&
+        *builtin.uniformIndex == uniformIndex)
+      return &builtin;
+  }
+  return nullptr;
+}
+
+static std::string
+getArgumentUniformExpression(const LaunchABIArgumentModel &arg) {
+  if (arg.kind == LaunchABIArgumentKind::Buffer)
+    return std::string("(uint32_t)(uintptr_t)") + arg.name;
+  if (arg.scalarType == "f32")
+    return std::string("vc4_codegen_pack_f32(") + arg.name + ")";
+  return std::string("(uint32_t)") + arg.name;
+}
+
+static std::optional<std::string>
+getBuiltinUniformExpression(const LaunchABIBuiltinModel &builtin) {
+  if (builtin.kind == "qpu_num")
+    return std::string("qpu");
+  if (builtin.kind == "num_qpus")
+    return std::string("activeQpus");
+  return std::nullopt;
+}
+
+static void appendLauncherUniformLayoutComment(
+    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
+  os << "  /*\n";
+  os << "   * Dense physical uniform layout per QPU, ordered by ";
+  os << "vc4.launch_abi uniform_index:\n";
+  for (int64_t index = 0; index != launchABI.uniformWordsPerQPU; ++index) {
+    os << "   *   [" << index << "] ";
+    if (const LaunchABIArgumentModel *arg =
+            findLaunchABIArgumentForUniformIndex(launchABI, index)) {
+      os << "arg " << arg->name;
+    } else if (const LaunchABIBuiltinModel *builtin =
+                   findLaunchABIBuiltinForUniformIndex(launchABI, index)) {
+      os << "builtin " << builtin->name << " (" << builtin->kind << ")";
+    } else {
+      os << "<missing>";
+    }
+    os << "\n";
+  }
+  os << "   */\n";
+}
+
+static LogicalResult appendLauncherUniformAssignment(
+    mlir::vc4::FuncOp func, llvm::raw_ostream &os,
+    const LaunchABIModel &launchABI, int64_t uniformIndex) {
+  if (const LaunchABIArgumentModel *arg =
+          findLaunchABIArgumentForUniformIndex(launchABI, uniformIndex)) {
+    os << "    state->unif[qpu][" << uniformIndex << "] = "
+       << getArgumentUniformExpression(*arg) << "; /* arg " << arg->name
+       << " */\n";
+    return success();
+  }
+
+  if (const LaunchABIBuiltinModel *builtin =
+          findLaunchABIBuiltinForUniformIndex(launchABI, uniformIndex)) {
+    std::optional<std::string> expression = getBuiltinUniformExpression(*builtin);
+    if (!expression) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("builtin '") + builtin->name +
+                    "' has unsupported kind for launcher uniform packing");
+    }
+    os << "    state->unif[qpu][" << uniformIndex << "] = " << *expression
+       << "; /* builtin " << builtin->name << " */\n";
+    return success();
+  }
+
+  return emitLaunchABIModelError(
+      func, llvm::Twine("missing launcher uniform assignment for index ") +
+                std::to_string(uniformIndex));
+}
+
 static LogicalResult writeLauncherSource(KernelRecord &kernel,
                                          llvm::StringRef bundleDir) {
+  std::string source;
+  llvm::raw_string_ostream os(source);
+
+  os << "#include \"kernel_launch.h\"\n\n";
+  os << "#include <stddef.h>\n";
+  os << "#include <stdint.h>\n";
+  if (launchABIRequiresF32Packing(kernel.launchABI))
+    os << "#include <string.h>\n";
+  os << "\n";
+
+  os << "#ifndef VC4_RUNTIME_MAX_QPUS\n";
+  os << "#define VC4_RUNTIME_MAX_QPUS 12u\n";
+  os << "#endif\n\n";
+  os << "#define NUM_UNIFS " << kernel.launchABI.uniformWordsPerQPU
+     << "u\n\n";
+
+  os << "extern uint32_t vc4_runtime_active_qpus(struct vc4_runtime *rt);\n\n";
+
+  if (launchABIRequiresF32Packing(kernel.launchABI)) {
+    os << "static uint32_t vc4_codegen_pack_f32(float value) {\n";
+    os << "  uint32_t bits = 0;\n";
+    os << "  memcpy(&bits, &value, sizeof(bits));\n";
+    os << "  return bits;\n";
+    os << "}\n\n";
+  }
+
+  os << "struct " << kernel.launchABI.publicName << "_state {\n";
+  os << "  uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];\n";
+  os << "  uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];\n";
+  os << "};\n\n";
+
+  appendLauncherPrototype(os, kernel.launchABI);
+  os << " {\n";
+  os << "  if (!rt)\n";
+  os << "    return -1;\n\n";
+  os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
+  os << "  if (activeQpus == 0 || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
+  os << "    return -1;\n\n";
+  os << "  struct " << kernel.launchABI.publicName
+     << "_state backing = {0};\n";
+  os << "  struct " << kernel.launchABI.publicName
+     << "_state *state = &backing;\n\n";
+  appendLauncherUniformLayoutComment(os, kernel.launchABI);
+  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
+  for (int64_t index = 0; index != kernel.launchABI.uniformWordsPerQPU;
+       ++index) {
+    if (failed(appendLauncherUniformAssignment(kernel.func, os,
+                                               kernel.launchABI, index)))
+      return failure();
+  }
+  os << "    state->unif_ptr[qpu] = "
+     << "(uint32_t)(uintptr_t)&state->unif[qpu][0];\n";
+  os << "  }\n\n";
+  os << "  (void)state;\n";
+  os << "  return 0;\n";
+  os << "}\n";
+  os.flush();
+
   return writeBundleFile(kernel.func.getOperation(), bundleDir,
-                         "kernel_launch.c", [&](llvm::raw_ostream &os) {
-                           os << "#include \"kernel_launch.h\"\n\n";
-                           appendLauncherPrototype(os, kernel.launchABI);
-                           os << " {\n";
-                           os << "  (void)rt;\n";
-                           for (const LaunchABIArgumentModel &arg :
-                                kernel.launchABI.arguments)
-                             os << "  (void)" << arg.name << ";\n";
-                           os << "  return 0;\n";
-                           os << "}\n";
-                         });
+                         "kernel_launch.c",
+                         [&](llvm::raw_ostream &fileOS) { fileOS << source; });
 }
 
 static void appendManifestPublicParameter(llvm::raw_ostream &os,

@@ -8,22 +8,26 @@
 // RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
-// HEADER: #include <stdint.h>
-// HEADER: struct vc4_runtime;
-// HEADER: int launch_abi_header_launch(struct vc4_runtime *rt, uint32_t *out, const float *input, uint32_t n, float scale);
+// HEADER: int uniform_packing_launch(struct vc4_runtime *rt, float scale, uint32_t *out, uint32_t n, const float *input);
 // HEADER-NOT: qpu_id
 // HEADER-NOT: num_qpus
 // HEADER-NOT: uniform
 
-// SOURCE: #include "kernel_launch.h"
 // SOURCE: #define NUM_UNIFS 6u
 // SOURCE: extern uint32_t vc4_runtime_active_qpus(struct vc4_runtime *rt);
 // SOURCE: static uint32_t vc4_codegen_pack_f32(float value) {
-// SOURCE: struct launch_abi_header_launch_state {
+// SOURCE: struct uniform_packing_launch_state {
 // SOURCE: uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];
 // SOURCE: uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];
-// SOURCE: int launch_abi_header_launch(struct vc4_runtime *rt, uint32_t *out, const float *input, uint32_t n, float scale) {
+// SOURCE: int uniform_packing_launch(struct vc4_runtime *rt, float scale, uint32_t *out, uint32_t n, const float *input) {
 // SOURCE: uint32_t activeQpus = vc4_runtime_active_qpus(rt);
+// SOURCE: * Dense physical uniform layout per QPU, ordered by vc4.launch_abi uniform_index:
+// SOURCE: *   [0] arg out
+// SOURCE: *   [1] arg input
+// SOURCE: *   [2] arg n
+// SOURCE: *   [3] arg scale
+// SOURCE: *   [4] builtin qpu_id (qpu_num)
+// SOURCE: *   [5] builtin num_qpus (num_qpus)
 // SOURCE: for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {
 // SOURCE-NEXT:     state->unif[qpu][0] = (uint32_t)(uintptr_t)out; /* arg out */
 // SOURCE-NEXT:     state->unif[qpu][1] = (uint32_t)(uintptr_t)input; /* arg input */
@@ -34,41 +38,29 @@
 // SOURCE-NEXT:     state->unif_ptr[qpu] = (uint32_t)(uintptr_t)&state->unif[qpu][0];
 // SOURCE-NEXT:   }
 
-// MANIFEST: "kernel": "launch_abi_header_kernel"
-// MANIFEST: "public_name": "launch_abi_header_launch"
-// MANIFEST: "launch_abi": {
+// MANIFEST: "kernel": "uniform_packing_kernel"
+// MANIFEST: "public_name": "uniform_packing_launch"
 // MANIFEST: "arg_count": 4
-// MANIFEST: {"name": "out", "kind": "buffer", "direction": "out", "elem_type": "u32", "c_type": "uint32_t *", "uniform_index": 0}
-// MANIFEST: {"name": "input", "kind": "buffer", "direction": "in", "elem_type": "f32", "c_type": "const float *", "uniform_index": 1}
-// MANIFEST: {"name": "n", "kind": "scalar", "direction": "by_value", "type": "u32", "c_type": "uint32_t", "uniform_index": 2}
-// MANIFEST: {"name": "scale", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 3}
-// MANIFEST: "public_api": {
-// MANIFEST: "function_name": "launch_abi_header_launch"
-// MANIFEST: {"name": "rt", "c_type": "struct vc4_runtime *", "role": "runtime"}
-// MANIFEST: {"name": "out", "c_type": "uint32_t *", "role": "kernel_arg"}
-// MANIFEST: {"name": "input", "c_type": "const float *", "role": "kernel_arg"}
-// MANIFEST: {"name": "n", "c_type": "uint32_t", "role": "kernel_arg"}
-// MANIFEST: {"name": "scale", "c_type": "float", "role": "kernel_arg"}
 
-vc4.module @launch_abi_header {
-  vc4.func @launch_abi_header_kernel() attributes {
+vc4.module @uniform_packing {
+  vc4.func @uniform_packing_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "launch_abi_header_launch",
+      public_name = "uniform_packing_launch",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 6 : i32,
       args = [
+        {name = "scale", kind = "scalar", direction = "by_value", type = "f32", uniform_index = 3 : i32},
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32},
-        {name = "input", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 1 : i32},
         {name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 2 : i32},
-        {name = "scale", kind = "scalar", direction = "by_value", type = "f32", uniform_index = 3 : i32}
+        {name = "input", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 1 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32},
-        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32}
+        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32},
+        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32}
       ]
     }
   } {
