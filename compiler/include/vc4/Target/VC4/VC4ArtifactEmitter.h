@@ -27,7 +27,7 @@ struct VC4ArtifactKernelInfo {
 
 /// Validate the final scheduled VC4 input boundary and emit a skeleton artifact
 /// bundle rooted at `bundleDir`.
-LogicalResult emitVC4ArtifactBundle(ModuleOp module,
+LogicalResult emitVC4ArtifactBundle(mlir::ModuleOp module,
                                     llvm::StringRef bundleDir);
 
 } // namespace mlir::vc4

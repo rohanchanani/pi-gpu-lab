@@ -12,7 +12,9 @@
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/BuiltinAttributes.h"
+#include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
+#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallString.h"
 #include "llvm/ADT/SmallVector.h"
@@ -21,6 +23,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <cstddef>
 #include <optional>
 #include <system_error>
 
@@ -35,7 +38,7 @@ struct KernelRecord {
   mlir::vc4::VC4ArtifactKernelInfo info;
 };
 
-static bool isScheduledQPUKernelWithLaunchABI(mlir::vc4::FuncOp func) {
+static bool isScheduledQPUKernel(mlir::vc4::FuncOp func) {
   if (func.isExternal())
     return false;
 
@@ -45,11 +48,7 @@ static bool isScheduledQPUKernelWithLaunchABI(mlir::vc4::FuncOp func) {
       *form != mlir::vc4::FunctionForm::scheduled)
     return false;
 
-  if (!func->hasAttr("kernel"))
-    return false;
-
-  return static_cast<bool>(
-      func->getAttrOfType<mlir::DictionaryAttr>("vc4.launch_abi"));
+  return func->hasAttr("kernel");
 }
 
 static bool isCIdentifierHead(char value) {
@@ -110,39 +109,103 @@ static void appendJSONEscapedString(llvm::raw_ostream &os,
   os << '"';
 }
 
-static LogicalResult appendScheduledSinkOp(mlir::Operation *op,
-                                           unsigned &scheduledOpCount);
+static LogicalResult appendScheduledSinkOp(
+    mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream);
+
+static bool isThreadEndScheduledOp(mlir::Operation *op) {
+  auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op);
+  return bundle && bundle.getSig() == mlir::vc4::QPUSignal::thrend;
+}
+
+static bool isNonBranchScheduledDelaySlotOpWithoutThreadEnd(
+    mlir::Operation *op) {
+  if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
+    return bundle.getSig() != mlir::vc4::QPUSignal::thrend;
+  return llvm::isa<mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp>(op);
+}
+
+static mlir::InFlightDiagnostic emitInvalidQASMEpilogueDiag(
+    mlir::vc4::FuncOp func) {
+  return func.emitOpError(
+      "is not directly emittable: qasm input requires an explicit thrend plus "
+      "two delay-slot instructions at the end of the flattened scheduled "
+      "instruction stream");
+}
 
 static LogicalResult appendBranchDelaySlotSinkOps(
-    mlir::vc4::QPUBranchOp branch, unsigned &scheduledOpCount) {
+    mlir::vc4::QPUBranchOp branch,
+    llvm::SmallVectorImpl<mlir::Operation *> &stream) {
   if (!branch.getDelaySlots().hasOneBlock()) {
     return branch.emitOpError()
            << "requires exactly one delay-slot block for artifact emission";
   }
 
   for (mlir::Operation &delaySlotOp : branch.getDelaySlots().front()) {
-    if (mlir::failed(appendScheduledSinkOp(&delaySlotOp, scheduledOpCount)))
+    if (mlir::failed(appendScheduledSinkOp(&delaySlotOp, stream)))
       return failure();
   }
   return success();
 }
 
-static LogicalResult appendScheduledSinkOp(mlir::Operation *op,
-                                           unsigned &scheduledOpCount) {
+static LogicalResult appendScheduledSinkOp(
+    mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream) {
   if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                 mlir::vc4::QPUSemaOp>(op)) {
-    ++scheduledOpCount;
+    stream.push_back(op);
     return success();
   }
 
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    ++scheduledOpCount;
-    return appendBranchDelaySlotSinkOps(branch, scheduledOpCount);
+    stream.push_back(op);
+    return appendBranchDelaySlotSinkOps(branch, stream);
   }
 
   return op->emitOpError()
          << "is not a supported final scheduled VC4 QPU sink op for "
             "artifact emission";
+}
+
+static LogicalResult verifyThreadEndEpilogue(
+    mlir::vc4::FuncOp func, llvm::ArrayRef<mlir::Operation *> stream) {
+  if (stream.size() < 3) {
+    auto diag = emitInvalidQASMEpilogueDiag(func);
+    diag << "; found only " << static_cast<unsigned>(stream.size())
+         << " scheduled instruction slot(s)";
+    return failure();
+  }
+
+  const size_t threadEndIndex = stream.size() - 3;
+  auto threadEndBundle =
+      llvm::dyn_cast<mlir::vc4::QPUBundleOp>(stream[threadEndIndex]);
+  if (!threadEndBundle ||
+      threadEndBundle.getSig() != mlir::vc4::QPUSignal::thrend) {
+    auto diag = emitInvalidQASMEpilogueDiag(func);
+    diag << "; slot N-3 must be a vc4.qpu.bundle with sig = "
+            "#vc4.qpu_signal<thrend>";
+    return failure();
+  }
+
+  for (size_t i = 0; i != threadEndIndex; ++i) {
+    if (!isThreadEndScheduledOp(stream[i]))
+      continue;
+    auto diag = emitInvalidQASMEpilogueDiag(func);
+    diag << "; found an earlier vc4.qpu.bundle with sig = "
+            "#vc4.qpu_signal<thrend> before slot N-3";
+    return failure();
+  }
+
+  if (!isNonBranchScheduledDelaySlotOpWithoutThreadEnd(
+          stream[threadEndIndex + 1]) ||
+      !isNonBranchScheduledDelaySlotOpWithoutThreadEnd(
+          stream[threadEndIndex + 2])) {
+    auto diag = emitInvalidQASMEpilogueDiag(func);
+    diag << "; only slot N-3 may carry sig = #vc4.qpu_signal<thrend>; "
+            "slots N-2 and N-1 must be non-branch scheduled ops without "
+            "another thread-end signal";
+    return failure();
+  }
+
+  return success();
 }
 
 static LogicalResult populateScheduledSinkInfo(KernelRecord &kernel) {
@@ -151,13 +214,16 @@ static LogicalResult populateScheduledSinkInfo(KernelRecord &kernel) {
            << "requires a single top-level block for artifact emission";
   }
 
-  unsigned scheduledOpCount = 0;
+  llvm::SmallVector<mlir::Operation *, 16> stream;
   for (mlir::Operation &op : kernel.func.getBody().front()) {
-    if (mlir::failed(appendScheduledSinkOp(&op, scheduledOpCount)))
+    if (mlir::failed(appendScheduledSinkOp(&op, stream)))
       return failure();
   }
 
-  kernel.info.scheduledOpCount = scheduledOpCount;
+  if (mlir::failed(verifyThreadEndEpilogue(kernel.func, stream)))
+    return failure();
+
+  kernel.info.scheduledOpCount = static_cast<unsigned>(stream.size());
   return success();
 }
 
@@ -196,19 +262,17 @@ static LogicalResult populateLaunchABIInfo(KernelRecord &kernel) {
 }
 
 static LogicalResult
-collectSingleKernel(mlir::ModuleOp module,
+collectSingleKernel(mlir::vc4::ModuleOp vc4Module,
                     llvm::SmallVectorImpl<KernelRecord> &kernels) {
-  module.walk([&](mlir::vc4::FuncOp func) {
-    if (isScheduledQPUKernelWithLaunchABI(func))
+  vc4Module.walk([&](mlir::vc4::FuncOp func) {
+    if (isScheduledQPUKernel(func))
       kernels.emplace_back(func);
   });
 
   if (kernels.size() != 1) {
-    return module.emitError()
-           << "expected exactly one eligible VC4 QPU kernel with domain = "
-              "#vc4.execution_domain<qpu>, form = "
-              "#vc4.function_form<scheduled>, kernel marker, and "
-              "\"vc4.launch_abi\"";
+    return vc4Module.emitOpError()
+           << "expected exactly one eligible VC4 QPU kernel: exactly one "
+              "kernel qpu scheduled vc4.func for artifact emission";
   }
 
   if (failed(populateLaunchABIInfo(kernels.front())))
@@ -332,8 +396,17 @@ static LogicalResult writeManifest(KernelRecord &kernel,
 
 LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
                                                llvm::StringRef bundleDir) {
+  llvm::SmallVector<mlir::vc4::ModuleOp, 1> vc4Modules;
+  module.walk([&](mlir::vc4::ModuleOp vc4Module) {
+    vc4Modules.push_back(vc4Module);
+  });
+  if (vc4Modules.size() != 1) {
+    return module.emitError()
+           << "expected exactly one vc4.module for artifact emission";
+  }
+
   llvm::SmallVector<KernelRecord, 1> kernels;
-  if (failed(collectSingleKernel(module, kernels)))
+  if (failed(collectSingleKernel(vc4Modules.front(), kernels)))
     return failure();
   KernelRecord &kernel = kernels.front();
 
