@@ -56,6 +56,7 @@ struct LaunchABIBuiltinModel {
 
 struct LaunchABIModel {
   std::string publicName;
+  std::string codeSymbol;
   std::string tailPolicy;
   int64_t uniformWordsPerQPU = 0;
   llvm::SmallVector<LaunchABIArgumentModel, 8> arguments;
@@ -68,6 +69,8 @@ struct KernelRecord {
   mlir::vc4::FuncOp func;
   mlir::vc4::VC4ArtifactKernelInfo info;
   LaunchABIModel launchABI;
+  unsigned kernelId = 0;
+  std::string qasmPath;
   llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
 };
 
@@ -319,6 +322,18 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
         func, "public_name must be a C identifier for generated launcher API");
   }
 
+  auto codeSymbol = getDictionaryStringAttr(launchABIDict, "code_symbol");
+  if (codeSymbol) {
+    if (codeSymbol.getValue().empty()) {
+      return emitLaunchABIModelError(
+          func, "code_symbol must be a non-empty C identifier when present");
+    }
+    if (!isCIdentifier(codeSymbol.getValue())) {
+      return emitLaunchABIModelError(
+          func, "code_symbol must be a C identifier for generated code arrays");
+    }
+  }
+
   auto tailPolicy = getDictionaryStringAttr(launchABIDict, "tail_policy");
   if (!tailPolicy || tailPolicy.getValue().empty()) {
     return emitLaunchABIModelError(func,
@@ -342,6 +357,8 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
 
   LaunchABIModel parsed;
   parsed.publicName = publicName.getValue().str();
+  parsed.codeSymbol = codeSymbol ? codeSymbol.getValue().str()
+                                 : parsed.publicName + "_shader";
   parsed.tailPolicy = tailPolicy.getValue().str();
   parsed.uniformWordsPerQPU = *uniformWords;
 
@@ -615,24 +632,70 @@ static LogicalResult populateLaunchABIInfo(KernelRecord &kernel) {
   return success();
 }
 
+static std::string makeKernelQASMPath(llvm::StringRef publicName) {
+  return (llvm::Twine("kernels/") + publicName + ".qasm").str();
+}
+
+static LogicalResult rejectDuplicateKernelPublicNames(
+    mlir::vc4::ModuleOp vc4Module, llvm::ArrayRef<KernelRecord> kernels) {
+  for (size_t i = 0; i != kernels.size(); ++i) {
+    for (size_t j = 0; j != i; ++j) {
+      if (kernels[i].info.publicName != kernels[j].info.publicName)
+        continue;
+      return vc4Module.emitOpError()
+             << "duplicate public_name '" << kernels[i].info.publicName
+             << "' in VC4 QPU program artifact";
+    }
+  }
+  return success();
+}
+
+static LogicalResult rejectDuplicateKernelCodeSymbols(
+    mlir::vc4::ModuleOp vc4Module, llvm::ArrayRef<KernelRecord> kernels) {
+  for (size_t i = 0; i != kernels.size(); ++i) {
+    for (size_t j = 0; j != i; ++j) {
+      if (kernels[i].launchABI.codeSymbol != kernels[j].launchABI.codeSymbol)
+        continue;
+      return vc4Module.emitOpError()
+             << "duplicate code_symbol '" << kernels[i].launchABI.codeSymbol
+             << "' in VC4 QPU program artifact";
+    }
+  }
+  return success();
+}
+
 static LogicalResult
-collectSingleKernel(mlir::vc4::ModuleOp vc4Module,
-                    llvm::SmallVectorImpl<KernelRecord> &kernels) {
+collectProgramKernels(mlir::vc4::ModuleOp vc4Module,
+                      llvm::SmallVectorImpl<KernelRecord> &kernels) {
   vc4Module.walk([&](mlir::vc4::FuncOp func) {
     if (isScheduledQPUKernel(func))
       kernels.emplace_back(func);
   });
 
-  if (kernels.size() != 1) {
+  if (kernels.empty()) {
     return vc4Module.emitOpError()
-           << "expected exactly one eligible VC4 QPU kernel: exactly one "
-              "kernel qpu scheduled vc4.func for artifact emission";
+           << "expected at least one eligible VC4 QPU kernel: one or more "
+              "kernel qpu scheduled vc4.func ops for program artifact emission";
   }
 
-  if (failed(populateLaunchABIInfo(kernels.front())))
+  for (KernelRecord &kernel : kernels) {
+    if (failed(populateLaunchABIInfo(kernel)))
+      return failure();
+  }
+
+  if (failed(rejectDuplicateKernelPublicNames(vc4Module, kernels)))
     return failure();
-  if (failed(populateScheduledSinkInfo(kernels.front())))
+  if (failed(rejectDuplicateKernelCodeSymbols(vc4Module, kernels)))
     return failure();
+
+  for (size_t i = 0; i != kernels.size(); ++i) {
+    KernelRecord &kernel = kernels[i];
+    kernel.kernelId = static_cast<unsigned>(i);
+    kernel.qasmPath = makeKernelQASMPath(kernel.info.publicName);
+    if (failed(populateScheduledSinkInfo(kernel)))
+      return failure();
+  }
+
   return success();
 }
 
@@ -666,6 +729,16 @@ static LogicalResult writeBundleFile(
     llvm::function_ref<void(llvm::raw_ostream &)> emit) {
   llvm::SmallString<256> path(bundleDir);
   llvm::sys::path::append(path, fileName);
+
+  llvm::SmallString<256> parent(path);
+  llvm::sys::path::remove_filename(parent);
+  std::error_code ec = llvm::sys::fs::create_directories(parent);
+  if (ec) {
+    return diagOp->emitError()
+           << "failed to create artifact directory '" << parent << "': "
+           << ec.message();
+  }
+
   return writeTextFile(diagOp, path, emit);
 }
 
@@ -1658,7 +1731,8 @@ static LogicalResult writeQASM(KernelRecord &kernel,
   }
   qasmOS.flush();
 
-  return writeBundleFile(kernel.func.getOperation(), bundleDir, "kernel.qasm",
+  return writeBundleFile(kernel.func.getOperation(), bundleDir,
+                         kernel.qasmPath,
                          [&](llvm::raw_ostream &os) { os << qasm; });
 }
 
@@ -2261,45 +2335,101 @@ static void appendManifestLaunchABI(llvm::raw_ostream &os,
   os << "  }";
 }
 
-static LogicalResult writeManifest(KernelRecord &kernel,
+static void appendManifestKernelArguments(llvm::raw_ostream &os,
+                                          const LaunchABIModel &launchABI) {
+  for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
+    appendManifestLaunchABIArgument(os, launchABI.arguments[i],
+                                    i + 1 != launchABI.arguments.size());
+  }
+}
+
+static void appendManifestKernelBuiltins(llvm::raw_ostream &os,
+                                         const LaunchABIModel &launchABI) {
+  for (size_t i = 0; i != launchABI.builtins.size(); ++i) {
+    appendManifestLaunchABIBuiltin(os, launchABI.builtins[i],
+                                   i + 1 != launchABI.builtins.size());
+  }
+}
+
+static void appendManifestKernelEntry(llvm::raw_ostream &os,
+                                      const KernelRecord &kernel,
+                                      bool trailingComma) {
+  os << "    {\n";
+  os << "      \"kernel_id\": " << kernel.kernelId << ",\n";
+  os << "      \"symbol_name\": ";
+  appendJSONEscapedString(os, kernel.info.symbolName);
+  os << ",\n";
+  os << "      \"public_name\": ";
+  appendJSONEscapedString(os, kernel.info.publicName);
+  os << ",\n";
+  os << "      \"qasm_path\": ";
+  appendJSONEscapedString(os, kernel.qasmPath);
+  os << ",\n";
+  os << "      \"code_symbol\": ";
+  appendJSONEscapedString(os, kernel.launchABI.codeSymbol);
+  os << ",\n";
+  os << "      \"scheduled_sink_ops\": "
+     << kernel.info.scheduledOpCount << ",\n";
+  os << "      \"uniform_words_per_request\": "
+     << kernel.info.uniformWordsPerQPU << ",\n";
+  os << "      \"uniform_words_per_qpu\": "
+     << kernel.info.uniformWordsPerQPU << ",\n";
+  os << "      \"max_requests_per_wave\": 12,\n";
+  os << "      \"tail_policy\": ";
+  appendJSONEscapedString(os, kernel.launchABI.tailPolicy);
+  os << ",\n";
+  os << "      \"schedule_mode\": \"independent_vector\",\n";
+  os << "      \"args\": [\n";
+  appendManifestKernelArguments(os, kernel.launchABI);
+  os << "      ],\n";
+  os << "      \"builtins\": [\n";
+  appendManifestKernelBuiltins(os, kernel.launchABI);
+  os << "      ],\n";
+  os << "      \"resources\": {\n";
+  os << "        \"uses_barrier\": false,\n";
+  os << "        \"uses_shared_vpm\": false,\n";
+  os << "        \"vpm_bytes_per_block\": 0,\n";
+  os << "        \"semaphores_per_block\": 0,\n";
+  os << "        \"warps_per_block_max\": 1\n";
+  os << "      }\n";
+  os << "    }";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
+                                   llvm::ArrayRef<KernelRecord> kernels,
                                    llvm::StringRef bundleDir) {
-  return writeBundleFile(kernel.func.getOperation(), bundleDir, "manifest.json",
+  return writeBundleFile(vc4Module.getOperation(), bundleDir, "manifest.json",
                          [&](llvm::raw_ostream &os) {
                            os << "{\n";
-                           os << "  \"kind\": \"vc4-codegen-artifact-bundle-v0\",\n";
-                           os << "  \"bundle_format\": \"vc4-codegen-artifact-bundle-v0\",\n";
-                           os << "  \"kernel\": ";
-                           appendJSONEscapedString(os, kernel.info.symbolName);
+                           os << "  \"schema_version\": 2,\n";
+                           os << "  \"kind\": \"vc4-codegen-artifact-bundle\",\n";
+                           os << "  \"program_name\": ";
+                           appendJSONEscapedString(os, vc4Module.getSymName());
                            os << ",\n";
-                           os << "  \"symbol_name\": ";
-                           appendJSONEscapedString(os, kernel.info.symbolName);
-                           os << ",\n";
-                           os << "  \"public_name\": ";
-                           appendJSONEscapedString(os, kernel.info.publicName);
-                           os << ",\n";
-                           os << "  \"scheduled_sink_ops\": "
-                              << kernel.info.scheduledOpCount << ",\n";
-                           os << "  \"uniform_words_per_qpu\": "
-                              << kernel.info.uniformWordsPerQPU << ",\n";
-                           os << "  \"kernel_info\": {\n";
-                           os << "    \"symbol_name\": ";
-                           appendJSONEscapedString(os, kernel.info.symbolName);
-                           os << ",\n";
-                           os << "    \"public_name\": ";
-                           appendJSONEscapedString(os, kernel.info.publicName);
-                           os << ",\n";
-                           os << "    \"uniform_words_per_qpu\": "
-                              << kernel.info.uniformWordsPerQPU << ",\n";
-                           os << "    \"scheduled_sink_ops\": "
-                              << kernel.info.scheduledOpCount << "\n";
+                           os << "  \"target\": {\n";
+                           os << "    \"name\": \"vc4-bcm2835-user-qpu\",\n";
+                           os << "    \"warp_size\": 16,\n";
+                           os << "    \"max_active_qpus\": 12,\n";
+                           os << "    \"shared_vpm_bytes\": 4096,\n";
+                           os << "    \"semaphores\": 16\n";
                            os << "  },\n";
-                           appendManifestLaunchABI(os, kernel.launchABI);
-                           os << ",\n";
+                           os << "  \"kernels\": [\n";
+                           for (size_t i = 0; i != kernels.size(); ++i) {
+                             appendManifestKernelEntry(
+                                 os, kernels[i], i + 1 != kernels.size());
+                           }
+                           os << "  ],\n";
                            os << "  \"artifacts\": [\n";
-                           os << "    \"kernel.qasm\",\n";
                            os << "    \"kernel_launch.c\",\n";
-                           os << "    \"kernel_launch.h\"\n";
-                           os << "  ]\n";
+                           os << "    \"kernel_launch.h\"";
+                           for (const KernelRecord &kernel : kernels) {
+                             os << ",\n    ";
+                             appendJSONEscapedString(os, kernel.qasmPath);
+                           }
+                           os << "\n  ]\n";
                            os << "}\n";
                          });
 }
@@ -2317,10 +2447,10 @@ LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
            << "expected exactly one vc4.module for artifact emission";
   }
 
+  mlir::vc4::ModuleOp vc4Module = vc4Modules.front();
   llvm::SmallVector<KernelRecord, 1> kernels;
-  if (failed(collectSingleKernel(vc4Modules.front(), kernels)))
+  if (failed(collectProgramKernels(vc4Module, kernels)))
     return failure();
-  KernelRecord &kernel = kernels.front();
 
   std::error_code ec = llvm::sys::fs::create_directories(bundleDir);
   if (ec) {
@@ -2331,13 +2461,15 @@ LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
   if (failed(ensureAdjacentVC4ASMTemplates(module.getOperation(), bundleDir)))
     return failure();
 
-  if (failed(writeQASM(kernel, bundleDir)))
+  for (KernelRecord &kernel : kernels) {
+    if (failed(writeQASM(kernel, bundleDir)))
+      return failure();
+  }
+  if (failed(writeLauncherSource(kernels.front(), bundleDir)))
     return failure();
-  if (failed(writeLauncherSource(kernel, bundleDir)))
+  if (failed(writeLauncherHeader(kernels.front(), bundleDir)))
     return failure();
-  if (failed(writeLauncherHeader(kernel, bundleDir)))
-    return failure();
-  if (failed(writeManifest(kernel, bundleDir)))
+  if (failed(writeManifest(vc4Module, kernels, bundleDir)))
     return failure();
 
   return success();

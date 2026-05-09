@@ -1,20 +1,19 @@
 // RUN: rm -rf %t.bundle
 // RUN: not vc4-codegen %s --emit-bundle %t.bundle 2>&1 | FileCheck %s
-// RUN: test ! -d %t.bundle
+// RUN: test ! -e %t.bundle
 
 // CHECK: duplicate
 // CHECK: code_symbol
 
 vc4.module @duplicate_code_symbol {
-
-  vc4.func @code_a_kernel() attributes {
+  vc4.func @first_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "code_a",
-      code_symbol = "same_code_symbol",
+      public_name = "first_launch",
+      code_symbol = "shared_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
@@ -24,8 +23,6 @@ vc4.module @duplicate_code_symbol {
       ]
     }
   } {
-    // Thread end plus two non-branch scheduled delay-slot instructions.
-    // The two trailing bundles are hardware nops: both ALU pipes are inactive.
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<thrend>,
       pm = false,
@@ -78,14 +75,14 @@ vc4.module @duplicate_code_symbol {
     }
   }
 
-  vc4.func @code_b_kernel() attributes {
+  vc4.func @second_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "code_b",
-      code_symbol = "same_code_symbol",
+      public_name = "second_launch",
+      code_symbol = "shared_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
@@ -95,8 +92,6 @@ vc4.module @duplicate_code_symbol {
       ]
     }
   } {
-    // Thread end plus two non-branch scheduled delay-slot instructions.
-    // The two trailing bundles are hardware nops: both ALU pipes are inactive.
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<thrend>,
       pm = false,
@@ -148,5 +143,4 @@ vc4.module @duplicate_code_symbol {
       mul_b = #vc4.qpu_mux<r1>
     }
   }
-
 }

@@ -1,19 +1,18 @@
 // RUN: rm -rf %t.bundle
 // RUN: not vc4-codegen %s --emit-bundle %t.bundle 2>&1 | FileCheck %s
-// RUN: test ! -d %t.bundle
+// RUN: test ! -e %t.bundle
 
 // CHECK: duplicate
 // CHECK: public_name
 
 vc4.module @duplicate_public_name {
-
-  vc4.func @dup_a_kernel() attributes {
+  vc4.func @first_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "duplicate_kernel",
+      public_name = "duplicate_launch",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
@@ -23,8 +22,6 @@ vc4.module @duplicate_public_name {
       ]
     }
   } {
-    // Thread end plus two non-branch scheduled delay-slot instructions.
-    // The two trailing bundles are hardware nops: both ALU pipes are inactive.
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<thrend>,
       pm = false,
@@ -77,13 +74,13 @@ vc4.module @duplicate_public_name {
     }
   }
 
-  vc4.func @dup_b_kernel() attributes {
+  vc4.func @second_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "duplicate_kernel",
+      public_name = "duplicate_launch",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
@@ -93,8 +90,6 @@ vc4.module @duplicate_public_name {
       ]
     }
   } {
-    // Thread end plus two non-branch scheduled delay-slot instructions.
-    // The two trailing bundles are hardware nops: both ALU pipes are inactive.
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<thrend>,
       pm = false,
@@ -146,5 +141,4 @@ vc4.module @duplicate_public_name {
       mul_b = #vc4.qpu_mux<r1>
     }
   }
-
 }
