@@ -74,6 +74,42 @@ struct KernelRecord {
   llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
 };
 
+struct ProgramLayoutRegion {
+  std::string name;
+  std::string kind;
+  uint64_t offset = 0;
+  uint64_t size = 0;
+  uint64_t alignment = 8;
+  std::optional<unsigned> kernelId;
+};
+
+struct KernelLayoutRecord {
+  unsigned kernelId = 0;
+  std::string publicName;
+  std::string codeSymbol;
+  uint64_t descriptorOffset = 0;
+  uint64_t descriptorSize = 0;
+  uint64_t codeOffset = 0;
+  uint64_t codeSize = 0;
+  uint64_t codeWords = 0;
+  uint64_t uniformsOffset = 0;
+  uint64_t uniformsSize = 0;
+  uint64_t unifPtrOffset = 0;
+  uint64_t unifPtrSize = 0;
+  uint64_t uniformWordsPerRequest = 0;
+  uint64_t maxRequestsPerWave = 12;
+};
+
+struct ProgramLayoutModel {
+  uint64_t alignment = 8;
+  uint64_t programBytes = 0;
+  uint64_t staticBytes = 0;
+  uint64_t heapOffset = 0;
+  uint64_t heapBytes = 4096;
+  llvm::SmallVector<ProgramLayoutRegion, 16> regions;
+  llvm::SmallVector<KernelLayoutRecord, 8> kernels;
+};
+
 static bool isScheduledQPUKernel(mlir::vc4::FuncOp func) {
   if (func.isExternal())
     return false;
@@ -634,6 +670,138 @@ static LogicalResult populateLaunchABIInfo(KernelRecord &kernel) {
 
 static std::string makeKernelQASMPath(llvm::StringRef publicName) {
   return (llvm::Twine("kernels/") + publicName + ".qasm").str();
+}
+
+
+static constexpr uint64_t kVC4ProgramLayoutAlignment = 8;
+static constexpr uint64_t kVC4ProgramHeaderBytes = 64;
+static constexpr uint64_t kVC4KernelDescriptorBytes = 32;
+static constexpr uint64_t kVC4MaxRequestsPerWave = 12;
+static constexpr uint64_t kVC4RuntimeBookkeepingBytes = 32;
+static constexpr uint64_t kVC4ReservedHeapBytes = 4096;
+
+static uint64_t alignUpTo(uint64_t value, uint64_t alignment) {
+  if (alignment <= 1)
+    return value;
+  return (value + alignment - 1) & ~(alignment - 1);
+}
+
+static std::string getKernelCodeRegionName(const KernelRecord &kernel) {
+  return kernel.info.publicName + ".code";
+}
+
+static std::string getKernelUniformRegionName(const KernelRecord &kernel) {
+  return kernel.info.publicName + ".uniforms";
+}
+
+static std::string getKernelUnifPtrRegionName(const KernelRecord &kernel) {
+  return kernel.info.publicName + ".unif_ptrs";
+}
+
+static std::string getKernelCodeFieldName(unsigned kernelId) {
+  return "kernel_" + std::to_string(kernelId) + "_code";
+}
+
+static std::string getKernelUniformFieldName(unsigned kernelId) {
+  return "kernel_" + std::to_string(kernelId) + "_unif";
+}
+
+static std::string getKernelUnifPtrFieldName(unsigned kernelId) {
+  return "kernel_" + std::to_string(kernelId) + "_unif_ptr";
+}
+
+static void appendProgramLayoutRegion(ProgramLayoutModel &layout,
+                                      llvm::StringRef name,
+                                      llvm::StringRef kind,
+                                      uint64_t offset, uint64_t size,
+                                      std::optional<unsigned> kernelId = std::nullopt) {
+  ProgramLayoutRegion region;
+  region.name = name.str();
+  region.kind = kind.str();
+  region.offset = offset;
+  region.size = size;
+  region.alignment = kVC4ProgramLayoutAlignment;
+  region.kernelId = kernelId;
+  layout.regions.push_back(std::move(region));
+}
+
+static ProgramLayoutModel
+buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
+  ProgramLayoutModel layout;
+  layout.alignment = kVC4ProgramLayoutAlignment;
+  layout.heapBytes = kVC4ReservedHeapBytes;
+
+  uint64_t offset = 0;
+  offset = alignUpTo(offset, layout.alignment);
+  appendProgramLayoutRegion(layout, "program_header", "program_header",
+                            offset, kVC4ProgramHeaderBytes);
+  offset += kVC4ProgramHeaderBytes;
+
+  offset = alignUpTo(offset, layout.alignment);
+  uint64_t descriptorTableOffset = offset;
+  uint64_t descriptorTableSize = kernels.size() * kVC4KernelDescriptorBytes;
+  appendProgramLayoutRegion(layout, "kernel_descriptor_table",
+                            "kernel_descriptor_table", offset,
+                            descriptorTableSize);
+  offset += descriptorTableSize;
+
+  for (const KernelRecord &kernel : kernels) {
+    KernelLayoutRecord kernelLayout;
+    kernelLayout.kernelId = kernel.kernelId;
+    kernelLayout.publicName = kernel.info.publicName;
+    kernelLayout.codeSymbol = kernel.launchABI.codeSymbol;
+    kernelLayout.descriptorOffset =
+        descriptorTableOffset + kernel.kernelId * kVC4KernelDescriptorBytes;
+    kernelLayout.descriptorSize = kVC4KernelDescriptorBytes;
+    kernelLayout.uniformWordsPerRequest = kernel.info.uniformWordsPerQPU;
+    kernelLayout.maxRequestsPerWave = kVC4MaxRequestsPerWave;
+
+    offset = alignUpTo(offset, layout.alignment);
+    kernelLayout.codeOffset = offset;
+    kernelLayout.codeWords =
+        static_cast<uint64_t>(kernel.info.scheduledOpCount) * 2u;
+    kernelLayout.codeSize = kernelLayout.codeWords * sizeof(uint32_t);
+    appendProgramLayoutRegion(layout, getKernelCodeRegionName(kernel), "code",
+                              kernelLayout.codeOffset,
+                              kernelLayout.codeSize, kernel.kernelId);
+    offset += kernelLayout.codeSize;
+
+    offset = alignUpTo(offset, layout.alignment);
+    kernelLayout.uniformsOffset = offset;
+    kernelLayout.uniformsSize = kVC4MaxRequestsPerWave *
+                                kernelLayout.uniformWordsPerRequest *
+                                sizeof(uint32_t);
+    appendProgramLayoutRegion(layout, getKernelUniformRegionName(kernel),
+                              "uniforms", kernelLayout.uniformsOffset,
+                              kernelLayout.uniformsSize, kernel.kernelId);
+    offset += kernelLayout.uniformsSize;
+
+    offset = alignUpTo(offset, layout.alignment);
+    kernelLayout.unifPtrOffset = offset;
+    kernelLayout.unifPtrSize = kVC4MaxRequestsPerWave * sizeof(uint32_t);
+    appendProgramLayoutRegion(layout, getKernelUnifPtrRegionName(kernel),
+                              "unif_ptrs", kernelLayout.unifPtrOffset,
+                              kernelLayout.unifPtrSize, kernel.kernelId);
+    offset += kernelLayout.unifPtrSize;
+
+    layout.kernels.push_back(std::move(kernelLayout));
+  }
+
+  offset = alignUpTo(offset, layout.alignment);
+  appendProgramLayoutRegion(layout, "runtime_bookkeeping",
+                            "runtime_bookkeeping", offset,
+                            kVC4RuntimeBookkeepingBytes);
+  offset += kVC4RuntimeBookkeepingBytes;
+
+  offset = alignUpTo(offset, layout.alignment);
+  layout.heapOffset = offset;
+  appendProgramLayoutRegion(layout, "heap", "heap", layout.heapOffset,
+                            layout.heapBytes);
+  offset += layout.heapBytes;
+
+  layout.staticBytes = offset;
+  layout.programBytes = offset;
+  return layout;
 }
 
 static LogicalResult rejectDuplicateKernelPublicNames(
@@ -1941,8 +2109,10 @@ static void appendLauncherUniformLayoutComment(
   os << "   */\n";
 }
 
-static LogicalResult writeLauncherSource(KernelRecord &kernel,
+static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
                                          llvm::StringRef bundleDir) {
+  KernelRecord &kernel = const_cast<KernelRecord &>(kernels.front());
+  ProgramLayoutModel programLayout = buildProgramLayoutModel(kernels);
   std::string source;
   llvm::raw_string_ostream os(source);
 
@@ -1961,14 +2131,40 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "#include \"kernel_launch.h\"\n\n";
   os << "#include \"rpi.h\"\n";
   os << "#include \"mailbox.h\"\n";
-  os << "#include \"" << launchABI.codeSymbol << ".h\"\n\n";
+  for (const KernelRecord &includeKernel : kernels)
+    os << "#include \"" << includeKernel.launchABI.codeSymbol << ".h\"\n";
+  os << "\n";
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
   os << "#include <string.h>\n\n";
 
   os << "#define GPU_MEM_FLG 0xCu\n";
   os << "#define GPU_BASE 0x40000000u\n";
-  os << "#define NUM_UNIFS " << launchABI.uniformWordsPerQPU << "u\n\n";
+  os << "#define VC4_CODEGEN_PROGRAM_MAGIC 0x56344350u /* VC4P */\n";
+  os << "#define VC4_CODEGEN_PROGRAM_KERNELS " << kernels.size() << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_LAYOUT_ALIGNMENT "
+     << programLayout.alignment << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_TOTAL_BYTES "
+     << programLayout.programBytes << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_STATIC_BYTES "
+     << programLayout.staticBytes << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_HEAP_OFFSET "
+     << programLayout.heapOffset << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
+     << programLayout.heapBytes << "u\n";
+  os << "#define NUM_UNIFS " << launchABI.uniformWordsPerQPU << "u\n";
+  for (const KernelRecord &macroKernel : kernels) {
+    os << "#define KERNEL_" << macroKernel.kernelId << "_NUM_UNIFS "
+       << macroKernel.info.uniformWordsPerQPU << "u\n";
+  }
+  os << "\n";
+  os << "/* VC4_RUNTIME_LAYOUT program_bytes=" << programLayout.programBytes
+     << " static_bytes=" << programLayout.staticBytes
+     << " heap_offset=" << programLayout.heapOffset
+     << " heap_bytes=" << programLayout.heapBytes
+     << " kernels=" << kernels.size() << " */\n";
+  os << "/* Persistent program image: descriptor table, per-kernel code, "
+        "uniform streams, uniform pointer arrays, runtime bookkeeping, heap. */\n\n";
 
   if (launchABIRequiresF32Packing(launchABI)) {
     os << "static uint32_t vc4_codegen_pack_f32(float value) {\n";
@@ -1978,15 +2174,42 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
     os << "}\n\n";
   }
 
+  os << "struct vc4_codegen_kernel_desc {\n";
+  os << "  uint32_t code_word_offset;\n";
+  os << "  uint32_t code_word_count;\n";
+  os << "  uint32_t unif_word_offset;\n";
+  os << "  uint32_t unif_words_per_request;\n";
+  os << "  uint32_t max_requests_per_wave;\n";
+  os << "  uint32_t unif_ptr_word_offset;\n";
+  os << "  uint32_t code_gpu_addr;\n";
+  os << "  uint32_t flags;\n";
+  os << "};\n\n";
+
   os << "struct " << stateName << " {\n";
-  os << "  uint32_t code[sizeof(" << launchABI.codeSymbol
-     << ") / sizeof(uint32_t)];\n";
-  os << "  uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];\n";
-  os << "  uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];\n";
+  os << "  uint32_t magic;\n";
+  os << "  uint32_t total_size_bytes;\n";
+  os << "  uint32_t num_kernels;\n";
+  os << "  uint32_t active_qpus;\n";
+  os << "  uint32_t warp_size;\n";
+  os << "  uint32_t descriptor_table_offset;\n";
+  os << "  uint32_t header_reserved[10];\n";
+  os << "  struct vc4_codegen_kernel_desc kernel_descs[VC4_CODEGEN_PROGRAM_KERNELS];\n";
+  for (const KernelRecord &stateKernel : kernels) {
+    os << "  uint32_t " << getKernelCodeFieldName(stateKernel.kernelId)
+       << "[sizeof(" << stateKernel.launchABI.codeSymbol
+       << ") / sizeof(uint32_t)];\n";
+    os << "  uint32_t " << getKernelUniformFieldName(stateKernel.kernelId)
+       << "[VC4_RUNTIME_MAX_QPUS][KERNEL_" << stateKernel.kernelId
+       << "_NUM_UNIFS];\n";
+    os << "  uint32_t " << getKernelUnifPtrFieldName(stateKernel.kernelId)
+       << "[VC4_RUNTIME_MAX_QPUS];\n";
+  }
   os << "  uint32_t handle;\n";
   os << "  uint32_t max_n;\n";
   os << "  uint32_t padded_capacity_n;\n";
   os << "  uint32_t launch_count;\n";
+  os << "  uint32_t runtime_reserved[4];\n";
+  os << "  uint8_t heap[VC4_CODEGEN_PROGRAM_HEAP_BYTES];\n";
   os << "  uint8_t payload[];\n";
   os << "};\n\n";
 
@@ -2087,13 +2310,48 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "    return -1;\n";
   os << "  }\n\n";
   os << "  memset((void *)state, 0, allocSize);\n";
+  os << "  state->magic = VC4_CODEGEN_PROGRAM_MAGIC;\n";
+  os << "  state->total_size_bytes = (uint32_t)allocSize;\n";
+  os << "  state->num_kernels = VC4_CODEGEN_PROGRAM_KERNELS;\n";
+  os << "  state->active_qpus = activeQpus;\n";
+  os << "  state->warp_size = VC4_RUNTIME_LANE_WIDTH;\n";
+  os << "  state->descriptor_table_offset = (uint32_t)offsetof(struct "
+     << stateName << ", kernel_descs);\n";
   os << "  state->handle = handle;\n";
   os << "  state->max_n = max_n;\n";
   os << "  state->padded_capacity_n = paddedCapacity;\n";
-  os << "  memcpy((void *)state->code, " << launchABI.codeSymbol
-     << ", sizeof state->code);\n";
-  os << "  for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; ++qpu)\n";
-  os << "    state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu][0];\n\n";
+  for (const KernelRecord &copyKernel : kernels) {
+    const unsigned id = copyKernel.kernelId;
+    os << "  memcpy((void *)state->" << getKernelCodeFieldName(id) << ", "
+       << copyKernel.launchABI.codeSymbol << ", sizeof state->"
+       << getKernelCodeFieldName(id) << ");\n";
+    os << "  state->kernel_descs[" << id << "].code_word_offset = "
+       << "(uint32_t)(offsetof(struct " << stateName << ", "
+       << getKernelCodeFieldName(id) << ") / sizeof(uint32_t));\n";
+    os << "  state->kernel_descs[" << id << "].code_word_count = "
+       << "(uint32_t)(sizeof state->" << getKernelCodeFieldName(id)
+       << " / sizeof(uint32_t));\n";
+    os << "  state->kernel_descs[" << id << "].unif_word_offset = "
+       << "(uint32_t)(offsetof(struct " << stateName << ", "
+       << getKernelUniformFieldName(id) << ") / sizeof(uint32_t));\n";
+    os << "  state->kernel_descs[" << id
+       << "].unif_words_per_request = KERNEL_" << id
+       << "_NUM_UNIFS;\n";
+    os << "  state->kernel_descs[" << id
+       << "].max_requests_per_wave = VC4_RUNTIME_MAX_QPUS;\n";
+    os << "  state->kernel_descs[" << id << "].unif_ptr_word_offset = "
+       << "(uint32_t)(offsetof(struct " << stateName << ", "
+       << getKernelUnifPtrFieldName(id) << ") / sizeof(uint32_t));\n";
+    os << "  state->kernel_descs[" << id
+       << "].code_gpu_addr = GPU_BASE + (uint32_t)(uintptr_t)&state->"
+       << getKernelCodeFieldName(id) << "[0];\n";
+    os << "  state->kernel_descs[" << id << "].flags = 0u;\n";
+    os << "  for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; ++qpu)\n";
+    os << "    state->" << getKernelUnifPtrFieldName(id)
+       << "[qpu] = GPU_BASE + (uint32_t)(uintptr_t)&state->"
+       << getKernelUniformFieldName(id) << "[qpu][0];\n";
+  }
+  os << "\n";
   os << "  g_handle = handle;\n";
   os << "  g_state = state;\n";
   os << "  g_allocations++;\n";
@@ -2153,11 +2411,11 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
     if (const LaunchABIArgumentModel *arg =
             findLaunchABIArgumentForUniformIndex(launchABI, index)) {
       if (arg->kind == LaunchABIArgumentKind::Buffer) {
-        os << "    g_state->unif[qpu][" << index << "] = GPU_BASE + "
+        os << "    g_state->kernel_0_unif[qpu][" << index << "] = GPU_BASE + "
            << "(uint32_t)gpu_" << arg->name << "; /* arg " << arg->name
            << " */\n";
       } else {
-        os << "    g_state->unif[qpu][" << index << "] = "
+        os << "    g_state->kernel_0_unif[qpu][" << index << "] = "
            << getArgumentUniformExpression(*arg) << "; /* arg " << arg->name
            << " */\n";
       }
@@ -2172,7 +2430,7 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
             kernel.func, llvm::Twine("builtin '") + builtin->name +
                          "' has unsupported kind for launcher uniform packing");
       }
-      os << "    g_state->unif[qpu][" << index << "] = " << *expression
+      os << "    g_state->kernel_0_unif[qpu][" << index << "] = " << *expression
          << "; /* builtin " << builtin->name << " */\n";
       continue;
     }
@@ -2181,11 +2439,11 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
         kernel.func, llvm::Twine("missing launcher uniform assignment for index ") +
                          std::to_string(index));
   }
-  os << "    g_state->unif_ptr[qpu] = GPU_BASE + "
-        "(uint32_t)&g_state->unif[qpu][0];\n";
+  os << "    g_state->kernel_0_unif_ptr[qpu] = GPU_BASE + "
+        "(uint32_t)(uintptr_t)&g_state->kernel_0_unif[qpu][0];\n";
   os << "  }\n\n";
-  os << "  gpu_fft_base_exec_direct((uint32_t)g_state->code,\n";
-  os << "                           (uint32_t *)g_state->unif_ptr, activeQpus);\n\n";
+  os << "  gpu_fft_base_exec_direct(g_state->kernel_descs[0].code_gpu_addr,\n";
+  os << "                           (uint32_t *)g_state->kernel_0_unif_ptr, activeQpus);\n\n";
 
   for (const LaunchABIArgumentModel *arg : bufferArgs) {
     std::string elemType = getBufferElementCTypeForCodegen(*arg);
@@ -2400,6 +2658,117 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "\n";
 }
 
+
+static void appendLayoutRegionJSON(llvm::raw_ostream &os,
+                                   const ProgramLayoutRegion &region,
+                                   bool trailingComma) {
+  os << "    {\"name\": ";
+  appendJSONEscapedString(os, region.name);
+  os << ", \"kind\": ";
+  appendJSONEscapedString(os, region.kind);
+  os << ", \"offset\": " << region.offset;
+  os << ", \"size\": " << region.size;
+  os << ", \"alignment\": " << region.alignment;
+  if (region.kernelId)
+    os << ", \"kernel_id\": " << *region.kernelId;
+  os << "}";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static void appendLayoutByteRange(llvm::raw_ostream &os, uint64_t offset,
+                                  uint64_t size) {
+  os << "{\"offset\": " << offset << ", \"size\": " << size
+     << ", \"alignment\": " << kVC4ProgramLayoutAlignment << "}";
+}
+
+static void appendKernelLayoutJSON(llvm::raw_ostream &os,
+                                   const KernelLayoutRecord &kernel,
+                                   bool trailingComma) {
+  os << "    {\n";
+  os << "      \"kernel_id\": " << kernel.kernelId << ",\n";
+  os << "      \"public_name\": ";
+  appendJSONEscapedString(os, kernel.publicName);
+  os << ",\n";
+  os << "      \"code_symbol\": ";
+  appendJSONEscapedString(os, kernel.codeSymbol);
+  os << ",\n";
+  os << "      \"descriptor\": ";
+  appendLayoutByteRange(os, kernel.descriptorOffset, kernel.descriptorSize);
+  os << ",\n";
+  os << "      \"code\": ";
+  appendLayoutByteRange(os, kernel.codeOffset, kernel.codeSize);
+  os << ",\n";
+  os << "      \"uniforms\": ";
+  appendLayoutByteRange(os, kernel.uniformsOffset, kernel.uniformsSize);
+  os << ",\n";
+  os << "      \"uniform_stream\": ";
+  appendLayoutByteRange(os, kernel.uniformsOffset, kernel.uniformsSize);
+  os << ",\n";
+  os << "      \"unif_ptrs\": ";
+  appendLayoutByteRange(os, kernel.unifPtrOffset, kernel.unifPtrSize);
+  os << ",\n";
+  os << "      \"uniform_pointer_array\": ";
+  appendLayoutByteRange(os, kernel.unifPtrOffset, kernel.unifPtrSize);
+  os << ",\n";
+  os << "      \"code_words\": " << kernel.codeWords << ",\n";
+  os << "      \"uniform_words_per_request\": "
+     << kernel.uniformWordsPerRequest << ",\n";
+  os << "      \"max_requests_per_wave\": "
+     << kernel.maxRequestsPerWave << "\n";
+  os << "    }";
+  if (trailingComma)
+    os << ",";
+  os << "\n";
+}
+
+static LogicalResult writeProgramLayout(mlir::vc4::ModuleOp vc4Module,
+                                        llvm::ArrayRef<KernelRecord> kernels,
+                                        llvm::StringRef bundleDir) {
+  ProgramLayoutModel layout = buildProgramLayoutModel(kernels);
+  return writeBundleFile(vc4Module.getOperation(), bundleDir, "layout.json",
+                         [&](llvm::raw_ostream &os) {
+                           os << "{\n";
+                           os << "  \"schema_version\": 1,\n";
+                           os << "  \"kind\": \"vc4-program-layout\",\n";
+                           os << "  \"program_name\": ";
+                           appendJSONEscapedString(os, vc4Module.getSymName());
+                           os << ",\n";
+                           os << "  \"alignment\": " << layout.alignment << ",\n";
+                           os << "  \"kernel_count\": " << kernels.size() << ",\n";
+                           os << "  \"max_active_qpus\": "
+                              << kVC4MaxRequestsPerWave << ",\n";
+                           os << "  \"program_bytes\": "
+                              << layout.programBytes << ",\n";
+                           os << "  \"static_bytes\": "
+                              << layout.staticBytes << ",\n";
+                           os << "  \"heap_offset\": "
+                              << layout.heapOffset << ",\n";
+                           os << "  \"heap_bytes\": "
+                              << layout.heapBytes << ",\n";
+                           os << "  \"heap\": ";
+                           appendLayoutByteRange(os, layout.heapOffset,
+                                                 layout.heapBytes);
+                           os << ",\n";
+                           os << "  \"regions\": [\n";
+                           for (size_t i = 0; i != layout.regions.size(); ++i) {
+                             appendLayoutRegionJSON(
+                                 os, layout.regions[i],
+                                 i + 1 != layout.regions.size());
+                           }
+                           os << "  ],\n";
+                           os << "  \"kernels\": [\n";
+                           for (size_t i = 0; i != layout.kernels.size(); ++i) {
+                             appendKernelLayoutJSON(
+                                 os, layout.kernels[i],
+                                 i + 1 != layout.kernels.size());
+                           }
+                           os << "  ]\n";
+                           os << "}\n";
+                         });
+}
+
 static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
                                    llvm::ArrayRef<KernelRecord> kernels,
                                    llvm::StringRef bundleDir) {
@@ -2426,7 +2795,8 @@ static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
                            os << "  ],\n";
                            os << "  \"artifacts\": [\n";
                            os << "    \"kernel_launch.c\",\n";
-                           os << "    \"kernel_launch.h\"";
+                           os << "    \"kernel_launch.h\",\n";
+                           os << "    \"layout.json\"";
                            for (const KernelRecord &kernel : kernels) {
                              os << ",\n    ";
                              appendJSONEscapedString(os, kernel.qasmPath);
@@ -2467,9 +2837,11 @@ LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
     if (failed(writeQASM(kernel, bundleDir)))
       return failure();
   }
-  if (failed(writeLauncherSource(kernels.front(), bundleDir)))
+  if (failed(writeLauncherSource(kernels, bundleDir)))
     return failure();
   if (failed(writeLauncherHeader(kernels.front(), bundleDir)))
+    return failure();
+  if (failed(writeProgramLayout(vc4Module, kernels, bundleDir)))
     return failure();
   if (failed(writeManifest(vc4Module, kernels, bundleDir)))
     return failure();
