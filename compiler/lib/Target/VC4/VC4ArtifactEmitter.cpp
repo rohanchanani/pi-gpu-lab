@@ -191,13 +191,10 @@ static std::optional<std::string> getElementCType(llvm::StringRef elemType) {
 
 static std::optional<std::string>
 getBufferCType(llvm::StringRef direction, llvm::StringRef elemType) {
-  std::optional<std::string> base = getElementCType(elemType);
-  if (!base)
+  if (!getElementCType(elemType))
     return std::nullopt;
-  if (direction == "in")
-    return std::string("const ") + *base + " *";
-  if (direction == "out" || direction == "inout")
-    return *base + " *";
+  if (direction == "in" || direction == "out" || direction == "inout")
+    return std::string("vc4_deviceptr_t");
   return std::nullopt;
 }
 
@@ -1913,16 +1910,6 @@ static void appendLauncherParameter(llvm::raw_ostream &os,
     os << " " << arg.name;
 }
 
-static void appendLauncherPrototype(llvm::raw_ostream &os,
-                                    const LaunchABIModel &launchABI) {
-  os << "int " << launchABI.publicName << "(struct vc4_runtime *rt";
-  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
-    os << ", ";
-    appendLauncherParameter(os, arg);
-  }
-  os << ")";
-}
-
 static std::string getLaunchAPIBaseName(const LaunchABIModel &launchABI) {
   std::string base = launchABI.publicName;
   constexpr const char *suffix = "_launch";
@@ -1934,12 +1921,25 @@ static std::string getLaunchAPIBaseName(const LaunchABIModel &launchABI) {
   return base;
 }
 
-static std::string getPrepareFunctionName(const LaunchABIModel &launchABI) {
-  return getLaunchAPIBaseName(launchABI) + "_prepare";
+static std::string getLaunchFunctionName(const LaunchABIModel &launchABI) {
+  constexpr const char *suffix = "_launch";
+  constexpr size_t suffixLen = 7;
+  if (launchABI.publicName.size() > suffixLen &&
+      launchABI.publicName.compare(launchABI.publicName.size() - suffixLen,
+                                   suffixLen, suffix) == 0)
+    return launchABI.publicName;
+  return launchABI.publicName + "_launch";
 }
 
-static std::string getReleaseFunctionName(const LaunchABIModel &launchABI) {
-  return getLaunchAPIBaseName(launchABI) + "_release";
+static void appendLauncherPrototype(llvm::raw_ostream &os,
+                                    const LaunchABIModel &launchABI) {
+  os << "int " << getLaunchFunctionName(launchABI)
+     << "(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block";
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    os << ", ";
+    appendLauncherParameter(os, arg);
+  }
+  os << ")";
 }
 
 static std::string
@@ -1959,14 +1959,6 @@ getRuntimeCapacityFunctionName(const LaunchABIModel &launchABI) {
 
 static bool isLaunchABIBufferArgument(const LaunchABIArgumentModel &arg) {
   return arg.kind == LaunchABIArgumentKind::Buffer;
-}
-
-static bool isInputLikeBufferDirection(llvm::StringRef direction) {
-  return direction == "in" || direction == "inout";
-}
-
-static bool isOutputLikeBufferDirection(llvm::StringRef direction) {
-  return direction == "out" || direction == "inout";
 }
 
 static llvm::SmallVector<const LaunchABIArgumentModel *, 4>
@@ -1996,21 +1988,30 @@ static std::string getBufferElementCTypeForCodegen(
   return "uint32_t";
 }
 
-static void appendPreparePrototype(llvm::raw_ostream &os,
-                                   const LaunchABIModel &launchABI) {
-  os << "int " << getPrepareFunctionName(launchABI)
-     << "(struct vc4_runtime *rt, uint32_t max_n)";
+static void appendRuntimeAPIDeclarations(llvm::raw_ostream &os) {
+  os << "typedef uint32_t vc4_deviceptr_t;\n\n";
+  os << "typedef struct vc4_dim3 {\n";
+  os << "  uint32_t x;\n";
+  os << "  uint32_t y;\n";
+  os << "  uint32_t z;\n";
+  os << "} vc4_dim3;\n\n";
+  os << "struct vc4_program;\n\n";
+  os << "int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);\n";
+  os << "void vc4_program_destroy(struct vc4_program *program);\n";
+  os << "int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes);\n";
+  os << "int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr);\n";
+  os << "int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes);\n";
+  os << "int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes);\n";
+  os << "int vc4MemcpyDtoD(struct vc4_program *program, vc4_deviceptr_t dst, vc4_deviceptr_t src, uint32_t bytes);\n";
+  os << "int vc4MemsetD8(struct vc4_program *program, vc4_deviceptr_t dst, uint8_t value, uint32_t bytes);\n\n";
 }
 
-static void appendReleasePrototype(llvm::raw_ostream &os,
-                                   const LaunchABIModel &launchABI) {
-  os << "void " << getReleaseFunctionName(launchABI)
-     << "(struct vc4_runtime *rt)";
-}
-
-static LogicalResult writeLauncherHeader(KernelRecord &kernel,
+static LogicalResult writeLauncherHeader(llvm::ArrayRef<KernelRecord> kernels,
                                          llvm::StringRef bundleDir) {
-  return writeBundleFile(kernel.func.getOperation(), bundleDir,
+  if (kernels.empty())
+    return failure();
+  mlir::vc4::FuncOp firstFunc = kernels.front().func;
+  return writeBundleFile(firstFunc.getOperation(), bundleDir,
                          "kernel_launch.h", [&](llvm::raw_ostream &os) {
                            os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_H\n";
                            os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
@@ -2019,20 +2020,20 @@ static LogicalResult writeLauncherHeader(KernelRecord &kernel,
                            os << "#ifdef __cplusplus\n";
                            os << "extern \"C\" {\n";
                            os << "#endif\n\n";
-                           appendPreparePrototype(os, kernel.launchABI);
-                           os << ";\n\n";
-                           appendLauncherPrototype(os, kernel.launchABI);
-                           os << ";\n\n";
-                           appendReleasePrototype(os, kernel.launchABI);
-                           os << ";\n\n";
+                           appendRuntimeAPIDeclarations(os);
+                           for (const KernelRecord &kernel : kernels) {
+                             appendLauncherPrototype(os, kernel.launchABI);
+                             os << ";\n";
+                           }
+                           os << "\n";
                            os << "uint32_t "
-                              << getRuntimeAllocationsFunctionName(kernel.launchABI)
+                              << getRuntimeAllocationsFunctionName(kernels.front().launchABI)
                               << "(void);\n";
                            os << "uint32_t "
-                              << getRuntimeLaunchesFunctionName(kernel.launchABI)
+                              << getRuntimeLaunchesFunctionName(kernels.front().launchABI)
                               << "(void);\n";
                            os << "uint32_t "
-                              << getRuntimeCapacityFunctionName(kernel.launchABI)
+                              << getRuntimeCapacityFunctionName(kernels.front().launchABI)
                               << "(void);\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "}\n";
@@ -2073,7 +2074,7 @@ findLaunchABIBuiltinForUniformIndex(const LaunchABIModel &launchABI,
 static std::string
 getArgumentUniformExpression(const LaunchABIArgumentModel &arg) {
   if (arg.kind == LaunchABIArgumentKind::Buffer)
-    return std::string("(uint32_t)(uintptr_t)") + arg.name;
+    return std::string("(uint32_t)") + arg.name;
   if (arg.scalarType == "f32")
     return std::string("vc4_codegen_pack_f32(") + arg.name + ")";
   return std::string("(uint32_t)") + arg.name;
@@ -2111,22 +2112,26 @@ static void appendLauncherUniformLayoutComment(
 
 static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
                                          llvm::StringRef bundleDir) {
-  KernelRecord &kernel = const_cast<KernelRecord &>(kernels.front());
+  KernelRecord &firstKernel = const_cast<KernelRecord &>(kernels.front());
   ProgramLayoutModel programLayout = buildProgramLayoutModel(kernels);
   std::string source;
   llvm::raw_string_ostream os(source);
 
-  const LaunchABIModel &launchABI = kernel.launchABI;
-  const std::string apiBase = getLaunchAPIBaseName(launchABI);
-  const std::string stateName = apiBase + "_launch_state";
-  const std::string prepareName = getPrepareFunctionName(launchABI);
-  const std::string allocationsName = getRuntimeAllocationsFunctionName(launchABI);
-  const std::string launchesName = getRuntimeLaunchesFunctionName(launchABI);
-  const std::string capacityName = getRuntimeCapacityFunctionName(launchABI);
-  llvm::SmallVector<const LaunchABIArgumentModel *, 4> bufferArgs =
-      collectLaunchABIBufferArguments(launchABI);
-  const LaunchABIArgumentModel *logicalCountArg =
-      findLaunchABILogicalCountArgument(launchABI);
+  const LaunchABIModel &firstABI = firstKernel.launchABI;
+  const std::string apiBase = getLaunchAPIBaseName(firstABI);
+  const std::string stateName = apiBase + "_program_state";
+  const std::string allocationsName = getRuntimeAllocationsFunctionName(firstABI);
+  const std::string launchesName = getRuntimeLaunchesFunctionName(firstABI);
+  const std::string capacityName = getRuntimeCapacityFunctionName(firstABI);
+
+  bool requiresF32Packing = false;
+  bool requiresLaunchElements = false;
+  for (const KernelRecord &kernel : kernels) {
+    requiresF32Packing |= launchABIRequiresF32Packing(kernel.launchABI);
+    requiresLaunchElements |=
+        !collectLaunchABIBufferArguments(kernel.launchABI).empty() &&
+        !findLaunchABILogicalCountArgument(kernel.launchABI);
+  }
 
   os << "#include \"kernel_launch.h\"\n\n";
   os << "#include \"rpi.h\"\n";
@@ -2152,7 +2157,10 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
      << programLayout.heapOffset << "u\n";
   os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
      << programLayout.heapBytes << "u\n";
-  os << "#define NUM_UNIFS " << launchABI.uniformWordsPerQPU << "u\n";
+  os << "#define VC4_HEAP_BLOCK_MAGIC 0x48454150u /* HEAP */\n";
+  os << "#define VC4_HEAP_NO_NEXT 0xffffffffu\n";
+  os << "#define VC4_HEAP_ALIGNMENT 8u\n";
+  os << "#define NUM_UNIFS " << firstABI.uniformWordsPerQPU << "u\n";
   for (const KernelRecord &macroKernel : kernels) {
     os << "#define KERNEL_" << macroKernel.kernelId << "_NUM_UNIFS "
        << macroKernel.info.uniformWordsPerQPU << "u\n";
@@ -2163,12 +2171,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
      << " heap_offset=" << programLayout.heapOffset
      << " heap_bytes=" << programLayout.heapBytes
      << " kernels=" << kernels.size() << " */\n";
-  os << "/* Persistent program image: descriptor table, per-kernel code, "
-        "uniform streams, uniform pointer arrays, runtime bookkeeping, heap. */\n\n";
+  os << "/* VC4_HEAP_STATS allocs/frees/failures/high_water are tracked in "
+        "the persistent program image. */\n";
+  os << "/* Generated launches accept vc4_deviceptr_t buffers and never copy "
+        "host buffers implicitly. */\n\n";
 
-  if (launchABIRequiresF32Packing(launchABI)) {
+  if (requiresF32Packing) {
     os << "static uint32_t vc4_codegen_pack_f32(float value) {\n";
-    os << "  uint32_t bits = 0;\n";
+    os << "  uint32_t bits;\n";
     os << "  memcpy(&bits, &value, sizeof(bits));\n";
     os << "  return bits;\n";
     os << "}\n\n";
@@ -2205,93 +2215,169 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << "[VC4_RUNTIME_MAX_QPUS];\n";
   }
   os << "  uint32_t handle;\n";
-  os << "  uint32_t max_n;\n";
-  os << "  uint32_t padded_capacity_n;\n";
   os << "  uint32_t launch_count;\n";
-  os << "  uint32_t runtime_reserved[4];\n";
+  os << "  uint32_t heap_allocs;\n";
+  os << "  uint32_t heap_frees;\n";
+  os << "  uint32_t heap_failures;\n";
+  os << "  uint32_t heap_live_bytes;\n";
+  os << "  uint32_t heap_high_water;\n";
+  os << "  uint32_t runtime_reserved[3];\n";
   os << "  uint8_t heap[VC4_CODEGEN_PROGRAM_HEAP_BYTES];\n";
-  os << "  uint8_t payload[];\n";
   os << "};\n\n";
 
-  os << "static volatile struct " << stateName << " *g_state;\n";
-  os << "static uint32_t g_handle;\n";
-  os << "static uint32_t g_allocations;\n\n";
+  os << "struct vc4_codegen_heap_block {\n";
+  os << "  uint32_t size;\n";
+  os << "  uint32_t next;\n";
+  os << "  uint32_t free;\n";
+  os << "  uint32_t magic;\n";
+  os << "};\n\n";
 
-  os << "static size_t " << apiBase
-     << "_align_up_size(size_t value, size_t alignment) {\n";
+  os << "struct vc4_program {\n";
+  os << "  volatile struct " << stateName << " *state;\n";
+  os << "  uint32_t handle;\n";
+  os << "  uint32_t active_qpus;\n";
+  os << "  uint32_t heap_bytes;\n";
+  os << "  uint32_t heap_head;\n";
+  os << "};\n\n";
+
+  os << "static struct vc4_program g_program_storage;\n";
+  os << "static uint32_t g_program_live;\n";
+  os << "static uint32_t g_program_allocations;\n\n";
+
+  os << "static uint32_t vc4_codegen_align_u32(uint32_t value, uint32_t alignment) {\n";
   os << "  if (alignment <= 1u)\n";
   os << "    return value;\n";
   os << "  return (value + alignment - 1u) & ~(alignment - 1u);\n";
   os << "}\n\n";
 
-  os << "static uint32_t " << apiBase << "_round_up_to_lane_width(uint32_t n) {\n";
-  os << "  const uint32_t laneWidth = VC4_RUNTIME_LANE_WIDTH;\n";
-  os << "  if (n == 0u)\n";
-  os << "    return 0u;\n";
-  os << "  return (n + laneWidth - 1u) & ~(laneWidth - 1u);\n";
-  os << "}\n\n";
-
-  os << "static size_t " << apiBase
-     << "_payload_bytes(uint32_t padded_capacity_n) {\n";
-  os << "  size_t offset = 0u;\n";
-  for (const LaunchABIArgumentModel *arg : bufferArgs) {
-    std::string elemType = getBufferElementCTypeForCodegen(*arg);
-    os << "  offset = " << apiBase << "_align_up_size(offset, sizeof("
-       << elemType << "));\n";
-    os << "  offset += (size_t)padded_capacity_n * sizeof(" << elemType
-       << ");\n";
-  }
-  os << "  return offset;\n";
-  os << "}\n\n";
-
-  for (size_t i = 0; i != bufferArgs.size(); ++i) {
-    const LaunchABIArgumentModel &arg = *bufferArgs[i];
-    std::string elemType = getBufferElementCTypeForCodegen(arg);
-    os << "static size_t " << apiBase << "_" << arg.name
-       << "_offset(uint32_t padded_capacity_n) {\n";
-    os << "  size_t offset = 0u;\n";
-    for (size_t j = 0; j != i; ++j) {
-      const LaunchABIArgumentModel &prev = *bufferArgs[j];
-      std::string prevElemType = getBufferElementCTypeForCodegen(prev);
-      os << "  offset = " << apiBase << "_align_up_size(offset, sizeof("
-         << prevElemType << "));\n";
-      os << "  offset += (size_t)padded_capacity_n * sizeof(" << prevElemType
-         << ");\n";
-    }
-    os << "  return " << apiBase << "_align_up_size(offset, sizeof("
-       << elemType << "));\n";
+  if (requiresLaunchElements) {
+    os << "static uint32_t vc4_codegen_saturating_mul_u32(uint32_t lhs, uint32_t rhs) {\n";
+    os << "  if (lhs != 0u && rhs > 0xffffffffu / lhs)\n";
+    os << "    return 0xffffffffu;\n";
+    os << "  return lhs * rhs;\n";
     os << "}\n\n";
 
-    os << "static " << elemType << " *" << apiBase << "_" << arg.name
-       << "_ptr(volatile struct " << stateName << " *state) {\n";
-    os << "  return (" << elemType << " *)(state->payload + " << apiBase
-       << "_" << arg.name << "_offset(state->padded_capacity_n));\n";
+    os << "static uint32_t vc4_codegen_launch_elements(vc4_dim3 grid, vc4_dim3 block) {\n";
+    os << "  uint32_t total = 1u;\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.x);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.y);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.z);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.x);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.y);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.z);\n";
+    os << "  return total;\n";
     os << "}\n\n";
   }
 
-  os << "static size_t " << apiBase << "_state_size(uint32_t padded_capacity_n) {\n";
-  os << "  return offsetof(struct " << stateName << ", payload) + "
-     << apiBase << "_payload_bytes(padded_capacity_n);\n";
+  os << "static int vc4_program_is_live(const struct vc4_program *program) {\n";
+  os << "  return program && g_program_live && program == &g_program_storage && program->state;\n";
   os << "}\n\n";
 
-  appendPreparePrototype(os, launchABI);
-  os << " {\n";
-  os << "  if (!rt || !rt->isInitialized)\n";
+  os << "static unsigned char *vc4_program_heap_base(struct vc4_program *program) {\n";
+  os << "  return (unsigned char *)&program->state->heap[0];\n";
+  os << "}\n\n";
+
+  os << "static uint32_t vc4_program_heap_gpu_base(struct vc4_program *program) {\n";
+  os << "  return GPU_BASE + (uint32_t)(uintptr_t)vc4_program_heap_base(program);\n";
+  os << "}\n\n";
+
+  os << "static void vc4_heap_failure(struct vc4_program *program) {\n";
+  os << "  if (vc4_program_is_live(program))\n";
+  os << "    program->state->heap_failures++;\n";
+  os << "}\n\n";
+
+  os << "static struct vc4_codegen_heap_block *vc4_heap_block_at(struct vc4_program *program, uint32_t offset) {\n";
+  os << "  if (!vc4_program_is_live(program))\n";
+  os << "    return 0;\n";
+  os << "  if (offset > program->heap_bytes ||\n";
+  os << "      program->heap_bytes - offset < sizeof(struct vc4_codegen_heap_block))\n";
+  os << "    return 0;\n";
+  os << "  struct vc4_codegen_heap_block *block =\n";
+  os << "      (struct vc4_codegen_heap_block *)(vc4_program_heap_base(program) + offset);\n";
+  os << "  if (block->magic != VC4_HEAP_BLOCK_MAGIC)\n";
+  os << "    return 0;\n";
+  os << "  return block;\n";
+  os << "}\n\n";
+
+  os << "static void vc4_heap_init(struct vc4_program *program) {\n";
+  os << "  program->heap_head = 0u;\n";
+  os << "  struct vc4_codegen_heap_block *head =\n";
+  os << "      (struct vc4_codegen_heap_block *)vc4_program_heap_base(program);\n";
+  os << "  head->size = program->heap_bytes - (uint32_t)sizeof(struct vc4_codegen_heap_block);\n";
+  os << "  head->next = VC4_HEAP_NO_NEXT;\n";
+  os << "  head->free = 1u;\n";
+  os << "  head->magic = VC4_HEAP_BLOCK_MAGIC;\n";
+  os << "  program->state->heap_allocs = 0u;\n";
+  os << "  program->state->heap_frees = 0u;\n";
+  os << "  program->state->heap_failures = 0u;\n";
+  os << "  program->state->heap_live_bytes = 0u;\n";
+  os << "  program->state->heap_high_water = 0u;\n";
+  os << "}\n\n";
+
+  os << "static void vc4_heap_coalesce_next(struct vc4_program *program, struct vc4_codegen_heap_block *block) {\n";
+  os << "  while (block->next != VC4_HEAP_NO_NEXT) {\n";
+  os << "    struct vc4_codegen_heap_block *next = vc4_heap_block_at(program, block->next);\n";
+  os << "    if (!next || !next->free)\n";
+  os << "      return;\n";
+  os << "    block->size += (uint32_t)sizeof(struct vc4_codegen_heap_block) + next->size;\n";
+  os << "    block->next = next->next;\n";
+  os << "  }\n";
+  os << "}\n\n";
+
+  os << "static int vc4_device_range_offset(struct vc4_program *program, vc4_deviceptr_t ptr, uint32_t bytes, uint32_t *offset_out) {\n";
+  os << "  if (!vc4_program_is_live(program))\n";
+  os << "    return 0;\n";
+  os << "  uint32_t gpu_base = vc4_program_heap_gpu_base(program);\n";
+  os << "  if (ptr < gpu_base)\n";
+  os << "    return 0;\n";
+  os << "  uint32_t offset = ptr - gpu_base;\n";
+  os << "  if (offset > program->heap_bytes)\n";
+  os << "    return 0;\n";
+  os << "  if (bytes > program->heap_bytes - offset)\n";
+  os << "    return 0;\n";
+  os << "  if (offset_out)\n";
+  os << "    *offset_out = offset;\n";
+  os << "  return 1;\n";
+  os << "}\n\n";
+
+  os << "static int vc4_device_range_is_allocated(struct vc4_program *program, vc4_deviceptr_t ptr, uint32_t bytes) {\n";
+  os << "  uint32_t range_offset = 0u;\n";
+  os << "  if (!vc4_device_range_offset(program, ptr, bytes, &range_offset))\n";
+  os << "    return 0;\n";
+  os << "  uint32_t current = program->heap_head;\n";
+  os << "  while (current != VC4_HEAP_NO_NEXT) {\n";
+  os << "    struct vc4_codegen_heap_block *block = vc4_heap_block_at(program, current);\n";
+  os << "    if (!block)\n";
+  os << "      return 0;\n";
+  os << "    uint32_t payload_begin = current + (uint32_t)sizeof(struct vc4_codegen_heap_block);\n";
+  os << "    if (!block->free && range_offset >= payload_begin &&\n";
+  os << "        range_offset - payload_begin <= block->size &&\n";
+  os << "        bytes <= block->size - (range_offset - payload_begin))\n";
+  os << "      return 1;\n";
+  os << "    current = block->next;\n";
+  os << "  }\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  os << "static void *vc4_deviceptr_to_host(struct vc4_program *program, vc4_deviceptr_t ptr, uint32_t bytes) {\n";
+  os << "  if (!vc4_device_range_is_allocated(program, ptr, bytes))\n";
+  os << "    return 0;\n";
+  os << "  uint32_t offset = ptr - vc4_program_heap_gpu_base(program);\n";
+  os << "  return vc4_program_heap_base(program) + offset;\n";
+  os << "}\n\n";
+
+  os << "int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes) {\n";
+  os << "  if (!out)\n";
+  os << "    return -1;\n";
+  os << "  *out = 0;\n";
+  os << "  if (g_program_live)\n";
+  os << "    return -1;\n";
+  os << "  if (requested_bytes > VC4_CODEGEN_PROGRAM_HEAP_BYTES - sizeof(struct vc4_codegen_heap_block))\n";
   os << "    return -1;\n\n";
-  os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
+  os << "  uint32_t activeQpus = VC4_RUNTIME_MAX_QPUS;\n";
   os << "  if (activeQpus == 0u || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
   os << "    return -1;\n\n";
-  os << "  uint32_t paddedCapacity = " << apiBase
-     << "_round_up_to_lane_width(max_n);\n";
-  os << "  if (paddedCapacity < max_n)\n";
-  os << "    return -1;\n\n";
-  os << "  if (g_state) {\n";
-  os << "    if (max_n <= g_state->max_n)\n";
-  os << "      return 0;\n";
-  os << "    return -1;\n";
-  os << "  }\n\n";
-  os << "  size_t allocSize = " << apiBase
-     << "_state_size(paddedCapacity);\n";
+  os << "  size_t allocSize = sizeof(struct " << stateName << ");\n";
   os << "  if (allocSize > 0xffffffffu)\n";
   os << "    return -1;\n\n";
   os << "  uint32_t handle = mem_alloc((uint32_t)allocSize, 4096u, GPU_MEM_FLG);\n";
@@ -2304,11 +2390,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  }\n\n";
   os << "  volatile struct " << stateName << " *state =\n";
   os << "      (volatile struct " << stateName << " *)(vc - GPU_BASE);\n";
-  os << "  if (!state) {\n";
-  os << "    mem_unlock(handle);\n";
-  os << "    mem_free(handle);\n";
-  os << "    return -1;\n";
-  os << "  }\n\n";
   os << "  memset((void *)state, 0, allocSize);\n";
   os << "  state->magic = VC4_CODEGEN_PROGRAM_MAGIC;\n";
   os << "  state->total_size_bytes = (uint32_t)allocSize;\n";
@@ -2318,8 +2399,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  state->descriptor_table_offset = (uint32_t)offsetof(struct "
      << stateName << ", kernel_descs);\n";
   os << "  state->handle = handle;\n";
-  os << "  state->max_n = max_n;\n";
-  os << "  state->padded_capacity_n = paddedCapacity;\n";
+  os << "  state->launch_count = 0u;\n";
   for (const KernelRecord &copyKernel : kernels) {
     const unsigned id = copyKernel.kernelId;
     os << "  memcpy((void *)state->" << getKernelCodeFieldName(id) << ", "
@@ -2352,143 +2432,281 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << getKernelUniformFieldName(id) << "[qpu][0];\n";
   }
   os << "\n";
-  os << "  g_handle = handle;\n";
-  os << "  g_state = state;\n";
-  os << "  g_allocations++;\n";
+  os << "  memset((void *)&g_program_storage, 0, sizeof(g_program_storage));\n";
+  os << "  g_program_storage.state = state;\n";
+  os << "  g_program_storage.handle = handle;\n";
+  os << "  g_program_storage.active_qpus = activeQpus;\n";
+  os << "  g_program_storage.heap_bytes = VC4_CODEGEN_PROGRAM_HEAP_BYTES;\n";
+  os << "  g_program_live = 1u;\n";
+  os << "  vc4_heap_init(&g_program_storage);\n";
+  os << "  g_program_allocations++;\n";
+  os << "  *out = &g_program_storage;\n";
   os << "  return 0;\n";
   os << "}\n\n";
 
-  appendLauncherPrototype(os, launchABI);
-  os << " {\n";
-  os << "  if (!rt || !rt->isInitialized)\n";
-  os << "    return -1;\n\n";
-  os << "  uint32_t activeQpus = vc4_runtime_active_qpus(rt);\n";
-  os << "  if (activeQpus == 0u || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
-  os << "    return -1;\n\n";
-  if (logicalCountArg) {
-    os << "  uint32_t logicalN = (uint32_t)" << logicalCountArg->name << ";\n";
-  } else {
-    os << "  uint32_t logicalN = g_state ? g_state->max_n : 0u;\n";
-  }
-  for (const LaunchABIArgumentModel *arg : bufferArgs) {
-    os << "  if (logicalN != 0u && !" << arg->name << ")\n";
-    os << "    return -1;\n";
-  }
-  os << "  if (!g_state) {\n";
-  os << "    if (" << prepareName << "(rt, logicalN) < 0)\n";
-  os << "      return -1;\n";
-  os << "  }\n";
-  os << "  if (logicalN > g_state->max_n)\n";
-  os << "    return -1;\n\n";
-  os << "  uint32_t paddedN = " << apiBase << "_round_up_to_lane_width(logicalN);\n";
-  os << "  if (paddedN < logicalN || paddedN > g_state->padded_capacity_n)\n";
-  os << "    return -1;\n\n";
-
-  for (const LaunchABIArgumentModel *arg : bufferArgs) {
-    std::string elemType = getBufferElementCTypeForCodegen(*arg);
-    os << "  " << elemType << " *gpu_" << arg->name << " = " << apiBase
-       << "_" << arg->name << "_ptr(g_state);\n";
-  }
-  if (!bufferArgs.empty())
-    os << "\n";
-
-  for (const LaunchABIArgumentModel *arg : bufferArgs) {
-    std::string elemType = getBufferElementCTypeForCodegen(*arg);
-    if (isInputLikeBufferDirection(arg->direction)) {
-      os << "  if (logicalN != 0u)\n";
-      os << "    memcpy(gpu_" << arg->name << ", " << arg->name
-         << ", (size_t)logicalN * sizeof(" << elemType << "));\n";
-    }
-    os << "  for (uint32_t i = logicalN; i < paddedN; ++i)\n";
-    os << "    gpu_" << arg->name << "[i] = (" << elemType << ")0;\n";
-  }
-  if (!bufferArgs.empty())
-    os << "\n";
-
-  appendLauncherUniformLayoutComment(os, launchABI);
-  os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
-  for (int64_t index = 0; index != launchABI.uniformWordsPerQPU; ++index) {
-    if (const LaunchABIArgumentModel *arg =
-            findLaunchABIArgumentForUniformIndex(launchABI, index)) {
-      if (arg->kind == LaunchABIArgumentKind::Buffer) {
-        os << "    g_state->kernel_0_unif[qpu][" << index << "] = GPU_BASE + "
-           << "(uint32_t)gpu_" << arg->name << "; /* arg " << arg->name
-           << " */\n";
-      } else {
-        os << "    g_state->kernel_0_unif[qpu][" << index << "] = "
-           << getArgumentUniformExpression(*arg) << "; /* arg " << arg->name
-           << " */\n";
-      }
-      continue;
-    }
-
-    if (const LaunchABIBuiltinModel *builtin =
-            findLaunchABIBuiltinForUniformIndex(launchABI, index)) {
-      std::optional<std::string> expression = getBuiltinUniformExpression(*builtin);
-      if (!expression) {
-        return emitLaunchABIModelError(
-            kernel.func, llvm::Twine("builtin '") + builtin->name +
-                         "' has unsupported kind for launcher uniform packing");
-      }
-      os << "    g_state->kernel_0_unif[qpu][" << index << "] = " << *expression
-         << "; /* builtin " << builtin->name << " */\n";
-      continue;
-    }
-
-    return emitLaunchABIModelError(
-        kernel.func, llvm::Twine("missing launcher uniform assignment for index ") +
-                         std::to_string(index));
-  }
-  os << "    g_state->kernel_0_unif_ptr[qpu] = GPU_BASE + "
-        "(uint32_t)(uintptr_t)&g_state->kernel_0_unif[qpu][0];\n";
-  os << "  }\n\n";
-  os << "  gpu_fft_base_exec_direct(g_state->kernel_descs[0].code_gpu_addr,\n";
-  os << "                           (uint32_t *)g_state->kernel_0_unif_ptr, activeQpus);\n\n";
-
-  for (const LaunchABIArgumentModel *arg : bufferArgs) {
-    std::string elemType = getBufferElementCTypeForCodegen(*arg);
-    if (!isOutputLikeBufferDirection(arg->direction))
-      continue;
-    os << "  if (logicalN != 0u)\n";
-    os << "    memcpy(" << arg->name << ", gpu_" << arg->name
-       << ", (size_t)logicalN * sizeof(" << elemType << "));\n";
-  }
-  if (!bufferArgs.empty())
-    os << "\n";
-
-  os << "  g_state->launch_count++;\n";
-  os << "  return 0;\n";
-  os << "}\n\n";
-
-  appendReleasePrototype(os, launchABI);
-  os << " {\n";
-  os << "  (void)rt;\n";
-  os << "  if (!g_state)\n";
+  os << "void vc4_program_destroy(struct vc4_program *program) {\n";
+  os << "  if (!vc4_program_is_live(program))\n";
   os << "    return;\n";
-  os << "  mem_unlock(g_handle);\n";
-  os << "  mem_free(g_handle);\n";
-  os << "  g_state = 0;\n";
-  os << "  g_handle = 0;\n";
+  os << "  mem_unlock(program->handle);\n";
+  os << "  mem_free(program->handle);\n";
+  os << "  memset((void *)&g_program_storage, 0, sizeof(g_program_storage));\n";
+  os << "  g_program_live = 0u;\n";
   os << "}\n\n";
+
+  os << "int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes) {\n";
+  os << "  if (!vc4_program_is_live(program) || !out) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  *out = 0u;\n";
+  os << "  if (bytes == 0u)\n";
+  os << "    return 0;\n";
+  os << "  uint32_t aligned = vc4_codegen_align_u32(bytes, VC4_HEAP_ALIGNMENT);\n";
+  os << "  if (aligned < bytes) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  uint32_t current = program->heap_head;\n";
+  os << "  while (current != VC4_HEAP_NO_NEXT) {\n";
+  os << "    struct vc4_codegen_heap_block *block = vc4_heap_block_at(program, current);\n";
+  os << "    if (!block)\n";
+  os << "      break;\n";
+  os << "    if (block->free && block->size >= aligned) {\n";
+  os << "      uint32_t remaining = block->size - aligned;\n";
+  os << "      if (remaining > sizeof(struct vc4_codegen_heap_block) + VC4_HEAP_ALIGNMENT) {\n";
+  os << "        uint32_t new_offset = current + (uint32_t)sizeof(struct vc4_codegen_heap_block) + aligned;\n";
+  os << "        struct vc4_codegen_heap_block *split = vc4_heap_block_at(program, new_offset);\n";
+  os << "        if (!split)\n";
+  os << "          split = (struct vc4_codegen_heap_block *)(vc4_program_heap_base(program) + new_offset);\n";
+  os << "        split->size = remaining - (uint32_t)sizeof(struct vc4_codegen_heap_block);\n";
+  os << "        split->next = block->next;\n";
+  os << "        split->free = 1u;\n";
+  os << "        split->magic = VC4_HEAP_BLOCK_MAGIC;\n";
+  os << "        block->size = aligned;\n";
+  os << "        block->next = new_offset;\n";
+  os << "      }\n";
+  os << "      block->free = 0u;\n";
+  os << "      program->state->heap_allocs++;\n";
+  os << "      program->state->heap_live_bytes += block->size;\n";
+  os << "      if (program->state->heap_live_bytes > program->state->heap_high_water)\n";
+  os << "        program->state->heap_high_water = program->state->heap_live_bytes;\n";
+  os << "      *out = vc4_program_heap_gpu_base(program) + current +\n";
+  os << "             (uint32_t)sizeof(struct vc4_codegen_heap_block);\n";
+  os << "      return 0;\n";
+  os << "    }\n";
+  os << "    current = block->next;\n";
+  os << "  }\n";
+  os << "  vc4_heap_failure(program);\n";
+  os << "  return -1;\n";
+  os << "}\n\n";
+
+  os << "int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr) {\n";
+  os << "  if (!vc4_program_is_live(program)) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  if (ptr == 0u)\n";
+  os << "    return 0;\n";
+  os << "  uint32_t range_offset = 0u;\n";
+  os << "  if (!vc4_device_range_offset(program, ptr, 0u, &range_offset) ||\n";
+  os << "      range_offset < sizeof(struct vc4_codegen_heap_block)) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  uint32_t block_offset = range_offset - (uint32_t)sizeof(struct vc4_codegen_heap_block);\n";
+  os << "  uint32_t current = program->heap_head;\n";
+  os << "  uint32_t prev = VC4_HEAP_NO_NEXT;\n";
+  os << "  while (current != VC4_HEAP_NO_NEXT) {\n";
+  os << "    struct vc4_codegen_heap_block *block = vc4_heap_block_at(program, current);\n";
+  os << "    if (!block)\n";
+  os << "      break;\n";
+  os << "    if (current == block_offset) {\n";
+  os << "      if (block->free) {\n";
+  os << "        vc4_heap_failure(program);\n";
+  os << "        return -1;\n";
+  os << "      }\n";
+  os << "      block->free = 1u;\n";
+  os << "      program->state->heap_frees++;\n";
+  os << "      if (program->state->heap_live_bytes >= block->size)\n";
+  os << "        program->state->heap_live_bytes -= block->size;\n";
+  os << "      else\n";
+  os << "        program->state->heap_live_bytes = 0u;\n";
+  os << "      vc4_heap_coalesce_next(program, block);\n";
+  os << "      if (prev != VC4_HEAP_NO_NEXT) {\n";
+  os << "        struct vc4_codegen_heap_block *prev_block = vc4_heap_block_at(program, prev);\n";
+  os << "        if (prev_block && prev_block->free)\n";
+  os << "          vc4_heap_coalesce_next(program, prev_block);\n";
+  os << "      }\n";
+  os << "      return 0;\n";
+  os << "    }\n";
+  os << "    prev = current;\n";
+  os << "    current = block->next;\n";
+  os << "  }\n";
+  os << "  vc4_heap_failure(program);\n";
+  os << "  return -1;\n";
+  os << "}\n\n";
+
+  os << "int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes) {\n";
+  os << "  if (bytes == 0u)\n";
+  os << "    return 0;\n";
+  os << "  if (!src) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  void *dst_host = vc4_deviceptr_to_host(program, dst, bytes);\n";
+  os << "  if (!dst_host) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  memcpy(dst_host, src, bytes);\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  os << "int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes) {\n";
+  os << "  if (bytes == 0u)\n";
+  os << "    return 0;\n";
+  os << "  if (!dst) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  void *src_host = vc4_deviceptr_to_host(program, src, bytes);\n";
+  os << "  if (!src_host) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  memcpy(dst, src_host, bytes);\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  os << "int vc4MemcpyDtoD(struct vc4_program *program, vc4_deviceptr_t dst, vc4_deviceptr_t src, uint32_t bytes) {\n";
+  os << "  if (bytes == 0u)\n";
+  os << "    return 0;\n";
+  os << "  void *dst_host = vc4_deviceptr_to_host(program, dst, bytes);\n";
+  os << "  void *src_host = vc4_deviceptr_to_host(program, src, bytes);\n";
+  os << "  if (!dst_host || !src_host) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  memmove(dst_host, src_host, bytes);\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  os << "int vc4MemsetD8(struct vc4_program *program, vc4_deviceptr_t dst, uint8_t value, uint32_t bytes) {\n";
+  os << "  if (bytes == 0u)\n";
+  os << "    return 0;\n";
+  os << "  void *dst_host = vc4_deviceptr_to_host(program, dst, bytes);\n";
+  os << "  if (!dst_host) {\n";
+  os << "    vc4_heap_failure(program);\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  memset(dst_host, value, bytes);\n";
+  os << "  return 0;\n";
+  os << "}\n\n";
+
+  for (const KernelRecord &launchKernel : kernels) {
+    const LaunchABIModel &kernelABI = launchKernel.launchABI;
+    llvm::SmallVector<const LaunchABIArgumentModel *, 4> bufferArgs =
+        collectLaunchABIBufferArguments(kernelABI);
+    const LaunchABIArgumentModel *logicalCountArg =
+        findLaunchABILogicalCountArgument(kernelABI);
+
+    appendLauncherPrototype(os, kernelABI);
+    os << " {\n";
+    os << "  if (!vc4_program_is_live(program))\n";
+    os << "    return -1;\n";
+    os << "  uint32_t activeQpus = program->active_qpus;\n";
+    os << "  if (activeQpus == 0u || activeQpus > VC4_RUNTIME_MAX_QPUS)\n";
+    os << "    return -1;\n";
+    if (!bufferArgs.empty()) {
+      if (logicalCountArg) {
+        os << "  uint32_t logicalN = (uint32_t)" << logicalCountArg->name << ";\n";
+      } else {
+        os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
+      }
+    }
+    os << "  (void)grid;\n";
+    os << "  (void)block;\n";
+    for (const LaunchABIArgumentModel *arg : bufferArgs) {
+      std::string elemType = getBufferElementCTypeForCodegen(*arg);
+      os << "  if (logicalN != 0u) {\n";
+      os << "    size_t arg_bytes = (size_t)logicalN * sizeof(" << elemType << ");\n";
+      os << "    if (arg_bytes > 0xffffffffu || !vc4_device_range_is_allocated(program, "
+         << arg->name << ", (uint32_t)arg_bytes))\n";
+      os << "      return -1;\n";
+      os << "  }\n";
+    }
+    if (!bufferArgs.empty())
+      os << "\n";
+
+    appendLauncherUniformLayoutComment(os, kernelABI);
+    os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
+    for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
+      if (const LaunchABIArgumentModel *arg =
+              findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
+        if (arg->kind == LaunchABIArgumentKind::Buffer) {
+          os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+             << "[qpu][" << index << "] = (uint32_t)" << arg->name
+             << "; /* arg " << arg->name << " */\n";
+        } else {
+          os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+             << "[qpu][" << index << "] = "
+             << getArgumentUniformExpression(*arg) << "; /* arg "
+             << arg->name << " */\n";
+        }
+        continue;
+      }
+
+      if (const LaunchABIBuiltinModel *builtin =
+              findLaunchABIBuiltinForUniformIndex(kernelABI, index)) {
+        std::optional<std::string> expression = getBuiltinUniformExpression(*builtin);
+        if (!expression) {
+          return emitLaunchABIModelError(
+              launchKernel.func, llvm::Twine("builtin '") + builtin->name +
+                            "' has unsupported kind for launcher uniform packing");
+        }
+        os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+           << "[qpu][" << index << "] = " << *expression
+           << "; /* builtin " << builtin->name << " */\n";
+        continue;
+      }
+
+      return emitLaunchABIModelError(
+          launchKernel.func,
+          llvm::Twine("missing launcher uniform assignment for index ") +
+              std::to_string(index));
+    }
+    os << "    program->state->" << getKernelUnifPtrFieldName(launchKernel.kernelId)
+       << "[qpu] = GPU_BASE + (uint32_t)(uintptr_t)&program->state->"
+       << getKernelUniformFieldName(launchKernel.kernelId) << "[qpu][0];\n";
+    os << "  }\n\n";
+    os << "  gpu_fft_base_exec_direct(program->state->kernel_descs["
+       << launchKernel.kernelId << "].code_gpu_addr,\n";
+    os << "                           (uint32_t *)program->state->"
+       << getKernelUnifPtrFieldName(launchKernel.kernelId)
+       << ", activeQpus);\n";
+    os << "  program->state->launch_count++;\n";
+    os << "  return 0;\n";
+    os << "}\n\n";
+  }
 
   os << "uint32_t " << allocationsName << "(void) {\n";
-  os << "  return g_allocations;\n";
+  os << "  return g_program_allocations;\n";
   os << "}\n\n";
 
   os << "uint32_t " << launchesName << "(void) {\n";
-  os << "  if (!g_state)\n";
+  os << "  if (!g_program_live || !g_program_storage.state)\n";
   os << "    return 0u;\n";
-  os << "  return g_state->launch_count;\n";
+  os << "  return g_program_storage.state->launch_count;\n";
   os << "}\n\n";
 
   os << "uint32_t " << capacityName << "(void) {\n";
-  os << "  if (!g_state)\n";
+  os << "  if (!g_program_live)\n";
   os << "    return 0u;\n";
-  os << "  return g_state->max_n;\n";
+  os << "  return g_program_storage.heap_bytes;\n";
   os << "}\n";
   os.flush();
 
-  return writeBundleFile(kernel.func.getOperation(), bundleDir,
+  return writeBundleFile(firstKernel.func.getOperation(), bundleDir,
                          "kernel_launch.c",
                          [&](llvm::raw_ostream &fileOS) { fileOS << source; });
 }
@@ -2579,11 +2797,13 @@ static void appendManifestLaunchABI(llvm::raw_ostream &os,
   os << "    ],\n";
   os << "    \"public_api\": {\n";
   os << "      \"function_name\": ";
-  appendJSONEscapedString(os, launchABI.publicName);
+  appendJSONEscapedString(os, getLaunchFunctionName(launchABI));
   os << ",\n";
   os << "      \"return_type\": \"int\",\n";
   os << "      \"parameters\": [\n";
-  appendManifestPublicParameter(os, "rt", "struct vc4_runtime *", "runtime",
+  appendManifestPublicParameter(os, "program", "struct vc4_program *", "program", true);
+  appendManifestPublicParameter(os, "grid", "vc4_dim3", "grid", true);
+  appendManifestPublicParameter(os, "block", "vc4_dim3", "block",
                                 !launchABI.arguments.empty());
   for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
     const LaunchABIArgumentModel &arg = launchABI.arguments[i];
@@ -2745,7 +2965,11 @@ static LogicalResult writeProgramLayout(mlir::vc4::ModuleOp vc4Module,
                               << layout.staticBytes << ",\n";
                            os << "  \"heap_offset\": "
                               << layout.heapOffset << ",\n";
+                           os << "  \"heap_offset_bytes\": "
+                              << layout.heapOffset << ",\n";
                            os << "  \"heap_bytes\": "
+                              << layout.heapBytes << ",\n";
+                           os << "  \"heap_size_bytes\": "
                               << layout.heapBytes << ",\n";
                            os << "  \"heap\": ";
                            appendLayoutByteRange(os, layout.heapOffset,
@@ -2839,7 +3063,7 @@ LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
   }
   if (failed(writeLauncherSource(kernels, bundleDir)))
     return failure();
-  if (failed(writeLauncherHeader(kernels.front(), bundleDir)))
+  if (failed(writeLauncherHeader(kernels, bundleDir)))
     return failure();
   if (failed(writeProgramLayout(vc4Module, kernels, bundleDir)))
     return failure();
