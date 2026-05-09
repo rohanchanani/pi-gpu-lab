@@ -199,7 +199,7 @@
         {
           "id": "lit-current-emit-suite",
           "mechanism": "command",
-          "description": "Current Emit suite uses the canonical M2 program-bundle layout, including single-kernel bundles represented through manifest schema v2 kernels[].",
+          "description": "Current non-M2/slice-local Emit suite remains green while M2-specific manifest, layout, heap, launch-ABI, resource, and multi-kernel tests are verified by their owning slices.",
           "argv": [
             "{python}",
             "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
@@ -220,7 +220,13 @@
             "--exclude-prefix",
             "emit-program-layout-json",
             "--exclude-prefix",
-            "emit-resource"
+            "emit-resource",
+            "--exclude-prefix",
+            "emit-launch-abi-header",
+            "--exclude-prefix",
+            "emit-launcher-uniform-packing",
+            "--exclude-prefix",
+            "emit-saxpy-full-qasm-artifact-regression"
           ],
           "expect_exit_code": 0,
           "route_hint": "codex_mechanical"
