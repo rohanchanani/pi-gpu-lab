@@ -404,6 +404,12 @@ def run_patch_preflight_gate(
     cmd = [
         sys.executable,
         str(preflight),
+        "--repo",
+        str(config.repo),
+        "--worklist",
+        str(config.worklist_path),
+        "--context-profiles",
+        str(config.context_profiles_path),
         "patch-invariants",
         "--slice",
         str(slice_entry["id"]),
@@ -709,6 +715,22 @@ def run_gpt_slice(
         failed = first_failed(results)
         assert failed is not None
         failure_packet = write_gate_failure_packet(state=state, paths=paths, slice_entry=slice_entry, failed=failed)
+        if preflight_failure_is_workflow_config(failed, paths.log_dir):
+            cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
+            state.record_attempt(
+                slice_id=slice_id,
+                attempt=attempt,
+                status="workflow-preflight-failed",
+                details={"failure_packet": relpath(config.repo, failure_packet)},
+            )
+            state.mark_slice_failed(slice_id=slice_id, failure_packet=relpath(config.repo, failure_packet))
+            log(
+                "FAIL "
+                + slice_id
+                + ": patch preflight failed due to workflow/configuration, not candidate semantics; "
+                + "not spending another GPT attempt"
+            )
+            return 1
         route = classify_failure(
             slice_entry=slice_entry,
             stage="gate",
@@ -1074,6 +1096,56 @@ def load_config_and_state(args: argparse.Namespace) -> tuple[Path, MilestoneConf
     return repo, config, state
 
 
+def default_preflight_slice(config: MilestoneConfig) -> Mapping[str, Any]:
+    """Return the best no-GPT/bootstrap slice for this milestone.
+
+    The original M1-only workflow hard-coded m1-00-preflight.  M2 uses
+    m2-00-scaffold instead, and future milestones may choose a different name.
+    Prefer a milestone-prefixed 00/preflight slice, then any root no-GPT slice,
+    then the first declared slice.
+    """
+    slice_ids = set(config.slice_ids())
+    short = str(config.milestone).split("-")[-1]
+    preferred = [
+        f"{short}-00-preflight",
+        f"{short}-00-scaffold",
+        "m1-00-preflight",
+        "m2-00-scaffold",
+    ]
+    for slice_id in preferred:
+        if slice_id in slice_ids:
+            return config.get_slice(slice_id)
+    for slice_entry in config.slices:
+        if not slice_entry.get("depends_on") and int(slice_entry.get("max_gpt_attempts", 0) or 0) == 0:
+            return slice_entry
+    if config.slices:
+        return config.slices[0]
+    raise DriverError("worklist has no slices")
+
+
+def preflight_failure_is_workflow_config(failed: CommandResult, log_dir: Path) -> bool:
+    """True for automation/config failures that GPT should not be asked to fix."""
+    if failed.gate != "preflight:patch-invariants":
+        return False
+    report_path = log_dir / "preflight_patch_invariants_report.json"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+        except Exception:
+            report = None
+        if isinstance(report, dict) and str(report.get("category", "")) in {"workflow_config", "automation_config"}:
+            return True
+    tail = tail_file(failed.log_path, max_lines=80)
+    workflow_needles = [
+        "[vc4-preflight] ERROR:",
+        "unknown slice id:",
+        "missing worklist:",
+        "missing context profiles:",
+        "ambiguous slice id",
+    ]
+    return any(needle in tail for needle in workflow_needles)
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     repo, config, state = load_config_and_state(args)
     data = state.load()
@@ -1103,8 +1175,8 @@ def cmd_status(args: argparse.Namespace) -> int:
 
 def cmd_preflight(args: argparse.Namespace) -> int:
     repo, config, state = load_config_and_state(args)
-    slice_entry = config.get_slice("m1-00-preflight")
-    log_dir = state.root / "logs" / "m1-00-preflight" / "manual-preflight"
+    slice_entry = default_preflight_slice(config)
+    log_dir = state.root / "logs" / str(slice_entry["id"]) / "manual-preflight"
     ok, _results = run_slice_gates(
         config=config,
         slice_entry=slice_entry,
@@ -1162,6 +1234,12 @@ def cmd_context(args: argparse.Namespace) -> int:
     cmd = [
         sys.executable,
         str(context_script),
+        "--repo",
+        str(repo),
+        "--worklist",
+        str(config.worklist_path),
+        "--context-profiles",
+        str(config.context_profiles_path),
         "build",
         "--slice",
         args.slice,
