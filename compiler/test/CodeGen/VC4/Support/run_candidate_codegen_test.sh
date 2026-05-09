@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Generate, assemble, build, or run a VC4 codegen candidate bundle for a
-# hardware ground-truth test without mutating the checked-in reference bundle.
+# Generate, assemble, build, or run a VC4 codegen candidate program bundle for
+# a hardware ground-truth test without mutating the checked-in reference side.
 #
-# Usage:
-#   run_candidate_codegen_test.sh TEST_NAME generate
-#   run_candidate_codegen_test.sh TEST_NAME assemble
-#   run_candidate_codegen_test.sh TEST_NAME build
-#   run_candidate_codegen_test.sh TEST_NAME run
+# M2 additions:
+#   * VC4_CODEGEN_STATE_ROOT selects .vc4_auto/codegen_m2 cleanly.
+#   * manifest-v2 kernels[] are treated as the general case, including the
+#     single-kernel case.
+#   * every manifest-listed qasm_path is assembled to its code_symbol .c/.h.
+#   * candidate/<test>_candidate_harness.c is preferred when present, so M2
+#     CUDA-like device-pointer harnesses can coexist with immutable references.
 
 set -euo pipefail
 
@@ -16,10 +18,7 @@ usage: run_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|
 USAGE
 }
 
-if [[ $# -lt 2 ]]; then
-  usage
-  exit 2
-fi
+if [[ $# -lt 2 ]]; then usage; exit 2; fi
 
 TEST_NAME="$1"
 PHASE="$2"
@@ -35,46 +34,26 @@ TEST_ROOT="$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/$TEST_NAME"
 INPUT_MLIR="$TEST_ROOT/input.mlir"
 EXPECTED_JSON="$TEST_ROOT/expected.json"
 REFERENCE_DIR="$TEST_ROOT/reference"
-AUTO_ROOT="$REPO_ROOT/.vc4_auto/codegen_m1"
+CANDIDATE_DIR="$TEST_ROOT/candidate"
+AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/codegen_m1}"
+case "$AUTO_ROOT_RAW" in
+  /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
+  *) AUTO_ROOT="$REPO_ROOT/$AUTO_ROOT_RAW" ;;
+esac
 GENERATED_DIR="$AUTO_ROOT/candidates/$TEST_NAME"
 HARDWARE_ROOT="$AUTO_ROOT/hardware/$TEST_NAME"
 WORK_DIR="$HARDWARE_ROOT/candidate_work"
 
-log() {
-  printf '[vc4-candidate] %s\n' "$*"
-}
-
-fail() {
-  printf '[vc4-candidate] ERROR: %s\n' "$*" >&2
-  exit 1
-}
-
-relpath() {
-  local path="$1"
-  case "$path" in
-    "$REPO_ROOT"/*) printf '%s\n' "${path#$REPO_ROOT/}" ;;
-    *) printf '%s\n' "$path" ;;
-  esac
-}
-
-require_file() {
-  [[ -f "$1" ]] || fail "required file not found: $(relpath "$1")"
-}
-
-require_dir() {
-  [[ -d "$1" ]] || fail "required directory not found: $(relpath "$1")"
-}
+log() { printf '[vc4-candidate] %s\n' "$*"; }
+fail() { printf '[vc4-candidate] ERROR: %s\n' "$*" >&2; exit 1; }
+relpath() { case "$1" in "$REPO_ROOT"/*) printf '%s\n' "${1#$REPO_ROOT/}" ;; *) printf '%s\n' "$1" ;; esac; }
+require_file() { [[ -f "$1" ]] || fail "required file not found: $(relpath "$1")"; }
+require_dir() { [[ -d "$1" ]] || fail "required directory not found: $(relpath "$1")"; }
 
 find_tool() {
   local tool="$1"
-  if [[ -x "$REPO_ROOT/compiler/build/bin/$tool" ]]; then
-    printf '%s\n' "$REPO_ROOT/compiler/build/bin/$tool"
-    return 0
-  fi
-  if command -v "$tool" >/dev/null 2>&1; then
-    command -v "$tool"
-    return 0
-  fi
+  if [[ -x "$REPO_ROOT/compiler/build/bin/$tool" ]]; then printf '%s\n' "$REPO_ROOT/compiler/build/bin/$tool"; return 0; fi
+  if command -v "$tool" >/dev/null 2>&1; then command -v "$tool"; return 0; fi
   fail "could not find required tool: $tool"
 }
 
@@ -86,37 +65,34 @@ check_fixture() {
   require_file "$REFERENCE_DIR/Makefile"
   require_file "$REFERENCE_DIR/mailbox.c"
   require_file "$REFERENCE_DIR/mailbox.h"
-  require_dir "$TEST_ROOT/share"
+}
+
+share_source_dir() {
+  if [[ -d "$TEST_ROOT/share" ]]; then printf '%s\n' "$TEST_ROOT/share"; return 0; fi
+  if [[ -d "$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share" ]]; then
+    printf '%s\n' "$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share"; return 0
+  fi
+  return 1
+}
+
+copy_assembler_share_to() {
+  local dst_parent="$1" src
+  if src="$(share_source_dir)"; then
+    mkdir -p "$dst_parent"
+    rm -rf "$dst_parent/share"
+    cp -R "$src" "$dst_parent/share"
+  fi
 }
 
 copy_assembler_share() {
-  # vc4asm -c resolves ../share/vc4tmpl/template.h from the generated bundle
-  # directory.  Also provide ./share for older local assembler builds.
-  if [[ -d "$TEST_ROOT/share" ]]; then
-    mkdir -p "$AUTO_ROOT/candidates"
-    rm -rf "$AUTO_ROOT/candidates/share" "$GENERATED_DIR/share"
-    cp -R "$TEST_ROOT/share" "$AUTO_ROOT/candidates/share"
-    cp -R "$TEST_ROOT/share" "$GENERATED_DIR/share"
-  fi
-}
-
-copy_workdir_assembler_share() {
-  # The generated hardware workdir re-runs vc4asm from candidate_work.
-  # vc4asm -c resolves ../share/vc4tmpl/template.h from that directory,
-  # so provide HARDWARE_ROOT/share in addition to the generated-bundle share.
-  if [[ -d "$TEST_ROOT/share" ]]; then
-    mkdir -p "$HARDWARE_ROOT"
-    rm -rf "$HARDWARE_ROOT/share" "$WORK_DIR/share"
-    cp -R "$TEST_ROOT/share" "$HARDWARE_ROOT/share"
-    cp -R "$TEST_ROOT/share" "$WORK_DIR/share"
-  fi
+  copy_assembler_share_to "$GENERATED_DIR"
+  copy_assembler_share_to "$AUTO_ROOT/candidates"
 }
 
 check_generated_bundle() {
-  require_file "$GENERATED_DIR/kernel.qasm"
+  require_file "$GENERATED_DIR/manifest.json"
   require_file "$GENERATED_DIR/kernel_launch.c"
   require_file "$GENERATED_DIR/kernel_launch.h"
-  require_file "$GENERATED_DIR/manifest.json"
 }
 
 run_vc4_codegen() {
@@ -132,10 +108,7 @@ run_vc4_codegen() {
 
 ensure_generated() {
   check_fixture
-  if [[ -f "$GENERATED_DIR/kernel.qasm" && \
-        -f "$GENERATED_DIR/kernel_launch.c" && \
-        -f "$GENERATED_DIR/kernel_launch.h" && \
-        -f "$GENERATED_DIR/manifest.json" ]]; then
+  if [[ -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
     log "using existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
     copy_assembler_share
     return 0
@@ -143,94 +116,115 @@ ensure_generated() {
   run_vc4_codegen
 }
 
+manifest_kernel_records() {
+  require_file "$GENERATED_DIR/manifest.json"
+  python3 - "$GENERATED_DIR" <<'PY_RECORDS'
+import json, re, sys
+from pathlib import Path
+bundle = Path(sys.argv[1])
+data = json.loads((bundle / 'manifest.json').read_text())
+
+def ident(s):
+    s = re.sub(r'[^0-9A-Za-z_]', '_', str(s or ''))
+    if not s or not re.match(r'[A-Za-z_]', s[0]):
+        s = 'vc4_' + s
+    return s
+
+kernels = data.get('kernels')
+if isinstance(kernels, list):
+    for i, k in enumerate(kernels):
+        qasm = k.get('qasm_path') or ('kernel.qasm' if i == 0 else f'kernel_{i}.qasm')
+        code = k.get('code_symbol') or ident(k.get('public_name') or k.get('symbol_name') or f'kernel_{i}') + 'shader'
+        public = k.get('public_name') or k.get('symbol_name') or f'kernel_{i}'
+        print(f'{qasm}\t{code}\t{public}')
+else:
+    public = data.get('public_name') or data.get('c_entry_point') or data.get('kernel') or 'kernel'
+    print(f'kernel.qasm\tkernelshader\t{public}')
+PY_RECORDS
+}
+
 assemble_candidate() {
   ensure_generated
   local vc4asm_tool
   vc4asm_tool="$(find_tool vc4asm)"
-  log "assembling $(relpath "$GENERATED_DIR/kernel.qasm") as kernelshader.c/.h"
-  local out
-  if ! out="$(
-    (
-      cd "$GENERATED_DIR"
-      rm -f kernelshader.c kernelshader.h
-      "$vc4asm_tool" -c kernelshader.c -h kernelshader.h kernel.qasm
-    ) 2>&1
-  )"; then
-    printf '%s\n' "$out" >&2
-    fail "vc4asm failed for $TEST_NAME"
+  local records qasm_rel code_symbol public qasm_path out_c out_h out
+  mapfile -t records < <(manifest_kernel_records)
+  [[ "${#records[@]}" -ge 1 ]] || fail "manifest contains no kernels to assemble"
+  for record in "${records[@]}"; do
+    IFS=$'\t' read -r qasm_rel code_symbol public <<<"$record"
+    qasm_path="$GENERATED_DIR/$qasm_rel"
+    require_file "$qasm_path"
+    out_c="$GENERATED_DIR/${code_symbol}.c"
+    out_h="$GENERATED_DIR/${code_symbol}.h"
+    log "assembling $(relpath "$qasm_path") as ${code_symbol}.c/.h"
+    if ! out="$(
+      (
+        cd "$GENERATED_DIR" &&
+        rm -f "${code_symbol}.c" "${code_symbol}.h" &&
+        "$vc4asm_tool" -c "${code_symbol}.c" -h "${code_symbol}.h" "$qasm_rel"
+      ) 2>&1
+    )"; then
+      printf '%s\n' "$out" >&2
+      fail "vc4asm failed for $TEST_NAME kernel $public"
+    fi
+    if [[ -n "$out" ]]; then
+      printf '%s\n' "$out" >&2
+      fail "vc4asm produced unexpected output for $TEST_NAME kernel $public"
+    fi
+    require_file "$out_c"; require_file "$out_h"
+  done
+  # Compatibility aliases for existing one-kernel M1 harnesses.
+  if [[ "${#records[@]}" -eq 1 ]]; then
+    IFS=$'\t' read -r qasm_rel code_symbol public <<<"${records[0]}"
+    cp "$GENERATED_DIR/${code_symbol}.c" "$GENERATED_DIR/kernelshader.c"
+    cp "$GENERATED_DIR/${code_symbol}.h" "$GENERATED_DIR/kernelshader.h"
   fi
-  if [[ -n "$out" ]]; then
-    printf '%s\n' "$out" >&2
-    fail "vc4asm produced unexpected output for $TEST_NAME"
-  fi
-  require_file "$GENERATED_DIR/kernelshader.c"
-  require_file "$GENERATED_DIR/kernelshader.h"
 }
 
 extract_public_name() {
-  require_file "$GENERATED_DIR/manifest.json"
   python3 - "$GENERATED_DIR/manifest.json" <<'PY_PUBLIC'
-import json
-import sys
+import json, sys
 from pathlib import Path
-
-data = json.loads(Path(sys.argv[1]).read_text())
-public = data.get("public_name") or data.get("c_entry_point")
-if not isinstance(public, str) or not public:
-    launch = data.get("launch_abi")
-    if isinstance(launch, dict):
-        public = launch.get("public_name")
-if not isinstance(public, str) or not public:
-    raise SystemExit("manifest.json does not contain public_name or c_entry_point")
-print(public)
+m=json.loads(Path(sys.argv[1]).read_text())
+ks=m.get('kernels')
+if isinstance(ks, list) and len(ks)==1:
+    p=ks[0].get('public_name') or ks[0].get('symbol_name')
+else:
+    p=m.get('public_name') or m.get('c_entry_point') or m.get('kernel')
+if not isinstance(p,str) or not p:
+    raise SystemExit('manifest public name not found')
+print(p)
 PY_PUBLIC
-}
-
-c_identifier_from_string() {
-  python3 - "$1" <<'PY_IDENT'
-import re
-import sys
-value = sys.argv[1]
-value = re.sub(r"[^0-9A-Za-z_]", "_", value)
-if not value or not re.match(r"[A-Za-z_]", value[0]):
-    value = "vc4_" + value
-print(value)
-PY_IDENT
 }
 
 derive_kernel_base() {
   local public_name="$1"
-  if [[ "$public_name" == *_launch ]]; then
-    printf '%s\n' "${public_name%_launch}"
-  else
-    printf '%s\n' "$TEST_NAME"
-  fi
+  if [[ "$public_name" == *_launch ]]; then printf '%s\n' "${public_name%_launch}"; else printf '%s\n' "$public_name"; fi
 }
 
-find_reference_harness_basename() {
+select_harness_path() {
+  local candidate="$CANDIDATE_DIR/${TEST_NAME}_candidate_harness.c"
+  if [[ -f "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
+  local named="$CANDIDATE_DIR/${TEST_NAME}_harness.c"
+  if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
   local -a matches
   mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name '3-test-*.c' -print | sort)
-  if [[ "${#matches[@]}" -ne 1 ]]; then
-    fail "expected exactly one reference harness matching reference/3-test-*.c"
-  fi
-  basename "${matches[0]}"
-}
-
-install_public_launch_header() {
-  local kernel_base="$1"
-  local public_name="$2"
-  cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/${kernel_base}_launch.h"
-  : "$public_name"
+  if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
+  mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
+  if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
+  fail "could not find candidate/<test>_candidate_harness.c or exactly one reference harness"
 }
 
 write_candidate_makefile() {
   local harness_name="$1"
+  shift
+  local common_src="mailbox.c kernel_launch.c $*"
   cat > "$WORK_DIR/Makefile" <<EOF_MAKE
 LIBS += \$(CS240LX_2025_PATH)/lib/libgcc.a \$(CS240LX_2025_PATH)/libpi/libpi.a
 
 export OPT_LEVEL := -O3
 
-COMMON_SRC := mailbox.c kernel_launch.c kernelshader.c
+COMMON_SRC := ${common_src}
 
 PROGS := ${harness_name}
 
@@ -241,30 +235,16 @@ RUN ?= 0
 
 BOOTLOADER = pi-install
 EXCLUDE ?= grep -v simple_boot
-GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|VC4_TEST_RESULT\|NRF:'
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|VC4_TEST_RESULT\|VC4_RUNTIME_LAYOUT\|VC4_KERNEL_LAUNCH\|NRF:'
 include \$(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
 EOF_MAKE
 }
 
 write_workdir_run_sh() {
-  local kernel_base="$1"
-  local bin_name="$2"
+  local bin_name="$1"
   cat > "$WORK_DIR/run.sh" <<EOF_RUN
 #!/usr/bin/env bash
 set -euo pipefail
-
-if ! out=\$(vc4asm -c kernelshader.c -h kernelshader.h kernel.qasm 2>&1); then
-  echo "ASSEMBLY FAILED WITH OUTPUT" >&2
-  printf '%s\n' "\$out" >&2
-  exit 1
-fi
-if [[ -n "\$out" ]]; then
-  echo "ASSEMBLY PRODUCED UNEXPECTED OUTPUT" >&2
-  printf '%s\n' "\$out" >&2
-  exit 1
-fi
-cp kernelshader.c ${kernel_base}shader.c
-cp kernelshader.h ${kernel_base}shader.h
 
 echo "RUNNING MAKE"
 make RUN=0 ${bin_name}
@@ -277,50 +257,57 @@ EOF_RUN
 
 prepare_workdir() {
   assemble_candidate
-  local public_name kernel_base harness_name bin_name
-  public_name="$(extract_public_name)"
-  if ! [[ "$public_name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-    fail "generated public_name is not a valid C identifier: $public_name"
-  fi
-  kernel_base="$(derive_kernel_base "$public_name")"
-  if ! [[ "$kernel_base" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
-    fail "derived kernel base is not a valid C identifier: $kernel_base"
-  fi
-  harness_name="$(find_reference_harness_basename)"
+  local public_name kernel_base harness_path harness_name bin_name shader_sources
+  public_name="$(extract_public_name || true)"
+  kernel_base="$(derive_kernel_base "${public_name:-$TEST_NAME}")"
+  harness_path="$(select_harness_path)"
+  harness_name="$(basename "$harness_path")"
   bin_name="${harness_name%.c}.bin"
 
   log "preparing candidate workdir $(relpath "$WORK_DIR")"
   rm -rf "$WORK_DIR"
   mkdir -p "$WORK_DIR"
-  copy_workdir_assembler_share
+  copy_assembler_share_to "$HARDWARE_ROOT"
+  copy_assembler_share_to "$WORK_DIR"
 
-  write_candidate_makefile "$harness_name"
-  cp "$REFERENCE_DIR/$harness_name" "$WORK_DIR/$harness_name"
+  cp "$harness_path" "$WORK_DIR/$harness_name"
   cp "$REFERENCE_DIR/mailbox.c" "$WORK_DIR/mailbox.c"
   cp "$REFERENCE_DIR/mailbox.h" "$WORK_DIR/mailbox.h"
+  if [[ -f "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" ]]; then
+    cp "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" "$WORK_DIR/vc4_m2_candidate_test_helpers.h"
+  fi
 
-  cp "$GENERATED_DIR/kernel.qasm" "$WORK_DIR/kernel.qasm"
-  cp "$GENERATED_DIR/kernel.qasm" "$WORK_DIR/${kernel_base}.qasm"
+  cp "$GENERATED_DIR/manifest.json" "$WORK_DIR/manifest.json"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
-  cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
-  install_public_launch_header "$kernel_base" "$public_name"
-  cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/kernelshader.c"
-  cp "$GENERATED_DIR/kernelshader.h" "$WORK_DIR/kernelshader.h"
-  cp "$GENERATED_DIR/kernelshader.c" "$WORK_DIR/${kernel_base}shader.c"
-  cp "$GENERATED_DIR/kernelshader.h" "$WORK_DIR/${kernel_base}shader.h"
 
-  write_workdir_run_sh "$kernel_base" "$bin_name"
+  shader_sources=()
+  while IFS=$'\t' read -r qasm_rel code_symbol public; do
+    cp "$GENERATED_DIR/$qasm_rel" "$WORK_DIR/$(basename "$qasm_rel")"
+    cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${code_symbol}.c"
+    cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${code_symbol}.h"
+    shader_sources+=("${code_symbol}.c")
+    # Compatibility aliases for old reference harness fallback.
+    if [[ "${#shader_sources[@]}" -eq 1 ]]; then
+      cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/kernelshader.c"
+      cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/kernelshader.h"
+      cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${kernel_base}shader.c"
+      cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${kernel_base}shader.h"
+      cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
+      cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/${kernel_base}_launch.h"
+    fi
+  done < <(manifest_kernel_records)
+
+  write_candidate_makefile "$harness_name" "${shader_sources[@]}"
+  write_workdir_run_sh "$bin_name"
 
   cat > "$WORK_DIR/README.generated.md" <<EOF_README
 # Generated candidate hardware workdir
 
-This directory is generated by compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh.
-It is intentionally under .vc4_auto and should not be committed.
+Generated by compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh.
+This directory is under .vc4_auto and must not be committed.
 
 Test: $TEST_NAME
-Public launcher: $public_name
-Kernel base: $kernel_base
 Harness: $harness_name
 Binary: $bin_name
 EOF_README
@@ -330,52 +317,25 @@ EOF_README
 build_candidate() {
   prepare_workdir
   local harness_name bin_name
-  harness_name="$(find_reference_harness_basename)"
+  harness_name="$(basename "$(select_harness_path)")"
   bin_name="${harness_name%.c}.bin"
   log "building candidate binary in $(relpath "$WORK_DIR") without hardware execution"
-  (
-    cd "$WORK_DIR"
-    make RUN=0 "$bin_name"
-  )
+  (cd "$WORK_DIR" && make RUN=0 "$bin_name")
   require_file "$WORK_DIR/$bin_name"
 }
 
 run_candidate() {
   prepare_workdir
   log "running candidate hardware workdir $(relpath "$WORK_DIR")"
-  (
-    cd "$WORK_DIR"
-    bash run.sh
-  )
+  (cd "$WORK_DIR" && bash run.sh)
 }
 
 case "$PHASE" in
-  clean)
-    rm -rf "$GENERATED_DIR" "$HARDWARE_ROOT"
-    log "removed generated candidate state for $TEST_NAME"
-    ;;
-  generate)
-    check_fixture
-    run_vc4_codegen
-    ;;
-  assemble)
-    assemble_candidate
-    ;;
-  build)
-    build_candidate
-    ;;
-  run)
-    run_candidate
-    ;;
-  all)
-    run_candidate
-    ;;
-  workdir)
-    prepare_workdir
-    printf '%s\n' "$WORK_DIR"
-    ;;
-  *)
-    usage
-    exit 2
-    ;;
+  clean) rm -rf "$GENERATED_DIR" "$HARDWARE_ROOT"; log "removed generated candidate state for $TEST_NAME" ;;
+  generate) check_fixture; run_vc4_codegen ;;
+  assemble) assemble_candidate ;;
+  build) build_candidate ;;
+  run|all) run_candidate ;;
+  workdir) prepare_workdir; printf '%s\n' "$WORK_DIR" ;;
+  *) usage; exit 2 ;;
 esac

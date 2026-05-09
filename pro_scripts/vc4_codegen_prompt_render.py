@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render GPT Pro prompts for VC4 codegen Milestone 1 slices.
+"""Render GPT Pro prompts for VC4 codegen slices.
 
 This script combines a prompt template with a deterministic context pack.  It is
 called by vc4_codegen_m1_autorun.py immediately before invoking the unchanged
@@ -17,93 +17,19 @@ from typing import Any, Mapping
 
 try:
     from vc4_codegen_context_pack import render_context_pack
-    from vc4_codegen_contracts import build_repo_capabilities, render_capabilities_markdown
     from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, relpath, write_json_file
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from vc4_codegen_context_pack import render_context_pack  # type: ignore
-    from vc4_codegen_contracts import build_repo_capabilities, render_capabilities_markdown  # type: ignore
     from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, relpath, write_json_file  # type: ignore
 
 
-TEMPLATE_DIR = Path("pro_scripts/prompts/vc4_codegen_m1")
-
-SUPPORTED_TEMPLATE_KEYS = {
-    "GENERATED_AT_UTC",
-    "SLICE_ID",
-    "SLICE_TITLE",
-    "SLICE_INTENT",
-    "ALLOWED_PATHS",
-    "FORBIDDEN_PATHS",
-    "GATES",
-    "NON_GOALS",
-    "ATTEMPT",
-    "MODE",
-    "TEMPLATE_PATH",
-    "CONSTITUTION",
-    "OUTPUT_CONTRACT",
-    "SLICE_CONTRACT",
-    "CODEX_CONTRACT",
-    "RESPONSE_JSON_SCHEMA",
-    "FAILURE_PACKET_JSON",
-    "REPO_CAPABILITY_SNAPSHOT",
-    "REPO_CAPABILITIES",
-    "REPO_CAPABILITIES_MARKDOWN",
-    "REPO_CAPABILITIES_JSON",
-    "ARTIFACT_PREFIX",
-    "BUNDLE_ZIP_FILENAME",
-    "APPLY_SCRIPT_FILENAME",
-    "DOWNLOAD_CONTRACT_JSON",
-    "DOWNLOAD_CONTRACT_MARKDOWN",
-    "CONTEXT_PACK",
-    "CONTEXT_METADATA_JSON",
-    # Codex mechanical prompt placeholders are validated here too. They are
-    # rendered by vc4_codegen_m1_autorun.py, not by this GPT renderer.
-    "FAILED_GATE",
-    "FAILED_COMMAND",
-    "FAILED_LOG_TAIL",
-}
+DEFAULT_TEMPLATE_DIR = Path("pro_scripts/prompts/vc4_codegen_m1")
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-
-def artifact_stamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-
-
-def safe_artifact_component(value: str) -> str:
-    out: list[str] = []
-    for ch in value:
-        out.append(ch if ch.isalnum() or ch in {"-", "_", "."} else "-")
-    return "".join(out).strip("-._") or "slice"
-
-
-def build_download_contract(slice_id: str, attempt: int) -> dict[str, Any]:
-    prefix = (
-        f"vc4_codegen_m1__{safe_artifact_component(slice_id)}__"
-        f"attempt-{attempt:02d}__{artifact_stamp()}"
-    )
-    return {
-        "schema_version": 1,
-        "transport": "vc4_codegen_download_bundle_v1",
-        "artifact_prefix": prefix,
-        "bundle_zip": f"{prefix}.zip",
-        "apply_script": f"{prefix}.sh",
-    }
-
-
-def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
-    return "\n".join([
-        "## Required downloadable artifact names",
-        "",
-        f"Artifact prefix: `{contract['artifact_prefix']}`",
-        f"Bundle zip: `{contract['bundle_zip']}`",
-        f"Apply script: `{contract['apply_script']}`",
-        "",
-        "The local driver looks for these exact filenames in ChatGPT downloads / `~/Downloads` after the response settles.",
-    ]) + "\n"
 
 def fenced(text: str, language: str = "") -> str:
     return f"````{language}\n{text.rstrip()}\n````"
@@ -119,7 +45,18 @@ def markdown_list(items: Any, *, code: bool = True) -> str:
     return "\n".join(out)
 
 
-def load_template(repo: Path, mode: str) -> tuple[Path, str]:
+def template_dir_for_config(config: MilestoneConfig) -> Path:
+    defaults = config.defaults if isinstance(config.defaults, dict) else {}
+    raw = defaults.get("prompt_template_dir")
+    if isinstance(raw, str) and raw:
+        return Path(raw)
+    milestone = str(config.milestone)
+    if milestone.endswith("m2") or "m2" in milestone:
+        return Path("pro_scripts/prompts/vc4_codegen_m2")
+    return DEFAULT_TEMPLATE_DIR
+
+
+def load_template(repo: Path, mode: str, template_dir: Path) -> tuple[Path, str]:
     mapping = {
         "initial": "gpt_slice_prompt.md.j2",
         "failure": "gpt_failure_prompt.md.j2",
@@ -128,7 +65,7 @@ def load_template(repo: Path, mode: str) -> tuple[Path, str]:
     name = mapping.get(mode)
     if not name:
         raise DriverError(f"unknown prompt mode: {mode}")
-    path = repo / TEMPLATE_DIR / name
+    path = repo / template_dir / name
     if not path.exists():
         raise DriverError(f"missing prompt template: {relpath(repo, path)}")
     return path, path.read_text(encoding="utf-8")
@@ -161,124 +98,6 @@ def response_schema(mode: str) -> str:
     return fenced(json.dumps(schema, indent=2, sort_keys=True), "json")
 
 
-
-SOURCE_PRODUCT_FILE_KEYS = (
-    "required_source_files",
-    "required_existing_files",
-    "support_files",
-    "semantic_oracle_files",
-)
-SOURCE_PRODUCT_MAPPING_KEYS = (
-    "candidate_input_files",
-    "candidate_fixture_inputs",
-    "hardware_fixture_inputs",
-)
-SOURCE_PRODUCT_GLOB_KEYS = (
-    "required_source_globs",
-    "lit_test_globs",
-)
-
-
-def _extend_unique(dst: list[str], values: list[str]) -> None:
-    seen = set(dst)
-    for value in values:
-        if value not in seen:
-            dst.append(value)
-            seen.add(value)
-
-
-def _load_json_if_present(path: Path) -> dict[str, Any]:
-    if not path.exists():
-        return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
-    return value if isinstance(value, dict) else {}
-
-
-def _spec_slice(spec: Mapping[str, Any], slice_id: str) -> Mapping[str, Any]:
-    raw = spec.get("slices")
-    if isinstance(raw, Mapping):
-        value = raw.get(slice_id)
-        return value if isinstance(value, Mapping) else {}
-    if isinstance(raw, list):
-        for item in raw:
-            if isinstance(item, Mapping) and item.get("id") == slice_id:
-                return item
-    return {}
-
-
-def _worklist_source_products(slice_entry: Mapping[str, Any]) -> tuple[list[str], list[str]]:
-    products = slice_entry.get("products") if isinstance(slice_entry.get("products"), Mapping) else {}
-    files: list[str] = []
-    globs: list[str] = []
-    for key in SOURCE_PRODUCT_FILE_KEYS:
-        value = products.get(key)
-        if isinstance(value, str):
-            _extend_unique(files, [value])
-        elif isinstance(value, list):
-            _extend_unique(files, [str(x) for x in value])
-    for key in SOURCE_PRODUCT_MAPPING_KEYS:
-        value = products.get(key)
-        if isinstance(value, Mapping):
-            _extend_unique(files, [str(x) for x in value.values() if isinstance(x, str)])
-    for key in SOURCE_PRODUCT_GLOB_KEYS:
-        value = products.get(key)
-        if isinstance(value, str):
-            _extend_unique(globs, [value])
-        elif isinstance(value, list):
-            _extend_unique(globs, [str(x) for x in value])
-    return files, globs
-
-
-def render_typed_verifier_contract(repo: Path, config: MilestoneConfig, slice_entry: Mapping[str, Any]) -> str:
-    """Render the exact deterministic products/verifications for the prompt."""
-    slice_id = str(slice_entry.get("id", ""))
-    files, globs = _worklist_source_products(slice_entry)
-    spec = _load_json_if_present(repo / "pro_scripts/vc4_codegen_m1_verifications.json")
-    sspec = _spec_slice(spec, slice_id)
-    verifications = sspec.get("verifications") if isinstance(sspec.get("verifications"), list) else []
-
-    lines: list[str] = [
-        "## Typed deterministic verifier contract",
-        "",
-        "The central typed verifier is the final source of truth for this slice. A patch is incomplete unless these exact products and typed verifications pass.",
-        "Do not substitute nearby filenames, prefixes, or semantically similar test names for the exact source-product paths below.",
-        "",
-        "### Exact source products from the worklist",
-    ]
-    if files:
-        lines.append("Required files:")
-        for path in files:
-            lines.append(f"- `{path}`")
-    else:
-        lines.append("Required files: <none>")
-    if globs:
-        lines.append("Required globs:")
-        for pattern in globs:
-            lines.append(f"- `{pattern}`")
-    else:
-        lines.append("Required globs: <none>")
-
-    lines += ["", "### Typed verifier checks"]
-    if not verifications:
-        lines.append("- <no typed verifier entries found>")
-    else:
-        for v in verifications:
-            if not isinstance(v, Mapping):
-                continue
-            vid = str(v.get("id", "<missing-id>"))
-            mech = str(v.get("mechanism", "<missing-mechanism>"))
-            desc = str(v.get("description", "")).strip()
-            lines.append(f"- `{vid}` via `{mech}`" + (f": {desc}" if desc else ""))
-            for key in ("files", "globs", "input", "output_dir", "candidate", "phase", "path", "lit_path", "target", "expected_json", "log"):
-                if key in v:
-                    value = v[key]
-                    rendered = json.dumps(value, sort_keys=True) if isinstance(value, (dict, list)) else str(value)
-                    lines.append(f"  - `{key}`: `{rendered}`")
-    return "\n".join(lines).rstrip() + "\n"
-
 def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     if not failure_packet:
         return "<no failure packet supplied>"
@@ -290,33 +109,6 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     except Exception as exc:
         return f"<failure packet parse error: {exc}>"
     return fenced(json.dumps(data, indent=2, sort_keys=True), "json")
-
-
-def discover_template_placeholders(template: str) -> set[str]:
-    import re
-    return {m.group(1) for m in re.finditer(r"\{\{([A-Z0-9_]+)\}\}", template)}
-
-
-def validate_prompt_templates(repo: Path) -> dict[str, Any]:
-    templates = sorted((repo / TEMPLATE_DIR).glob("*.md.j2"))
-    reports: list[dict[str, Any]] = []
-    missing: dict[str, list[str]] = {}
-    supported = set(SUPPORTED_TEMPLATE_KEYS)
-    for path in templates:
-        rel = relpath(repo, path)
-        placeholders = sorted(discover_template_placeholders(path.read_text(encoding="utf-8", errors="replace")))
-        unresolved = sorted(set(placeholders) - supported)
-        if unresolved:
-            missing[rel] = unresolved
-        reports.append({"path": rel, "placeholders": placeholders, "unsupported": unresolved})
-    return {
-        "schema_version": 1,
-        "ok": not missing,
-        "template_count": len(templates),
-        "supported_keys": sorted(supported),
-        "templates": reports,
-        "unsupported_placeholders": missing,
-    }
 
 
 def simple_render(template: str, values: Mapping[str, str]) -> str:
@@ -346,7 +138,8 @@ def render_prompt(
     metadata_out: Path | None = None,
 ) -> str:
     slice_entry = config.get_slice(slice_id)
-    template_path, template = load_template(repo, mode)
+    template_dir = template_dir_for_config(config)
+    template_path, template = load_template(repo, mode, template_dir)
     context_pack, context_meta = render_context_pack(
         repo=repo,
         config=config,
@@ -357,19 +150,13 @@ def render_prompt(
         allow_large_context=allow_large_context,
         metadata_out=metadata_out,
     )
-    typed_contract = render_typed_verifier_contract(repo, config, slice_entry)
-    context_pack = typed_contract.rstrip() + "\n\n" + context_pack
     if context_out:
         context_out.parent.mkdir(parents=True, exist_ok=True)
         context_out.write_text(context_pack, encoding="utf-8")
-    output_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/output_contract.md")
-    slice_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/slice_contract.md")
-    constitution = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/constitution.md")
-    codex_contract = load_optional_file(repo, "pro_scripts/prompts/vc4_codegen_m1/codex_contract.md")
-
-    repo_capabilities = build_repo_capabilities(repo)
-    repo_capability_snapshot = repo_capabilities
-    download_contract = build_download_contract(slice_id, attempt)
+    output_contract = load_optional_file(repo, str(template_dir / "output_contract.md"))
+    slice_contract = load_optional_file(repo, str(template_dir / "slice_contract.md"))
+    constitution = load_optional_file(repo, str(template_dir / "constitution.md"))
+    codex_contract = load_optional_file(repo, str(template_dir / "codex_contract.md"))
 
     values = {
         "GENERATED_AT_UTC": utc_now(),
@@ -389,19 +176,8 @@ def render_prompt(
         "CODEX_CONTRACT": codex_contract.rstrip(),
         "RESPONSE_JSON_SCHEMA": response_schema(mode),
         "FAILURE_PACKET_JSON": failure_packet_json(repo, failure_packet),
-        "REPO_CAPABILITY_SNAPSHOT": fenced(json.dumps(repo_capability_snapshot, indent=2, sort_keys=True), "json"),
-        # Backward-compatible alias for older templates. Keep this provider
-        # even after templates migrate to the explicit MARKDOWN/JSON split.
-        "REPO_CAPABILITIES": render_capabilities_markdown(repo_capabilities),
         "CONTEXT_PACK": context_pack.rstrip(),
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
-        "REPO_CAPABILITIES_MARKDOWN": render_capabilities_markdown(repo_capabilities),
-        "REPO_CAPABILITIES_JSON": fenced(json.dumps(repo_capabilities, indent=2, sort_keys=True), "json"),
-        "ARTIFACT_PREFIX": str(download_contract["artifact_prefix"]),
-        "BUNDLE_ZIP_FILENAME": str(download_contract["bundle_zip"]),
-        "APPLY_SCRIPT_FILENAME": str(download_contract["apply_script"]),
-        "DOWNLOAD_CONTRACT_JSON": fenced(json.dumps(download_contract, indent=2, sort_keys=True), "json"),
-        "DOWNLOAD_CONTRACT_MARKDOWN": render_download_contract_markdown(download_contract),
     }
     return simple_render(template, values)
 

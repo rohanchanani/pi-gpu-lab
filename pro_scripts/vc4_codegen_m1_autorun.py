@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic orchestrator for VC4 codegen Milestone 1.
+"""Deterministic orchestrator for VC4 codegen milestones.
 
 Stage 2 installs the core controller.  It can already run status/preflight/gates
 for the Stage 1 worklist.  GPT prompt rendering is intentionally deferred to
@@ -116,6 +116,8 @@ def render_prompt(
     out_path: Path,
     failure_packet: Path | None = None,
     verbose: bool = False,
+    worklist_path: Path | None = None,
+    context_profiles_path: Path | None = None,
 ) -> None:
     renderer = prompt_renderer_path(repo)
     if not renderer.exists():
@@ -123,7 +125,11 @@ def render_prompt(
             "Stage 3 prompt renderer is not installed yet: "
             f"{relpath(repo, renderer)}. Run only status/preflight/gates until Stage 3 is installed."
         )
-    cmd = [sys.executable, str(renderer), "--slice", slice_id, "--attempt", str(attempt), "--mode", mode, "--out", str(out_path)]
+    cmd = [sys.executable, str(renderer), "--repo", str(repo), "--slice", slice_id, "--attempt", str(attempt), "--mode", mode, "--out", str(out_path)]
+    if worklist_path is not None:
+        cmd += ["--worklist", str(worklist_path)]
+    if context_profiles_path is not None:
+        cmd += ["--context-profiles", str(context_profiles_path)]
     if failure_packet:
         cmd += ["--failure-packet", str(failure_packet)]
     log_path = out_path.with_suffix(out_path.suffix + ".render.log")
@@ -626,6 +632,8 @@ def run_gpt_slice(
             out_path=paths.prompt_path,
             failure_packet=failure_packet,
             verbose=verbose,
+            worklist_path=config.worklist_path,
+            context_profiles_path=config.context_profiles_path,
         )
         log(f"prompt: {relpath(config.repo, paths.prompt_path)}")
 
@@ -1165,6 +1173,8 @@ def cmd_render_prompt(args: argparse.Namespace) -> int:
         out_path=out,
         failure_packet=failure_packet,
         verbose=args.verbose,
+        worklist_path=config.worklist_path,
+        context_profiles_path=config.context_profiles_path,
     )
     log(f"prompt: {relpath(repo, out)}")
     return 0

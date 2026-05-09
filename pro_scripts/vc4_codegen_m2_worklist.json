@@ -1,0 +1,722 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m2",
+  "title": "Milestone 2: complete scheduled-VC4 backend/runtime program bundles",
+  "locked_goal": "Finish the backend for already-scheduled vc4 QPU kernels: manifest v2 program bundles, multi-kernel code arrays, persistent program image, heap-backed CUDA-like memory API, CUDA-like launch ABI, and runtime schedulers for independent-vector and cooperative-block scheduled kernels.",
+  "defaults": {
+    "repo_script_dir": "pro_scripts",
+    "gpt_web_driver": "pro_scripts/gpt_web_driver.js",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/codegen_m2",
+    "candidate_state_root": ".vc4_auto/codegen_m2",
+    "typed_verifier_script": "pro_scripts/vc4_codegen_m1_verifier.py",
+    "verification_spec": "pro_scripts/vc4_codegen_m2_verifications.json",
+    "prompt_template_dir": "pro_scripts/prompts/vc4_codegen_m2",
+    "auto_commit_on_pass": true,
+    "hardware_gates_required_by_default": true,
+    "gpt_output_files": [
+      "artifact_transport.json",
+      "bundle.zip",
+      "apply_bundle.sh"
+    ],
+    "build_commands": {
+      "build_vc4_opt": "ninja -C compiler/build vc4-opt",
+      "check_vc4": "ninja -C compiler/build check-vc4"
+    },
+    "required_verifier_pipeline": [
+      "--vc4-verify-emit-contract",
+      "--vc4-verify-scheduled-hardware-rules",
+      "--vc4-verify-scheduled-adjacent-hazards",
+      "--vc4-verify-scheduled-io-spacing",
+      "--vc4-verify-scheduled-peripheral-accesses"
+    ],
+    "forbidden_paths": [
+      "compiler/test/CodeGen/VC4/catalog.json",
+      "pro_scripts/gpt_web_driver.js",
+      ".vc4_auto/**",
+      "compiler/test/**/Output/**",
+      "compiler/test/**/.lit_test_times.txt",
+      "compiler/test/**/run.log"
+    ],
+    "path_policy": {
+      "paths_are_repo_relative": true,
+      "reject_absolute_paths": true,
+      "reject_parent_directory_components": true,
+      "reject_binary_patches": true,
+      "reject_existing_reference_bundle_mutation": true,
+      "reject_existing_expected_json_mutation": true,
+      "reject_catalog_mutation_by_default": true
+    },
+    "gate_environment_contract": {
+      "path_prefix": [
+        "compiler/build/bin"
+      ],
+      "candidate_state_root_env": "VC4_CODEGEN_STATE_ROOT=.vc4_auto/codegen_m2",
+      "lit_run_line_contract": "Every %token in changed RUN lines must be defined by lit config or be a lit builtin."
+    },
+    "gpt_output_transport": "download_bundle",
+    "download_bundle_transport": {
+      "schema_version": 1,
+      "transport": "vc4_codegen_download_bundle_v1",
+      "staged_files": [
+        "artifact_transport.json",
+        "bundle.zip",
+        "apply_bundle.sh"
+      ],
+      "zip_layout": [
+        "manifest.json",
+        "repo/<repo-relative changed files>"
+      ],
+      "trusted_applier": "pro_scripts/vc4_codegen_download_bundle_apply.py",
+      "legacy_patch_transport_retained": true
+    },
+    "test_design_contract": {
+      "vc4_codegen_verifies_before_emission": true,
+      "generated_lit_side_effects_forbidden": [
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt"
+      ],
+      "single_kernel_is_program_bundle_with_one_kernel": true,
+      "public_launch_abi_is_cuda_like_no_implicit_host_copies": true
+    }
+  },
+  "slices": [
+    {
+      "id": "m2-00-scaffold",
+      "title": "M2 verifier/worklist scaffold",
+      "depends_on": [],
+      "context_profile": "m2_scaffold",
+      "intent": "Install the cumulative M2 orchestration layer: M2 worklist/spec/context/prompts/docs, cumulative typed verifier mechanisms, and support-script plumbing for .vc4_auto/codegen_m2 without changing backend semantics.",
+      "non_goals": [
+        "Do not change emitter/runtime semantics in this slice.",
+        "Do not add M2 tests yet; that is the next stage."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-00-scaffold"
+      ],
+      "hardware_required": false,
+      "codex_policy": "never",
+      "max_gpt_attempts": 0,
+      "max_codex_attempts": 0,
+      "commit_message": "vc4 codegen m2: add orchestration and verifier scaffold",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "pro_scripts/vc4_codegen_m2_worklist.json",
+          "pro_scripts/vc4_codegen_m2_verifications.json",
+          "pro_scripts/vc4_codegen_m2_context_profiles.json",
+          "pro_scripts/vc4_codegen_m1_verifier.py",
+          "pro_scripts/vc4_codegen_m2_verifier.py",
+          "pro_scripts/prompts/vc4_codegen_m2/constitution.md",
+          "pro_scripts/prompts/vc4_codegen_m2/output_contract.md",
+          "pro_scripts/prompts/vc4_codegen_m2/slice_contract.md",
+          "compiler/docs/codegen/vc4-codegen-m2-plan.md",
+          "compiler/docs/codegen/vc4-artifact-manifest-v2.md",
+          "compiler/docs/codegen/vc4-runtime-abi.md",
+          "compiler/docs/codegen/vc4-m2-test-matrix.md",
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h",
+          "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py",
+          "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-00-scaffold"
+      ]
+    },
+    {
+      "id": "m2-01-manifest-v2",
+      "title": "Manifest v2 general program artifacts",
+      "depends_on": [
+        "m2-00-scaffold"
+      ],
+      "context_profile": "manifest_v2",
+      "intent": "vc4-codegen emits manifest schema v2 with kernels[] for one or more scheduled kernels; a single kernel is represented as kernels.length == 1.",
+      "non_goals": [
+        "Do not implement persistent runtime layout yet.",
+        "Do not special-case one-kernel programs."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-01-manifest-v2"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: manifest v2 general program artifacts",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-public-name.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-code-symbol.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-01-manifest-v2"
+      ]
+    },
+    {
+      "id": "m2-02-program-bundle-assembly",
+      "title": "Program bundle assembly support",
+      "depends_on": [
+        "m2-01-manifest-v2"
+      ],
+      "context_profile": "program_bundle",
+      "intent": "Support scripts and verifier assemble every manifest-listed kernel qasm_path and produce one code array per kernel using code_symbol; one-kernel bundles use the same path.",
+      "non_goals": [
+        "Do not implement heap or launch ABI conversion yet."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-02-program-bundle-assembly"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: program bundle assembly support",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/input.mlir",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/expected.json",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/run.sh",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/candidate/run.sh"
+        ],
+        "support_files": [
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-02-program-bundle-assembly"
+      ]
+    },
+    {
+      "id": "m2-03-persistent-program-layout",
+      "title": "Persistent program image and layout.json",
+      "depends_on": [
+        "m2-02-program-bundle-assembly"
+      ],
+      "context_profile": "persistent_layout",
+      "intent": "Generated runtime creates one persistent device-visible program allocation with descriptor table, per-kernel code/uniform/unif_ptr regions, and layout.json with non-overlapping aligned regions.",
+      "non_goals": [
+        "Do not expose vc4Malloc yet."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-03-persistent-program-layout"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: persistent program image and layout.json",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-03-persistent-program-layout"
+      ]
+    },
+    {
+      "id": "m2-04-device-heap",
+      "title": "Device heap in persistent allocation",
+      "depends_on": [
+        "m2-03-persistent-program-layout"
+      ],
+      "context_profile": "device_heap",
+      "intent": "Expose vc4Malloc/vc4Free/vc4Memcpy*/vc4MemsetD8 backed by a heap carved from the persistent program image; generated code no longer uses static user buffers.",
+      "non_goals": [
+        "Do not generate public host-copy wrappers."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-04-device-heap"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: device heap in persistent allocation",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c",
+          "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c",
+          "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-04-device-heap"
+      ]
+    },
+    {
+      "id": "m2-05-cuda-like-launch-abi",
+      "title": "CUDA-like launch ABI without copy wrapper",
+      "depends_on": [
+        "m2-04-device-heap"
+      ],
+      "context_profile": "cuda_like_abi",
+      "intent": "Generated launch headers take struct vc4_program*, vc4_dim3 grid/block, vc4_deviceptr_t buffers, and by-value scalars; launches pack uniforms/enqueue hardware but never allocate/copy/free user buffers.",
+      "non_goals": [
+        "Do not implement gpu dialect lowering.",
+        "Do not generate convenience wrappers that copy host buffers."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-05-cuda-like-launch-abi"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: cuda-like launch abi without copy wrapper",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir",
+          "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-05-cuda-like-launch-abi"
+      ]
+    },
+    {
+      "id": "m2-06-multi-kernel-chain-hardware",
+      "title": "First true multi-kernel hardware program",
+      "depends_on": [
+        "m2-05-cuda-like-launch-abi"
+      ],
+      "context_profile": "multi_kernel_hw",
+      "intent": "A new hardware fixture compiles to one program image with at least two kernels, launches them sequentially using the same heap buffer, and validates final output.",
+      "non_goals": [
+        "Do not mutate existing fixture reference bundles."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-06-multi-kernel-chain-hardware"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: first true multi-kernel hardware program",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh"
+        ],
+        "semantic_oracle_files": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/expected.json"
+        ],
+        "required_source_globs": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/**"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-06-multi-kernel-chain-hardware"
+      ]
+    },
+    {
+      "id": "m2-07-independent-vector-scheduler",
+      "title": "Independent-vector runtime scheduler",
+      "depends_on": [
+        "m2-06-multi-kernel-chain-hardware"
+      ],
+      "context_profile": "independent_vector",
+      "intent": "For schedule_mode=independent_vector, runtime launches logical QPU requests in waves, packs logical IDs/tail metadata via uniforms, and avoids physical QPU indexing for work assignment.",
+      "non_goals": [
+        "Do not lower gpu.thread_id or generate kernel predicate code."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-07-independent-vector-scheduler"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: independent-vector runtime scheduler",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-07-independent-vector-scheduler"
+      ]
+    },
+    {
+      "id": "m2-08-cooperative-block-scheduler",
+      "title": "Cooperative-block runtime resource scheduler",
+      "depends_on": [
+        "m2-07-independent-vector-scheduler"
+      ],
+      "context_profile": "cooperative_block",
+      "intent": "For schedule_mode=cooperative_block, runtime enforces full block residency, assigns VPM/semaphore resources per resident block, and rejects impossible launches before enqueue.",
+      "non_goals": [
+        "Do not synthesize barrier protocol from structured IR; that is M3."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-08-cooperative-block-scheduler"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: cooperative-block runtime resource scheduler",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-08-cooperative-block-scheduler"
+      ]
+    },
+    {
+      "id": "m2-09-memory-subsystem-matrix",
+      "title": "Memory subsystem fixture matrix",
+      "depends_on": [
+        "m2-08-cooperative-block-scheduler"
+      ],
+      "context_profile": "fixture_matrix",
+      "intent": "Backend passes the curated scheduled-VC4 matrix for TMU, SFU, VPM/VDW, tail, and reduction paths, or emits deterministic unsupported diagnostics for out-of-scope features.",
+      "non_goals": [
+        "Do not count M3 structured lowering fixtures as M2 failures."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-09-memory-subsystem-matrix"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: memory subsystem fixture matrix",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {},
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-09-memory-subsystem-matrix"
+      ]
+    },
+    {
+      "id": "m2-10-final-acceptance",
+      "title": "Final M2 acceptance",
+      "depends_on": [
+        "m2-09-memory-subsystem-matrix"
+      ],
+      "context_profile": "final_acceptance",
+      "intent": "All required M2 fixture matrices pass or are explicitly unsupported; no single-kernel assumptions, static user buffers, per-launch code upload, or public host-copy wrappers remain.",
+      "non_goals": [
+        "Do not start gpu dialect lowering in this slice."
+      ],
+      "allowed_paths": [
+        "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Target/VC4/**",
+        "compiler/tools/vc4-codegen/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/test/CodeGen/VC4/Runtime/**",
+        "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_codegen_m1_verifier.py",
+        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_codegen_m2_worklist.json",
+        "pro_scripts/vc4_codegen_m2_verifications.json",
+        "pro_scripts/vc4_codegen_m2_context_profiles.json",
+        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_codegen_prompt_render.py",
+        "pro_scripts/vc4_codegen_gate_runner.py",
+        "pro_scripts/prompts/vc4_codegen_m2/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-10-final-acceptance"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 codegen m2: final m2 acceptance",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {},
+      "success_probes": [
+        "build:vc4-codegen",
+        "typed-verifier:m2-10-final-acceptance"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+You are Codex acting as a narrow mechanical patcher for VC4 codegen Milestone 2.
+
+Slice: {{SLICE_ID}} — {{SLICE_TITLE}}
+
+Failed gate: {{FAILED_GATE}}
+
+Allowed paths:
+{{ALLOWED_PATHS}}
+
+Forbidden paths:
+{{FORBIDDEN_PATHS}}
+
+Rules:
+- Fix only the mechanical compile/build issue shown by the failed command/log.
+- Do not change qasm semantics.
+- Do not change launch ABI semantics.
+- Do not change hardware behavior.
+- Do not touch reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, or .vc4_auto.
+- Do not refactor.
+- Make the smallest local change needed.
+
+Failed command:
+{{FAILED_COMMAND}}
+
+Log tail:
+````text
+{{FAILED_LOG_TAIL}}
+````

@@ -303,10 +303,12 @@ class GateRunner:
         )
 
     def _typed_verifier_script(self) -> Path:
-        return self.repo / "pro_scripts/vc4_codegen_m1_verifier.py"
+        raw = self.config.defaults.get("typed_verifier_script", "pro_scripts/vc4_codegen_m1_verifier.py")
+        return self.repo / str(raw)
 
     def _typed_verifier_spec(self) -> Path:
-        return self.repo / "pro_scripts/vc4_codegen_m1_verifications.json"
+        raw = self.config.defaults.get("verification_spec", "pro_scripts/vc4_codegen_m1_verifications.json")
+        return self.repo / str(raw)
 
     def run_typed_verifier(
         self,

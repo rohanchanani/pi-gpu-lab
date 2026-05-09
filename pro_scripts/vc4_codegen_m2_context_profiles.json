@@ -1,0 +1,464 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m2",
+  "defaults": {
+    "max_chars": 160000,
+    "always_include": [
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_codegen_m2/constitution.md"
+      },
+      {
+        "kind": "worklist_slice"
+      },
+      {
+        "kind": "output_contract",
+        "path": "pro_scripts/prompts/vc4_codegen_m2/output_contract.md"
+      },
+      {
+        "kind": "slice_contract",
+        "path": "pro_scripts/prompts/vc4_codegen_m2/slice_contract.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4-codegen-m2-plan.md"
+      }
+    ],
+    "failure_includes": [
+      {
+        "kind": "failure_packet"
+      },
+      {
+        "kind": "git_diff_summary"
+      },
+      {
+        "kind": "changed_files_excerpt"
+      }
+    ]
+  },
+  "profiles": {
+    "m2_scaffold": {
+      "max_chars": 120000,
+      "purpose": "Install M2 orchestration/verifier scaffolding only.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_verifier.py"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_worklist.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m1_context_profiles.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ]
+    },
+    "manifest_v2": {
+      "max_chars": 160000,
+      "purpose": "Implement manifest schema v2 and multi-kernel metadata.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        }
+      ],
+      "extractors": [
+        "launch_abi_summary",
+        "scheduled_sink_summary"
+      ]
+    },
+    "program_bundle": {
+      "max_chars": 160000,
+      "purpose": "General bundle assembly and support-script behavior.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "persistent_layout": {
+      "max_chars": 160000,
+      "purpose": "Persistent program allocation and layout.json.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "device_heap": {
+      "max_chars": 160000,
+      "purpose": "Heap allocator and copy API in generated runtime.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "cuda_like_abi": {
+      "max_chars": 160000,
+      "purpose": "CUDA-like public launch ABI and no implicit copy wrapper.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        }
+      ],
+      "extractors": [
+        "launch_abi_summary"
+      ]
+    },
+    "multi_kernel_hw": {
+      "max_chars": 160000,
+      "purpose": "Create first true multi-kernel hardware fixture.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "independent_vector": {
+      "max_chars": 160000,
+      "purpose": "Runtime scheduler for independent-vector kernels.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "cooperative_block": {
+      "max_chars": 160000,
+      "purpose": "Runtime scheduler/resource allocator for cooperative-block kernels.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "fixture_matrix": {
+      "max_chars": 160000,
+      "purpose": "Curated M2 fixture matrix hardening.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        }
+      ],
+      "extractors": [
+        "existing_codegen_files"
+      ]
+    },
+    "final_acceptance": {
+      "max_chars": 160000,
+      "purpose": "Final M2 acceptance and cleanup.",
+      "include": [
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+          "focus": [
+            "manifest",
+            "layout",
+            "kernel_launch",
+            "QASM",
+            "launch ABI"
+          ]
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "focus": [
+            "VC4_ModuleOp",
+            "VC4_FuncOp",
+            "vc4.qpu",
+            "launch_abi"
+          ]
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary",
+        "existing_codegen_files"
+      ]
+    }
+  }
+}

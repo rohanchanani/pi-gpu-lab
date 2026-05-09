@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Typed deterministic verifier for VC4 Codegen Milestone 1 slices.
+"""Typed deterministic verifier for VC4 Codegen Milestones 1 and 2 slices.
 
 The verifier consumes a declarative JSON spec whose top-level ``slices`` map
 contains a list of typed ``verifications`` for each slice.  Each verification
@@ -138,6 +138,15 @@ class VerifierContext:
         if isinstance(path_prefix, list):
             prefix_paths = [str((self.repo / p).resolve()) for p in path_prefix]
             self.env["PATH"] = os.pathsep.join(prefix_paths + [self.env.get("PATH", "")])
+
+        # Candidate support scripts are shared by M1 and M2.  M1 defaults to
+        # .vc4_auto/codegen_m1; M2 specs set candidate_state_root to
+        # .vc4_auto/codegen_m2 so fixture_matrix/candidate_phase do not collide
+        # with completed M1 artifacts.
+        candidate_state_root = defaults.get("candidate_state_root")
+        if isinstance(candidate_state_root, str) and candidate_state_root:
+            self.env["VC4_CODEGEN_STATE_ROOT"] = candidate_state_root
+
         self.timeout_sec = int(args.timeout_sec or defaults.get("timeout_sec", 7200))
         self.hardware_timeout_sec = int(
             args.hardware_timeout_sec
@@ -733,6 +742,8 @@ def expand_command(ctx: VerifierContext, argv: Sequence[Any], v: Mapping[str, An
         "{repo}": str(ctx.repo),
         "{build_dir}": str(ctx.build_dir),
         "{state_root}": str(ctx.state_root),
+        "{python}": sys.executable,
+        "{python3}": sys.executable,
     }
     out: List[str] = []
     for x in argv:
@@ -1101,6 +1112,691 @@ def mechanism_launch_abi_uniform_layout(ctx: VerifierContext, slice_id: str, v: 
     return make_success(ctx, slice_id, v, message="launch ABI uniform layout contract passed", duration=time.time() - started, details={"launch_abi": abi, "public_param_names": names})
 
 
+
+# ---------------------------------------------------------------------------
+# Milestone 2 program-bundle verifier mechanisms
+# ---------------------------------------------------------------------------
+
+
+def resolve_repo_or_auto_path(ctx: VerifierContext, value: str) -> Path:
+    value = str(value)
+    if value.startswith(".vc4_auto/"):
+        return ctx.repo / value
+    return ctx.repo_path(value)
+
+
+def read_json_file_checked(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise VerificationError(f"JSON file missing: {path}", details={"path": str(path), "exists": False})
+    except json.JSONDecodeError as exc:
+        raise VerificationError(f"invalid JSON in {path}: {exc}", details={"path": str(path), "error": str(exc)})
+
+
+def bundle_path(ctx: VerifierContext, v: Mapping[str, Any]) -> Path:
+    raw = str(v.get("bundle", ""))
+    if not raw:
+        raise VerificationError("verification requires bundle")
+    return resolve_repo_or_auto_path(ctx, raw)
+
+
+def manifest_from_bundle(ctx: VerifierContext, v: Mapping[str, Any]) -> tuple[Path, Dict[str, Any]]:
+    b = bundle_path(ctx, v)
+    manifest_rel = str(v.get("manifest", "manifest.json"))
+    manifest_path = b / manifest_rel
+    data = read_json_file_checked(manifest_path)
+    if not isinstance(data, dict):
+        raise VerificationError("manifest must be a JSON object", details={"manifest": str(manifest_path), "type": type(data).__name__})
+    return manifest_path, data
+
+
+def layout_from_bundle(ctx: VerifierContext, v: Mapping[str, Any]) -> tuple[Path, Dict[str, Any]]:
+    b = bundle_path(ctx, v)
+    layout_rel = str(v.get("layout", "layout.json"))
+    layout_path = b / layout_rel
+    data = read_json_file_checked(layout_path)
+    if not isinstance(data, dict):
+        raise VerificationError("layout must be a JSON object", details={"layout": str(layout_path), "type": type(data).__name__})
+    return layout_path, data
+
+
+def manifest_kernels(manifest: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    kernels = manifest.get("kernels")
+    if isinstance(kernels, list):
+        return [k for k in kernels if isinstance(k, dict)]
+    # Legacy M1 compatibility: expose the old single-kernel manifest as a one
+    # element logical kernel list so docs/explanations can still inspect it.
+    if any(key in manifest for key in ("kernel", "public_name", "qasm_path")):
+        public_name = str(manifest.get("public_name") or manifest.get("c_entry_point") or manifest.get("kernel") or "kernel")
+        return [{
+            "kernel_id": int(manifest.get("kernel_id", 0) or 0),
+            "symbol_name": str(manifest.get("kernel") or public_name),
+            "public_name": public_name,
+            "qasm_path": str(manifest.get("qasm_path") or "kernel.qasm"),
+            "code_symbol": str(manifest.get("code_symbol") or "kernelshader"),
+            "scheduled_sink_ops": manifest.get("scheduled_sink_ops"),
+            "uniform_words_per_request": manifest.get("uniform_words_per_request") or manifest.get("uniform_words_per_qpu"),
+            "max_requests_per_wave": manifest.get("max_requests_per_wave") or 12,
+            "tail_policy": manifest.get("tail_policy"),
+            "schedule_mode": manifest.get("schedule_mode"),
+            "args": manifest.get("args") or [],
+            "builtins": manifest.get("builtins") or [],
+            "resources": manifest.get("resources") or {},
+        }]
+    return []
+
+
+def bundle_relative_path(bundle: Path, rel_value: str) -> Path:
+    rel = normalize_repo_relpath(str(rel_value))
+    if rel.startswith("/") or rel.startswith("../") or "/../" in rel:
+        raise VerificationError("bundle-relative path is unsafe", details={"path": rel_value})
+    return bundle / rel
+
+
+def unique_field_errors(kernels: Sequence[Mapping[str, Any]], fields: Sequence[str]) -> Dict[str, List[Any]]:
+    errors: Dict[str, List[Any]] = {}
+    for field in fields:
+        values = [k.get(field) for k in kernels]
+        seen = set()
+        dupes = []
+        for value in values:
+            key = json.dumps(value, sort_keys=True) if isinstance(value, (dict, list)) else value
+            if key in seen and value not in dupes:
+                dupes.append(value)
+            seen.add(key)
+        if dupes:
+            errors[field] = dupes
+    return errors
+
+
+def regex_list(value: Any) -> List[str]:
+    return [str(x) for x in as_list(value)]
+
+
+def function_body_for_name(text: str, name: str) -> str:
+    pattern = re.compile(r"(?:^|\n)\s*(?:static\s+)?(?:inline\s+)?(?:int|void|uint32_t|unsigned|long|struct\s+\w+\s*\*|[A-Za-z_][A-Za-z0-9_\s\*]+)\s+" + re.escape(name) + r"\s*\([^;{}]*\)\s*\{", re.S)
+    m = pattern.search(text)
+    if not m:
+        return ""
+    start = m.end() - 1
+    depth = 0
+    in_string = False
+    escaped = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : i + 1]
+    return text[start:]
+
+
+def public_launch_names_from_manifest(manifest: Mapping[str, Any]) -> List[str]:
+    out = []
+    for kernel in manifest_kernels(manifest):
+        public = str(kernel.get("public_name") or "")
+        if public:
+            out.append(public + "_launch" if not public.endswith("_launch") else public)
+    return out
+
+
+def mechanism_manifest_schema(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    kernels = manifest_kernels(manifest)
+    expected_schema = v.get("schema_version")
+    expected_count = v.get("expected_kernel_count")
+    min_count = int(v.get("min_kernel_count", 0) or 0)
+    max_count = v.get("max_kernel_count")
+    required_top = regex_list(v.get("required_top_level_keys")) or ["schema_version", "kind", "program_name", "target", "kernels"]
+    required_kernel = regex_list(v.get("required_kernel_keys"))
+    unique_fields = regex_list(v.get("unique_kernel_fields")) or ["kernel_id", "public_name", "code_symbol", "qasm_path"]
+    forbid_top = regex_list(v.get("forbid_top_level_keys"))
+    missing_top = [k for k in required_top if k not in manifest]
+    schema_mismatch = expected_schema is not None and manifest.get("schema_version") != expected_schema
+    count_mismatch = expected_count is not None and len(kernels) != int(expected_count)
+    min_mismatch = min_count and len(kernels) < min_count
+    max_mismatch = max_count is not None and len(kernels) > int(max_count)
+    missing_kernel: Dict[int, List[str]] = {}
+    for i, kernel in enumerate(kernels):
+        miss = [k for k in required_kernel if k not in kernel]
+        if miss:
+            missing_kernel[i] = miss
+    dupes = unique_field_errors(kernels, unique_fields)
+    forbidden_present = [k for k in forbid_top if k in manifest]
+    unsafe_paths = []
+    b = manifest_path.parent
+    for kernel in kernels:
+        qasm_path = kernel.get("qasm_path")
+        if isinstance(qasm_path, str):
+            try:
+                p = bundle_relative_path(b, qasm_path).resolve()
+                if not str(p).startswith(str(b.resolve())):
+                    unsafe_paths.append(qasm_path)
+            except VerificationError:
+                unsafe_paths.append(qasm_path)
+    if missing_top or schema_mismatch or count_mismatch or min_mismatch or max_mismatch or missing_kernel or dupes or forbidden_present or unsafe_paths:
+        return make_failure(
+            ctx, slice_id, v, "manifest schema contract failed",
+            expected={"schema_version": expected_schema, "expected_kernel_count": expected_count, "required_top_level_keys": required_top, "required_kernel_keys": required_kernel, "unique_kernel_fields": unique_fields},
+            actual={"manifest": ctx.rel(manifest_path), "kernel_count": len(kernels), "missing_top_level_keys": missing_top, "schema_mismatch": schema_mismatch, "count_mismatch": count_mismatch, "missing_kernel_keys": missing_kernel, "duplicate_fields": dupes, "forbidden_top_level_keys_present": forbidden_present, "unsafe_paths": unsafe_paths},
+            duration=time.time() - started,
+        )
+    return make_success(ctx, slice_id, v, message="manifest schema contract passed", details={"manifest": ctx.rel(manifest_path), "kernel_count": len(kernels)}, duration=time.time() - started)
+
+
+def mechanism_program_artifact_bundle(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    b = manifest_path.parent
+    kernels = manifest_kernels(manifest)
+    expected_count = v.get("expected_kernel_count")
+    required_common = regex_list(v.get("required_common_files")) or ["kernel_launch.c", "kernel_launch.h", "manifest.json"]
+    if bool(v.get("require_layout", "layout.json" in required_common)) and "layout.json" not in required_common:
+        required_common.append("layout.json")
+    missing_common = [rel for rel in required_common if not (b / rel).exists()]
+    qasm_missing = []
+    qasm_forbidden: Dict[str, List[str]] = {}
+    not_contains = regex_list(v.get("not_contains_in_qasm"))
+    seen_qasm = set()
+    duplicate_qasm = []
+    if bool(v.get("require_qasm_files", True)):
+        for kernel in kernels:
+            qasm_rel = str(kernel.get("qasm_path", ""))
+            if not qasm_rel:
+                qasm_missing.append("<empty>")
+                continue
+            try:
+                qasm_abs = bundle_relative_path(b, qasm_rel)
+            except VerificationError:
+                qasm_missing.append(qasm_rel)
+                continue
+            if qasm_rel in seen_qasm and qasm_rel not in duplicate_qasm:
+                duplicate_qasm.append(qasm_rel)
+            seen_qasm.add(qasm_rel)
+            if not qasm_abs.exists():
+                qasm_missing.append(qasm_rel)
+                continue
+            text = read_text(qasm_abs)
+            bad = [token for token in not_contains if token in text]
+            if bad:
+                qasm_forbidden[qasm_rel] = bad
+    if expected_count is not None and len(kernels) != int(expected_count):
+        count_bad = True
+    else:
+        count_bad = False
+    if missing_common or qasm_missing or qasm_forbidden or duplicate_qasm or count_bad:
+        return make_failure(ctx, slice_id, v, "program artifact bundle contract failed", expected={"required_common_files": required_common, "expected_kernel_count": expected_count}, actual={"bundle": ctx.rel(b), "kernel_count": len(kernels), "missing_common": missing_common, "missing_qasm": qasm_missing, "duplicate_qasm": duplicate_qasm, "qasm_forbidden": qasm_forbidden}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="program artifact bundle contract passed", details={"bundle": ctx.rel(b), "kernel_count": len(kernels)}, duration=time.time() - started)
+
+
+def mechanism_all_qasm_assemble(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+        exe = ctx.resolve_tool(str(v.get("tool", "vc4asm")))
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    b = manifest_path.parent
+    if v.get("out_dir"):
+        out_dir = resolve_repo_or_auto_path(ctx, str(v.get("out_dir")))
+    else:
+        out_dir = b / "assembled"
+    if not ctx.dry_run:
+        out_dir.mkdir(parents=True, exist_ok=True)
+    failures = []
+    outputs = []
+    for kernel in manifest_kernels(manifest):
+        qasm_rel = str(kernel.get(str(v.get("qasm_field", "qasm_path")), ""))
+        symbol = str(kernel.get(str(v.get("symbol_field", "code_symbol")), "")) or Path(qasm_rel).stem
+        try:
+            qasm_abs = bundle_relative_path(b, qasm_rel)
+        except VerificationError as exc:
+            failures.append({"kernel": kernel.get("public_name"), "error": str(exc), "qasm_path": qasm_rel})
+            continue
+        out_c = out_dir / f"{symbol}.c"
+        out_h = out_dir / f"{symbol}.h"
+        log_path = ctx.command_log_path(slice_id, f"{v.get('id', 'all_qasm_assemble')}_{symbol}")
+        result = ctx.run_command([exe, "-c", str(out_c), "-h", str(out_h), str(qasm_abs)], cwd=qasm_abs.parent, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+        missing = [str(p) for p in (out_c, out_h) if not p.exists()]
+        if not result.ok or missing:
+            failures.append({"kernel": kernel.get("public_name"), "symbol": symbol, "exit_code": result.exit_code, "missing": missing, "log_path": str(log_path), "stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr)})
+        else:
+            outputs.append({"kernel": kernel.get("public_name"), "c": ctx.rel(out_c), "h": ctx.rel(out_h)})
+    if failures:
+        return make_failure(ctx, slice_id, v, "one or more kernel qasm files failed to assemble", actual={"failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="all qasm files assembled", details={"outputs": outputs}, duration=time.time() - started)
+
+
+def mechanism_program_layout_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        layout_path, layout = layout_from_bundle(ctx, v)
+        _manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    alignment = int(v.get("alignment_bytes", layout.get("alignment_bytes", 8)) or 8)
+    regions = layout.get("regions")
+    if not isinstance(regions, list):
+        return make_failure(ctx, slice_id, v, "layout regions must be an array", actual={"regions_type": type(regions).__name__}, duration=time.time() - started)
+    region_errors = []
+    intervals = []
+    for idx, region in enumerate(regions):
+        if not isinstance(region, dict):
+            region_errors.append({"index": idx, "error": "region is not object"})
+            continue
+        name = region.get("name", f"region_{idx}")
+        offset = region.get("offset")
+        size = region.get("size")
+        if not isinstance(offset, int) or not isinstance(size, int) or offset < 0 or size < 0:
+            region_errors.append({"name": name, "error": "offset/size must be non-negative integers", "offset": offset, "size": size})
+            continue
+        if alignment and offset % alignment != 0:
+            region_errors.append({"name": name, "error": "offset misaligned", "offset": offset, "alignment": alignment})
+        intervals.append((offset, offset + size, str(name)))
+    overlaps = []
+    if bool(v.get("require_no_overlaps", True)):
+        for i, (a0, a1, an) in enumerate(intervals):
+            for b0, b1, bn in intervals[i+1:]:
+                if a0 < b1 and b0 < a1:
+                    overlaps.append({"lhs": an, "rhs": bn, "lhs_range": [a0, a1], "rhs_range": [b0, b1]})
+    heap_errors = []
+    require_heap = bool(v.get("require_heap", False))
+    heap_size = layout.get("heap_size_bytes", 0)
+    if require_heap and (not isinstance(heap_size, int) or heap_size <= 0):
+        heap_errors.append("heap_size_bytes must be positive")
+    min_heap = v.get("min_heap_bytes")
+    if min_heap is not None and (not isinstance(heap_size, int) or heap_size < int(min_heap)):
+        heap_errors.append(f"heap_size_bytes must be at least {min_heap}")
+    kernels = layout.get("kernels")
+    if not isinstance(kernels, list):
+        kernels = []
+    expected_count = v.get("expected_kernel_count")
+    manifest_kernel_count = len(manifest_kernels(manifest))
+    count_bad = (expected_count is not None and len(kernels) != int(expected_count)) or (manifest_kernel_count and len(kernels) and len(kernels) != manifest_kernel_count)
+    if region_errors or overlaps or heap_errors or count_bad:
+        return make_failure(ctx, slice_id, v, "program layout contract failed", expected={"alignment_bytes": alignment, "require_no_overlaps": v.get("require_no_overlaps", True), "require_heap": require_heap, "expected_kernel_count": expected_count}, actual={"layout": ctx.rel(layout_path), "region_errors": region_errors, "overlaps": overlaps, "heap_errors": heap_errors, "layout_kernel_count": len(kernels), "manifest_kernel_count": manifest_kernel_count}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="program layout contract passed", details={"layout": ctx.rel(layout_path), "regions": len(regions), "heap_size_bytes": heap_size}, duration=time.time() - started)
+
+
+def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        manifest_path, manifest = (None, {})
+    b = bundle_path(ctx, v)
+    header_path = b / str(v.get("header", "kernel_launch.h"))
+    source_path = b / str(v.get("source", "kernel_launch.c"))
+    missing_files = [ctx.rel(p) for p in (header_path, source_path) if not p.exists()]
+    if missing_files:
+        return make_failure(ctx, slice_id, v, "generated runtime files missing", actual={"missing": missing_files}, duration=time.time() - started)
+    header = read_text(header_path)
+    source = read_text(source_path)
+    combined = header + "\n" + source
+    required_functions = regex_list(v.get("required_functions"))
+    missing_functions = [fn for fn in required_functions if not re.search(rf"\b{re.escape(fn)}\s*\(", combined)]
+    required_patterns = regex_list(v.get("required_patterns"))
+    missing_patterns = [pat for pat in required_patterns if not re.search(pat, combined, flags=re.S)]
+    forbidden_patterns = regex_list(v.get("forbidden_patterns"))
+    forbidden_present = [pat for pat in forbidden_patterns if re.search(pat, combined, flags=re.S)]
+    launch_forbidden = regex_list(v.get("forbidden_patterns_in_launch_functions"))
+    launch_required = regex_list(v.get("required_patterns_in_launch_functions"))
+    launch_violations = []
+    for launch in public_launch_names_from_manifest(manifest):
+        body = function_body_for_name(source, launch)
+        if not body:
+            launch_violations.append({"launch_function": launch, "missing_body": True})
+            continue
+        bad = [pat for pat in launch_forbidden if re.search(pat, body, flags=re.S)]
+        miss = [pat for pat in launch_required if not re.search(pat, body, flags=re.S)]
+        if bad or miss:
+            launch_violations.append({"launch_function": launch, "forbidden_present": bad, "required_missing": miss})
+    # Lightweight allocation policy checks by regex.  These deliberately fail
+    # loudly until M2 runtime code grows stable event names/helpers.
+    allocation_policy = v.get("allocation_policy") if isinstance(v.get("allocation_policy"), dict) else {}
+    allocation_errors = []
+    if allocation_policy.get("launch_reuses_resident_code"):
+        for launch in public_launch_names_from_manifest(manifest):
+            body = function_body_for_name(source, launch)
+            if re.search(r"copy_.*code|code_upload|mem_alloc|mem_lock", body, flags=re.I|re.S):
+                allocation_errors.append({"launch_function": launch, "error": "launch appears to allocate/copy/lock code"})
+    if missing_functions or missing_patterns or forbidden_present or launch_violations or allocation_errors:
+        return make_failure(ctx, slice_id, v, "generated runtime contract failed", expected={"required_functions": required_functions, "required_patterns": required_patterns, "forbidden_patterns": forbidden_patterns}, actual={"missing_functions": missing_functions, "missing_patterns": missing_patterns, "forbidden_present": forbidden_present, "launch_violations": launch_violations, "allocation_errors": allocation_errors}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="generated runtime contract passed", details={"header": ctx.rel(header_path), "source": ctx.rel(source_path)}, duration=time.time() - started)
+
+
+def mechanism_heap_api_unit(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    sources = [resolve_repo_or_auto_path(ctx, str(x)) for x in as_list(v.get("source_files"))]
+    stubs = [resolve_repo_or_auto_path(ctx, str(x)) for x in as_list(v.get("stub_files"))]
+    missing = [ctx.rel(p) for p in sources + stubs if not p.exists()]
+    if missing:
+        return make_failure(ctx, slice_id, v, "heap API unit source files missing", actual={"missing": missing})
+    cc = str(v.get("cc", os.environ.get("CC", "/usr/bin/cc")))
+    include_dirs = [resolve_repo_or_auto_path(ctx, str(x)) for x in as_list(v.get("include_dirs"))]
+    tmp_parent = ctx.state_root / "tmp"
+    if not ctx.dry_run:
+        tmp_parent.mkdir(parents=True, exist_ok=True)
+    tmpdir = Path(tempfile.mkdtemp(prefix="vc4_heap_unit_", dir=str(tmp_parent)))
+    exe = tmpdir / "heap_unit"
+    argv = [cc, "-std=c11", "-Wall", "-Wextra", "-O2"] + [f"-I{p}" for p in include_dirs] + [str(p) for p in sources + stubs] + ["-o", str(exe)]
+    log_path = ctx.command_log_path(slice_id, str(v.get("id", "heap_api_unit_compile")))
+    compile_result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+    if not compile_result.ok:
+        return make_failure(ctx, slice_id, v, "heap API unit compile failed", command_result=compile_result)
+    run_log = ctx.command_log_path(slice_id, str(v.get("id", "heap_api_unit_run")) + "_run")
+    run_result = ctx.run_command([str(exe)], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=run_log)
+    expected_exit = int(v.get("expect_exit_code", 0))
+    contains = regex_list(v.get("stdout_contains"))
+    missing_contains = [s for s in contains if s not in run_result.stdout]
+    if run_result.exit_code != expected_exit or missing_contains:
+        return make_failure(ctx, slice_id, v, "heap API unit run failed", expected={"exit_code": expected_exit, "stdout_contains": contains}, actual={"exit_code": run_result.exit_code, "missing_stdout": missing_contains}, command_result=run_result)
+    return make_success(ctx, slice_id, v, message="heap API unit test passed", duration=compile_result.duration_sec + run_result.duration_sec, details={"compile_log": str(log_path), "run_log": str(run_log)})
+
+
+def mechanism_launch_abi_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    b = manifest_path.parent
+    header_path = b / str(v.get("header", "kernel_launch.h"))
+    source_path = b / str(v.get("source", "kernel_launch.c"))
+    if not header_path.exists():
+        return make_failure(ctx, slice_id, v, "launch ABI header missing", expected=str(header_path), actual={"exists": False}, duration=time.time() - started)
+    header = read_text(header_path)
+    source = read_text(source_path) if source_path.exists() else ""
+    checks = v.get("kernels") if isinstance(v.get("kernels"), list) else []
+    if not checks:
+        checks = [{"public_name": k.get("public_name")} for k in manifest_kernels(manifest)]
+    failures = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        public = str(check.get("public_name") or "")
+        launch = str(check.get("launch_function") or (public + "_launch"))
+        protos = find_c_prototypes(header + "\n" + source, launch)
+        if not protos:
+            failures.append({"public_name": public, "launch_function": launch, "error": "prototype not found"})
+            continue
+        params = prototype_params(protos[0])
+        joined = "\n".join(params)
+        if check.get("requires_program_handle") and not re.search(r"struct\s+vc4_program\s*\*\s*\w+", joined):
+            failures.append({"launch_function": launch, "error": "missing struct vc4_program * parameter", "prototype": protos[0]})
+        if check.get("requires_grid_block") and len(re.findall(r"\bvc4_dim3\b|struct\s+vc4_dim3", joined)) < 2:
+            failures.append({"launch_function": launch, "error": "missing grid/block vc4_dim3 parameters", "prototype": protos[0]})
+        if check.get("buffers_are_deviceptr"):
+            kernel_meta = next((k for k in manifest_kernels(manifest) if k.get("public_name") == public), {})
+            buffer_names = [a.get("name") for a in kernel_meta.get("args", []) if isinstance(a, dict) and a.get("kind") == "buffer"]
+            for name in buffer_names:
+                if name and re.search(rf"(?:\*\s*{re.escape(str(name))}\b|\b(?:float|uint32_t|int32_t|void)\s*\*\s*{re.escape(str(name))}\b)", joined):
+                    failures.append({"launch_function": launch, "arg": name, "error": "buffer argument appears to be host pointer", "prototype": protos[0]})
+                if name and not re.search(rf"\bvc4_deviceptr_t\s+{re.escape(str(name))}\b", joined):
+                    failures.append({"launch_function": launch, "arg": name, "error": "buffer argument is not vc4_deviceptr_t", "prototype": protos[0]})
+        if check.get("forbid_public_uniform_arrays") and re.search(r"\buniform\w*\b", protos[0]):
+            failures.append({"launch_function": launch, "error": "public prototype exposes uniforms", "prototype": protos[0]})
+        if check.get("forbid_implicit_host_copies"):
+            body = function_body_for_name(source, launch)
+            if re.search(r"vc4MemcpyHtoD|vc4MemcpyDtoH|memcpy\s*\(", body):
+                failures.append({"launch_function": launch, "error": "launch body appears to perform host/device copy"})
+    if failures:
+        return make_failure(ctx, slice_id, v, "launch ABI contract failed", actual={"failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="launch ABI contract passed", details={"manifest": ctx.rel(manifest_path)}, duration=time.time() - started)
+
+
+def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    log_raw = str(v.get("log_path", ""))
+    fixture = str(v.get("fixture", ""))
+    candidates = []
+    if log_raw:
+        candidates.append(resolve_repo_or_auto_path(ctx, log_raw))
+    if fixture:
+        candidates.append(ctx.repo_path(f"compiler/test/CodeGen/VC4/Hardware/Run/{fixture}/candidate/run.log"))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*hardware*candidate*{fixture}*.log")))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*hardware*candidate*.log")))
+    log_path = next((p for p in candidates if p.exists()), None)
+    if log_path is None:
+        return make_failure(ctx, slice_id, v, "runtime event log not found", expected={"log_path": log_raw, "fixture": fixture}, actual={"candidates": [str(p) for p in candidates]}, duration=time.time() - started)
+    text = read_text(log_path)
+    contains = regex_list(v.get("contains"))
+    not_contains = regex_list(v.get("not_contains"))
+    missing = [s for s in contains if s not in text]
+    forbidden = [s for s in not_contains if s in text]
+    required_counters = v.get("required_counters") if isinstance(v.get("required_counters"), dict) else {}
+    min_counters = v.get("min_counters") if isinstance(v.get("min_counters"), dict) else {}
+    found_counters: Dict[str, int] = {}
+    for name in set(required_counters) | set(min_counters):
+        matches = re.findall(rf"\b{re.escape(str(name))}=(-?\d+)\b", text)
+        if matches:
+            found_counters[str(name)] = int(matches[-1])
+    counter_errors = []
+    for name, expected in required_counters.items():
+        if found_counters.get(str(name)) != int(expected):
+            counter_errors.append({"counter": name, "expected": int(expected), "actual": found_counters.get(str(name))})
+    for name, minimum in min_counters.items():
+        actual = found_counters.get(str(name))
+        if actual is None or actual < int(minimum):
+            counter_errors.append({"counter": name, "min": int(minimum), "actual": actual})
+    if missing or forbidden or counter_errors:
+        return make_failure(ctx, slice_id, v, "runtime event log contract failed", expected={"contains": contains, "not_contains": not_contains, "required_counters": required_counters, "min_counters": min_counters}, actual={"log_path": ctx.rel(log_path), "missing": missing, "forbidden_present": forbidden, "counter_errors": counter_errors, "found_counters": found_counters}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="runtime event log contract passed", details={"log_path": ctx.rel(log_path), "found_counters": found_counters}, duration=time.time() - started)
+
+
+def expand_fixture_matrix(ctx: VerifierContext, v: Mapping[str, Any]) -> List[Dict[str, Any]]:
+    raw = v.get("fixtures")
+    matrix_name = v.get("matrix")
+    if raw is None and matrix_name:
+        matrices = ctx.spec.get("fixture_matrices") or ctx.spec.get("matrices") or ctx.spec.get("defaults", {}).get("fixture_matrices", {})
+        if isinstance(matrices, dict):
+            raw = matrices.get(str(matrix_name), [])
+    fixtures = []
+    for item in as_list(raw):
+        if isinstance(item, str):
+            fixtures.append({"name": item})
+        elif isinstance(item, dict):
+            fixtures.append(dict(item))
+    return fixtures
+
+
+def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    if ctx.no_hardware and bool(v.get("requires_hardware", False)):
+        return skip_result(ctx, slice_id, v, "fixture matrix skipped by --no-hardware")
+    started = time.time()
+    fixtures = expand_fixture_matrix(ctx, v)
+    phases = [str(x) for x in as_list(v.get("phases"))]
+    if not fixtures:
+        return make_failure(ctx, slice_id, v, "fixture_matrix requires fixtures or matrix")
+    if not phases:
+        return make_failure(ctx, slice_id, v, "fixture_matrix requires phases")
+    keep_going = bool(v.get("keep_going", True))
+    script = ctx.repo_path(str(v.get("script", "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh")))
+    check_script = ctx.repo_path(str(v.get("check_script", "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py")))
+    vc4_codegen = None
+    per_fixture = []
+    failures = []
+    for fx in fixtures:
+        name = str(fx.get("name", ""))
+        if not name:
+            continue
+        root = ctx.repo_path(str(fx.get("root", f"compiler/test/CodeGen/VC4/Hardware/Run/{name}")))
+        input_mlir = ctx.repo_path(str(fx.get("input", f"compiler/test/CodeGen/VC4/Hardware/Run/{name}/input.mlir")))
+        expected_json = ctx.repo_path(str(fx.get("expected", f"compiler/test/CodeGen/VC4/Hardware/Run/{name}/expected.json")))
+        bundle = resolve_repo_or_auto_path(ctx, str(fx.get("bundle", f"{ctx.env.get('VC4_CODEGEN_STATE_ROOT', '.vc4_auto/codegen_m1')}/candidates/{name}")))
+        fx_results = []
+        candidate_hardware_log: Optional[Path] = None
+        for phase in phases:
+            phase_id = f"{v.get('id', 'fixture_matrix')}_{name}_{phase}"
+            log_path = ctx.command_log_path(slice_id, phase_id)
+            if phase == "reference_hardware":
+                if ctx.no_hardware:
+                    fx_results.append({"phase": phase, "skipped": True})
+                    continue
+                result = ctx.run_command(["bash", "run.sh"], cwd=root, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
+            elif phase == "generate":
+                if vc4_codegen is None:
+                    try:
+                        vc4_codegen = ctx.resolve_tool("vc4-codegen")
+                    except VerificationError as exc:
+                        failures.append({"fixture": name, "phase": phase, "error": str(exc), "details": exc.details})
+                        break
+                if bundle.exists() and not ctx.dry_run:
+                    shutil.rmtree(bundle)
+                if not ctx.dry_run:
+                    bundle.mkdir(parents=True, exist_ok=True)
+                result = ctx.run_command([vc4_codegen, str(input_mlir), "--emit-bundle", str(bundle)], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+            elif phase in {"assemble", "build"}:
+                result = ctx.run_command(["bash", str(script), name, phase], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+            elif phase == "candidate_hardware":
+                if ctx.no_hardware:
+                    fx_results.append({"phase": phase, "skipped": True})
+                    continue
+                result = ctx.run_command(["bash", str(script), name, "run"], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
+                candidate_hardware_log = log_path
+            elif phase == "expected_json":
+                if candidate_hardware_log is None:
+                    candidate_hardware_log = log_path.parent / f"{slice_id}_{v.get('id', 'fixture_matrix')}_{name}_candidate_hardware.log"
+                result = ctx.run_command([sys.executable, str(check_script), str(expected_json), str(candidate_hardware_log)], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+            else:
+                failures.append({"fixture": name, "phase": phase, "error": "unknown phase"})
+                break
+            fx_results.append({"phase": phase, "ok": result.ok, "exit_code": result.exit_code, "timed_out": result.timed_out, "log_path": str(log_path)})
+            if not result.ok:
+                failures.append({"fixture": name, "phase": phase, "exit_code": result.exit_code, "timed_out": result.timed_out, "log_path": str(log_path), "stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr)})
+                if not keep_going:
+                    break
+        per_fixture.append({"name": name, "results": fx_results})
+        if failures and not keep_going:
+            break
+    if failures:
+        return make_failure(ctx, slice_id, v, "fixture matrix failed", expected={"fixtures": fixtures, "phases": phases}, actual={"failures": failures, "results": per_fixture}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="fixture matrix passed", details={"fixtures": per_fixture}, duration=time.time() - started)
+
+
+def mechanism_resource_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    try:
+        manifest_path, manifest = manifest_from_bundle(ctx, v)
+    except VerificationError as exc:
+        return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+    target = v.get("target") if isinstance(v.get("target"), dict) else {}
+    active_qpus = int(target.get("active_qpus", manifest.get("target", {}).get("max_active_qpus", 12)) or 12)
+    vpm_bytes = int(target.get("vpm_bytes", manifest.get("target", {}).get("shared_vpm_bytes", 4096)) or 4096)
+    semaphores = int(target.get("hardware_semaphores", manifest.get("target", {}).get("semaphores", 16)) or 16)
+    failures = []
+    manifest_by_public = {str(k.get("public_name")): k for k in manifest_kernels(manifest)}
+    for req in as_list(v.get("kernels")):
+        if not isinstance(req, dict):
+            continue
+        public = str(req.get("public_name", ""))
+        kernel = manifest_by_public.get(public)
+        if not kernel:
+            failures.append({"public_name": public, "error": "kernel not found in manifest"})
+            continue
+        resources = kernel.get("resources") if isinstance(kernel.get("resources"), dict) else {}
+        schedule_mode = kernel.get("schedule_mode")
+        if req.get("schedule_mode") and schedule_mode != req.get("schedule_mode"):
+            failures.append({"public_name": public, "error": "schedule_mode mismatch", "expected": req.get("schedule_mode"), "actual": schedule_mode})
+        warps = int(resources.get("warps_per_block_max", kernel.get("warps_per_block_max", 1)) or 1)
+        sem_per = int(resources.get("semaphores_per_block", 0) or 0)
+        vpm_per = int(resources.get("vpm_bytes_per_block", 0) or 0)
+        if req.get("warps_per_block_max") is not None and warps > int(req.get("warps_per_block_max")):
+            failures.append({"public_name": public, "error": "warps_per_block_max exceeds expected", "actual": warps})
+        if bool(req.get("require_full_block_residency")) and warps > active_qpus:
+            failures.append({"public_name": public, "error": "warps_per_block_max exceeds active_qpus", "warps": warps, "active_qpus": active_qpus})
+        if sem_per > semaphores:
+            failures.append({"public_name": public, "error": "semaphores_per_block exceeds hardware semaphores", "semaphores_per_block": sem_per, "hardware_semaphores": semaphores})
+        if vpm_per > vpm_bytes:
+            failures.append({"public_name": public, "error": "vpm_bytes_per_block exceeds VPM bytes", "vpm_bytes_per_block": vpm_per, "vpm_bytes": vpm_bytes})
+        for key in ["uses_barrier", "uses_shared_vpm"]:
+            if key in req and bool(resources.get(key, False)) != bool(req.get(key)):
+                failures.append({"public_name": public, "error": f"{key} mismatch", "expected": bool(req.get(key)), "actual": bool(resources.get(key, False))})
+    expect = str(v.get("expect", "accept"))
+    if expect == "accept" and failures:
+        return make_failure(ctx, slice_id, v, "resource contract failed", actual={"failures": failures, "manifest": ctx.rel(manifest_path)}, duration=time.time() - started)
+    if expect == "reject" and not failures:
+        return make_failure(ctx, slice_id, v, "resource contract expected rejection but accepted", actual={"manifest": ctx.rel(manifest_path)}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="resource contract passed", details={"manifest": ctx.rel(manifest_path), "failures_observed": failures if expect == "reject" else []}, duration=time.time() - started)
+
+
+def mechanism_support_script_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    script = ctx.repo_path(str(v.get("script", "")))
+    if not script.exists():
+        return make_failure(ctx, slice_id, v, "support script missing", expected=str(script), actual={"exists": False}, duration=time.time() - started)
+    text = read_text(script)
+    required = regex_list(v.get("required_patterns"))
+    forbidden = regex_list(v.get("forbidden_literals"))
+    missing = [pat for pat in required if not re.search(pat, text, flags=re.S)]
+    present_forbidden = [lit for lit in forbidden if lit in text]
+    if missing or present_forbidden:
+        return make_failure(ctx, slice_id, v, "support script contract failed", expected={"required_patterns": required, "forbidden_literals": forbidden}, actual={"missing_patterns": missing, "forbidden_present": present_forbidden}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="support script contract passed", details={"script": ctx.rel(script)}, duration=time.time() - started)
+
+
+def mechanism_negative_diagnostic(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    argv = v.get("argv") or v.get("command")
+    if not isinstance(argv, list) or not argv:
+        return make_failure(ctx, slice_id, v, "negative_diagnostic requires non-empty argv array")
+    tmp_root = ctx.state_root / "tmp" / f"{slice_id}_{v.get('id', 'negative')}"
+    if tmp_root.exists() and not ctx.dry_run:
+        shutil.rmtree(tmp_root)
+    if not ctx.dry_run:
+        tmp_root.mkdir(parents=True, exist_ok=True)
+    expanded = []
+    for arg in argv:
+        s = str(arg).replace("%t", str(tmp_root / "tmp"))
+        expanded.append(s)
+    # Resolve common repo-built tools while preserving explicit paths.
+    if expanded and "/" not in expanded[0]:
+        try:
+            expanded[0] = ctx.resolve_tool(expanded[0])
+        except VerificationError:
+            pass
+    cwd = ctx.repo_path(str(v.get("cwd", "."))) if v.get("cwd") else ctx.repo
+    log_path = ctx.command_log_path(slice_id, str(v.get("id", "negative_diagnostic")))
+    result = ctx.run_command(expanded, cwd=cwd, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+    expect_exit = v.get("expect_exit_code", "nonzero")
+    if expect_exit == "nonzero":
+        exit_ok = result.exit_code != 0
+    else:
+        exit_ok = result.exit_code == int(expect_exit)
+    stdout_contains = regex_list(v.get("stdout_contains"))
+    stderr_contains = regex_list(v.get("stderr_contains"))
+    combined_contains = regex_list(v.get("contains"))
+    missing_stdout = [s for s in stdout_contains if s not in result.stdout]
+    missing_stderr = [s for s in stderr_contains if s not in result.stderr]
+    combined = result.stdout + "\n" + result.stderr
+    missing_combined = [s for s in combined_contains if s not in combined]
+    bundle_created = False
+    if bool(v.get("forbid_bundle_created", False)):
+        bundle_created = any(p.exists() for p in tmp_root.glob("*.bundle")) or any(p.is_dir() and p.name.endswith(".bundle") for p in tmp_root.rglob("*"))
+    if not exit_ok or missing_stdout or missing_stderr or missing_combined or bundle_created:
+        return make_failure(ctx, slice_id, v, "negative diagnostic contract failed", expected={"expect_exit_code": expect_exit, "stdout_contains": stdout_contains, "stderr_contains": stderr_contains, "contains": combined_contains, "forbid_bundle_created": v.get("forbid_bundle_created", False)}, actual={"exit_code": result.exit_code, "missing_stdout": missing_stdout, "missing_stderr": missing_stderr, "missing_combined": missing_combined, "bundle_created": bundle_created}, command_result=result)
+    return make_success(ctx, slice_id, v, message="negative diagnostic passed", duration=result.duration_sec, details={"log_path": str(log_path)})
+
+
 MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], VerificationResult]] = {
     "source_products": mechanism_source_products,
     "forbidden_absent": mechanism_forbidden_absent,
@@ -1119,6 +1815,18 @@ MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], Verifi
     "reference_immutable": mechanism_reference_immutable,
     "launch_abi_public_api": mechanism_launch_abi_public_api,
     "launch_abi_uniform_layout": mechanism_launch_abi_uniform_layout,
+    "manifest_schema": mechanism_manifest_schema,
+    "program_artifact_bundle": mechanism_program_artifact_bundle,
+    "all_qasm_assemble": mechanism_all_qasm_assemble,
+    "program_layout_contract": mechanism_program_layout_contract,
+    "generated_runtime_contract": mechanism_generated_runtime_contract,
+    "heap_api_unit": mechanism_heap_api_unit,
+    "launch_abi_contract": mechanism_launch_abi_contract,
+    "runtime_event_log": mechanism_runtime_event_log,
+    "fixture_matrix": mechanism_fixture_matrix,
+    "resource_contract": mechanism_resource_contract,
+    "support_script_contract": mechanism_support_script_contract,
+    "negative_diagnostic": mechanism_negative_diagnostic,
 }
 
 MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
@@ -1139,6 +1847,18 @@ MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
     "reference_immutable": ["globs"],
     "launch_abi_public_api": ["input_mlir", "header"],
     "launch_abi_uniform_layout": ["input_mlir", "source"],
+    "manifest_schema": ["bundle"],
+    "program_artifact_bundle": ["bundle"],
+    "all_qasm_assemble": ["bundle"],
+    "program_layout_contract": ["bundle"],
+    "generated_runtime_contract": ["bundle"],
+    "heap_api_unit": ["source_files"],
+    "launch_abi_contract": ["bundle"],
+    "runtime_event_log": [],
+    "fixture_matrix": ["phases"],
+    "resource_contract": ["bundle"],
+    "support_script_contract": ["script"],
+    "negative_diagnostic": ["argv"],
 }
 
 MECHANISM_DOCS: Dict[str, str] = {
@@ -1159,6 +1879,18 @@ MECHANISM_DOCS: Dict[str, str] = {
     "reference_immutable": "Check git status is clean for immutable reference/oracle globs.",
     "launch_abi_public_api": "Parse input vc4.launch_abi and verify generated public C API is semantic and does not expose hidden builtins/raw uniforms.",
     "launch_abi_uniform_layout": "Parse input vc4.launch_abi and verify generated launcher source has dense uniform slots and does not expose builtin values publicly.",
+    "manifest_schema": "Validate manifest.json schema v2, kernel count, required keys, uniqueness, and bundle-relative paths.",
+    "program_artifact_bundle": "Validate general program bundle filesystem shape; single-kernel is just kernels.length == 1.",
+    "all_qasm_assemble": "Assemble every manifest-listed kernel qasm_path with vc4asm using code_symbol outputs.",
+    "program_layout_contract": "Validate layout.json region offsets, alignments, no-overlap, heap, and kernel count.",
+    "generated_runtime_contract": "Regex-check generated kernel_launch.c/.h for runtime API, allocation/code-upload policy, and launch-body restrictions.",
+    "heap_api_unit": "Compile and run a host-only heap allocator unit test with optional stubs.",
+    "launch_abi_contract": "Validate CUDA-like public launch ABI: program handle, grid/block, device pointers, scalars, and no implicit copies.",
+    "runtime_event_log": "Parse stable runtime event/counter lines from hardware logs.",
+    "fixture_matrix": "Run a declarative fixture matrix through generate/assemble/build/hardware/expected-json phases.",
+    "resource_contract": "Validate independent/cooperative scheduler resource metadata against target QPU/VPM/semaphore limits.",
+    "support_script_contract": "Scan support scripts for required program-bundle patterns and forbidden single-kernel literals.",
+    "negative_diagnostic": "Run a command expected to fail and check deterministic diagnostics.",
 }
 
 
