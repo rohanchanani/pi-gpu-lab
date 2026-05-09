@@ -11,31 +11,50 @@
 
 // HEADER: #include <stdint.h>
 // HEADER: #include "mailbox.h"
-// HEADER: int launch_abi_header_prepare(struct vc4_runtime *rt, uint32_t max_n);
-// HEADER: int launch_abi_header_launch(struct vc4_runtime *rt, uint32_t *out, const float *input, uint32_t n, float scale);
-// HEADER: void launch_abi_header_release(struct vc4_runtime *rt);
+// HEADER-DAG: typedef uint32_t vc4_deviceptr_t;
+// HEADER-DAG: typedef struct vc4_dim3
+// HEADER-DAG: struct vc4_program;
+// HEADER-DAG: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);
+// HEADER-DAG: int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes);
+// HEADER-DAG: int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes);
+// HEADER-DAG: int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes);
+// HEADER-DAG: int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr);
+// HEADER-DAG: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale);
+// HEADER-NOT: struct vc4_runtime
+// HEADER-NOT: launch_abi_header_prepare
+// HEADER-NOT: launch_abi_header_release
+// HEADER-NOT: uint32_t *out
+// HEADER-NOT: const float *input
+// HEADER-NOT: uint32_t *uniform
 // HEADER-NOT: qpu_id
 // HEADER-NOT: num_qpus
-// HEADER-NOT: uint32_t *uniform
 
 // SOURCE: #include "kernel_launch.h"
-// SOURCE: #define NUM_UNIFS 6u
 // SOURCE: static uint32_t vc4_codegen_pack_f32(float value) {
-// SOURCE: struct launch_abi_header_launch_state {
-// SOURCE: uint32_t code[sizeof(kernelshader) / sizeof(uint32_t)];
-// SOURCE: uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];
-// SOURCE: uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];
-// SOURCE: int launch_abi_header_prepare(struct vc4_runtime *rt, uint32_t max_n) {
-// SOURCE: uint32_t activeQpus = vc4_runtime_active_qpus(rt);
-// SOURCE: int launch_abi_header_launch(struct vc4_runtime *rt, uint32_t *out, const float *input, uint32_t n, float scale) {
+// SOURCE-LABEL: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale) {
+// SOURCE-NOT: vc4Malloc(
+// SOURCE-NOT: vc4MemcpyHtoD(
+// SOURCE-NOT: vc4MemcpyDtoH(
+// SOURCE-NOT: vc4Free(
+// SOURCE: uint32_t activeQpus
+// SOURCE: * Dense physical uniform layout per QPU, ordered by vc4.launch_abi uniform_index:
+// SOURCE: *   [0] arg out
+// SOURCE: *   [1] arg input
+// SOURCE: *   [2] arg n
+// SOURCE: *   [3] arg scale
+// SOURCE: *   [4] builtin qpu_id (qpu_num)
+// SOURCE: *   [5] builtin num_qpus (num_qpus)
 // SOURCE: for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {
-// SOURCE: g_state->unif[qpu][0] = GPU_BASE + (uint32_t)gpu_out; /* arg out */
-// SOURCE: g_state->unif[qpu][1] = GPU_BASE + (uint32_t)gpu_input; /* arg input */
-// SOURCE: g_state->unif[qpu][2] = (uint32_t)n; /* arg n */
-// SOURCE: g_state->unif[qpu][3] = vc4_codegen_pack_f32(scale); /* arg scale */
-// SOURCE: g_state->unif[qpu][4] = qpu; /* builtin qpu_id */
-// SOURCE: g_state->unif[qpu][5] = activeQpus; /* builtin num_qpus */
-// SOURCE: g_state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&g_state->unif[qpu][0];
+// SOURCE: [qpu][0] = (uint32_t)out; /* arg out */
+// SOURCE: [qpu][1] = (uint32_t)input; /* arg input */
+// SOURCE: [qpu][2] = (uint32_t)n; /* arg n */
+// SOURCE: [qpu][3] = vc4_codegen_pack_f32(scale); /* arg scale */
+// SOURCE: [qpu][4] = qpu; /* builtin qpu_id */
+// SOURCE: [qpu][5] = activeQpus; /* builtin num_qpus */
+// SOURCE: PUT32(V3D_SRQUA,
+// SOURCE: PUT32(V3D_SRQPC,
+// SOURCE: vc4_codegen_wait_for_qpus(activeQpus);
+// SOURCE: return 0;
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "program_name": "launch_abi_header"
@@ -45,11 +64,10 @@
 // MANIFEST: "public_name": "launch_abi_header_launch"
 // MANIFEST: "qasm_path": "kernels/launch_abi_header_launch.qasm"
 // MANIFEST: "code_symbol": "launch_abi_header_launch_shader"
-// MANIFEST: {"name": "out", "kind": "buffer", "direction": "out", "elem_type": "u32", "c_type": "uint32_t *", "uniform_index": 0}
-// MANIFEST: {"name": "input", "kind": "buffer", "direction": "in", "elem_type": "f32", "c_type": "const float *", "uniform_index": 1}
-// MANIFEST: {"name": "n", "kind": "scalar", "direction": "by_value", "type": "u32", "c_type": "uint32_t", "uniform_index": 2}
-// MANIFEST: {"name": "scale", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 3}
-
+// MANIFEST-DAG: {"name": "out", "kind": "buffer", "direction": "out", "elem_type": "u32", "c_type": "vc4_deviceptr_t", "uniform_index": 0}
+// MANIFEST-DAG: {"name": "input", "kind": "buffer", "direction": "in", "elem_type": "f32", "c_type": "vc4_deviceptr_t", "uniform_index": 1}
+// MANIFEST-DAG: {"name": "n", "kind": "scalar", "direction": "by_value", "type": "u32", "c_type": "uint32_t", "uniform_index": 2}
+// MANIFEST-DAG: {"name": "scale", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 3}
 vc4.module @launch_abi_header {
   vc4.func @launch_abi_header_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,

@@ -482,10 +482,62 @@ build_candidate() {
   require_file "$WORK_DIR/$bin_name"
 }
 
+vc4_candidate_power_cycle_if_needed() {
+  local message="$1"
+  if [[ "${VC4_SKIP_POWER_CYCLE:-0}" == "1" ]]; then
+    log "skipping Pi power cycle: ${message}"
+    return 0
+  fi
+  local cmd="${VC4_PI_POWER_CYCLE_CMD:-uhubctl -l 0-1 -a cycle}"
+  local sleep_sec="${VC4_PI_POWER_CYCLE_SLEEP_SEC:-1}"
+  log "${message}: ${cmd}"
+  if [[ -n "$cmd" ]]; then
+    bash -lc "$cmd"
+  fi
+  if [[ "$sleep_sec" =~ ^[0-9]+$ ]] && [[ "$sleep_sec" -gt 0 ]]; then
+    sleep "$sleep_sec"
+  fi
+}
+
 run_candidate() {
   prepare_workdir
   log "running candidate hardware workdir $(relpath "$WORK_DIR")"
-  (cd "$WORK_DIR" && bash run.sh)
+
+  local tty_read_zero_pattern='tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]'
+  local max_attempts="${VC4_RUN_SH_MAX_ATTEMPTS:-3}"
+  if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || [[ "$max_attempts" -lt 1 ]]; then
+    fail "VC4_RUN_SH_MAX_ATTEMPTS must be a positive integer, got: $max_attempts"
+  fi
+
+  local attempt=1
+  local run_rc=0
+  local attempt_log="$WORK_DIR/.vc4_candidate_run_attempt.log"
+  while true; do
+    if [[ "$attempt" -eq 1 ]]; then
+      vc4_candidate_power_cycle_if_needed "power cycling Pi before candidate run"
+    else
+      log "retrying candidate run after transient tty read failure (attempt ${attempt}/${max_attempts})"
+      vc4_candidate_power_cycle_if_needed "power cycling Pi before retry"
+    fi
+
+    rm -f "$attempt_log"
+    set +e
+    (
+      cd "$WORK_DIR"
+      bash run.sh
+    ) 2>&1 | tee "$attempt_log"
+    run_rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ "$run_rc" -ne 0 ]] &&        grep -Fq "$tty_read_zero_pattern" "$attempt_log" &&        [[ "$attempt" -lt "$max_attempts" ]]; then
+      attempt=$((attempt + 1))
+      continue
+    fi
+
+    break
+  done
+
+  return "$run_rc"
 }
 
 case "$PHASE" in
