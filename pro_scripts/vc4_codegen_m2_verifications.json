@@ -71,7 +71,9 @@
   "notes": [
     "The verifier script is cumulative and remains pro_scripts/vc4_codegen_m1_verifier.py for backward compatibility.",
     "M2 introduces general program-bundle mechanisms; a single-kernel bundle is a kernels.length == 1 program.",
-    "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware."
+    "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware.",
+    "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
+    "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -675,11 +677,17 @@
         {
           "id": "cuda-like-abi-test-products",
           "mechanism": "source_products",
-          "description": "Source products exist",
+          "description": "Slice-5 launch-ABI tests and hardware harness inputs exist; stale prepare-wrapper tests are owned and updated here, not by m2-00.",
           "files": [
             "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir",
             "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir",
-            "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+            "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c",
+            "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir",
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
           ]
         },
         {
@@ -726,22 +734,46 @@
           "mechanism": "generated_runtime_contract",
           "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
           "forbidden_patterns_in_launch_functions": [
-            "vc4Malloc",
-            "vc4Free",
-            "vc4MemcpyHtoD",
-            "vc4MemcpyDtoH",
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
             "memcpy\\s*\\(",
-            "vc4Malloc\\\\s*\\\\(",
-            "vc4MemcpyHtoD\\\\s*\\\\(",
-            "vc4MemcpyDtoH\\\\s*\\\\(",
-            "vc4MemcpyDtoD\\\\s*\\\\(",
-            "vc4Free\\\\s*\\\\("
+            "memmove\\s*\\(",
+            "memset\\s*\\("
           ],
           "required_patterns_in_launch_functions": [
-            "program->state->.*_unif\\\\s*\\\\[qpu\\\\]",
-            "PUT32\\\\s*\\\\(\\\\s*V3D_SRQUA",
-            "PUT32\\\\s*\\\\(\\\\s*V3D_SRQPC"
-          ]
+            "program->state->.*_unif\\s*\\[qpu\\]",
+            "PUT32\\s*\\(\\s*V3D_SRQUA",
+            "PUT32\\s*\\(\\s*V3D_SRQPC"
+          ],
+          "description": "Public launch functions only pack uniforms/enqueue hardware: no allocation/copy/free host wrapper calls inside launch bodies. Regexes are intentionally valid Python regex strings."
+        },
+        {
+          "id": "cuda-like-launch-abi-lit",
+          "mechanism": "command",
+          "description": "Run all launch-ABI-owned Emit lit tests, including formerly stale prepare-wrapper tests now updated to the M2 program API.",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/VC4/Emit",
+            "--include",
+            "emit-cuda-like-launch-abi.mlir",
+            "--include",
+            "emit-buffer-direction-metadata-no-wrapper.mlir",
+            "--include",
+            "emit-launch-abi-header.mlir",
+            "--include",
+            "emit-launcher-uniform-packing.mlir",
+            "--include",
+            "emit-saxpy-full-qasm-artifact-regression.mlir"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
         },
         {
           "id": "saxpy-full-device-pointer-hardware",

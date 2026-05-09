@@ -391,10 +391,13 @@
         "m2-04-device-heap"
       ],
       "context_profile": "cuda_like_abi",
-      "intent": "Generated launch headers take struct vc4_program*, vc4_dim3 grid/block, vc4_deviceptr_t buffers, and by-value scalars; launches pack uniforms/enqueue hardware but never allocate/copy/free user buffers.",
+      "intent": "Generated launch headers expose the M2 CUDA-like program API: struct vc4_program*, vc4_dim3 grid/block, vc4_deviceptr_t buffer arguments, and by-value scalars. Public launch functions pack uniforms and enqueue V3D/QPU work directly; allocation/copy/free happen through vc4Malloc/vc4Memcpy*/vc4Free outside launch functions.",
       "non_goals": [
         "Do not implement gpu dialect lowering.",
-        "Do not generate convenience wrappers that copy host buffers."
+        "Do not generate convenience wrappers that copy host buffers.",
+        "Do not generate legacy *_prepare functions or host-copy convenience wrappers.",
+        "Do not add references to undefined cache-maintenance symbols such as clean_dcache, flush_dcache, or invalidate_dcache.",
+        "Do not satisfy this slice by weakening verification specs or expected.json; fix generated runtime/tests instead."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -434,13 +437,20 @@
         "required_source_files": [
           "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir",
           "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir",
-          "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+          "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c",
+          "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir",
+          "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir",
+          "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh",
+          "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
         ]
       },
       "success_probes": [
         "build:vc4-codegen",
         "typed-verifier:m2-05-cuda-like-launch-abi"
-      ]
+      ],
+      "fresh_chat_handoff": "Slices m2-00 through m2-04 are expected to be already satisfied. Start from the M2 program-bundle/heap runtime state and implement only the slice-5 CUDA-like public launch ABI/test updates."
     },
     {
       "id": "m2-06-multi-kernel-chain-hardware",
