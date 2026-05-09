@@ -1039,9 +1039,36 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
 
 
 def load_config_and_state(args: argparse.Namespace) -> tuple[Path, MilestoneConfig, StateStore]:
-    repo = find_repo_root(args.repo)
+    # These attributes may come from either the parent parser or the selected
+    # subparser.  Subparser definitions use argparse.SUPPRESS defaults so a
+    # value supplied before the subcommand is not overwritten when the same
+    # switch is omitted after the subcommand.
+    repo_arg = getattr(args, "repo", ".")
+    worklist_arg = getattr(args, "worklist", "pro_scripts/vc4_codegen_m1_worklist.json")
+    context_profiles_arg = getattr(
+        args,
+        "context_profiles",
+        "pro_scripts/vc4_codegen_m1_context_profiles.json",
+    )
+    spec_arg = getattr(args, "spec", "")
+
+    repo = find_repo_root(repo_arg)
     ensure_auto_excluded(repo)
-    config = MilestoneConfig.load(repo, worklist_path=args.worklist, context_profiles_path=args.context_profiles)
+    config = MilestoneConfig.load(
+        repo,
+        worklist_path=worklist_arg,
+        context_profiles_path=context_profiles_arg,
+    )
+
+    # M2 worklists already carry defaults.verification_spec, but accepting
+    # --spec lets callers override it and keeps the CLI symmetric with the
+    # typed verifier entrypoint.
+    if spec_arg:
+        defaults = config.worklist.setdefault("defaults", {})
+        if not isinstance(defaults, dict):
+            raise DriverError("worklist.defaults must be an object before --spec can be applied")
+        defaults["verification_spec"] = str(spec_arg)
+
     state = StateStore(config)
     state.ensure_dirs()
     return repo, config, state
@@ -1294,24 +1321,64 @@ def cmd_list_gates(args: argparse.Namespace) -> int:
     return 0
 
 
+
+def _add_common_config_args(parser: argparse.ArgumentParser, *, hidden: bool = False) -> None:
+    """Allow milestone config options either before or after the subcommand.
+
+    argparse normally requires parent-parser options to appear before the
+    subcommand.  The M2 workflow commonly invokes:
+
+      vc4_codegen_m1_autorun.py run --repo ... --worklist ... --spec ... --slice ...
+
+    so every subparser also accepts the same configuration switches.  Suppressed
+    defaults preserve values supplied before the subcommand.
+    """
+    help_text = argparse.SUPPRESS if hidden else None
+    parser.add_argument(
+        "--repo",
+        default=argparse.SUPPRESS,
+        help=help_text or "repo root, default: current directory",
+    )
+    parser.add_argument(
+        "--worklist",
+        default=argparse.SUPPRESS,
+        help=help_text or "milestone worklist JSON",
+    )
+    parser.add_argument(
+        "--context-profiles",
+        default=argparse.SUPPRESS,
+        help=help_text or "milestone context profiles JSON",
+    )
+    parser.add_argument(
+        "--spec",
+        default=argparse.SUPPRESS,
+        help=help_text or "typed verifier spec JSON override",
+    )
+
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".", help="repo root, default: current directory")
     parser.add_argument("--worklist", default="pro_scripts/vc4_codegen_m1_worklist.json")
     parser.add_argument("--context-profiles", default="pro_scripts/vc4_codegen_m1_context_profiles.json")
+    parser.add_argument("--spec", default="", help="typed verifier spec JSON override")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p_status = sub.add_parser("status")
+    _add_common_config_args(p_status, hidden=True)
     p_status.add_argument("--verbose", action="store_true")
     p_status.set_defaults(func=cmd_status)
 
     p_preflight = sub.add_parser("preflight", help="run m1-00 gates without marking state")
+    _add_common_config_args(p_preflight, hidden=True)
     p_preflight.add_argument("--allow-dirty", action="store_true")
     p_preflight.add_argument("--verbose", action="store_true")
     p_preflight.add_argument("--gate-timeout-sec", type=int, default=DEFAULT_GATE_TIMEOUT_SEC)
     p_preflight.set_defaults(func=cmd_preflight)
 
     p_gates = sub.add_parser("gates", help="run gates for one slice without applying GPT patches")
+    _add_common_config_args(p_gates, hidden=True)
     p_gates.add_argument("--slice", required=True)
     p_gates.add_argument("--only-gate", action="append", default=[])
     p_gates.add_argument("--allow-dirty", action="store_true")
@@ -1322,6 +1389,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_gates.set_defaults(func=cmd_gates)
 
     p_run = sub.add_parser("run", help="run one slice through the deterministic workflow")
+    _add_common_config_args(p_run, hidden=True)
     target = p_run.add_mutually_exclusive_group(required=True)
     target.add_argument("--slice", default="")
     target.add_argument("--next", action="store_true")
@@ -1340,6 +1408,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
     p_context = sub.add_parser("context", help="build a deterministic context pack for one slice")
+    _add_common_config_args(p_context, hidden=True)
     p_context.add_argument("--slice", required=True)
     p_context.add_argument("--mode", choices=["initial", "failure", "diagnosis"], default="initial")
     p_context.add_argument("--failure-packet", default="")
@@ -1351,6 +1420,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_context.set_defaults(func=cmd_context)
 
     p_prompt = sub.add_parser("render-prompt", help="render a GPT Pro prompt for one slice without invoking GPT")
+    _add_common_config_args(p_prompt, hidden=True)
     p_prompt.add_argument("--slice", required=True)
     p_prompt.add_argument("--attempt", type=int, default=0)
     p_prompt.add_argument("--mode", choices=["initial", "failure", "diagnosis"], default="initial")
@@ -1361,6 +1431,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 
     p_dry = sub.add_parser("dry-run", help="safe no-GPT integration dry run of Milestone 1 automation plumbing")
+    _add_common_config_args(p_dry, hidden=True)
     p_dry.add_argument("--allow-dirty", action="store_true", help="allow dirty repo during preflight gate")
     p_dry.add_argument("--skip-preflight", action="store_true", help="skip build/check preflight gates during the dry run")
     p_dry.add_argument("--keep-going", action="store_true", help="continue dry-run checks after a failed check")
@@ -1369,11 +1440,13 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_dry.set_defaults(func=cmd_dry_run)
 
     p_reset = sub.add_parser("reset-slice")
+    _add_common_config_args(p_reset, hidden=True)
     p_reset.add_argument("--slice", required=True)
     p_reset.add_argument("--purge-files", action="store_true", help="also remove .vc4_auto prompts/staging/logs/failure_packets for the slice")
     p_reset.set_defaults(func=cmd_reset_slice)
 
     p_list = sub.add_parser("list-gates")
+    _add_common_config_args(p_list, hidden=True)
     p_list.set_defaults(func=cmd_list_gates)
 
     return parser
