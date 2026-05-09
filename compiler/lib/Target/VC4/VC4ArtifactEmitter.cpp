@@ -1961,7 +1961,7 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "#include \"kernel_launch.h\"\n\n";
   os << "#include \"rpi.h\"\n";
   os << "#include \"mailbox.h\"\n";
-  os << "#include \"kernelshader.h\"\n\n";
+  os << "#include \"" << launchABI.codeSymbol << ".h\"\n\n";
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
   os << "#include <string.h>\n\n";
@@ -1979,7 +1979,8 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   }
 
   os << "struct " << stateName << " {\n";
-  os << "  uint32_t code[sizeof(kernelshader) / sizeof(uint32_t)];\n";
+  os << "  uint32_t code[sizeof(" << launchABI.codeSymbol
+     << ") / sizeof(uint32_t)];\n";
   os << "  uint32_t unif[VC4_RUNTIME_MAX_QPUS][NUM_UNIFS];\n";
   os << "  uint32_t unif_ptr[VC4_RUNTIME_MAX_QPUS];\n";
   os << "  uint32_t handle;\n";
@@ -2089,7 +2090,8 @@ static LogicalResult writeLauncherSource(KernelRecord &kernel,
   os << "  state->handle = handle;\n";
   os << "  state->max_n = max_n;\n";
   os << "  state->padded_capacity_n = paddedCapacity;\n";
-  os << "  memcpy((void *)state->code, kernelshader, sizeof state->code);\n";
+  os << "  memcpy((void *)state->code, " << launchABI.codeSymbol
+     << ", sizeof state->code);\n";
   os << "  for (uint32_t qpu = 0; qpu < VC4_RUNTIME_MAX_QPUS; ++qpu)\n";
   os << "    state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&state->unif[qpu][0];\n\n";
   os << "  g_handle = handle;\n";

@@ -2,7 +2,7 @@
 # Generate, assemble, build, or run a VC4 codegen candidate program bundle for
 # a hardware ground-truth test without mutating the checked-in reference side.
 #
-# M2 additions:
+# M2 program-bundle behavior:
 #   * VC4_CODEGEN_STATE_ROOT selects .vc4_auto/codegen_m2 cleanly.
 #   * manifest-v2 kernels[] are treated as the general case, including the
 #     single-kernel case.
@@ -35,6 +35,24 @@ INPUT_MLIR="$TEST_ROOT/input.mlir"
 EXPECTED_JSON="$TEST_ROOT/expected.json"
 REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
+BUNDLE_ONLY_FIXTURE=0
+
+# The M2 verifier uses multi_kernel_minimal as a program-bundle smoke fixture.
+# A later runtime/heap slice may provide a full CUDA-like candidate harness for
+# the same name, but this slice only needs manifest-driven generation, all-QASM
+# assembly, and a link smoke check.  Keep that smoke path active even when a
+# Hardware/Run skeleton exists so we do not compile future ABI helpers here.
+if [[ "$TEST_NAME" == "multi_kernel_minimal" ]]; then
+  BUNDLE_ONLY_FIXTURE=1
+  EXPECTED_JSON=""
+  emit_input="$REPO_ROOT/compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
+  if [[ ! -f "$INPUT_MLIR" && -f "$emit_input" ]]; then
+    INPUT_MLIR="$emit_input"
+  fi
+  REFERENCE_DIR="$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference"
+  CANDIDATE_DIR="$TEST_ROOT/candidate"
+fi
+
 AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/codegen_m1}"
 case "$AUTO_ROOT_RAW" in
   /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
@@ -58,6 +76,10 @@ find_tool() {
 }
 
 check_fixture() {
+  if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
+    require_file "$INPUT_MLIR"
+    return 0
+  fi
   require_dir "$TEST_ROOT"
   require_file "$INPUT_MLIR"
   require_file "$EXPECTED_JSON"
@@ -89,10 +111,59 @@ copy_assembler_share() {
   copy_assembler_share_to "$AUTO_ROOT/candidates"
 }
 
+manifest_kernel_records() {
+  require_file "$GENERATED_DIR/manifest.json"
+  python3 - "$GENERATED_DIR" <<'PY_RECORDS'
+import json, re, sys
+from pathlib import Path, PurePosixPath
+bundle = Path(sys.argv[1])
+data = json.loads((bundle / 'manifest.json').read_text())
+
+if data.get('schema_version') != 2:
+    raise SystemExit('manifest schema_version 2 is required for M2 candidate assembly')
+
+kernels = data.get('kernels')
+if not isinstance(kernels, list) or not kernels:
+    raise SystemExit('manifest must contain non-empty kernels[] for M2 candidate assembly')
+
+seen_qasm = set()
+seen_code = set()
+for i, k in enumerate(kernels):
+    if not isinstance(k, dict):
+        raise SystemExit(f'manifest kernels[{i}] must be an object')
+    qasm = k.get('qasm_path')
+    code = k.get('code_symbol')
+    public = k.get('public_name') or k.get('symbol_name')
+    if not isinstance(qasm, str) or not qasm:
+        raise SystemExit(f'manifest kernels[{i}] missing qasm_path')
+    if qasm == 'kernel.qasm':
+        raise SystemExit('M2 bundles must use kernels[].qasm_path, not a root-level singleton QASM artifact')
+    qasm_path = PurePosixPath(qasm)
+    if qasm_path.is_absolute() or any(part in ('', '.', '..') for part in qasm_path.parts):
+        raise SystemExit(f'manifest kernels[{i}] has unsafe qasm_path {qasm!r}')
+    if not (bundle / qasm).is_file():
+        raise SystemExit(f'manifest kernels[{i}] qasm_path does not exist: {qasm}')
+    if not isinstance(code, str) or not code:
+        raise SystemExit(f'manifest kernels[{i}] missing code_symbol')
+    if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', code):
+        raise SystemExit(f'manifest kernels[{i}] code_symbol is not a C identifier: {code!r}')
+    if not isinstance(public, str) or not public:
+        raise SystemExit(f'manifest kernels[{i}] missing public_name/symbol_name')
+    if qasm in seen_qasm:
+        raise SystemExit(f'duplicate qasm_path in manifest: {qasm}')
+    if code in seen_code:
+        raise SystemExit(f'duplicate code_symbol in manifest: {code}')
+    seen_qasm.add(qasm)
+    seen_code.add(code)
+    print(f'{qasm}\t{code}\t{public}')
+PY_RECORDS
+}
+
 check_generated_bundle() {
   require_file "$GENERATED_DIR/manifest.json"
   require_file "$GENERATED_DIR/kernel_launch.c"
   require_file "$GENERATED_DIR/kernel_launch.h"
+  manifest_kernel_records >/dev/null
 }
 
 run_vc4_codegen() {
@@ -110,47 +181,11 @@ ensure_generated() {
   check_fixture
   if [[ -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
     log "using existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
+    check_generated_bundle
     copy_assembler_share
     return 0
   fi
   run_vc4_codegen
-}
-
-manifest_kernel_records() {
-  require_file "$GENERATED_DIR/manifest.json"
-  python3 - "$GENERATED_DIR" <<'PY_RECORDS'
-import json, re, sys
-from pathlib import Path
-bundle = Path(sys.argv[1])
-data = json.loads((bundle / 'manifest.json').read_text())
-
-def ident(s):
-    s = re.sub(r'[^0-9A-Za-z_]', '_', str(s or ''))
-    if not s or not re.match(r'[A-Za-z_]', s[0]):
-        s = 'vc4_' + s
-    return s
-
-if data.get('schema_version') != 2:
-    raise SystemExit('manifest schema_version 2 is required for M2 candidate assembly')
-
-kernels = data.get('kernels')
-if not isinstance(kernels, list) or not kernels:
-    raise SystemExit('manifest must contain non-empty kernels[] for M2 candidate assembly')
-
-for i, k in enumerate(kernels):
-    if not isinstance(k, dict):
-        raise SystemExit(f'manifest kernels[{i}] must be an object')
-    qasm = k.get('qasm_path')
-    code = k.get('code_symbol')
-    public = k.get('public_name') or k.get('symbol_name')
-    if not isinstance(qasm, str) or not qasm:
-        raise SystemExit(f'manifest kernels[{i}] missing qasm_path')
-    if not isinstance(code, str) or not code:
-        raise SystemExit(f'manifest kernels[{i}] missing code_symbol')
-    if not isinstance(public, str) or not public:
-        raise SystemExit(f'manifest kernels[{i}] missing public_name/symbol_name')
-    print(f'{qasm}\t{code}\t{public}')
-PY_RECORDS
 }
 
 assemble_candidate() {
@@ -183,14 +218,6 @@ assemble_candidate() {
     fi
     require_file "$out_c"; require_file "$out_h"
   done
-  # Current one-kernel launcher source includes kernelshader.h; create that
-  # build alias from the manifest-declared code_symbol output while keeping
-  # qasm_path and code_symbol as the only source of truth.
-  if [[ "${#records[@]}" -eq 1 ]]; then
-    IFS=$'\t' read -r qasm_rel code_symbol public <<<"${records[0]}"
-    cp "$GENERATED_DIR/${code_symbol}.c" "$GENERATED_DIR/kernelshader.c"
-    cp "$GENERATED_DIR/${code_symbol}.h" "$GENERATED_DIR/kernelshader.h"
-  fi
 }
 
 extract_public_name() {
@@ -199,7 +226,7 @@ import json, sys
 from pathlib import Path
 m=json.loads(Path(sys.argv[1]).read_text())
 ks=m.get('kernels')
-if isinstance(ks, list) and len(ks)==1:
+if isinstance(ks, list) and ks:
     p=ks[0].get('public_name') or ks[0].get('symbol_name')
 else:
     p=m.get('public_name') or m.get('c_entry_point') or m.get('kernel')
@@ -252,8 +279,31 @@ include \$(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
 EOF_MAKE
 }
 
+write_bundle_smoke_makefile() {
+  local harness_name="$1"
+  shift
+  local common_src="$*"
+  cat > "$WORK_DIR/Makefile" <<EOF_MAKE
+LIBS += \$(CS240LX_2025_PATH)/lib/libgcc.a \$(CS240LX_2025_PATH)/libpi/libpi.a
+
+export OPT_LEVEL := -O3
+
+COMMON_SRC := ${common_src}
+
+PROGS := ${harness_name}
+
+RUN ?= 0
+
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|VC4_TEST_RESULT\|NRF:'
+include \$(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
+EOF_MAKE
+}
+
 write_workdir_run_sh() {
   local bin_name="$1"
+  printf '%s\n' "$bin_name" > "$WORK_DIR/.vc4_candidate_bin"
   cat > "$WORK_DIR/run.sh" <<EOF_RUN
 #!/usr/bin/env bash
 set -euo pipefail
@@ -267,9 +317,103 @@ EOF_RUN
   chmod +x "$WORK_DIR/run.sh"
 }
 
-prepare_workdir() {
+write_header_alias() {
+  local alias_name="$1"
+  local code_symbol="$2"
+  cat > "$WORK_DIR/${alias_name}.h" <<EOF_ALIAS
+#ifndef VC4_CODEGEN_${alias_name}_ALIAS_H
+#define VC4_CODEGEN_${alias_name}_ALIAS_H
+#include "${code_symbol}.h"
+#define ${alias_name} ${code_symbol}
+#endif
+EOF_ALIAS
+}
+
+write_bundle_smoke_harness() {
+  local harness_name="$1"
+  python3 - "$GENERATED_DIR/manifest.json" "$WORK_DIR/$harness_name" <<'PY_HARNESS'
+import json, re, sys
+from pathlib import Path
+manifest = json.loads(Path(sys.argv[1]).read_text())
+out = Path(sys.argv[2])
+kernels = manifest.get('kernels') or []
+lines = [
+    '#include <stdint.h>',
+]
+for kernel in kernels:
+    code = kernel['code_symbol']
+    lines.append(f'#include "{code}.h"')
+lines.append('')
+lines.append('void notmain(void) {')
+lines.append('  volatile uint32_t vc4_codegen_bundle_checksum = 0;')
+for kernel in kernels:
+    code = kernel['code_symbol']
+    if not re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', code):
+        raise SystemExit(f'bad code_symbol: {code!r}')
+    lines.append(f'  vc4_codegen_bundle_checksum ^= {code}[0];')
+lines.append('  (void)vc4_codegen_bundle_checksum;')
+lines.append('}')
+lines.append('')
+out.write_text('\n'.join(lines))
+PY_HARNESS
+}
+
+copy_manifest_artifacts_to_workdir() {
+  local qasm_rel code_symbol public
+  while IFS=$'\t' read -r qasm_rel code_symbol public; do
+    cp "$GENERATED_DIR/$qasm_rel" "$WORK_DIR/$(basename "$qasm_rel")"
+    cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${code_symbol}.c"
+    cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${code_symbol}.h"
+    printf '%s\n' "${code_symbol}.c"
+  done < <(manifest_kernel_records)
+}
+
+prepare_bundle_only_workdir() {
   assemble_candidate
-  local public_name kernel_base harness_path harness_name bin_name shader_sources
+  local harness_name bin_name shader_sources
+  harness_name="${TEST_NAME}_bundle_smoke.c"
+  bin_name="${harness_name%.c}.bin"
+
+  log "preparing program-bundle smoke workdir $(relpath "$WORK_DIR")"
+  rm -rf "$WORK_DIR"
+  mkdir -p "$WORK_DIR"
+  copy_assembler_share_to "$HARDWARE_ROOT"
+  copy_assembler_share_to "$WORK_DIR"
+
+  cp "$GENERATED_DIR/manifest.json" "$WORK_DIR/manifest.json"
+  cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
+  cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
+
+  shader_sources=()
+  while IFS= read -r src; do
+    shader_sources+=("$src")
+  done < <(copy_manifest_artifacts_to_workdir)
+
+  write_bundle_smoke_harness "$harness_name"
+  write_bundle_smoke_makefile "$harness_name" "${shader_sources[@]}"
+  write_workdir_run_sh "$bin_name"
+
+  cat > "$WORK_DIR/README.generated.md" <<EOF_README
+# Generated M2 program-bundle smoke workdir
+
+Generated by compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh.
+This directory is under .vc4_auto and must not be committed.
+
+Test: $TEST_NAME
+Harness: $harness_name
+Binary: $bin_name
+EOF_README
+  log "program-bundle smoke workdir ready: $(relpath "$WORK_DIR")"
+}
+
+prepare_workdir() {
+  if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
+    prepare_bundle_only_workdir
+    return 0
+  fi
+
+  assemble_candidate
+  local public_name kernel_base harness_path harness_name bin_name shader_sources first_code_symbol
   public_name="$(extract_public_name || true)"
   kernel_base="$(derive_kernel_base "${public_name:-$TEST_NAME}")"
   harness_path="$(select_harness_path)"
@@ -294,17 +438,19 @@ prepare_workdir() {
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
 
   shader_sources=()
+  first_code_symbol=""
   while IFS=$'\t' read -r qasm_rel code_symbol public; do
     cp "$GENERATED_DIR/$qasm_rel" "$WORK_DIR/$(basename "$qasm_rel")"
     cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${code_symbol}.c"
     cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${code_symbol}.h"
     shader_sources+=("${code_symbol}.c")
-    # Compatibility aliases for old reference harness fallback.
-    if [[ "${#shader_sources[@]}" -eq 1 ]]; then
-      cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/kernelshader.c"
-      cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/kernelshader.h"
-      cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${kernel_base}shader.c"
-      cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${kernel_base}shader.h"
+    if [[ -z "$first_code_symbol" ]]; then
+      first_code_symbol="$code_symbol"
+      # Compatibility headers for older harnesses that include legacy shader
+      # names.  These are aliases to the manifest-declared code_symbol; all
+      # linked code arrays still come from kernels[].code_symbol.
+      write_header_alias "kernelshader" "$code_symbol"
+      write_header_alias "${kernel_base}shader" "$code_symbol"
       cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
       cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/${kernel_base}_launch.h"
     fi
@@ -328,9 +474,9 @@ EOF_README
 
 build_candidate() {
   prepare_workdir
-  local harness_name bin_name
-  harness_name="$(basename "$(select_harness_path)")"
-  bin_name="${harness_name%.c}.bin"
+  local bin_name
+  require_file "$WORK_DIR/.vc4_candidate_bin"
+  bin_name="$(cat "$WORK_DIR/.vc4_candidate_bin")"
   log "building candidate binary in $(relpath "$WORK_DIR") without hardware execution"
   (cd "$WORK_DIR" && make RUN=0 "$bin_name")
   require_file "$WORK_DIR/$bin_name"
