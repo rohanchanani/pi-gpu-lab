@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render GPT Pro prompts for VC4 codegen slices.
 
-This script combines a prompt template with a deterministic context pack.  It is
+This script combines a prompt template with a deterministic context pack. It is
 called by vc4_codegen_m1_autorun.py immediately before invoking the unchanged
 pro_scripts/gpt_web_driver.js transport.
 """
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,22 +18,121 @@ from typing import Any, Mapping
 
 try:
     from vc4_codegen_context_pack import render_context_pack
-    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, relpath, write_json_file
+    from vc4_codegen_state import (
+        DriverError,
+        MilestoneConfig,
+        find_repo_root,
+        read_json_file,
+        relpath,
+    )
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from vc4_codegen_context_pack import render_context_pack  # type: ignore
-    from vc4_codegen_state import DriverError, MilestoneConfig, find_repo_root, read_json_file, relpath, write_json_file  # type: ignore
+    from vc4_codegen_state import (  # type: ignore
+        DriverError,
+        MilestoneConfig,
+        find_repo_root,
+        read_json_file,
+        relpath,
+    )
 
 
 DEFAULT_TEMPLATE_DIR = Path("pro_scripts/prompts/vc4_codegen_m1")
+DOWNLOAD_TRANSPORT = "vc4_codegen_download_bundle_v1"
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def artifact_stamp() -> str:
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+
+
+def safe_artifact_component(value: str) -> str:
+    out: list[str] = []
+    for ch in str(value):
+        out.append(ch if ch.isalnum() or ch in {"-", "_", "."} else "-")
+    return "".join(out).strip("-._") or "slice"
+
+
+def artifact_milestone_slug(config: Any, slice_id: str) -> str:
+    """Return vc4_codegen_m1 / vc4_codegen_m2 / ... from config or slice id."""
+    raw = str(getattr(config, "milestone", "") or "")
+    match = re.search(r"(?:^|[^A-Za-z0-9])(m[0-9]+)(?:[^A-Za-z0-9]|$)", raw)
+    if not match:
+        match = re.match(r"(m[0-9]+)-", str(slice_id))
+    milestone = match.group(1) if match else "m"
+    return f"vc4_codegen_{milestone}"
+
+
+def build_download_contract(config: Any, slice_id: str, attempt: int) -> dict[str, Any]:
+    prefix = (
+        f"{artifact_milestone_slug(config, slice_id)}__{safe_artifact_component(slice_id)}__"
+        f"attempt-{attempt:02d}__{artifact_stamp()}"
+    )
+    return {
+        "schema_version": 1,
+        "transport": DOWNLOAD_TRANSPORT,
+        "artifact_prefix": prefix,
+        "bundle_zip": f"{prefix}.zip",
+        "apply_script": f"{prefix}.sh",
+    }
+
+
 def fenced(text: str, language: str = "") -> str:
     return f"````{language}\n{text.rstrip()}\n````"
+
+
+def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
+    """Render a contract in the exact JSON shape parsed by gpt_web_driver.js."""
+    final_response = {
+        "status": "ok",
+        "bundle_zip": str(contract["bundle_zip"]),
+        "apply_script": str(contract["apply_script"]),
+        "source": "",
+    }
+    return "\n".join(
+        [
+            "## Required downloadable artifact transport",
+            "",
+            f"Transport: `{DOWNLOAD_TRANSPORT}`",
+            "",
+            "If any earlier template text mentions `response.json`, `changes.patch`, or GPTWEB file blocks for this implementation/failure attempt, ignore that older transport language. Use the downloadable bundle transport below.",
+            "",
+            f"Artifact prefix: `{contract['artifact_prefix']}`",
+            f"Bundle zip filename: `{contract['bundle_zip']}`",
+            f"Apply script filename: `{contract['apply_script']}`",
+            "",
+            "The local browser driver parses the prompt for JSON keys named exactly `bundle_zip` and `apply_script`; keep those keys and filenames byte-for-byte unchanged.",
+            "",
+            "Machine-readable contract:",
+            "",
+            fenced(json.dumps(dict(contract), indent=2, sort_keys=True), "json"),
+            "",
+            "Final visible ChatGPT response must start with this JSON object and then expose two downloadable links/attachments whose visible labels are exactly the two filenames:",
+            "",
+            fenced(json.dumps(final_response, separators=(",", ":")), "json"),
+            "",
+            str(contract["bundle_zip"]),
+            str(contract["apply_script"]),
+        ]
+    ) + "\n"
+
+
+def append_download_contract_to_prompt(rendered: str, contract: Mapping[str, Any], mode: str) -> str:
+    if mode == "diagnosis":
+        return rendered
+    bundle = str(contract["bundle_zip"])
+    apply = str(contract["apply_script"])
+    if DOWNLOAD_TRANSPORT in rendered and bundle in rendered and apply in rendered:
+        return rendered
+    return (
+        rendered.rstrip()
+        + "\n\n## Downloadable artifact contract\n\n"
+        + render_download_contract_markdown(contract).rstrip()
+        + "\n"
+    )
 
 
 def markdown_list(items: Any, *, code: bool = True) -> str:
@@ -89,11 +189,10 @@ def response_schema(mode: str) -> str:
         }
     else:
         schema = {
-            "summary": "one-sentence patch summary",
-            "diagnosis": ["concise, user-visible diagnosis bullets"],
-            "changed_paths": ["repo/relative/path/from/changes.patch"],
-            "tests_to_run": ["deterministic gates or commands expected to pass"],
-            "risk_notes": ["known limitations or assumptions, if any"],
+            "status": "ok",
+            "bundle_zip": "exact zip filename from DOWNLOAD_CONTRACT_JSON",
+            "apply_script": "exact shell filename from DOWNLOAD_CONTRACT_JSON",
+            "source": "",
         }
     return fenced(json.dumps(schema, indent=2, sort_keys=True), "json")
 
@@ -116,7 +215,6 @@ def simple_render(template: str, values: Mapping[str, str]) -> str:
     for key, value in values.items():
         out = out.replace("{{" + key + "}}", value)
     unresolved = []
-    import re
     for match in re.finditer(r"\{\{([A-Z0-9_]+)\}\}", out):
         unresolved.append(match.group(1))
     if unresolved:
@@ -153,10 +251,12 @@ def render_prompt(
     if context_out:
         context_out.parent.mkdir(parents=True, exist_ok=True)
         context_out.write_text(context_pack, encoding="utf-8")
+
     output_contract = load_optional_file(repo, str(template_dir / "output_contract.md"))
     slice_contract = load_optional_file(repo, str(template_dir / "slice_contract.md"))
     constitution = load_optional_file(repo, str(template_dir / "constitution.md"))
     codex_contract = load_optional_file(repo, str(template_dir / "codex_contract.md"))
+    download_contract = build_download_contract(config, slice_id, attempt)
 
     values = {
         "GENERATED_AT_UTC": utc_now(),
@@ -174,17 +274,27 @@ def render_prompt(
         "OUTPUT_CONTRACT": output_contract.rstrip(),
         "SLICE_CONTRACT": slice_contract.rstrip(),
         "CODEX_CONTRACT": codex_contract.rstrip(),
+        "ARTIFACT_PREFIX": str(download_contract["artifact_prefix"]),
+        "BUNDLE_ZIP_FILENAME": str(download_contract["bundle_zip"]),
+        "APPLY_SCRIPT_FILENAME": str(download_contract["apply_script"]),
+        "DOWNLOAD_CONTRACT_JSON": fenced(json.dumps(download_contract, indent=2, sort_keys=True), "json"),
+        "DOWNLOAD_CONTRACT_MARKDOWN": render_download_contract_markdown(download_contract).rstrip(),
         "RESPONSE_JSON_SCHEMA": response_schema(mode),
         "FAILURE_PACKET_JSON": failure_packet_json(repo, failure_packet),
         "CONTEXT_PACK": context_pack.rstrip(),
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
     }
-    return simple_render(template, values)
+    rendered = simple_render(template, values)
+    return append_download_contract_to_prompt(rendered, download_contract, mode)
 
 
 def cmd_render(args: argparse.Namespace) -> int:
     repo = find_repo_root(args.repo)
-    config = MilestoneConfig.load(repo, worklist_path=args.worklist, context_profiles_path=args.context_profiles)
+    config = MilestoneConfig.load(
+        repo,
+        worklist_path=args.worklist,
+        context_profiles_path=args.context_profiles,
+    )
     failure_packet = Path(args.failure_packet) if args.failure_packet else None
     out = Path(args.out)
     context_out = Path(args.context_out) if args.context_out else None
@@ -203,7 +313,19 @@ def cmd_render(args: argparse.Namespace) -> int:
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
-    print(json.dumps({"ok": True, "out": str(out), "chars": len(text), "context_out": str(context_out) if context_out else "", "metadata_out": str(metadata_out) if metadata_out else ""}, indent=2, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "out": str(out),
+                "chars": len(text),
+                "context_out": str(context_out) if context_out else "",
+                "metadata_out": str(metadata_out) if metadata_out else "",
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0
 
 

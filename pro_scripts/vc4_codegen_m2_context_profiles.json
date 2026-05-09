@@ -9,6 +9,10 @@
         "path": "pro_scripts/prompts/vc4_codegen_m2/constitution.md"
       },
       {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_codegen_m2/m1_handoff.md"
+      },
+      {
         "kind": "worklist_slice"
       },
       {
