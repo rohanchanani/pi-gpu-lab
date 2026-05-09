@@ -1269,6 +1269,10 @@ def mechanism_manifest_schema(ctx: VerifierContext, slice_id: str, v: Mapping[st
     required_kernel = regex_list(v.get("required_kernel_keys"))
     unique_fields = regex_list(v.get("unique_kernel_fields")) or ["kernel_id", "public_name", "code_symbol", "qasm_path"]
     forbid_top = regex_list(v.get("forbid_top_level_keys"))
+    if manifest.get("schema_version") == 2:
+        for legacy_key in ("kernel", "public_name", "qasm_path", "launch_abi"):
+            if legacy_key not in forbid_top:
+                forbid_top.append(legacy_key)
     missing_top = [k for k in required_top if k not in manifest]
     schema_mismatch = expected_schema is not None and manifest.get("schema_version") != expected_schema
     count_mismatch = expected_count is not None and len(kernels) != int(expected_count)
@@ -1315,6 +1319,10 @@ def mechanism_program_artifact_bundle(ctx: VerifierContext, slice_id: str, v: Ma
     if bool(v.get("require_layout", "layout.json" in required_common)) and "layout.json" not in required_common:
         required_common.append("layout.json")
     missing_common = [rel for rel in required_common if not (b / rel).exists()]
+    forbidden_common = regex_list(v.get("forbidden_common_files"))
+    if manifest.get("schema_version") == 2 and "kernel.qasm" not in forbidden_common:
+        forbidden_common.append("kernel.qasm")
+    present_forbidden_common = [rel for rel in forbidden_common if (b / rel).exists()]
     qasm_missing = []
     qasm_forbidden: Dict[str, List[str]] = {}
     not_contains = regex_list(v.get("not_contains_in_qasm"))
@@ -1345,8 +1353,8 @@ def mechanism_program_artifact_bundle(ctx: VerifierContext, slice_id: str, v: Ma
         count_bad = True
     else:
         count_bad = False
-    if missing_common or qasm_missing or qasm_forbidden or duplicate_qasm or count_bad:
-        return make_failure(ctx, slice_id, v, "program artifact bundle contract failed", expected={"required_common_files": required_common, "expected_kernel_count": expected_count}, actual={"bundle": ctx.rel(b), "kernel_count": len(kernels), "missing_common": missing_common, "missing_qasm": qasm_missing, "duplicate_qasm": duplicate_qasm, "qasm_forbidden": qasm_forbidden}, duration=time.time() - started)
+    if missing_common or present_forbidden_common or qasm_missing or qasm_forbidden or duplicate_qasm or count_bad:
+        return make_failure(ctx, slice_id, v, "program artifact bundle contract failed", expected={"required_common_files": required_common, "forbidden_common_files": forbidden_common, "expected_kernel_count": expected_count}, actual={"bundle": ctx.rel(b), "kernel_count": len(kernels), "missing_common": missing_common, "forbidden_common_present": present_forbidden_common, "missing_qasm": qasm_missing, "duplicate_qasm": duplicate_qasm, "qasm_forbidden": qasm_forbidden}, duration=time.time() - started)
     return make_success(ctx, slice_id, v, message="program artifact bundle contract passed", details={"bundle": ctx.rel(b), "kernel_count": len(kernels)}, duration=time.time() - started)
 
 

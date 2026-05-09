@@ -77,7 +77,8 @@
         "compiler/test/**/.lit_test_times.txt"
       ],
       "single_kernel_is_program_bundle_with_one_kernel": true,
-      "public_launch_abi_is_cuda_like_no_implicit_host_copies": true
+      "public_launch_abi_is_cuda_like_no_implicit_host_copies": true,
+      "root_kernel_qasm_is_not_m2_canonical": true
     }
   },
   "slices": [
@@ -86,10 +87,10 @@
       "title": "M2 verifier/worklist scaffold",
       "depends_on": [],
       "context_profile": "m2_scaffold",
-      "intent": "Install the cumulative M2 orchestration layer: M2 worklist/spec/context/prompts/docs, cumulative typed verifier mechanisms, and support-script plumbing for .vc4_auto/codegen_m2 without changing backend semantics.",
+      "intent": "Install and verify the cumulative M2 orchestration layer against the current canonical program-bundle truth; after M2 slices land, this slice probe must validate the M2 layout rather than preserve stale M1 singleton artifact expectations.",
       "non_goals": [
-        "Do not change emitter/runtime semantics in this slice.",
-        "Do not add M2 tests yet; that is the next stage."
+        "Do not add M2 tests yet; that is the next stage.",
+        "Do not preserve M1 root kernel.qasm expectations in M2 verification."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",

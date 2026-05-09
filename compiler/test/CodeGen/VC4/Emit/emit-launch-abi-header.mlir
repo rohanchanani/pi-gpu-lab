@@ -1,6 +1,7 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernel.qasm
+// RUN: test -f %t.bundle/kernels/launch_abi_header_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
@@ -36,21 +37,18 @@
 // SOURCE: g_state->unif[qpu][5] = activeQpus; /* builtin num_qpus */
 // SOURCE: g_state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&g_state->unif[qpu][0];
 
-// MANIFEST: "kernel": "launch_abi_header_kernel"
+// MANIFEST: "schema_version": 2
+// MANIFEST: "program_name": "launch_abi_header"
+// MANIFEST: "kernels": [
+// MANIFEST: "kernel_id": 0
+// MANIFEST: "symbol_name": "launch_abi_header_kernel"
 // MANIFEST: "public_name": "launch_abi_header_launch"
-// MANIFEST: "launch_abi": {
-// MANIFEST: "arg_count": 4
+// MANIFEST: "qasm_path": "kernels/launch_abi_header_launch.qasm"
+// MANIFEST: "code_symbol": "launch_abi_header_launch_shader"
 // MANIFEST: {"name": "out", "kind": "buffer", "direction": "out", "elem_type": "u32", "c_type": "uint32_t *", "uniform_index": 0}
 // MANIFEST: {"name": "input", "kind": "buffer", "direction": "in", "elem_type": "f32", "c_type": "const float *", "uniform_index": 1}
 // MANIFEST: {"name": "n", "kind": "scalar", "direction": "by_value", "type": "u32", "c_type": "uint32_t", "uniform_index": 2}
 // MANIFEST: {"name": "scale", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 3}
-// MANIFEST: "public_api": {
-// MANIFEST: "function_name": "launch_abi_header_launch"
-// MANIFEST: {"name": "rt", "c_type": "struct vc4_runtime *", "role": "runtime"}
-// MANIFEST: {"name": "out", "c_type": "uint32_t *", "role": "kernel_arg"}
-// MANIFEST: {"name": "input", "c_type": "const float *", "role": "kernel_arg"}
-// MANIFEST: {"name": "n", "c_type": "uint32_t", "role": "kernel_arg"}
-// MANIFEST: {"name": "scale", "c_type": "float", "role": "kernel_arg"}
 
 vc4.module @launch_abi_header {
   vc4.func @launch_abi_header_kernel() attributes {

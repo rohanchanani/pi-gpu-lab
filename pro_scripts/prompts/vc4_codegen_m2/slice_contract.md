@@ -20,3 +20,5 @@ M2 verifier specs may use these additional mechanisms:
 Reference/oracle policy: existing references and expected JSON are immutable. Slices that create new fixtures may add their own reference/oracle files only when those paths are explicitly allowlisted and covered by source-product checks.
 
 Scheduling policy: M2 may implement runtime scheduling for already-scheduled kernels. M2 must not implement `gpu` dialect lowering, register allocation, or structured VC4 instruction scheduling.
+
+Bundle layout policy: root-level `kernel.qasm` is an M1 artifact spelling and is not canonical for M2. Single-kernel M2 bundles must use `manifest.json` schema v2 with `kernels.length == 1`, and all QASM checks must use `kernels[].qasm_path`.

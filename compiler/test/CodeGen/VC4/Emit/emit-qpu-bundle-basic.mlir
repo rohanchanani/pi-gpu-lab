@@ -1,10 +1,11 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernel.qasm
+// RUN: test -f %t.bundle/kernels/qpu_bundle_basic_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernel.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_bundle_basic_launch.qasm
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: add r0, ra0, rb1; fmul r1, r2, r3
@@ -16,10 +17,16 @@
 // QASM-NEXT: nop
 // QASM-NEXT: nop
 
-// MANIFEST: "kernel": "qpu_bundle_basic_kernel"
-// MANIFEST: "public_name": "qpu_bundle_basic_launch"
-// MANIFEST: "scheduled_sink_ops": 8
 
+// MANIFEST: "schema_version": 2
+// MANIFEST: "program_name": "qpu_bundle_basic"
+// MANIFEST: "kernels": [
+// MANIFEST: "kernel_id": 0
+// MANIFEST: "symbol_name": "qpu_bundle_basic_kernel"
+// MANIFEST: "public_name": "qpu_bundle_basic_launch"
+// MANIFEST: "qasm_path": "kernels/qpu_bundle_basic_launch.qasm"
+// MANIFEST: "code_symbol": "qpu_bundle_basic_launch_shader"
+// MANIFEST: "scheduled_sink_ops": 8
 vc4.module @qpu_bundle_basic {
   vc4.func @qpu_bundle_basic_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,

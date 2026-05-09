@@ -1,21 +1,28 @@
 // RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernel.qasm
+// RUN: test -f %t.bundle/kernels/minimal_thrend_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernel.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/minimal_thrend_launch.qasm
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: thrend
 // QASM-NEXT: nop
 // QASM-NEXT: nop
 
-// MANIFEST: "kernel": "minimal_thrend_kernel"
-// MANIFEST: "public_name": "minimal_thrend_launch"
-// MANIFEST: "scheduled_sink_ops": 3
 
+// MANIFEST: "schema_version": 2
+// MANIFEST: "program_name": "minimal_thrend"
+// MANIFEST: "kernels": [
+// MANIFEST: "kernel_id": 0
+// MANIFEST: "symbol_name": "minimal_thrend_kernel"
+// MANIFEST: "public_name": "minimal_thrend_launch"
+// MANIFEST: "qasm_path": "kernels/minimal_thrend_launch.qasm"
+// MANIFEST: "code_symbol": "minimal_thrend_launch_shader"
+// MANIFEST: "scheduled_sink_ops": 3
 vc4.module @minimal_thrend {
   vc4.func @minimal_thrend_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,

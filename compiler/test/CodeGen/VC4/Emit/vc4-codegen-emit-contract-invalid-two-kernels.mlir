@@ -1,8 +1,30 @@
+// M2 truth: a program bundle may contain more than one scheduled kernel.
+// This historical filename is retained for path stability, but the test now
+// asserts the current contract: two unique kernels are valid and appear in
+// manifest schema v2 as kernels[0] and kernels[1].
 // RUN: rm -rf %t.bundle
-// RUN: not vc4-codegen %s --emit-bundle %t.bundle 2>&1 | FileCheck %s
+// RUN: vc4-codegen %s --emit-bundle %t.bundle
+// RUN: test -f %t.bundle/kernel_launch.c
+// RUN: test -f %t.bundle/kernel_launch.h
+// RUN: test -f %t.bundle/manifest.json
+// RUN: test -f %t.bundle/kernels/first_launch.qasm
+// RUN: test -f %t.bundle/kernels/second_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
+// RUN: FileCheck %s --input-file=%t.bundle/manifest.json
 
-// CHECK: expected exactly one eligible VC4 QPU kernel
-// CHECK: exactly one kernel qpu scheduled vc4.func
+// CHECK: "schema_version": 2
+// CHECK: "program_name": "vc4_codegen_emit_contract_two_kernels"
+// CHECK: "kernels": [
+// CHECK: "kernel_id": 0
+// CHECK: "symbol_name": "first_kernel"
+// CHECK: "public_name": "first_launch"
+// CHECK: "qasm_path": "kernels/first_launch.qasm"
+// CHECK: "code_symbol": "first_launch_shader"
+// CHECK: "kernel_id": 1
+// CHECK: "symbol_name": "second_kernel"
+// CHECK: "public_name": "second_launch"
+// CHECK: "qasm_path": "kernels/second_launch.qasm"
+// CHECK: "code_symbol": "second_launch_shader"
 
 vc4.module @vc4_codegen_emit_contract_two_kernels {
   vc4.func @first_kernel() attributes {

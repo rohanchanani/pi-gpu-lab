@@ -197,9 +197,9 @@
           "route_hint": "codex_mechanical"
         },
         {
-          "id": "lit-existing-emit-suite",
+          "id": "lit-current-emit-suite",
           "mechanism": "command",
-          "description": "Existing pre-M2 Emit suite still passes without requiring future M2 tests before their slices implement them",
+          "description": "Current Emit suite uses the canonical M2 program-bundle layout, including single-kernel bundles represented through manifest schema v2 kernels[].",
           "argv": [
             "{python}",
             "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
@@ -297,14 +297,72 @@
           "mechanism": "manifest_schema",
           "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
           "schema_version": 2,
-          "expected_kernel_count": 1
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
         },
         {
           "id": "manifest-v2-two-kernel",
           "mechanism": "manifest_schema",
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
           "schema_version": 2,
-          "expected_kernel_count": 2
+          "expected_kernel_count": 2,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
         },
         {
           "id": "reject-duplicate-public-name",
@@ -416,14 +474,20 @@
           "mechanism": "program_artifact_bundle",
           "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
           "expected_kernel_count": 1,
-          "require_layout": false
+          "require_layout": false,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
         },
         {
           "id": "program-artifact-bundle-two-kernel",
           "mechanism": "program_artifact_bundle",
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
           "expected_kernel_count": 2,
-          "require_layout": false
+          "require_layout": false,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
         },
         {
           "id": "assemble-all-qasm-multi-kernel",
@@ -451,6 +515,11 @@
             "kernels",
             "qasm_path",
             "code_symbol"
+          ],
+          "forbidden_literals": [
+            "kernel.qasm if i == 0",
+            "data.get('public_name') or data.get('c_entry_point')",
+            "f'kernel_{i}.qasm'"
           ]
         }
       ]
@@ -723,7 +792,36 @@
           "mechanism": "manifest_schema",
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
           "schema_version": 2,
-          "expected_kernel_count": 2
+          "expected_kernel_count": 2,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
         },
         {
           "id": "multi-kernel-chain-layout",

@@ -3,6 +3,7 @@
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
+// RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernels/single_launch.qasm
 // RUN: FileCheck %s --input-file=%t.bundle/manifest.json
 

@@ -61,3 +61,5 @@ pro_scripts/vc4_codegen_download_bundle_apply.py validate-apply
 It must include `--slice <active slice id>`, `--bundle <current exact zip filename>`, `--apply-script <current exact shell filename>`, and `--expect-attempt <current attempt>`. Do not put Python patching logic, heredocs, file writes, unzip/copy logic, or `rm -rf` in the shell script.
 
 The central typed verifier remains the source of truth. A slice is incomplete until its M2 typed verification entry passes.
+
+For compiler/test changes in M2, do not emit or test for root-level `kernel.qasm`; use manifest schema v2 `kernels[].qasm_path` even for one-kernel bundles.

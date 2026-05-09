@@ -222,7 +222,7 @@ No backend feature changes except scaffolding. No artifact schema changes yet.
 
 #### Expected end state
 
-`vc4-codegen` accepts one `vc4.module` with one or more scheduled kernel functions and emits `manifest.json` schema v2 with a `kernels[]` array. There is no separate single-kernel schema. Existing single-kernel tests are migrated or compatibility-bridged to schema v2.
+`vc4-codegen` accepts one `vc4.module` with one or more scheduled kernel functions and emits `manifest.json` schema v2 with a `kernels[]` array. There is no separate single-kernel schema. Existing single-kernel tests are migrated to schema v2; M2 verification must not require or recreate the M1 root `kernel.qasm` singleton layout.
 
 #### Manifest v2 required shape
 
@@ -322,7 +322,7 @@ The support scripts and verifier treat every bundle as a program bundle. They re
 2. parse `kernels[]`,
 3. assemble every `qasm_path`,
 4. use each kernel's `code_symbol` for generated `.c/.h`,
-5. avoid hardcoding `kernel.qasm` or `kernelshader.c` as the only artifact,
+5. avoid hardcoding root `kernel.qasm`; QASM comes from `manifest.kernels[].qasm_path`, and code arrays come from `manifest.kernels[].code_symbol`,
 6. preserve compatibility with current fixture layout,
 7. keep generated logs out of git.
 
@@ -1573,3 +1573,8 @@ M2 is complete when:
 10. Required fixture matrices pass candidate hardware or are explicitly unsupported with deterministic diagnostics.
 11. No reference bundles, expected JSON files, generated lit Output files, run logs, or `.vc4_auto/**` artifacts are committed.
 12. The backend target is stable enough for M3 structured VC4 lowering and later `gpu -> vc4` lowering.
+
+
+### Canonical single-kernel bundle policy
+
+A single scheduled kernel is still a program bundle with `kernels.length == 1`. M2 source-product and lit tests must assert absence of root `kernel.qasm` and must read QASM through `manifest.kernels[].qasm_path`.

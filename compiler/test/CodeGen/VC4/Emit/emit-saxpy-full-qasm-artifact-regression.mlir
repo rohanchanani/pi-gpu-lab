@@ -1,8 +1,21 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %S/../Hardware/Run/saxpy_full/input.mlir --emit-bundle %t.bundle
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernel.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
+// RUN: test -f %t.bundle/kernels/saxpy_full_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
+// RUN: test -f %t.bundle/manifest.json
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/saxpy_full_launch.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
 // RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
+// RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
+
+// MANIFEST: "schema_version": 2
+// MANIFEST: "program_name": "saxpy_full"
+// MANIFEST: "kernels": [
+// MANIFEST: "kernel_id": 0
+// MANIFEST: "symbol_name": "saxpy_full_kernel"
+// MANIFEST: "public_name": "saxpy_full_launch"
+// MANIFEST: "qasm_path": "kernels/saxpy_full_launch.qasm"
+// MANIFEST: "code_symbol": "saxpy_full_launch_shader"
 
 // This is a non-hardware regression for the QASM spelling surface exercised by
 // the saxpy_full hardware fixture.  The scheduled MLIR keeps raw QPU addresses;

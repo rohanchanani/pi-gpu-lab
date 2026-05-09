@@ -23,3 +23,5 @@ Required top-level keys:
 Every kernel entry must include `kernel_id`, `symbol_name`, `public_name`, `qasm_path`, `code_symbol`, `scheduled_sink_ops`, `uniform_words_per_request`, `max_requests_per_wave`, `tail_policy`, `schedule_mode`, `args`, `builtins`, and `resources`.
 
 `qasm_path` is bundle-relative and must stay inside the bundle.
+
+The root-level `kernel.qasm` spelling is not part of the M2 bundle contract. Every QASM artifact is addressed through `kernels[].qasm_path`; for the current emitter that path is `kernels/<public_name>.qasm`.

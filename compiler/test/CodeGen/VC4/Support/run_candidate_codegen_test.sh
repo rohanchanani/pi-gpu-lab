@@ -130,16 +130,26 @@ def ident(s):
         s = 'vc4_' + s
     return s
 
+if data.get('schema_version') != 2:
+    raise SystemExit('manifest schema_version 2 is required for M2 candidate assembly')
+
 kernels = data.get('kernels')
-if isinstance(kernels, list):
-    for i, k in enumerate(kernels):
-        qasm = k.get('qasm_path') or ('kernel.qasm' if i == 0 else f'kernel_{i}.qasm')
-        code = k.get('code_symbol') or ident(k.get('public_name') or k.get('symbol_name') or f'kernel_{i}') + 'shader'
-        public = k.get('public_name') or k.get('symbol_name') or f'kernel_{i}'
-        print(f'{qasm}\t{code}\t{public}')
-else:
-    public = data.get('public_name') or data.get('c_entry_point') or data.get('kernel') or 'kernel'
-    print(f'kernel.qasm\tkernelshader\t{public}')
+if not isinstance(kernels, list) or not kernels:
+    raise SystemExit('manifest must contain non-empty kernels[] for M2 candidate assembly')
+
+for i, k in enumerate(kernels):
+    if not isinstance(k, dict):
+        raise SystemExit(f'manifest kernels[{i}] must be an object')
+    qasm = k.get('qasm_path')
+    code = k.get('code_symbol')
+    public = k.get('public_name') or k.get('symbol_name')
+    if not isinstance(qasm, str) or not qasm:
+        raise SystemExit(f'manifest kernels[{i}] missing qasm_path')
+    if not isinstance(code, str) or not code:
+        raise SystemExit(f'manifest kernels[{i}] missing code_symbol')
+    if not isinstance(public, str) or not public:
+        raise SystemExit(f'manifest kernels[{i}] missing public_name/symbol_name')
+    print(f'{qasm}\t{code}\t{public}')
 PY_RECORDS
 }
 
@@ -173,7 +183,9 @@ assemble_candidate() {
     fi
     require_file "$out_c"; require_file "$out_h"
   done
-  # Compatibility aliases for existing one-kernel M1 harnesses.
+  # Current one-kernel launcher source includes kernelshader.h; create that
+  # build alias from the manifest-declared code_symbol output while keeping
+  # qasm_path and code_symbol as the only source of truth.
   if [[ "${#records[@]}" -eq 1 ]]; then
     IFS=$'\t' read -r qasm_rel code_symbol public <<<"${records[0]}"
     cp "$GENERATED_DIR/${code_symbol}.c" "$GENERATED_DIR/kernelshader.c"

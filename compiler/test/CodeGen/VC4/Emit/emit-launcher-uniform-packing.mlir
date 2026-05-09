@@ -1,6 +1,7 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernel.qasm
+// RUN: test -f %t.bundle/kernels/uniform_packing_launch.qasm
+// RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
@@ -37,10 +38,15 @@
 // SOURCE: g_state->unif[qpu][5] = activeQpus; /* builtin num_qpus */
 // SOURCE: g_state->unif_ptr[qpu] = GPU_BASE + (uint32_t)&g_state->unif[qpu][0];
 
-// MANIFEST: "kernel": "uniform_packing_kernel"
-// MANIFEST: "public_name": "uniform_packing_launch"
-// MANIFEST: "arg_count": 4
 
+// MANIFEST: "schema_version": 2
+// MANIFEST: "program_name": "uniform_packing"
+// MANIFEST: "kernels": [
+// MANIFEST: "kernel_id": 0
+// MANIFEST: "symbol_name": "uniform_packing_kernel"
+// MANIFEST: "public_name": "uniform_packing_launch"
+// MANIFEST: "qasm_path": "kernels/uniform_packing_launch.qasm"
+// MANIFEST: "code_symbol": "uniform_packing_launch_shader"
 vc4.module @uniform_packing {
   vc4.func @uniform_packing_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
