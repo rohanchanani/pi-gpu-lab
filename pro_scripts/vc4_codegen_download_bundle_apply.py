@@ -62,6 +62,7 @@ REPO_PREFIX = "repo/"
 ALLOWED_MODES = {"0644", "0755", "100644", "100755"}
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_BUNDLE_BYTES = 64 * 1024 * 1024
+MAX_APPLY_SCRIPT_BYTES = 4096
 
 
 class BundleApplyError(DriverError):
@@ -248,11 +249,13 @@ def _validate_manifest_header(manifest: Any, *, slice_entry: Mapping[str, Any], 
         raise BundleApplyError(
             f"bundle manifest slice_id {manifest.get('slice_id')!r} does not match active slice {slice_entry.get('id')!r}"
         )
-    if expect_attempt is not None and manifest.get("attempt") is not None:
+    if expect_attempt is not None:
+        if manifest.get("attempt") is None:
+            raise BundleApplyError(f"bundle manifest must include attempt = {expect_attempt}")
         try:
             got = int(manifest.get("attempt"))
         except Exception as exc:
-            raise BundleApplyError("bundle manifest attempt must be an integer when present") from exc
+            raise BundleApplyError("bundle manifest attempt must be an integer") from exc
         if got != int(expect_attempt):
             raise BundleApplyError(f"bundle manifest attempt {got} does not match expected attempt {expect_attempt}")
     for key in ("diagnosis", "risk_notes", "tests_to_run"):
@@ -267,24 +270,44 @@ def _validate_launcher_script(script_path: Path | None, *, bundle_path: Path, sl
     if not script_path.exists():
         raise BundleApplyError(f"apply script not found: {script_path}")
     text = script_path.read_text(encoding="utf-8", errors="replace")
-    if len(text) > 64_000:
-        raise BundleApplyError("apply script is too large for a trusted launcher")
+    if len(text.encode("utf-8")) > MAX_APPLY_SCRIPT_BYTES:
+        raise BundleApplyError(
+            f"apply script is too large for a trusted launcher: {len(text.encode('utf-8'))} bytes > {MAX_APPLY_SCRIPT_BYTES}"
+        )
     if "\0" in text:
         raise BundleApplyError("apply script contains NUL bytes")
-    forbidden = ["rm -rf", "curl ", "wget ", "nc ", "python -c", "python3 -c", "eval ", "source ", ". "]
+    if not text.startswith("#!/usr/bin/env bash\n") and not text.startswith("#!/bin/bash\n"):
+        raise BundleApplyError("apply script must be a bash launcher with a bash shebang")
+    forbidden = [
+        "rm -rf", "curl ", "wget ", "nc ", "eval ", "source ",
+        "python -c", "python3 -c", "python -", "python3 -", "<<", "PYINNER",
+        "zipfile", "shutil", "extractall", "copyfile", "open(", "write_text(",
+    ]
     hits = [s for s in forbidden if s in text]
     if hits:
-        raise BundleApplyError("apply script is not a narrow launcher; forbidden snippet(s): " + ", ".join(hits))
-    if "vc4_codegen_download_bundle_apply.py" not in text:
-        raise BundleApplyError("apply script must delegate to pro_scripts/vc4_codegen_download_bundle_apply.py")
-    if str(slice_entry.get("id")) not in text:
+        raise BundleApplyError("apply script is not a narrow trusted-applier launcher; forbidden snippet(s): " + ", ".join(hits))
+    required = [
+        "vc4_codegen_download_bundle_apply.py",
+        "validate-apply",
+        "--repo",
+        "--slice",
+        "--bundle",
+        "--apply-script",
+    ]
+    missing = [s for s in required if s not in text]
+    if missing:
+        raise BundleApplyError("apply script must delegate to the trusted bundle applier; missing: " + ", ".join(missing))
+    slice_id = str(slice_entry.get("id"))
+    if slice_id not in text:
         raise BundleApplyError("apply script must include the active slice id")
-    if expect_attempt is not None and str(expect_attempt) not in text:
-        raise BundleApplyError("apply script must include the expected attempt number")
-    if bundle_path.name not in text and ".zip" not in text:
+    if expect_attempt is not None:
+        if "--expect-attempt" not in text:
+            raise BundleApplyError("apply script must pass --expect-attempt")
+        if str(expect_attempt) not in text:
+            raise BundleApplyError("apply script must include the expected attempt number")
+    if bundle_path.name not in text and "bundle.zip" not in text and ".zip" not in text:
         raise BundleApplyError("apply script must reference a bundle zip filename")
-    return {"present": True, "validated": True, "path": str(script_path), "bytes": len(text)}
-
+    return {"present": True, "validated": True, "path": str(script_path), "bytes": len(text.encode("utf-8"))}
 
 def validate_bundle(
     *,

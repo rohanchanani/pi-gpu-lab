@@ -74,6 +74,8 @@ def build_download_contract(config: Any, slice_id: str, attempt: int) -> dict[st
     return {
         "schema_version": 1,
         "transport": DOWNLOAD_TRANSPORT,
+        "slice_id": slice_id,
+        "attempt": int(attempt),
         "artifact_prefix": prefix,
         "bundle_zip": f"{prefix}.zip",
         "apply_script": f"{prefix}.sh",
@@ -85,32 +87,75 @@ def fenced(text: str, language: str = "") -> str:
 
 
 def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
-    """Render a contract in the exact JSON shape parsed by gpt_web_driver.js."""
+    """Render the exact downloadable transport contract parsed by the web driver."""
+    attempt = int(contract["attempt"])
+    slice_id = str(contract["slice_id"])
     final_response = {
         "status": "ok",
         "bundle_zip": str(contract["bundle_zip"]),
         "apply_script": str(contract["apply_script"]),
         "source": "",
     }
+    manifest_shape = {
+        "schema_version": 1,
+        "transport": DOWNLOAD_TRANSPORT,
+        "slice_id": slice_id,
+        "attempt": attempt,
+        "diagnosis": ["one concise user-visible reason for the change"],
+        "risk_notes": [],
+        "tests_to_run": [],
+        "changed_paths": [
+            {
+                "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
+                "action": "write",
+                "mode": "0644",
+                "sha256": "64 lowercase hex characters for repo/<path>",
+            }
+        ],
+    }
+    applier_example = (
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        "REPO_ROOT=\"${1:-${VC4_REPO:-$PWD}}\"\n"
+        "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n"
+        f"python3 \"$REPO_ROOT/pro_scripts/vc4_codegen_download_bundle_apply.py\" validate-apply --repo \"$REPO_ROOT\" --slice \"{slice_id}\" --bundle \"$SCRIPT_DIR/{contract['bundle_zip']}\" --apply-script \"$SCRIPT_DIR/{contract['apply_script']}\" --expect-attempt {attempt}\n"
+    )
     return "\n".join(
         [
             "## Required downloadable artifact transport",
             "",
             f"Transport: `{DOWNLOAD_TRANSPORT}`",
             "",
-            "If any earlier template text mentions `response.json`, `changes.patch`, or GPTWEB file blocks for this implementation/failure attempt, ignore that older transport language. Use the downloadable bundle transport below.",
+            "Use this section as the source of truth. Ignore any previous-attempt artifact filenames, artifact_prefix values, bundle_zip values, apply_script values, or downloadable links shown in failure packets or chat history.",
+            "",
+            "Hard artifact filename rules:",
+            f"- The zip filename MUST be exactly `{contract['bundle_zip']}`.",
+            f"- The shell filename MUST be exactly `{contract['apply_script']}`.",
+            f"- The zip and manifest MUST say `slice_id = {slice_id}` and `attempt = {attempt}`.",
+            "- Do not use `attempt-01` unless this prompt's `Attempt:` line is exactly `1` and the exact filenames below contain `attempt-01`.",
+            "- Do not invent a new timestamp or reuse an old timestamp; use the exact filenames below byte-for-byte.",
             "",
             f"Artifact prefix: `{contract['artifact_prefix']}`",
             f"Bundle zip filename: `{contract['bundle_zip']}`",
             f"Apply script filename: `{contract['apply_script']}`",
             "",
-            "The local browser driver parses the prompt for JSON keys named exactly `bundle_zip` and `apply_script`; keep those keys and filenames byte-for-byte unchanged.",
-            "",
-            "Machine-readable contract:",
+            "Machine-readable DOWNLOAD_CONTRACT_JSON:",
             "",
             fenced(json.dumps(dict(contract), indent=2, sort_keys=True), "json"),
             "",
-            "Final visible ChatGPT response must start with this JSON object and then expose two downloadable links/attachments whose visible labels are exactly the two filenames:",
+            "The bundle zip layout must be exactly:",
+            "",
+            "````text\nmanifest.json\nrepo/<repo-relative changed files>\n````",
+            "",
+            "`manifest.json` must use this shape. `diagnosis`, `risk_notes`, and `tests_to_run` are arrays, not strings:",
+            "",
+            fenced(json.dumps(manifest_shape, indent=2, sort_keys=True), "json"),
+            "",
+            "The shell script must be a tiny trusted-applier launcher only. Do not put Python patching logic, heredocs, file writes, unzip/copy logic, or `rm -rf` in it. It should be equivalent to:",
+            "",
+            fenced(applier_example, "bash"),
+            "",
+            "Final visible ChatGPT response must start with this exact JSON object and then expose two downloadable links/attachments whose visible labels are exactly the two filenames:",
             "",
             fenced(json.dumps(final_response, separators=(",", ":")), "json"),
             "",
@@ -118,7 +163,6 @@ def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
             str(contract["apply_script"]),
         ]
     ) + "\n"
-
 
 def append_download_contract_to_prompt(rendered: str, contract: Mapping[str, Any], mode: str) -> str:
     if mode == "diagnosis":
@@ -178,6 +222,80 @@ def load_optional_file(repo: Path, rel: str) -> str:
     return path.read_text(encoding="utf-8", errors="replace")
 
 
+def sanitize_failure_packet_for_prompt(data: Any) -> Any:
+    """Return a prompt-safe failure packet without stale artifact filenames.
+
+    Failure packets from rejected downloadable bundles can contain the prior
+    attempt's artifact_transport.json, apply shell, and bundle manifest.  GPT
+    has copied those stale filenames into later answers.  Keep the useful
+    validation facts, but remove exact prior artifact names and large generated
+    payloads.
+    """
+    if isinstance(data, list):
+        return [sanitize_failure_packet_for_prompt(x) for x in data]
+    if not isinstance(data, dict):
+        return data
+
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "apply_bundle_sh":
+            out[key] = "<redacted: previous generated apply shell; do not copy; use the current prompt's apply_script filename and trusted-applier launcher>"
+            continue
+        if key == "artifact_transport_json":
+            summary: dict[str, Any] = {
+                "redacted": True,
+                "reason": "previous attempt artifact metadata contains stale filenames; do not copy",
+            }
+            if isinstance(value, dict):
+                for keep in ("transport", "schema_version", "collected_at"):
+                    if keep in value:
+                        summary[keep] = value[keep]
+                for name_key in ("bundle_zip", "apply_script", "artifact_prefix"):
+                    if name_key in value:
+                        summary[f"{name_key}_redacted"] = True
+            out[key] = summary
+            continue
+        if key == "bundle_manifest_json":
+            summary = {
+                "redacted": True,
+                "reason": "previous bundle manifest may contain stale attempt IDs and filenames",
+            }
+            if isinstance(value, dict):
+                for keep in ("schema_version", "transport", "slice_id", "attempt"):
+                    if keep in value:
+                        summary[keep] = value[keep]
+                changed = value.get("changed_paths")
+                if isinstance(changed, list):
+                    summary["changed_paths_count"] = len(changed)
+                    summary["changed_paths_preview"] = [
+                        (x.get("path") if isinstance(x, dict) else x)
+                        for x in changed[:20]
+                    ]
+                if "diagnosis" in value:
+                    summary["diagnosis_type"] = type(value.get("diagnosis")).__name__
+                    if not isinstance(value.get("diagnosis"), list):
+                        summary["diagnosis_error"] = "diagnosis must be an array of strings"
+            out[key] = summary
+            continue
+        if key == "bundle_zip":
+            if isinstance(value, dict):
+                out[key] = {"path_redacted": True, "bytes": value.get("bytes")}
+            else:
+                out[key] = "<redacted: previous bundle zip metadata>"
+            continue
+        if key == "bundle_zip_members":
+            out[key] = "<redacted: previous bundle member list>"
+            continue
+        out[key] = sanitize_failure_packet_for_prompt(value)
+
+    if data.get("stage") == "patch-guard" or "extra" in data:
+        out["artifact_filename_rule"] = (
+            "Ignore every artifact filename, artifact_prefix, bundle_zip, and apply_script from this failure packet. "
+            "For the next answer, use only the current prompt's DOWNLOAD_CONTRACT_JSON values."
+        )
+    return out
+
+
 def response_schema(mode: str) -> str:
     if mode == "diagnosis":
         schema = {
@@ -207,7 +325,8 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
         data = read_json_file(path)
     except Exception as exc:
         return f"<failure packet parse error: {exc}>"
-    return fenced(json.dumps(data, indent=2, sort_keys=True), "json")
+    sanitized = sanitize_failure_packet_for_prompt(data)
+    return fenced(json.dumps(sanitized, indent=2, sort_keys=True), "json")
 
 
 def simple_render(template: str, values: Mapping[str, str]) -> str:

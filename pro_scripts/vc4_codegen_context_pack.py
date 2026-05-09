@@ -98,6 +98,22 @@ def read_text(path: Path, *, limit: int | None = None) -> str:
     return clean_text(text)
 
 
+def item_char_limit(item: Mapping[str, Any], default_limit: int | None) -> int | None:
+    """Return per-item char limit. Use max_chars="full" for full text."""
+    raw = item.get("max_chars", item.get("limit_chars", None))
+    if raw is None:
+        return default_limit
+    if isinstance(raw, str):
+        value = raw.strip().lower()
+        if value in {"", "default"}:
+            return default_limit
+        if value in {"full", "none", "unlimited", "all"}:
+            return None
+        return int(value)
+    value = int(raw)
+    return None if value <= 0 else value
+
+
 def language_for(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix in {".cpp", ".cc", ".cxx", ".h", ".hpp"}:
@@ -207,13 +223,15 @@ def focused_excerpt(text: str, focus_terms: Sequence[str], *, window: int = 70, 
     return soft_truncate("\n".join(out), limit)
 
 
-def include_file(repo: Path, item: Mapping[str, Any], *, default_limit: int = DEFAULT_PER_FILE_CHAR_LIMIT) -> Section:
+def include_file(repo: Path, item: Mapping[str, Any], *, default_limit: int | None = DEFAULT_PER_FILE_CHAR_LIMIT) -> Section:
     raw_path = str(item.get("path", ""))
     path = repo / raw_path
     if not path.exists():
         return Section("Missing file", f"Requested file does not exist yet: `{raw_path}`", raw_path)
-    text = read_text(path, limit=default_limit)
-    return Section(f"File: {raw_path}", fenced(text, language=language_for(path)), raw_path)
+    limit = item_char_limit(item, default_limit)
+    text = read_text(path, limit=limit)
+    limit_note = "full file" if limit is None else f"up to {limit} chars"
+    return Section(f"File: {raw_path}", f"Included as {limit_note}.\n\n" + fenced(text, language=language_for(path)), raw_path)
 
 
 def include_file_excerpt(repo: Path, item: Mapping[str, Any]) -> Section:
@@ -223,8 +241,13 @@ def include_file_excerpt(repo: Path, item: Mapping[str, Any]) -> Section:
     if not path.exists():
         return Section("Missing file excerpt", f"Requested file does not exist yet: `{raw_path}`", raw_path)
     text = path.read_text(encoding="utf-8", errors="replace")
-    excerpt = focused_excerpt(text, focus)
-    focus_line = "Focus terms: " + ", ".join(focus) if focus else "No focus terms."
+    if str(item.get("max_chars", "")).strip().lower() in {"full", "none", "unlimited", "all"}:
+        excerpt = clean_text(text)
+        focus_line = "Full file requested; focus terms retained as hints: " + ", ".join(focus) if focus else "Full file requested."
+    else:
+        limit = item_char_limit(item, DEFAULT_FOCUSED_FILE_CHAR_LIMIT)
+        excerpt = focused_excerpt(text, focus, limit=limit or 0)
+        focus_line = "Focus terms: " + ", ".join(focus) if focus else "No focus terms."
     return Section(f"Focused excerpt: {raw_path}", focus_line + "\n\n" + fenced(excerpt, language=language_for(path)), raw_path)
 
 
@@ -474,6 +497,55 @@ def fnmatch_path(path: str, pattern: str) -> bool:
     return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, pattern.rstrip("/") + "/**")
 
 
+def sanitize_failure_packet_for_prompt(data: Any) -> Any:
+    if isinstance(data, list):
+        return [sanitize_failure_packet_for_prompt(x) for x in data]
+    if not isinstance(data, dict):
+        return data
+    out: dict[str, Any] = {}
+    for key, value in data.items():
+        if key == "apply_bundle_sh":
+            out[key] = "<redacted: previous generated apply shell; do not copy; use current DOWNLOAD_CONTRACT_JSON and trusted applier>"
+            continue
+        if key == "artifact_transport_json":
+            summary: dict[str, Any] = {"redacted": True, "reason": "previous attempt artifact metadata contains stale filenames"}
+            if isinstance(value, dict):
+                for keep in ("schema_version", "transport", "collected_at"):
+                    if keep in value:
+                        summary[keep] = value[keep]
+                for name_key in ("artifact_prefix", "bundle_zip", "apply_script"):
+                    if name_key in value:
+                        summary[f"{name_key}_redacted"] = True
+            out[key] = summary
+            continue
+        if key == "bundle_manifest_json":
+            summary: dict[str, Any] = {"redacted": True, "reason": "previous bundle manifest may contain stale attempt IDs and filenames"}
+            if isinstance(value, dict):
+                for keep in ("schema_version", "transport", "slice_id", "attempt"):
+                    if keep in value:
+                        summary[keep] = value[keep]
+                changed = value.get("changed_paths")
+                if isinstance(changed, list):
+                    summary["changed_paths_count"] = len(changed)
+                    summary["changed_paths_preview"] = [(x.get("path") if isinstance(x, dict) else x) for x in changed[:20]]
+                if "diagnosis" in value:
+                    summary["diagnosis_type"] = type(value.get("diagnosis")).__name__
+                    if not isinstance(value.get("diagnosis"), list):
+                        summary["diagnosis_error"] = "diagnosis must be an array"
+            out[key] = summary
+            continue
+        if key == "bundle_zip":
+            out[key] = {"path_redacted": True, "bytes": value.get("bytes") if isinstance(value, dict) else None}
+            continue
+        if key == "bundle_zip_members":
+            out[key] = "<redacted: previous bundle member list>"
+            continue
+        out[key] = sanitize_failure_packet_for_prompt(value)
+    if data.get("stage") == "patch-guard" or "extra" in data:
+        out["artifact_filename_rule"] = "Do not copy artifact filenames from this failure packet; use only the current prompt's DOWNLOAD_CONTRACT_JSON."
+    return out
+
+
 def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tuple[str, Mapping[str, Any] | None]:
     if not failure_packet_path:
         return "No failure packet was provided.", None
@@ -484,14 +556,15 @@ def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tu
         data = read_json_file(path)
     except Exception as exc:
         return f"Could not parse failure packet `{relpath(repo, path)}`: {exc}", None
-    body = fenced(json.dumps(data, indent=2, sort_keys=True), language="json")
+    sanitized = sanitize_failure_packet_for_prompt(data)
+    body = fenced(json.dumps(sanitized, indent=2, sort_keys=True), language="json")
     # Include bounded tail of referenced log if present.
     log_path = data.get("log_path")
     if isinstance(log_path, str):
         lp = repo / log_path
         if lp.exists():
             body += "\n\n### Referenced log tail\n" + fenced(tail_file(lp, max_lines=180), language="text")
-    return body, data if isinstance(data, dict) else None
+    return body, sanitized if isinstance(sanitized, dict) else None
 
 
 def run_extractor(name: str, repo: Path, *, slice_entry: Mapping[str, Any], config: MilestoneConfig, failure_packet_path: Path | None, failure_packet_data: Mapping[str, Any] | None) -> list[Section]:
@@ -601,7 +674,7 @@ def build_sections(
         sections.extend(run_extractor(str(extractor), repo, slice_entry=slice_entry, config=config, failure_packet_path=failure_packet_path, failure_packet_data=failure_packet_data))
 
     sections.append(Section("Context pack usage reminder", """
-Use this context only for the active slice. Do not broaden scope. Do not change reference bundles, expected.json, catalog.json, or the GPT web driver. Emit GPTWEB-staged `response.json` and `changes.patch` only when the prompt asks for a patch.
+Use this context only for the active slice. Do not broaden scope. Do not change reference bundles, expected.json, catalog.json, or the GPT web driver. For implementation/failure prompts with a downloadable bundle contract, emit only the exact downloadable bundle artifacts requested by the current prompt; never copy artifact filenames from prior failure packets.
 """.strip()))
     return sections
 
@@ -631,7 +704,7 @@ def render_context_pack(
     rendered_sections: list[str] = []
     included: list[dict[str, Any]] = []
     total = 0
-    header = f"# VC4 Codegen Milestone 1 Context Pack\n\nSlice: `{slice_id}` — {slice_entry.get('title')}\n\nProfile: `{profile_name}`\n\nMode: `{mode}`\n"
+    header = f"# VC4 Codegen Context Pack\n\nSlice: `{slice_id}` — {slice_entry.get('title')}\n\nProfile: `{profile_name}`\n\nMode: `{mode}`\n"
     total += len(header)
     rendered_sections.append(header)
     for section in sections:

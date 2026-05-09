@@ -70,6 +70,16 @@ class PatchGateError(DriverError):
     pass
 
 
+GENERATED_TEST_SIDE_EFFECT_PATTERNS = (
+    "compiler/test/**/Output/**",
+    "compiler/test/**/.lit_test_times.txt",
+)
+
+
+def is_generated_test_side_effect_path(path: str) -> bool:
+    return match_any_path(path, GENERATED_TEST_SIDE_EFFECT_PATTERNS)
+
+
 def _strip_diff_prefix(raw: str) -> str | None:
     raw = raw.strip().strip('"')
     if raw == "/dev/null":
@@ -122,6 +132,65 @@ def detect_staging_transport(staging_dir: Path) -> str:
     if (staging_dir / "response.json").exists() or (staging_dir / "changes.patch").exists():
         return "legacy_patch"
     return "unknown"
+
+
+def expected_attempt_from_staging_dir(staging_dir: Path) -> int | None:
+    for part in reversed(staging_dir.parts):
+        m = re.fullmatch(r"attempt-(\d+)", part)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def expected_download_name_fragment(slice_entry: Mapping[str, Any], expected_attempt: int | None) -> str | None:
+    if expected_attempt is None:
+        return None
+    slice_id = str(slice_entry.get("id", ""))
+    if not slice_id:
+        return None
+    milestone = "m"
+    m = re.match(r"(m\d+)-", slice_id)
+    if m:
+        milestone = m.group(1)
+    return f"vc4_codegen_{milestone}__{slice_id}__attempt-{expected_attempt:02d}__"
+
+
+def validate_download_transport_metadata(
+    transport: Mapping[str, Any],
+    *,
+    slice_entry: Mapping[str, Any],
+    expected_attempt: int | None,
+) -> None:
+    fragment = expected_download_name_fragment(slice_entry, expected_attempt)
+    if fragment is None:
+        return
+    stale: list[str] = []
+    for key in ("artifact_prefix", "bundle_zip", "apply_script"):
+        value = transport.get(key)
+        if isinstance(value, str) and value and fragment not in value:
+            stale.append(f"{key}={value}")
+    attempts = transport.get("attempts")
+    if isinstance(attempts, list):
+        for item in attempts:
+            if isinstance(item, dict):
+                filename = item.get("filename")
+                if isinstance(filename, str) and filename and fragment not in filename:
+                    stale.append(f"attempts[].filename={filename}")
+    downloaded = transport.get("downloaded_files")
+    if isinstance(downloaded, dict):
+        for key in ("bundle_zip", "apply_script"):
+            value = downloaded.get(key)
+            if isinstance(value, str) and value:
+                name = Path(value).name
+                if name not in {"bundle.zip", "apply_bundle.sh"} and fragment not in name:
+                    stale.append(f"downloaded_files.{key}={value}")
+    if stale:
+        raise PatchGateError(
+            "download-bundle artifact metadata uses stale or wrong attempt filenames. "
+            f"Expected all generated artifact names to contain {fragment!r}. "
+            "The next GPT attempt must ignore prior failure-packet artifact filenames and use only the current prompt's DOWNLOAD_CONTRACT_JSON.\n"
+            + "\n".join(stale[:20])
+        )
 
 
 def validate_staging_file_set(staging_dir: Path, *, transport: str = "legacy_patch") -> None:
@@ -241,6 +310,8 @@ def validate_patch_policy(*, patch_paths: Sequence[str], allowed_paths: Sequence
         raise PatchGateError("could not extract any changed paths from changes.patch")
     for path in patch_paths:
         normalized = normalize_relpath(path)
+        if is_generated_test_side_effect_path(normalized):
+            raise PatchGateError(f"generated lit side-effect path is not a source product: {normalized}")
         reject_if_forbidden(normalized, forbidden_paths)
         require_allowed(normalized, allowed_paths)
 
@@ -268,7 +339,13 @@ def validate_and_apply(
 ) -> dict[str, Any]:
     transport = detect_staging_transport(staging_dir)
     if transport == "download_bundle":
+        expected_attempt = expected_attempt_from_staging_dir(staging_dir)
         bundle_path, script_path, transport_meta = load_download_bundle_transport(staging_dir)
+        validate_download_transport_metadata(
+            transport_meta,
+            slice_entry=slice_entry,
+            expected_attempt=expected_attempt,
+        )
         try:
             report = apply_bundle(
                 repo=repo,
@@ -276,7 +353,7 @@ def validate_and_apply(
                 slice_entry=slice_entry,
                 bundle_path=bundle_path,
                 apply_script=script_path,
-                expect_attempt=None,
+                expect_attempt=expected_attempt,
                 check_only=not apply_patch,
                 write_report=write_report,
             )
@@ -284,6 +361,7 @@ def validate_and_apply(
             raise PatchGateError(str(exc)) from exc
         report["staging_dir"] = str(staging_dir)
         report["artifact_transport_json"] = transport_meta
+        report["expected_attempt"] = expected_attempt
         if write_report:
             write_json_file(write_report, report)
         return report
@@ -353,13 +431,17 @@ def guard_worktree(*, repo: Path, config: MilestoneConfig, slice_entry: Mapping[
     forbidden = config.forbidden_paths_for_slice(slice_entry)
     disallowed: list[str] = []
     forbidden_hits: list[str] = []
+    generated_side_effects: list[str] = []
     for path in changed:
+        if is_generated_test_side_effect_path(path):
+            generated_side_effects.append(path)
+            continue
         if match_any_path(path, forbidden):
             forbidden_hits.append(path)
             continue
         if not match_any_path(path, allowed):
             disallowed.append(path)
-    bad = sorted(set(disallowed + forbidden_hits))
+    bad = sorted(set(disallowed + forbidden_hits + generated_side_effects))
     if bad and restore_disallowed:
         restore_paths(repo, bad)
     return {
@@ -367,6 +449,7 @@ def guard_worktree(*, repo: Path, config: MilestoneConfig, slice_entry: Mapping[
         "changed_paths": changed,
         "disallowed_paths": disallowed,
         "forbidden_paths": forbidden_hits,
+        "generated_side_effects": generated_side_effects,
         "restored": bool(bad and restore_disallowed),
     }
 
