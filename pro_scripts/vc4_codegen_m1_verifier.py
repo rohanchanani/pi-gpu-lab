@@ -1447,6 +1447,13 @@ def mechanism_program_layout_contract(ctx: VerifierContext, slice_id: str, v: Ma
     return make_success(ctx, slice_id, v, message="program layout contract passed", details={"layout": ctx.rel(layout_path), "regions": len(regions), "heap_size_bytes": heap_size}, duration=time.time() - started)
 
 
+
+def strip_c_comments_for_runtime_contract(text: str) -> str:
+    """Return C/C++ text with comments removed for semantic regex checks."""
+    text = re.sub(r"/\*.*?\*/", "", text, flags=re.S)
+    text = re.sub(r"//[^\n\r]*", "", text)
+    return text
+
 def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
     try:
@@ -1473,11 +1480,12 @@ def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v:
     launch_violations = []
     for launch in public_launch_names_from_manifest(manifest):
         body = function_body_for_name(source, launch)
+        body_for_contract = strip_c_comments_for_runtime_contract(body)
         if not body:
             launch_violations.append({"launch_function": launch, "missing_body": True})
             continue
-        bad = [pat for pat in launch_forbidden if re.search(pat, body, flags=re.S)]
-        miss = [pat for pat in launch_required if not re.search(pat, body, flags=re.S)]
+        bad = [pat for pat in launch_forbidden if re.search(pat, body_for_contract, flags=re.S)]
+        miss = [pat for pat in launch_required if not re.search(pat, body_for_contract, flags=re.S)]
         if bad or miss:
             launch_violations.append({"launch_function": launch, "forbidden_present": bad, "required_missing": miss})
     # Lightweight allocation policy checks by regex.  These deliberately fail

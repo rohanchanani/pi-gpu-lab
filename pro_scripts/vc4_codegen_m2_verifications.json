@@ -724,12 +724,17 @@
             "vc4Free",
             "vc4MemcpyHtoD",
             "vc4MemcpyDtoH",
-            "memcpy\\s*\\("
+            "memcpy\\s*\\(",
+            "vc4Malloc\\\\s*\\\\(",
+            "vc4MemcpyHtoD\\\\s*\\\\(",
+            "vc4MemcpyDtoH\\\\s*\\\\(",
+            "vc4MemcpyDtoD\\\\s*\\\\(",
+            "vc4Free\\\\s*\\\\("
           ],
           "required_patterns_in_launch_functions": [
-            "uniform",
-            "SRQUA",
-            "SRQPC"
+            "program->state->.*_unif\\\\s*\\\\[qpu\\\\]",
+            "PUT32\\\\s*\\\\(\\\\s*V3D_SRQUA",
+            "PUT32\\\\s*\\\\(\\\\s*V3D_SRQPC"
           ]
         },
         {

@@ -675,7 +675,7 @@ static constexpr uint64_t kVC4ProgramHeaderBytes = 64;
 static constexpr uint64_t kVC4KernelDescriptorBytes = 32;
 static constexpr uint64_t kVC4MaxRequestsPerWave = 12;
 static constexpr uint64_t kVC4RuntimeBookkeepingBytes = 32;
-static constexpr uint64_t kVC4ReservedHeapBytes = 4096;
+static constexpr uint64_t kVC4ReservedHeapBytes = 65536;
 
 static uint64_t alignUpTo(uint64_t value, uint64_t alignment) {
   if (alignment <= 1)
@@ -2145,6 +2145,15 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
 
   os << "#define GPU_MEM_FLG 0xCu\n";
   os << "#define GPU_BASE 0x40000000u\n";
+  os << "#define V3D_BASE 0x20C00000u\n";
+  os << "#define V3D_L2CACTL (V3D_BASE + 0x020u)\n";
+  os << "#define V3D_SLCACTL (V3D_BASE + 0x024u)\n";
+  os << "#define V3D_SRQPC (V3D_BASE + 0x0430u)\n";
+  os << "#define V3D_SRQUA (V3D_BASE + 0x0434u)\n";
+  os << "#define V3D_SRQCS (V3D_BASE + 0x043cu)\n";
+  os << "#define V3D_DBCFG (V3D_BASE + 0x0e00u)\n";
+  os << "#define V3D_DBQITE (V3D_BASE + 0x0e2cu)\n";
+  os << "#define V3D_DBQITC (V3D_BASE + 0x0e30u)\n";
   os << "#define VC4_CODEGEN_PROGRAM_MAGIC 0x56344350u /* VC4P */\n";
   os << "#define VC4_CODEGEN_PROGRAM_KERNELS " << kernels.size() << "u\n";
   os << "#define VC4_CODEGEN_PROGRAM_LAYOUT_ALIGNMENT "
@@ -2243,6 +2252,20 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "static struct vc4_program g_program_storage;\n";
   os << "static uint32_t g_program_live;\n";
   os << "static uint32_t g_program_allocations;\n\n";
+
+  os << "static void vc4_codegen_prepare_v3d_queue(void) {\n";
+  os << "  PUT32(V3D_DBCFG, 0u);\n";
+  os << "  PUT32(V3D_DBQITE, 0u);\n";
+  os << "  PUT32(V3D_DBQITC, 0xffffffffu);\n";
+  os << "  PUT32(V3D_L2CACTL, 1u << 2);\n";
+  os << "  PUT32(V3D_SLCACTL, 0xffffffffu);\n";
+  os << "  PUT32(V3D_SRQCS, (1u << 7) | (1u << 8) | (1u << 16));\n";
+  os << "}\n\n";
+
+  os << "static void vc4_codegen_wait_for_qpus(uint32_t activeQpus) {\n";
+  os << "  while (((GET32(V3D_SRQCS) >> 16) & 0xffu) != activeQpus) {\n";
+  os << "  }\n";
+  os << "}\n\n";
 
   os << "static uint32_t vc4_codegen_align_u32(uint32_t value, uint32_t alignment) {\n";
   os << "  if (alignment <= 1u)\n";
@@ -2380,12 +2403,23 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  size_t allocSize = sizeof(struct " << stateName << ");\n";
   os << "  if (allocSize > 0xffffffffu)\n";
   os << "    return -1;\n\n";
+  os << "#ifdef __RPI__\n";
+  os << "  if (qpu_enable(1))\n";
+  os << "    return -1;\n";
+  os << "#endif\n\n";
   os << "  uint32_t handle = mem_alloc((uint32_t)allocSize, 4096u, GPU_MEM_FLG);\n";
-  os << "  if (!handle)\n";
-  os << "    return -1;\n\n";
+  os << "  if (!handle) {\n";
+  os << "#ifdef __RPI__\n";
+  os << "    qpu_enable(0);\n";
+  os << "#endif\n";
+  os << "    return -1;\n";
+  os << "  }\n\n";
   os << "  uint32_t vc = mem_lock(handle);\n";
   os << "  if (!vc) {\n";
   os << "    mem_free(handle);\n";
+  os << "#ifdef __RPI__\n";
+  os << "    qpu_enable(0);\n";
+  os << "#endif\n";
   os << "    return -1;\n";
   os << "  }\n\n";
   os << "  volatile struct " << stateName << " *state =\n";
@@ -2449,6 +2483,9 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "    return;\n";
   os << "  mem_unlock(program->handle);\n";
   os << "  mem_free(program->handle);\n";
+  os << "#ifdef __RPI__\n";
+  os << "  qpu_enable(0);\n";
+  os << "#endif\n";
   os << "  memset((void *)&g_program_storage, 0, sizeof(g_program_storage));\n";
   os << "  g_program_live = 0u;\n";
   os << "}\n\n";
@@ -2635,8 +2672,12 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       os << "      return -1;\n";
       os << "  }\n";
     }
-    if (!bufferArgs.empty())
-      os << "\n";
+    if (!bufferArgs.empty()) {
+      os << "  if (logicalN == 0u) {\n";
+      os << "    program->state->launch_count++;\n";
+      os << "    return 0;\n";
+      os << "  }\n\n";
+    }
 
     appendLauncherUniformLayoutComment(os, kernelABI);
     os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
@@ -2679,11 +2720,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << "[qpu] = GPU_BASE + (uint32_t)(uintptr_t)&program->state->"
        << getKernelUniformFieldName(launchKernel.kernelId) << "[qpu][0];\n";
     os << "  }\n\n";
-    os << "  gpu_fft_base_exec_direct(program->state->kernel_descs["
-       << launchKernel.kernelId << "].code_gpu_addr,\n";
-    os << "                           (uint32_t *)program->state->"
-       << getKernelUnifPtrFieldName(launchKernel.kernelId)
-       << ", activeQpus);\n";
+    os << "  vc4_codegen_prepare_v3d_queue();\n";
+    os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
+    os << "    PUT32(V3D_SRQUA, program->state->"
+       << getKernelUnifPtrFieldName(launchKernel.kernelId) << "[qpu]);\n";
+    os << "    PUT32(V3D_SRQPC, program->state->kernel_descs["
+       << launchKernel.kernelId << "].code_gpu_addr);\n";
+    os << "  }\n";
+    os << "  vc4_codegen_wait_for_qpus(activeQpus);\n";
     os << "  program->state->launch_count++;\n";
     os << "  return 0;\n";
     os << "}\n\n";
