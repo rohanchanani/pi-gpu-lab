@@ -10,6 +10,7 @@ to drive GPT Pro one slice at a time through gpt_web_driver.js.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import shlex
@@ -478,9 +479,95 @@ def _decode_first_json_object(text: str) -> Mapping[str, Any] | None:
     return None
 
 
+def _iter_json_log_paths(value: Any) -> list[str]:
+    """Return every log_path string nested in a JSON-like object, in order."""
+    out: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            for key, child in node.items():
+                if key == "log_path" and isinstance(child, str) and child:
+                    out.append(child)
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(value)
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for raw in out:
+        if raw not in seen:
+            seen.add(raw)
+            deduped.append(raw)
+    return deduped
+
+
+def _packet_relpath(repo: Path, path: Path) -> str:
+    try:
+        return relpath(repo, path)
+    except Exception:
+        return str(path)
+
+
+def _resolve_packet_path(repo: Path, raw_path: str) -> Path:
+    path = Path(raw_path)
+    if path.is_absolute():
+        return path
+    return repo / path
+
+
+def _read_packet_file(path: Path) -> dict[str, Any]:
+    record: dict[str, Any] = {"path": str(path)}
+    if not path.exists():
+        record["exists"] = False
+        return record
+    data = path.read_bytes()
+    record.update({
+        "exists": True,
+        "byte_count": len(data),
+        "sha256": hashlib.sha256(data).hexdigest(),
+    })
+    text = data.decode("utf-8", errors="replace")
+
+    # Full hardware output is intentionally high signal.  By default include it
+    # completely.  Set VC4_FAILURE_PACKET_LOG_MAX_BYTES to a positive integer only
+    # if a future log becomes too large for prompt transport.
+    raw_limit = os.environ.get("VC4_FAILURE_PACKET_LOG_MAX_BYTES", "0").strip()
+    try:
+        limit = int(raw_limit)
+    except ValueError:
+        limit = 0
+    if limit > 0 and len(data) > limit:
+        head = text[: max(limit // 2, 0)]
+        tail = text[-max(limit // 2, 0) :] if limit else ""
+        record.update({
+            "included_full_text": False,
+            "truncated_to_bytes": limit,
+            "text_head": head,
+            "text_tail": tail,
+        })
+    else:
+        record.update({
+            "included_full_text": True,
+            "text": text,
+        })
+    return record
+
+
+def _extract_command_out_path(command: Sequence[str] | None) -> str | None:
+    if not command:
+        return None
+    for index, item in enumerate(command):
+        if item == "--out" and index + 1 < len(command):
+            return str(command[index + 1])
+    return None
+
+
 def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
     if not str(failed.gate).startswith("typed-verifier:"):
         return {}
+    repo = failed.cwd
     if not failed.log_path.exists():
         return {"typed_verifier": {"error": "typed verifier log is missing"}}
     text = failed.log_path.read_text(encoding="utf-8", errors="replace")
@@ -490,6 +577,26 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
     failures = report.get("failures", [])
     results = report.get("results", [])
     first_failure = failures[0] if isinstance(failures, list) and failures else None
+
+    referenced_paths: list[Path] = []
+    for raw in _iter_json_log_paths(report):
+        referenced_paths.append(_resolve_packet_path(repo, raw))
+    out_path = _extract_command_out_path(failed.command)
+    if out_path:
+        referenced_paths.append(_resolve_packet_path(repo, out_path))
+    referenced_paths.append(failed.log_path)
+
+    full_logs: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for path in referenced_paths:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        record = _read_packet_file(path)
+        record["path"] = _packet_relpath(repo, path)
+        full_logs.append(record)
+
     return {
         "typed_verifier": {
             "ok": bool(report.get("ok")),
@@ -497,6 +604,9 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
             "first_failure": first_failure,
             "failure_count": len(failures) if isinstance(failures, list) else None,
             "result_count": len(results) if isinstance(results, list) else None,
+            "full_report": report,
+            "referenced_log_count": len(full_logs),
+            "referenced_logs": full_logs,
         }
     }
 
