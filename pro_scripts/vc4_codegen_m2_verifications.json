@@ -76,7 +76,8 @@
     "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(.",
     "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks.",
     "M2 slice 6 static runtime/layout contracts are stop_on_failure gates: if generated launch code cannot enqueue V3D work or lacks a bounded failure path, do not spend a pi-install hardware timeout before returning a failure packet.",
-    "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware."
+    "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware.",
+    "Post-slice-6 anti-shortcut checks keep QASM emission scheduled-stream based and prevent support-script VC4_TEST_RESULT/runtime-event injection in later hardware slices."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -831,11 +832,11 @@
         {
           "id": "generic-qasm-emitter-no-fixture-special-cases",
           "mechanism": "command",
-          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents m2-06 from passing by hardcoding memory_output/read_nop_write and regressing earlier kernels such as saxpy_full.",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents future slices from passing by hardcoding individual matrix fixtures or regressing earlier kernels.",
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport sys\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nforbidden = [\n    'appendMemoryOutputQASM',\n    'appendReadNopWriteQASM',\n    'launchABI.publicName == \"memory_output\"',\n    'launchABI.publicName == \"read_nop_write\"',\n    'publicName == \"memory_output\"',\n    'publicName == \"read_nop_write\"',\n]\nfound = [item for item in forbidden if item in text]\nrequired = ['scheduledStream', 'emitQPUBundleQASM', 'emitQPULDIQASM', 'emitQPUSemaQASM', 'emitQPUBranchQASM']\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name QASM special cases found:', ', '.join(found))\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing:', ', '.join(missing))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1070,6 +1071,32 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "generic-qasm-emitter-no-fixture-special-cases",
+          "mechanism": "command",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents future slices from passing by hardcoding individual matrix fixtures or regressing earlier kernels.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "support-runner-no-synthetic-results",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; runtime diagnostics and VC4_TEST_RESULT lines must come from real hardware harnesses, not synthetic support-script injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
           "id": "generate-saxpy_full",
           "mechanism": "vc4_codegen_generate",
           "description": "Generate candidate bundle for saxpy_full",
@@ -1093,7 +1120,8 @@
               "uses_barrier": false,
               "uses_shared_vpm": false
             }
-          ]
+          ],
+          "stop_on_failure": true
         },
         {
           "id": "independent-vector-fixture-matrix",
@@ -1132,6 +1160,32 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "generic-qasm-emitter-no-fixture-special-cases",
+          "mechanism": "command",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents future slices from passing by hardcoding individual matrix fixtures or regressing earlier kernels.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "support-runner-no-synthetic-results",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; runtime diagnostics and VC4_TEST_RESULT lines must come from real hardware harnesses, not synthetic support-script injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
           "id": "generate-qpu_barrier_syncthreads",
           "mechanism": "vc4_codegen_generate",
           "description": "Generate candidate bundle for qpu_barrier_syncthreads",
@@ -1164,7 +1218,8 @@
               "semaphores_per_block": 4
             }
           ],
-          "expect": "accept"
+          "expect": "accept",
+          "stop_on_failure": true
         },
         {
           "id": "cooperative-invalid-too-many-warps",
@@ -1178,7 +1233,8 @@
           "stderr_contains": [
             "warps_per_block",
             "12"
-          ]
+          ],
+          "stop_on_failure": true
         },
         {
           "id": "cooperative-invalid-too-much-shared-vpm",
@@ -1192,7 +1248,8 @@
           ],
           "stderr_contains": [
             "vpm_bytes_per_block"
-          ]
+          ],
+          "stop_on_failure": true
         },
         {
           "id": "cooperative-fixture-matrix",
@@ -1219,6 +1276,32 @@
           "description": "Build vc4-codegen target",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generic-qasm-emitter-no-fixture-special-cases",
+          "mechanism": "command",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents future slices from passing by hardcoding individual matrix fixtures or regressing earlier kernels.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "support-runner-no-synthetic-results",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; runtime diagnostics and VC4_TEST_RESULT lines must come from real hardware harnesses, not synthetic support-script injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
         },
         {
           "id": "m2-smoke-runtime-matrix",
@@ -1286,6 +1369,32 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "generic-qasm-emitter-no-fixture-special-cases",
+          "mechanism": "command",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents future slices from passing by hardcoding individual matrix fixtures or regressing earlier kernels.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "support-runner-no-synthetic-results",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; runtime diagnostics and VC4_TEST_RESULT lines must come from real hardware harnesses, not synthetic support-script injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
           "id": "build-check-vc4",
           "mechanism": "build",
           "target": "check-vc4",
@@ -1339,7 +1448,8 @@
           "allocation_policy": {
             "launch_reuses_resident_code": true
           },
-          "route_hint": "gpt_pro"
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
         },
         {
           "id": "final-multi-kernel-resident-bundle",
@@ -1349,7 +1459,8 @@
           "expected_kernel_count": 2,
           "require_code_artifacts": true,
           "forbid_root_kernel_qasm": true,
-          "route_hint": "gpt_pro"
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
         }
       ]
     }

@@ -446,6 +446,10 @@
       "include": [
         {
           "kind": "file",
+          "path": "pro_scripts/prompts/vc4_codegen_m2/post_slice6_handoff.md"
+        },
+        {
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -474,16 +478,41 @@
         {
           "kind": "file",
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 160000
+      "max_chars_ignored_by_no_truncation_patch": 2000000,
+      "max_chars": 2000000
     },
     "cooperative_block": {
       "purpose": "Runtime scheduler/resource allocator for cooperative-block kernels.",
       "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_codegen_m2/post_slice6_handoff.md"
+        },
         {
           "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
@@ -514,18 +543,43 @@
         {
           "kind": "fixture_tree",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 160000
+      "max_chars_ignored_by_no_truncation_patch": 2000000,
+      "max_chars": 2000000
     },
     "fixture_matrix": {
       "purpose": "Curated M2 fixture matrix hardening.",
       "include": [
         {
           "kind": "file",
+          "path": "pro_scripts/prompts/vc4_codegen_m2/post_slice6_handoff.md"
+        },
+        {
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -554,18 +608,39 @@
         {
           "kind": "file",
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 160000
+      "max_chars_ignored_by_no_truncation_patch": 2000000,
+      "max_chars": 2000000
     },
     "final_acceptance": {
       "purpose": "Final M2 acceptance and cleanup.",
       "include": [
         {
           "kind": "file",
+          "path": "pro_scripts/prompts/vc4_codegen_m2/post_slice6_handoff.md"
+        },
+        {
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -594,13 +669,30 @@
         {
           "kind": "file",
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
         }
       ],
       "extractors": [
         "git_diff_summary",
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 160000
+      "max_chars_ignored_by_no_truncation_patch": 2000000,
+      "max_chars": 2000000
     }
   }
 }
