@@ -25,3 +25,9 @@ Slice 6 established the first real two-kernel resident hardware program. Carry t
 - Do not patch `run_candidate_codegen_test.sh` to inject fixture-specific `VC4_TEST_RESULT` or synthetic runtime lines.
 - Do not mutate checked-in hardware fixture reference trees, expected JSON, `.vc4_auto/**`, lit `Output/**`, `.lit_test_times.txt`, or `run.log` artifacts.
 - Do not replace generic QASM emission with hardcoded fixture QASM emitters.
+
+## Slice 7+ context rule
+
+- For slices 7-10, fixture matrices are semantic inputs, not just names. The workflow should provide full text for each matrix fixture's `input.mlir`, `expected.json`, run scripts, and trusted reference qasm/launcher/harness files. Do not guess the contents of fixture files from summaries.
+- If a failure packet mentions a generate/assemble/build/candidate_hardware/expected_json log, read the full referenced log in the prompt context before patching. Summary tails are only triage hints.
+- Known slice-7 trap: if `gemv_naive_tail` fails, use the actual `gemv_naive_tail/input.mlir` and reference files supplied in context; do not synthesize an imagined GEMV kernel.

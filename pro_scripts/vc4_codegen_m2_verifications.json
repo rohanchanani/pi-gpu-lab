@@ -1090,7 +1090,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1108,6 +1108,25 @@
             "manifest.json"
           ],
           "route_hint": "gpt_pro"
+        },
+        {
+          "id": "independent-vector-generated-runtime-no-legacy-wrapper",
+          "mechanism": "generated_runtime_contract",
+          "description": "Slice 7 must keep the M2 CUDA-like resident-program runtime shape: no legacy vc4_runtime prepare/release wrappers or host-copy launcher compatibility layer.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "forbidden_patterns": [
+            "struct\\s+vc4_runtime",
+            "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_release\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_legacy\\b",
+            "\\bprepare_1d\\b",
+            "\\bprepare_2d\\b"
+          ],
+          "allocation_policy": {
+            "launch_reuses_resident_code": true
+          },
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
         },
         {
           "id": "independent-vector-resource-contract",
@@ -1179,7 +1198,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1297,7 +1316,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1388,7 +1407,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
