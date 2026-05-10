@@ -2460,13 +2460,179 @@ def _json_safe_for_report(value):
     # pathlib.Path, enums, exceptions, and any accidental custom objects.
     return str(value)
 
+
+# --- VC4_VERIFY_RESULT_SUMMARY_V1 start ---
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    return bool(value)
+
+
+def _verification_packet_key(packet: Mapping[str, Any]) -> str:
+    return str(packet.get("verification_id") or packet.get("id") or "<unknown>")
+
+
+def _build_verify_summary(report: Mapping[str, Any]) -> Dict[str, Any]:
+    """Build a compact, human-oriented summary for verify reports.
+
+    The detailed JSON remains the source of truth.  This summary makes terminal
+    runs unambiguous while preserving stdout as parseable JSON for automation.
+    """
+    raw_results = report.get("results")
+    results: List[Mapping[str, Any]] = [
+        r for r in raw_results if isinstance(r, Mapping)
+    ] if isinstance(raw_results, list) else []
+
+    required_results = [r for r in results if _as_bool(r.get("required"), True)]
+    optional_results = [r for r in results if not _as_bool(r.get("required"), True)]
+
+    required_failures = [r for r in required_results if not _as_bool(r.get("ok"), False)]
+    optional_failures = [r for r in optional_results if not _as_bool(r.get("ok"), False)]
+    skipped_results = [r for r in results if _as_bool(r.get("skipped"), False)]
+    required_skipped = [r for r in required_results if _as_bool(r.get("skipped"), False)]
+    required_passed = [
+        r for r in required_results
+        if _as_bool(r.get("ok"), False) and not _as_bool(r.get("skipped"), False)
+    ]
+    optional_passed = [
+        r for r in optional_results
+        if _as_bool(r.get("ok"), False) and not _as_bool(r.get("skipped"), False)
+    ]
+
+    if required_failures:
+        status = "FAIL"
+    elif skipped_results:
+        status = "PASS_WITH_SKIPS"
+    else:
+        status = "PASS"
+
+    slice_statuses: Dict[str, Dict[str, Any]] = {}
+    for r in results:
+        sid = str(r.get("slice_id") or "<unknown>")
+        entry = slice_statuses.setdefault(
+            sid,
+            {
+                "status": "PASS",
+                "required_total": 0,
+                "required_passed": 0,
+                "required_failed": 0,
+                "required_skipped": 0,
+                "optional_failed": 0,
+                "skipped": 0,
+            },
+        )
+        is_required = _as_bool(r.get("required"), True)
+        is_ok = _as_bool(r.get("ok"), False)
+        is_skipped = _as_bool(r.get("skipped"), False)
+        if is_required:
+            entry["required_total"] += 1
+            if is_skipped:
+                entry["required_skipped"] += 1
+            elif is_ok:
+                entry["required_passed"] += 1
+            else:
+                entry["required_failed"] += 1
+        elif not is_ok:
+            entry["optional_failed"] += 1
+        if is_skipped:
+            entry["skipped"] += 1
+
+    for entry in slice_statuses.values():
+        if entry["required_failed"]:
+            entry["status"] = "FAIL"
+        elif entry["skipped"]:
+            entry["status"] = "PASS_WITH_SKIPS"
+        else:
+            entry["status"] = "PASS"
+
+    first_failure = None
+    if required_failures:
+        f = required_failures[0]
+        first_failure = {
+            "slice_id": str(f.get("slice_id") or "<unknown>"),
+            "verification_id": _verification_packet_key(f),
+            "mechanism": str(f.get("mechanism") or ""),
+            "message": str(f.get("message") or ""),
+        }
+        if f.get("log_path") is not None:
+            first_failure["log_path"] = str(f.get("log_path"))
+
+    return {
+        "status": status,
+        "ok": status != "FAIL",
+        "required_total": len(required_results),
+        "required_passed": len(required_passed),
+        "required_failed": len(required_failures),
+        "required_skipped": len(required_skipped),
+        "optional_total": len(optional_results),
+        "optional_passed": len(optional_passed),
+        "optional_failed": len(optional_failures),
+        "skipped": len(skipped_results),
+        "slice_statuses": slice_statuses,
+        "first_failure": first_failure,
+    }
+
+
+def _attach_verify_summary(report: Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(report.get("results"), list) and "ok" in report:
+        summary = _build_verify_summary(report)
+        report["status"] = summary["status"]
+        report["summary"] = summary
+    return report
+
+
+def _shell_quote_for_summary(value: Any) -> str:
+    text = str(value if value is not None else "")
+    if not text:
+        return "''"
+    if re.fullmatch(r"[A-Za-z0-9_./:=+@,%,-]+", text):
+        return text
+    return "'" + text.replace("'", "'\\''") + "'"
+
+
+def _emit_verify_summary_line(report: Mapping[str, Any], args: argparse.Namespace) -> None:
+    if getattr(args, "command", None) != "verify":
+        return
+    summary = report.get("summary")
+    if not isinstance(summary, Mapping):
+        return
+    parts = [
+        f"VC4_VERIFY_RESULT={summary.get('status', 'UNKNOWN')}",
+        f"required_passed={summary.get('required_passed', 0)}",
+        f"required_failed={summary.get('required_failed', 0)}",
+        f"required_skipped={summary.get('required_skipped', 0)}",
+        f"optional_failed={summary.get('optional_failed', 0)}",
+        f"skipped={summary.get('skipped', 0)}",
+        f"duration_sec={report.get('duration_sec', '')}",
+        "slices=" + _shell_quote_for_summary(",".join(str(x) for x in report.get("slice_ids", []))),
+    ]
+    print("[vc4-verify] " + " ".join(parts), file=sys.stderr)
+    first_failure = summary.get("first_failure")
+    if isinstance(first_failure, Mapping):
+        msg_parts = [
+            "VC4_VERIFY_FIRST_FAILURE",
+            "slice=" + _shell_quote_for_summary(first_failure.get("slice_id", "")),
+            "verification=" + _shell_quote_for_summary(first_failure.get("verification_id", "")),
+            "mechanism=" + _shell_quote_for_summary(first_failure.get("mechanism", "")),
+        ]
+        if first_failure.get("log_path"):
+            msg_parts.append("log=" + _shell_quote_for_summary(first_failure.get("log_path")))
+        if first_failure.get("message"):
+            msg_parts.append("message=" + _shell_quote_for_summary(first_failure.get("message")))
+        print("[vc4-verify] " + " ".join(msg_parts), file=sys.stderr)
+# --- VC4_VERIFY_RESULT_SUMMARY_V1 end ---
+
 def emit_report(report: Dict[str, Any], args: argparse.Namespace) -> None:
+    _attach_verify_summary(report)
     text = json.dumps(_json_safe_for_report(report), indent=2, sort_keys=False) + "\n"
     if args.out:
         out = Path(args.out)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_text(text, encoding="utf-8")
     print(text, end="")
+    _emit_verify_summary_line(report, args)
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
