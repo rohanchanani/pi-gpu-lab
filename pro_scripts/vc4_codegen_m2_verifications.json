@@ -795,7 +795,7 @@
     },
     "m2-06-multi-kernel-chain-hardware": {
       "title": "First true multi-kernel hardware program",
-      "expected_end_state": "The multi_kernel_chain fixture launches two kernels from one persistent program image using the same heap buffer and validates final output.",
+      "expected_end_state": "The multi_kernel_chain fixture launches memory_output then read_nop_write from one persistent program image, using the same heap buffer, and validates the real hardware result without host-script synthetic runtime/result lines.",
       "verifications": [
         {
           "id": "multi-kernel-chain-source-products",
@@ -835,7 +835,10 @@
           "required_files": [
             "kernel_launch.c",
             "kernel_launch.h",
-            "manifest.json"
+            "manifest.json",
+            "layout.json",
+            "kernels/memory_output.qasm",
+            "kernels/read_nop_write.qasm"
           ],
           "route_hint": "gpt_pro"
         },
@@ -883,6 +886,55 @@
           "require_heap": true
         },
         {
+          "id": "multi-kernel-chain-generated-runtime-contract",
+          "mechanism": "generated_runtime_contract",
+          "description": "Generated runtime exposes two real launch entry points from one resident program; result lines must come from the hardware harness, not generated launcher source.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "required_functions": [
+            "vc4_program_create",
+            "vc4Malloc",
+            "vc4MemcpyHtoD",
+            "vc4MemcpyDtoH",
+            "memory_output_launch",
+            "read_nop_write_launch"
+          ],
+          "forbidden_patterns": [
+            "VC4_TEST_RESULT",
+            "emit_multi_kernel_chain",
+            "struct\\s+vc4_runtime",
+            "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_release\\s*\\("
+          ],
+          "forbidden_patterns_in_launch_functions": [
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
+            "memcpy\\s*\\(",
+            "memmove\\s*\\(",
+            "memset\\s*\\("
+          ],
+          "required_patterns_in_launch_functions": [
+            "program->state->.*_unif\\s*\\[qpu\\]",
+            "PUT32\\s*\\(\\s*V3D_SRQUA",
+            "PUT32\\s*\\(\\s*V3D_SRQPC"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "multi-kernel-chain-support-runner-generic",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; m2-06 must not be passed by synthetic multi_kernel_chain log/result injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport sys\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\ntext = p.read_text(encoding='utf-8', errors='replace')\nforbidden = [\n    'multi_kernel_chain',\n    'emit_multi_kernel_chain',\n    'VC4_TEST_RESULT name=multi_kernel_chain',\n    'VC4_TEST_RESULT {\"name\":\"multi_kernel_chain\"',\n]\nfound = [x for x in forbidden if x in text]\nif found:\n    print('support runner must stay fixture-generic; forbidden m2-06 special-case text found:', ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
           "id": "multi-kernel-chain-hardware",
           "mechanism": "fixture_matrix",
           "fixtures": [
@@ -896,7 +948,18 @@
             "candidate_hardware",
             "expected_json"
           ],
-          "requires_hardware": true
+          "requires_hardware": true,
+          "keep_going": true,
+          "reference_side_effect_globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.log",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/objs",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.elf",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.bin",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.list"
+          ],
+          "description": "Run reference and generated candidate hardware. Reference byproducts are cleaned by exact untracked git-clean pathspecs; candidate_hardware must produce a real VC4_TEST_RESULT."
         },
         {
           "id": "multi-kernel-chain-reference-byproducts-clean",
@@ -924,9 +987,15 @@
           "contains": [
             "VC4_RUNTIME_LAYOUT",
             "VC4_KERNEL_LAUNCH name=memory_output",
-            "VC4_KERNEL_LAUNCH name=read_nop_write"
+            "VC4_KERNEL_LAUNCH name=read_nop_write",
+            "VC4_TEST_RESULT"
           ],
-          "description": "Parse the fixture-matrix candidate_hardware log for stable multi-kernel runtime diagnostics."
+          "description": "Parse the fixture-matrix candidate_hardware log for real runtime diagnostics after the real hardware result line is emitted.",
+          "not_contains": [
+            "emit_multi_kernel_chain_runtime_events",
+            "synthetic",
+            "SYNTHETIC"
+          ]
         }
       ]
     },

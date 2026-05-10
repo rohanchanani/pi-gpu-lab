@@ -316,8 +316,8 @@
       ]
     },
     "multi_kernel_hw": {
-      "max_chars": 160000,
-      "purpose": "Fix and complete the true multi-kernel hardware chain: one resident program image, two kernel code artifacts, shared heap buffer, sequential launches, and clean verifier side effects.",
+      "max_chars": 200000,
+      "purpose": "Fix the real m2-06 multi-kernel hardware chain in compiler-generated runtime/codegen, not by patching support scripts or fixture oracles.",
       "include": [
         {
           "kind": "file_excerpt",
@@ -327,7 +327,10 @@
             "layout",
             "kernel_launch",
             "QASM",
-            "launch ABI"
+            "launch ABI",
+            "program",
+            "kernels",
+            "code_symbol"
           ]
         },
         {
@@ -342,23 +345,83 @@
         },
         {
           "kind": "file",
-          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
         },
         {
           "kind": "file",
           "path": "pro_scripts/prompts/vc4_codegen_m2/slice6_handoff.md"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm"
+        },
+        {
+          "kind": "file_excerpt",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "focus": [
+            "manifest.json",
+            "kernels",
+            "qasm_path",
+            "code_symbol",
+            "assemble",
+            "candidate workdir"
+          ]
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
         }
       ],
       "extractors": [

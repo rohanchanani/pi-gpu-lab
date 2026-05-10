@@ -216,6 +216,8 @@ class VerifierContext:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
+            encoding="utf-8",
+            errors="replace",
             start_new_session=True,
         )
         timed_out = False
@@ -1592,18 +1594,6 @@ def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[
         candidates.append(ctx.repo_path(f"compiler/test/CodeGen/VC4/Hardware/Run/{fixture}/candidate/run.log"))
         candidates.extend(sorted(ctx.log_dir.glob(f"*hardware*candidate*{fixture}*.log")))
         candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*hardware*candidate*.log")))
-        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*candidate_hardware*.log")))
-        candidates.extend(sorted(ctx.log_dir.glob(f"*candidate_hardware*{fixture}*.log")))
-        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*_candidate_hardware.log")))
-    deduped_candidates = []
-    seen_candidates = set()
-    for candidate in candidates:
-        key = str(candidate)
-        if key in seen_candidates:
-            continue
-        seen_candidates.add(key)
-        deduped_candidates.append(candidate)
-    candidates = deduped_candidates
     log_path = next((p for p in candidates if p.exists()), None)
     if log_path is None:
         return make_failure(ctx, slice_id, v, "runtime event log not found", expected={"log_path": log_raw, "fixture": fixture}, actual={"candidates": [str(p) for p in candidates]}, duration=time.time() - started)
@@ -1632,23 +1622,6 @@ def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[
     return make_success(ctx, slice_id, v, message="runtime event log contract passed", details={"log_path": ctx.rel(log_path), "found_counters": found_counters}, duration=time.time() - started)
 
 
-def cleanup_fixture_reference_side_effects(ctx: VerifierContext, root: Path) -> None:
-    """Remove hardware reference-run byproducts so verifier probes stay side-effect clean."""
-    if getattr(ctx, "dry_run", False):
-        return
-    targets = [Path(root) / "reference", Path(root) / "run.log"]
-    for target in targets:
-        try:
-            rel = target.resolve().relative_to(ctx.repo.resolve())
-        except Exception:
-            continue
-        rel_s = str(rel)
-        subprocess.run(["git", "-C", str(ctx.repo), "restore", "--", rel_s],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.run(["git", "-C", str(ctx.repo), "clean", "-fd", "--", rel_s],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-
-
 def expand_fixture_matrix(ctx: VerifierContext, v: Mapping[str, Any]) -> List[Dict[str, Any]]:
     raw = v.get("fixtures")
     matrix_name = v.get("matrix")
@@ -1664,6 +1637,60 @@ def expand_fixture_matrix(ctx: VerifierContext, v: Mapping[str, Any]) -> List[Di
             fixtures.append(dict(item))
     return fixtures
 
+
+
+def cleanup_fixture_reference_side_effects(
+    ctx: VerifierContext,
+    slice_id: str,
+    v: Mapping[str, Any],
+    fx: Mapping[str, Any],
+    fixture_name: str,
+) -> List[Dict[str, Any]]:
+    """Remove untracked byproducts intentionally produced by reference probes.
+
+    Hardware reference directories are checked-in source/oracle inputs.  Some
+    legacy run.sh scripts generate vc4asm .c/.h, objs/, or run.log byproducts in
+    that source tree.  Those files must not make the repo dirty between the
+    already-satisfied verifier probe and the GPT autorun path.  Only explicit
+    pathspecs supplied by the spec/fixture are cleaned, and git clean never
+    removes tracked source files.
+    """
+    raw_globs = fx.get("reference_side_effect_globs")
+    if raw_globs is None:
+        raw_globs = v.get("reference_side_effect_globs")
+    patterns = [normalize_repo_relpath(str(x)) for x in as_list(raw_globs)]
+    if not patterns:
+        return []
+
+    details: List[Dict[str, Any]] = []
+    for index, pattern in enumerate(patterns):
+        status_id = f"{v.get('id', 'fixture_matrix')}_{fixture_name}_reference_cleanup_status_{index}"
+        clean_id = f"{v.get('id', 'fixture_matrix')}_{fixture_name}_reference_cleanup_{index}"
+        status = ctx.run_command(
+            ["git", "status", "--porcelain", "--", pattern],
+            cwd=ctx.repo,
+            timeout_sec=verification_timeout_sec(ctx, v),
+            log_path=ctx.command_log_path(slice_id, status_id),
+        )
+        entry: Dict[str, Any] = {
+            "pattern": pattern,
+            "status_exit_code": status.exit_code,
+            "status": status.stdout.strip(),
+        }
+        if status.exit_code == 0 and status.stdout.strip():
+            clean = ctx.run_command(
+                ["git", "clean", "-fd", "--", pattern],
+                cwd=ctx.repo,
+                timeout_sec=verification_timeout_sec(ctx, v),
+                log_path=ctx.command_log_path(slice_id, clean_id),
+            )
+            entry.update({
+                "clean_exit_code": clean.exit_code,
+                "clean_stdout": clean.stdout.strip(),
+                "clean_stderr": clean.stderr.strip(),
+            })
+        details.append(entry)
+    return details
 
 def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     if ctx.no_hardware and bool(v.get("requires_hardware", False)):
@@ -1699,7 +1726,7 @@ def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str
                     fx_results.append({"phase": phase, "skipped": True})
                     continue
                 result = ctx.run_command(["bash", "run.sh"], cwd=root, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
-                cleanup_fixture_reference_side_effects(ctx, root)
+                cleanup_fixture_reference_side_effects(ctx, slice_id, v, fx, name)
             elif phase == "generate":
                 if vc4_codegen is None:
                     try:
