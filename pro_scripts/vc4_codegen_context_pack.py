@@ -54,6 +54,16 @@ DEFAULT_FOCUSED_FILE_CHAR_LIMIT = 42000
 DEFAULT_TEST_FILE_CHAR_LIMIT = 30000
 DEFAULT_EXTRACTOR_CHAR_LIMIT = 50000
 
+# Text artifact suffixes that are safe/useful to include verbatim in GPT
+# context.  The no-truncation patch made several extractors include complete
+# generated artifacts and changed files; this constant must be module-level so
+# those extractors do not fail at prompt-render time.
+TEXT_EXTS = {
+    ".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx",
+    ".td", ".mlir", ".qasm", ".json", ".py", ".sh", ".md", ".txt",
+    ".log", ".cfg", ".in", ".cmake", ".mk", ".make", "",
+}
+
 
 @dataclass
 class Section:
@@ -69,6 +79,27 @@ class Section:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def parse_optional_int(value: Any, default: int = 0) -> int:
+    """Parse an optional integer-ish config value.
+
+    Context max_chars is ignored by this workflow, but profiles may still carry
+    legacy values such as "full".  Metadata generation should not crash on
+    those legacy strings.
+    """
+    if value is None or value == "":
+        return default
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"", "default"}:
+            return default
+        if lowered in {"full", "none", "unlimited", "all"}:
+            return 0
+    try:
+        return int(value)
+    except Exception:
+        return default
 
 
 def clean_text(text: str) -> str:
@@ -219,10 +250,16 @@ def include_file(repo: Path, item: Mapping[str, Any], *, default_limit: int | No
     path = repo / raw_path
     if not path.exists():
         return Section("Missing file", f"Requested file does not exist yet: `{raw_path}`", raw_path)
-    limit = item_char_limit(item, default_limit)
-    text = read_text(path, limit=limit)
-    limit_note = "full file" if limit is None else f"up to {limit} chars"
-    return Section(f"File: {raw_path}", f"Included as {limit_note}.\n\n" + fenced(text, language=language_for(path)), raw_path)
+    # The no-truncation workflow intentionally ignores per-file limits.  Keep
+    # the API call for compatibility, but report the truth in the prompt.
+    item_char_limit(item, default_limit)
+    text = read_text(path)
+    return Section(
+        f"File: {raw_path}",
+        "FULL FILE INCLUDED. No context/profile max_chars budget was applied.\n\n"
+        + fenced(text, language=language_for(path)),
+        raw_path,
+    )
 
 
 
@@ -406,6 +443,9 @@ Generated qasm for the minimal smoke should canonicalize this as `thrend`, `nop`
         "scheduled_instruction_stream_flattening": """
 The scheduled instruction stream is flattened in top-level program order. A `vc4.qpu.branch` contributes the branch instruction itself followed immediately by the three operations in its explicit delay-slot region. Cross-instruction verifiers reason over this flattened stream, so qasm emission should use the same flattening.
 """.strip(),
+        "hardware_fixture_summary": """
+Hardware fixture inputs are source truth: input.mlir, run.sh, candidate/run.sh, reference bundles, and expected.json should be used to understand the fixture. Do not mutate reference bundles or expected.json unless a slice explicitly allows it. Candidate generated artifacts and verifier logs are the debugging targets.
+""".strip(),
         "hardware_contract_summary": """
 Hardware-run tests have a reference side and a future candidate side. The reference side is immutable ground truth. Candidate codegen is expected to generate `kernel.qasm`, `kernel_launch.c`, and `kernel_launch.h` from `input.mlir`. Passing is determined by the semantic oracle and `expected.json`, not by exact qasm text matching.
 """.strip(),
@@ -577,7 +617,8 @@ def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tu
         data = read_json_file(path)
     except Exception as exc:
         return f"Could not parse failure packet `{relpath(repo, path)}`: {exc}", None
-    body = fenced(json.dumps(data, indent=2, sort_keys=True), language="json")
+    sanitized = sanitize_failure_packet_for_prompt(data)
+    body = fenced(json.dumps(sanitized, indent=2, sort_keys=True), language="json")
 
     log_paths: list[Path] = []
     seen: set[str] = set()
@@ -739,7 +780,12 @@ def render_context_pack(
         raise DriverError(f"context profile {profile_name!r} must be an object")
 
     defaults = config.context_profiles.get("defaults", {}) if isinstance(config.context_profiles, dict) else {}
-    requested_max_chars = int(max_chars_override or profile.get("max_chars") or defaults.get("max_chars", 0) or 0)
+    requested_max_chars = parse_optional_int(
+        max_chars_override
+        if max_chars_override is not None
+        else profile.get("max_chars", defaults.get("max_chars", 0)),
+        default=0,
+    )
 
     sections = build_sections(repo=repo, config=config, slice_entry=slice_entry, profile=profile, mode=mode, failure_packet_path=failure_packet)
     rendered_sections: list[str] = []
@@ -828,15 +874,25 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
-    args = parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    subcommands = {"build", "list-profiles"}
+    # Backward-compatible shorthand: older callers used
+    #   vc4_codegen_context_pack.py --repo ... --slice ... --out ...
+    # argparse would otherwise reject --slice before we reach the legacy branch.
+    if "--slice" in raw_argv and not any(arg in subcommands for arg in raw_argv):
+        prefix: list[str] = []
+        rest = list(raw_argv)
+        for opt in ("--repo", "--worklist", "--context-profiles"):
+            if opt in rest:
+                i = rest.index(opt)
+                if i + 1 < len(rest):
+                    prefix.extend([rest[i], rest[i + 1]])
+                    del rest[i : i + 2]
+        raw_argv = prefix + ["build"] + rest
+    args = parser.parse_args(raw_argv)
     if not args.cmd:
-        # Backward-compatible shorthand: allow direct --slice without subcommand.
-        if "--slice" in (argv or sys.argv[1:]):
-            args.cmd = "build"
-            args.func = cmd_build
-        else:
-            parser.print_help()
-            return 2
+        parser.print_help()
+        return 2
     try:
         return int(args.func(args))
     except DriverError as exc:

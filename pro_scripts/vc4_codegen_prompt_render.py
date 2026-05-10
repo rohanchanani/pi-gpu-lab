@@ -18,6 +18,7 @@ from typing import Any, Mapping
 
 try:
     from vc4_codegen_context_pack import render_context_pack
+    from vc4_codegen_contracts import build_repo_capabilities, render_capabilities_markdown
     from vc4_codegen_state import (
         DriverError,
         MilestoneConfig,
@@ -28,6 +29,19 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     from vc4_codegen_context_pack import render_context_pack  # type: ignore
+    try:
+        from vc4_codegen_contracts import build_repo_capabilities, render_capabilities_markdown  # type: ignore
+    except ModuleNotFoundError:  # pragma: no cover
+        def build_repo_capabilities(repo: Path) -> dict[str, Any]:  # type: ignore
+            return {
+                "schema_version": 1,
+                "fallback": True,
+                "repo": str(repo),
+                "compiler_dir_exists": (repo / "compiler").exists(),
+                "build_dir_exists": (repo / "compiler/build").exists(),
+            }
+        def render_capabilities_markdown(capabilities: Mapping[str, Any]) -> str:  # type: ignore
+            return fenced(json.dumps(capabilities, indent=2, sort_keys=True), "json")
     from vc4_codegen_state import (  # type: ignore
         DriverError,
         MilestoneConfig,
@@ -379,6 +393,9 @@ def render_prompt(
     constitution = load_optional_file(repo, str(template_dir / "constitution.md"))
     codex_contract = load_optional_file(repo, str(template_dir / "codex_contract.md"))
     download_contract = build_download_contract(config, slice_id, attempt)
+    repo_capabilities = build_repo_capabilities(repo)
+    repo_capabilities_md = render_capabilities_markdown(repo_capabilities)
+    repo_capabilities_json = fenced(json.dumps(repo_capabilities, indent=2, sort_keys=True), "json")
 
     values = {
         "GENERATED_AT_UTC": utc_now(),
@@ -403,6 +420,14 @@ def render_prompt(
         "DOWNLOAD_CONTRACT_MARKDOWN": render_download_contract_markdown(download_contract).rstrip(),
         "RESPONSE_JSON_SCHEMA": response_schema(mode),
         "FAILURE_PACKET_JSON": failure_packet_json(repo, failure_packet),
+        "REPO_CAPABILITY_SNAPSHOT": repo_capabilities_json,
+        "REPO_CAPABILITIES": repo_capabilities_md,
+        "REPO_CAPABILITIES_MARKDOWN": repo_capabilities_md,
+        "REPO_CAPABILITIES_JSON": repo_capabilities_json,
+        "NO_TRUNCATION_CONTEXT_POLICY": "Context truncation is disabled: all selected files/logs/artifacts are included in full. Do not reconstruct omitted code; if something is missing from context, explicitly ask for it.",
+        "DOWNLOAD_CONTRACT": render_download_contract_markdown(download_contract).rstrip(),
+        "DOWNLOAD_ARTIFACT_CONTRACT": render_download_contract_markdown(download_contract).rstrip(),
+        "DOWNLOAD_CONTRACT_JSON_RAW": json.dumps(download_contract, indent=2, sort_keys=True),
         "CONTEXT_PACK": context_pack.rstrip(),
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
     }
