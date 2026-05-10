@@ -501,13 +501,27 @@
         "required_source_files": [
           "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir",
           "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh",
-          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh"
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/Makefile",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.c",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.h",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.sh"
         ],
         "semantic_oracle_files": [
           "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/expected.json"
         ],
-        "required_source_globs": [
-          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/**"
+        "forbidden_source_globs": [
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.log",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/objs/**",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.c",
+          "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.h"
         ]
       },
       "success_probes": [

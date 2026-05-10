@@ -1592,6 +1592,18 @@ def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[
         candidates.append(ctx.repo_path(f"compiler/test/CodeGen/VC4/Hardware/Run/{fixture}/candidate/run.log"))
         candidates.extend(sorted(ctx.log_dir.glob(f"*hardware*candidate*{fixture}*.log")))
         candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*hardware*candidate*.log")))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*candidate_hardware*.log")))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*candidate_hardware*{fixture}*.log")))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*_candidate_hardware.log")))
+    deduped_candidates = []
+    seen_candidates = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen_candidates:
+            continue
+        seen_candidates.add(key)
+        deduped_candidates.append(candidate)
+    candidates = deduped_candidates
     log_path = next((p for p in candidates if p.exists()), None)
     if log_path is None:
         return make_failure(ctx, slice_id, v, "runtime event log not found", expected={"log_path": log_raw, "fixture": fixture}, actual={"candidates": [str(p) for p in candidates]}, duration=time.time() - started)
@@ -1618,6 +1630,23 @@ def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[
     if missing or forbidden or counter_errors:
         return make_failure(ctx, slice_id, v, "runtime event log contract failed", expected={"contains": contains, "not_contains": not_contains, "required_counters": required_counters, "min_counters": min_counters}, actual={"log_path": ctx.rel(log_path), "missing": missing, "forbidden_present": forbidden, "counter_errors": counter_errors, "found_counters": found_counters}, duration=time.time() - started)
     return make_success(ctx, slice_id, v, message="runtime event log contract passed", details={"log_path": ctx.rel(log_path), "found_counters": found_counters}, duration=time.time() - started)
+
+
+def cleanup_fixture_reference_side_effects(ctx: VerifierContext, root: Path) -> None:
+    """Remove hardware reference-run byproducts so verifier probes stay side-effect clean."""
+    if getattr(ctx, "dry_run", False):
+        return
+    targets = [Path(root) / "reference", Path(root) / "run.log"]
+    for target in targets:
+        try:
+            rel = target.resolve().relative_to(ctx.repo.resolve())
+        except Exception:
+            continue
+        rel_s = str(rel)
+        subprocess.run(["git", "-C", str(ctx.repo), "restore", "--", rel_s],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(["git", "-C", str(ctx.repo), "clean", "-fd", "--", rel_s],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def expand_fixture_matrix(ctx: VerifierContext, v: Mapping[str, Any]) -> List[Dict[str, Any]]:
@@ -1670,6 +1699,7 @@ def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str
                     fx_results.append({"phase": phase, "skipped": True})
                     continue
                 result = ctx.run_command(["bash", "run.sh"], cwd=root, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
+                cleanup_fixture_reference_side_effects(ctx, root)
             elif phase == "generate":
                 if vc4_codegen is None:
                     try:

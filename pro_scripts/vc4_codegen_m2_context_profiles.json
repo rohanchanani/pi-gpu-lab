@@ -317,7 +317,7 @@
     },
     "multi_kernel_hw": {
       "max_chars": 160000,
-      "purpose": "Create first true multi-kernel hardware fixture.",
+      "purpose": "Fix and complete the true multi-kernel hardware chain: one resident program image, two kernel code artifacts, shared heap buffer, sequential launches, and clean verifier side effects.",
       "include": [
         {
           "kind": "file_excerpt",
@@ -347,10 +347,24 @@
         {
           "kind": "fixture_tree",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_codegen_m2/slice6_handoff.md"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
         }
       ],
       "extractors": [
-        "existing_codegen_files"
+        "existing_codegen_files",
+        "launch_abi_summary",
+        "scheduled_sink_summary"
       ]
     },
     "independent_vector": {

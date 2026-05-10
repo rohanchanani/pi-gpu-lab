@@ -73,7 +73,8 @@
     "M2 introduces general program-bundle mechanisms; a single-kernel bundle is a kernels.length == 1 program.",
     "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware.",
     "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
-    "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(."
+    "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(.",
+    "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -799,15 +800,23 @@
         {
           "id": "multi-kernel-chain-source-products",
           "mechanism": "source_products",
-          "description": "Source products exist",
+          "description": "Exact multi-kernel-chain source products exist; generated reference byproducts are not source products.",
           "files": [
             "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir",
             "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/expected.json",
             "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh",
-            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh"
-          ],
-          "globs": [
-            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/**"
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/Makefile",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.sh"
           ]
         },
         {
@@ -890,6 +899,17 @@
           "requires_hardware": true
         },
         {
+          "id": "multi-kernel-chain-reference-byproducts-clean",
+          "mechanism": "forbidden_absent",
+          "description": "Reference hardware probe must not leave checked-in reference tree dirty.",
+          "mode": "git-status",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.log"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
           "id": "multi-kernel-chain-runtime-events",
           "mechanism": "runtime_event_log",
           "fixture": "multi_kernel_chain",
@@ -903,8 +923,10 @@
           },
           "contains": [
             "VC4_RUNTIME_LAYOUT",
-            "VC4_KERNEL_LAUNCH"
-          ]
+            "VC4_KERNEL_LAUNCH name=memory_output",
+            "VC4_KERNEL_LAUNCH name=read_nop_write"
+          ],
+          "description": "Parse the fixture-matrix candidate_hardware log for stable multi-kernel runtime diagnostics."
         }
       ]
     },
@@ -1039,6 +1061,20 @@
           ]
         },
         {
+          "id": "cooperative-invalid-too-much-shared-vpm",
+          "mechanism": "negative_diagnostic",
+          "description": "Reject cooperative blocks whose shared VPM allocation cannot fit resident warps.",
+          "argv": [
+            "vc4-codegen",
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir",
+            "--emit-bundle",
+            "%t.bundle"
+          ],
+          "stderr_contains": [
+            "vpm_bytes_per_block"
+          ]
+        },
+        {
           "id": "cooperative-fixture-matrix",
           "mechanism": "fixture_matrix",
           "matrix": "cooperative_shared_reduction",
@@ -1169,6 +1205,31 @@
             "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
             "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json"
           ]
+        },
+        {
+          "id": "final-saxpy-launch-no-legacy-wrapper",
+          "mechanism": "generated_runtime_contract",
+          "description": "Final acceptance rejects legacy prepare/release runtime wrappers in saxpy_full launch artifacts.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "forbidden_patterns": [
+            "struct\\s+vc4_runtime",
+            "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_release\\s*\\("
+          ],
+          "allocation_policy": {
+            "launch_reuses_resident_code": true
+          },
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "final-multi-kernel-resident-bundle",
+          "mechanism": "program_artifact_bundle",
+          "description": "Final acceptance confirms multi_kernel_chain remains one resident program bundle with two kernel code artifacts.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "expected_kernel_count": 2,
+          "require_code_artifacts": true,
+          "forbid_root_kernel_qasm": true,
+          "route_hint": "gpt_pro"
         }
       ]
     }
