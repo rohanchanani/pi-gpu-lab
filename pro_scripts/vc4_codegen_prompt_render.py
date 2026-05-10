@@ -363,8 +363,11 @@ def render_prompt(
         slice_id=slice_id,
         mode=mode,
         failure_packet=failure_packet,
-        max_chars_override=max_chars,
-        allow_large_context=allow_large_context,
+        # Context truncation is disabled for this workflow.  Ignore profile
+        # budgets and any accidental --max-chars so GPT receives complete
+        # selected files/logs instead of reconstructing missing source.
+        max_chars_override=None,
+        allow_large_context=True,
         metadata_out=metadata_out,
     )
     if context_out:

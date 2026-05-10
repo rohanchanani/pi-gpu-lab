@@ -131,6 +131,9 @@ def render_prompt(
         cmd += ["--worklist", str(worklist_path)]
     if context_profiles_path is not None:
         cmd += ["--context-profiles", str(context_profiles_path)]
+    # Always request the no-truncation context path.  The renderer/context
+    # packer also ignore profile budgets, but this keeps the command explicit.
+    cmd += ["--allow-large-context"]
     if failure_packet:
         cmd += ["--failure-packet", str(failure_packet)]
     log_path = out_path.with_suffix(out_path.suffix + ".render.log")
@@ -341,20 +344,17 @@ def first_failed(results: Sequence[CommandResult]) -> CommandResult | None:
 
 
 
-def _git_capture(repo: Path, args: Sequence[str], *, max_chars: int = 60000) -> str:
+
+def _git_capture(repo: Path, args: Sequence[str], *, max_chars: int = 0) -> str:
+    """Capture complete git output; max_chars is retained as a no-op."""
     try:
         proc = subprocess.run(["git", *args], cwd=str(repo), text=True, capture_output=True)
     except Exception as exc:
         return f"<git {' '.join(args)} failed to start: {exc}>"
-    text = (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
-    if len(text) > max_chars:
-        half = max_chars // 2
-        text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
-    return text
-
+    return (proc.stdout or "") + (("\n" + proc.stderr) if proc.stderr else "")
 
 def collect_candidate_change_report(repo: Path) -> dict[str, Any]:
-    """Capture candidate diff/excerpts before failed attempts are cleaned."""
+    """Capture complete candidate diff and complete untracked text files."""
     changed = git_changed_paths(repo, include_untracked=True)
     report: dict[str, Any] = {
         "candidate_changed_paths": changed,
@@ -370,15 +370,15 @@ def collect_candidate_change_report(repo: Path) -> dict[str, Any]:
         tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel], cwd=str(repo), text=True, capture_output=True)
         if tracked.returncode == 0:
             continue
+        if path.suffix.lower() not in TEXT_EXTS:
+            continue
         try:
             data = path.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        excerpts[rel] = data[:4000]
+        excerpts[rel] = data
     report["candidate_untracked_file_excerpts"] = excerpts
     return report
-
-
 def cleanup_failed_attempt_changes(repo: Path, *, baseline_paths: Sequence[str], log_dir: Path | None = None) -> list[str]:
     """Restore changes introduced by a failed attempt, preserving baseline dirt."""
     baseline = set(baseline_paths)
@@ -421,7 +421,9 @@ def run_patch_preflight_gate(
     return runner.run_command(gate="preflight:patch-invariants", cmd=cmd, log_dir=log_dir, timeout_sec=min(timeout_sec, 300))
 
 
-def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 60000) -> dict[str, Any]:
+
+def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 0) -> dict[str, Any]:
+    """Collect complete GPT staged outputs; max_chars is retained as a no-op."""
     report: dict[str, Any] = {"staged_files": []}
     if not staging_dir.exists():
         return report
@@ -435,36 +437,31 @@ def collect_staged_output_report(staging_dir: Path, *, max_chars: int = 60000) -
         try:
             report["staged_response_json"] = json.loads(response.read_text(encoding="utf-8", errors="replace"))
         except Exception:
-            report["staged_response_json"] = response.read_text(encoding="utf-8", errors="replace")[:max_chars]
+            report["staged_response_json"] = response.read_text(encoding="utf-8", errors="replace")
     patch = staging_dir / "changes.patch"
     if patch.exists():
-        text = patch.read_text(encoding="utf-8", errors="replace")
-        if len(text) > max_chars:
-            half = max_chars // 2
-            text = text[:half] + "\n\n[... truncated ...]\n\n" + text[-half:]
-        report["staged_changes_patch"] = text
+        report["staged_changes_patch"] = patch.read_text(encoding="utf-8", errors="replace")
     artifact = staging_dir / "artifact_transport.json"
     if artifact.exists():
         try:
             report["artifact_transport_json"] = json.loads(artifact.read_text(encoding="utf-8", errors="replace"))
         except Exception:
-            report["artifact_transport_json"] = artifact.read_text(encoding="utf-8", errors="replace")[:max_chars]
+            report["artifact_transport_json"] = artifact.read_text(encoding="utf-8", errors="replace")
     bundle = staging_dir / "bundle.zip"
     if bundle.exists():
         report["bundle_zip"] = {"path": str(bundle), "bytes": bundle.stat().st_size}
         try:
             import zipfile
             with zipfile.ZipFile(bundle) as zf:
-                report["bundle_zip_members"] = sorted(zf.namelist())[:200]
+                report["bundle_zip_members"] = sorted(zf.namelist())
                 if "manifest.json" in zf.namelist():
                     report["bundle_manifest_json"] = json.loads(zf.read("manifest.json").decode("utf-8", "replace"))
         except Exception as exc:
             report["bundle_zip_error"] = str(exc)
     apply_script = staging_dir / "apply_bundle.sh"
     if apply_script.exists():
-        report["apply_bundle_sh"] = apply_script.read_text(encoding="utf-8", errors="replace")[:4000]
+        report["apply_bundle_sh"] = apply_script.read_text(encoding="utf-8", errors="replace")
     return report
-
 def _decode_first_json_object(text: str) -> Mapping[str, Any] | None:
     decoder = json.JSONDecoder()
     for index, ch in enumerate(text):
@@ -517,7 +514,9 @@ def _resolve_packet_path(repo: Path, raw_path: str) -> Path:
     return repo / path
 
 
+
 def _read_packet_file(path: Path) -> dict[str, Any]:
+    """Read a referenced packet file completely."""
     record: dict[str, Any] = {"path": str(path)}
     if not path.exists():
         record["exists"] = False
@@ -527,34 +526,10 @@ def _read_packet_file(path: Path) -> dict[str, Any]:
         "exists": True,
         "byte_count": len(data),
         "sha256": hashlib.sha256(data).hexdigest(),
+        "included_full_text": True,
+        "text": data.decode("utf-8", errors="replace"),
     })
-    text = data.decode("utf-8", errors="replace")
-
-    # Full hardware output is intentionally high signal.  By default include it
-    # completely.  Set VC4_FAILURE_PACKET_LOG_MAX_BYTES to a positive integer only
-    # if a future log becomes too large for prompt transport.
-    raw_limit = os.environ.get("VC4_FAILURE_PACKET_LOG_MAX_BYTES", "0").strip()
-    try:
-        limit = int(raw_limit)
-    except ValueError:
-        limit = 0
-    if limit > 0 and len(data) > limit:
-        head = text[: max(limit // 2, 0)]
-        tail = text[-max(limit // 2, 0) :] if limit else ""
-        record.update({
-            "included_full_text": False,
-            "truncated_to_bytes": limit,
-            "text_head": head,
-            "text_tail": tail,
-        })
-    else:
-        record.update({
-            "included_full_text": True,
-            "text": text,
-        })
     return record
-
-
 def _extract_command_out_path(command: Sequence[str] | None) -> str | None:
     if not command:
         return None
@@ -1444,9 +1419,8 @@ def cmd_context(args: argparse.Namespace) -> int:
     if args.failure_packet:
         cmd += ["--failure-packet", args.failure_packet]
     if args.max_chars:
-        cmd += ["--max-chars", str(args.max_chars)]
-    if args.allow_large_context:
-        cmd += ["--allow-large-context"]
+        warn("--max-chars is ignored because no-truncation context is enabled")
+    cmd += ["--allow-large-context"]
     log_path = out.with_suffix(out.suffix + ".context.log")
     result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, timeout_sec=300, verbose=args.verbose)
     if not result.ok:

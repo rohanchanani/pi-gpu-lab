@@ -82,22 +82,20 @@ def fenced(text: str, *, language: str = "") -> str:
     return f"{fence}{lang}\n{text.rstrip()}\n{fence}"
 
 
+
 def soft_truncate(text: str, limit: int, *, marker: str = "[... truncated ...]") -> str:
-    text = clean_text(text)
-    if limit <= 0 or len(text) <= limit:
-        return text
-    head = max(0, limit // 2 - len(marker) - 64)
-    tail = max(0, limit - head - len(marker) - 8)
-    return text[:head].rstrip() + f"\n\n{marker}\n\n" + text[-tail:].lstrip()
+    """Return complete text.
 
-
-def read_text(path: Path, *, limit: int | None = None) -> str:
-    text = path.read_text(encoding="utf-8", errors="replace")
-    if limit is not None:
-        return soft_truncate(text, limit)
+    The VC4 workflow intentionally does not truncate prompt context anymore.
+    Earlier budget trimming caused GPT to see partial source files and then try
+    to reconstruct missing code.  The `limit` and `marker` parameters remain for
+    backward-compatible callers but are deliberately ignored.
+    """
     return clean_text(text)
 
-
+def read_text(path: Path, *, limit: int | None = None) -> str:
+    """Read a complete text file; `limit` is retained as a no-op API arg."""
+    return clean_text(path.read_text(encoding="utf-8", errors="replace"))
 def item_char_limit(item: Mapping[str, Any], default_limit: int | None) -> int | None:
     """Return per-item char limit. Use max_chars="full" for full text."""
     raw = item.get("max_chars", item.get("limit_chars", None))
@@ -161,9 +159,17 @@ def git_diff_limited(repo: Path, paths: Sequence[str] | None = None, *, limit: i
     return soft_truncate(out, limit)
 
 
-def repo_tree_excerpt(repo: Path, roots: Sequence[str], *, max_files: int = 400) -> str:
+
+def repo_tree_excerpt(repo: Path, roots: Sequence[str], *, max_files: int = 0) -> str:
+    """Return a complete deterministic tree listing for the requested roots.
+
+    `max_files` is ignored unless explicitly positive and the environment sets
+    VC4_CONTEXT_ENABLE_TREE_LIMIT=1.  Normal GPT prompts should not silently omit
+    files from the selected context.
+    """
     rows: list[str] = []
     skipped = 0
+    limit_enabled = os.environ.get("VC4_CONTEXT_ENABLE_TREE_LIMIT", "").lower() in {"1", "true", "yes"}
     for root in roots:
         root_path = repo / root
         if not root_path.exists():
@@ -178,15 +184,13 @@ def repo_tree_excerpt(repo: Path, roots: Sequence[str], *, max_files: int = 400)
                 continue
             if path.is_dir():
                 continue
-            if len(rows) < max_files:
-                rows.append(rel)
-            else:
+            if limit_enabled and max_files > 0 and len(rows) >= max_files:
                 skipped += 1
+                continue
+            rows.append(rel)
     if skipped:
-        rows.append(f"... {skipped} more file(s) omitted ...")
+        rows.append(f"... {skipped} more file(s) omitted because VC4_CONTEXT_ENABLE_TREE_LIMIT=1 ...")
     return "\n".join(rows) if rows else "<empty tree excerpt>"
-
-
 def merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     if not ranges:
         return []
@@ -201,28 +205,15 @@ def merge_ranges(ranges: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return merged
 
 
+
 def focused_excerpt(text: str, focus_terms: Sequence[str], *, window: int = 70, limit: int = DEFAULT_FOCUSED_FILE_CHAR_LIMIT) -> str:
-    text = clean_text(text)
-    if not focus_terms:
-        return soft_truncate(text, limit)
-    lines = text.splitlines()
-    ranges: list[tuple[int, int]] = []
-    for term in focus_terms:
-        term_l = str(term).lower()
-        matches = [i for i, line in enumerate(lines) if term_l in line.lower()]
-        for idx in matches[:4]:
-            ranges.append((max(0, idx - window), min(len(lines), idx + window + 1)))
-    if not ranges:
-        header = "No exact focus terms matched; showing beginning of file.\n\n"
-        return header + soft_truncate(text, limit)
-    out: list[str] = []
-    for start, end in merge_ranges(ranges):
-        out.append(f"// ---- excerpt lines {start + 1}-{end} ----")
-        for i in range(start, end):
-            out.append(f"{i + 1:5d}. {lines[i]}")
-    return soft_truncate("\n".join(out), limit)
+    """Return the complete file, not a focus-window excerpt.
 
-
+    Focus terms are still reported by include_file_excerpt(), but source code is
+    sent whole.  This avoids the failure mode where GPT sees a truncated
+    VC4ArtifactEmitter.cpp and invents replacement functions.
+    """
+    return clean_text(text)
 def include_file(repo: Path, item: Mapping[str, Any], *, default_limit: int | None = DEFAULT_PER_FILE_CHAR_LIMIT) -> Section:
     raw_path = str(item.get("path", ""))
     path = repo / raw_path
@@ -234,23 +225,16 @@ def include_file(repo: Path, item: Mapping[str, Any], *, default_limit: int | No
     return Section(f"File: {raw_path}", f"Included as {limit_note}.\n\n" + fenced(text, language=language_for(path)), raw_path)
 
 
+
 def include_file_excerpt(repo: Path, item: Mapping[str, Any]) -> Section:
     raw_path = str(item.get("path", ""))
     path = repo / raw_path
     focus = [str(x) for x in item.get("focus", [])]
     if not path.exists():
         return Section("Missing file excerpt", f"Requested file does not exist yet: `{raw_path}`", raw_path)
-    text = path.read_text(encoding="utf-8", errors="replace")
-    if str(item.get("max_chars", "")).strip().lower() in {"full", "none", "unlimited", "all"}:
-        excerpt = clean_text(text)
-        focus_line = "Full file requested; focus terms retained as hints: " + ", ".join(focus) if focus else "Full file requested."
-    else:
-        limit = item_char_limit(item, DEFAULT_FOCUSED_FILE_CHAR_LIMIT)
-        excerpt = focused_excerpt(text, focus, limit=limit or 0)
-        focus_line = "Focus terms: " + ", ".join(focus) if focus else "No focus terms."
-    return Section(f"Focused excerpt: {raw_path}", focus_line + "\n\n" + fenced(excerpt, language=language_for(path)), raw_path)
-
-
+    text = read_text(path)
+    focus_line = "Focus terms retained for navigation only; FULL FILE INCLUDED: " + ", ".join(focus) if focus else "FULL FILE INCLUDED."
+    return Section(f"Full file formerly excerpted: {raw_path}", focus_line + "\n\n" + fenced(text, language=language_for(path)), raw_path)
 def include_tests(repo: Path, item: Mapping[str, Any]) -> list[Section]:
     sections: list[Section] = []
     for raw in item.get("paths", []):
@@ -281,43 +265,82 @@ def include_fixture_tree(repo: Path, item: Mapping[str, Any]) -> Section:
     return Section(f"Fixture tree: {raw_path}", "\n".join(lines) if lines else "<empty>", raw_path)
 
 
+
 def include_generated_artifacts(repo: Path, item: Mapping[str, Any], slice_entry: Mapping[str, Any], failure_packet: Mapping[str, Any] | None) -> list[Section]:
+    """Include complete generated artifacts from candidate bundles.
+
+    This scans both M1 and M2 candidate roots plus any bundle/output/staging
+    paths named in the failure packet.  Text artifacts are included whole.
+    """
     sections: list[Section] = []
     configured = [str(p) for p in item.get("paths", [])]
     roots: list[Path] = []
-    # Candidate directories used by the gate runner.
-    for name in ["minimal_thrend", "qpu_bundle_basic", "qpu_ldi_sema", "qpu_branch", "saxpy_full"]:
-        roots.append(repo / ".vc4_auto/codegen_m1/candidates" / name)
+    seen_roots: set[str] = set()
+
+    def add_root(path: Path) -> None:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key not in seen_roots:
+            seen_roots.add(key)
+            roots.append(path)
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            for key, value in node.items():
+                if key in {"bundle", "candidate_dir", "output_dir", "staging_dir"} and isinstance(value, str) and value:
+                    add_root(value and ((repo / value) if not Path(value).is_absolute() else Path(value)))
+                visit(value)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    fixture_names = {
+        "minimal_thrend", "memory_output", "read_nop_write", "saxpy_full", "multi_kernel_chain",
+        "saxpy_16", "saxpy_basic", "global_store_coalesced_multi", "gemv_naive_tail",
+        "saxpy_tmu", "saxpy_tmu_overlap", "tmu_read_nop_write", "tmu_strided_load", "sfu_recip",
+        "vpm_setup_clobber", "vpm_slice_visibility", "qpu_barrier_syncthreads", "warp_reduce_sum",
+        "warp_prefix_sum", "block_reduce_sum", "shared_transpose_16x16",
+    }
     if failure_packet:
-        for key in ["candidate_dir", "output_dir", "staging_dir"]:
-            val = failure_packet.get(key)
-            if isinstance(val, str):
-                roots.append(repo / val)
-        extra = failure_packet.get("extra")
-        if isinstance(extra, dict):
-            for key in ["candidate_dir", "output_dir", "staging_dir"]:
-                val = extra.get(key)
-                if isinstance(val, str):
-                    roots.append(repo / val)
-    seen: set[str] = set()
+        visit(failure_packet)
+        for key in ("fixture", "name"):
+            def gather(node: Any) -> None:
+                if isinstance(node, Mapping):
+                    for k, v in node.items():
+                        if k == key and isinstance(v, str) and v:
+                            fixture_names.add(v)
+                        gather(v)
+                elif isinstance(node, list):
+                    for child in node:
+                        gather(child)
+            gather(failure_packet)
+
+    for state_root in [repo / ".vc4_auto/codegen_m1/candidates", repo / ".vc4_auto/codegen_m2/candidates"]:
+        for name in sorted(fixture_names):
+            add_root(state_root / name)
+
+    patterns = configured or [
+        "manifest.json", "layout.json", "kernel_launch.c", "kernel_launch.h",
+        "kernels/*.qasm", "assembled/*.c", "assembled/*.h", "*.qasm", "*_shader.c", "*_shader.h",
+        "*.json", "*.c", "*.h",
+    ]
+    seen_paths: set[str] = set()
     for root in roots:
-        if not root.exists():
+        if not root.exists() or not root.is_dir():
             continue
-        for rel_name in configured or ["kernel.qasm", "kernel_launch.c", "kernel_launch.h", "manifest.json", "build.log", "run.log"]:
-            path = root / Path(rel_name).name
-            if not path.exists() or path.is_dir():
-                continue
-            key = str(path.resolve())
-            if key in seen:
-                continue
-            seen.add(key)
-            text = read_text(path, limit=24000)
-            sections.append(Section(f"Generated artifact: {relpath(repo, path)}", fenced(text, language=language_for(path)), relpath(repo, path)))
+        for pattern in patterns:
+            for path in sorted(root.glob(pattern)):
+                if not path.is_file():
+                    continue
+                if path.suffix.lower() not in TEXT_EXTS:
+                    continue
+                key = str(path.resolve())
+                if key in seen_paths:
+                    continue
+                seen_paths.add(key)
+                sections.append(Section(f"Generated artifact: {relpath(repo, path)}", fenced(read_text(path), language=language_for(path)), relpath(repo, path)))
     if not sections:
-        sections.append(Section("Generated artifacts", "No generated candidate artifacts were found yet under `.vc4_auto/codegen_m1/candidates/` or the failure packet paths."))
+        sections.append(Section("Generated artifacts", "No generated candidate artifacts were found yet under M1/M2 candidate roots or failure packet paths."))
     return sections
-
-
 def format_slice(slice_entry: Mapping[str, Any], config: MilestoneConfig) -> str:
     fields = {
         "id": slice_entry.get("id"),
@@ -437,6 +460,7 @@ def extractor_minimal_qasm(repo: Path) -> str:
     return fenced(read_text(path, limit=12000), language="qasm")
 
 
+
 def extractor_existing_codegen_files(repo: Path) -> str:
     roots = [
         "compiler/include/vc4/Target/VC4",
@@ -453,20 +477,18 @@ def extractor_existing_codegen_files(repo: Path) -> str:
             missing.append(raw)
             continue
         for path in sorted(root.rglob("*")):
-            if path.is_file() and path.suffix.lower() in {".cpp", ".h", ".hpp", ".mlir", ".sh", ".py", ".json", ".txt", ".md"}:
+            if path.is_file() and path.suffix.lower() in TEXT_EXTS:
                 files.append(path)
     parts: list[str] = []
     if missing:
         parts.append("Missing/not-yet-created codegen roots:\n" + "\n".join(f"- {m}" for m in missing))
     if files:
-        parts.append("Existing codegen-related files:\n" + "\n".join(f"- {relpath(repo, f)}" for f in files[:200]))
-        for path in files[:12]:
-            parts.append(f"### {relpath(repo, path)}\n" + fenced(read_text(path, limit=12000), language=language_for(path)))
+        parts.append("Existing codegen-related files:\n" + "\n".join(f"- {relpath(repo, f)}" for f in files))
+        for path in files:
+            parts.append(f"### {relpath(repo, path)}\n" + fenced(read_text(path), language=language_for(path)))
     else:
         parts.append("No existing Target/VC4 codegen files were found yet.")
     return "\n\n".join(parts)
-
-
 def extractor_git_diff_summary(repo: Path) -> str:
     changed = git_changed_paths(repo, include_untracked=True)
     parts = [git_diff_stat(repo)]
@@ -475,23 +497,21 @@ def extractor_git_diff_summary(repo: Path) -> str:
     return "\n\n".join(parts)
 
 
+
 def extractor_changed_files_excerpt(repo: Path, slice_entry: Mapping[str, Any], config: MilestoneConfig) -> str:
     changed = git_changed_paths(repo, include_untracked=True)
     allowed = config.allowed_paths_for_slice(slice_entry)
-    # Keep this simple: include small excerpts for changed text files under the slice allowlist.
     parts: list[str] = []
-    for raw in changed[:40]:
+    for raw in changed:
         path = repo / raw
         if not path.exists() or path.is_dir():
             continue
         if not any(fnmatch_path(raw, pat) for pat in allowed):
             continue
-        if path.suffix.lower() not in {".cpp", ".h", ".hpp", ".td", ".mlir", ".json", ".py", ".sh", ".md", ".txt", ".c"}:
+        if path.suffix.lower() not in TEXT_EXTS:
             continue
-        parts.append(f"### {raw}\n" + fenced(read_text(path, limit=10000), language=language_for(path)))
-    return "\n\n".join(parts) if parts else "No changed allowed text files to excerpt."
-
-
+        parts.append(f"### {raw}\n" + fenced(read_text(path), language=language_for(path)))
+    return "\n\n".join(parts) if parts else "No changed allowed text files to include."
 def fnmatch_path(path: str, pattern: str) -> bool:
     import fnmatch
     return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, pattern.rstrip("/") + "/**")
@@ -546,6 +566,7 @@ def sanitize_failure_packet_for_prompt(data: Any) -> Any:
     return out
 
 
+
 def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tuple[str, Mapping[str, Any] | None]:
     if not failure_packet_path:
         return "No failure packet was provided.", None
@@ -556,17 +577,34 @@ def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tu
         data = read_json_file(path)
     except Exception as exc:
         return f"Could not parse failure packet `{relpath(repo, path)}`: {exc}", None
-    sanitized = sanitize_failure_packet_for_prompt(data)
-    body = fenced(json.dumps(sanitized, indent=2, sort_keys=True), language="json")
-    # Include bounded tail of referenced log if present.
-    log_path = data.get("log_path")
-    if isinstance(log_path, str):
-        lp = repo / log_path
-        if lp.exists():
-            body += "\n\n### Referenced log tail\n" + fenced(tail_file(lp, max_lines=180), language="text")
-    return body, sanitized if isinstance(sanitized, dict) else None
+    body = fenced(json.dumps(data, indent=2, sort_keys=True), language="json")
 
-
+    log_paths: list[Path] = []
+    seen: set[str] = set()
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            for k, v in node.items():
+                if k == "log_path" and isinstance(v, str) and v:
+                    p = Path(v)
+                    if not p.is_absolute():
+                        p = repo / p
+                    key = str(p.resolve()) if p.exists() else str(p)
+                    if key not in seen:
+                        seen.add(key)
+                        log_paths.append(p)
+                visit(v)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+    visit(data)
+    if log_paths:
+        body += "\n\n### Full referenced logs"
+        for lp in log_paths:
+            if lp.exists():
+                body += f"\n\n#### {relpath(repo, lp)}\n" + fenced(read_text(lp), language="text")
+            else:
+                body += f"\n\n#### {lp}\n<missing>"
+    return body, data if isinstance(data, dict) else None
 def run_extractor(name: str, repo: Path, *, slice_entry: Mapping[str, Any], config: MilestoneConfig, failure_packet_path: Path | None, failure_packet_data: Mapping[str, Any] | None) -> list[Section]:
     if name == "cmake_neighbors":
         return [Section("Extractor: CMake neighbors", extractor_cmake_neighbors(repo))]
@@ -679,6 +717,7 @@ Use this context only for the active slice. Do not broaden scope. Do not change 
     return sections
 
 
+
 def render_context_pack(
     *,
     repo: Path,
@@ -698,34 +737,21 @@ def render_context_pack(
     profile = profiles[profile_name]
     if not isinstance(profile, dict):
         raise DriverError(f"context profile {profile_name!r} must be an object")
-    max_chars = int(max_chars_override or profile.get("max_chars") or config.context_profiles.get("defaults", {}).get("max_chars", 140000))
+
+    defaults = config.context_profiles.get("defaults", {}) if isinstance(config.context_profiles, dict) else {}
+    requested_max_chars = int(max_chars_override or profile.get("max_chars") or defaults.get("max_chars", 0) or 0)
 
     sections = build_sections(repo=repo, config=config, slice_entry=slice_entry, profile=profile, mode=mode, failure_packet_path=failure_packet)
     rendered_sections: list[str] = []
     included: list[dict[str, Any]] = []
-    total = 0
-    header = f"# VC4 Codegen Context Pack\n\nSlice: `{slice_id}` — {slice_entry.get('title')}\n\nProfile: `{profile_name}`\n\nMode: `{mode}`\n"
-    total += len(header)
+    header = f"# VC4 Codegen Context Pack (NO TRUNCATION)\n\nSlice: `{slice_id}` — {slice_entry.get('title')}\n\nProfile: `{profile_name}`\n\nMode: `{mode}`\n\nThis context pack intentionally ignores profile max_chars and includes selected files/logs in full.\n"
     rendered_sections.append(header)
+    total = len(header)
     for section in sections:
         text = section.render()
-        if total + len(text) > max_chars:
-            remaining = max_chars - total
-            if remaining > 2000:
-                text = soft_truncate(text, remaining, marker=f"[... section `{section.title}` truncated to fit context budget ...]")
-                rendered_sections.append(text)
-                total += len(text)
-                included.append({"title": section.title, "source": section.source, "chars": len(text), "truncated_to_fit": True})
-            else:
-                notice = f"\n\n## Context budget exhausted\n\nOmitted section `{section.title}` and later sections.\n"
-                if total + len(notice) <= max_chars:
-                    rendered_sections.append(notice)
-                    total += len(notice)
-                included.append({"title": section.title, "source": section.source, "chars": 0, "omitted_budget": True})
-            break
         rendered_sections.append(text)
         total += len(text)
-        included.append({"title": section.title, "source": section.source, "chars": len(text)})
+        included.append({"title": section.title, "source": section.source, "chars": len(text), "truncated_to_fit": False, "omitted_budget": False})
     pack = "".join(rendered_sections).rstrip() + "\n"
     metadata = {
         "schema_version": 1,
@@ -734,17 +760,15 @@ def render_context_pack(
         "profile": profile_name,
         "mode": mode,
         "chars": len(pack),
-        "max_chars": max_chars,
-        "allow_large_context": allow_large_context,
+        "requested_max_chars_ignored": requested_max_chars,
+        "max_chars": None,
+        "allow_large_context": True,
+        "truncation_policy": "disabled; full selected context included",
         "sections": included,
     }
-    if len(pack) > max_chars and not allow_large_context:
-        raise DriverError(f"context pack is {len(pack)} chars, above max {max_chars}; pass --allow-large-context")
     if metadata_out:
         write_json_file(metadata_out, metadata)
     return pack, metadata
-
-
 def cmd_build(args: argparse.Namespace) -> int:
     repo = find_repo_root(args.repo)
     config = MilestoneConfig.load(repo, worklist_path=args.worklist, context_profiles_path=args.context_profiles)

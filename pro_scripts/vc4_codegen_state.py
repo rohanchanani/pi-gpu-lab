@@ -604,6 +604,7 @@ def executable_in_path(name: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 
+
 def write_failure_packet(
     path: Path,
     *,
@@ -616,6 +617,17 @@ def write_failure_packet(
     log_path: Path | None = None,
     extra: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
+    log_text = ""
+    log_full = False
+    if log_path:
+        try:
+            if log_path.exists():
+                log_text = log_path.read_text(encoding="utf-8", errors="replace")
+                log_full = True
+            else:
+                log_text = f"<missing log file: {log_path}>"
+        except Exception as exc:
+            log_text = f"<could not read log file {log_path}: {exc}>"
     packet = {
         "schema_version": 1,
         "time": iso_now(),
@@ -628,6 +640,8 @@ def write_failure_packet(
         "timed_out": timed_out,
         "log_path": str(log_path) if log_path else None,
         "log_tail": tail_file(log_path, max_lines=120) if log_path else "",
+        "log_text_included_full": log_full,
+        "log_text": log_text,
         "intent": slice_entry.get("intent"),
         "non_goals": slice_entry.get("non_goals", []),
         "extra": dict(extra or {}),

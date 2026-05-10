@@ -2,7 +2,6 @@
   "schema_version": 1,
   "milestone": "vc4-codegen-m1",
   "defaults": {
-    "max_chars": 140000,
     "always_include": [
       {
         "kind": "file",
@@ -30,11 +29,11 @@
       {
         "kind": "changed_files_excerpt"
       }
-    ]
+    ],
+    "max_chars_ignored_by_no_truncation_patch": 140000
   },
   "profiles": {
     "preflight": {
-      "max_chars": 60000,
       "purpose": "No-GPT context for human/state reporting only.",
       "include": [
         {
@@ -46,10 +45,10 @@
           "path": "pro_scripts/vc4_codegen_m1_context_profiles.json"
         }
       ],
-      "extractors": []
+      "extractors": [],
+      "max_chars_ignored_by_no_truncation_patch": 60000
     },
     "bootstrap_tool": {
-      "max_chars": 150000,
       "purpose": "Add vc4-codegen tool skeleton and reusable Target/VC4 library surface.",
       "include": [
         {
@@ -61,31 +60,34 @@
           ]
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/tools/vc4-opt/vc4-opt.cpp",
           "focus": [
             "dialect registration",
             "verifier pass names",
             "MlirOptMain usage"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu.* ops"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp",
           "focus": [
             "verifyLaunchAbi",
             "FuncOp verifier",
             "scheduled op verifiers"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "fixture",
@@ -97,19 +99,20 @@
         "vc4_dialect_registration",
         "launch_abi_summary",
         "scheduled_sink_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 150000
     },
     "emit_contract": {
-      "max_chars": 140000,
       "purpose": "Local tests for Milestone 1 input boundary.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/tools/vc4-opt/vc4-opt.cpp",
           "focus": [
             "VC4VerifyEmitContractPass",
             "scheduled verifier pass arguments"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "tests",
@@ -125,10 +128,10 @@
         "verify_emit_contract_summary",
         "launch_abi_summary",
         "minimal_thrend_input"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 140000
     },
     "qasm_minimal": {
-      "max_chars": 130000,
       "purpose": "Emit and assemble thrend/nop/nop qasm.",
       "include": [
         {
@@ -140,14 +143,15 @@
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend.qasm"
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_QPUBundleOp"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
           "focus": [
             "VC4_QPUSignal",
@@ -155,28 +159,30 @@
             "VC4_MulOpcode",
             "VC4_Cond",
             "VC4_QPUMux"
-          ]
+          ],
+          "formerly_file_excerpt": true
         }
       ],
       "extractors": [
         "minimal_thrend_input",
         "minimal_thrend_reference_qasm",
         "scheduled_epilogue_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 130000
     },
     "qpu_bundle": {
-      "max_chars": 160000,
       "purpose": "Emit vc4.qpu.bundle canonical qasm.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_QPUBundleOp"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
           "focus": [
             "VC4_QPUSignal",
@@ -186,7 +192,8 @@
             "VC4_QPUMux",
             "pack",
             "unpack"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "tests",
@@ -200,29 +207,31 @@
         "scheduled_sink_summary",
         "qpu_bundle_verifier_summary",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "qpu_ldi_sema": {
-      "max_chars": 150000,
       "purpose": "Emit vc4.qpu.ldi and vc4.qpu.sema canonical qasm.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_QPULDIOp",
             "VC4_QPUSemaOp"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
           "focus": [
             "VC4_LoadImmMode",
             "VC4_SemaphoreMode",
             "VC4_Cond",
             "pack"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "tests",
@@ -236,25 +245,27 @@
         "qpu_ldi_verifier_summary",
         "qpu_sema_verifier_summary",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 150000
     },
     "qpu_branch": {
-      "max_chars": 150000,
       "purpose": "Emit vc4.qpu.branch labels and delay-slot qasm.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_QPUBranchOp"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td",
           "focus": [
             "VC4_BranchCond"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "tests",
@@ -268,21 +279,22 @@
         "qpu_branch_verifier_summary",
         "scheduled_instruction_stream_flattening",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 150000
     },
     "launch_abi": {
-      "max_chars": 150000,
       "purpose": "Parse vc4.launch_abi and generate semantic launcher API/C packing.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp",
           "focus": [
             "verifyLaunchAbi",
             "verifyLaunchAbiArg",
             "verifyLaunchAbiBuiltin",
             "verifyLaunchAbiUniformLayout"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "tests",
@@ -304,21 +316,22 @@
         "launch_abi_summary",
         "expected_json_schema",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 150000
     },
     "candidate_runner": {
-      "max_chars": 150000,
       "purpose": "Generate/build candidate bundle without touching reference bundles.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md",
           "focus": [
             "reference side",
             "candidate side",
             "expected.json",
             "no exact qasm matching"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "fixture_tree",
@@ -334,20 +347,21 @@
         "candidate_vs_reference_summary",
         "expected_json_schema",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 150000
     },
     "hardware_failure": {
-      "max_chars": 170000,
       "purpose": "Diagnose required hardware candidate failures with full logs and generated artifacts.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md",
           "focus": [
             "semantic oracle",
             "VC4_TEST_RESULT",
             "candidate generation"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "failure_packet"
@@ -369,7 +383,8 @@
         "expected_json_schema",
         "generated_artifact_summary",
         "git_diff_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 170000
     }
   }
 }

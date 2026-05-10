@@ -2,7 +2,6 @@
   "schema_version": 1,
   "milestone": "vc4-codegen-m2",
   "defaults": {
-    "max_chars": 160000,
     "always_include": [
       {
         "kind": "file",
@@ -38,11 +37,11 @@
       {
         "kind": "changed_files_excerpt"
       }
-    ]
+    ],
+    "max_chars_ignored_by_no_truncation_patch": 160000
   },
   "profiles": {
     "m2_scaffold": {
-      "max_chars": 120000,
       "purpose": "Install M2 orchestration/verifier scaffolding only.",
       "include": [
         {
@@ -68,14 +67,14 @@
       ],
       "extractors": [
         "git_diff_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 120000
     },
     "manifest_v2": {
-      "max_chars": 160000,
       "purpose": "Implement manifest schema v2 and multi-kernel metadata.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -83,17 +82,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -111,14 +112,14 @@
       "extractors": [
         "launch_abi_summary",
         "scheduled_sink_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "program_bundle": {
-      "max_chars": 160000,
       "purpose": "General bundle assembly and support-script behavior.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -126,17 +127,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -149,14 +152,14 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "persistent_layout": {
-      "max_chars": 160000,
       "purpose": "Persistent program allocation and layout.json.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -164,17 +167,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -191,14 +196,14 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "device_heap": {
-      "max_chars": 160000,
       "purpose": "Heap allocator and copy API in generated runtime.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -206,17 +211,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -229,10 +236,10 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "cuda_like_abi": {
-      "max_chars": 220000,
       "purpose": "CUDA-like public launch ABI and no implicit copy wrapper.",
       "include": [
         {
@@ -240,7 +247,7 @@
           "path": "pro_scripts/prompts/vc4_codegen_m2/slice5_handoff.md"
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -248,17 +255,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -313,10 +322,10 @@
         "launch_abi_summary",
         "existing_codegen_files",
         "hardware_fixture_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 220000
     },
     "multi_kernel_hw": {
-      "max_chars": 420000,
       "purpose": "Fix the real m2-06 multi-kernel hardware chain with the full VC4ArtifactEmitter.cpp and recent attempt-7/8 timeout evidence in prompt context; implementation belongs in compiler-generated runtime/codegen, not support scripts or fixture oracles.",
       "include": [
         {
@@ -324,14 +333,15 @@
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -398,7 +408,7 @@
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm"
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
           "focus": [
             "manifest.json",
@@ -407,7 +417,8 @@
             "code_symbol",
             "assemble",
             "candidate workdir"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "fixture_tree",
@@ -418,14 +429,14 @@
         "existing_codegen_files",
         "launch_abi_summary",
         "scheduled_sink_summary"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 420000
     },
     "independent_vector": {
-      "max_chars": 160000,
       "purpose": "Runtime scheduler for independent-vector kernels.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -433,17 +444,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -456,14 +469,14 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "cooperative_block": {
-      "max_chars": 160000,
       "purpose": "Runtime scheduler/resource allocator for cooperative-block kernels.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -471,17 +484,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -494,14 +509,14 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "fixture_matrix": {
-      "max_chars": 160000,
       "purpose": "Curated M2 fixture matrix hardening.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -509,17 +524,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -532,14 +549,14 @@
       ],
       "extractors": [
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "final_acceptance": {
-      "max_chars": 160000,
       "purpose": "Final M2 acceptance and cleanup.",
       "include": [
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
           "focus": [
             "manifest",
@@ -547,17 +564,19 @@
             "kernel_launch",
             "QASM",
             "launch ABI"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
-          "kind": "file_excerpt",
+          "kind": "file",
           "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
             "vc4.qpu",
             "launch_abi"
-          ]
+          ],
+          "formerly_file_excerpt": true
         },
         {
           "kind": "file",
@@ -571,7 +590,8 @@
       "extractors": [
         "git_diff_summary",
         "existing_codegen_files"
-      ]
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
     }
   }
 }
