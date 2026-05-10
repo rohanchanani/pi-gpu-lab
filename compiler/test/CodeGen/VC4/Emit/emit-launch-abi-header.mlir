@@ -30,7 +30,11 @@
 // HEADER-NOT: num_qpus
 
 // SOURCE: #include "kernel_launch.h"
+// SOURCE: #define VC4_CODEGEN_QPU_WAIT_MAX_POLLS 10000000u
 // SOURCE: static uint32_t vc4_codegen_pack_f32(float value) {
+// SOURCE: static int vc4_codegen_wait_for_qpus(struct vc4_program *program, uint32_t activeQpus) {
+// SOURCE: vc4_codegen_launch_failure(program);
+// SOURCE: return -1;
 // SOURCE-LABEL: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale) {
 // SOURCE-NOT: vc4Malloc(
 // SOURCE-NOT: vc4MemcpyHtoD(
@@ -51,9 +55,14 @@
 // SOURCE: [qpu][3] = vc4_codegen_pack_f32(scale); /* arg scale */
 // SOURCE: [qpu][4] = qpu; /* builtin qpu_id */
 // SOURCE: [qpu][5] = activeQpus; /* builtin num_qpus */
+// SOURCE: VC4_KERNEL_LAUNCH name=launch_abi_header_launch
+// SOURCE: uint32_t max_wait_polls = VC4_CODEGEN_QPU_WAIT_MAX_POLLS;
 // SOURCE: PUT32(V3D_SRQUA,
 // SOURCE: PUT32(V3D_SRQPC,
-// SOURCE: vc4_codegen_wait_for_qpus(activeQpus);
+// SOURCE: vc4_codegen_launch_code_gpu_addr(program->state->kernel_descs[0].code_gpu_addr)
+// SOURCE: if (vc4_codegen_wait_for_qpus(program, activeQpus) < 0)
+// SOURCE: return -1;
+// SOURCE: program->state->launch_count++;
 // SOURCE: return 0;
 
 // MANIFEST: "schema_version": 2
