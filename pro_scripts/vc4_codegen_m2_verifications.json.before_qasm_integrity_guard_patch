@@ -1,0 +1,1344 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-codegen-m2",
+  "title": "Typed deterministic verification specs for VC4 Codegen Milestone 2",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/codegen_m2/verifier",
+    "candidate_state_root": ".vc4_auto/codegen_m2",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 7200,
+    "hardware_timeout_sec": 120,
+    "fixture_matrices": {
+      "smoke_runtime": [
+        "minimal_thrend",
+        "memory_output",
+        "read_nop_write",
+        "saxpy_full",
+        "multi_kernel_chain"
+      ],
+      "independent_vector": [
+        "saxpy_16",
+        "saxpy_basic",
+        "saxpy_full",
+        "global_store_coalesced_multi",
+        "gemv_naive_tail"
+      ],
+      "memory_sfu": [
+        "saxpy_tmu",
+        "saxpy_tmu_overlap",
+        "tmu_read_nop_write",
+        "tmu_strided_load",
+        "sfu_recip",
+        "vpm_setup_clobber",
+        "vpm_slice_visibility"
+      ],
+      "cooperative_shared_reduction": [
+        "qpu_barrier_syncthreads",
+        "vpm_slice_visibility",
+        "warp_reduce_sum",
+        "warp_prefix_sum",
+        "block_reduce_sum",
+        "shared_transpose_16x16"
+      ],
+      "m2_required": [
+        "block_reduce_sum",
+        "gemv_naive_tail",
+        "global_store_coalesced_multi",
+        "memory_output",
+        "minimal_thrend",
+        "multi_kernel_chain",
+        "qpu_barrier_syncthreads",
+        "read_nop_write",
+        "saxpy_16",
+        "saxpy_basic",
+        "saxpy_full",
+        "saxpy_tmu",
+        "saxpy_tmu_overlap",
+        "sfu_recip",
+        "shared_transpose_16x16",
+        "tmu_read_nop_write",
+        "tmu_strided_load",
+        "vpm_setup_clobber",
+        "vpm_slice_visibility",
+        "warp_prefix_sum",
+        "warp_reduce_sum"
+      ]
+    }
+  },
+  "notes": [
+    "The verifier script is cumulative and remains pro_scripts/vc4_codegen_m1_verifier.py for backward compatibility.",
+    "M2 introduces general program-bundle mechanisms; a single-kernel bundle is a kernels.length == 1 program.",
+    "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware.",
+    "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
+    "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(.",
+    "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks.",
+    "M2 slice 6 static runtime/layout contracts are stop_on_failure gates: if generated launch code cannot enqueue V3D work or lacks a bounded failure path, do not spend a pi-install hardware timeout before returning a failure packet.",
+    "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware."
+  ],
+  "fixture_matrices": {
+    "smoke_runtime": [
+      "minimal_thrend",
+      "memory_output",
+      "read_nop_write",
+      "saxpy_full",
+      "multi_kernel_chain"
+    ],
+    "independent_vector": [
+      "saxpy_16",
+      "saxpy_basic",
+      "saxpy_full",
+      "global_store_coalesced_multi",
+      "gemv_naive_tail"
+    ],
+    "memory_sfu": [
+      "saxpy_tmu",
+      "saxpy_tmu_overlap",
+      "tmu_read_nop_write",
+      "tmu_strided_load",
+      "sfu_recip",
+      "vpm_setup_clobber",
+      "vpm_slice_visibility"
+    ],
+    "cooperative_shared_reduction": [
+      "qpu_barrier_syncthreads",
+      "vpm_slice_visibility",
+      "warp_reduce_sum",
+      "warp_prefix_sum",
+      "block_reduce_sum",
+      "shared_transpose_16x16"
+    ],
+    "m2_required": [
+      "block_reduce_sum",
+      "gemv_naive_tail",
+      "global_store_coalesced_multi",
+      "memory_output",
+      "minimal_thrend",
+      "multi_kernel_chain",
+      "qpu_barrier_syncthreads",
+      "read_nop_write",
+      "saxpy_16",
+      "saxpy_basic",
+      "saxpy_full",
+      "saxpy_tmu",
+      "saxpy_tmu_overlap",
+      "sfu_recip",
+      "shared_transpose_16x16",
+      "tmu_read_nop_write",
+      "tmu_strided_load",
+      "vpm_setup_clobber",
+      "vpm_slice_visibility",
+      "warp_prefix_sum",
+      "warp_reduce_sum"
+    ]
+  },
+  "slices": {
+    "m2-00-scaffold": {
+      "title": "M2 verifier/worklist scaffold",
+      "expected_end_state": "M2 orchestration files, cumulative verifier mechanisms, prompt contracts, and support-script state-root plumbing exist; existing M1 emit tests and saxpy_full hardware remain runnable.",
+      "verifications": [
+        {
+          "id": "m2-orchestration-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "pro_scripts/vc4_codegen_m2_worklist.json",
+            "pro_scripts/vc4_codegen_m2_verifications.json",
+            "pro_scripts/vc4_codegen_m2_context_profiles.json",
+            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "pro_scripts/vc4_codegen_m2_verifier.py",
+            "pro_scripts/prompts/vc4_codegen_m2/constitution.md",
+            "pro_scripts/prompts/vc4_codegen_m2/output_contract.md",
+            "pro_scripts/prompts/vc4_codegen_m2/slice_contract.md",
+            "compiler/docs/codegen/vc4-codegen-m2-plan.md",
+            "compiler/docs/codegen/vc4-artifact-manifest-v2.md",
+            "compiler/docs/codegen/vc4-runtime-abi.md",
+            "compiler/docs/codegen/vc4-m2-test-matrix.md",
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h",
+            "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py",
+            "compiler/test/CodeGen/VC4/Support/check_m2_layout.py",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+          ]
+        },
+        {
+          "id": "m2-new-mechanisms-registered",
+          "mechanism": "command",
+          "description": "Cumulative verifier lists M2 mechanisms",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "mechanisms",
+            "--repo",
+            "{repo}"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "manifest_schema",
+            "program_artifact_bundle",
+            "fixture_matrix",
+            "launch_abi_contract",
+            "resource_contract"
+          ]
+        },
+        {
+          "id": "support-script-m2-state-root",
+          "mechanism": "support_script_contract",
+          "description": "Candidate support script can switch from M1 to M2 state root",
+          "script": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "required_patterns": [
+            "VC4_CODEGEN_STATE_ROOT",
+            "AUTO_ROOT_RAW",
+            "candidates/\\$TEST_NAME"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-current-emit-suite",
+          "mechanism": "command",
+          "description": "Current non-M2/slice-local Emit suite remains green while M2-specific manifest, layout, heap, launch-ABI, resource, and multi-kernel tests are verified by their owning slices.",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/VC4/Emit",
+            "--exclude-prefix",
+            "emit-buffer-direction-metadata-no-wrapper",
+            "--exclude-prefix",
+            "emit-cuda-like-launch-abi",
+            "--exclude-prefix",
+            "emit-heap-layout-smoke",
+            "--exclude-prefix",
+            "emit-manifest-v2",
+            "--exclude-prefix",
+            "emit-multi-kernel",
+            "--exclude-prefix",
+            "emit-program-layout-json",
+            "--exclude-prefix",
+            "emit-resource",
+            "--exclude-prefix",
+            "emit-launch-abi-header",
+            "--exclude-prefix",
+            "emit-launcher-uniform-packing",
+            "--exclude-prefix",
+            "emit-saxpy-full-qasm-artifact-regression"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "audit-m2-spec",
+          "mechanism": "command",
+          "description": "M2 spec audits against M2 worklist",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "audit-contract",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_codegen_m2_verifications.json",
+            "--worklist",
+            "pro_scripts/vc4_codegen_m2_worklist.json"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m2-01-manifest-v2": {
+      "title": "Manifest v2 general program artifacts",
+      "expected_end_state": "vc4-codegen emits schema v2 program manifests with kernels[] for one or more kernels and deterministic diagnostics for duplicate kernel public/code symbols.",
+      "verifications": [
+        {
+          "id": "manifest-v2-test-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-public-name.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-code-symbol.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy_full",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "generate-multi_kernel_minimal",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for multi_kernel_minimal",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "manifest-v2-single-kernel",
+          "mechanism": "manifest_schema",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "manifest-v2-two-kernel",
+          "mechanism": "manifest_schema",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
+          "schema_version": 2,
+          "expected_kernel_count": 2,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "reject-duplicate-public-name",
+          "mechanism": "negative_diagnostic",
+          "argv": [
+            "vc4-codegen",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-public-name.mlir",
+            "--emit-bundle",
+            "%t.bundle"
+          ],
+          "stderr_contains": [
+            "duplicate",
+            "public_name"
+          ],
+          "forbid_bundle_created": true
+        },
+        {
+          "id": "emit-manifest-v2-lit",
+          "mechanism": "command",
+          "description": "Run only M2 manifest-v2 Emit lit tests for this slice",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/VC4/Emit",
+            "--include",
+            "emit-manifest-v2-single-kernel.mlir",
+            "--include",
+            "emit-multi-kernel-manifest-v2.mlir",
+            "--include",
+            "emit-multi-kernel-invalid-duplicate-public-name.mlir",
+            "--include",
+            "emit-multi-kernel-invalid-duplicate-code-symbol.mlir"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "reject-duplicate-code-symbol",
+          "mechanism": "negative_diagnostic",
+          "argv": [
+            "vc4-codegen",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-invalid-duplicate-code-symbol.mlir",
+            "--emit-bundle",
+            "%t.bundle"
+          ],
+          "stderr_contains": [
+            "duplicate",
+            "code_symbol"
+          ],
+          "forbid_bundle_created": true
+        }
+      ]
+    },
+    "m2-02-program-bundle-assembly": {
+      "title": "Program bundle assembly support",
+      "expected_end_state": "Support scripts and verifier treat every bundle as a program bundle and assemble every manifest-listed qasm_path using code_symbol outputs.",
+      "verifications": [
+        {
+          "id": "program-bundle-support-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/input.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/expected.json",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_minimal/candidate/run.sh"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy_full",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "generate-multi_kernel_minimal",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for multi_kernel_minimal",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-single",
+          "mechanism": "program_artifact_bundle",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "expected_kernel_count": 1,
+          "require_layout": false,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "program-artifact-bundle-two-kernel",
+          "mechanism": "program_artifact_bundle",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal",
+          "expected_kernel_count": 2,
+          "require_layout": false,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-multi-kernel",
+          "mechanism": "all_qasm_assemble",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_minimal"
+        },
+        {
+          "id": "candidate-assemble-multi-kernel-minimal",
+          "mechanism": "candidate_phase",
+          "name": "multi_kernel_minimal",
+          "phase": "assemble"
+        },
+        {
+          "id": "candidate-build-multi-kernel-minimal",
+          "mechanism": "candidate_phase",
+          "name": "multi_kernel_minimal",
+          "phase": "build"
+        },
+        {
+          "id": "support-script-no-single-kernel-only-assumption",
+          "mechanism": "support_script_contract",
+          "script": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+          "required_patterns": [
+            "manifest.json",
+            "kernels",
+            "qasm_path",
+            "code_symbol"
+          ],
+          "forbidden_literals": [
+            "kernel.qasm if i == 0",
+            "data.get('public_name') or data.get('c_entry_point')",
+            "f'kernel_{i}.qasm'"
+          ]
+        }
+      ]
+    },
+    "m2-03-persistent-program-layout": {
+      "title": "Persistent program image and layout.json",
+      "expected_end_state": "Generated runtime/layout creates exactly one persistent program image with non-overlapping aligned regions and setup-only code upload policy.",
+      "verifications": [
+        {
+          "id": "layout-test-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy_full",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json",
+            "layout.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "layout-no-overlap-single",
+          "mechanism": "program_layout_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "require_no_overlaps": true,
+          "alignment_bytes": 8,
+          "require_heap": false,
+          "expected_kernel_count": 1
+        },
+        {
+          "id": "runtime-setup-only-code-upload",
+          "mechanism": "generated_runtime_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "allocation_policy": {
+            "program_image_allocations": "exactly_one_in_setup",
+            "code_upload": "setup_only",
+            "launch_reuses_resident_code": true
+          },
+          "forbidden_patterns_in_launch_functions": [
+            "mem_alloc",
+            "mem_lock",
+            "mem_free",
+            "copy_kernel_code"
+          ]
+        }
+      ]
+    },
+    "m2-04-device-heap": {
+      "title": "Device heap in persistent allocation",
+      "expected_end_state": "Generated runtime exposes vc4Malloc/vc4Free/vc4Memcpy*/vc4MemsetD8 backed by a deterministic heap inside the persistent program image.",
+      "verifications": [
+        {
+          "id": "heap-test-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c",
+            "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c",
+            "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-heap_smoke",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for heap_smoke",
+          "input": "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/heap_smoke",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json",
+            "layout.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "heap-layout-present",
+          "mechanism": "program_layout_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/heap_smoke",
+          "require_heap": true,
+          "min_heap_bytes": 4096
+        },
+        {
+          "id": "heap-api-unit",
+          "mechanism": "heap_api_unit",
+          "source_files": [
+            "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c"
+          ],
+          "stub_files": [
+            "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
+          ],
+          "include_dirs": [
+            "compiler/test/CodeGen/VC4/Runtime"
+          ],
+          "stdout_contains": [
+            "HEAP_UNIT_RESULT status=PASS"
+          ]
+        },
+        {
+          "id": "generated-runtime-has-vc4-memory-api",
+          "mechanism": "generated_runtime_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/heap_smoke",
+          "required_functions": [
+            "vc4Malloc",
+            "vc4Free",
+            "vc4MemcpyHtoD",
+            "vc4MemcpyDtoH",
+            "vc4MemcpyDtoD",
+            "vc4MemsetD8"
+          ],
+          "forbidden_patterns": [
+            "static uint8_t .*user",
+            "static float .*input",
+            "static float .*output"
+          ]
+        }
+      ]
+    },
+    "m2-05-cuda-like-launch-abi": {
+      "title": "CUDA-like launch ABI without copy wrapper",
+      "expected_end_state": "Generated launch ABI resembles CUDA: program handle, grid/block, device pointer buffers, scalar values; generated launch functions pack uniforms/enqueue but perform no implicit copies.",
+      "verifications": [
+        {
+          "id": "cuda-like-abi-test-products",
+          "mechanism": "source_products",
+          "description": "Slice-5 launch-ABI tests and hardware harness inputs exist; stale prepare-wrapper tests are owned and updated here, not by m2-00.",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir",
+            "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c",
+            "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir",
+            "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy_full",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json",
+            "layout.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "cuda-like-launch-abi-saxpy-full",
+          "mechanism": "launch_abi_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "kernels": [
+            {
+              "public_name": "saxpy_full",
+              "launch_function": "saxpy_full_launch",
+              "requires_program_handle": true,
+              "requires_grid_block": true,
+              "buffers_are_deviceptr": true,
+              "scalars_by_value": true,
+              "forbid_host_pointer_launch_args": true,
+              "forbid_public_uniform_arrays": true,
+              "forbid_implicit_host_copies": true
+            }
+          ]
+        },
+        {
+          "id": "generated-runtime-launch-no-copies",
+          "mechanism": "generated_runtime_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "forbidden_patterns_in_launch_functions": [
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
+            "memcpy\\s*\\(",
+            "memmove\\s*\\(",
+            "memset\\s*\\("
+          ],
+          "required_patterns_in_launch_functions": [
+            "program->state->.*_unif\\s*\\[qpu\\]",
+            "PUT32\\s*\\(\\s*V3D_SRQUA",
+            "PUT32\\s*\\(\\s*V3D_SRQPC"
+          ],
+          "description": "Public launch functions only pack uniforms/enqueue hardware: no allocation/copy/free host wrapper calls inside launch bodies. Regexes are intentionally valid Python regex strings."
+        },
+        {
+          "id": "cuda-like-launch-abi-lit",
+          "mechanism": "command",
+          "description": "Run all launch-ABI-owned Emit lit tests, including formerly stale prepare-wrapper tests now updated to the M2 program API.",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/VC4/Emit",
+            "--include",
+            "emit-cuda-like-launch-abi.mlir",
+            "--include",
+            "emit-buffer-direction-metadata-no-wrapper.mlir",
+            "--include",
+            "emit-launch-abi-header.mlir",
+            "--include",
+            "emit-launcher-uniform-packing.mlir",
+            "--include",
+            "emit-saxpy-full-qasm-artifact-regression.mlir"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "saxpy-full-device-pointer-hardware",
+          "mechanism": "fixture_matrix",
+          "fixtures": [
+            "saxpy_full"
+          ],
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        }
+      ]
+    },
+    "m2-06-multi-kernel-chain-hardware": {
+      "title": "First true multi-kernel hardware program",
+      "expected_end_state": "The multi_kernel_chain fixture launches memory_output then read_nop_write from one persistent program image, using the same heap buffer, and validates the real hardware result without host-script synthetic runtime/result lines.",
+      "verifications": [
+        {
+          "id": "multi-kernel-chain-source-products",
+          "mechanism": "source_products",
+          "description": "Exact multi-kernel-chain source products exist; generated reference byproducts are not source products.",
+          "files": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/expected.json",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/candidate/run.sh",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/Makefile",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.sh"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-multi_kernel_chain",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for multi_kernel_chain",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json",
+            "layout.json",
+            "kernels/memory_output.qasm",
+            "kernels/read_nop_write.qasm"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "multi-kernel-chain-manifest",
+          "mechanism": "manifest_schema",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "schema_version": 2,
+          "expected_kernel_count": 2,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ],
+          "stop_on_failure": true
+        },
+        {
+          "id": "multi-kernel-chain-layout",
+          "mechanism": "program_layout_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "require_no_overlaps": true,
+          "require_heap": true,
+          "expected_kernel_count": 2,
+          "min_heap_bytes": 65536,
+          "description": "Multi-kernel chain layout keeps the persistent M2 heap and two kernel layout records; shrinking the heap back to a tiny/default value is a regression.",
+          "stop_on_failure": true
+        },
+        {
+          "id": "multi-kernel-chain-generated-runtime-contract",
+          "mechanism": "generated_runtime_contract",
+          "description": "Generated runtime exposes two real launch entry points from one resident program. Each launch must enqueue real V3D work, have a bounded wait/failure path, and leave final result lines to the hardware harness.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "required_functions": [
+            "vc4_program_create",
+            "vc4Malloc",
+            "vc4MemcpyHtoD",
+            "vc4MemcpyDtoH",
+            "memory_output_launch",
+            "read_nop_write_launch"
+          ],
+          "forbidden_patterns": [
+            "VC4_TEST_RESULT",
+            "emit_multi_kernel_chain",
+            "struct\\s+vc4_runtime",
+            "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_release\\s*\\("
+          ],
+          "forbidden_patterns_in_launch_functions": [
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
+            "memcpy\\s*\\(",
+            "memmove\\s*\\(",
+            "memset\\s*\\("
+          ],
+          "required_patterns_in_launch_functions": [
+            "program->state->.*_unif\\s*\\[qpu\\]",
+            "PUT32\\s*\\(\\s*V3D_SRQUA",
+            "PUT32\\s*\\(\\s*V3D_SRQPC"
+          ],
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true,
+          "required_patterns": [
+            "\\blaunch_failures\\b",
+            "(?i)(timeout|deadline|max_polls|max_wait|poll_limit|tries|attempts)"
+          ],
+          "required_any_patterns_in_launch_functions": [
+            {
+              "name": "launch_failure_return_path",
+              "patterns": [
+                "\\blaunch_failures\\b",
+                "return\\s*-\\s*1\\b",
+                "return\\s+1\\b",
+                "return\\s+VC4_[A-Z0-9_]*FAIL",
+                "return\\s+vc4_[a-zA-Z0-9_]*fail"
+              ]
+            },
+            {
+              "name": "bounded_launch_wait_marker",
+              "patterns": [
+                "(?i)timeout",
+                "(?i)deadline",
+                "(?i)max_polls",
+                "(?i)max_wait",
+                "(?i)poll_limit",
+                "(?i)tries",
+                "(?i)attempts"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "multi-kernel-chain-support-runner-generic",
+          "mechanism": "command",
+          "description": "The shared support runner must remain fixture-generic; m2-06 must not be passed by synthetic multi_kernel_chain log/result injection.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport sys\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\ntext = p.read_text(encoding='utf-8', errors='replace')\nforbidden = [\n    'multi_kernel_chain',\n    'emit_multi_kernel_chain',\n    'VC4_TEST_RESULT name=multi_kernel_chain',\n    'VC4_TEST_RESULT {\"name\":\"multi_kernel_chain\"',\n]\nfound = [x for x in forbidden if x in text]\nif found:\n    print('support runner must stay fixture-generic; forbidden m2-06 special-case text found:', ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "multi-kernel-chain-hardware",
+          "mechanism": "fixture_matrix",
+          "fixtures": [
+            "multi_kernel_chain"
+          ],
+          "phases": [
+            "reference_hardware",
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true,
+          "keep_going": true,
+          "reference_side_effect_globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.log",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/objs",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.c",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*shader.h",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.elf",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.bin",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/*.list"
+          ],
+          "description": "Run reference and generated candidate hardware. Reference byproducts are cleaned by exact untracked git-clean pathspecs; candidate_hardware must produce a real VC4_TEST_RESULT."
+        },
+        {
+          "id": "multi-kernel-chain-reference-byproducts-clean",
+          "mechanism": "forbidden_absent",
+          "description": "Reference hardware probe must not leave checked-in reference tree dirty.",
+          "mode": "git-status",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference",
+            "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.log"
+          ],
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "multi-kernel-chain-runtime-events",
+          "mechanism": "runtime_event_log",
+          "fixture": "multi_kernel_chain",
+          "required_counters": {
+            "program_allocations": 1,
+            "code_uploads": 2,
+            "launch_failures": 0
+          },
+          "min_counters": {
+            "runtime_launches": 2
+          },
+          "contains": [
+            "VC4_RUNTIME_LAYOUT",
+            "VC4_KERNEL_LAUNCH name=memory_output",
+            "VC4_KERNEL_LAUNCH name=read_nop_write",
+            "VC4_TEST_RESULT"
+          ],
+          "description": "Parse the fixture-matrix candidate_hardware verifier log for real runtime diagnostics after the real hardware result line is emitted; never use stale fixture run.log when the verifier log exists.",
+          "not_contains": [
+            "emit_multi_kernel_chain_runtime_events",
+            "synthetic",
+            "SYNTHETIC"
+          ],
+          "log_path": ".vc4_auto/codegen_m2/verifier/logs/m2-06-multi-kernel-chain-hardware_multi-kernel-chain-hardware_multi_kernel_chain_candidate_hardware.log"
+        }
+      ]
+    },
+    "m2-07-independent-vector-scheduler": {
+      "title": "Independent-vector runtime scheduler",
+      "expected_end_state": "Independent-vector kernels are launched as logical request waves using manifest metadata and uniform-provided logical IDs/tails, not physical QPU numbers.",
+      "verifications": [
+        {
+          "id": "independent-vector-test-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-saxpy_full",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for saxpy_full",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "independent-vector-resource-contract",
+          "mechanism": "resource_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "kernels": [
+            {
+              "public_name": "saxpy_full",
+              "schedule_mode": "independent_vector",
+              "uses_barrier": false,
+              "uses_shared_vpm": false
+            }
+          ]
+        },
+        {
+          "id": "independent-vector-fixture-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "independent_vector",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        }
+      ]
+    },
+    "m2-08-cooperative-block-scheduler": {
+      "title": "Cooperative-block runtime scheduler",
+      "expected_end_state": "Cooperative-block kernels enforce full residency and safe VPM/semaphore allocation per resident block, rejecting impossible resource requests.",
+      "verifications": [
+        {
+          "id": "cooperative-test-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir",
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "generate-qpu_barrier_syncthreads",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for qpu_barrier_syncthreads",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/qpu_barrier_syncthreads",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "cooperative-resource-contract-qpu-barrier",
+          "mechanism": "resource_contract",
+          "bundle": ".vc4_auto/codegen_m2/candidates/qpu_barrier_syncthreads",
+          "target": {
+            "active_qpus": 12,
+            "warp_size": 16,
+            "vpm_bytes": 4096,
+            "hardware_semaphores": 16
+          },
+          "kernels": [
+            {
+              "public_name": "qpu_barrier_syncthreads",
+              "schedule_mode": "cooperative_block",
+              "uses_barrier": true,
+              "require_full_block_residency": true,
+              "warps_per_block_max": 12,
+              "semaphores_per_block": 4
+            }
+          ],
+          "expect": "accept"
+        },
+        {
+          "id": "cooperative-invalid-too-many-warps",
+          "mechanism": "negative_diagnostic",
+          "argv": [
+            "vc4-codegen",
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir",
+            "--emit-bundle",
+            "%t.bundle"
+          ],
+          "stderr_contains": [
+            "warps_per_block",
+            "12"
+          ]
+        },
+        {
+          "id": "cooperative-invalid-too-much-shared-vpm",
+          "mechanism": "negative_diagnostic",
+          "description": "Reject cooperative blocks whose shared VPM allocation cannot fit resident warps.",
+          "argv": [
+            "vc4-codegen",
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir",
+            "--emit-bundle",
+            "%t.bundle"
+          ],
+          "stderr_contains": [
+            "vpm_bytes_per_block"
+          ]
+        },
+        {
+          "id": "cooperative-fixture-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "cooperative_shared_reduction",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        }
+      ]
+    },
+    "m2-09-memory-subsystem-matrix": {
+      "title": "Memory subsystem fixture matrix",
+      "expected_end_state": "The backend passes the required M2 memory/TMU/SFU/VPM/cooperative matrices or rejects unsupported M3-only features deterministically.",
+      "verifications": [
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m2-smoke-runtime-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "smoke_runtime",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        },
+        {
+          "id": "m2-independent-vector-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "independent_vector",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        },
+        {
+          "id": "m2-memory-sfu-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "memory_sfu",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        },
+        {
+          "id": "m2-cooperative-matrix",
+          "mechanism": "fixture_matrix",
+          "matrix": "cooperative_shared_reduction",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        }
+      ]
+    },
+    "m2-10-final-acceptance": {
+      "title": "Final M2 acceptance",
+      "expected_end_state": "All required fixture matrices pass; manifests/layout/runtime contracts are valid; no generated artifacts/logs or immutable oracle mutations are present.",
+      "verifications": [
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check-vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lit-codegen-vc4-emit",
+          "mechanism": "lit",
+          "root": "compiler/build/test/CodeGen/VC4/Emit"
+        },
+        {
+          "id": "all-required-fixtures",
+          "mechanism": "fixture_matrix",
+          "matrix": "m2_required",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
+        },
+        {
+          "id": "no-generated-artifacts-committed",
+          "mechanism": "forbidden_absent",
+          "globs": [
+            "compiler/test/**/Output/**",
+            "compiler/test/**/.lit_test_times.txt",
+            "compiler/test/**/run.log"
+          ]
+        },
+        {
+          "id": "existing-reference-bundles-clean",
+          "mechanism": "reference_immutable",
+          "globs": [
+            "compiler/test/CodeGen/VC4/Hardware/Run/*/reference/**",
+            "compiler/test/CodeGen/VC4/Hardware/Run/*/expected.json"
+          ]
+        },
+        {
+          "id": "final-saxpy-launch-no-legacy-wrapper",
+          "mechanism": "generated_runtime_contract",
+          "description": "Final acceptance rejects legacy prepare/release runtime wrappers in saxpy_full launch artifacts.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "forbidden_patterns": [
+            "struct\\s+vc4_runtime",
+            "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
+            "\\b[a-zA-Z0-9_]+_release\\s*\\("
+          ],
+          "allocation_policy": {
+            "launch_reuses_resident_code": true
+          },
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "final-multi-kernel-resident-bundle",
+          "mechanism": "program_artifact_bundle",
+          "description": "Final acceptance confirms multi_kernel_chain remains one resident program bundle with two kernel code artifacts.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
+          "expected_kernel_count": 2,
+          "require_code_artifacts": true,
+          "forbid_root_kernel_qasm": true,
+          "route_hint": "gpt_pro"
+        }
+      ]
+    }
+  }
+}
