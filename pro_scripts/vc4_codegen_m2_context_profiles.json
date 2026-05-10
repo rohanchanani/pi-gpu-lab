@@ -423,6 +423,14 @@
         {
           "kind": "fixture_tree",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
         }
       ],
       "extractors": [
@@ -430,7 +438,8 @@
         "launch_abi_summary",
         "scheduled_sink_summary"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 420000
+      "max_chars_ignored_by_no_truncation_patch": 2000000,
+      "max_chars": 2000000
     },
     "independent_vector": {
       "purpose": "Runtime scheduler for independent-vector kernels.",
