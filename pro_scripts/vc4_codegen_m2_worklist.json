@@ -459,12 +459,13 @@
         "m2-05-cuda-like-launch-abi"
       ],
       "context_profile": "multi_kernel_hw",
-      "intent": "Implement the true multi-kernel hardware chain in generated compiler/runtime artifacts: one resident program image, two kernel code artifacts, one shared heap buffer, sequential real hardware launches, and a real VC4_TEST_RESULT from hardware.",
+      "intent": "Implement the true multi-kernel hardware chain in generated compiler/runtime artifacts: one resident program image, two kernel code artifacts, one shared heap buffer, sequential bounded real hardware launches, and a real VC4_TEST_RESULT from hardware.",
       "non_goals": [
         "Do not mutate existing fixture reference bundles, fixture expected.json files, or fixture input.mlir files.",
         "Do not patch compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh for this slice.",
         "Do not synthesize VC4_RUNTIME_LAYOUT, VC4_KERNEL_LAUNCH, VC4_HEAP_STATS, or VC4_TEST_RESULT lines in host scripts.",
-        "Do not special-case multi_kernel_chain in generic support/orchestration code; fix compiler-generated runtime/launcher semantics instead."
+        "Do not special-case multi_kernel_chain in generic support/orchestration code; fix compiler-generated runtime/launcher semantics instead.",
+        "Do not implement unbounded V3D/QPU wait loops; launch failures must return through a bounded generated-runtime failure path instead of hanging the verifier."
       ],
       "allowed_paths": [
         "compiler/include/vc4/Target/VC4/**",
@@ -490,7 +491,7 @@
       ],
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
-      "max_gpt_attempts": 6,
+      "max_gpt_attempts": 4,
       "max_codex_attempts": 1,
       "commit_message": "vc4 codegen m2: first true multi-kernel hardware program",
       "mechanical_budgets": {

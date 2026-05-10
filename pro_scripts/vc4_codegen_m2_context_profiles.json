@@ -316,22 +316,12 @@
       ]
     },
     "multi_kernel_hw": {
-      "max_chars": 200000,
-      "purpose": "Fix the real m2-06 multi-kernel hardware chain in compiler-generated runtime/codegen, not by patching support scripts or fixture oracles.",
+      "max_chars": 420000,
+      "purpose": "Fix the real m2-06 multi-kernel hardware chain with the full VC4ArtifactEmitter.cpp and recent attempt-7/8 timeout evidence in prompt context; implementation belongs in compiler-generated runtime/codegen, not support scripts or fixture oracles.",
       "include": [
         {
-          "kind": "file_excerpt",
-          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp",
-          "focus": [
-            "manifest",
-            "layout",
-            "kernel_launch",
-            "QASM",
-            "launch ABI",
-            "program",
-            "kernels",
-            "code_symbol"
-          ]
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
         },
         {
           "kind": "file_excerpt",

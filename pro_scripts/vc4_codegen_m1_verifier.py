@@ -1479,6 +1479,26 @@ def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v:
     forbidden_present = [pat for pat in forbidden_patterns if re.search(pat, combined, flags=re.S)]
     launch_forbidden = regex_list(v.get("forbidden_patterns_in_launch_functions"))
     launch_required = regex_list(v.get("required_patterns_in_launch_functions"))
+
+    # Optional flexible launch-body groups.  Each entry may be either a list of
+    # regexes or {"name": str, "patterns": [regex, ...]}; at least one regex in
+    # each group must match the stripped launch body.  This lets M2 specs require
+    # concepts such as a bounded wait/failure path without hard-coding one helper
+    # name.
+    launch_required_any_groups = []
+    for index, entry in enumerate(as_list(v.get("required_any_patterns_in_launch_functions"))):
+        if isinstance(entry, dict):
+            patterns = regex_list(entry.get("patterns"))
+            name = str(entry.get("name") or f"group_{index}")
+        elif isinstance(entry, list):
+            patterns = regex_list(entry)
+            name = f"group_{index}"
+        else:
+            patterns = regex_list([entry])
+            name = f"group_{index}"
+        if patterns:
+            launch_required_any_groups.append({"name": name, "patterns": patterns})
+
     launch_violations = []
     for launch in public_launch_names_from_manifest(manifest):
         body = function_body_for_name(source, launch)
@@ -1488,8 +1508,13 @@ def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v:
             continue
         bad = [pat for pat in launch_forbidden if re.search(pat, body_for_contract, flags=re.S)]
         miss = [pat for pat in launch_required if not re.search(pat, body_for_contract, flags=re.S)]
-        if bad or miss:
-            launch_violations.append({"launch_function": launch, "forbidden_present": bad, "required_missing": miss})
+        any_miss = []
+        for group in launch_required_any_groups:
+            patterns = group["patterns"]
+            if not any(re.search(pat, body_for_contract, flags=re.S) for pat in patterns):
+                any_miss.append(group)
+        if bad or miss or any_miss:
+            launch_violations.append({"launch_function": launch, "forbidden_present": bad, "required_missing": miss, "required_any_missing": any_miss})
     # Lightweight allocation policy checks by regex.  These deliberately fail
     # loudly until M2 runtime code grows stable event names/helpers.
     allocation_policy = v.get("allocation_policy") if isinstance(v.get("allocation_policy"), dict) else {}
@@ -1500,7 +1525,7 @@ def mechanism_generated_runtime_contract(ctx: VerifierContext, slice_id: str, v:
             if re.search(r"copy_.*code|code_upload|mem_alloc|mem_lock", body, flags=re.I|re.S):
                 allocation_errors.append({"launch_function": launch, "error": "launch appears to allocate/copy/lock code"})
     if missing_functions or missing_patterns or forbidden_present or launch_violations or allocation_errors:
-        return make_failure(ctx, slice_id, v, "generated runtime contract failed", expected={"required_functions": required_functions, "required_patterns": required_patterns, "forbidden_patterns": forbidden_patterns}, actual={"missing_functions": missing_functions, "missing_patterns": missing_patterns, "forbidden_present": forbidden_present, "launch_violations": launch_violations, "allocation_errors": allocation_errors}, duration=time.time() - started)
+        return make_failure(ctx, slice_id, v, "generated runtime contract failed", expected={"required_functions": required_functions, "required_patterns": required_patterns, "forbidden_patterns": forbidden_patterns, "required_any_patterns_in_launch_functions": launch_required_any_groups}, actual={"missing_functions": missing_functions, "missing_patterns": missing_patterns, "forbidden_present": forbidden_present, "launch_violations": launch_violations, "allocation_errors": allocation_errors}, duration=time.time() - started)
     return make_success(ctx, slice_id, v, message="generated runtime contract passed", details={"header": ctx.rel(header_path), "source": ctx.rel(source_path)}, duration=time.time() - started)
 
 
@@ -1591,9 +1616,28 @@ def mechanism_runtime_event_log(ctx: VerifierContext, slice_id: str, v: Mapping[
     if log_raw:
         candidates.append(resolve_repo_or_auto_path(ctx, log_raw))
     if fixture:
-        candidates.append(ctx.repo_path(f"compiler/test/CodeGen/VC4/Hardware/Run/{fixture}/candidate/run.log"))
+        # The fixture_matrix candidate-hardware log name is built from
+        # ``<slice>_<verification>_<fixture>_candidate_hardware.log``.  Keep
+        # the search deliberately broad because older specs used
+        # ``hardware_candidate`` while the current M2 runner uses
+        # ``candidate_hardware``.  Prefer verifier logs over checked-in fixture
+        # directories so timed-out hardware runs still produce actionable
+        # diagnostics from .vc4_auto instead of a stale/missing run.log.
+        candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*candidate_hardware*.log")))
+        candidates.extend(sorted(ctx.log_dir.glob(f"*candidate_hardware*{fixture}*.log")))
         candidates.extend(sorted(ctx.log_dir.glob(f"*hardware*candidate*{fixture}*.log")))
         candidates.extend(sorted(ctx.log_dir.glob(f"*{fixture}*hardware*candidate*.log")))
+        candidates.append(ctx.repo_path(f"compiler/test/CodeGen/VC4/Hardware/Run/{fixture}/candidate/run.log"))
+    # De-duplicate while preserving priority.
+    deduped_candidates = []
+    seen_candidates = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key in seen_candidates:
+            continue
+        seen_candidates.add(key)
+        deduped_candidates.append(candidate)
+    candidates = deduped_candidates
     log_path = next((p for p in candidates if p.exists()), None)
     if log_path is None:
         return make_failure(ctx, slice_id, v, "runtime event log not found", expected={"log_path": log_raw, "fixture": fixture}, actual={"candidates": [str(p) for p in candidates]}, duration=time.time() - started)
@@ -2018,8 +2062,15 @@ def run_verify(ctx: VerifierContext, slice_ids: List[str]) -> Dict[str, Any]:
             if ctx.verbose:
                 status = "SKIP" if result.skipped else "OK" if result.ok else "FAIL"
                 print(f"[{status}] {slice_id}:{result.verification_id} {result.mechanism} {result.message}", file=sys.stderr)
-            if not result.ok and result.required and not ctx.keep_going:
-                break
+            if not result.ok and result.required:
+                # Some verifications are intentionally static pre-hardware gates.
+                # They should stop the current slice even under --keep-going so a
+                # known-bad generated runtime does not burn a hardware timeout
+                # before the failure packet is produced.
+                if bool(v.get("stop_on_failure", False)):
+                    break
+                if not ctx.keep_going:
+                    break
         if any((not r.ok and r.required) for r in all_results if r.slice_id == slice_id) and not ctx.keep_going:
             break
     ok = all(r.ok or not r.required for r in all_results)

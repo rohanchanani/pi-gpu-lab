@@ -74,7 +74,9 @@
     "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware.",
     "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
     "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(.",
-    "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks."
+    "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks.",
+    "M2 slice 6 static runtime/layout contracts are stop_on_failure gates: if generated launch code cannot enqueue V3D work or lacks a bounded failure path, do not spend a pi-install hardware timeout before returning a failure packet.",
+    "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -876,19 +878,24 @@
             "args",
             "builtins",
             "resources"
-          ]
+          ],
+          "stop_on_failure": true
         },
         {
           "id": "multi-kernel-chain-layout",
           "mechanism": "program_layout_contract",
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
           "require_no_overlaps": true,
-          "require_heap": true
+          "require_heap": true,
+          "expected_kernel_count": 2,
+          "min_heap_bytes": 65536,
+          "description": "Multi-kernel chain layout keeps the persistent M2 heap and two kernel layout records; shrinking the heap back to a tiny/default value is a regression.",
+          "stop_on_failure": true
         },
         {
           "id": "multi-kernel-chain-generated-runtime-contract",
           "mechanism": "generated_runtime_contract",
-          "description": "Generated runtime exposes two real launch entry points from one resident program; result lines must come from the hardware harness, not generated launcher source.",
+          "description": "Generated runtime exposes two real launch entry points from one resident program. Each launch must enqueue real V3D work, have a bounded wait/failure path, and leave final result lines to the hardware harness.",
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
           "required_functions": [
             "vc4_program_create",
@@ -920,7 +927,36 @@
             "PUT32\\s*\\(\\s*V3D_SRQUA",
             "PUT32\\s*\\(\\s*V3D_SRQPC"
           ],
-          "route_hint": "gpt_pro"
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true,
+          "required_patterns": [
+            "\\blaunch_failures\\b",
+            "(?i)(timeout|deadline|max_polls|max_wait|poll_limit|tries|attempts)"
+          ],
+          "required_any_patterns_in_launch_functions": [
+            {
+              "name": "launch_failure_return_path",
+              "patterns": [
+                "\\blaunch_failures\\b",
+                "return\\s*-\\s*1\\b",
+                "return\\s+1\\b",
+                "return\\s+VC4_[A-Z0-9_]*FAIL",
+                "return\\s+vc4_[a-zA-Z0-9_]*fail"
+              ]
+            },
+            {
+              "name": "bounded_launch_wait_marker",
+              "patterns": [
+                "(?i)timeout",
+                "(?i)deadline",
+                "(?i)max_polls",
+                "(?i)max_wait",
+                "(?i)poll_limit",
+                "(?i)tries",
+                "(?i)attempts"
+              ]
+            }
+          ]
         },
         {
           "id": "multi-kernel-chain-support-runner-generic",
@@ -932,7 +968,8 @@
             "from pathlib import Path\nimport sys\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\ntext = p.read_text(encoding='utf-8', errors='replace')\nforbidden = [\n    'multi_kernel_chain',\n    'emit_multi_kernel_chain',\n    'VC4_TEST_RESULT name=multi_kernel_chain',\n    'VC4_TEST_RESULT {\"name\":\"multi_kernel_chain\"',\n]\nfound = [x for x in forbidden if x in text]\nif found:\n    print('support runner must stay fixture-generic; forbidden m2-06 special-case text found:', ', '.join(found))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
-          "route_hint": "gpt_pro"
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
         },
         {
           "id": "multi-kernel-chain-hardware",
@@ -990,12 +1027,13 @@
             "VC4_KERNEL_LAUNCH name=read_nop_write",
             "VC4_TEST_RESULT"
           ],
-          "description": "Parse the fixture-matrix candidate_hardware log for real runtime diagnostics after the real hardware result line is emitted.",
+          "description": "Parse the fixture-matrix candidate_hardware verifier log for real runtime diagnostics after the real hardware result line is emitted; never use stale fixture run.log when the verifier log exists.",
           "not_contains": [
             "emit_multi_kernel_chain_runtime_events",
             "synthetic",
             "SYNTHETIC"
-          ]
+          ],
+          "log_path": ".vc4_auto/codegen_m2/verifier/logs/m2-06-multi-kernel-chain-hardware_multi-kernel-chain-hardware_multi_kernel_chain_candidate_hardware.log"
         }
       ]
     },
