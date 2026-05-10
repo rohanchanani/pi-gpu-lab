@@ -564,6 +564,85 @@ def _extract_command_out_path(command: Sequence[str] | None) -> str | None:
     return None
 
 
+def _iter_json_values_for_key(obj: Any, key: str):
+    if isinstance(obj, Mapping):
+        for k, v in obj.items():
+            if k == key:
+                yield v
+            yield from _iter_json_values_for_key(v, key)
+    elif isinstance(obj, list):
+        for item in obj:
+            yield from _iter_json_values_for_key(item, key)
+
+
+def _iter_fixture_names_from_report(obj: Any):
+    for value in _iter_json_values_for_key(obj, "fixture"):
+        if isinstance(value, str) and value:
+            yield value
+    for value in _iter_json_values_for_key(obj, "name"):
+        if isinstance(value, str) and value:
+            yield value
+
+
+def _collect_candidate_artifact_paths(repo: Path, report: Mapping[str, Any]) -> list[Path]:
+    roots: list[Path] = []
+    seen_roots: set[str] = set()
+
+    def add_root(path: Path) -> None:
+        key = str(path.resolve()) if path.exists() else str(path)
+        if key not in seen_roots:
+            seen_roots.add(key)
+            roots.append(path)
+
+    for raw in _iter_json_values_for_key(report, "bundle"):
+        if isinstance(raw, str) and raw:
+            add_root(_resolve_packet_path(repo, raw))
+
+    for fixture in _iter_fixture_names_from_report(report):
+        for base in [repo / ".vc4_auto/codegen_m2/candidates", repo / ".vc4_auto/codegen_m1/candidates"]:
+            candidate = base / fixture
+            if candidate.exists():
+                add_root(candidate)
+
+    artifact_paths: list[Path] = []
+    seen_paths: set[str] = set()
+    patterns = [
+        "manifest.json",
+        "layout.json",
+        "kernel_launch.c",
+        "kernel_launch.h",
+        "kernels/*.qasm",
+        "assembled/*.c",
+        "assembled/*.h",
+        "*.qasm",
+        "*_shader.c",
+        "*_shader.h",
+    ]
+    for root in roots:
+        if not root.exists() or not root.is_dir():
+            continue
+        for pattern in patterns:
+            for path in sorted(root.glob(pattern)):
+                if path.is_file():
+                    key = str(path.resolve())
+                    if key not in seen_paths:
+                        seen_paths.add(key)
+                        artifact_paths.append(path)
+    return artifact_paths
+
+
+def collect_generated_artifact_report(repo: Path, report: Mapping[str, Any]) -> dict[str, Any]:
+    records: list[dict[str, Any]] = []
+    for path in _collect_candidate_artifact_paths(repo, report):
+        record = _read_packet_file(path)
+        record["path"] = _packet_relpath(repo, path)
+        records.append(record)
+    return {
+        "generated_artifact_count": len(records),
+        "generated_artifacts": records,
+    }
+
+
 def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
     if not str(failed.gate).startswith("typed-verifier:"):
         return {}
@@ -597,6 +676,7 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
         record["path"] = _packet_relpath(repo, path)
         full_logs.append(record)
 
+    artifact_report = collect_generated_artifact_report(repo, report)
     return {
         "typed_verifier": {
             "ok": bool(report.get("ok")),
@@ -607,6 +687,7 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
             "full_report": report,
             "referenced_log_count": len(full_logs),
             "referenced_logs": full_logs,
+            **artifact_report,
         }
     }
 
@@ -1488,14 +1569,47 @@ def cmd_run(args: argparse.Namespace) -> int:
 
 
 def cmd_reset_slice(args: argparse.Namespace) -> int:
-    repo, _config, state = load_config_and_state(args)
+    repo, config, state = load_config_and_state(args)
     state.reset_slice(args.slice)
     if args.purge_files:
         for child in ["prompts", "staging", "logs", "failure_packets"]:
             path = state.root / child / args.slice
             if path.exists():
                 shutil.rmtree(path, ignore_errors=True)
-        log(f"purged stored attempts/logs for {args.slice}")
+        # Resume probes and verifier logs are outside the attempt dirs but can
+        # otherwise keep stale pass/fail evidence for the same slice.
+        for probe in [
+            state.root / "resume_probe" / f"{args.slice}.json",
+            state.root / "resume_probe" / f"{args.slice}-manual-lockcheck.json",
+        ]:
+            try:
+                probe.unlink()
+            except FileNotFoundError:
+                pass
+        verifier_root = state.root / "verifier"
+        for subdir, pattern in [("logs", f"{args.slice}_*"), ("tmp", f"{args.slice}_*")]:
+            root = verifier_root / subdir
+            if root.exists():
+                for path in root.glob(pattern):
+                    if path.is_dir():
+                        shutil.rmtree(path, ignore_errors=True)
+                    else:
+                        try:
+                            path.unlink()
+                        except FileNotFoundError:
+                            pass
+        downloads = Path.home() / "Downloads"
+        if downloads.exists():
+            for pattern in [
+                f"vc4_codegen_*__{args.slice}__attempt-*.zip",
+                f"vc4_codegen_*__{args.slice}__attempt-*.sh",
+            ]:
+                for path in downloads.glob(pattern):
+                    try:
+                        path.unlink()
+                    except FileNotFoundError:
+                        pass
+        log(f"purged stored attempts/logs/probes/downloaded artifacts for {args.slice}")
     log(f"reset state for {args.slice}")
     return 0
 

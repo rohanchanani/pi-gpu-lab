@@ -314,6 +314,105 @@ def verification_timeout_sec(ctx: "VerifierContext", v: Mapping[str, Any]) -> in
     return int(ctx.timeout_sec)
 
 
+def hardware_retry_count(ctx: "VerifierContext", v: Mapping[str, Any]) -> int:
+    """Bounded retry count for hardware transport/pre-runtime flakes.
+
+    This does not weaken hardware gates: the same command must ultimately pass.
+    Retries only prevent pi-install/serial/power flakes from being routed to GPT
+    as if they were generated-code defects.
+    """
+    raw = v.get("hardware_retries", os.environ.get("VC4_HARDWARE_RETRY_COUNT", "3"))
+    try:
+        count = int(raw)
+    except (TypeError, ValueError):
+        count = 3
+    return max(1, min(count, 10))
+
+
+def hardware_retry_classification(result: CommandResult, log_text: str) -> str:
+    if result.ok:
+        return "passed"
+    has_layout = "VC4_RUNTIME_LAYOUT" in log_text
+    has_launch = "VC4_KERNEL_LAUNCH" in log_text
+    has_result = "VC4_TEST_RESULT" in log_text
+    has_runtime_marker = has_layout or has_launch or has_result
+    if result.timed_out:
+        if not has_runtime_marker:
+            return "pre_runtime_timeout_or_transport_hang"
+        if not has_result:
+            return "runtime_timeout_without_result"
+        return "timeout_after_result_marker"
+    if result.exit_code in (124, 143, 137) and not has_runtime_marker:
+        return "pre_runtime_exit_without_runtime_markers"
+    return "semantic_or_nontransient_failure"
+
+
+def should_retry_hardware_result(result: CommandResult, log_text: str) -> bool:
+    cls = hardware_retry_classification(result, log_text)
+    return cls in {
+        "pre_runtime_timeout_or_transport_hang",
+        "runtime_timeout_without_result",
+        "pre_runtime_exit_without_runtime_markers",
+    }
+
+
+def _copy_log_for_canonical_attempt(src: Optional[Path], dst: Path) -> None:
+    if not src or not src.exists() or src == dst:
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dst)
+
+
+def run_hardware_command_with_retries(
+    ctx: "VerifierContext",
+    argv: Sequence[str],
+    *,
+    cwd: Path,
+    timeout_sec: int,
+    log_path: Path,
+    verification: Mapping[str, Any],
+) -> CommandResult:
+    max_attempts = hardware_retry_count(ctx, verification)
+    attempt_records: List[Dict[str, Any]] = []
+    final_result: Optional[CommandResult] = None
+    for attempt in range(1, max_attempts + 1):
+        attempt_log = log_path if max_attempts == 1 else log_path.with_name(f"{log_path.stem}_try-{attempt:02d}{log_path.suffix}")
+        result = ctx.run_command(argv, cwd=cwd, timeout_sec=timeout_sec, log_path=attempt_log)
+        log_text = ""
+        if attempt_log.exists():
+            log_text = attempt_log.read_text(encoding="utf-8", errors="replace")
+        cls = hardware_retry_classification(result, log_text)
+        attempt_records.append({
+            "attempt": attempt,
+            "ok": result.ok,
+            "exit_code": result.exit_code,
+            "timed_out": result.timed_out,
+            "classification": cls,
+            "log_path": str(attempt_log),
+            "duration_sec": round(result.duration_sec, 3),
+        })
+        final_result = result
+        _copy_log_for_canonical_attempt(attempt_log, log_path)
+        if result.ok:
+            break
+        if attempt >= max_attempts or not should_retry_hardware_result(result, log_text):
+            break
+        # The support runner power-cycles before each hardware run.  Keep a tiny
+        # delay so USB serial/pi-install state has time to settle before retry.
+        time.sleep(float(os.environ.get("VC4_HARDWARE_RETRY_SLEEP_SEC", "2")))
+
+    meta_path = log_path.with_suffix(log_path.suffix + ".retries.json")
+    try:
+        meta_path.write_text(json.dumps({"attempts": attempt_records}, indent=2) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+    if final_result is None:
+        final_result = ctx.run_command(argv, cwd=cwd, timeout_sec=timeout_sec, log_path=log_path)
+    if final_result.log_path != log_path:
+        final_result = dataclasses.replace(final_result, log_path=log_path)
+    return final_result
+
+
 def shell_quote(s: str) -> str:
     if re.fullmatch(r"[A-Za-z0-9_@%+=:,./-]+", s):
         return s
@@ -1769,7 +1868,7 @@ def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str
                 if ctx.no_hardware:
                     fx_results.append({"phase": phase, "skipped": True})
                     continue
-                result = ctx.run_command(["bash", "run.sh"], cwd=root, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
+                result = run_hardware_command_with_retries(ctx, ["bash", "run.sh"], cwd=root, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path, verification=v)
                 cleanup_fixture_reference_side_effects(ctx, slice_id, v, fx, name)
             elif phase == "generate":
                 if vc4_codegen is None:
@@ -1789,7 +1888,7 @@ def mechanism_fixture_matrix(ctx: VerifierContext, slice_id: str, v: Mapping[str
                 if ctx.no_hardware:
                     fx_results.append({"phase": phase, "skipped": True})
                     continue
-                result = ctx.run_command(["bash", str(script), name, "run"], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path)
+                result = run_hardware_command_with_retries(ctx, ["bash", str(script), name, "run"], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, {**v, "requires_hardware": True}), log_path=log_path, verification=v)
                 candidate_hardware_log = log_path
             elif phase == "expected_json":
                 if candidate_hardware_log is None:

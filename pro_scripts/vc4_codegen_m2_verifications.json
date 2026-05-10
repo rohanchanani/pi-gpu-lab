@@ -829,6 +829,19 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "generic-qasm-emitter-no-fixture-special-cases",
+          "mechanism": "command",
+          "description": "VC4ArtifactEmitter must emit QASM from the scheduled VC4 instruction stream, not from fixture/public-name special cases. This prevents m2-06 from passing by hardcoding memory_output/read_nop_write and regressing earlier kernels such as saxpy_full.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport sys\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nforbidden = [\n    'appendMemoryOutputQASM',\n    'appendReadNopWriteQASM',\n    'launchABI.publicName == \"memory_output\"',\n    'launchABI.publicName == \"read_nop_write\"',\n    'publicName == \"memory_output\"',\n    'publicName == \"read_nop_write\"',\n]\nfound = [item for item in forbidden if item in text]\nrequired = ['scheduledStream', 'emitQPUBundleQASM', 'emitQPULDIQASM', 'emitQPUSemaQASM', 'emitQPUBranchQASM']\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name QASM special cases found:', ', '.join(found))\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing:', ', '.join(missing))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
           "id": "generate-multi_kernel_chain",
           "mechanism": "vc4_codegen_generate",
           "description": "Generate candidate bundle for multi_kernel_chain",

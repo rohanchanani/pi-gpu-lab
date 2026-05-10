@@ -170,6 +170,41 @@ def verifier_probe(
     return proc.returncode == 0
 
 
+def cumulative_prefix_probe(
+    *,
+    repo: Path,
+    python: str,
+    spec: Path,
+    worklist: Path,
+    state_root: Path,
+    slice_ids: list[str],
+    timeout_sec: int,
+    env: dict[str, str],
+    verbose: bool,
+) -> bool:
+    """Re-verify all selected prior slices after a new slice commit.
+
+    This catches cross-slice regressions before the runner starts the next slice.
+    Hardware flakiness is handled inside the typed verifier; this function does
+    not skip or weaken redundant verification.
+    """
+    for sid in slice_ids:
+        if not verifier_probe(
+            repo=repo,
+            python=python,
+            spec=spec,
+            worklist=worklist,
+            state_root=state_root,
+            slice_id=sid,
+            timeout_sec=timeout_sec,
+            env=env,
+            verbose=verbose,
+        ):
+            print(f"[m2-resume] cumulative prefix check failed at {sid}", file=sys.stderr)
+            return False
+    return True
+
+
 def run_slice(
     *,
     repo: Path,
@@ -265,7 +300,7 @@ def main() -> int:
 
     python = sys.executable or "python3"
 
-    for s in slices:
+    for slice_index, s in enumerate(slices):
         slice_id = str(s["id"])
         print(f"\n[m2-resume] === {slice_id} ===", flush=True)
 
@@ -318,6 +353,22 @@ def main() -> int:
             return 1
 
         print(f"[m2-resume] PASS {slice_id}")
+
+        prefix_ids = [str(item["id"]) for item in slices[: slice_index + 1]]
+        print("[m2-resume] cumulative prefix recheck after commit: " + ", ".join(prefix_ids), flush=True)
+        if not cumulative_prefix_probe(
+            repo=repo,
+            python=python,
+            spec=spec,
+            worklist=worklist,
+            state_root=state_root,
+            slice_ids=prefix_ids,
+            timeout_sec=args.timeout_sec,
+            env=env,
+            verbose=args.verbose,
+        ):
+            print(f"[m2-resume] STOP: cumulative prefix did not verify after {slice_id}", file=sys.stderr)
+            return 1
 
     print("\n[m2-resume] all selected M2 slices passed or were already satisfied")
     return 0

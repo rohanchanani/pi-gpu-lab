@@ -10,6 +10,8 @@ Read the full emitter before editing. Prefer a small, local patch over a broad r
 
 ## Hard constraints
 
+Do not special-case QASM emission by fixture name, public launch name, or kernel name. In particular, do not add helpers like `appendMemoryOutputQASM` / `appendReadNopWriteQASM`, and do not branch on `memory_output`, `read_nop_write`, `multi_kernel_chain`, or `saxpy_full` to choose QASM text. QASM must be emitted by walking each `KernelRecord::scheduledStream` and printing the scheduled VC4 QPU ops (`vc4.qpu.bundle`, `vc4.qpu.ldi`, `vc4.qpu.sema`, and `vc4.qpu.branch`) through the generic emitter path. If the generic emitter lacks support for an op, extend the generic op printer rather than hardcoding a fixture program.
+
 Do not patch `compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh` in this slice. The shared support runner must remain fixture-generic. Do not add any `multi_kernel_chain` special case, synthetic `VC4_RUNTIME_LAYOUT`, synthetic `VC4_KERNEL_LAUNCH`, synthetic `VC4_HEAP_STATS`, or synthetic `VC4_TEST_RESULT` output in a host/support script. The pass condition is a real hardware `VC4_TEST_RESULT` line parsed from the candidate hardware log.
 
 Do not mutate `compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/**` source/oracle files. The fixture is already present. The implementation belongs in generated compiler/runtime artifacts, primarily `compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp` and related Target/VC4 code.
