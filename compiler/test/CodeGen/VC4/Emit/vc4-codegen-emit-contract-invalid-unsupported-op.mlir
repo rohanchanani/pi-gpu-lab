@@ -14,7 +14,7 @@ vc4.module @vc4_codegen_emit_contract_unsupported_op {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "unsupported_op_launch",
+      public_name = "unsupported_op",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

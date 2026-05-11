@@ -25,7 +25,7 @@ vc4.module @saxpy_tmu {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "saxpy_tmu_launch",
+      public_name = "saxpy_tmu",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 6 : i32,
       args = [

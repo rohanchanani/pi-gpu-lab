@@ -4,8 +4,8 @@
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: test ! -f %t.bundle/kernel.qasm
-// RUN: test -f %t.bundle/kernels/first_launch.qasm
-// RUN: test -f %t.bundle/kernels/second_launch.qasm
+// RUN: test -f %t.bundle/kernels/first.qasm
+// RUN: test -f %t.bundle/kernels/second.qasm
 // RUN: FileCheck %s --input-file=%t.bundle/manifest.json
 
 // CHECK: "schema_version": 2
@@ -13,13 +13,13 @@
 // CHECK: "kernels": [
 // CHECK: "kernel_id": 0
 // CHECK: "symbol_name": "first_kernel"
-// CHECK: "public_name": "first_launch"
-// CHECK: "qasm_path": "kernels/first_launch.qasm"
+// CHECK: "public_name": "first"
+// CHECK: "qasm_path": "kernels/first.qasm"
 // CHECK: "code_symbol": "first_shader"
 // CHECK: "kernel_id": 1
 // CHECK: "symbol_name": "second_kernel"
-// CHECK: "public_name": "second_launch"
-// CHECK: "qasm_path": "kernels/second_launch.qasm"
+// CHECK: "public_name": "second"
+// CHECK: "qasm_path": "kernels/second.qasm"
 // CHECK: "code_symbol": "second_shader"
 
 vc4.module @multi_kernel_minimal {
@@ -29,7 +29,7 @@ vc4.module @multi_kernel_minimal {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "first_launch",
+      public_name = "first",
       code_symbol = "first_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
@@ -98,7 +98,7 @@ vc4.module @multi_kernel_minimal {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "second_launch",
+      public_name = "second",
       code_symbol = "second_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,

@@ -12,7 +12,7 @@ vc4.module @duplicate_public_name {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "duplicate_launch",
+      public_name = "duplicate",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
@@ -80,7 +80,7 @@ vc4.module @duplicate_public_name {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "duplicate_launch",
+      public_name = "duplicate",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

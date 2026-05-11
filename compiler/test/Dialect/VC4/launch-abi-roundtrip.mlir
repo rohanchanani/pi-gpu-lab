@@ -15,7 +15,7 @@
 // CHECK-SAME: materialization = "uniform_suffix"
 // CHECK-SAME: name = "num_qpus"
 // CHECK-SAME: uniform_index = 5 : i32
-// CHECK-SAME: public_name = "saxpy_launch"
+// CHECK-SAME: public_name = "saxpy"
 // CHECK-SAME: tail_policy = "exact_multiple"
 // CHECK-SAME: uniform_words_per_qpu = 6 : i32
 // CHECK-LABEL: vc4.func @uses_num_qpus
@@ -28,7 +28,7 @@ vc4.module @kernels {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "saxpy_launch",
+      public_name = "saxpy",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 6 : i32,
       args = [

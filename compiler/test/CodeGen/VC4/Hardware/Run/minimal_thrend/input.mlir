@@ -19,7 +19,7 @@ vc4.module @minimal_thrend {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "minimal_thrend_launch",
+      public_name = "minimal_thrend",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

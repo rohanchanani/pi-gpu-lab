@@ -10,7 +10,7 @@ vc4.module @memory_output {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "memory_output_launch",
+      public_name = "memory_output",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 3 : i32,
       args = [

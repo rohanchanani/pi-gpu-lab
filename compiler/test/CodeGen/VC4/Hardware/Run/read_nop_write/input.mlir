@@ -27,7 +27,7 @@ vc4.module @read_nop_write_reference {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "read_nop_write_launch",
+      public_name = "read_nop_write",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 5 : i32,
       args = [

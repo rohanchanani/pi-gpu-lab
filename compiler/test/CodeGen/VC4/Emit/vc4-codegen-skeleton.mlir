@@ -1,11 +1,11 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernels/skeleton_launch.qasm
+// RUN: test -f %t.bundle/kernels/skeleton.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/skeleton_launch.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/skeleton.qasm
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "kind": "vc4-codegen-artifact-bundle"
@@ -13,9 +13,9 @@
 // MANIFEST: "kernels": [
 // MANIFEST: "kernel_id": 0
 // MANIFEST: "symbol_name": "skeleton_kernel"
-// MANIFEST: "public_name": "skeleton_launch"
-// MANIFEST: "qasm_path": "kernels/skeleton_launch.qasm"
-// MANIFEST: "code_symbol": "skeleton_launch_shader"
+// MANIFEST: "public_name": "skeleton"
+// MANIFEST: "qasm_path": "kernels/skeleton.qasm"
+// MANIFEST: "code_symbol": "skeleton_shader"
 // MANIFEST: "scheduled_sink_ops": 3
 // QASM: thrend
 // QASM-NEXT: nop
@@ -28,7 +28,7 @@ vc4.module @vc4_codegen_skeleton {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "skeleton_launch",
+      public_name = "skeleton",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

@@ -4,7 +4,7 @@
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: test ! -f %t.bundle/kernel.qasm
-// RUN: test -f %t.bundle/kernels/single_launch.qasm
+// RUN: test -f %t.bundle/kernels/single.qasm
 // RUN: FileCheck %s --input-file=%t.bundle/manifest.json
 
 // CHECK: "schema_version": 2
@@ -15,9 +15,9 @@
 // CHECK: "kernels": [
 // CHECK: "kernel_id": 0
 // CHECK: "symbol_name": "single_kernel"
-// CHECK: "public_name": "single_launch"
-// CHECK: "qasm_path": "kernels/single_launch.qasm"
-// CHECK: "code_symbol": "single_launch_shader"
+// CHECK: "public_name": "single"
+// CHECK: "qasm_path": "kernels/single.qasm"
+// CHECK: "code_symbol": "single_shader"
 // CHECK: "uniform_words_per_request": 2
 // CHECK: "tail_policy": "exact_multiple"
 // CHECK: "schedule_mode": "independent_vector"
@@ -30,7 +30,7 @@ vc4.module @manifest_v2_single {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "single_launch",
+      public_name = "single",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

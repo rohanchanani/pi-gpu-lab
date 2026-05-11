@@ -41,7 +41,7 @@ form = #vc4.function_form<scheduled>,
 kernel,
 threading = #vc4.threading_mode<single>,
 "vc4.launch_abi" = {
-public_name = "stencil2d_5point_naive_launch",
+public_name = "stencil2d_5point_naive",
 tail_policy = "tail_safe",
 uniform_words_per_qpu = 9 : i32,
 args = [

@@ -12,7 +12,7 @@ vc4.module @vc4_codegen_emit_contract_tail_duplicate_thrend {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "tail_duplicate_thrend_launch",
+      public_name = "tail_duplicate_thrend",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

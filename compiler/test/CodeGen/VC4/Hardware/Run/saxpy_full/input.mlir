@@ -21,7 +21,7 @@ module attributes {
   "vc4.hardware_run_test.kind" = "hardware-run-reference",
   "vc4.hardware_run_test.reference_kernel" = "reference/saxpy_full.qasm",
   "vc4.hardware_run_test.launch_abi" = {
-    public_name = "saxpy_full_launch",
+    public_name = "saxpy_full",
     tail_policy = "tail_safe",
     uniform_words_per_qpu = 6 : i32,
     args = [
@@ -48,7 +48,7 @@ module attributes {
       kernel,
       threading = #vc4.threading_mode<single>,
       "vc4.launch_abi" = {
-        public_name = "saxpy_full_launch",
+        public_name = "saxpy_full",
         tail_policy = "tail_safe",
         uniform_words_per_qpu = 6 : i32,
         args = [

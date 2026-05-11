@@ -14,7 +14,7 @@ vc4.module @vc4_codegen_emit_contract_branch_tail {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "branch_tail_launch",
+      public_name = "branch_tail",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

@@ -11,7 +11,7 @@ vc4.module @vc4_codegen_emit_contract_no_thrend_epilogue {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "no_thrend_epilogue_launch",
+      public_name = "no_thrend_epilogue",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

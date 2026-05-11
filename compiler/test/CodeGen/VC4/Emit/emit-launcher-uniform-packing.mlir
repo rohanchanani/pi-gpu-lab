@@ -1,6 +1,6 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernels/uniform_packing_launch.qasm
+// RUN: test -f %t.bundle/kernels/uniform_packing.qasm
 // RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
@@ -26,14 +26,14 @@
 // SOURCE-NOT: vc4MemcpyDtoH(
 // SOURCE-NOT: vc4Free(
 // SOURCE: uint32_t activeQpus
-// SOURCE: * Dense physical uniform layout per QPU, ordered by vc4.launch_abi uniform_index:
+// SOURCE: * Dense physical uniform layout per logical request, ordered by vc4.launch_abi uniform_index:
 // SOURCE: *   [0] arg out
 // SOURCE: *   [1] arg input
 // SOURCE: *   [2] arg n
 // SOURCE: *   [3] arg scale
 // SOURCE: *   [4] builtin qpu_id (qpu_num)
 // SOURCE: *   [5] builtin num_qpus (num_qpus)
-// SOURCE: for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {
+// SOURCE: for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {
 // SOURCE: [qpu][0] = (uint32_t)out; /* arg out */
 // SOURCE: [qpu][1] = (uint32_t)input; /* arg input */
 // SOURCE: [qpu][2] = (uint32_t)n; /* arg n */
@@ -49,9 +49,9 @@
 // MANIFEST: "kernels": [
 // MANIFEST: "kernel_id": 0
 // MANIFEST: "symbol_name": "uniform_packing_kernel"
-// MANIFEST: "public_name": "uniform_packing_launch"
-// MANIFEST: "qasm_path": "kernels/uniform_packing_launch.qasm"
-// MANIFEST: "code_symbol": "uniform_packing_launch_shader"
+// MANIFEST: "public_name": "uniform_packing"
+// MANIFEST: "qasm_path": "kernels/uniform_packing.qasm"
+// MANIFEST: "code_symbol": "uniform_packing_shader"
 // MANIFEST-DAG: {"name": "scale", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 3}
 // MANIFEST-DAG: {"name": "out", "kind": "buffer", "direction": "out", "elem_type": "u32", "c_type": "vc4_deviceptr_t", "uniform_index": 0}
 // MANIFEST-DAG: {"name": "n", "kind": "scalar", "direction": "by_value", "type": "u32", "c_type": "uint32_t", "uniform_index": 2}
@@ -64,7 +64,7 @@ vc4.module @uniform_packing {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "uniform_packing_launch",
+      public_name = "uniform_packing",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 6 : i32,
       args = [

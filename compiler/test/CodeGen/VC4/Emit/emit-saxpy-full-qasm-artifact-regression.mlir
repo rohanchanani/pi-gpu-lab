@@ -1,9 +1,9 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %S/../Hardware/Run/saxpy_full/input.mlir --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernels/saxpy_full_launch.qasm
+// RUN: test -f %t.bundle/kernels/saxpy_full.qasm
 // RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/saxpy_full_launch.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/saxpy_full.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
 // RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
@@ -13,9 +13,9 @@
 // MANIFEST: "kernels": [
 // MANIFEST: "kernel_id": 0
 // MANIFEST: "symbol_name": "saxpy_full_kernel"
-// MANIFEST: "public_name": "saxpy_full_launch"
-// MANIFEST: "qasm_path": "kernels/saxpy_full_launch.qasm"
-// MANIFEST: "code_symbol": "saxpy_full_launch_shader"
+// MANIFEST: "public_name": "saxpy_full"
+// MANIFEST: "qasm_path": "kernels/saxpy_full.qasm"
+// MANIFEST: "code_symbol": "saxpy_full_shader"
 // MANIFEST-DAG: {"name": "x", "kind": "buffer", "direction": "in", "elem_type": "f32", "c_type": "vc4_deviceptr_t", "uniform_index": 0}
 // MANIFEST-DAG: {"name": "y", "kind": "buffer", "direction": "inout", "elem_type": "f32", "c_type": "vc4_deviceptr_t", "uniform_index": 1}
 // MANIFEST-DAG: {"name": "alpha", "kind": "scalar", "direction": "by_value", "type": "f32", "c_type": "float", "uniform_index": 2}

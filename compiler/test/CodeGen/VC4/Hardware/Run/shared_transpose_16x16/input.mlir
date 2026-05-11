@@ -43,7 +43,7 @@ form = #vc4.function_form<scheduled>,
 kernel,
 threading = #vc4.threading_mode<single>,
 "vc4.launch_abi" = {
-public_name = "shared_transpose_16x16_launch",
+public_name = "shared_transpose_16x16",
 tail_policy = "exact_multiple",
 uniform_words_per_qpu = 7 : i32,
 args = [

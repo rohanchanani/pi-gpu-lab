@@ -356,6 +356,23 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
   return success();
 }
 
+static std::string canonicalizeKernelPublicName(llvm::StringRef rawName) {
+  // vc4.launch_abi.public_name names the public kernel.  Historically many
+  // fixtures used a *_launch spelling because the only public API was the
+  // generated launch stub.  Canonical M2 program artifacts name the kernel,
+  // QASM artifact, manifest entry, layout regions, and default code symbol
+  // without that launcher suffix; the generated C API adds *_launch at the
+  // function boundary.
+  constexpr const char *launchSuffix = "_launch";
+  constexpr size_t launchSuffixLen = 7;
+  std::string name = rawName.str();
+  if (name.size() > launchSuffixLen &&
+      name.compare(name.size() - launchSuffixLen, launchSuffixLen,
+                   launchSuffix) == 0)
+    name.resize(name.size() - launchSuffixLen);
+  return name;
+}
+
 static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
                                          mlir::DictionaryAttr launchABIDict,
                                          LaunchABIModel &launchABI) {
@@ -403,14 +420,7 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
   }
 
   LaunchABIModel parsed;
-  std::string rawPublicName = publicName.getValue().str();
-  parsed.publicName = rawPublicName;
-  constexpr const char *launchSuffix = "_launch";
-  constexpr size_t launchSuffixLen = 7;
-  if (parsed.publicName.size() > launchSuffixLen &&
-      parsed.publicName.compare(parsed.publicName.size() - launchSuffixLen,
-                                launchSuffixLen, launchSuffix) == 0)
-    parsed.publicName.resize(parsed.publicName.size() - launchSuffixLen);
+  parsed.publicName = canonicalizeKernelPublicName(publicName.getValue());
   parsed.codeSymbol = codeSymbol ? codeSymbol.getValue().str()
                                  : parsed.publicName + "_shader";
   parsed.tailPolicy = tailPolicy.getValue().str();
@@ -2459,375 +2469,6 @@ static void appendLauncherPrototype(llvm::raw_ostream &os,
   os << ")";
 }
 
-static bool hasExactMultipleHostPointerSaxpyShape(
-    const LaunchABIModel &launchABI) {
-  if (launchABI.tailPolicy != "exact_multiple" ||
-      launchABI.arguments.size() != 4)
-    return false;
-
-  const LaunchABIArgumentModel &x = launchABI.arguments[0];
-  const LaunchABIArgumentModel &y = launchABI.arguments[1];
-  const LaunchABIArgumentModel &alpha = launchABI.arguments[2];
-  const LaunchABIArgumentModel &n = launchABI.arguments[3];
-  return x.kind == LaunchABIArgumentKind::Buffer && x.name == "x" &&
-         x.elementType == "f32" &&
-         y.kind == LaunchABIArgumentKind::Buffer && y.name == "y" &&
-         y.elementType == "f32" &&
-         alpha.kind == LaunchABIArgumentKind::Scalar && alpha.name == "alpha" &&
-         alpha.scalarType == "f32" &&
-         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
-         (n.scalarType == "u32" || n.scalarType == "index");
-}
-
-static void appendExactMultipleHostPointerSaxpyAdapter(
-    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
-  const std::string apiBase = getLaunchAPIBaseName(launchABI);
-  const std::string launchName = getLaunchFunctionName(launchABI);
-  const std::string helperName = apiBase + "_host_pointer_saxpy_adapter";
-  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
-  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_5_OR_7\n";
-  os << "#define VC4_CODEGEN_SELECT_LAUNCH_5_OR_7(_1,_2,_3,_4,_5,_6,_7,NAME,...) NAME\n";
-  os << "#endif\n";
-  os << "static inline int " << helperName
-     << "(void *ignored_runtime, float *x, float *y, float alpha, uint32_t n) {\n";
-  os << "  (void)ignored_runtime;\n";
-  os << "  if (n != 0u && (!x || !y))\n";
-  os << "    return -1;\n";
-  if (apiBase == "saxpy_16") {
-    // The saxpy_16 MLIR fixture intentionally carries only a schematic loop
-    // body while the checked semantics live in the immutable reference qasm.
-    // Its legacy reference harness only needs the host-pointer compatibility
-    // path to produce the semantic result, so avoid launching the schematic
-    // loop on hardware where it can spin forever.
-    os << "  for (uint32_t i = 0u; i < n; ++i)\n";
-    os << "    y[i] = alpha * x[i] + y[i];\n";
-    os << "  return 0;\n";
-    os << "}\n";
-  } else {
-    os << "  struct vc4_program *program = (struct vc4_program *)0;\n";
-    os << "  vc4_deviceptr_t x_dev = 0u;\n";
-    os << "  vc4_deviceptr_t y_dev = 0u;\n";
-    os << "  uint32_t bytes = n * (uint32_t)sizeof(float);\n";
-    os << "  if (n != 0u && bytes / (uint32_t)sizeof(float) != n)\n";
-    os << "    return -1;\n";
-    os << "  uint32_t requested = bytes * 2u + 4096u;\n";
-    os << "  if (bytes != 0u && requested < bytes)\n";
-    os << "    requested = 0xffffffffu;\n";
-    os << "  if (vc4_program_create(&program, requested) < 0)\n";
-    os << "    return -1;\n";
-    os << "  int status = 0;\n";
-    os << "  if (bytes != 0u) {\n";
-    os << "    if (vc4Malloc(program, &x_dev, bytes) < 0 ||\n";
-    os << "        vc4Malloc(program, &y_dev, bytes) < 0 ||\n";
-    os << "        vc4MemcpyHtoD(program, x_dev, x, bytes) < 0 ||\n";
-    os << "        vc4MemcpyHtoD(program, y_dev, y, bytes) < 0)\n";
-    os << "      status = -1;\n";
-    os << "  }\n";
-    os << "  if (status == 0) {\n";
-    os << "    vc4_dim3 grid = { n, 1u, 1u };\n";
-    os << "    vc4_dim3 block = { 1u, 1u, 1u };\n";
-    os << "    status = " << launchName
-       << "(program, grid, block, x_dev, y_dev, alpha, n);\n";
-    os << "  }\n";
-    os << "  if (status == 0 && bytes != 0u)\n";
-    os << "    status = vc4MemcpyDtoH(program, y, y_dev, bytes);\n";
-    os << "  if (x_dev != 0u)\n";
-    os << "    (void)vc4Free(program, x_dev);\n";
-    os << "  if (y_dev != 0u)\n";
-    os << "    (void)vc4Free(program, y_dev);\n";
-    os << "  vc4_program_destroy(program);\n";
-    os << "  return status;\n";
-    os << "}\n";
-  }
-  os << "#define " << launchName
-     << "(...) VC4_CODEGEN_SELECT_LAUNCH_5_OR_7(__VA_ARGS__, " << launchName
-     << ", vc4_codegen_bad_launch_arity, " << helperName << ")(__VA_ARGS__)\n";
-  os << "#endif\n\n";
-}
-
-static bool hasGlobalStoreCoalescedMultiLegacyShape(
-    const LaunchABIModel &launchABI) {
-  if (getLaunchAPIBaseName(launchABI) != "global_store_coalesced_multi" ||
-      launchABI.tailPolicy != "tail_safe" || launchABI.arguments.size() != 3)
-    return false;
-  const LaunchABIArgumentModel &out = launchABI.arguments[0];
-  const LaunchABIArgumentModel &n = launchABI.arguments[1];
-  const LaunchABIArgumentModel &caseId = launchABI.arguments[2];
-  return out.kind == LaunchABIArgumentKind::Buffer && out.name == "out" &&
-         out.elementType == "u32" &&
-         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
-         (n.scalarType == "u32" || n.scalarType == "index") &&
-         caseId.kind == LaunchABIArgumentKind::Scalar &&
-         caseId.name == "case_id" &&
-         (caseId.scalarType == "u32" || caseId.scalarType == "index");
-}
-
-static bool hasGemvNaiveTailLegacyShape(const LaunchABIModel &launchABI) {
-  if (getLaunchAPIBaseName(launchABI) != "gemv_naive_tail" ||
-      launchABI.tailPolicy != "tail_safe" || launchABI.arguments.size() != 5)
-    return false;
-  const LaunchABIArgumentModel &a = launchABI.arguments[0];
-  const LaunchABIArgumentModel &x = launchABI.arguments[1];
-  const LaunchABIArgumentModel &y = launchABI.arguments[2];
-  const LaunchABIArgumentModel &m = launchABI.arguments[3];
-  const LaunchABIArgumentModel &n = launchABI.arguments[4];
-  return a.kind == LaunchABIArgumentKind::Buffer && a.name == "a" &&
-         a.elementType == "f32" &&
-         x.kind == LaunchABIArgumentKind::Buffer && x.name == "x" &&
-         x.elementType == "f32" &&
-         y.kind == LaunchABIArgumentKind::Buffer && y.name == "y" &&
-         y.elementType == "f32" &&
-         m.kind == LaunchABIArgumentKind::Scalar && m.name == "m" &&
-         (m.scalarType == "u32" || m.scalarType == "index") &&
-         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
-         (n.scalarType == "u32" || n.scalarType == "index");
-}
-
-static std::string getRuntimeAllocationsFunctionName(const LaunchABIModel &launchABI);
-static std::string getRuntimeLaunchesFunctionName(const LaunchABIModel &launchABI);
-static std::string getRuntimeCapacityFunctionName(const LaunchABIModel &launchABI);
-static std::string getRuntimeCodeUploadsFunctionName(const LaunchABIModel &launchABI);
-static std::string getRuntimeLaunchFailuresFunctionName(const LaunchABIModel &launchABI);
-
-static void appendRuntimeCounterVarargCompatibilityMacros(
-    llvm::raw_ostream &os, const LaunchABIModel &launchABI,
-    llvm::StringRef stateName) {
-  os << "#ifndef VC4_CODEGEN_LEGACY_COUNTER_SELECT\n";
-  os << "#define VC4_CODEGEN_LEGACY_COUNTER_SELECT(_0,_1,NAME,...) NAME\n";
-  os << "#endif\n";
-
-  auto emitCounter = [&](const std::string &functionName,
-                         llvm::StringRef fieldName) {
-    os << "static inline uint32_t " << functionName
-       << "_legacy_zero(void) { return " << functionName << "(); }\n";
-    os << "static inline uint32_t " << functionName
-       << "_legacy_state(const struct " << stateName
-       << " *state) { return state ? state->" << fieldName
-       << " : 0u; }\n";
-    os << "#define " << functionName
-       << "(...) VC4_CODEGEN_LEGACY_COUNTER_SELECT(_, ##__VA_ARGS__, "
-       << functionName << "_legacy_state, " << functionName
-       << "_legacy_zero)(__VA_ARGS__)\n";
-  };
-
-  emitCounter(getRuntimeAllocationsFunctionName(launchABI), "allocation_count");
-  emitCounter(getRuntimeLaunchesFunctionName(launchABI), "launch_count");
-  emitCounter(getRuntimeCapacityFunctionName(launchABI), "capacity_n");
-  emitCounter(getRuntimeCodeUploadsFunctionName(launchABI), "allocation_count");
-  emitCounter(getRuntimeLaunchFailuresFunctionName(launchABI), "launch_failures");
-}
-
-static void appendGlobalStoreCoalescedMultiLegacyAdapter(
-    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
-  const std::string base = getLaunchAPIBaseName(launchABI);
-  const std::string launchName = getLaunchFunctionName(launchABI);
-  const std::string stateName = base + "_state";
-  const std::string prepareName = base + "_prepare";
-  const std::string shutdownName = base + "_shutdown";
-  const std::string helperName = base + "_host_pointer_adapter";
-  const std::string prepareHelper = base + "_prepare_compat";
-  const std::string shutdownHelper = base + "_shutdown_compat";
-
-  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
-  os << "#if defined(__GNUC__)\n";
-  os << "#pragma GCC diagnostic ignored \"-Wformat\"\n";
-  os << "#endif\n";
-  os << "#ifndef GLOBAL_STORE_COHERENT_MAX_N\n";
-  os << "#define GLOBAL_STORE_COHERENT_MAX_N 1000u\n";
-  os << "#endif\n";
-  os << "#ifndef GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS\n";
-  os << "#define GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS 64u\n";
-  os << "#endif\n";
-  os << "#ifndef QPU_STORE_SENTINEL\n";
-  os << "#define QPU_STORE_SENTINEL 0xdeadbeefu\n";
-  os << "#endif\n";
-  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_4_OR_6\n";
-  os << "#define VC4_CODEGEN_SELECT_LAUNCH_4_OR_6(_1,_2,_3,_4,_5,_6,NAME,...) NAME\n";
-  os << "#endif\n";
-  os << "struct " << stateName << " {\n";
-  os << "  struct vc4_program *program;\n";
-  os << "  vc4_deviceptr_t out_dev;\n";
-  os << "  uint32_t capacity_n;\n";
-  os << "  uint32_t alloc_bytes;\n";
-  os << "  uint32_t active_qpus;\n";
-  os << "  uint32_t lanes;\n";
-  os << "  uint32_t allocation_count;\n";
-  os << "  uint32_t launch_count;\n";
-  os << "  uint32_t launch_failures;\n";
-  os << "};\n";
-  os << "static inline int " << prepareHelper << "(struct " << stateName
-     << " *state, uint32_t max_n, ...) {\n";
-  os << "  if (!state)\n";
-  os << "    return -1;\n";
-  os << "  state->program = (struct vc4_program *)0;\n";
-  os << "  state->out_dev = 0u;\n";
-  os << "  state->capacity_n = max_n;\n";
-  os << "  state->active_qpus = 12u;\n";
-  os << "  state->lanes = 16u;\n";
-  os << "  state->allocation_count = 0u;\n";
-  os << "  state->launch_count = 0u;\n";
-  os << "  state->launch_failures = 0u;\n";
-  os << "  if (max_n > 0x3fffffffu - GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS)\n";
-  os << "    return -1;\n";
-  os << "  uint32_t words = max_n + GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS;\n";
-  os << "  state->alloc_bytes = words * (uint32_t)sizeof(uint32_t);\n";
-  os << "  uint32_t requested = state->alloc_bytes + 4096u;\n";
-  os << "  if (requested < state->alloc_bytes)\n";
-  os << "    requested = 0xffffffffu;\n";
-  os << "  if (vc4_program_create(&state->program, requested) < 0)\n";
-  os << "    return -1;\n";
-  os << "  if (vc4Malloc(state->program, &state->out_dev, state->alloc_bytes) < 0) {\n";
-  os << "    vc4_program_destroy(state->program);\n";
-  os << "    state->program = (struct vc4_program *)0;\n";
-  os << "    return -1;\n";
-  os << "  }\n";
-  os << "  state->allocation_count = 1u;\n";
-  os << "  return 0;\n";
-  os << "}\n";
-  os << "static inline int " << helperName << "(struct " << stateName
-     << " *state, uint32_t *out, uint32_t n, uint32_t case_id) {\n";
-  os << "  if (!state || !state->program || !out || n > state->capacity_n)\n";
-  os << "    return -1;\n";
-  os << "  if (vc4MemcpyHtoD(state->program, state->out_dev, out, state->alloc_bytes) < 0)\n";
-  os << "    return -1;\n";
-  os << "  vc4_dim3 grid = { n, 1u, 1u };\n";
-  os << "  vc4_dim3 block = { 1u, 1u, 1u };\n";
-  os << "  int status = " << launchName
-     << "(state->program, grid, block, state->out_dev, n, case_id);\n";
-  os << "  if (status == 0) {\n";
-  os << "    state->launch_count++;\n";
-  os << "    status = vc4MemcpyDtoH(state->program, out, state->out_dev, state->alloc_bytes);\n";
-  os << "  } else {\n";
-  os << "    state->launch_failures++;\n";
-  os << "  }\n";
-  os << "  return status;\n";
-  os << "}\n";
-  os << "static inline void " << shutdownHelper << "(struct " << stateName
-     << " *state) {\n";
-  os << "  if (!state)\n";
-  os << "    return;\n";
-  os << "  if (state->program && state->out_dev != 0u)\n";
-  os << "    (void)vc4Free(state->program, state->out_dev);\n";
-  os << "  vc4_program_destroy(state->program);\n";
-  os << "  state->program = (struct vc4_program *)0;\n";
-  os << "  state->out_dev = 0u;\n";
-  os << "}\n";
-  os << "#define " << prepareName << "(runtime, state, max_n, ...) "
-     << prepareHelper << "((state), (uint32_t)(max_n))\n";
-  os << "#define " << shutdownName << "(state) " << shutdownHelper
-     << "((state))\n";
-  os << "#define " << launchName
-     << "(...) VC4_CODEGEN_SELECT_LAUNCH_4_OR_6(__VA_ARGS__, "
-     << launchName << ", vc4_codegen_bad_launch_arity, " << helperName
-     << ")(__VA_ARGS__)\n";
-  appendRuntimeCounterVarargCompatibilityMacros(os, launchABI, stateName);
-  os << "#endif\n\n";
-}
-
-static void appendGemvNaiveTailLegacyAdapter(llvm::raw_ostream &os,
-                                             const LaunchABIModel &launchABI) {
-  const std::string base = getLaunchAPIBaseName(launchABI);
-  const std::string launchName = getLaunchFunctionName(launchABI);
-  const std::string stateName = base + "_state";
-  const std::string prepareName = base + "_prepare";
-  const std::string shutdownName = base + "_shutdown";
-  const std::string helperName = base + "_host_pointer_adapter";
-  const std::string prepareHelper = base + "_prepare_compat";
-  const std::string shutdownHelper = base + "_shutdown_compat";
-
-  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
-  os << "#if defined(__GNUC__)\n";
-  os << "#pragma GCC diagnostic ignored \"-Wformat\"\n";
-  os << "#endif\n";
-  os << "extern int printf(const char *fmt, ...);\n";
-  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_6_OR_8\n";
-  os << "#define VC4_CODEGEN_SELECT_LAUNCH_6_OR_8(_1,_2,_3,_4,_5,_6,_7,_8,NAME,...) NAME\n";
-  os << "#endif\n";
-  os << "struct " << stateName << " {\n";
-  os << "  struct vc4_program *program;\n";
-  os << "  vc4_deviceptr_t a_dev;\n";
-  os << "  vc4_deviceptr_t x_dev;\n";
-  os << "  vc4_deviceptr_t y_dev;\n";
-  os << "  uint32_t max_m;\n";
-  os << "  uint32_t max_n;\n";
-  os << "  uint32_t a_bytes;\n";
-  os << "  uint32_t x_bytes;\n";
-  os << "  uint32_t y_bytes;\n";
-  os << "  uint32_t active_qpus;\n";
-  os << "  uint32_t lanes;\n";
-  os << "  uint32_t allocation_count;\n";
-  os << "  uint32_t launch_count;\n";
-  os << "  uint32_t launch_failures;\n";
-  os << "  uint32_t capacity_n;\n";
-  os << "};\n";
-  os << "static inline int " << prepareHelper << "(struct " << stateName
-     << " *state, uint32_t max_m, uint32_t max_n, ...) {\n";
-  os << "  if (!state || (max_m != 0u && max_n > 0xffffffffu / max_m / (uint32_t)sizeof(float)))\n";
-  os << "    return -1;\n";
-  os << "  state->program = (struct vc4_program *)0;\n";
-  os << "  state->a_dev = 0u;\n";
-  os << "  state->x_dev = 0u;\n";
-  os << "  state->y_dev = 0u;\n";
-  os << "  state->max_m = max_m;\n";
-  os << "  state->max_n = max_n;\n";
-  os << "  state->capacity_n = max_n;\n";
-  os << "  state->active_qpus = 12u;\n";
-  os << "  state->lanes = 16u;\n";
-  os << "  state->allocation_count = 0u;\n";
-  os << "  state->launch_count = 0u;\n";
-  os << "  state->launch_failures = 0u;\n";
-  os << "  state->a_bytes = max_m * max_n * (uint32_t)sizeof(float);\n";
-  os << "  state->x_bytes = max_n * (uint32_t)sizeof(float);\n";
-  os << "  state->y_bytes = max_m * (uint32_t)sizeof(float);\n";
-  os << "  /* This legacy hosted gemv fixture carries a C reference harness with\n";
-  os << "   * main()/printf()/clock(), not the libpi notmain()/printk() shape.\n";
-  os << "   * Keep its compatibility state host-side and let the adapter below\n";
-  os << "   * compute the checked semantic result directly; the public CUDA-like\n";
-  os << "   * vc4_program launch ABI remains unchanged. */\n";
-  os << "  state->allocation_count = 1u;\n";
-  os << "  return 0;\n";
-  os << "}\n";
-  os << "static inline int " << helperName << "(struct " << stateName
-     << " *state, float *a, float *x, float *y, uint32_t m, uint32_t n) {\n";
-  os << "  if (!state || !a || !x || !y || m > state->max_m || n > state->max_n)\n";
-  os << "    return -1;\n";
-  os << "  uint32_t waves = (m + state->active_qpus - 1u) / state->active_qpus;\n";
-  os << "  printf(\"VC4_KERNEL_LAUNCH name=" << base
-     << " kernel_id=0 schedule_mode=independent_vector requests=%u waves=%u runtime_launches=%u launch_failures=%u\\n\",\n";
-  os << "         m, waves, state->launch_count + 1u, state->launch_failures);\n";
-  os << "  for (uint32_t row = 0u; row < m; ++row) {\n";
-  os << "    float acc = 0.0f;\n";
-  os << "    for (uint32_t col = 0u; col < n; ++col)\n";
-  os << "      acc += a[row * n + col] * x[col];\n";
-  os << "    y[row] = acc;\n";
-  os << "  }\n";
-  os << "  state->launch_count++;\n";
-  os << "  return 0;\n";
-  os << "}\n";
-  os << "static inline void " << shutdownHelper << "(struct " << stateName
-     << " *state) {\n";
-  os << "  if (!state) return;\n";
-  os << "  if (state->program && state->a_dev != 0u) (void)vc4Free(state->program, state->a_dev);\n";
-  os << "  if (state->program && state->x_dev != 0u) (void)vc4Free(state->program, state->x_dev);\n";
-  os << "  if (state->program && state->y_dev != 0u) (void)vc4Free(state->program, state->y_dev);\n";
-  os << "  vc4_program_destroy(state->program);\n";
-  os << "  state->program = (struct vc4_program *)0;\n";
-  os << "  state->a_dev = 0u;\n";
-  os << "  state->x_dev = 0u;\n";
-  os << "  state->y_dev = 0u;\n";
-  os << "}\n";
-  os << "#define " << prepareName << "(runtime, state, max_m, max_n, ...) "
-     << prepareHelper << "((state), (uint32_t)(max_m), (uint32_t)(max_n))\n";
-  os << "#define " << shutdownName << "(state) " << shutdownHelper
-     << "((state))\n";
-  os << "#define " << launchName
-     << "(...) VC4_CODEGEN_SELECT_LAUNCH_6_OR_8(__VA_ARGS__, "
-     << launchName << ", vc4_codegen_bad_launch_arity, " << helperName
-     << ")(__VA_ARGS__)\n";
-  appendRuntimeCounterVarargCompatibilityMacros(os, launchABI, stateName);
-  os << "#endif\n\n";
-}
-
 static std::string
 getRuntimeAllocationsFunctionName(const LaunchABIModel &launchABI) {
   return getLaunchAPIBaseName(launchABI) + "_runtime_allocations";
@@ -2956,14 +2597,6 @@ static LogicalResult writeLauncherHeader(llvm::ArrayRef<KernelRecord> kernels,
                            os << "#ifdef __cplusplus\n";
                            os << "}\n";
                            os << "#endif\n\n";
-                           for (const KernelRecord &kernel : kernels) {
-                             if (hasExactMultipleHostPointerSaxpyShape(kernel.launchABI))
-                               appendExactMultipleHostPointerSaxpyAdapter(os, kernel.launchABI);
-                             if (hasGlobalStoreCoalescedMultiLegacyShape(kernel.launchABI))
-                               appendGlobalStoreCoalescedMultiLegacyAdapter(os, kernel.launchABI);
-                             if (hasGemvNaiveTailLegacyShape(kernel.launchABI))
-                               appendGemvNaiveTailLegacyAdapter(os, kernel.launchABI);
-                           }
                            os << "#endif // VC4_CODEGEN_KERNEL_LAUNCH_H\n";
                          });
 }
@@ -3009,9 +2642,9 @@ getArgumentUniformExpression(const LaunchABIArgumentModel &arg) {
 static std::optional<std::string>
 getBuiltinUniformExpression(const LaunchABIBuiltinModel &builtin) {
   if (builtin.kind == "qpu_num")
-    return std::string("logicalRequest");
+    return std::string("qpu");
   if (builtin.kind == "num_qpus")
-    return std::string("totalRequests");
+    return std::string("activeQpus");
   return std::nullopt;
 }
 
@@ -3057,9 +2690,16 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   bool requiresLaunchElements = false;
   for (const KernelRecord &kernel : kernels) {
     requiresF32Packing |= launchABIRequiresF32Packing(kernel.launchABI);
+    const LaunchABIArgumentModel *rowCountArgForLaunchShape =
+        findLaunchABIScalarArgumentNamed(kernel.launchABI, "m");
+    // Kernels with both m and n, such as GEMV, use m/n as semantic dimensions;
+    // neither scalar is necessarily the one-dimensional launch element count.
+    // Those kernels must use CUDA-like grid/block launch geometry to choose
+    // logical QPU requests.  Elementwise kernels with only an n scalar keep the
+    // convenient n-as-logical-count behavior.
     requiresLaunchElements |=
-        !findLaunchABILogicalCountArgument(kernel.launchABI) &&
-        !findLaunchABIScalarArgumentNamed(kernel.launchABI, "m");
+        rowCountArgForLaunchShape ||
+        !findLaunchABILogicalCountArgument(kernel.launchABI);
   }
 
   os << "#define VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION 1\n";
@@ -3072,7 +2712,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "\n";
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
-  os << "#include <stdarg.h>\n";
   os << "#include <string.h>\n\n";
 
   // kernel_launch.h and mailbox.h normally provide libpi mailbox/QPU
@@ -3234,80 +2873,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  return 0u;\n";
   os << "}\n\n";
 
-  if (apiBase == "gemv_naive_tail") {
-    os << "static void vc4_codegen_printf_putc(char ch) {\n";
-    os << "  char text[2];\n";
-    os << "  text[0] = ch;\n";
-    os << "  text[1] = '\\0';\n";
-    os << "  printk(\"%s\", text);\n";
-    os << "}\n\n";
-    os << "static void vc4_codegen_printf_u32(uint32_t value) {\n";
-    os << "  char text[11];\n";
-    os << "  unsigned pos = sizeof(text);\n";
-    os << "  text[--pos] = '\\0';\n";
-    os << "  do {\n";
-    os << "    text[--pos] = (char)('0' + (value % 10u));\n";
-    os << "    value /= 10u;\n";
-    os << "  } while (value != 0u);\n";
-    os << "  printk(\"%s\", &text[pos]);\n";
-    os << "}\n\n";
-    os << "static void vc4_codegen_printf_i32(int32_t value) {\n";
-    os << "  if (value < 0) {\n";
-    os << "    vc4_codegen_printf_putc('-');\n";
-    os << "    vc4_codegen_printf_u32((uint32_t)(-value));\n";
-    os << "  } else {\n";
-    os << "    vc4_codegen_printf_u32((uint32_t)value);\n";
-    os << "  }\n";
-    os << "}\n\n";
-    os << "static void vc4_codegen_printf_fixed6(double value) {\n";
-    os << "  if (value < 0.0) {\n";
-    os << "    vc4_codegen_printf_putc('-');\n";
-    os << "    value = -value;\n";
-    os << "  }\n";
-    os << "  uint32_t whole = (uint32_t)value;\n";
-    os << "  double frac_d = (value - (double)whole) * 1000000.0 + 0.5;\n";
-    os << "  uint32_t frac = (uint32_t)frac_d;\n";
-    os << "  if (frac >= 1000000u) {\n";
-    os << "    ++whole;\n";
-    os << "    frac -= 1000000u;\n";
-    os << "  }\n";
-    os << "  vc4_codegen_printf_u32(whole);\n";
-    os << "  vc4_codegen_printf_putc('.');\n";
-    os << "  for (uint32_t place = 100000u; place != 0u; place /= 10u)\n";
-    os << "    vc4_codegen_printf_putc((char)('0' + ((frac / place) % 10u)));\n";
-    os << "}\n\n";
-    os << "VC4_CODEGEN_WEAK_SYMBOL int printf(const char *fmt, ...) {\n";
-    os << "  va_list ap;\n";
-    os << "  va_start(ap, fmt);\n";
-    os << "  int count = 0;\n";
-    os << "  for (const char *p = fmt; p && *p; ++p) {\n";
-    os << "    if (*p != '%') {\n";
-    os << "      vc4_codegen_printf_putc(*p);\n";
-    os << "      ++count;\n";
-    os << "      continue;\n";
-    os << "    }\n";
-    os << "    ++p;\n";
-    os << "    if (*p == '%') { vc4_codegen_printf_putc('%'); ++count; continue; }\n";
-    os << "    while (*p >= '0' && *p <= '9') ++p;\n";
-    os << "    if (*p == '.') { ++p; while (*p >= '0' && *p <= '9') ++p; }\n";
-    os << "    int long_arg = 0;\n";
-    os << "    while (*p == 'l') { long_arg = 1; ++p; }\n";
-    os << "    switch (*p) {\n";
-    os << "    case 's': { const char *str = va_arg(ap, const char *); printk(\"%s\", str ? str : \"(null)\"); break; }\n";
-    os << "    case 'c': vc4_codegen_printf_putc((char)va_arg(ap, int)); break;\n";
-    os << "    case 'u': vc4_codegen_printf_u32(long_arg ? (uint32_t)va_arg(ap, unsigned long) : (uint32_t)va_arg(ap, unsigned int)); break;\n";
-    os << "    case 'd': case 'i': vc4_codegen_printf_i32(long_arg ? (int32_t)va_arg(ap, long) : (int32_t)va_arg(ap, int)); break;\n";
-    os << "    case 'f': vc4_codegen_printf_fixed6(va_arg(ap, double)); break;\n";
-    os << "    default: vc4_codegen_printf_putc('%'); if (*p) vc4_codegen_printf_putc(*p); break;\n";
-    os << "    }\n";
-    os << "  }\n";
-    os << "  va_end(ap);\n";
-    os << "  return count;\n";
-    os << "}\n\n";
-    os << "VC4_CODEGEN_WEAK_SYMBOL long clock(void) { return 0; }\n\n";
-    os << "extern int main(void) __attribute__((weak));\n";
-    os << "VC4_CODEGEN_WEAK_SYMBOL void notmain(void) { if (main) (void)main(); }\n\n";
-  }
 
   os << "static void vc4_codegen_prepare_v3d_queue(void) {\n";
   os << "  PUT32(V3D_DBCFG, 0u);\n";
@@ -3733,12 +3298,11 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     const LaunchABIModel &kernelABI = launchKernel.launchABI;
     llvm::SmallVector<const LaunchABIArgumentModel *, 4> bufferArgs =
         collectLaunchABIBufferArguments(kernelABI);
-    const LaunchABIArgumentModel *logicalCountArg =
-        findLaunchABILogicalCountArgument(kernelABI);
     const LaunchABIArgumentModel *rowCountArg =
         findLaunchABIScalarArgumentNamed(kernelABI, "m");
-    const LaunchABIArgumentModel *validationCountArg =
-        logicalCountArg ? logicalCountArg : rowCountArg;
+    const LaunchABIArgumentModel *logicalCountArg =
+        rowCountArg ? nullptr : findLaunchABILogicalCountArgument(kernelABI);
+    const LaunchABIArgumentModel *validationCountArg = logicalCountArg;
 
     appendLauncherPrototype(os, kernelABI);
     os << " {\n";
@@ -3755,14 +3319,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     } else {
       os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
     }
-    if (kernelABI.tailPolicy == "exact_multiple") {
-      os << "  uint32_t totalRequests = logicalN == 0u ? 0u : activeQpus;\n";
-    } else if (rowCountArg) {
-      os << "  uint32_t totalRequests = (uint32_t)" << rowCountArg->name
-         << ";\n";
-    } else {
-      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
-    }
+    os << "  uint32_t totalRequests = logicalN == 0u ? 0u : activeQpus;\n";
     os << "  uint32_t totalWaves = vc4_codegen_ceil_div_u32(totalRequests, activeQpus);\n";
     os << "  (void)grid;\n";
     os << "  (void)block;\n";
@@ -3797,7 +3354,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "    if (waveRequests > activeQpus)\n";
     os << "      waveRequests = activeQpus;\n";
     os << "    for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {\n";
-    os << "      uint32_t logicalRequest = waveBase + qpu;\n";
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
@@ -3893,23 +3449,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
                          [&](llvm::raw_ostream &fileOS) { fileOS << source; });
 }
 
-static void appendManifestPublicParameter(llvm::raw_ostream &os,
-                                          llvm::StringRef name,
-                                          llvm::StringRef cType,
-                                          llvm::StringRef role,
-                                          bool trailingComma) {
-  os << "      {\"name\": ";
-  appendJSONEscapedString(os, name);
-  os << ", \"c_type\": ";
-  appendJSONEscapedString(os, cType);
-  os << ", \"role\": ";
-  appendJSONEscapedString(os, role);
-  os << "}";
-  if (trailingComma)
-    os << ",";
-  os << "\n";
-}
-
 static void appendManifestLaunchABIArgument(llvm::raw_ostream &os,
                                             const LaunchABIArgumentModel &arg,
                                             bool trailingComma) {
@@ -3951,50 +3490,6 @@ static void appendManifestLaunchABIBuiltin(llvm::raw_ostream &os,
   if (trailingComma)
     os << ",";
   os << "\n";
-}
-
-static void appendManifestLaunchABI(llvm::raw_ostream &os,
-                                    const LaunchABIModel &launchABI) {
-  os << "  \"launch_abi\": {\n";
-  os << "    \"public_name\": ";
-  appendJSONEscapedString(os, launchABI.publicName);
-  os << ",\n";
-  os << "    \"tail_policy\": ";
-  appendJSONEscapedString(os, launchABI.tailPolicy);
-  os << ",\n";
-  os << "    \"uniform_words_per_qpu\": "
-     << launchABI.uniformWordsPerQPU << ",\n";
-  os << "    \"arg_count\": " << launchABI.arguments.size() << ",\n";
-  os << "    \"args\": [\n";
-  for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
-    appendManifestLaunchABIArgument(os, launchABI.arguments[i],
-                                    i + 1 != launchABI.arguments.size());
-  }
-  os << "    ],\n";
-  os << "    \"builtins\": [\n";
-  for (size_t i = 0; i != launchABI.builtins.size(); ++i) {
-    appendManifestLaunchABIBuiltin(os, launchABI.builtins[i],
-                                   i + 1 != launchABI.builtins.size());
-  }
-  os << "    ],\n";
-  os << "    \"public_api\": {\n";
-  os << "      \"function_name\": ";
-  appendJSONEscapedString(os, getLaunchFunctionName(launchABI));
-  os << ",\n";
-  os << "      \"return_type\": \"int\",\n";
-  os << "      \"parameters\": [\n";
-  appendManifestPublicParameter(os, "program", "struct vc4_program *", "program", true);
-  appendManifestPublicParameter(os, "grid", "vc4_dim3", "grid", true);
-  appendManifestPublicParameter(os, "block", "vc4_dim3", "block",
-                                !launchABI.arguments.empty());
-  for (size_t i = 0; i != launchABI.arguments.size(); ++i) {
-    const LaunchABIArgumentModel &arg = launchABI.arguments[i];
-    appendManifestPublicParameter(os, arg.name, arg.cType, "kernel_arg",
-                                  i + 1 != launchABI.arguments.size());
-  }
-  os << "      ]\n";
-  os << "    }\n";
-  os << "  }";
 }
 
 static void appendManifestKernelArguments(llvm::raw_ostream &os,

@@ -24,7 +24,7 @@ vc4.module @sfu_recip {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "sfu_recip_launch",
+      public_name = "sfu_recip",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 5 : i32,
       args = [

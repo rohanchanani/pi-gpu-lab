@@ -11,7 +11,7 @@ vc4.module @vc4_codegen_emit_contract_allowed_sinks {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "allowed_sinks_launch",
+      public_name = "allowed_sinks",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

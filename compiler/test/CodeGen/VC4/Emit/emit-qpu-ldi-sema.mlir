@@ -1,11 +1,11 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernels/qpu_ldi_sema_launch.qasm
+// RUN: test -f %t.bundle/kernels/qpu_ldi_sema.qasm
 // RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_ldi_sema_launch.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_ldi_sema.qasm
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: ldi.setf ra0.16a, 0x00001234
@@ -22,9 +22,9 @@
 // MANIFEST: "kernels": [
 // MANIFEST: "kernel_id": 0
 // MANIFEST: "symbol_name": "qpu_ldi_sema_kernel"
-// MANIFEST: "public_name": "qpu_ldi_sema_launch"
-// MANIFEST: "qasm_path": "kernels/qpu_ldi_sema_launch.qasm"
-// MANIFEST: "code_symbol": "qpu_ldi_sema_launch_shader"
+// MANIFEST: "public_name": "qpu_ldi_sema"
+// MANIFEST: "qasm_path": "kernels/qpu_ldi_sema.qasm"
+// MANIFEST: "code_symbol": "qpu_ldi_sema_shader"
 // MANIFEST: "scheduled_sink_ops": 7
 vc4.module @qpu_ldi_sema {
   vc4.func @qpu_ldi_sema_kernel() attributes {
@@ -33,7 +33,7 @@ vc4.module @qpu_ldi_sema {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "qpu_ldi_sema_launch",
+      public_name = "qpu_ldi_sema",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],

@@ -11,12 +11,12 @@
 // LAYOUT: "program_name": "program_layout_json"
 // LAYOUT: "kernel_count": 2
 // LAYOUT-DAG: "name": "kernel_descriptor_table"
-// LAYOUT-DAG: "name": "first_layout_launch.code"
-// LAYOUT-DAG: "name": "first_layout_launch.uniforms"
-// LAYOUT-DAG: "name": "first_layout_launch.unif_ptrs"
-// LAYOUT-DAG: "name": "second_layout_launch.code"
-// LAYOUT-DAG: "name": "second_layout_launch.uniforms"
-// LAYOUT-DAG: "name": "second_layout_launch.unif_ptrs"
+// LAYOUT-DAG: "name": "first_layout.code"
+// LAYOUT-DAG: "name": "first_layout.uniforms"
+// LAYOUT-DAG: "name": "first_layout.unif_ptrs"
+// LAYOUT-DAG: "name": "second_layout.code"
+// LAYOUT-DAG: "name": "second_layout.uniforms"
+// LAYOUT-DAG: "name": "second_layout.unif_ptrs"
 // LAYOUT-DAG: "name": "heap"
 // LAYOUT-DAG: "descriptor": {"offset":
 // LAYOUT-DAG: "uniform_stream": {"offset":
@@ -38,7 +38,7 @@ vc4.module @program_layout_json {
     threading = #vc4.threading_mode<single>,
     "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false},
     "vc4.launch_abi" = {
-      public_name = "first_layout_launch",
+      public_name = "first_layout",
       code_symbol = "first_layout_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
@@ -108,7 +108,7 @@ vc4.module @program_layout_json {
     threading = #vc4.threading_mode<single>,
     "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false},
     "vc4.launch_abi" = {
-      public_name = "second_layout_launch",
+      public_name = "second_layout",
       code_symbol = "second_layout_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 3 : i32,

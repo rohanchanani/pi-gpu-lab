@@ -12,7 +12,7 @@ vc4.module @duplicate_code_symbol {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "first_launch",
+      public_name = "first",
       code_symbol = "shared_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
@@ -81,7 +81,7 @@ vc4.module @duplicate_code_symbol {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "second_launch",
+      public_name = "second",
       code_symbol = "shared_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,

@@ -33,7 +33,7 @@ form = #vc4.function_form<scheduled>,
 kernel,
 threading = #vc4.threading_mode<single>,
 "vc4.launch_abi" = {
-public_name = "image_boxblur_shared_launch",
+public_name = "image_boxblur_shared",
 tail_policy = "tail_safe",
 uniform_words_per_qpu = 8 : i32,
 args = [

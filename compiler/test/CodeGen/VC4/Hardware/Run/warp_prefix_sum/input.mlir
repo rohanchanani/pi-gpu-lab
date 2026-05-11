@@ -36,7 +36,7 @@ form = #vc4.function_form<scheduled>,
 kernel,
 threading = #vc4.threading_mode<single>,
 "vc4.launch_abi" = {
-public_name = "warp_prefix_sum_launch",
+public_name = "warp_prefix_sum",
 tail_policy = "tail_safe",
 uniform_words_per_qpu = 5 : i32,
 args = [

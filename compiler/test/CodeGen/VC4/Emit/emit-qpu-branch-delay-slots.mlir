@@ -1,11 +1,11 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
-// RUN: test -f %t.bundle/kernels/qpu_branch_launch.qasm
+// RUN: test -f %t.bundle/kernels/qpu_branch.qasm
 // RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_branch_launch.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_branch.qasm
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: :vc4_qpu_slot_0
@@ -29,9 +29,9 @@
 // MANIFEST: "kernels": [
 // MANIFEST: "kernel_id": 0
 // MANIFEST: "symbol_name": "qpu_branch_kernel"
-// MANIFEST: "public_name": "qpu_branch_launch"
-// MANIFEST: "qasm_path": "kernels/qpu_branch_launch.qasm"
-// MANIFEST: "code_symbol": "qpu_branch_launch_shader"
+// MANIFEST: "public_name": "qpu_branch"
+// MANIFEST: "qasm_path": "kernels/qpu_branch.qasm"
+// MANIFEST: "code_symbol": "qpu_branch_shader"
 // MANIFEST: "scheduled_sink_ops": 7
 vc4.module @qpu_branch {
   vc4.func @qpu_branch_kernel() attributes {
@@ -40,7 +40,7 @@ vc4.module @qpu_branch {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "qpu_branch_launch",
+      public_name = "qpu_branch",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 2 : i32,
       args = [],
