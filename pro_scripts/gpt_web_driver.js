@@ -103,6 +103,37 @@ function requireArg(args, name) {
   return args[name];
 }
 
+function promptCharLimit() {
+  const raw = process.env.VC4_GPT_MAX_PROMPT_CHARS || process.env.GPT_WEB_MAX_PROMPT_CHARS || "650000";
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error(`Invalid VC4_GPT_MAX_PROMPT_CHARS/GPT_WEB_MAX_PROMPT_CHARS: ${raw}`);
+  }
+  return Math.floor(value);
+}
+
+function enforcePromptCharLimit(promptFile, promptLen, outDir) {
+  const limit = promptCharLimit();
+  if (limit === 0 || promptLen <= limit) return;
+  const message =
+    `Prompt is ${promptLen} chars, above safe web-transport limit ${limit}. ` +
+    `Slice context is too large for reliable ChatGPT composer submission; reduce selected context or set VC4_GPT_MAX_PROMPT_CHARS=0 to override explicitly.`;
+  const diag = {
+    ok: false,
+    reason: "prompt_too_large_for_web_transport",
+    promptFile,
+    promptChars: promptLen,
+    limitChars: limit,
+    overrideEnv: "VC4_GPT_MAX_PROMPT_CHARS=0",
+    message,
+  };
+  try {
+    mkdirp(path.join(outDir, ".gpt-web-run"));
+    fs.writeFileSync(path.join(outDir, ".gpt-web-run", "prompt_too_large.json"), JSON.stringify(diag, null, 2) + "\n", "utf8");
+  } catch (_) {}
+  throw new Error(message);
+}
+
 // ---------------------------------------------------------------------------
 // Filesystem helpers
 // ---------------------------------------------------------------------------
@@ -2260,7 +2291,9 @@ async function run(mode, argv) {
     file: promptFile,
     chars: userPrompt.length,
     hash: promptHash.slice(0, 16),
+    safeTransportLimitChars: promptCharLimit(),
   });
+  enforcePromptCharLimit(promptFile, userPrompt.length, outDir);
 
   vlog("connecting to Chrome via CDP...");
   const browser = await connectBrowser(connectTimeoutMs);

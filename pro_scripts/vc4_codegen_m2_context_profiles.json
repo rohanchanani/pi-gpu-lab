@@ -421,10 +421,6 @@
           "formerly_file_excerpt": true
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
         },
@@ -438,8 +434,14 @@
         "launch_abi_summary",
         "scheduled_sink_summary"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 2000000,
-      "max_chars": 2000000
+      "max_chars_ignored_by_no_truncation_patch": 450000,
+      "max_chars": 450000,
+      "workflow_notes": [
+        "Post-slice7 transport hardening: do not expand fixture_tree bulk context; explicit slice-6 reference source files remain selected."
+      ],
+      "_post_slice7_slimmed_context_removed_counts": {
+        "fixture_tree_entries_removed": 1
+      }
     },
     "independent_vector": {
       "purpose": "Runtime scheduler for independent-vector kernels.",
@@ -484,26 +486,6 @@
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
-        },
-        {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/README.md"
         },
@@ -525,67 +507,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/3-test-saxpy-16.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -609,67 +531,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/3-test-saxpy-basic.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -697,67 +559,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/3-test-saxpy_full.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -781,59 +583,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -857,62 +607,21 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.h"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 2000000,
-      "max_chars": 2000000
+      "max_chars_ignored_by_no_truncation_patch": 450000,
+      "max_chars": 450000,
+      "workflow_notes": [
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+      ],
+      "_post_slice7_slimmed_context_removed_counts": {
+        "fixture_tree_entries_removed": 5,
+        "reference_or_share_fixture_files_removed": 70
+      }
     },
     "cooperative_block": {
       "purpose": "Runtime scheduler/resource allocator for cooperative-block kernels.",
@@ -953,30 +662,6 @@
           "path": "pro_scripts/vc4_codegen_m2_verifications.json"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
-        },
-        {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/README.md"
         },
@@ -994,67 +679,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/3-test-qpu_barrier_syncthreads.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1074,67 +699,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/3-test-vpm_slice_visibility.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1158,59 +723,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1234,59 +747,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1310,67 +771,11 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/run.sh"
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template2.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/README.md"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/RERUN_COMMANDS.md"
         },
         {
           "kind": "file",
@@ -1390,66 +795,21 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template2.h"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 2000000,
-      "max_chars": 2000000
+      "max_chars_ignored_by_no_truncation_patch": 450000,
+      "max_chars": 450000,
+      "workflow_notes": [
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+      ],
+      "_post_slice7_slimmed_context_removed_counts": {
+        "fixture_tree_entries_removed": 6,
+        "reference_or_share_fixture_files_removed": 83
+      }
     },
     "fixture_matrix": {
       "purpose": "Curated M2 fixture matrix hardening.",
@@ -1494,22 +854,6 @@
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
-        },
-        {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/README.md"
         },
@@ -1531,67 +875,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/3-test-minimal-thrend.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_threndshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_threndshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1615,59 +899,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/3-test-memory-output.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1691,67 +923,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/3-test-read-nop-write.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_writeshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_writeshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1779,67 +951,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/3-test-saxpy_full.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1859,67 +971,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -1943,67 +995,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/3-test-saxpy-16.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2027,67 +1019,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/3-test-saxpy-basic.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2111,59 +1043,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2187,55 +1067,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.h"
         },
         {
           "kind": "file",
@@ -2259,67 +1091,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/3-test-saxpy-tmu.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmushader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmushader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2343,67 +1115,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/3-test-saxpy-tmu-overlap.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlapshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlapshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2427,67 +1139,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/3-test-tmu-read-nop-write.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_writeshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_writeshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2511,59 +1163,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2587,67 +1187,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/3-test-sfu-recip.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recipshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recipshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2671,59 +1211,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2743,67 +1231,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/3-test-vpm_slice_visibility.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2823,67 +1251,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/3-test-qpu_barrier_syncthreads.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2907,59 +1275,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -2983,59 +1299,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3059,67 +1323,11 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/run.sh"
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template2.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/README.md"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/RERUN_COMMANDS.md"
         },
         {
           "kind": "file",
@@ -3139,66 +1347,21 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template2.h"
         }
       ],
       "extractors": [
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 2000000,
-      "max_chars": 2000000
+      "max_chars_ignored_by_no_truncation_patch": 500000,
+      "max_chars": 500000,
+      "workflow_notes": [
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+      ],
+      "_post_slice7_slimmed_context_removed_counts": {
+        "fixture_tree_entries_removed": 4,
+        "reference_or_share_fixture_files_removed": 297
+      }
     },
     "final_acceptance": {
       "purpose": "Final M2 acceptance and cleanup.",
@@ -3243,22 +1406,6 @@
           "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
-        },
-        {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/README.md"
         },
@@ -3280,59 +1427,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/block_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3356,55 +1451,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/gemv_naive_tail_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/share/vc4tmpl/template.h"
         },
         {
           "kind": "file",
@@ -3428,59 +1475,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/global_store_coalesced_multi_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3504,59 +1499,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/3-test-memory-output.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/memory_output_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3580,67 +1523,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/3-test-minimal-thrend.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_thrend_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_threndshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/minimal_threndshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3660,67 +1543,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/3-test-multi_kernel_chain.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/memory_output_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3740,67 +1563,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/3-test-qpu_barrier_syncthreads.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreads_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/qpu_barrier_syncthreadsshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3824,67 +1587,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/3-test-read-nop-write.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_writeshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/read_nop_writeshader.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference/run.sh"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3908,67 +1611,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/3-test-saxpy-16.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/reference/saxpy_16shader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -3992,67 +1635,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/3-test-saxpy-basic.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basic_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/reference/saxpy_basicshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4080,67 +1663,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/3-test-saxpy_full.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_full_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference/saxpy_fullshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4164,67 +1687,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/3-test-saxpy-tmu.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmu_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmushader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference/saxpy_tmushader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4248,67 +1711,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/3-test-saxpy-tmu-overlap.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlap_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlapshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference/saxpy_tmu_overlapshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4332,75 +1735,11 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/3-test-sfu-recip.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recip_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recipshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference/sfu_recipshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/run.sh"
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/share/vc4tmpl/template2.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/README.md"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/RERUN_COMMANDS.md"
         },
         {
           "kind": "file",
@@ -4420,59 +1759,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/reference/shared_transpose_16x16_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4496,67 +1783,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/3-test-tmu-read-nop-write.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_write_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_writeshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference/tmu_read_nop_writeshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4580,59 +1807,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/reference/tmu_strided_load_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4656,59 +1831,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/reference/vpm_setup_clobber_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4728,67 +1851,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/3-test-vpm_slice_visibility.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibility_launch.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/reference/vpm_slice_visibilityshader.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4812,59 +1875,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/reference/warp_prefix_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/share/vc4tmpl/template2.h"
         },
         {
           "kind": "file",
@@ -4888,67 +1899,25 @@
         },
         {
           "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/.gitignore"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/Makefile"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/mailbox.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum.qasm"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_harness.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/reference/warp_reduce_sum_launch.h"
-        },
-        {
-          "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/run.sh"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4inc/vc4.qinc"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.c"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template.h"
-        },
-        {
-          "kind": "file",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/share/vc4tmpl/template2.h"
         }
       ],
       "extractors": [
         "git_diff_summary",
         "existing_codegen_files"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 2000000,
-      "max_chars": 2000000
+      "max_chars_ignored_by_no_truncation_patch": 500000,
+      "max_chars": 500000,
+      "workflow_notes": [
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+      ],
+      "_post_slice7_slimmed_context_removed_counts": {
+        "fixture_tree_entries_removed": 4,
+        "reference_or_share_fixture_files_removed": 297
+      }
     }
-  }
+  },
+  "notes": [
+    "Post-slice7 workflow recovery: large prompts are avoided by narrowing fixture context to core full files and full failure logs; no selected file is truncated."
+  ]
 }
