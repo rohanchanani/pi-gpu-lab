@@ -608,13 +608,159 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/vc4-codegen.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/README.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
         }
       ],
-      "extractors": [
-        "existing_codegen_files"
-      ],
-      "max_chars_ignored_by_no_truncation_patch": 450000,
-      "max_chars": 450000,
+      "extractors": [],
+      "max_chars_ignored_by_no_truncation_patch": 650000,
+      "max_chars": 650000,
       "workflow_notes": [
         "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
       ],
@@ -796,13 +942,167 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/vc4-codegen.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/README.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-m2-test-matrix.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
         }
       ],
-      "extractors": [
-        "existing_codegen_files"
-      ],
-      "max_chars_ignored_by_no_truncation_patch": 450000,
-      "max_chars": 450000,
+      "extractors": [],
+      "max_chars_ignored_by_no_truncation_patch": 650000,
+      "max_chars": 650000,
       "workflow_notes": [
         "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
       ],
@@ -1348,13 +1648,223 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/vc4-codegen.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/README.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
         }
       ],
-      "extractors": [
-        "existing_codegen_files"
-      ],
-      "max_chars_ignored_by_no_truncation_patch": 500000,
-      "max_chars": 500000,
+      "extractors": [],
+      "max_chars_ignored_by_no_truncation_patch": 650000,
+      "max_chars": 650000,
       "workflow_notes": [
         "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
       ],
@@ -1900,14 +2410,225 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/run.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-codegen/vc4-codegen.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/README.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/hardware-ground-truth-test-contract.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-buffer-direction-metadata-no-wrapper.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-cuda-like-launch-abi.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launch-abi-header.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-launcher-uniform-packing.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-manifest-v2-single-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-program-layout-json.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-bundle-basic.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-ldi-sema.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-many-warps.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-invalid-too-much-shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
+        },
+        {
+          "kind": "fixture_tree",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
         }
       ],
       "extractors": [
-        "git_diff_summary",
-        "existing_codegen_files"
+        "git_diff_summary"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 500000,
-      "max_chars": 500000,
+      "max_chars_ignored_by_no_truncation_patch": 650000,
+      "max_chars": 650000,
       "workflow_notes": [
         "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
       ],
