@@ -3,10 +3,9 @@
 // RUN: python3 %S/../Support/check_m2_manifest.py %t.bundle/manifest.json --schema-version 2 --kernel-count 1 --require-target --require-kernel-fields --public-name saxpy_full
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
 
-// HEADER-DAG: typedef uint32_t vc4_deviceptr_t;
-// HEADER-DAG: typedef struct vc4_dim3
-// HEADER-DAG: struct vc4_program;
+// HEADER-DAG: #include "vc4_runtime.h"
 // HEADER-DAG: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n);
+// HEADER-NOT: typedef uint32_t vc4_deviceptr_t
 // HEADER-NOT: float *x
 // HEADER-NOT: float *y
 // HEADER-NOT: uniform

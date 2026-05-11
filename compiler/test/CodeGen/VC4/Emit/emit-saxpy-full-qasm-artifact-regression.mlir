@@ -4,8 +4,8 @@
 // RUN: test ! -f %t.bundle/kernel.qasm
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/saxpy_full.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
-// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
-// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
+// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='"mailbox.h"' --implicit-check-not='typedef uint32_t vc4_deviceptr_t'
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS'
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // MANIFEST: "schema_version": 2
@@ -44,14 +44,8 @@
 // QASM-DAG: target_label=vc4_qpu_slot_37
 // QASM-DAG: target_label=vc4_qpu_slot_21
 
-// HEADER-DAG: typedef uint32_t vc4_deviceptr_t;
-// HEADER-DAG: typedef struct vc4_dim3
-// HEADER-DAG: struct vc4_program;
+// HEADER-DAG: #include "vc4_runtime.h"
 // HEADER-DAG: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);
-// HEADER-DAG: int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes);
-// HEADER-DAG: int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr);
 // HEADER-DAG: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n);
 // HEADER-DAG: uint32_t saxpy_full_runtime_allocations(void);
 // HEADER-DAG: uint32_t saxpy_full_runtime_launches(void);
@@ -63,17 +57,19 @@
 // HEADER-NOT: uint32_t *uniform
 
 // SOURCE: #include "kernel_launch.h"
+// SOURCE: static const struct vc4_kernel_image vc4_codegen_kernels[] = {
+// SOURCE: { "saxpy_full", saxpy_full_shader,
+// SOURCE: VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR
+// SOURCE: static const struct vc4_module_image vc4_codegen_module = {
+// SOURCE: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
+// SOURCE-LABEL: static int saxpy_full_pack_uniforms(void *opaque, uint32_t logicalRequest, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
+// SOURCE: uniformWords[0] = (uint32_t)ctx->x; /* arg x */
+// SOURCE: uniformWords[1] = (uint32_t)ctx->y; /* arg y */
+// SOURCE: uniformWords[2] = vc4_codegen_pack_f32(ctx->alpha); /* arg alpha */
+// SOURCE: uniformWords[3] = (uint32_t)ctx->n; /* arg n */
+// SOURCE: uniformWords[4] = logicalRequest; /* builtin qpu_id */
+// SOURCE: uniformWords[5] = ctx->total_requests; /* builtin num_qpus */
 // SOURCE-LABEL: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n) {
-// SOURCE-NOT: vc4Malloc(
-// SOURCE-NOT: vc4MemcpyHtoD(
-// SOURCE-NOT: vc4MemcpyDtoH(
-// SOURCE-NOT: vc4Free(
-// SOURCE: [qpu][0] = (uint32_t)x; /* arg x */
-// SOURCE: [qpu][1] = (uint32_t)y; /* arg y */
-// SOURCE: [qpu][2] = vc4_codegen_pack_f32(alpha); /* arg alpha */
-// SOURCE: [qpu][3] = (uint32_t)n; /* arg n */
-// SOURCE: [qpu][4] = logicalRequest; /* builtin qpu_id */
-// SOURCE: [qpu][5] = totalRequests; /* builtin num_qpus */
-// SOURCE: PUT32(V3D_SRQUA,
-// SOURCE: PUT32(V3D_SRQPC,
-// SOURCE: return 0;
+// SOURCE: vc4DeviceRangeIsAllocated(program, x,
+// SOURCE: vc4DeviceRangeIsAllocated(program, y,
+// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, saxpy_full_pack_uniforms, &ctx);

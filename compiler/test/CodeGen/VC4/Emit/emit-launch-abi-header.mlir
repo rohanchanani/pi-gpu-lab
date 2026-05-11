@@ -5,20 +5,13 @@
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
-// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
-// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
+// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='"mailbox.h"' --implicit-check-not='typedef uint32_t vc4_deviceptr_t'
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS'
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // HEADER: #include <stdint.h>
-// HEADER: #include "mailbox.h"
-// HEADER-DAG: typedef uint32_t vc4_deviceptr_t;
-// HEADER-DAG: typedef struct vc4_dim3
-// HEADER-DAG: struct vc4_program;
+// HEADER: #include "vc4_runtime.h"
 // HEADER-DAG: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);
-// HEADER-DAG: int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes);
-// HEADER-DAG: int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr);
 // HEADER-DAG: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale);
 // HEADER-NOT: struct vc4_runtime
 // HEADER-NOT: launch_abi_header_prepare
@@ -30,19 +23,15 @@
 // HEADER-NOT: num_qpus
 
 // SOURCE: #include "kernel_launch.h"
-// SOURCE: #define VC4_CODEGEN_QPU_WAIT_MAX_POLLS 10000000u
 // SOURCE: static uint32_t vc4_codegen_pack_f32(float value) {
-// SOURCE: static int vc4_codegen_wait_for_qpus(struct vc4_program *program, uint32_t activeQpus) {
-// SOURCE: vc4_codegen_launch_failure(program);
-// SOURCE: return -1;
-// SOURCE-LABEL: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale) {
-// SOURCE-NOT: vc4Malloc(
-// SOURCE-NOT: vc4MemcpyHtoD(
-// SOURCE-NOT: vc4MemcpyDtoH(
-// SOURCE-NOT: vc4Free(
-// SOURCE: uint32_t activeQpus
-// SOURCE: VC4_KERNEL_LAUNCH name=launch_abi_header
-// SOURCE: uint32_t max_wait_polls = VC4_CODEGEN_QPU_WAIT_MAX_POLLS;
+// SOURCE: static const struct vc4_kernel_image vc4_codegen_kernels[] = {
+// SOURCE: { "launch_abi_header", launch_abi_header_shader,
+// SOURCE: VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR
+// SOURCE: static const struct vc4_module_image vc4_codegen_module = {
+// SOURCE: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes) {
+// SOURCE: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
+// SOURCE: struct launch_abi_header_pack_ctx {
+// SOURCE-LABEL: static int launch_abi_header_pack_uniforms(void *opaque, uint32_t logicalRequest, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
 // SOURCE: * Dense physical uniform layout per logical request, ordered by vc4.launch_abi uniform_index:
 // SOURCE: *   [0] arg out
 // SOURCE: *   [1] arg input
@@ -50,20 +39,16 @@
 // SOURCE: *   [3] arg scale
 // SOURCE: *   [4] builtin qpu_id (qpu_num)
 // SOURCE: *   [5] builtin num_qpus (num_qpus)
-// SOURCE: for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {
-// SOURCE: [qpu][0] = (uint32_t)out; /* arg out */
-// SOURCE: [qpu][1] = (uint32_t)input; /* arg input */
-// SOURCE: [qpu][2] = (uint32_t)n; /* arg n */
-// SOURCE: [qpu][3] = vc4_codegen_pack_f32(scale); /* arg scale */
-// SOURCE: [qpu][4] = logicalRequest; /* builtin qpu_id */
-// SOURCE: [qpu][5] = totalRequests; /* builtin num_qpus */
-// SOURCE: PUT32(V3D_SRQUA,
-// SOURCE: PUT32(V3D_SRQPC,
-// SOURCE: vc4_codegen_launch_code_gpu_addr(program->state->kernel_descs[0].code_gpu_addr)
-// SOURCE: if (vc4_codegen_wait_for_qpus(program, waveRequests) < 0)
-// SOURCE: return -1;
-// SOURCE: program->state->launch_count++;
-// SOURCE: return 0;
+// SOURCE: uniformWords[0] = (uint32_t)ctx->out; /* arg out */
+// SOURCE: uniformWords[1] = (uint32_t)ctx->input; /* arg input */
+// SOURCE: uniformWords[2] = (uint32_t)ctx->n; /* arg n */
+// SOURCE: uniformWords[3] = vc4_codegen_pack_f32(ctx->scale); /* arg scale */
+// SOURCE: uniformWords[4] = logicalRequest; /* builtin qpu_id */
+// SOURCE: uniformWords[5] = ctx->total_requests; /* builtin num_qpus */
+// SOURCE-LABEL: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale) {
+// SOURCE: vc4DeviceRangeIsAllocated(program, out,
+// SOURCE: vc4DeviceRangeIsAllocated(program, input,
+// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, launch_abi_header_pack_uniforms, &ctx);
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "program_name": "launch_abi_header"

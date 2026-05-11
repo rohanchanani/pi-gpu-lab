@@ -2,15 +2,11 @@
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
 // RUN: test -f %t.bundle/layout.json
 // RUN: python3 %S/../Support/check_m2_layout.py %t.bundle/layout.json --alignment 8 --require-heap --min-heap-bytes 4096
-// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h
+// RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='typedef uint32_t vc4_deviceptr_t' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy'
 
-// HEADER-DAG: typedef uint32_t vc4_deviceptr_t;
-// HEADER-DAG: int vc4Malloc(struct vc4_program *program, vc4_deviceptr_t *out, uint32_t bytes);
-// HEADER-DAG: int vc4Free(struct vc4_program *program, vc4_deviceptr_t ptr);
-// HEADER-DAG: int vc4MemcpyHtoD(struct vc4_program *program, vc4_deviceptr_t dst, const void *src, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyDtoH(struct vc4_program *program, void *dst, vc4_deviceptr_t src, uint32_t bytes);
-// HEADER-DAG: int vc4MemcpyDtoD(struct vc4_program *program, vc4_deviceptr_t dst, vc4_deviceptr_t src, uint32_t bytes);
-// HEADER-DAG: int vc4MemsetD8(struct vc4_program *program, vc4_deviceptr_t dst, uint8_t value, uint32_t bytes);
+// HEADER: #include "vc4_runtime.h"
+// HEADER-DAG: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);
+// HEADER-DAG: int heap_smoke_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block);
 
 vc4.module @heap_smoke {
 
