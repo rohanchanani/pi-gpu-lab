@@ -55,8 +55,8 @@
 // SOURCE: [qpu][1] = (uint32_t)input; /* arg input */
 // SOURCE: [qpu][2] = (uint32_t)n; /* arg n */
 // SOURCE: [qpu][3] = vc4_codegen_pack_f32(scale); /* arg scale */
-// SOURCE: [qpu][4] = qpu; /* builtin qpu_id */
-// SOURCE: [qpu][5] = activeQpus; /* builtin num_qpus */
+// SOURCE: [qpu][4] = logicalRequest; /* builtin qpu_id */
+// SOURCE: [qpu][5] = totalRequests; /* builtin num_qpus */
 // SOURCE: PUT32(V3D_SRQUA,
 // SOURCE: PUT32(V3D_SRQPC,
 // SOURCE: vc4_codegen_launch_code_gpu_addr(program->state->kernel_descs[0].code_gpu_addr)

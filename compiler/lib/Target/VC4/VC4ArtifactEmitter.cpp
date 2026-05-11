@@ -2642,9 +2642,9 @@ getArgumentUniformExpression(const LaunchABIArgumentModel &arg) {
 static std::optional<std::string>
 getBuiltinUniformExpression(const LaunchABIBuiltinModel &builtin) {
   if (builtin.kind == "qpu_num")
-    return std::string("qpu");
+    return std::string("logicalRequest");
   if (builtin.kind == "num_qpus")
-    return std::string("activeQpus");
+    return std::string("totalRequests");
   return std::nullopt;
 }
 
@@ -3319,7 +3319,11 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     } else {
       os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
     }
-    os << "  uint32_t totalRequests = logicalN == 0u ? 0u : activeQpus;\n";
+    if (kernelABI.tailPolicy == "exact_multiple") {
+      os << "  uint32_t totalRequests = logicalN == 0u ? 0u : activeQpus;\n";
+    } else {
+      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
+    }
     os << "  uint32_t totalWaves = vc4_codegen_ceil_div_u32(totalRequests, activeQpus);\n";
     os << "  (void)grid;\n";
     os << "  (void)block;\n";
@@ -3354,6 +3358,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "    if (waveRequests > activeQpus)\n";
     os << "      waveRequests = activeQpus;\n";
     os << "    for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {\n";
+    os << "      uint32_t logicalRequest = waveBase + qpu;\n";
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
