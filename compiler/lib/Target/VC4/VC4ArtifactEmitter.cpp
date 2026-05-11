@@ -2714,22 +2714,16 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "#include <stdint.h>\n";
   os << "#include <string.h>\n\n";
 
-  // kernel_launch.h and mailbox.h normally provide libpi mailbox/QPU
-  // prototypes.  Emit matching fallback declarations as well: some legacy
-  // candidate workdirs provide a minimal mailbox.h that implements these
-  // functions but omits prototypes, and -Werror rejects implicit calls.
-  // Keep the signatures byte-for-byte compatible with the libpi mailbox ABI.
+  // kernel_launch.h and mailbox.h provide libpi mailbox/QPU prototypes.  Keep
+  // matching declarations here so hardware builds fail at link time if the
+  // real libpi VC4 runtime is not linked.
   os << "extern uint32_t qpu_enable(uint32_t enable);\n";
   os << "extern uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);\n";
   os << "extern uint32_t mem_lock(uint32_t handle);\n";
   os << "extern uint32_t mem_unlock(uint32_t handle);\n";
   os << "extern uint32_t mem_free(uint32_t handle);\n";
   os << "extern unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);\n";
-  os << "#if defined(__GNUC__)\n";
-  os << "#define VC4_CODEGEN_WEAK_SYMBOL __attribute__((weak))\n";
-  os << "#else\n";
-  os << "#define VC4_CODEGEN_WEAK_SYMBOL\n";
-  os << "#endif\n\n";
+  os << "\n";
 
   os << "#define GPU_MEM_FLG 0xCu\n";
   os << "#define GPU_BASE 0x40000000u\n";
@@ -2843,35 +2837,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "static struct vc4_program g_program_storage;\n";
   os << "static uint32_t g_program_live;\n";
   os << "static uint32_t g_program_allocations;\n";
-  os << "static unsigned char vc4_codegen_weak_mailbox_storage[sizeof(struct "
-     << stateName << ")] __attribute__((aligned(4096)));\n\n";
-
-  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t qpu_enable(uint32_t enable) {\n";
-  os << "  (void)enable;\n";
-  os << "  return 0u;\n";
-  os << "}\n\n";
-  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags) {\n";
-  os << "  (void)align;\n";
-  os << "  (void)flags;\n";
-  os << "  return size <= sizeof(vc4_codegen_weak_mailbox_storage) ? 1u : 0u;\n";
-  os << "}\n\n";
-  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_lock(uint32_t handle) {\n";
-  os << "  return handle ? GPU_BASE + (uint32_t)(uintptr_t)&vc4_codegen_weak_mailbox_storage[0] : 0u;\n";
-  os << "}\n\n";
-  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_unlock(uint32_t handle) {\n";
-  os << "  (void)handle;\n";
-  os << "  return 0u;\n";
-  os << "}\n\n";
-  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_free(uint32_t handle) {\n";
-  os << "  (void)handle;\n";
-  os << "  return 0u;\n";
-  os << "}\n\n";
-  os << "VC4_CODEGEN_WEAK_SYMBOL unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus) {\n";
-  os << "  (void)code;\n";
-  os << "  (void)unifs;\n";
-  os << "  (void)num_qpus;\n";
-  os << "  return 0u;\n";
-  os << "}\n\n";
+  os << "\n";
 
 
   os << "static void vc4_codegen_prepare_v3d_queue(void) {\n";

@@ -83,32 +83,6 @@ check_fixture() {
   require_dir "$TEST_ROOT"
   require_file "$INPUT_MLIR"
   require_file "$EXPECTED_JSON"
-  require_dir "$REFERENCE_DIR"
-  require_file "$REFERENCE_DIR/Makefile"
-  require_file "$REFERENCE_DIR/mailbox.c"
-  require_file "$REFERENCE_DIR/mailbox.h"
-}
-
-share_source_dir() {
-  if [[ -d "$TEST_ROOT/share" ]]; then printf '%s\n' "$TEST_ROOT/share"; return 0; fi
-  if [[ -d "$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share" ]]; then
-    printf '%s\n' "$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/share"; return 0
-  fi
-  return 1
-}
-
-copy_assembler_share_to() {
-  local dst_parent="$1" src
-  if src="$(share_source_dir)"; then
-    mkdir -p "$dst_parent"
-    rm -rf "$dst_parent/share"
-    cp -R "$src" "$dst_parent/share"
-  fi
-}
-
-copy_assembler_share() {
-  copy_assembler_share_to "$GENERATED_DIR"
-  copy_assembler_share_to "$AUTO_ROOT/candidates"
 }
 
 manifest_kernel_records() {
@@ -174,7 +148,6 @@ run_vc4_codegen() {
   log "generating $(relpath "$GENERATED_DIR") from $(relpath "$INPUT_MLIR")"
   "$vc4_codegen" "$INPUT_MLIR" --emit-bundle "$GENERATED_DIR"
   check_generated_bundle
-  copy_assembler_share
 }
 
 ensure_generated() {
@@ -182,7 +155,6 @@ ensure_generated() {
   if [[ -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
     log "using existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
     check_generated_bundle
-    copy_assembler_share
     return 0
   fi
   run_vc4_codegen
@@ -247,17 +219,19 @@ select_harness_path() {
   local named="$CANDIDATE_DIR/${TEST_NAME}_harness.c"
   if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
   local -a matches
-  mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name '3-test-*.c' -print | sort)
-  if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
-  mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
-  if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
+  if [[ -d "$REFERENCE_DIR" ]]; then
+    mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name '3-test-*.c' -print | sort)
+    if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
+    mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
+    if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
+  fi
   fail "could not find candidate/<test>_candidate_harness.c or exactly one reference harness"
 }
 
 write_candidate_makefile() {
   local harness_name="$1"
   shift
-  local common_src="mailbox.c kernel_launch.c $*"
+  local common_src="kernel_launch.c $*"
   cat > "$WORK_DIR/Makefile" <<EOF_MAKE
 LIBS += \$(CS240LX_2025_PATH)/lib/libgcc.a \$(CS240LX_2025_PATH)/libpi/libpi.a
 
@@ -303,6 +277,7 @@ EOF_MAKE
 
 write_workdir_run_sh() {
   local bin_name="$1"
+  local elf_name="${bin_name%.bin}.elf"
   printf '%s\n' "$bin_name" > "$WORK_DIR/.vc4_candidate_bin"
   cat > "$WORK_DIR/run.sh" <<EOF_RUN
 #!/usr/bin/env bash
@@ -311,10 +286,49 @@ set -euo pipefail
 echo "RUNNING MAKE"
 make RUN=0 ${bin_name}
 
+if command -v arm-none-eabi-nm >/dev/null 2>&1 && [[ -f "objs/${elf_name}" ]]; then
+  nm_out="\$(arm-none-eabi-nm "objs/${elf_name}")"
+  if grep -Fq 'vc4_codegen_weak_mailbox_storage' <<<"\$nm_out"; then
+    echo "ERROR: candidate ELF contains generated weak mailbox storage instead of libpi VC4 runtime" >&2
+    exit 1
+  fi
+  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free gpu_fft_base_exec_direct; do
+    if ! grep -Eq "[[:space:]][TtWw][[:space:]]+\${sym}\$" <<<"\$nm_out"; then
+      echo "ERROR: candidate ELF is missing VC4 runtime symbol: \${sym}" >&2
+      exit 1
+    fi
+    if grep -Eq "[[:space:]][Ww][[:space:]]+\${sym}\$" <<<"\$nm_out"; then
+      echo "ERROR: candidate ELF uses weak VC4 runtime symbol instead of libpi: \${sym}" >&2
+      exit 1
+    fi
+  done
+fi
+
 echo "RUNNING PI INSTALL"
 "\${VC4_PI_INSTALL_CMD:-pi-install}" "./${bin_name}"
 EOF_RUN
   chmod +x "$WORK_DIR/run.sh"
+}
+
+check_candidate_runtime_symbols() {
+  local bin_name="$1"
+  local elf_path="$WORK_DIR/objs/${bin_name%.bin}.elf"
+  [[ -f "$elf_path" ]] || return 0
+  command -v arm-none-eabi-nm >/dev/null 2>&1 || return 0
+
+  local nm_out sym
+  nm_out="$(arm-none-eabi-nm "$elf_path")"
+  if grep -Fq 'vc4_codegen_weak_mailbox_storage' <<<"$nm_out"; then
+    fail "candidate ELF contains generated weak mailbox storage instead of libpi VC4 runtime"
+  fi
+  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free gpu_fft_base_exec_direct; do
+    if ! grep -Eq "[[:space:]][TtWw][[:space:]]+${sym}$" <<<"$nm_out"; then
+      fail "candidate ELF is missing VC4 runtime symbol: ${sym}"
+    fi
+    if grep -Eq "[[:space:]][Ww][[:space:]]+${sym}$" <<<"$nm_out"; then
+      fail "candidate ELF uses weak VC4 runtime symbol instead of libpi: ${sym}"
+    fi
+  done
 }
 
 write_header_alias() {
@@ -377,8 +391,6 @@ prepare_bundle_only_workdir() {
   log "preparing program-bundle smoke workdir $(relpath "$WORK_DIR")"
   rm -rf "$WORK_DIR"
   mkdir -p "$WORK_DIR"
-  copy_assembler_share_to "$HARDWARE_ROOT"
-  copy_assembler_share_to "$WORK_DIR"
 
   cp "$GENERATED_DIR/manifest.json" "$WORK_DIR/manifest.json"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
@@ -423,12 +435,8 @@ prepare_workdir() {
   log "preparing candidate workdir $(relpath "$WORK_DIR")"
   rm -rf "$WORK_DIR"
   mkdir -p "$WORK_DIR"
-  copy_assembler_share_to "$HARDWARE_ROOT"
-  copy_assembler_share_to "$WORK_DIR"
 
   cp "$harness_path" "$WORK_DIR/$harness_name"
-  cp "$REFERENCE_DIR/mailbox.c" "$WORK_DIR/mailbox.c"
-  cp "$REFERENCE_DIR/mailbox.h" "$WORK_DIR/mailbox.h"
   if [[ -f "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" ]]; then
     cp "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" "$WORK_DIR/vc4_m2_candidate_test_helpers.h"
   fi
@@ -480,6 +488,7 @@ build_candidate() {
   log "building candidate binary in $(relpath "$WORK_DIR") without hardware execution"
   (cd "$WORK_DIR" && make RUN=0 "$bin_name")
   require_file "$WORK_DIR/$bin_name"
+  check_candidate_runtime_symbols "$bin_name"
 }
 
 vc4_candidate_power_cycle_if_needed() {
