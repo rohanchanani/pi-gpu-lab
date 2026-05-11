@@ -736,6 +736,19 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "runtime-owns-raw-srq",
+          "mechanism": "command",
+          "description": "Invariant libpi runtime owns raw V3D SRQ queueing and bounded launch waits; generated launchers must not carry this code.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\np = Path('/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/src/vc4_runtime.c')\ntext = p.read_text(encoding='utf-8', errors='replace')\nrequired_literals = ['V3D_SRQUA', 'V3D_SRQPC', 'V3D_SRQCS', 'vc4LaunchKernel', 'VC4_RUNTIME_LAUNCH_TIMEOUT_USEC']\nrequired_regex = {\n    'srqua_write': r'(?:PUT32|vc4_runtime_put32)\\s*\\(\\s*V3D_SRQUA',\n    'srqpc_write': r'(?:PUT32|vc4_runtime_put32)\\s*\\(\\s*V3D_SRQPC',\n}\nmissing = [s for s in required_literals if s not in text]\nmissing += [name for name, pattern in required_regex.items() if not re.search(pattern, text)]\nforbidden = [r'\\bgpu_fft_base_exec_direct\\s*\\(']\npresent = [pattern for pattern in forbidden if re.search(pattern, text)]\nif missing or present:\n    print({'missing': missing, 'forbidden_present': present})\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical",
+          "stop_on_failure": true
+        },
+        {
           "id": "generate-saxpy_full",
           "mechanism": "vc4_codegen_generate",
           "description": "Generate candidate bundle for saxpy_full",
@@ -771,6 +784,22 @@
           "id": "generated-runtime-launch-no-copies",
           "mechanism": "generated_runtime_contract",
           "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_patterns": [
+            "vc4ProgramCreateFromImage\\s*\\(",
+            "static\\s+int\\s+saxpy_full_pack_uniforms\\s*\\("
+          ],
+          "forbidden_patterns": [
+            "gpu_fft_base_exec_direct",
+            "V3D_SRQPC",
+            "V3D_SRQUA",
+            "V3D_SRQCS",
+            "PUT32\\s*\\(",
+            "GET32\\s*\\(",
+            "qpu_enable\\b",
+            "mem_alloc\\s*\\(",
+            "mem_lock\\s*\\(",
+            "mem_free\\s*\\("
+          ],
           "forbidden_patterns_in_launch_functions": [
             "vc4Malloc\\s*\\(",
             "vc4Free\\s*\\(",
@@ -779,7 +808,6 @@
             "vc4MemcpyDtoD\\s*\\(",
             "memcpy\\s*\\(",
             "memmove\\s*\\(",
-            "memset\\s*\\(",
             "gpu_fft_base_exec_direct",
             "V3D_SRQ",
             "PUT32\\s*\\(",
@@ -974,7 +1002,6 @@
             "vc4MemcpyDtoD\\s*\\(",
             "memcpy\\s*\\(",
             "memmove\\s*\\(",
-            "memset\\s*\\(",
             "gpu_fft_base_exec_direct",
             "V3D_SRQ",
             "PUT32\\s*\\(",
@@ -1078,7 +1105,8 @@
           "mechanism": "source_products",
           "description": "Source products exist",
           "files": [
-            "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir"
+            "compiler/test/CodeGen/VC4/Emit/emit-resource-independent-vector.mlir",
+            "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/input.mlir"
           ]
         },
         {
@@ -1087,6 +1115,19 @@
           "description": "Build vc4-codegen target",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "runtime-owns-raw-srq",
+          "mechanism": "command",
+          "description": "Invariant libpi runtime owns raw V3D SRQ queueing and bounded launch waits; generated launchers must not carry this code.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\np = Path('/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/src/vc4_runtime.c')\ntext = p.read_text(encoding='utf-8', errors='replace')\nrequired_literals = ['V3D_SRQUA', 'V3D_SRQPC', 'V3D_SRQCS', 'vc4LaunchKernel', 'VC4_RUNTIME_LAUNCH_TIMEOUT_USEC']\nrequired_regex = {\n    'srqua_write': r'(?:PUT32|vc4_runtime_put32)\\s*\\(\\s*V3D_SRQUA',\n    'srqpc_write': r'(?:PUT32|vc4_runtime_put32)\\s*\\(\\s*V3D_SRQPC',\n}\nmissing = [s for s in required_literals if s not in text]\nmissing += [name for name, pattern in required_regex.items() if not re.search(pattern, text)]\nforbidden = [r'\\bgpu_fft_base_exec_direct\\s*\\(']\npresent = [pattern for pattern in forbidden if re.search(pattern, text)]\nif missing or present:\n    print({'missing': missing, 'forbidden_present': present})\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical",
+          "stop_on_failure": true
         },
         {
           "id": "generic-qasm-emitter-no-fixture-special-cases",
@@ -1132,19 +1173,106 @@
           "mechanism": "generated_runtime_contract",
           "description": "Slice 7 must keep the M2 CUDA-like resident-program runtime shape: no legacy vc4_runtime prepare/release wrappers or host-copy launcher compatibility layer.",
           "bundle": ".vc4_auto/codegen_m2/candidates/saxpy_full",
+          "required_patterns": [
+            "vc4ProgramCreateFromImage\\s*\\(",
+            "static\\s+int\\s+saxpy_full_pack_uniforms\\s*\\("
+          ],
           "forbidden_patterns": [
             "struct\\s+vc4_runtime",
             "\\b[a-zA-Z0-9_]+_prepare\\s*\\(",
             "\\b[a-zA-Z0-9_]+_release\\s*\\(",
             "\\b[a-zA-Z0-9_]+_legacy\\b",
             "\\bprepare_1d\\b",
-            "\\bprepare_2d\\b"
+            "\\bprepare_2d\\b",
+            "gpu_fft_base_exec_direct",
+            "V3D_SRQPC",
+            "V3D_SRQUA",
+            "V3D_SRQCS",
+            "PUT32\\s*\\(",
+            "GET32\\s*\\(",
+            "qpu_enable\\b",
+            "mem_alloc\\s*\\(",
+            "mem_lock\\s*\\(",
+            "mem_free\\s*\\("
+          ],
+          "required_patterns_in_launch_functions": [
+            "vc4LaunchKernel\\s*\\("
+          ],
+          "forbidden_patterns_in_launch_functions": [
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
+            "memcpy\\s*\\(",
+            "memmove\\s*\\("
           ],
           "allocation_policy": {
             "launch_reuses_resident_code": true
           },
           "route_hint": "gpt_pro",
           "stop_on_failure": true
+        },
+        {
+          "id": "generate-vector_store_smoke",
+          "mechanism": "vc4_codegen_generate",
+          "description": "Generate candidate bundle for vector_store_smoke",
+          "input": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/input.mlir",
+          "bundle": ".vc4_auto/codegen_m2/candidates/vector_store_smoke",
+          "required_files": [
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "manifest.json"
+          ],
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "vector-store-generated-launcher-raw-srq-free",
+          "mechanism": "generated_runtime_contract",
+          "description": "vector_store_smoke generated launcher uses module image, uniform packing, and vc4LaunchKernel; raw SRQ queueing stays in invariant runtime.",
+          "bundle": ".vc4_auto/codegen_m2/candidates/vector_store_smoke",
+          "required_patterns": [
+            "vc4ProgramCreateFromImage\\s*\\(",
+            "static\\s+int\\s+vector_store_smoke_pack_uniforms\\s*\\("
+          ],
+          "forbidden_patterns": [
+            "gpu_fft_base_exec_direct",
+            "V3D_SRQPC",
+            "V3D_SRQUA",
+            "V3D_SRQCS",
+            "PUT32\\s*\\(",
+            "GET32\\s*\\(",
+            "qpu_enable\\b",
+            "mem_alloc\\s*\\(",
+            "mem_lock\\s*\\(",
+            "mem_free\\s*\\("
+          ],
+          "required_patterns_in_launch_functions": [
+            "vc4LaunchKernel\\s*\\("
+          ],
+          "forbidden_patterns_in_launch_functions": [
+            "vc4Malloc\\s*\\(",
+            "vc4Free\\s*\\(",
+            "vc4MemcpyHtoD\\s*\\(",
+            "vc4MemcpyDtoH\\s*\\(",
+            "vc4MemcpyDtoD\\s*\\(",
+            "memcpy\\s*\\(",
+            "memmove\\s*\\("
+          ],
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "optional-qpu-barrier-generated-launcher-raw-srq-free",
+          "mechanism": "command",
+          "description": "If qpu_barrier_syncthreads has been generated, its launcher must also be raw-SRQ-free.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\np = Path('.vc4_auto/codegen_m2/candidates/qpu_barrier_syncthreads/kernel_launch.c')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nrequired = [r'vc4ProgramCreateFromImage\\s*\\(', r'vc4LaunchKernel\\s*\\(', r'static\\s+int\\s+qpu_barrier_syncthreads_pack_uniforms\\s*\\(']\nforbidden = [r'gpu_fft_base_exec_direct', r'V3D_SRQPC', r'V3D_SRQUA', r'V3D_SRQCS', r'PUT32\\s*\\(', r'GET32\\s*\\(', r'qpu_enable\\b', r'mem_alloc\\s*\\(', r'mem_lock\\s*\\(', r'mem_free\\s*\\(']\nmissing = [pat for pat in required if not re.search(pat, text)]\npresent = [pat for pat in forbidden if re.search(pat, text)]\nif missing or present:\n    print({'missing': missing, 'forbidden_present': present})\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
         },
         {
           "id": "independent-vector-resource-contract",
