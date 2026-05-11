@@ -71,6 +71,8 @@ DEFAULT_CODEX_TIMEOUT_SEC = 20 * 60
 DEFAULT_GATE_TIMEOUT_SEC = 30 * 60
 DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS = 5 * 60 * 1000
 DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000
+CODEX_NEEDS_GPT_SENTINEL = "VC4_CODEX_NEEDS_GPT"
+CODEX_DIAGNOSTIC_MAX_CHARS = 24000
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +218,85 @@ def invoke_gpt(
     return runner.run_command(gate="chat:gpt-pro", cmd=cmd, log_dir=log_dir, timeout_sec=chat_timeout_sec)
 
 
+def _safe_json_for_prompt(value: Any, *, max_chars: int = CODEX_DIAGNOSTIC_MAX_CHARS) -> str:
+    try:
+        text = json.dumps(value, indent=2, sort_keys=True)
+    except Exception:
+        text = str(value)
+    if len(text) <= max_chars:
+        return text
+    return text[:max_chars] + f"\n... <truncated to {max_chars} chars for Codex prompt; inspect the referenced file/log directly if needed>"
+
+
+def _load_json_if_exists(path: Path | None) -> Mapping[str, Any] | None:
+    if path is None or not path.exists():
+        return None
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return None
+    return obj if isinstance(obj, Mapping) else None
+
+
+def _packet_typed_verifier(packet: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if not isinstance(packet, Mapping):
+        return {}
+    extra = packet.get("extra")
+    if isinstance(extra, Mapping):
+        typed = extra.get("typed_verifier")
+        if isinstance(typed, Mapping):
+            return typed
+    return {}
+
+
+def _codex_referenced_log_sections(packet: Mapping[str, Any] | None, route: Mapping[str, Any]) -> str:
+    typed = _packet_typed_verifier(packet)
+    logs = typed.get("referenced_logs")
+    if not isinstance(logs, list):
+        return ""
+    diagnostic_path = str(route.get("diagnostic_log_path") or "")
+    diagnostic_name = Path(diagnostic_path).name if diagnostic_path else ""
+    selected: list[Mapping[str, Any]] = []
+    for record in logs:
+        if not isinstance(record, Mapping):
+            continue
+        path = str(record.get("path") or "")
+        if diagnostic_path and (path == diagnostic_path or path.endswith(diagnostic_name) or diagnostic_path.endswith(path)):
+            selected.append(record)
+    if not selected and logs:
+        # Fall back to the first failed log embedded in the packet.  Successful
+        # logs are not embedded by the packet writer, so this remains high-signal.
+        selected = [record for record in logs if isinstance(record, Mapping)][:1]
+
+    sections: list[str] = []
+    for record in selected[:3]:
+        path = str(record.get("path") or "")
+        body = str(record.get("text") or "")
+        if len(body) > CODEX_DIAGNOSTIC_MAX_CHARS:
+            body = body[:CODEX_DIAGNOSTIC_MAX_CHARS] + f"\n... <truncated to {CODEX_DIAGNOSTIC_MAX_CHARS} chars; inspect {path} directly if needed>"
+        sections.append(f"### Referenced failed log: {path}\n````text\n{body.rstrip()}\n````")
+    return "\n\n".join(sections)
+
+
+def _codex_generated_artifact_summary(packet: Mapping[str, Any] | None) -> str:
+    typed = _packet_typed_verifier(packet)
+    artifacts = typed.get("generated_artifacts")
+    if not isinstance(artifacts, list) or not artifacts:
+        return ""
+    rows: list[str] = []
+    for record in artifacts[:80]:
+        if not isinstance(record, Mapping):
+            continue
+        path = str(record.get("path") or "")
+        byte_count = record.get("byte_count")
+        sha = str(record.get("sha256") or "")[:16]
+        if path:
+            rows.append(f"- {path} ({byte_count} bytes, sha256={sha}...)")
+    if not rows:
+        return ""
+    return "\n".join(rows)
+
+
 def render_codex_prompt(
     *,
     repo: Path,
@@ -223,16 +304,38 @@ def render_codex_prompt(
     failed_result: CommandResult,
     route: Mapping[str, Any],
     out_path: Path,
+    failure_packet_path: Path | None = None,
 ) -> None:
-    allowed = "\n".join(f"- {p}" for p in slice_entry.get("allowed_paths", []))
-    forbidden = "\n".join(f"- {p}" for p in slice_entry.get("forbidden_paths", []))
-    text = f"""You are Codex acting as a narrow mechanical patcher for VC4 codegen Milestone 1.
+    allowed = "\n".join(f"- {p}" for p in slice_entry.get("allowed_paths", [])) or "- <none listed>"
+    forbidden = "\n".join(f"- {p}" for p in slice_entry.get("forbidden_paths", [])) or "- <none listed>"
+    packet = _load_json_if_exists(failure_packet_path)
+    typed = _packet_typed_verifier(packet)
+    first_failure = typed.get("first_failure") if isinstance(typed, Mapping) else None
+    referenced_logs = _codex_referenced_log_sections(packet, route)
+    artifact_summary = _codex_generated_artifact_summary(packet)
+    failure_packet_rel = relpath(repo, failure_packet_path) if failure_packet_path and failure_packet_path.exists() else "<missing>"
+    failed_log_rel = relpath(repo, failed_result.log_path) if failed_result.log_path.exists() else str(failed_result.log_path)
+
+    text = f"""You are Codex acting as a HIGHLY TARGETED mechanical patcher for VC4 codegen Milestone 2.
 
 Slice: {slice_entry.get('id')} — {slice_entry.get('title')}
 Intent: {slice_entry.get('intent')}
 
-Classification:
-{json.dumps(dict(route), indent=2, sort_keys=True)}
+Routing decision:
+{_safe_json_for_prompt(dict(route), max_chars=12000)}
+
+This prompt is intentionally narrow. You are being invoked because the deterministic router saw a compile/build-style failure, not because it wants semantic scheduling/QASM/runtime design work.
+
+Your responsibility:
+- Fix only the obvious mechanical compile/API/path issue shown by the failed build log.
+- Examples of allowed mechanical fixes: make generated C use the actual API names/types/struct fields already present in the repo, add a missing declaration/include when the referenced API already exists, copy/include a required source file that the support runner clearly forgot to stage, or adjust a tiny generated helper/prototype mismatch.
+- Prefer the smallest local change, usually in compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp.
+- If the failure is caused by generated candidate C, fix the compiler emitter that generated it; do not hand-edit .vc4_auto outputs.
+
+Hard stop / route back to GPT Pro:
+- If the fix requires scheduler design, QASM semantics, launch ABI policy, runtime allocation policy, hardware behavior decisions, expected-result/oracle changes, or broad refactoring, do not patch.
+- If you are not confident the fix is a simple API/compile integration repair, leave the worktree unchanged and print exactly: {CODEX_NEEDS_GPT_SENTINEL}
+- Do not guess fixture semantics just to silence the compiler.
 
 Allowed paths:
 {allowed}
@@ -240,28 +343,50 @@ Allowed paths:
 Forbidden paths:
 {forbidden}
 
-Rules:
-- Fix only the narrow mechanical issue shown below.
+Additional forbidden behavior:
+- Do not edit reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, .vc4_auto, generated candidate outputs, or hardware run logs.
 - Do not change qasm semantics.
 - Do not change launch ABI semantics.
-- Do not change tests unless the failure is purely mechanical test invocation plumbing and the path is allowlisted.
-- Do not touch reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, or .vc4_auto.
+- Do not change hardware harness/oracle behavior.
 - Do not refactor.
-- Make the smallest local change needed.
+- Do not perform large rewrites.
 
 Failed gate: {failed_result.gate}
-Command: {shlex.join(failed_result.command)}
+Failed command: {shlex.join(failed_result.command)}
 Exit code: {failed_result.exit_code}
-Log path: {relpath(repo, failed_result.log_path)}
+Gate log: {failed_log_rel}
+Failure packet: {failure_packet_rel}
 
-Log tail:
-```
-{tail_file(failed_result.log_path, max_lines=160)}
-```
+First typed-verifier failure summary:
+````json
+{_safe_json_for_prompt(first_failure if isinstance(first_failure, Mapping) else {}, max_chars=20000)}
+````
+
+Generated artifact paths available for inspection in the live repo (do not edit these; use them as diagnostics):
+{artifact_summary or '- <none recorded>'}
+
+Primary gate log tail:
+````text
+{tail_file(failed_result.log_path, max_lines=180)}
+````
+
+{referenced_logs}
+
+Suggested verification loop:
+1. Inspect the referenced build log and generated artifact under .vc4_auto to identify the exact missing symbol/type/API.
+2. Apply the smallest allowed source change.
+3. Run: ninja -C compiler/build vc4-codegen
+4. Run the exact failed build command if available in the referenced log; for fixture matrix build failures this is usually:
+   bash compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh <fixture> build
+5. Then run the typed verifier slice if the narrow build fix passes:
+   python3 pro_scripts/vc4_codegen_m1_verifier.py verify --repo . --spec pro_scripts/vc4_codegen_m2_verifications.json --worklist pro_scripts/vc4_codegen_m2_worklist.json --slice {slice_entry.get('id')} --out /tmp/vc4_codex_after.json --timeout-sec 1800 --keep-going
+
+Final response format:
+- If you patched: briefly summarize the exact mechanical compile/API fix and commands run.
+- If you declined: print {CODEX_NEEDS_GPT_SENTINEL} and explain the semantic uncertainty in one sentence.
 """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
-
 
 def invoke_codex(
     *,
@@ -1010,11 +1135,16 @@ def run_gpt_slice(
                 + "not spending another GPT attempt"
             )
             return 1
+        route_log_text = (
+            failure_packet.read_text(encoding="utf-8", errors="replace")
+            if failure_packet and failure_packet.exists()
+            else tail_file(failed.log_path, max_lines=200)
+        )
         route = classify_failure(
             slice_entry=slice_entry,
             stage="gate",
             gate=failed.gate,
-            log_text=tail_file(failed.log_path, max_lines=200),
+            log_text=route_log_text,
             codex_attempts_used=codex_attempts_used,
             codex_attempts_by_category=codex_attempts_by_category,
         )
@@ -1023,7 +1153,14 @@ def run_gpt_slice(
 
         if route.get("route") == "codex":
             codex_prompt = paths.log_dir / "codex_mechanical_prompt.md"
-            render_codex_prompt(repo=config.repo, slice_entry=slice_entry, failed_result=failed, route=route, out_path=codex_prompt)
+            render_codex_prompt(
+                repo=config.repo,
+                slice_entry=slice_entry,
+                failed_result=failed,
+                route=route,
+                out_path=codex_prompt,
+                failure_packet_path=failure_packet,
+            )
             codex = invoke_codex(repo=config.repo, prompt_path=codex_prompt, log_dir=paths.log_dir, timeout_sec=codex_timeout_sec, verbose=verbose)
             codex_attempts_used += 1
             category = str(route.get("category", "mechanical"))
@@ -1043,6 +1180,24 @@ def run_gpt_slice(
                 )
                 cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
                 continue
+            codex_log_tail = tail_file(codex.log_path, max_lines=300) if codex.log_path.exists() else ""
+            if CODEX_NEEDS_GPT_SENTINEL in codex_log_tail:
+                state.record_attempt(slice_id=slice_id, attempt=attempt, status="codex-declined")
+                failure_packet = paths.failure_packet_path
+                write_failure_packet(
+                    failure_packet,
+                    slice_entry=slice_entry,
+                    stage="codex",
+                    message="Codex mechanical repair declined as too semantic/ambiguous",
+                    command=codex.command,
+                    exit_code=codex.exit_code,
+                    timed_out=codex.timed_out,
+                    log_path=codex.log_path,
+                    extra={"route": dict(route)},
+                )
+                cleanup_failed_attempt_changes(config.repo, baseline_paths=attempt_baseline_paths, log_dir=paths.log_dir)
+                continue
+
             guard = guard_worktree(repo=config.repo, config=config, slice_entry=slice_entry, restore_disallowed=True)
             write_json_file(paths.log_dir / "codex_path_guard.json", guard)
             if not guard.get("ok"):

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -36,7 +37,10 @@ CODEX_POLICIES_NEVER = {"never", "never_for_hardware", "none", ""}
 MECHANICAL_COMPILE_RE = re.compile(
     r"(CMake Error|ninja: build stopped|fatal error: .*file not found|fatal error: .*No such file|"
     r"undefined reference to|ld: .*undefined|error: use of undeclared|error: no member named|"
-    r"error: unknown type name|error: expected|cannot find -l|no rule to make target|unknown target)",
+    r"error: unknown type name|error: expected|error: implicit declaration of function|"
+    r"error: '[^']+' undeclared|warning: implicit declaration of function|"
+    r"cannot find -l|no rule to make target|unknown target|"
+    r"make: \*\*\* \[.*\] Error|arm-none-eabi-(gcc|ld)|clang: error|gcc: error)",
     re.IGNORECASE,
 )
 LIT_CONFIG_SYNTAX_RE = re.compile(r"(fatal: unable to parse config file|IndentationError|SyntaxError|NameError: name 'config'|lit\.local\.cfg)", re.IGNORECASE)
@@ -47,6 +51,10 @@ TRANSPORT_RE = re.compile(r"(Could not find ChatGPT prompt box|web-driver|browse
 ARTIFACT_RE = re.compile(r"(downloadable artifact|artifact_transport|bundle\.zip|apply_bundle|vc4_codegen_download_bundle_v1|bundle manifest|sha256 mismatch|missing downloadable)", re.IGNORECASE)
 ARTIFACT_SCHEMA_RE = re.compile(r"(manifest.*changed_paths|changed_paths.*manifest|path is outside allowed_paths: repo/|manifest path.*repo/|repo/repo/|bundle repo/ members|zip member.*repo/)", re.IGNORECASE)
 
+FIXTURE_PHASE_ORDER = {"generate": 0, "assemble": 1, "build": 2, "candidate_hardware": 3, "expected_json": 4}
+RUNTIME_OR_HARDWARE_RE = re.compile(r"(VC4_TEST_RESULT|mismatch|PANIC|SUCCESS:|timeout|timed out|hang|NRF:|sentinel|launch_failures)", re.IGNORECASE)
+CODEX_NEEDS_GPT_SENTINEL = "VC4_CODEX_NEEDS_GPT"
+
 DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_compile": 1,
     "mechanical_cmake_or_target": 1,
@@ -54,6 +62,14 @@ DEFAULT_MECHANICAL_BUDGETS = {
     "mechanical_lit_config": 1,
     "mechanical_candidate_build": 1,
     "mechanical_artifact_transport": 1,
+}
+
+MECHANICAL_BUDGET_ALIASES = {
+    # M2 worklists often budget generic mechanical_build but the typed verifier
+    # exposes fixture build phases as candidate-build mechanics.
+    "mechanical_candidate_build": ("mechanical_build", "candidate_build", "fixture_build"),
+    "mechanical_test_invocation": ("test_invocation", "lit_tool_resolution"),
+    "mechanical_lit_config": ("lit_config_syntax",),
 }
 
 
@@ -71,20 +87,198 @@ def _decode_first_json_object(text: str) -> Mapping[str, Any] | None:
     return None
 
 
-def _typed_verifier_first_failure(log_text: str) -> Mapping[str, Any] | None:
-    report = _decode_first_json_object(log_text)
-    if not isinstance(report, Mapping):
+
+def _typed_verifier_report_from_packet_or_report(obj: Mapping[str, Any] | None) -> Mapping[str, Any] | None:
+    if not isinstance(obj, Mapping):
         return None
-    failures = report.get("failures")
-    if isinstance(failures, list) and failures and isinstance(failures[0], Mapping):
-        return failures[0]
-    # Failure packets may embed the summarized verifier report under extra.
-    extra = report.get("extra")
+    if isinstance(obj.get("results"), list) and isinstance(obj.get("failures"), list):
+        return obj
+    extra = obj.get("extra")
     if isinstance(extra, Mapping):
         typed = extra.get("typed_verifier")
-        if isinstance(typed, Mapping) and isinstance(typed.get("first_failure"), Mapping):
-            return typed["first_failure"]
+        if isinstance(typed, Mapping):
+            full_report = typed.get("full_report")
+            if isinstance(full_report, Mapping):
+                return full_report
+    typed = obj.get("typed_verifier")
+    if isinstance(typed, Mapping):
+        full_report = typed.get("full_report")
+        if isinstance(full_report, Mapping):
+            return full_report
     return None
+
+
+def _typed_verifier_first_failure(log_text: str) -> Mapping[str, Any] | None:
+    obj = _decode_first_json_object(log_text)
+    report = _typed_verifier_report_from_packet_or_report(obj)
+    if isinstance(report, Mapping):
+        failures = report.get("failures")
+        if isinstance(failures, list) and failures and isinstance(failures[0], Mapping):
+            return failures[0]
+    if isinstance(obj, Mapping):
+        failures = obj.get("failures")
+        if isinstance(failures, list) and failures and isinstance(failures[0], Mapping):
+            return failures[0]
+        extra = obj.get("extra")
+        if isinstance(extra, Mapping):
+            typed = extra.get("typed_verifier")
+            if isinstance(typed, Mapping) and isinstance(typed.get("first_failure"), Mapping):
+                return typed["first_failure"]
+    return None
+
+
+def _as_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    try:
+        return json.dumps(value, sort_keys=True)
+    except Exception:
+        return str(value)
+
+
+def _iter_failed_fixture_phase_records(failure: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    """Extract failed fixture-matrix phase records from a typed failure."""
+    out: list[Mapping[str, Any]] = []
+    actual = failure.get("actual")
+    if not isinstance(actual, Mapping):
+        actual = failure.get("details") if isinstance(failure.get("details"), Mapping) else {}
+    if not isinstance(actual, Mapping):
+        return out
+
+    failures = actual.get("failures")
+    if isinstance(failures, list):
+        for item in failures:
+            if isinstance(item, Mapping):
+                out.append(item)
+
+    fixtures = actual.get("fixtures")
+    if isinstance(fixtures, list):
+        for fixture in fixtures:
+            if not isinstance(fixture, Mapping):
+                continue
+            fixture_name = fixture.get("name") or fixture.get("fixture") or ""
+            phase_results = fixture.get("results")
+            if not isinstance(phase_results, list):
+                continue
+            for phase in phase_results:
+                if isinstance(phase, Mapping) and phase.get("ok") is False:
+                    merged = dict(phase)
+                    if fixture_name and "fixture" not in merged:
+                        merged["fixture"] = fixture_name
+                    out.append(merged)
+
+    deduped: list[Mapping[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for item in out:
+        key = (str(item.get("fixture") or item.get("name") or ""), str(item.get("phase") or ""), str(item.get("log_path") or ""))
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
+    return deduped
+
+
+def _primary_fixture_phase_failure(failure: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    failures = _iter_failed_fixture_phase_records(failure)
+    if not failures:
+        return None
+    return sorted(
+        failures,
+        key=lambda item: (FIXTURE_PHASE_ORDER.get(str(item.get("phase") or ""), 99), str(item.get("fixture") or item.get("name") or "")),
+    )[0]
+
+
+def _referenced_logs_from_packet_text(log_text: str) -> dict[str, str]:
+    """Return map of log path -> embedded full text from a failure packet."""
+    obj = _decode_first_json_object(log_text)
+    out: dict[str, str] = {}
+    if not isinstance(obj, Mapping):
+        return out
+    extra = obj.get("extra")
+    if not isinstance(extra, Mapping):
+        return out
+    typed = extra.get("typed_verifier")
+    if not isinstance(typed, Mapping):
+        return out
+    logs = typed.get("referenced_logs")
+    if not isinstance(logs, list):
+        return out
+    for record in logs:
+        if not isinstance(record, Mapping):
+            continue
+        path = str(record.get("path") or "")
+        text = str(record.get("text") or "")
+        if path and text:
+            out[path] = text
+            out[Path(path).name] = text
+    return out
+
+
+def _diagnostic_text_for_phase(phase_record: Mapping[str, Any], log_text: str) -> str:
+    pieces = [
+        _as_text(phase_record.get("stdout_tail")),
+        _as_text(phase_record.get("stderr_tail")),
+    ]
+    raw_path = str(phase_record.get("log_path") or "")
+    embedded_logs = _referenced_logs_from_packet_text(log_text)
+    if raw_path in embedded_logs:
+        pieces.append(embedded_logs[raw_path])
+    base = Path(raw_path).name if raw_path else ""
+    if base and base in embedded_logs:
+        pieces.append(embedded_logs[base])
+    pieces.append(log_text)
+    return "\n".join(p for p in pieces if p)
+
+
+def _fixture_matrix_category(failure: Mapping[str, Any], log_text: str, reason: str) -> tuple[str, str]:
+    phase_record = _primary_fixture_phase_failure(failure)
+    if phase_record is None:
+        return "hardware_or_result", reason + "; fixture-matrix failure did not expose phase records"
+    phase = str(phase_record.get("phase") or "")
+    fixture = str(phase_record.get("fixture") or phase_record.get("name") or "<unknown-fixture>")
+    diagnostic = _diagnostic_text_for_phase(phase_record, log_text)
+    prefix = f"{reason}; first failed fixture phase is {fixture}:{phase}"
+
+    if phase == "generate":
+        return "typed_verifier", prefix + "; generation failures are semantic/codegen and route to GPT Pro"
+    if phase == "assemble":
+        return "qasm_assembler", prefix + "; vc4asm/qasm failures route to GPT Pro"
+    if phase == "expected_json":
+        return "hardware_or_result", prefix + "; result mismatches route to GPT Pro"
+    if phase == "build":
+        if MECHANICAL_COMPILE_RE.search(diagnostic) or "arm-none-eabi-" in diagnostic or "make:" in diagnostic.lower():
+            return "mechanical_candidate_build", prefix + "; C/GCC/linker build diagnostics are narrow mechanical repair"
+        return "candidate_build_semantic", prefix + "; build phase lacked obvious compile/link diagnostics"
+    if phase == "candidate_hardware":
+        if (MECHANICAL_COMPILE_RE.search(diagnostic) or "arm-none-eabi-" in diagnostic or "make:" in diagnostic.lower()) and not RUNTIME_OR_HARDWARE_RE.search(diagnostic):
+            return "mechanical_candidate_build", prefix + "; candidate_hardware failed during make/compile, before semantic hardware execution"
+        return "hardware_or_result", prefix + "; candidate_hardware runtime/hardware failures route to GPT Pro"
+    return "hardware_or_result", prefix + "; unrecognized fixture phase routes to GPT Pro"
+
+
+def _route_details_for_typed_failure(gate: str, log_text: str) -> dict[str, Any]:
+    if not gate.lower().startswith("typed-verifier:"):
+        return {}
+    failure = _typed_verifier_first_failure(log_text)
+    if not isinstance(failure, Mapping):
+        return {}
+    details: dict[str, Any] = {
+        "typed_mechanism": str(failure.get("mechanism", "")),
+        "typed_verification_id": str(failure.get("verification_id", "")),
+    }
+    if str(failure.get("mechanism", "")) == "fixture_matrix":
+        phase_record = _primary_fixture_phase_failure(failure)
+        if phase_record is not None:
+            details.update({
+                "fixture": str(phase_record.get("fixture") or phase_record.get("name") or ""),
+                "phase": str(phase_record.get("phase") or ""),
+                "diagnostic_log_path": str(phase_record.get("log_path") or ""),
+                "phase_exit_code": phase_record.get("exit_code"),
+                "phase_timed_out": bool(phase_record.get("timed_out", False)),
+            })
+    return details
 
 
 def _typed_verifier_category(gate: str, log_text: str) -> tuple[str, str] | None:
@@ -98,11 +292,8 @@ def _typed_verifier_category(gate: str, log_text: str) -> tuple[str, str] | None
     message = str(failure.get("message", ""))
     reason = f"Typed verifier failed at {vid or '<unknown>'} ({mechanism or '<unknown>'}): {message}"
 
-    # Keep semantic/product checks on GPT Pro, but allow narrowly mechanical
-    # verifier mechanisms to use existing Codex budgets.  This preserves the
-    # original routing principle: FileCheck/content, qasm semantics, hardware,
-    # and source-product holes go to GPT; compiler/toolchain plumbing can go to
-    # Codex once.
+    if mechanism == "fixture_matrix":
+        return _fixture_matrix_category(failure, log_text, reason)
     if mechanism == "build":
         return "mechanical_compile", reason
     if mechanism == "c_syntax":
@@ -123,13 +314,15 @@ def _typed_verifier_category(gate: str, log_text: str) -> tuple[str, str] | None
     if mechanism == "vc4asm_assemble":
         return "qasm_assembler", reason
     if mechanism == "candidate_phase":
+        blob = json.dumps(failure) + "\n" + log_text
+        if MECHANICAL_COMPILE_RE.search(blob) or "arm-none-eabi-" in blob:
+            return "mechanical_candidate_build", reason + "; candidate phase has compile/link diagnostics"
         return "candidate_build_semantic", reason
     if mechanism == "hardware_run" or mechanism == "expected_json_result":
         return "hardware_or_result", reason
     if mechanism == "reference_immutable":
         return "patch_policy_or_apply", reason
     return "typed_verifier", reason
-
 
 def _category_attempts_used(category: str, *, codex_attempts_used: int, codex_attempts_by_category: Mapping[str, Any] | None) -> int:
     if codex_attempts_by_category is None:
@@ -142,11 +335,14 @@ def _category_attempts_used(category: str, *, codex_attempts_used: int, codex_at
 
 def _category_budget(category: str, slice_entry: Mapping[str, Any], *, max_codex: int) -> int:
     raw = slice_entry.get("mechanical_budgets", {})
-    if isinstance(raw, Mapping) and category in raw:
-        try:
-            return int(raw.get(category, 0) or 0)
-        except Exception:
-            return 0
+    if isinstance(raw, Mapping):
+        for key in (category, *MECHANICAL_BUDGET_ALIASES.get(category, ())) :
+            if key not in raw:
+                continue
+            try:
+                return int(raw.get(key, 0) or 0)
+            except Exception:
+                return 0
     if category in DEFAULT_MECHANICAL_BUDGETS:
         return min(max_codex, DEFAULT_MECHANICAL_BUDGETS[category]) if max_codex > 0 else 0
     return 0
@@ -233,8 +429,15 @@ def classify_failure(
 ) -> dict[str, Any]:
     policy = str(slice_entry.get("codex_policy", "never"))
     max_codex = int(slice_entry.get("max_codex_attempts", 0) or 0)
+    raw_max_codex = os.environ.get("VC4_MAX_CODEX_ATTEMPTS") or os.environ.get("VC4_M2_MAX_CODEX_ATTEMPTS")
+    if raw_max_codex:
+        try:
+            max_codex = int(raw_max_codex)
+        except Exception:
+            max_codex = 0
     hardware_required = bool(slice_entry.get("hardware_required", False))
     category, reason = _normalized_category(stage=stage, gate=gate, log_text=log_text, hardware_required=hardware_required)
+    route_details = _route_details_for_typed_failure(gate, log_text)
     used_for_category = _category_attempts_used(category, codex_attempts_used=codex_attempts_used, codex_attempts_by_category=codex_attempts_by_category)
     budget_for_category = _category_budget(category, slice_entry, max_codex=max_codex)
 
@@ -246,7 +449,7 @@ def classify_failure(
     elif policy in CODEX_POLICIES_NEVER or not _is_mechanical_category(category):
         route = Route.GPT
 
-    return {
+    result = {
         "route": route,
         "category": category,
         "reason": reason,
@@ -256,15 +459,19 @@ def classify_failure(
         "category_attempts_used": used_for_category,
         "category_budget": budget_for_category,
         "max_codex_attempts": max_codex,
+        "codex_needs_gpt_sentinel": CODEX_NEEDS_GPT_SENTINEL,
         "stage": stage,
         "gate": gate,
     }
+    result.update(route_details)
+    return result
 
 
 def classify_from_packet(packet: Mapping[str, Any], slice_entry: Mapping[str, Any], *, codex_attempts_used: int = 0, codex_attempts_by_category: Mapping[str, Any] | None = None) -> dict[str, Any]:
-    log_text = str(packet.get("log_tail", ""))
-    if not log_text and isinstance(packet.get("extra"), Mapping):
-        log_text = json.dumps(packet.get("extra"), sort_keys=True)
+    # Use the full packet, not just log_tail: M2 failure packets embed the typed
+    # verifier report plus full failed phase logs under extra.  The routing
+    # decision depends on fixture phase and build-log diagnostics.
+    log_text = json.dumps(packet, sort_keys=True)
     return classify_failure(
         slice_entry=slice_entry,
         stage=str(packet.get("stage", "")),
