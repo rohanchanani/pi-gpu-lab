@@ -10,7 +10,7 @@
       "compiler/build/bin"
     ],
     "timeout_sec": 7200,
-    "hardware_timeout_sec": 120,
+    "hardware_timeout_sec": 60,
     "fixture_matrices": {
       "smoke_runtime": [
         "minimal_thrend",

@@ -150,8 +150,9 @@ class VerifierContext:
         self.timeout_sec = int(args.timeout_sec or defaults.get("timeout_sec", 7200))
         self.hardware_timeout_sec = int(
             args.hardware_timeout_sec
+            or os.environ.get("VC4_HW_ATTEMPT_TIMEOUT_SEC")
             or os.environ.get("VC4_HARDWARE_TIMEOUT_SEC")
-            or defaults.get("hardware_timeout_sec", 120)
+            or defaults.get("hardware_timeout_sec", 60)
         )
         self.dry_run = bool(args.dry_run)
         self.no_hardware = bool(args.no_hardware)
@@ -2394,7 +2395,7 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--out", help="write JSON report to this path")
     parser.add_argument("--state-root", help="override generated verifier state root")
     parser.add_argument("--timeout-sec", type=int, default=0)
-    parser.add_argument("--hardware-timeout-sec", type=int, default=0, help="default timeout for hardware-like verifications (default: spec defaults.hardware_timeout_sec, env VC4_HARDWARE_TIMEOUT_SEC, or 120)")
+    parser.add_argument("--hardware-timeout-sec", type=int, default=0, help="default timeout for hardware-like verifications (default: env VC4_HW_ATTEMPT_TIMEOUT_SEC, env VC4_HARDWARE_TIMEOUT_SEC, spec defaults.hardware_timeout_sec, or 60)")
     parser.add_argument("--keep-going", action="store_true", help="run all requested verifications even after failures")
     parser.add_argument("--no-hardware", action="store_true", help="skip verifications marked requires_hardware")
     parser.add_argument("--dry-run", action="store_true", help="validate command construction without running external commands")

@@ -16,7 +16,7 @@ environment:
   VC4_PI_POWER_CYCLE_SLEEP_SEC  default: 1
   VC4_SKIP_POWER_CYCLE=1        skip power cycle, for self-test/manual debug only
   VC4_RUN_SH_MAX_ATTEMPTS       default: 3
-  VC4_HW_ATTEMPT_TIMEOUT_SEC   default: 120; timeout for one side run.sh attempt
+  VC4_HW_ATTEMPT_TIMEOUT_SEC   default: 60; timeout for one side run.sh attempt
 USAGE
 }
 
@@ -91,7 +91,7 @@ run_one() {
   local log_path="${4:-$test_root/$side/run.log}"
   local side_dir="$test_root/$side"
   local max_attempts="${VC4_RUN_SH_MAX_ATTEMPTS:-3}"
-  local attempt_timeout="${VC4_HW_ATTEMPT_TIMEOUT_SEC:-120}"
+  local attempt_timeout="${VC4_HW_ATTEMPT_TIMEOUT_SEC:-60}"
   local input_mlir="$test_root/input.mlir"
 
   [[ "$side" == "reference" || "$side" == "candidate" ]] || fail "side must be reference or candidate"
@@ -99,7 +99,7 @@ run_one() {
   [[ -f "$expected_json" ]] || fail "missing expected json: $expected_json"
   [[ -f "$side_dir/run.sh" ]] || fail "missing side runner: $side_dir/run.sh"
   [[ "$max_attempts" =~ ^[0-9]+$ && "$max_attempts" -ge 1 ]] || max_attempts=1
-  [[ "$attempt_timeout" =~ ^[0-9]+$ && "$attempt_timeout" -ge 1 ]] || attempt_timeout=120
+  [[ "$attempt_timeout" =~ ^[0-9]+$ && "$attempt_timeout" -ge 1 ]] || attempt_timeout=60
 
   mkdir -p "$(dirname "$log_path")"
   run_power_cycle

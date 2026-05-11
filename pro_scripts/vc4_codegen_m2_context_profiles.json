@@ -819,6 +819,10 @@
         },
         {
           "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
           "path": "pro_scripts/vc4_codegen_m2_verifications.json"
         },
         {
@@ -836,6 +840,10 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir"
         },
         {
           "kind": "file",
@@ -1112,6 +1120,14 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_runtime.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_runtime.h"
         },
         {
           "kind": "file",

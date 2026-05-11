@@ -1521,8 +1521,9 @@ Existing M1 mechanisms can be reused where behavior is identical.
 ```bash
 cd ~/Downloads/pi-gpu-lab
 export PATH="$PWD/compiler/build/bin:$PATH"
-export VC4_HW_ATTEMPT_TIMEOUT_SEC=120
-export VC4_RUN_SH_MAX_ATTEMPTS=2
+export VC4_HW_ATTEMPT_TIMEOUT_SEC=60
+export VC4_HARDWARE_TIMEOUT_SEC=60
+export VC4_RUN_SH_MAX_ATTEMPTS=3
 
 # Baseline before M2 changes.
 git status --short --untracked-files=all

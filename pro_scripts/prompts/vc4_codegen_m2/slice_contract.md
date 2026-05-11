@@ -21,4 +21,6 @@ Reference/oracle policy: existing references and expected JSON are immutable. Sl
 
 Scheduling policy: M2 may implement runtime scheduling for already-scheduled kernels. M2 must not implement `gpu` dialect lowering, register allocation, or structured VC4 instruction scheduling.
 
+M2-08 cooperative-block resource work may touch VC4 dialect IR verifier files for static resource metadata validation, in addition to target/runtime/support files.
+
 Bundle layout policy: root-level `kernel.qasm` is an M1 artifact spelling and is not canonical for M2. Single-kernel M2 bundles must use `manifest.json` schema v2 with `kernels.length == 1`, and all QASM checks must use `kernels[].qasm_path`.

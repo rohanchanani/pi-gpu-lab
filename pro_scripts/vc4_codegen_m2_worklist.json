@@ -599,12 +599,17 @@
         "Do not synthesize barrier protocol from structured IR; that is M3."
       ],
       "allowed_paths": [
+        "compiler/include/vc4/Dialect/VC4/IR/**",
         "compiler/include/vc4/Target/VC4/**",
+        "compiler/lib/Dialect/VC4/IR/**",
         "compiler/lib/Target/VC4/**",
         "compiler/tools/vc4-codegen/**",
+        "compiler/test/Dialect/VC4/**",
         "compiler/test/CodeGen/VC4/Emit/**",
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/**",
         "compiler/docs/codegen/**",
         "pro_scripts/vc4_codegen_m1_verifier.py",
         "pro_scripts/vc4_codegen_m2_verifier.py",
