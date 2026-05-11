@@ -738,35 +738,49 @@
           "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Types.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
         }
       ],
       "extractors": [],
-      "max_chars_ignored_by_no_truncation_patch": 650000,
-      "max_chars": 650000,
+      "max_chars_ignored_by_no_truncation_patch": 1000000,
+      "max_chars": 1000000,
       "workflow_notes": [
-        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents.",
+        "Post-slice7-to-10 context hardening: no existing_codegen_files extractor and no fixture_tree bulk expansion; use explicit hand-selected codegen, support, docs, lit, runtime-unit, and core fixture files only."
       ],
       "_post_slice7_slimmed_context_removed_counts": {
         "fixture_tree_entries_removed": 5,
         "reference_or_share_fixture_files_removed": 70
+      },
+      "_post_slice7_to_10_handselected_context": {
+        "existing_codegen_extractors_removed_in_this_run": 0,
+        "fixture_tree_entries_removed_in_this_run": 5,
+        "prompt_web_transport_limit_default_chars": 1000000
       }
     },
     "cooperative_block": {
@@ -1076,39 +1090,49 @@
           "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Types.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
         }
       ],
       "extractors": [],
-      "max_chars_ignored_by_no_truncation_patch": 650000,
-      "max_chars": 650000,
+      "max_chars_ignored_by_no_truncation_patch": 1000000,
+      "max_chars": 1000000,
       "workflow_notes": [
-        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents.",
+        "Post-slice7-to-10 context hardening: no existing_codegen_files extractor and no fixture_tree bulk expansion; use explicit hand-selected codegen, support, docs, lit, runtime-unit, and core fixture files only."
       ],
       "_post_slice7_slimmed_context_removed_counts": {
         "fixture_tree_entries_removed": 6,
         "reference_or_share_fixture_files_removed": 83
+      },
+      "_post_slice7_to_10_handselected_context": {
+        "existing_codegen_extractors_removed_in_this_run": 0,
+        "fixture_tree_entries_removed_in_this_run": 6,
+        "prompt_web_transport_limit_default_chars": 1000000
       }
     },
     "fixture_matrix": {
@@ -1778,99 +1802,49 @@
           "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Types.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
         }
       ],
       "extractors": [],
-      "max_chars_ignored_by_no_truncation_patch": 650000,
-      "max_chars": 650000,
+      "max_chars_ignored_by_no_truncation_patch": 1000000,
+      "max_chars": 1000000,
       "workflow_notes": [
-        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents.",
+        "Post-slice7-to-10 context hardening: no existing_codegen_files extractor and no fixture_tree bulk expansion; use explicit hand-selected codegen, support, docs, lit, runtime-unit, and core fixture files only."
       ],
       "_post_slice7_slimmed_context_removed_counts": {
         "fixture_tree_entries_removed": 4,
         "reference_or_share_fixture_files_removed": 297
+      },
+      "_post_slice7_to_10_handselected_context": {
+        "existing_codegen_extractors_removed_in_this_run": 0,
+        "fixture_tree_entries_removed_in_this_run": 21,
+        "prompt_web_transport_limit_default_chars": 1000000
       }
     },
     "final_acceptance": {
@@ -2540,105 +2514,56 @@
           "path": "compiler/test/CodeGen/VC4/Emit/emit-saxpy-full-qasm-artifact-regression.mlir"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output"
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Types.td"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/launch_abi_unit_test.c"
         },
         {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_16"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_basic"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_strided_load"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_setup_clobber"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum"
-        },
-        {
-          "kind": "fixture_tree",
-          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum"
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
         }
       ],
       "extractors": [
         "git_diff_summary"
       ],
-      "max_chars_ignored_by_no_truncation_patch": 650000,
-      "max_chars": 650000,
+      "max_chars_ignored_by_no_truncation_patch": 1000000,
+      "max_chars": 1000000,
       "workflow_notes": [
-        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents."
+        "Post-slice7 transport hardening: include complete selected files only, but do not expand fixture_tree/reference/share trees into the prompt. Core fixture input.mlir, expected.json, run.sh, candidate harness/run files, and full failure logs remain included so GPT must not guess fixture contents.",
+        "Post-slice7-to-10 context hardening: no existing_codegen_files extractor and no fixture_tree bulk expansion; use explicit hand-selected codegen, support, docs, lit, runtime-unit, and core fixture files only."
       ],
       "_post_slice7_slimmed_context_removed_counts": {
         "fixture_tree_entries_removed": 4,
         "reference_or_share_fixture_files_removed": 297
+      },
+      "_post_slice7_to_10_handselected_context": {
+        "existing_codegen_extractors_removed_in_this_run": 0,
+        "fixture_tree_entries_removed_in_this_run": 21,
+        "prompt_web_transport_limit_default_chars": 1000000
       }
     }
   },
   "notes": [
-    "Post-slice7 workflow recovery: large prompts are avoided by narrowing fixture context to core full files and full failure logs; no selected file is truncated."
+    "Post-slice7 workflow recovery: large prompts are avoided by narrowing fixture context to core full files and full failure logs; no selected file is truncated.",
+    "Post-slice7-to-10 workflow recovery: remaining implementation profiles avoid broad existing_codegen_files and fixture_tree prompt expansion; important lost context is explicitly hand-selected."
   ]
 }
