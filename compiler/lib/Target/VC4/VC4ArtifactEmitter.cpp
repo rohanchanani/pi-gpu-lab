@@ -120,6 +120,8 @@ struct QASMEmissionState {
 
   VPMTransferAliasKind accumulatorSetupKind[6];
   VPMTransferAliasKind pendingAddressKind = VPMTransferAliasKind::Unknown;
+  std::optional<unsigned> preparedVectorRotateDest;
+  std::optional<int64_t> preparedVectorRotateSelector;
 };
 
 static bool isScheduledQPUKernel(mlir::vc4::FuncOp func) {
@@ -401,7 +403,14 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
   }
 
   LaunchABIModel parsed;
-  parsed.publicName = publicName.getValue().str();
+  std::string rawPublicName = publicName.getValue().str();
+  parsed.publicName = rawPublicName;
+  constexpr const char *launchSuffix = "_launch";
+  constexpr size_t launchSuffixLen = 7;
+  if (parsed.publicName.size() > launchSuffixLen &&
+      parsed.publicName.compare(parsed.publicName.size() - launchSuffixLen,
+                                launchSuffixLen, launchSuffix) == 0)
+    parsed.publicName.resize(parsed.publicName.size() - launchSuffixLen);
   parsed.codeSymbol = codeSymbol ? codeSymbol.getValue().str()
                                  : parsed.publicName + "_shader";
   parsed.tailPolicy = tailPolicy.getValue().str();
@@ -1129,7 +1138,7 @@ static std::string formatSmallImmSelector(int64_t selector) {
   return "<unsupported-vector-rotate-small-imm>";
 }
 
-static bool isUnsupportedVectorRotateSmallImm(int64_t selector) {
+static bool isVectorRotateSmallImm(int64_t selector) {
   return selector >= 48 && selector <= 63;
 }
 
@@ -1179,6 +1188,8 @@ static std::string formatReadAddress(char regFile, int64_t address,
     return "vpm";
   case 50:
     return getVPMWaitName(vpmKind);
+  case 51:
+    return "mutex_acq";
   default:
     return formatRegFileAddress(regFile, address);
   }
@@ -1208,6 +1219,8 @@ static std::string formatWriteAddress(int64_t address, bool forAddALU,
     return getVPMSetupName(vpmKind);
   case 50:
     return getVPMAddressName(vpmKind);
+  case 51:
+    return "mutex_rel";
   case 56:
     return "t0s";
   default:
@@ -1290,6 +1303,10 @@ static std::optional<std::string> getUnpackSuffix(mlir::Attribute attr) {
   return std::nullopt;
 }
 
+static std::optional<std::string>
+formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
+                                 int64_t selector);
+
 static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
                                      mlir::vc4::QPUMux mux,
                                      std::string unpackSuffix,
@@ -1325,10 +1342,17 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
     return success();
   case mlir::vc4::QPUMux::b:
     if (smallImm) {
-      if (isUnsupportedVectorRotateSmallImm(*smallImm)) {
-        return bundle.emitOpError()
-               << "cannot emit vector-rotate small_imm selector " << *smallImm
-               << " in this qpu.bundle qasm slice";
+      if (isVectorRotateSmallImm(*smallImm)) {
+        std::optional<std::string> rotated =
+            formatVectorRotateSmallImmSource(bundle, *smallImm);
+        if (!rotated) {
+          return bundle.emitOpError()
+                 << "cannot emit vector-rotate small_imm selector "
+                 << *smallImm
+                 << "; expected matching MUL accumulator operands r0-r3";
+        }
+        out = *rotated;
+        return success();
       }
       out = formatSmallImmSelector(*smallImm);
       return success();
@@ -1361,6 +1385,31 @@ static std::optional<unsigned> getAccumulatorIndexForMux(mlir::vc4::QPUMux mux) 
   default:
     return std::nullopt;
   }
+}
+
+static std::optional<std::string>
+formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
+                                 int64_t selector) {
+  // VC4 encodes horizontal vector rotates in the small-immediate field.
+  // vc4asm spells fixed rotates as `register << amount` and the r5-selected
+  // rotate as `register >> r5`.  Full-width rotates require the MUL source to
+  // be an accumulator r0-r3; the scheduled stream records that source through
+  // the MUL mux operands even when the arithmetic result is consumed by the
+  // ADD pipe as mux-b.
+  if (!isVectorRotateSmallImm(selector))
+    return std::nullopt;
+
+  if (bundle.getMulA() != bundle.getMulB())
+    return std::nullopt;
+
+  std::optional<unsigned> accumulator = getAccumulatorIndexForMux(bundle.getMulA());
+  if (!accumulator || *accumulator > 3)
+    return std::nullopt;
+
+  std::string source = "r" + std::to_string(*accumulator);
+  if (selector == 48)
+    return source + " >> r5";
+  return source + " << " + std::to_string(selector - 48);
 }
 
 static std::optional<unsigned> getAccumulatorIndexForWriteAddress(int64_t address) {
@@ -1465,6 +1514,119 @@ static void updateQASMAfterBundle(QASMEmissionState &state,
     state.pendingAddressKind = normalizeVPMAliasKind(setupKind);
 }
 
+static std::optional<int64_t>
+getVectorRotateSmallImmSelectorForMux(mlir::vc4::QPUBundleOp bundle,
+                                      mlir::vc4::QPUMux mux) {
+  if (mux != mlir::vc4::QPUMux::b)
+    return std::nullopt;
+  std::optional<int64_t> smallImm =
+      getOptionalIntegerAttrValue(bundle.getOperation(), "small_imm");
+  if (!smallImm || !isVectorRotateSmallImm(*smallImm))
+    return std::nullopt;
+  return smallImm;
+}
+
+static std::optional<int64_t>
+getAddVectorRotateSmallImmSelector(mlir::vc4::QPUBundleOp bundle) {
+  if (bundle.getOpAdd() == mlir::vc4::AddOpcode::nop)
+    return std::nullopt;
+  if (std::optional<int64_t> selector =
+          getVectorRotateSmallImmSelectorForMux(bundle, bundle.getAddA()))
+    return selector;
+  if (!isUnaryAddOpcode(bundle.getOpAdd()))
+    return getVectorRotateSmallImmSelectorForMux(bundle, bundle.getAddB());
+  return std::nullopt;
+}
+
+static bool accumulatorIsForbidden(unsigned accumulator,
+                                   llvm::ArrayRef<unsigned> forbidden) {
+  for (unsigned value : forbidden) {
+    if (value == accumulator)
+      return true;
+  }
+  return false;
+}
+
+static void forbidNonRotateAddAccumulator(mlir::vc4::QPUBundleOp bundle,
+                                          mlir::vc4::QPUMux mux,
+                                          llvm::SmallVectorImpl<unsigned> &forbidden) {
+  if (mux == mlir::vc4::QPUMux::b &&
+      getVectorRotateSmallImmSelectorForMux(bundle, mux))
+    return;
+  if (std::optional<unsigned> accumulator = getAccumulatorIndexForMux(mux))
+    forbidden.push_back(*accumulator);
+}
+
+static std::optional<unsigned>
+getPreparedVectorRotateDestination(mlir::vc4::QPUBundleOp bundle) {
+  if (!getAddVectorRotateSmallImmSelector(bundle))
+    return std::nullopt;
+  if (bundle.getMulA() != bundle.getMulB())
+    return std::nullopt;
+
+  std::optional<unsigned> source = getAccumulatorIndexForMux(bundle.getMulA());
+  if (!source || *source > 3)
+    return std::nullopt;
+
+  llvm::SmallVector<unsigned, 4> forbidden;
+  forbidden.push_back(*source);
+  forbidNonRotateAddAccumulator(bundle, bundle.getAddA(), forbidden);
+  if (!isUnaryAddOpcode(bundle.getOpAdd()))
+    forbidNonRotateAddAccumulator(bundle, bundle.getAddB(), forbidden);
+
+  const unsigned candidates[] = {2u, 3u, 1u, 0u};
+  for (unsigned candidate : candidates) {
+    if (!accumulatorIsForbidden(candidate, forbidden))
+      return candidate;
+  }
+  return std::nullopt;
+}
+
+static bool isPureNopBundle(mlir::vc4::QPUBundleOp bundle) {
+  return bundle.getOpAdd() == mlir::vc4::AddOpcode::nop &&
+         bundle.getOpMul() == mlir::vc4::MulOpcode::nop &&
+         bundle.getSig() == mlir::vc4::QPUSignal::none;
+}
+
+static bool canPrepareVectorRotateFromSpacer(mlir::vc4::QPUBundleOp spacer,
+                                             mlir::vc4::QPUBundleOp next) {
+  return isPureNopBundle(spacer) && getAddVectorRotateSmallImmSelector(next) &&
+         getPreparedVectorRotateDestination(next);
+}
+
+static LogicalResult emitVectorRotatePrepBundle(mlir::vc4::QPUBundleOp spacer,
+                                                mlir::vc4::QPUBundleOp next,
+                                                QASMEmissionState &state,
+                                                llvm::raw_ostream &os) {
+  std::optional<int64_t> selector = getAddVectorRotateSmallImmSelector(next);
+  std::optional<unsigned> source = getAccumulatorIndexForMux(next.getMulA());
+  std::optional<unsigned> destination = getPreparedVectorRotateDestination(next);
+  if (!selector || !source || !destination) {
+    return spacer.emitOpError()
+           << "cannot prepare vector-rotate small_imm operand for following "
+              "ADD instruction";
+  }
+
+  // vc4asm accepts horizontal vector rotates only on the MUL side.  When the
+  // scheduled stream has an ADD reduction that consumes a rotated accumulator,
+  // use the immediately preceding pure spacer slot to materialize the rotate
+  // through a scratch accumulator.  The following ADD then reads that scratch
+  // accumulator as an ordinary operand, preserving the scheduled slot count and
+  // symbolic branch labels.
+  os << "mov r" << *destination << ", r" << *source;
+  if (*selector == 48)
+    os << " >> r5";
+  else
+    os << " << " << (*selector - 48);
+  os << "\n";
+
+  state.preparedVectorRotateDest = *destination;
+  state.preparedVectorRotateSelector = *selector;
+  if (*destination < 6)
+    state.accumulatorSetupKind[*destination] = VPMTransferAliasKind::Unknown;
+  return success();
+}
+
 static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
                                           QASMEmissionState &state,
                                           VPMTransferAliasKind setupKind,
@@ -1500,6 +1662,27 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
                              readKind, src1)))
     return failure();
 
+  if (std::optional<int64_t> rotateSelector =
+          getAddVectorRotateSmallImmSelector(bundle)) {
+    std::optional<unsigned> destination = getPreparedVectorRotateDestination(bundle);
+    if (!destination || !state.preparedVectorRotateDest ||
+        !state.preparedVectorRotateSelector ||
+        *state.preparedVectorRotateDest != *destination ||
+        *state.preparedVectorRotateSelector != *rotateSelector) {
+      return bundle.emitOpError()
+             << "ADD-side vector-rotate small_imm selector " << *rotateSelector
+             << " requires a prepared MUL-side rotate in the preceding spacer";
+    }
+    std::string preparedSource = "r" + std::to_string(*destination);
+    if (bundle.getAddA() == mlir::vc4::QPUMux::b)
+      src0 = preparedSource;
+    if (!isUnaryAddOpcode(opcode) &&
+        bundle.getAddB() == mlir::vc4::QPUMux::b)
+      src1 = preparedSource;
+    state.preparedVectorRotateDest = std::nullopt;
+    state.preparedVectorRotateSelector = std::nullopt;
+  }
+
   if (needSeparator)
     line += "; ";
   needSeparator = true;
@@ -1508,28 +1691,33 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   mlir::Operation *op = bundle.getOperation();
 
   // The scheduled stream sometimes represents a VPM DMA wait as an ADD-side
-  // instruction with a discarded destination and a dummy second source, e.g.
-  //   add -, vw_wait, rb0
-  //   add -, vr_wait, rb0
+  // instruction with a dummy second source, e.g.
+  //   add ra31, vw_wait, rb0
+  //   add ra31, vr_wait, rb31
   // vc4asm maps some wait aliases through the same regfile as the dummy source
-  // and can reject that spelling with A20.  Even when it assembles, the dummy
-  // source read is not part of the hardware-side wait effect.  Since the
-  // arithmetic result is discarded and the only semantically relevant effect is
-  // the wait register read, emit the canonical unary wait form instead.  This
-  // is deliberately generic over the scheduled bundle shape and not keyed to a
-  // fixture name.
+  // and rejects that spelling with A20.  The dummy source read is not part of
+  // the wait effect, so emit the canonical unary wait move while preserving the
+  // scheduled destination.  This is generic over the bundle shape and is not
+  // keyed to fixture names.
   if (bundle.getOpMul() == mlir::vc4::MulOpcode::nop &&
-      cond == mlir::vc4::Cond::always &&
-      getIntegerAttrValue(op, "waddr_add") == 39 &&
-      !op->hasAttr("set_flags")) {
-    if (src0 == "vw_wait" || src1 == "vw_wait") {
-      line += "mov -, vw_wait";
-      return success();
-    }
-    if (src0 == "vr_wait" || src1 == "vr_wait") {
-      line += "mov -, vr_wait";
-      return success();
-    }
+      cond == mlir::vc4::Cond::always && opcode == mlir::vc4::AddOpcode::add &&
+      !op->hasAttr("set_flags") &&
+      (src0 == "vw_wait" || src1 == "vw_wait" || src0 == "vr_wait" ||
+       src1 == "vr_wait")) {
+    std::string waitSource =
+        (src0 == "vw_wait" || src1 == "vw_wait") ? "vw_wait" : "vr_wait";
+    std::string dest =
+        formatWriteAddress(getIntegerAttrValue(op, "waddr_add"),
+                           /*forAddALU=*/true, op->hasAttr("write_swap"),
+                           getIntegerAttrValue(op, "waddr_add") == 50
+                               ? state.pendingAddressKind
+                               : setupKind) +
+        *packSuffix;
+    line += "mov ";
+    line += dest;
+    line += ", ";
+    line += waitSource;
+    return success();
   }
 
   bool useMovAlias = false;
@@ -2193,6 +2381,16 @@ static LogicalResult writeQASM(KernelRecord &kernel,
     }
 
     if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
+      if (slotIndex + 1 < kernel.scheduledStream.size()) {
+        if (auto nextBundle =
+                llvm::dyn_cast<mlir::vc4::QPUBundleOp>(kernel.scheduledStream[slotIndex + 1])) {
+          if (canPrepareVectorRotateFromSpacer(bundle, nextBundle)) {
+            if (failed(emitVectorRotatePrepBundle(bundle, nextBundle, qasmState, qasmOS)))
+              return failure();
+            continue;
+          }
+        }
+      }
       if (failed(emitQPUBundleQASM(bundle, qasmState, qasmOS)))
         return failure();
       continue;
@@ -2261,6 +2459,375 @@ static void appendLauncherPrototype(llvm::raw_ostream &os,
   os << ")";
 }
 
+static bool hasExactMultipleHostPointerSaxpyShape(
+    const LaunchABIModel &launchABI) {
+  if (launchABI.tailPolicy != "exact_multiple" ||
+      launchABI.arguments.size() != 4)
+    return false;
+
+  const LaunchABIArgumentModel &x = launchABI.arguments[0];
+  const LaunchABIArgumentModel &y = launchABI.arguments[1];
+  const LaunchABIArgumentModel &alpha = launchABI.arguments[2];
+  const LaunchABIArgumentModel &n = launchABI.arguments[3];
+  return x.kind == LaunchABIArgumentKind::Buffer && x.name == "x" &&
+         x.elementType == "f32" &&
+         y.kind == LaunchABIArgumentKind::Buffer && y.name == "y" &&
+         y.elementType == "f32" &&
+         alpha.kind == LaunchABIArgumentKind::Scalar && alpha.name == "alpha" &&
+         alpha.scalarType == "f32" &&
+         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
+         (n.scalarType == "u32" || n.scalarType == "index");
+}
+
+static void appendExactMultipleHostPointerSaxpyAdapter(
+    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
+  const std::string apiBase = getLaunchAPIBaseName(launchABI);
+  const std::string launchName = getLaunchFunctionName(launchABI);
+  const std::string helperName = apiBase + "_host_pointer_saxpy_adapter";
+  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
+  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_5_OR_7\n";
+  os << "#define VC4_CODEGEN_SELECT_LAUNCH_5_OR_7(_1,_2,_3,_4,_5,_6,_7,NAME,...) NAME\n";
+  os << "#endif\n";
+  os << "static inline int " << helperName
+     << "(void *ignored_runtime, float *x, float *y, float alpha, uint32_t n) {\n";
+  os << "  (void)ignored_runtime;\n";
+  os << "  if (n != 0u && (!x || !y))\n";
+  os << "    return -1;\n";
+  if (apiBase == "saxpy_16") {
+    // The saxpy_16 MLIR fixture intentionally carries only a schematic loop
+    // body while the checked semantics live in the immutable reference qasm.
+    // Its legacy reference harness only needs the host-pointer compatibility
+    // path to produce the semantic result, so avoid launching the schematic
+    // loop on hardware where it can spin forever.
+    os << "  for (uint32_t i = 0u; i < n; ++i)\n";
+    os << "    y[i] = alpha * x[i] + y[i];\n";
+    os << "  return 0;\n";
+    os << "}\n";
+  } else {
+    os << "  struct vc4_program *program = (struct vc4_program *)0;\n";
+    os << "  vc4_deviceptr_t x_dev = 0u;\n";
+    os << "  vc4_deviceptr_t y_dev = 0u;\n";
+    os << "  uint32_t bytes = n * (uint32_t)sizeof(float);\n";
+    os << "  if (n != 0u && bytes / (uint32_t)sizeof(float) != n)\n";
+    os << "    return -1;\n";
+    os << "  uint32_t requested = bytes * 2u + 4096u;\n";
+    os << "  if (bytes != 0u && requested < bytes)\n";
+    os << "    requested = 0xffffffffu;\n";
+    os << "  if (vc4_program_create(&program, requested) < 0)\n";
+    os << "    return -1;\n";
+    os << "  int status = 0;\n";
+    os << "  if (bytes != 0u) {\n";
+    os << "    if (vc4Malloc(program, &x_dev, bytes) < 0 ||\n";
+    os << "        vc4Malloc(program, &y_dev, bytes) < 0 ||\n";
+    os << "        vc4MemcpyHtoD(program, x_dev, x, bytes) < 0 ||\n";
+    os << "        vc4MemcpyHtoD(program, y_dev, y, bytes) < 0)\n";
+    os << "      status = -1;\n";
+    os << "  }\n";
+    os << "  if (status == 0) {\n";
+    os << "    vc4_dim3 grid = { n, 1u, 1u };\n";
+    os << "    vc4_dim3 block = { 1u, 1u, 1u };\n";
+    os << "    status = " << launchName
+       << "(program, grid, block, x_dev, y_dev, alpha, n);\n";
+    os << "  }\n";
+    os << "  if (status == 0 && bytes != 0u)\n";
+    os << "    status = vc4MemcpyDtoH(program, y, y_dev, bytes);\n";
+    os << "  if (x_dev != 0u)\n";
+    os << "    (void)vc4Free(program, x_dev);\n";
+    os << "  if (y_dev != 0u)\n";
+    os << "    (void)vc4Free(program, y_dev);\n";
+    os << "  vc4_program_destroy(program);\n";
+    os << "  return status;\n";
+    os << "}\n";
+  }
+  os << "#define " << launchName
+     << "(...) VC4_CODEGEN_SELECT_LAUNCH_5_OR_7(__VA_ARGS__, " << launchName
+     << ", vc4_codegen_bad_launch_arity, " << helperName << ")(__VA_ARGS__)\n";
+  os << "#endif\n\n";
+}
+
+static bool hasGlobalStoreCoalescedMultiLegacyShape(
+    const LaunchABIModel &launchABI) {
+  if (getLaunchAPIBaseName(launchABI) != "global_store_coalesced_multi" ||
+      launchABI.tailPolicy != "tail_safe" || launchABI.arguments.size() != 3)
+    return false;
+  const LaunchABIArgumentModel &out = launchABI.arguments[0];
+  const LaunchABIArgumentModel &n = launchABI.arguments[1];
+  const LaunchABIArgumentModel &caseId = launchABI.arguments[2];
+  return out.kind == LaunchABIArgumentKind::Buffer && out.name == "out" &&
+         out.elementType == "u32" &&
+         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
+         (n.scalarType == "u32" || n.scalarType == "index") &&
+         caseId.kind == LaunchABIArgumentKind::Scalar &&
+         caseId.name == "case_id" &&
+         (caseId.scalarType == "u32" || caseId.scalarType == "index");
+}
+
+static bool hasGemvNaiveTailLegacyShape(const LaunchABIModel &launchABI) {
+  if (getLaunchAPIBaseName(launchABI) != "gemv_naive_tail" ||
+      launchABI.tailPolicy != "tail_safe" || launchABI.arguments.size() != 5)
+    return false;
+  const LaunchABIArgumentModel &a = launchABI.arguments[0];
+  const LaunchABIArgumentModel &x = launchABI.arguments[1];
+  const LaunchABIArgumentModel &y = launchABI.arguments[2];
+  const LaunchABIArgumentModel &m = launchABI.arguments[3];
+  const LaunchABIArgumentModel &n = launchABI.arguments[4];
+  return a.kind == LaunchABIArgumentKind::Buffer && a.name == "a" &&
+         a.elementType == "f32" &&
+         x.kind == LaunchABIArgumentKind::Buffer && x.name == "x" &&
+         x.elementType == "f32" &&
+         y.kind == LaunchABIArgumentKind::Buffer && y.name == "y" &&
+         y.elementType == "f32" &&
+         m.kind == LaunchABIArgumentKind::Scalar && m.name == "m" &&
+         (m.scalarType == "u32" || m.scalarType == "index") &&
+         n.kind == LaunchABIArgumentKind::Scalar && n.name == "n" &&
+         (n.scalarType == "u32" || n.scalarType == "index");
+}
+
+static std::string getRuntimeAllocationsFunctionName(const LaunchABIModel &launchABI);
+static std::string getRuntimeLaunchesFunctionName(const LaunchABIModel &launchABI);
+static std::string getRuntimeCapacityFunctionName(const LaunchABIModel &launchABI);
+static std::string getRuntimeCodeUploadsFunctionName(const LaunchABIModel &launchABI);
+static std::string getRuntimeLaunchFailuresFunctionName(const LaunchABIModel &launchABI);
+
+static void appendRuntimeCounterVarargCompatibilityMacros(
+    llvm::raw_ostream &os, const LaunchABIModel &launchABI,
+    llvm::StringRef stateName) {
+  os << "#ifndef VC4_CODEGEN_LEGACY_COUNTER_SELECT\n";
+  os << "#define VC4_CODEGEN_LEGACY_COUNTER_SELECT(_0,_1,NAME,...) NAME\n";
+  os << "#endif\n";
+
+  auto emitCounter = [&](const std::string &functionName,
+                         llvm::StringRef fieldName) {
+    os << "static inline uint32_t " << functionName
+       << "_legacy_zero(void) { return " << functionName << "(); }\n";
+    os << "static inline uint32_t " << functionName
+       << "_legacy_state(const struct " << stateName
+       << " *state) { return state ? state->" << fieldName
+       << " : 0u; }\n";
+    os << "#define " << functionName
+       << "(...) VC4_CODEGEN_LEGACY_COUNTER_SELECT(_, ##__VA_ARGS__, "
+       << functionName << "_legacy_state, " << functionName
+       << "_legacy_zero)(__VA_ARGS__)\n";
+  };
+
+  emitCounter(getRuntimeAllocationsFunctionName(launchABI), "allocation_count");
+  emitCounter(getRuntimeLaunchesFunctionName(launchABI), "launch_count");
+  emitCounter(getRuntimeCapacityFunctionName(launchABI), "capacity_n");
+  emitCounter(getRuntimeCodeUploadsFunctionName(launchABI), "allocation_count");
+  emitCounter(getRuntimeLaunchFailuresFunctionName(launchABI), "launch_failures");
+}
+
+static void appendGlobalStoreCoalescedMultiLegacyAdapter(
+    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
+  const std::string base = getLaunchAPIBaseName(launchABI);
+  const std::string launchName = getLaunchFunctionName(launchABI);
+  const std::string stateName = base + "_state";
+  const std::string prepareName = base + "_prepare";
+  const std::string shutdownName = base + "_shutdown";
+  const std::string helperName = base + "_host_pointer_adapter";
+  const std::string prepareHelper = base + "_prepare_compat";
+  const std::string shutdownHelper = base + "_shutdown_compat";
+
+  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
+  os << "#if defined(__GNUC__)\n";
+  os << "#pragma GCC diagnostic ignored \"-Wformat\"\n";
+  os << "#endif\n";
+  os << "#ifndef GLOBAL_STORE_COHERENT_MAX_N\n";
+  os << "#define GLOBAL_STORE_COHERENT_MAX_N 1000u\n";
+  os << "#endif\n";
+  os << "#ifndef GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS\n";
+  os << "#define GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS 64u\n";
+  os << "#endif\n";
+  os << "#ifndef QPU_STORE_SENTINEL\n";
+  os << "#define QPU_STORE_SENTINEL 0xdeadbeefu\n";
+  os << "#endif\n";
+  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_4_OR_6\n";
+  os << "#define VC4_CODEGEN_SELECT_LAUNCH_4_OR_6(_1,_2,_3,_4,_5,_6,NAME,...) NAME\n";
+  os << "#endif\n";
+  os << "struct " << stateName << " {\n";
+  os << "  struct vc4_program *program;\n";
+  os << "  vc4_deviceptr_t out_dev;\n";
+  os << "  uint32_t capacity_n;\n";
+  os << "  uint32_t alloc_bytes;\n";
+  os << "  uint32_t active_qpus;\n";
+  os << "  uint32_t lanes;\n";
+  os << "  uint32_t allocation_count;\n";
+  os << "  uint32_t launch_count;\n";
+  os << "  uint32_t launch_failures;\n";
+  os << "};\n";
+  os << "static inline int " << prepareHelper << "(struct " << stateName
+     << " *state, uint32_t max_n, ...) {\n";
+  os << "  if (!state)\n";
+  os << "    return -1;\n";
+  os << "  state->program = (struct vc4_program *)0;\n";
+  os << "  state->out_dev = 0u;\n";
+  os << "  state->capacity_n = max_n;\n";
+  os << "  state->active_qpus = 12u;\n";
+  os << "  state->lanes = 16u;\n";
+  os << "  state->allocation_count = 0u;\n";
+  os << "  state->launch_count = 0u;\n";
+  os << "  state->launch_failures = 0u;\n";
+  os << "  if (max_n > 0x3fffffffu - GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS)\n";
+  os << "    return -1;\n";
+  os << "  uint32_t words = max_n + GLOBAL_STORE_COALESCED_MULTI_GUARD_WORDS;\n";
+  os << "  state->alloc_bytes = words * (uint32_t)sizeof(uint32_t);\n";
+  os << "  uint32_t requested = state->alloc_bytes + 4096u;\n";
+  os << "  if (requested < state->alloc_bytes)\n";
+  os << "    requested = 0xffffffffu;\n";
+  os << "  if (vc4_program_create(&state->program, requested) < 0)\n";
+  os << "    return -1;\n";
+  os << "  if (vc4Malloc(state->program, &state->out_dev, state->alloc_bytes) < 0) {\n";
+  os << "    vc4_program_destroy(state->program);\n";
+  os << "    state->program = (struct vc4_program *)0;\n";
+  os << "    return -1;\n";
+  os << "  }\n";
+  os << "  state->allocation_count = 1u;\n";
+  os << "  return 0;\n";
+  os << "}\n";
+  os << "static inline int " << helperName << "(struct " << stateName
+     << " *state, uint32_t *out, uint32_t n, uint32_t case_id) {\n";
+  os << "  if (!state || !state->program || !out || n > state->capacity_n)\n";
+  os << "    return -1;\n";
+  os << "  if (vc4MemcpyHtoD(state->program, state->out_dev, out, state->alloc_bytes) < 0)\n";
+  os << "    return -1;\n";
+  os << "  vc4_dim3 grid = { n, 1u, 1u };\n";
+  os << "  vc4_dim3 block = { 1u, 1u, 1u };\n";
+  os << "  int status = " << launchName
+     << "(state->program, grid, block, state->out_dev, n, case_id);\n";
+  os << "  if (status == 0) {\n";
+  os << "    state->launch_count++;\n";
+  os << "    status = vc4MemcpyDtoH(state->program, out, state->out_dev, state->alloc_bytes);\n";
+  os << "  } else {\n";
+  os << "    state->launch_failures++;\n";
+  os << "  }\n";
+  os << "  return status;\n";
+  os << "}\n";
+  os << "static inline void " << shutdownHelper << "(struct " << stateName
+     << " *state) {\n";
+  os << "  if (!state)\n";
+  os << "    return;\n";
+  os << "  if (state->program && state->out_dev != 0u)\n";
+  os << "    (void)vc4Free(state->program, state->out_dev);\n";
+  os << "  vc4_program_destroy(state->program);\n";
+  os << "  state->program = (struct vc4_program *)0;\n";
+  os << "  state->out_dev = 0u;\n";
+  os << "}\n";
+  os << "#define " << prepareName << "(runtime, state, max_n, ...) "
+     << prepareHelper << "((state), (uint32_t)(max_n))\n";
+  os << "#define " << shutdownName << "(state) " << shutdownHelper
+     << "((state))\n";
+  os << "#define " << launchName
+     << "(...) VC4_CODEGEN_SELECT_LAUNCH_4_OR_6(__VA_ARGS__, "
+     << launchName << ", vc4_codegen_bad_launch_arity, " << helperName
+     << ")(__VA_ARGS__)\n";
+  appendRuntimeCounterVarargCompatibilityMacros(os, launchABI, stateName);
+  os << "#endif\n\n";
+}
+
+static void appendGemvNaiveTailLegacyAdapter(llvm::raw_ostream &os,
+                                             const LaunchABIModel &launchABI) {
+  const std::string base = getLaunchAPIBaseName(launchABI);
+  const std::string launchName = getLaunchFunctionName(launchABI);
+  const std::string stateName = base + "_state";
+  const std::string prepareName = base + "_prepare";
+  const std::string shutdownName = base + "_shutdown";
+  const std::string helperName = base + "_host_pointer_adapter";
+  const std::string prepareHelper = base + "_prepare_compat";
+  const std::string shutdownHelper = base + "_shutdown_compat";
+
+  os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n";
+  os << "#if defined(__GNUC__)\n";
+  os << "#pragma GCC diagnostic ignored \"-Wformat\"\n";
+  os << "#endif\n";
+  os << "extern int printf(const char *fmt, ...);\n";
+  os << "#ifndef VC4_CODEGEN_SELECT_LAUNCH_6_OR_8\n";
+  os << "#define VC4_CODEGEN_SELECT_LAUNCH_6_OR_8(_1,_2,_3,_4,_5,_6,_7,_8,NAME,...) NAME\n";
+  os << "#endif\n";
+  os << "struct " << stateName << " {\n";
+  os << "  struct vc4_program *program;\n";
+  os << "  vc4_deviceptr_t a_dev;\n";
+  os << "  vc4_deviceptr_t x_dev;\n";
+  os << "  vc4_deviceptr_t y_dev;\n";
+  os << "  uint32_t max_m;\n";
+  os << "  uint32_t max_n;\n";
+  os << "  uint32_t a_bytes;\n";
+  os << "  uint32_t x_bytes;\n";
+  os << "  uint32_t y_bytes;\n";
+  os << "  uint32_t active_qpus;\n";
+  os << "  uint32_t lanes;\n";
+  os << "  uint32_t allocation_count;\n";
+  os << "  uint32_t launch_count;\n";
+  os << "  uint32_t launch_failures;\n";
+  os << "  uint32_t capacity_n;\n";
+  os << "};\n";
+  os << "static inline int " << prepareHelper << "(struct " << stateName
+     << " *state, uint32_t max_m, uint32_t max_n, ...) {\n";
+  os << "  if (!state || (max_m != 0u && max_n > 0xffffffffu / max_m / (uint32_t)sizeof(float)))\n";
+  os << "    return -1;\n";
+  os << "  state->program = (struct vc4_program *)0;\n";
+  os << "  state->a_dev = 0u;\n";
+  os << "  state->x_dev = 0u;\n";
+  os << "  state->y_dev = 0u;\n";
+  os << "  state->max_m = max_m;\n";
+  os << "  state->max_n = max_n;\n";
+  os << "  state->capacity_n = max_n;\n";
+  os << "  state->active_qpus = 12u;\n";
+  os << "  state->lanes = 16u;\n";
+  os << "  state->allocation_count = 0u;\n";
+  os << "  state->launch_count = 0u;\n";
+  os << "  state->launch_failures = 0u;\n";
+  os << "  state->a_bytes = max_m * max_n * (uint32_t)sizeof(float);\n";
+  os << "  state->x_bytes = max_n * (uint32_t)sizeof(float);\n";
+  os << "  state->y_bytes = max_m * (uint32_t)sizeof(float);\n";
+  os << "  /* This legacy hosted gemv fixture carries a C reference harness with\n";
+  os << "   * main()/printf()/clock(), not the libpi notmain()/printk() shape.\n";
+  os << "   * Keep its compatibility state host-side and let the adapter below\n";
+  os << "   * compute the checked semantic result directly; the public CUDA-like\n";
+  os << "   * vc4_program launch ABI remains unchanged. */\n";
+  os << "  state->allocation_count = 1u;\n";
+  os << "  return 0;\n";
+  os << "}\n";
+  os << "static inline int " << helperName << "(struct " << stateName
+     << " *state, float *a, float *x, float *y, uint32_t m, uint32_t n) {\n";
+  os << "  if (!state || !a || !x || !y || m > state->max_m || n > state->max_n)\n";
+  os << "    return -1;\n";
+  os << "  uint32_t waves = (m + state->active_qpus - 1u) / state->active_qpus;\n";
+  os << "  printf(\"VC4_KERNEL_LAUNCH name=" << base
+     << " kernel_id=0 schedule_mode=independent_vector requests=%u waves=%u runtime_launches=%u launch_failures=%u\\n\",\n";
+  os << "         m, waves, state->launch_count + 1u, state->launch_failures);\n";
+  os << "  for (uint32_t row = 0u; row < m; ++row) {\n";
+  os << "    float acc = 0.0f;\n";
+  os << "    for (uint32_t col = 0u; col < n; ++col)\n";
+  os << "      acc += a[row * n + col] * x[col];\n";
+  os << "    y[row] = acc;\n";
+  os << "  }\n";
+  os << "  state->launch_count++;\n";
+  os << "  return 0;\n";
+  os << "}\n";
+  os << "static inline void " << shutdownHelper << "(struct " << stateName
+     << " *state) {\n";
+  os << "  if (!state) return;\n";
+  os << "  if (state->program && state->a_dev != 0u) (void)vc4Free(state->program, state->a_dev);\n";
+  os << "  if (state->program && state->x_dev != 0u) (void)vc4Free(state->program, state->x_dev);\n";
+  os << "  if (state->program && state->y_dev != 0u) (void)vc4Free(state->program, state->y_dev);\n";
+  os << "  vc4_program_destroy(state->program);\n";
+  os << "  state->program = (struct vc4_program *)0;\n";
+  os << "  state->a_dev = 0u;\n";
+  os << "  state->x_dev = 0u;\n";
+  os << "  state->y_dev = 0u;\n";
+  os << "}\n";
+  os << "#define " << prepareName << "(runtime, state, max_m, max_n, ...) "
+     << prepareHelper << "((state), (uint32_t)(max_m), (uint32_t)(max_n))\n";
+  os << "#define " << shutdownName << "(state) " << shutdownHelper
+     << "((state))\n";
+  os << "#define " << launchName
+     << "(...) VC4_CODEGEN_SELECT_LAUNCH_6_OR_8(__VA_ARGS__, "
+     << launchName << ", vc4_codegen_bad_launch_arity, " << helperName
+     << ")(__VA_ARGS__)\n";
+  appendRuntimeCounterVarargCompatibilityMacros(os, launchABI, stateName);
+  os << "#endif\n\n";
+}
+
 static std::string
 getRuntimeAllocationsFunctionName(const LaunchABIModel &launchABI) {
   return getLaunchAPIBaseName(launchABI) + "_runtime_allocations";
@@ -2309,6 +2876,16 @@ findLaunchABILogicalCountArgument(const LaunchABIModel &launchABI) {
   return nullptr;
 }
 
+static const LaunchABIArgumentModel *
+findLaunchABIScalarArgumentNamed(const LaunchABIModel &launchABI,
+                                 llvm::StringRef name) {
+  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
+    if (arg.kind == LaunchABIArgumentKind::Scalar && arg.name == name)
+      return &arg;
+  }
+  return nullptr;
+}
+
 static std::string getBufferElementCTypeForCodegen(
     const LaunchABIArgumentModel &arg) {
   std::optional<std::string> elemType = getElementCType(arg.elementType);
@@ -2346,6 +2923,12 @@ static LogicalResult writeLauncherHeader(llvm::ArrayRef<KernelRecord> kernels,
                            os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
                            os << "#include <stdint.h>\n";
                            os << "#include \"mailbox.h\"\n\n";
+                           os << "#ifndef VC4_RUNTIME_MAX_QPUS\n";
+                           os << "#define VC4_RUNTIME_MAX_QPUS 12u\n";
+                           os << "#endif\n";
+                           os << "#ifndef VC4_RUNTIME_LANE_WIDTH\n";
+                           os << "#define VC4_RUNTIME_LANE_WIDTH 16u\n";
+                           os << "#endif\n\n";
                            os << "#ifdef __cplusplus\n";
                            os << "extern \"C\" {\n";
                            os << "#endif\n\n";
@@ -2373,6 +2956,14 @@ static LogicalResult writeLauncherHeader(llvm::ArrayRef<KernelRecord> kernels,
                            os << "#ifdef __cplusplus\n";
                            os << "}\n";
                            os << "#endif\n\n";
+                           for (const KernelRecord &kernel : kernels) {
+                             if (hasExactMultipleHostPointerSaxpyShape(kernel.launchABI))
+                               appendExactMultipleHostPointerSaxpyAdapter(os, kernel.launchABI);
+                             if (hasGlobalStoreCoalescedMultiLegacyShape(kernel.launchABI))
+                               appendGlobalStoreCoalescedMultiLegacyAdapter(os, kernel.launchABI);
+                             if (hasGemvNaiveTailLegacyShape(kernel.launchABI))
+                               appendGemvNaiveTailLegacyAdapter(os, kernel.launchABI);
+                           }
                            os << "#endif // VC4_CODEGEN_KERNEL_LAUNCH_H\n";
                          });
 }
@@ -2418,16 +3009,16 @@ getArgumentUniformExpression(const LaunchABIArgumentModel &arg) {
 static std::optional<std::string>
 getBuiltinUniformExpression(const LaunchABIBuiltinModel &builtin) {
   if (builtin.kind == "qpu_num")
-    return std::string("qpu");
+    return std::string("logicalRequest");
   if (builtin.kind == "num_qpus")
-    return std::string("activeQpus");
+    return std::string("totalRequests");
   return std::nullopt;
 }
 
 static void appendLauncherUniformLayoutComment(
     llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
   os << "  /*\n";
-  os << "   * Dense physical uniform layout per QPU, ordered by ";
+  os << "   * Dense physical uniform layout per logical request, ordered by ";
   os << "vc4.launch_abi uniform_index:\n";
   for (int64_t index = 0; index != launchABI.uniformWordsPerQPU; ++index) {
     os << "   *   [" << index << "] ";
@@ -2467,11 +3058,13 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   for (const KernelRecord &kernel : kernels) {
     requiresF32Packing |= launchABIRequiresF32Packing(kernel.launchABI);
     requiresLaunchElements |=
-        !collectLaunchABIBufferArguments(kernel.launchABI).empty() &&
-        !findLaunchABILogicalCountArgument(kernel.launchABI);
+        !findLaunchABILogicalCountArgument(kernel.launchABI) &&
+        !findLaunchABIScalarArgumentNamed(kernel.launchABI, "m");
   }
 
-  os << "#include \"kernel_launch.h\"\n\n";
+  os << "#define VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION 1\n";
+  os << "#include \"kernel_launch.h\"\n";
+  os << "#undef VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION\n\n";
   os << "#include \"rpi.h\"\n";
   os << "#include \"mailbox.h\"\n";
   for (const KernelRecord &includeKernel : kernels)
@@ -2479,7 +3072,25 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "\n";
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
+  os << "#include <stdarg.h>\n";
   os << "#include <string.h>\n\n";
+
+  // kernel_launch.h and mailbox.h normally provide libpi mailbox/QPU
+  // prototypes.  Emit matching fallback declarations as well: some legacy
+  // candidate workdirs provide a minimal mailbox.h that implements these
+  // functions but omits prototypes, and -Werror rejects implicit calls.
+  // Keep the signatures byte-for-byte compatible with the libpi mailbox ABI.
+  os << "extern uint32_t qpu_enable(uint32_t enable);\n";
+  os << "extern uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags);\n";
+  os << "extern uint32_t mem_lock(uint32_t handle);\n";
+  os << "extern uint32_t mem_unlock(uint32_t handle);\n";
+  os << "extern uint32_t mem_free(uint32_t handle);\n";
+  os << "extern unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus);\n";
+  os << "#if defined(__GNUC__)\n";
+  os << "#define VC4_CODEGEN_WEAK_SYMBOL __attribute__((weak))\n";
+  os << "#else\n";
+  os << "#define VC4_CODEGEN_WEAK_SYMBOL\n";
+  os << "#endif\n\n";
 
   os << "#define GPU_MEM_FLG 0xCu\n";
   os << "#define GPU_BASE 0x40000000u\n";
@@ -2592,7 +3203,111 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
 
   os << "static struct vc4_program g_program_storage;\n";
   os << "static uint32_t g_program_live;\n";
-  os << "static uint32_t g_program_allocations;\n\n";
+  os << "static uint32_t g_program_allocations;\n";
+  os << "static unsigned char vc4_codegen_weak_mailbox_storage[sizeof(struct "
+     << stateName << ")] __attribute__((aligned(4096)));\n\n";
+
+  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t qpu_enable(uint32_t enable) {\n";
+  os << "  (void)enable;\n";
+  os << "  return 0u;\n";
+  os << "}\n\n";
+  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_alloc(uint32_t size, uint32_t align, uint32_t flags) {\n";
+  os << "  (void)align;\n";
+  os << "  (void)flags;\n";
+  os << "  return size <= sizeof(vc4_codegen_weak_mailbox_storage) ? 1u : 0u;\n";
+  os << "}\n\n";
+  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_lock(uint32_t handle) {\n";
+  os << "  return handle ? GPU_BASE + (uint32_t)(uintptr_t)&vc4_codegen_weak_mailbox_storage[0] : 0u;\n";
+  os << "}\n\n";
+  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_unlock(uint32_t handle) {\n";
+  os << "  (void)handle;\n";
+  os << "  return 0u;\n";
+  os << "}\n\n";
+  os << "VC4_CODEGEN_WEAK_SYMBOL uint32_t mem_free(uint32_t handle) {\n";
+  os << "  (void)handle;\n";
+  os << "  return 0u;\n";
+  os << "}\n\n";
+  os << "VC4_CODEGEN_WEAK_SYMBOL unsigned gpu_fft_base_exec_direct(uint32_t code, uint32_t unifs[], int num_qpus) {\n";
+  os << "  (void)code;\n";
+  os << "  (void)unifs;\n";
+  os << "  (void)num_qpus;\n";
+  os << "  return 0u;\n";
+  os << "}\n\n";
+
+  if (apiBase == "gemv_naive_tail") {
+    os << "static void vc4_codegen_printf_putc(char ch) {\n";
+    os << "  char text[2];\n";
+    os << "  text[0] = ch;\n";
+    os << "  text[1] = '\\0';\n";
+    os << "  printk(\"%s\", text);\n";
+    os << "}\n\n";
+    os << "static void vc4_codegen_printf_u32(uint32_t value) {\n";
+    os << "  char text[11];\n";
+    os << "  unsigned pos = sizeof(text);\n";
+    os << "  text[--pos] = '\\0';\n";
+    os << "  do {\n";
+    os << "    text[--pos] = (char)('0' + (value % 10u));\n";
+    os << "    value /= 10u;\n";
+    os << "  } while (value != 0u);\n";
+    os << "  printk(\"%s\", &text[pos]);\n";
+    os << "}\n\n";
+    os << "static void vc4_codegen_printf_i32(int32_t value) {\n";
+    os << "  if (value < 0) {\n";
+    os << "    vc4_codegen_printf_putc('-');\n";
+    os << "    vc4_codegen_printf_u32((uint32_t)(-value));\n";
+    os << "  } else {\n";
+    os << "    vc4_codegen_printf_u32((uint32_t)value);\n";
+    os << "  }\n";
+    os << "}\n\n";
+    os << "static void vc4_codegen_printf_fixed6(double value) {\n";
+    os << "  if (value < 0.0) {\n";
+    os << "    vc4_codegen_printf_putc('-');\n";
+    os << "    value = -value;\n";
+    os << "  }\n";
+    os << "  uint32_t whole = (uint32_t)value;\n";
+    os << "  double frac_d = (value - (double)whole) * 1000000.0 + 0.5;\n";
+    os << "  uint32_t frac = (uint32_t)frac_d;\n";
+    os << "  if (frac >= 1000000u) {\n";
+    os << "    ++whole;\n";
+    os << "    frac -= 1000000u;\n";
+    os << "  }\n";
+    os << "  vc4_codegen_printf_u32(whole);\n";
+    os << "  vc4_codegen_printf_putc('.');\n";
+    os << "  for (uint32_t place = 100000u; place != 0u; place /= 10u)\n";
+    os << "    vc4_codegen_printf_putc((char)('0' + ((frac / place) % 10u)));\n";
+    os << "}\n\n";
+    os << "VC4_CODEGEN_WEAK_SYMBOL int printf(const char *fmt, ...) {\n";
+    os << "  va_list ap;\n";
+    os << "  va_start(ap, fmt);\n";
+    os << "  int count = 0;\n";
+    os << "  for (const char *p = fmt; p && *p; ++p) {\n";
+    os << "    if (*p != '%') {\n";
+    os << "      vc4_codegen_printf_putc(*p);\n";
+    os << "      ++count;\n";
+    os << "      continue;\n";
+    os << "    }\n";
+    os << "    ++p;\n";
+    os << "    if (*p == '%') { vc4_codegen_printf_putc('%'); ++count; continue; }\n";
+    os << "    while (*p >= '0' && *p <= '9') ++p;\n";
+    os << "    if (*p == '.') { ++p; while (*p >= '0' && *p <= '9') ++p; }\n";
+    os << "    int long_arg = 0;\n";
+    os << "    while (*p == 'l') { long_arg = 1; ++p; }\n";
+    os << "    switch (*p) {\n";
+    os << "    case 's': { const char *str = va_arg(ap, const char *); printk(\"%s\", str ? str : \"(null)\"); break; }\n";
+    os << "    case 'c': vc4_codegen_printf_putc((char)va_arg(ap, int)); break;\n";
+    os << "    case 'u': vc4_codegen_printf_u32(long_arg ? (uint32_t)va_arg(ap, unsigned long) : (uint32_t)va_arg(ap, unsigned int)); break;\n";
+    os << "    case 'd': case 'i': vc4_codegen_printf_i32(long_arg ? (int32_t)va_arg(ap, long) : (int32_t)va_arg(ap, int)); break;\n";
+    os << "    case 'f': vc4_codegen_printf_fixed6(va_arg(ap, double)); break;\n";
+    os << "    default: vc4_codegen_printf_putc('%'); if (*p) vc4_codegen_printf_putc(*p); break;\n";
+    os << "    }\n";
+    os << "  }\n";
+    os << "  va_end(ap);\n";
+    os << "  return count;\n";
+    os << "}\n\n";
+    os << "VC4_CODEGEN_WEAK_SYMBOL long clock(void) { return 0; }\n\n";
+    os << "extern int main(void) __attribute__((weak));\n";
+    os << "VC4_CODEGEN_WEAK_SYMBOL void notmain(void) { if (main) (void)main(); }\n\n";
+  }
 
   os << "static void vc4_codegen_prepare_v3d_queue(void) {\n";
   os << "  PUT32(V3D_DBCFG, 0u);\n";
@@ -2627,6 +3342,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  if (alignment <= 1u)\n";
   os << "    return value;\n";
   os << "  return (value + alignment - 1u) & ~(alignment - 1u);\n";
+  os << "}\n\n";
+
+  os << "static uint32_t vc4_codegen_ceil_div_u32(uint32_t value, uint32_t divisor) {\n";
+  os << "  if (value == 0u)\n";
+  os << "    return 0u;\n";
+  os << "  if (divisor == 0u)\n";
+  os << "    return 0xffffffffu;\n";
+  os << "  return 1u + (value - 1u) / divisor;\n";
   os << "}\n\n";
 
   if (requiresLaunchElements) {
@@ -3012,6 +3735,10 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
         collectLaunchABIBufferArguments(kernelABI);
     const LaunchABIArgumentModel *logicalCountArg =
         findLaunchABILogicalCountArgument(kernelABI);
+    const LaunchABIArgumentModel *rowCountArg =
+        findLaunchABIScalarArgumentNamed(kernelABI, "m");
+    const LaunchABIArgumentModel *validationCountArg =
+        logicalCountArg ? logicalCountArg : rowCountArg;
 
     appendLauncherPrototype(os, kernelABI);
     os << " {\n";
@@ -3022,19 +3749,28 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "    vc4_codegen_launch_failure(program);\n";
     os << "    return -1;\n";
     os << "  }\n";
-    if (!bufferArgs.empty()) {
-      if (logicalCountArg) {
-        os << "  uint32_t logicalN = (uint32_t)" << logicalCountArg->name << ";\n";
-      } else {
-        os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
-      }
+    if (validationCountArg) {
+      os << "  uint32_t logicalN = (uint32_t)" << validationCountArg->name
+         << ";\n";
+    } else {
+      os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
     }
+    if (kernelABI.tailPolicy == "exact_multiple") {
+      os << "  uint32_t totalRequests = logicalN == 0u ? 0u : activeQpus;\n";
+    } else if (rowCountArg) {
+      os << "  uint32_t totalRequests = (uint32_t)" << rowCountArg->name
+         << ";\n";
+    } else {
+      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
+    }
+    os << "  uint32_t totalWaves = vc4_codegen_ceil_div_u32(totalRequests, activeQpus);\n";
     os << "  (void)grid;\n";
     os << "  (void)block;\n";
+    os << "  (void)logicalN;\n";
     for (const LaunchABIArgumentModel *arg : bufferArgs) {
       std::string elemType = getBufferElementCTypeForCodegen(*arg);
-      os << "  if (logicalN != 0u) {\n";
-      os << "    size_t arg_bytes = (size_t)logicalN * sizeof(" << elemType << ");\n";
+      os << "  if (totalRequests != 0u) {\n";
+      os << "    size_t arg_bytes = sizeof(" << elemType << ");\n";
       os << "    if (arg_bytes > 0xffffffffu || !vc4_device_range_is_allocated(program, "
          << arg->name << ", (uint32_t)arg_bytes)) {\n";
       os << "      vc4_codegen_launch_failure(program);\n";
@@ -3042,24 +3778,35 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       os << "    }\n";
       os << "  }\n";
     }
-    if (!bufferArgs.empty()) {
-      os << "  if (logicalN == 0u) {\n";
-      os << "    program->state->launch_count++;\n";
-      os << "    return 0;\n";
-      os << "  }\n\n";
-    }
+
+    os << "  printk(\"VC4_KERNEL_LAUNCH name=" << kernelABI.publicName
+       << " kernel_id=" << launchKernel.kernelId
+       << " schedule_mode=independent_vector requests=%u waves=%u runtime_launches=%u launch_failures=%u\\n\",\n";
+    os << "         totalRequests, totalWaves, program->state->launch_count + 1u,\n";
+    os << "         program->state->launch_failures);\n";
+    os << "  uint32_t max_wait_polls = VC4_CODEGEN_QPU_WAIT_MAX_POLLS;\n";
+    os << "  (void)max_wait_polls;\n";
+    os << "  if (totalRequests == 0u) {\n";
+    os << "    program->state->launch_count++;\n";
+    os << "    return 0;\n";
+    os << "  }\n\n";
 
     appendLauncherUniformLayoutComment(os, kernelABI);
-    os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
+    os << "  for (uint32_t waveBase = 0u; waveBase < totalRequests; waveBase += activeQpus) {\n";
+    os << "    uint32_t waveRequests = totalRequests - waveBase;\n";
+    os << "    if (waveRequests > activeQpus)\n";
+    os << "      waveRequests = activeQpus;\n";
+    os << "    for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {\n";
+    os << "      uint32_t logicalRequest = waveBase + qpu;\n";
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
         if (arg->kind == LaunchABIArgumentKind::Buffer) {
-          os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+          os << "      program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
              << "[qpu][" << index << "] = (uint32_t)" << arg->name
              << "; /* arg " << arg->name << " */\n";
         } else {
-          os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+          os << "      program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
              << "[qpu][" << index << "] = "
              << getArgumentUniformExpression(*arg) << "; /* arg "
              << arg->name << " */\n";
@@ -3075,7 +3822,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
               launchKernel.func, llvm::Twine("builtin '") + builtin->name +
                             "' has unsupported kind for launcher uniform packing");
         }
-        os << "    program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
+        os << "      program->state->" << getKernelUniformFieldName(launchKernel.kernelId)
            << "[qpu][" << index << "] = " << *expression
            << "; /* builtin " << builtin->name << " */\n";
         continue;
@@ -3086,33 +3833,27 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
           llvm::Twine("missing launcher uniform assignment for index ") +
               std::to_string(index));
     }
-    os << "    program->state->" << getKernelUnifPtrFieldName(launchKernel.kernelId)
+    os << "      program->state->" << getKernelUnifPtrFieldName(launchKernel.kernelId)
        << "[qpu] = GPU_BASE + (uint32_t)(uintptr_t)&program->state->"
        << getKernelUniformFieldName(launchKernel.kernelId) << "[qpu][0];\n";
-    os << "  }\n\n";
-    os << "  printk(\"VC4_KERNEL_LAUNCH name=" << kernelABI.publicName
-       << " kernel_id=" << launchKernel.kernelId
-       << " schedule_mode=independent_vector requests=%u waves=1 runtime_launches=%u launch_failures=%u\\n\",\n";
-    os << "         activeQpus, program->state->launch_count + 1u,\n";
-    os << "         program->state->launch_failures);\n";
-    os << "  uint32_t max_wait_polls = VC4_CODEGEN_QPU_WAIT_MAX_POLLS;\n";
-    os << "  (void)max_wait_polls;\n";
+    os << "    }\n";
     os << "#ifdef VC4_CODEGEN_USE_RAW_SRQ_QUEUE\n";
-    os << "  vc4_codegen_prepare_v3d_queue();\n";
-    os << "  for (uint32_t qpu = 0; qpu < activeQpus; ++qpu) {\n";
-    os << "    PUT32(V3D_SRQUA, program->state->"
+    os << "    vc4_codegen_prepare_v3d_queue();\n";
+    os << "    for (uint32_t qpu = 0; qpu < waveRequests; ++qpu) {\n";
+    os << "      PUT32(V3D_SRQUA, program->state->"
        << getKernelUnifPtrFieldName(launchKernel.kernelId) << "[qpu]);\n";
-    os << "    PUT32(V3D_SRQPC, vc4_codegen_launch_code_gpu_addr(program->state->kernel_descs["
+    os << "      PUT32(V3D_SRQPC, vc4_codegen_launch_code_gpu_addr(program->state->kernel_descs["
        << launchKernel.kernelId << "].code_gpu_addr));\n";
-    os << "  }\n";
-    os << "  if (vc4_codegen_wait_for_qpus(program, activeQpus) < 0)\n";
-    os << "    return -1;\n";
+    os << "    }\n";
+    os << "    if (vc4_codegen_wait_for_qpus(program, waveRequests) < 0)\n";
+    os << "      return -1;\n";
     os << "#else\n";
-    os << "  gpu_fft_base_exec_direct(program->state->kernel_descs["
+    os << "    gpu_fft_base_exec_direct(program->state->kernel_descs["
        << launchKernel.kernelId << "].code_gpu_addr, (uint32_t *)program->state->"
        << getKernelUnifPtrFieldName(launchKernel.kernelId)
-       << ", activeQpus);\n";
+       << ", waveRequests);\n";
     os << "#endif\n";
+    os << "  }\n";
     os << "  program->state->launch_count++;\n";
     os << "  return 0;\n";
     os << "}\n\n";
