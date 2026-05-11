@@ -491,13 +491,83 @@ def _iter_json_log_paths(value: Any) -> list[str]:
                 visit(child)
 
     visit(value)
+    return _dedupe_preserve_order(out)
+
+
+def _dedupe_preserve_order(values: Sequence[str]) -> list[str]:
     deduped: list[str] = []
     seen: set[str] = set()
-    for raw in out:
+    for raw in values:
         if raw not in seen:
             seen.add(raw)
             deduped.append(raw)
     return deduped
+
+
+def _mapping_looks_failed(node: Mapping[str, Any]) -> bool:
+    """Return true when this exact JSON object represents a failed phase/result."""
+    if node.get("ok") is False or node.get("timed_out") is True:
+        return True
+    if str(node.get("status", "")).upper() in {"FAIL", "FAILED", "ERROR"}:
+        return True
+    if "exit_code" in node:
+        try:
+            return int(node.get("exit_code")) != 0
+        except Exception:
+            return bool(node.get("exit_code"))
+    return False
+
+
+def _iter_failed_json_log_paths(value: Any) -> list[str]:
+    """Return log_path values for failed phases/results only.
+
+    Typed verifier JSON contains log_path fields for both successful and failed
+    fixture phases.  Failure packets need full failure logs, while successful
+    logs are usually just make/vc4asm noise.  This keeps the high-signal logs
+    and leaves pass/fail status in full_report/generated artifacts.
+    """
+    out: list[str] = []
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            raw_log = node.get("log_path")
+            if isinstance(raw_log, str) and raw_log and _mapping_looks_failed(node):
+                out.append(raw_log)
+            for child in node.values():
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(value)
+    return _dedupe_preserve_order(out)
+
+
+def _successful_log_summaries(value: Any, failed_paths: set[str]) -> list[dict[str, Any]]:
+    """Summarize successful log paths that were deliberately not embedded."""
+    summaries: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            raw_log = node.get("log_path")
+            if isinstance(raw_log, str) and raw_log and raw_log not in failed_paths:
+                if raw_log not in seen and node.get("ok") is True:
+                    seen.add(raw_log)
+                    summaries.append({
+                        "log_path": raw_log,
+                        "ok": True,
+                        "omitted_full_text": True,
+                        "reason": "successful phase/result log; generated artifacts and full_report retain the useful signal",
+                    })
+            for child in node.values():
+                visit(child)
+        elif isinstance(node, list):
+            for child in node:
+                visit(child)
+
+    visit(value)
+    return summaries
 
 
 def _packet_relpath(repo: Path, path: Path) -> str:
@@ -632,13 +702,17 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
     results = report.get("results", [])
     first_failure = failures[0] if isinstance(failures, list) and failures else None
 
-    referenced_paths: list[Path] = []
-    for raw in _iter_json_log_paths(report):
-        referenced_paths.append(_resolve_packet_path(repo, raw))
+    failed_log_paths_raw = _iter_failed_json_log_paths(report)
+    referenced_paths: list[Path] = [_resolve_packet_path(repo, raw) for raw in failed_log_paths_raw]
+
+    # Do not embed the typed-verifier --out report as a referenced log: it is
+    # the same JSON object already stored under full_report.  Likewise, the
+    # outer command log usually duplicates full_report plus shell headers.  If
+    # no failed phase carried a log_path, fall back to the command log so GPT
+    # still has a complete failure record.
     out_path = _extract_command_out_path(failed.command)
-    if out_path:
-        referenced_paths.append(_resolve_packet_path(repo, out_path))
-    referenced_paths.append(failed.log_path)
+    if not failed_log_paths_raw:
+        referenced_paths.append(failed.log_path)
 
     full_logs: list[dict[str, Any]] = []
     seen: set[str] = set()
@@ -651,6 +725,7 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
         record["path"] = _packet_relpath(repo, path)
         full_logs.append(record)
 
+    omitted_success_logs = _successful_log_summaries(report, set(failed_log_paths_raw))
     artifact_report = collect_generated_artifact_report(repo, report)
     return {
         "typed_verifier": {
@@ -660,8 +735,12 @@ def collect_typed_verifier_report(failed: CommandResult) -> dict[str, Any]:
             "failure_count": len(failures) if isinstance(failures, list) else None,
             "result_count": len(results) if isinstance(results, list) else None,
             "full_report": report,
+            "typed_verifier_report_path": out_path,
+            "referenced_log_policy": "full text is included only for failed phase/result logs; successful phase logs and the typed --out JSON report are summarized because full_report/generated_artifacts retain the useful signal",
             "referenced_log_count": len(full_logs),
             "referenced_logs": full_logs,
+            "omitted_successful_log_count": len(omitted_success_logs),
+            "omitted_successful_logs": omitted_success_logs,
             **artifact_report,
         }
     }
@@ -690,6 +769,38 @@ def write_gate_failure_packet(
     packet["gate"] = failed.gate
     write_json_file(paths.failure_packet_path, packet)
     return paths.failure_packet_path
+
+
+def latest_failure_packet_from_state(state: StateStore, slice_id: str) -> Path | None:
+    """Return the latest persisted failure packet for slice resume, if any."""
+    data = state.load()
+    slices = data.get("slices", {})
+    if not isinstance(slices, Mapping):
+        return None
+    entry = slices.get(slice_id)
+    if not isinstance(entry, Mapping) or entry.get("status") != "failed":
+        return None
+    raw = entry.get("failure_packet")
+    if not isinstance(raw, str) or not raw:
+        return None
+    path = Path(raw)
+    if not path.is_absolute():
+        path = state.config.repo / path
+    return path if path.exists() else None
+
+
+def configured_max_gpt_attempts(slice_entry: Mapping[str, Any]) -> int:
+    """Slice max_gpt_attempts with an optional environment override."""
+    raw = os.environ.get("VC4_MAX_GPT_ATTEMPTS") or os.environ.get("VC4_M2_MAX_GPT_ATTEMPTS")
+    if raw:
+        try:
+            value = int(raw)
+        except Exception as exc:
+            raise DriverError(f"invalid VC4_MAX_GPT_ATTEMPTS/VC4_M2_MAX_GPT_ATTEMPTS={raw!r}: {exc}")
+        if value <= 0:
+            raise DriverError("VC4_MAX_GPT_ATTEMPTS/VC4_M2_MAX_GPT_ATTEMPTS must be positive when set")
+        return value
+    return int(slice_entry.get("max_gpt_attempts", 0) or 0)
 
 
 def commit_slice_if_needed(config: MilestoneConfig, slice_entry: Mapping[str, Any], *, no_commit: bool) -> bool:
@@ -785,10 +896,12 @@ def run_gpt_slice(
     artifact_download_timeout_ms: int = DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS,
 ) -> int:
     slice_id = str(slice_entry["id"])
-    max_gpt = int(slice_entry.get("max_gpt_attempts", 1) or 1)
+    max_gpt = configured_max_gpt_attempts(slice_entry) or 1
     codex_attempts_used = 0
     codex_attempts_by_category: dict[str, int] = {}
-    failure_packet: Path | None = None
+    failure_packet: Path | None = latest_failure_packet_from_state(state, slice_id)
+    if failure_packet:
+        log(f"resuming GPT failure context from {relpath(config.repo, failure_packet)}")
 
     for _ in range(max_gpt):
         attempt = state.next_attempt_index(slice_id)
@@ -1504,7 +1617,7 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     ensure_clean_repo(repo, allow_dirty=args.allow_dirty)
 
-    max_gpt = int(slice_entry.get("max_gpt_attempts", 0) or 0)
+    max_gpt = configured_max_gpt_attempts(slice_entry)
     if max_gpt > 0 and not args.skip_already_landed_probe:
         if probe_already_satisfied(
             config=config,

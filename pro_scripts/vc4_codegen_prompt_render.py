@@ -340,7 +340,26 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     except Exception as exc:
         return f"<failure packet parse error: {exc}>"
     sanitized = sanitize_failure_packet_for_prompt(data)
-    return fenced(json.dumps(sanitized, indent=2, sort_keys=True), "json")
+    extra = sanitized.get("extra", {}) if isinstance(sanitized, dict) else {}
+    typed = extra.get("typed_verifier", {}) if isinstance(extra, dict) else {}
+    summary = {
+        "failure_packet_path": relpath(repo, path),
+        "slice_id": sanitized.get("slice_id") if isinstance(sanitized, dict) else None,
+        "stage": sanitized.get("stage") if isinstance(sanitized, dict) else None,
+        "message": sanitized.get("message") if isinstance(sanitized, dict) else None,
+        "exit_code": sanitized.get("exit_code") if isinstance(sanitized, dict) else None,
+        "timed_out": sanitized.get("timed_out") if isinstance(sanitized, dict) else None,
+        "top_log_path": sanitized.get("log_path") if isinstance(sanitized, dict) else None,
+        "log_tail": sanitized.get("log_tail") if isinstance(sanitized, dict) else "",
+        "gate": extra.get("gate") if isinstance(extra, dict) else None,
+        "typed_verifier_first_failure": typed.get("first_failure") if isinstance(typed, dict) else None,
+        "typed_verifier_failure_count": typed.get("failure_count") if isinstance(typed, dict) else None,
+        "typed_verifier_result_count": typed.get("result_count") if isinstance(typed, dict) else None,
+        "referenced_log_count": typed.get("referenced_log_count") if isinstance(typed, dict) else None,
+        "generated_artifact_count": typed.get("generated_artifact_count") if isinstance(typed, dict) else None,
+        "note": "The full sanitized failure packet and any selected full failure logs are included in the context pack below; this header is intentionally compact to avoid duplicate 1MB+ prompt sections.",
+    }
+    return fenced(json.dumps(summary, indent=2, sort_keys=True), "json")
 
 
 TEXT_CONTEXT_SUFFIXES = {
@@ -528,18 +547,63 @@ def render_fixture_source_context(repo: Path, slice_id: str) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def collect_log_paths_from_json(value: Any) -> list[str]:
+def _json_mapping_looks_failed(value: Mapping[str, Any]) -> bool:
+    if value.get("ok") is False or value.get("timed_out") is True:
+        return True
+    if str(value.get("status", "")).upper() in {"FAIL", "FAILED", "ERROR"}:
+        return True
+    if "exit_code" in value:
+        try:
+            return int(value.get("exit_code")) != 0
+        except Exception:
+            return bool(value.get("exit_code"))
+    return False
+
+
+def collect_failed_log_paths_from_json(value: Any) -> list[str]:
+    """Collect log_path values attached to failed phases/results only."""
     found: list[str] = []
-    if isinstance(value, dict):
-        for key, sub in value.items():
-            if key == "log_path" and isinstance(sub, str):
-                found.append(sub)
-            else:
-                found.extend(collect_log_paths_from_json(sub))
-    elif isinstance(value, list):
-        for sub in value:
-            found.extend(collect_log_paths_from_json(sub))
+    seen: set[str] = set()
+
+    def add(raw: str) -> None:
+        if raw not in seen:
+            seen.add(raw)
+            found.append(raw)
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            raw = node.get("log_path")
+            if isinstance(raw, str) and raw and _json_mapping_looks_failed(node):
+                add(raw)
+            for sub in node.values():
+                visit(sub)
+        elif isinstance(node, list):
+            for sub in node:
+                visit(sub)
+
+    visit(value)
     return found
+
+
+def packet_embeds_full_log_text(data: Any, repo: Path, path: Path) -> bool:
+    """Return true if the failure packet already contains full text for path."""
+    wanted = {str(path), relpath(repo, path)}
+    try:
+        wanted.add(str(path.resolve()))
+    except Exception:
+        pass
+
+    def visit(node: Any) -> bool:
+        if isinstance(node, Mapping):
+            p = node.get("path")
+            if isinstance(p, str) and p in wanted and node.get("included_full_text") and isinstance(node.get("text"), str):
+                return True
+            return any(visit(v) for v in node.values())
+        if isinstance(node, list):
+            return any(visit(x) for x in node)
+        return False
+
+    return visit(data)
 
 
 def load_failure_packet_data(repo: Path, failure_packet: Path | None) -> Any:
@@ -570,9 +634,11 @@ def render_failure_log_context(repo: Path, slice_id: str, failure_packet: Path |
     seen: set[str] = set()
 
     data = load_failure_packet_data(repo, failure_packet)
-    for raw in collect_log_paths_from_json(data):
+    for raw in collect_failed_log_paths_from_json(data):
         path = normalize_repo_log_path(repo, raw)
         if path and path.exists() and path.is_file():
+            if packet_embeds_full_log_text(data, repo, path):
+                continue
             key = str(path.resolve())
             if key not in seen:
                 seen.add(key)

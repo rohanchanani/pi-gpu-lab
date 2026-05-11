@@ -557,6 +557,63 @@ def fnmatch_path(path: str, pattern: str) -> bool:
     return fnmatch.fnmatch(path, pattern) or fnmatch.fnmatch(path, pattern.rstrip("/") + "/**")
 
 
+def _json_mapping_looks_failed(value: Mapping[str, Any]) -> bool:
+    if value.get("ok") is False or value.get("timed_out") is True:
+        return True
+    if str(value.get("status", "")).upper() in {"FAIL", "FAILED", "ERROR"}:
+        return True
+    if "exit_code" in value:
+        try:
+            return int(value.get("exit_code")) != 0
+        except Exception:
+            return bool(value.get("exit_code"))
+    return False
+
+
+def collect_failed_log_paths_from_json(value: Any) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw: str) -> None:
+        if raw not in seen:
+            seen.add(raw)
+            found.append(raw)
+
+    def visit(node: Any) -> None:
+        if isinstance(node, Mapping):
+            raw = node.get("log_path")
+            if isinstance(raw, str) and raw and _json_mapping_looks_failed(node):
+                add(raw)
+            for sub in node.values():
+                visit(sub)
+        elif isinstance(node, list):
+            for sub in node:
+                visit(sub)
+
+    visit(value)
+    return found
+
+
+def packet_embeds_full_log_text(data: Any, repo: Path, path: Path) -> bool:
+    wanted = {str(path), relpath(repo, path)}
+    try:
+        wanted.add(str(path.resolve()))
+    except Exception:
+        pass
+
+    def visit(node: Any) -> bool:
+        if isinstance(node, Mapping):
+            p = node.get("path")
+            if isinstance(p, str) and p in wanted and node.get("included_full_text") and isinstance(node.get("text"), str):
+                return True
+            return any(visit(v) for v in node.values())
+        if isinstance(node, list):
+            return any(visit(x) for x in node)
+        return False
+
+    return visit(data)
+
+
 def sanitize_failure_packet_for_prompt(data: Any) -> Any:
     if isinstance(data, list):
         return [sanitize_failure_packet_for_prompt(x) for x in data]
@@ -622,24 +679,18 @@ def extractor_failure_packet(repo: Path, failure_packet_path: Path | None) -> tu
 
     log_paths: list[Path] = []
     seen: set[str] = set()
-    def visit(node: Any) -> None:
-        if isinstance(node, Mapping):
-            for k, v in node.items():
-                if k == "log_path" and isinstance(v, str) and v:
-                    p = Path(v)
-                    if not p.is_absolute():
-                        p = repo / p
-                    key = str(p.resolve()) if p.exists() else str(p)
-                    if key not in seen:
-                        seen.add(key)
-                        log_paths.append(p)
-                visit(v)
-        elif isinstance(node, list):
-            for child in node:
-                visit(child)
-    visit(data)
+    for raw in collect_failed_log_paths_from_json(data):
+        p = Path(raw)
+        if not p.is_absolute():
+            p = repo / p
+        if packet_embeds_full_log_text(data, repo, p):
+            continue
+        key = str(p.resolve()) if p.exists() else str(p)
+        if key not in seen:
+            seen.add(key)
+            log_paths.append(p)
     if log_paths:
-        body += "\n\n### Full referenced logs"
+        body += "\n\n### Full failed referenced logs not already embedded"
         for lp in log_paths:
             if lp.exists():
                 body += f"\n\n#### {relpath(repo, lp)}\n" + fenced(read_text(lp), language="text")
