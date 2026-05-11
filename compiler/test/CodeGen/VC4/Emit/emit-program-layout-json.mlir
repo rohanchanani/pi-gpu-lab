@@ -23,12 +23,18 @@
 // LAYOUT-DAG: "uniform_pointer_array": {"offset":
 
 // SOURCE: VC4_RUNTIME_LAYOUT
-// SOURCE-DAG: struct vc4_codegen_kernel_desc
-// SOURCE-DAG: kernel_descs[VC4_CODEGEN_PROGRAM_KERNELS]
-// SOURCE-DAG: memcpy((void *)state->kernel_0_code, first_layout_shader
-// SOURCE-DAG: memcpy((void *)state->kernel_1_code, second_layout_shader
-// SOURCE-DAG: kernel_0_unif_ptr
-// SOURCE-DAG: kernel_1_unif_ptr
+// SOURCE-DAG: static const struct vc4_kernel_image vc4_codegen_kernels[] = {
+// SOURCE-DAG: { "first_layout", first_layout_shader
+// SOURCE-DAG: { "second_layout", second_layout_shader
+// SOURCE-DAG: static const struct vc4_module_image vc4_codegen_module = {
+// SOURCE-DAG: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
+// SOURCE-DAG: static int first_layout_pack_uniforms
+// SOURCE-DAG: static int second_layout_pack_uniforms
+// SOURCE-DAG: return vc4LaunchKernel(program, 0u, totalRequests, first_layout_pack_uniforms, &ctx);
+// SOURCE-DAG: return vc4LaunchKernel(program, 1u, totalRequests, second_layout_pack_uniforms, &ctx);
+// SOURCE-NOT: struct vc4_codegen_kernel_desc
+// SOURCE-NOT: kernel_descs[VC4_CODEGEN_PROGRAM_KERNELS]
+// SOURCE-NOT: memcpy((void *)state->kernel_0_code
 
 vc4.module @program_layout_json {
   vc4.func @first_layout_kernel() attributes {

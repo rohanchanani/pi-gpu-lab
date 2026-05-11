@@ -75,7 +75,7 @@
     "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
     "Regex entries in generated_runtime_contract are Python regular expressions and must use single JSON escaping, e.g. \"PUT32\\\\s*\\\\(\" in JSON for regex PUT32\\s*\\(.",
     "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks.",
-    "M2 slice 6 static runtime/layout contracts are stop_on_failure gates: if generated launch code cannot enqueue V3D work or lacks a bounded failure path, do not spend a pi-install hardware timeout before returning a failure packet.",
+    "M2 static runtime/layout contracts are stop_on_failure gates: generated launch code must call vc4LaunchKernel while invariant libpi runtime owns raw V3D enqueue and bounded wait behavior.",
     "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware.",
     "Post-slice-6 anti-shortcut checks keep QASM emission scheduled-stream based and prevent support-script VC4_TEST_RESULT/runtime-event injection in later hardware slices."
   ],
@@ -606,6 +606,7 @@
           "description": "Source products exist",
           "files": [
             "compiler/test/CodeGen/VC4/Runtime/heap_unit_test.c",
+            "compiler/test/CodeGen/VC4/Runtime/raw_srq_unit_test.c",
             "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c",
             "compiler/test/CodeGen/VC4/Emit/emit-heap-layout-smoke.mlir"
           ]
@@ -653,6 +654,39 @@
           "stdout_contains": [
             "HEAP_UNIT_RESULT status=PASS"
           ]
+        },
+        {
+          "id": "raw-srq-runtime-unit",
+          "mechanism": "heap_api_unit",
+          "description": "Host-only unit test for invariant libpi raw SRQ queueing in vc4LaunchKernel.",
+          "source_files": [
+            "compiler/test/CodeGen/VC4/Runtime/raw_srq_unit_test.c",
+            "/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/src/vc4_runtime.c"
+          ],
+          "stub_files": [
+            "compiler/test/CodeGen/VC4/Runtime/vc4_mailbox_host_stub.c"
+          ],
+          "include_dirs": [
+            "/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/include",
+            "/Users/rohanchanani/Downloads/cs240lx-25spr/libpi/libc"
+          ],
+          "extra_compile_flags": [
+            "-DVC4_RUNTIME_TESTING"
+          ],
+          "stdout_contains": [
+            "VC4_RAW_SRQ_UNIT_RESULT status=PASS"
+          ]
+        },
+        {
+          "id": "external-libpi-raw-srq-source-contract",
+          "mechanism": "command",
+          "description": "Raw SRQ helpers live in invariant libpi vc4_runtime.c, while mailbox.c/h no longer expose the retired helper.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport sys\nroot = Path('/Users/rohanchanani/Downloads/cs240lx-25spr/libpi')\nruntime = (root / 'src/vc4_runtime.c').read_text(encoding='utf-8', errors='replace')\nmailbox_c = (root / 'src/mailbox.c').read_text(encoding='utf-8', errors='replace')\nmailbox_h = (root / 'include/mailbox.h').read_text(encoding='utf-8', errors='replace')\nrequired = ['VC4_RUNTIME_LAUNCH_TIMEOUT_USEC', 'vc4_runtime_prepare_v3d_queue', 'vc4_runtime_srqcs_completed', 'vc4_runtime_wait_for_qpus', 'vc4_runtime_enqueue_wave_raw', 'timer_get_usec()', 'VC4_RUNTIME_TESTING']\nmissing = [s for s in required if s not in runtime]\nforbidden_mailbox = [s for s in ['gpu_fft_base_exec_direct', 'V3D_SRQPC', 'V3D_SRQUA', 'V3D_SRQCS'] if s in mailbox_c or s in mailbox_h]\nif missing or forbidden_mailbox:\n    print({'missing_runtime': missing, 'forbidden_mailbox': forbidden_mailbox})\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0
         },
         {
           "id": "generated-runtime-has-vc4-memory-api",
@@ -745,14 +779,20 @@
             "vc4MemcpyDtoD\\s*\\(",
             "memcpy\\s*\\(",
             "memmove\\s*\\(",
-            "memset\\s*\\("
+            "memset\\s*\\(",
+            "gpu_fft_base_exec_direct",
+            "V3D_SRQ",
+            "PUT32\\s*\\(",
+            "GET32\\s*\\(",
+            "qpu_enable\\s*\\(",
+            "mem_alloc\\s*\\(",
+            "mem_lock\\s*\\(",
+            "mem_free\\s*\\("
           ],
           "required_patterns_in_launch_functions": [
-            "program->state->.*_unif\\s*\\[qpu\\]",
-            "PUT32\\s*\\(\\s*V3D_SRQUA",
-            "PUT32\\s*\\(\\s*V3D_SRQPC"
+            "vc4LaunchKernel\\s*\\("
           ],
-          "description": "Public launch functions only pack uniforms/enqueue hardware: no allocation/copy/free host wrapper calls inside launch bodies. Regexes are intentionally valid Python regex strings."
+          "description": "Public launch functions only validate ranges, populate a pack context, and call vc4LaunchKernel; raw SRQ queueing lives in invariant libpi runtime."
         },
         {
           "id": "cuda-like-launch-abi-lit",
@@ -934,43 +974,21 @@
             "vc4MemcpyDtoD\\s*\\(",
             "memcpy\\s*\\(",
             "memmove\\s*\\(",
-            "memset\\s*\\("
+            "memset\\s*\\(",
+            "gpu_fft_base_exec_direct",
+            "V3D_SRQ",
+            "PUT32\\s*\\(",
+            "GET32\\s*\\(",
+            "qpu_enable\\s*\\(",
+            "mem_alloc\\s*\\(",
+            "mem_lock\\s*\\(",
+            "mem_free\\s*\\("
           ],
           "required_patterns_in_launch_functions": [
-            "program->state->.*_unif\\s*\\[qpu\\]",
-            "PUT32\\s*\\(\\s*V3D_SRQUA",
-            "PUT32\\s*\\(\\s*V3D_SRQPC"
+            "vc4LaunchKernel\\s*\\("
           ],
           "route_hint": "gpt_pro",
-          "stop_on_failure": true,
-          "required_patterns": [
-            "\\blaunch_failures\\b",
-            "(?i)(timeout|deadline|max_polls|max_wait|poll_limit|tries|attempts)"
-          ],
-          "required_any_patterns_in_launch_functions": [
-            {
-              "name": "launch_failure_return_path",
-              "patterns": [
-                "\\blaunch_failures\\b",
-                "return\\s*-\\s*1\\b",
-                "return\\s+1\\b",
-                "return\\s+VC4_[A-Z0-9_]*FAIL",
-                "return\\s+vc4_[a-zA-Z0-9_]*fail"
-              ]
-            },
-            {
-              "name": "bounded_launch_wait_marker",
-              "patterns": [
-                "(?i)timeout",
-                "(?i)deadline",
-                "(?i)max_polls",
-                "(?i)max_wait",
-                "(?i)poll_limit",
-                "(?i)tries",
-                "(?i)attempts"
-              ]
-            }
-          ]
+          "stop_on_failure": true
         },
         {
           "id": "multi-kernel-chain-support-runner-generic",

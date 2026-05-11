@@ -292,7 +292,7 @@ if command -v arm-none-eabi-nm >/dev/null 2>&1 && [[ -f "objs/${elf_name}" ]]; t
     echo "ERROR: candidate ELF contains generated weak mailbox storage instead of libpi VC4 runtime" >&2
     exit 1
   fi
-  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free gpu_fft_base_exec_direct; do
+  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free vc4LaunchKernel; do
     if ! grep -Eq "[[:space:]][TtWw][[:space:]]+\${sym}\$" <<<"\$nm_out"; then
       echo "ERROR: candidate ELF is missing VC4 runtime symbol: \${sym}" >&2
       exit 1
@@ -321,7 +321,7 @@ check_candidate_runtime_symbols() {
   if grep -Fq 'vc4_codegen_weak_mailbox_storage' <<<"$nm_out"; then
     fail "candidate ELF contains generated weak mailbox storage instead of libpi VC4 runtime"
   fi
-  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free gpu_fft_base_exec_direct; do
+  for sym in qpu_enable mem_alloc mem_lock mem_unlock mem_free vc4LaunchKernel; do
     if ! grep -Eq "[[:space:]][TtWw][[:space:]]+${sym}$" <<<"$nm_out"; then
       fail "candidate ELF is missing VC4 runtime symbol: ${sym}"
     fi

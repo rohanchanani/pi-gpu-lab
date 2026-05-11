@@ -1221,6 +1221,8 @@ def mechanism_launch_abi_uniform_layout(ctx: VerifierContext, slice_id: str, v: 
 
 def resolve_repo_or_auto_path(ctx: VerifierContext, value: str) -> Path:
     value = str(value)
+    if Path(value).is_absolute():
+        return Path(value)
     if value.startswith(".vc4_auto/"):
         return ctx.repo / value
     return ctx.repo_path(value)
@@ -1641,7 +1643,8 @@ def mechanism_heap_api_unit(ctx: VerifierContext, slice_id: str, v: Mapping[str,
         tmp_parent.mkdir(parents=True, exist_ok=True)
     tmpdir = Path(tempfile.mkdtemp(prefix="vc4_heap_unit_", dir=str(tmp_parent)))
     exe = tmpdir / "heap_unit"
-    argv = [cc, "-std=c11", "-Wall", "-Wextra", "-O2"] + [f"-I{p}" for p in include_dirs] + [str(p) for p in sources + stubs] + ["-o", str(exe)]
+    extra_flags = [str(x) for x in as_list(v.get("extra_compile_flags"))]
+    argv = [cc, "-std=c11", "-Wall", "-Wextra", "-O2"] + extra_flags + [f"-I{p}" for p in include_dirs] + [str(p) for p in sources + stubs] + ["-o", str(exe)]
     log_path = ctx.command_log_path(slice_id, str(v.get("id", "heap_api_unit_compile")))
     compile_result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
     if not compile_result.ok:
