@@ -2266,6 +2266,7 @@ static VPMTransferAliasKind classifyVPMSetupImmediate(uint32_t value,
   case 0x80903000u:
     return VPMTransferAliasKind::Write;
   case 0x00101a00u: // vpm_setup(1, 1, h32(0)); r2 is read, r3 is write.
+  case 0x00101c00u: // vpm_setup(1, 1, v32(0, 0)); same aliasing.
     if (accumulator == 2)
       return VPMTransferAliasKind::Read;
     if (accumulator == 3)
@@ -2945,21 +2946,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "#include <string.h>\n\n";
   os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
      << programLayout.heapBytes << "u\n";
-  os << "#ifndef VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK\n";
-  os << "#define VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR\n";
-  os << "#endif\n";
-  os << "#ifndef VC4_KERNEL_FLAG_COOPERATIVE_BLOCK\n";
-  os << "#define VC4_KERNEL_FLAG_COOPERATIVE_BLOCK 0x00000001u\n";
-  os << "#endif\n";
-  os << "#ifndef VC4_KERNEL_FLAG_REQUIRE_FULL_BLOCK_RESIDENCY\n";
-  os << "#define VC4_KERNEL_FLAG_REQUIRE_FULL_BLOCK_RESIDENCY 0x00000002u\n";
-  os << "#endif\n";
-  os << "#ifndef VC4_KERNEL_FLAG_USES_BARRIER\n";
-  os << "#define VC4_KERNEL_FLAG_USES_BARRIER 0x00000004u\n";
-  os << "#endif\n";
-  os << "#ifndef VC4_KERNEL_FLAG_USES_SHARED_VPM\n";
-  os << "#define VC4_KERNEL_FLAG_USES_SHARED_VPM 0x00000008u\n";
-  os << "#endif\n";
   os << "#define VC4_CODEGEN_TARGET_VPM_BYTES 4096u\n";
   os << "#define VC4_CODEGEN_TARGET_SEMAPHORES 16u\n";
   for (const KernelRecord &macroKernel : kernels) {
@@ -3036,7 +3022,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "  total = vc4_codegen_saturating_mul_u32(total, block.x);\n";
     os << "  total = vc4_codegen_saturating_mul_u32(total, block.y);\n";
     os << "  total = vc4_codegen_saturating_mul_u32(total, block.z);\n";
-    os << "  return total;\n";
+    os << "  return vc4_codegen_ceil_div_u32(total, VC4_RUNTIME_LANE_WIDTH);\n";
     os << "}\n\n";
   }
 
@@ -3048,7 +3034,12 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << kernel.kernelId
        << "_NUM_UNIFS, VC4_RUNTIME_MAX_QPUS, "
        << getScheduleModeMacro(kernel.resources) << ", "
-       << getKernelResourceFlagsExpression(kernel.resources) << " },\n";
+       << getKernelResourceFlagsExpression(kernel.resources) << ", KERNEL_"
+       << kernel.kernelId << "_WARPS_PER_BLOCK_MAX, KERNEL_"
+       << kernel.kernelId << "_SEMAPHORES_PER_BLOCK, KERNEL_"
+       << kernel.kernelId << "_VPM_BYTES_PER_BLOCK, KERNEL_"
+       << kernel.kernelId << "_VPM_ROWS_PER_BLOCK, KERNEL_"
+       << kernel.kernelId << "_MAX_RESIDENT_BLOCKS },\n";
   }
   os << "};\n\n";
   for (const KernelRecord &resourceKernel : kernels) {
@@ -3078,13 +3069,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     const LaunchABIModel &kernelABI = launchKernel.launchABI;
     const std::string kernelBase = getLaunchAPIBaseName(kernelABI);
     os << "struct " << kernelBase << "_pack_ctx {\n";
-    os << "  uint32_t __vc4_total_requests;\n";
-    os << "  uint32_t __vc4_resident_blocks;\n";
-    os << "  uint32_t __vc4_warps_per_block;\n";
-    os << "  uint32_t __vc4_logical_block_id;\n";
-    os << "  uint32_t __vc4_logical_warp_id;\n";
-    os << "  uint32_t __vc4_vpm_base_row;\n";
-    os << "  uint32_t __vc4_semaphore_base;\n";
+    os << "  uint32_t __vc4_unused;\n";
     for (const LaunchABIArgumentModel &arg : kernelABI.arguments) {
       if (arg.kind == LaunchABIArgumentKind::Buffer) {
         os << "  vc4_deviceptr_t " << arg.name << ";\n";
@@ -3101,28 +3086,13 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "};\n\n";
 
     os << "static int " << kernelBase
-       << "_pack_uniforms(void *opaque, uint32_t logicalRequest, "
+       << "_pack_uniforms(void *opaque, const struct vc4_launch_request_info *requestInfo, "
           "uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {\n";
     os << "  struct " << kernelBase
        << "_pack_ctx *ctx = (struct " << kernelBase << "_pack_ctx *)opaque;\n";
-    os << "  if (!ctx || !uniformWords || uniformWordsPerRequest < KERNEL_"
+    os << "  if (!ctx || !requestInfo || !uniformWords || uniformWordsPerRequest < KERNEL_"
        << launchKernel.kernelId << "_NUM_UNIFS)\n";
     os << "    return -1;\n";
-    os << "  uint32_t logical_block_id = 0u;\n";
-    os << "  uint32_t logical_warp_id = logicalRequest;\n";
-    os << "  if (ctx->__vc4_warps_per_block != 0u) {\n";
-    os << "    logical_block_id = logicalRequest / ctx->__vc4_warps_per_block;\n";
-    os << "    logical_warp_id = logicalRequest % ctx->__vc4_warps_per_block;\n";
-    os << "  }\n";
-    os << "  uint32_t resident_slot = ctx->__vc4_resident_blocks ? (logical_block_id % ctx->__vc4_resident_blocks) : 0u;\n";
-    os << "  uint32_t vpm_base_row = resident_slot * KERNEL_" << launchKernel.kernelId << "_VPM_ROWS_PER_BLOCK;\n";
-    os << "  uint32_t semaphore_base = resident_slot * KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK;\n";
-    os << "  ctx->__vc4_logical_block_id = logical_block_id;\n";
-    os << "  ctx->__vc4_logical_warp_id = logical_warp_id;\n";
-    os << "  ctx->__vc4_vpm_base_row = vpm_base_row;\n";
-    os << "  ctx->__vc4_semaphore_base = semaphore_base;\n";
-    os << "  (void)vpm_base_row;\n";
-    os << "  (void)semaphore_base;\n";
     appendLauncherUniformLayoutComment(os, kernelABI);
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
@@ -3130,23 +3100,53 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
         if (launchKernel.resources.scheduleMode == "cooperative_block" &&
             arg->kind == LaunchABIArgumentKind::Scalar) {
           if (arg->name == "logical_warp_id") {
-            os << "  uniformWords[" << index << "] = logical_warp_id; /* arg "
+            os << "  uniformWords[" << index << "] = requestInfo->logical_warp_id; /* arg "
                << arg->name << " supplied by cooperative scheduler */\n";
             continue;
           }
           if (arg->name == "warps_per_block") {
             os << "  uniformWords[" << index
-               << "] = ctx->__vc4_warps_per_block; /* arg " << arg->name
+               << "] = requestInfo->warps_per_block; /* arg " << arg->name
                << " supplied by cooperative scheduler */\n";
             continue;
           }
+          if (arg->name == "logical_block_id") {
+            os << "  uniformWords[" << index << "] = requestInfo->logical_block_id; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
           if (arg->name == "vpm_base_row") {
-            os << "  uniformWords[" << index << "] = vpm_base_row; /* arg "
+            os << "  uniformWords[" << index << "] = requestInfo->vpm_base_row; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "vpm_rows") {
+            os << "  uniformWords[" << index << "] = requestInfo->vpm_rows; /* arg "
                << arg->name << " supplied by cooperative scheduler */\n";
             continue;
           }
           if (arg->name == "semaphore_base") {
-            os << "  uniformWords[" << index << "] = semaphore_base; /* arg "
+            os << "  uniformWords[" << index << "] = requestInfo->semaphore_base; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "barrier_arrive_sem") {
+            os << "  uniformWords[" << index << "] = requestInfo->barrier_arrive_sem; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "barrier_go_sem") {
+            os << "  uniformWords[" << index << "] = requestInfo->barrier_go_sem; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "barrier_depart_sem") {
+            os << "  uniformWords[" << index << "] = requestInfo->barrier_depart_sem; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "barrier_reset_sem") {
+            os << "  uniformWords[" << index << "] = requestInfo->barrier_reset_sem; /* arg "
                << arg->name << " supplied by cooperative scheduler */\n";
             continue;
           }
@@ -3168,18 +3168,18 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
               findLaunchABIBuiltinForUniformIndex(kernelABI, index)) {
         if (builtin->kind == "qpu_num") {
           if (launchKernel.resources.scheduleMode == "cooperative_block") {
-            os << "  uniformWords[" << index << "] = logical_warp_id; /* builtin "
+            os << "  uniformWords[" << index << "] = requestInfo->logical_warp_id; /* builtin "
                << builtin->name << " logical_warp_id for cooperative_block */\n";
           } else {
-            os << "  uniformWords[" << index << "] = logicalRequest; /* builtin "
+            os << "  uniformWords[" << index << "] = requestInfo->logical_request; /* builtin "
                << builtin->name << " */\n";
           }
         } else if (builtin->kind == "num_qpus") {
           if (launchKernel.resources.scheduleMode == "cooperative_block") {
-            os << "  uniformWords[" << index << "] = ctx->__vc4_warps_per_block; /* builtin "
+            os << "  uniformWords[" << index << "] = requestInfo->warps_per_block; /* builtin "
                << builtin->name << " warps_per_block for cooperative_block */\n";
           } else {
-            os << "  uniformWords[" << index << "] = ctx->__vc4_total_requests; /* builtin "
+            os << "  uniformWords[" << index << "] = requestInfo->total_requests; /* builtin "
                << builtin->name << " */\n";
           }
         } else {
@@ -3215,22 +3215,12 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     if (launchKernel.resources.scheduleMode == "cooperative_block") {
       os << "  uint32_t gridBlocks = vc4_codegen_grid_blocks(grid);\n";
       os << "  uint32_t warpsPerBlock = vc4_codegen_block_warps(block);\n";
-      os << "  uint32_t residentBlocks = 0u;\n";
       os << "  uint32_t logicalN = gridBlocks;\n";
       os << "  if (warpsPerBlock == 0u || warpsPerBlock > KERNEL_" << launchKernel.kernelId << "_WARPS_PER_BLOCK_MAX || warpsPerBlock > VC4_RUNTIME_MAX_QPUS) {\n";
       os << "    vc4ProgramRecordLaunchFailure(program);\n";
       os << "    return -1;\n";
       os << "  }\n";
-      os << "  residentBlocks = VC4_RUNTIME_MAX_QPUS / warpsPerBlock;\n";
-      os << "  if (KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK != 0u)\n";
-      os << "    residentBlocks = vc4_codegen_min_u32(residentBlocks, VC4_CODEGEN_TARGET_SEMAPHORES / KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK);\n";
-      os << "  if (KERNEL_" << launchKernel.kernelId << "_VPM_BYTES_PER_BLOCK != 0u)\n";
-      os << "    residentBlocks = vc4_codegen_min_u32(residentBlocks, VC4_CODEGEN_TARGET_VPM_BYTES / KERNEL_" << launchKernel.kernelId << "_VPM_BYTES_PER_BLOCK);\n";
-      os << "  if (residentBlocks == 0u) {\n";
-      os << "    vc4ProgramRecordLaunchFailure(program);\n";
-      os << "    return -1;\n";
-      os << "  }\n";
-      os << "  /* schedule_mode=cooperative_block resident_blocks computed before enqueue; each resident_wave waits before VPM/semaphore resource reuse. */\n";
+      os << "  /* schedule_mode=cooperative_block; runtime computes resident_blocks and waits before VPM/semaphore resource reuse. */\n";
       os << "  uint32_t totalRequests = vc4_codegen_saturating_mul_u32(gridBlocks, warpsPerBlock);\n";
     } else {
       if (validationCountArg) {
@@ -3241,8 +3231,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       if (kernelABI.tailPolicy == "exact_multiple")
         os << "  uint32_t totalRequests = logicalN == 0u ? 0u : VC4_RUNTIME_MAX_QPUS;\n";
       else
-        os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
-      os << "  uint32_t residentBlocks = VC4_RUNTIME_MAX_QPUS;\n";
+      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
       os << "  uint32_t warpsPerBlock = 1u;\n";
       os << "  (void)grid;\n";
       os << "  (void)block;\n";
@@ -3261,17 +3250,11 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     }
     os << "  struct " << kernelBase << "_pack_ctx ctx;\n";
     os << "  memset(&ctx, 0, sizeof(ctx));\n";
-    os << "  ctx.__vc4_total_requests = totalRequests;\n";
-    os << "  ctx.__vc4_resident_blocks = residentBlocks;\n";
-    os << "  ctx.__vc4_warps_per_block = warpsPerBlock;\n";
-    os << "  ctx.__vc4_logical_block_id = 0u;\n";
-    os << "  ctx.__vc4_logical_warp_id = 0u;\n";
-    os << "  ctx.__vc4_vpm_base_row = 0u;\n";
-    os << "  ctx.__vc4_semaphore_base = 0u;\n";
     for (const LaunchABIArgumentModel &arg : kernelABI.arguments)
       os << "  ctx." << arg.name << " = " << arg.name << ";\n";
     os << "  return vc4LaunchKernel(program, " << launchKernel.kernelId
-       << "u, totalRequests, " << kernelBase << "_pack_uniforms, &ctx);\n";
+       << "u, totalRequests, warpsPerBlock, " << kernelBase
+       << "_pack_uniforms, &ctx);\n";
     os << "}\n\n";
   }
 

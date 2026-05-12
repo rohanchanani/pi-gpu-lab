@@ -6,7 +6,7 @@
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='"mailbox.h"' --implicit-check-not='typedef uint32_t vc4_deviceptr_t'
-// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS'
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS' --implicit-check-not='VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR'
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // HEADER: #include <stdint.h>
@@ -31,7 +31,7 @@
 // SOURCE: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes) {
 // SOURCE: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
 // SOURCE: struct uniform_packing_pack_ctx {
-// SOURCE-LABEL: static int uniform_packing_pack_uniforms(void *opaque, uint32_t logicalRequest, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
+// SOURCE-LABEL: static int uniform_packing_pack_uniforms(void *opaque, const struct vc4_launch_request_info *requestInfo, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
 // SOURCE: * Dense physical uniform layout per logical request, ordered by vc4.launch_abi uniform_index:
 // SOURCE: *   [0] arg out
 // SOURCE: *   [1] arg input
@@ -43,12 +43,12 @@
 // SOURCE: uniformWords[1] = (uint32_t)ctx->input; /* arg input */
 // SOURCE: uniformWords[2] = (uint32_t)ctx->n; /* arg n */
 // SOURCE: uniformWords[3] = vc4_codegen_pack_f32(ctx->scale); /* arg scale */
-// SOURCE: uniformWords[4] = logicalRequest; /* builtin qpu_id */
-// SOURCE: uniformWords[5] = ctx->total_requests; /* builtin num_qpus */
+// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin qpu_id */
+// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin num_qpus */
 // SOURCE-LABEL: int uniform_packing_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, float scale, vc4_deviceptr_t out, uint32_t n, vc4_deviceptr_t input) {
 // SOURCE: vc4DeviceRangeIsAllocated(program, out,
 // SOURCE: vc4DeviceRangeIsAllocated(program, input,
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, uniform_packing_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, uniform_packing_pack_uniforms, &ctx);
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "program_name": "uniform_packing"

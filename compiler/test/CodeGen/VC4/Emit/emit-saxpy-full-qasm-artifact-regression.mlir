@@ -5,7 +5,7 @@
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/saxpy_full.qasm --implicit-check-not='ra32' --implicit-check-not='rb32' --implicit-check-not='ra38' --implicit-check-not='rb38' --implicit-check-not='ra48' --implicit-check-not='rb48' --implicit-check-not='ra49' --implicit-check-not='rb49' --implicit-check-not='ra50' --implicit-check-not='rb50' --implicit-check-not='ra56' --implicit-check-not='rb56'
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='"mailbox.h"' --implicit-check-not='typedef uint32_t vc4_deviceptr_t'
-// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS'
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS' --implicit-check-not='VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR'
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // MANIFEST: "schema_version": 2
@@ -62,14 +62,14 @@
 // SOURCE: VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR
 // SOURCE: static const struct vc4_module_image vc4_codegen_module = {
 // SOURCE: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
-// SOURCE-LABEL: static int saxpy_full_pack_uniforms(void *opaque, uint32_t logicalRequest, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
+// SOURCE-LABEL: static int saxpy_full_pack_uniforms(void *opaque, const struct vc4_launch_request_info *requestInfo, uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {
 // SOURCE: uniformWords[0] = (uint32_t)ctx->x; /* arg x */
 // SOURCE: uniformWords[1] = (uint32_t)ctx->y; /* arg y */
 // SOURCE: uniformWords[2] = vc4_codegen_pack_f32(ctx->alpha); /* arg alpha */
 // SOURCE: uniformWords[3] = (uint32_t)ctx->n; /* arg n */
-// SOURCE: uniformWords[4] = logicalRequest; /* builtin qpu_id */
-// SOURCE: uniformWords[5] = ctx->total_requests; /* builtin num_qpus */
+// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin qpu_id */
+// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin num_qpus */
 // SOURCE-LABEL: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n) {
 // SOURCE: vc4DeviceRangeIsAllocated(program, x,
 // SOURCE: vc4DeviceRangeIsAllocated(program, y,
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, saxpy_full_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, saxpy_full_pack_uniforms, &ctx);
