@@ -292,7 +292,10 @@ set -euo pipefail
 
 echo "RUNNING MAKE"
 make RUN=0 ${bin_name}
+EOF_RUN
 
+  if [[ "$BUNDLE_ONLY_FIXTURE" -eq 0 ]]; then
+    cat >> "$WORK_DIR/run.sh" <<EOF_RUN
 if command -v arm-none-eabi-nm >/dev/null 2>&1 && [[ -f "objs/${elf_name}" ]]; then
   nm_out="\$(arm-none-eabi-nm "objs/${elf_name}")"
   if grep -Fq 'vc4_codegen_weak_mailbox_storage' <<<"\$nm_out"; then
@@ -311,6 +314,10 @@ if command -v arm-none-eabi-nm >/dev/null 2>&1 && [[ -f "objs/${elf_name}" ]]; t
   done
 fi
 
+EOF_RUN
+  fi
+
+  cat >> "$WORK_DIR/run.sh" <<EOF_RUN
 echo "RUNNING PI INSTALL"
 "\${VC4_PI_INSTALL_CMD:-pi-install}" "./${bin_name}"
 EOF_RUN
@@ -322,6 +329,9 @@ check_candidate_runtime_symbols() {
   local elf_path="$WORK_DIR/objs/${bin_name%.bin}.elf"
   [[ -f "$elf_path" ]] || return 0
   command -v arm-none-eabi-nm >/dev/null 2>&1 || return 0
+  if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
+    return 0
+  fi
 
   local nm_out sym
   nm_out="$(arm-none-eabi-nm "$elf_path")"

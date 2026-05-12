@@ -694,16 +694,27 @@
           "expect_exit_code": 0
         },
         {
+          "id": "external-libpi-vc4-runtime-api-contract",
+          "mechanism": "command",
+          "description": "The public M2 heap/copy/launch API now lives in invariant libpi vc4_runtime.h/c; generated launch bundles include that runtime instead of re-emitting the API bodies.",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re\nimport sys\nroot = Path('/Users/rohanchanani/Downloads/cs240lx-25spr/libpi')\nheader = (root / 'include/vc4_runtime.h').read_text(encoding='utf-8', errors='replace')\nsource = (root / 'src/vc4_runtime.c').read_text(encoding='utf-8', errors='replace')\napi = ['vc4ProgramCreateFromImage', 'vc4_program_destroy', 'vc4Malloc', 'vc4Free', 'vc4MemcpyHtoD', 'vc4MemcpyDtoH', 'vc4MemcpyDtoD', 'vc4MemsetD8', 'vc4DeviceRangeIsAllocated', 'vc4ProgramRecordLaunchFailure', 'vc4LaunchKernel', 'vc4RuntimeCurrentProgram', 'vc4RuntimeProgramAllocations', 'vc4ProgramLaunches', 'vc4ProgramCapacity', 'vc4ProgramCodeUploads', 'vc4ProgramLaunchFailures']\nmissing_header = [name for name in api if not re.search(r'\\b' + re.escape(name) + r'\\s*\\(', header)]\nmissing_source = [name for name in api if not re.search(r'\\b' + re.escape(name) + r'\\s*\\(', source)]\nrequired_types = ['typedef uint32_t vc4_deviceptr_t', 'typedef struct vc4_dim3', 'struct vc4_program', 'struct vc4_kernel_image', 'struct vc4_module_image']\nmissing_types = [text for text in required_types if text not in header]\nif missing_header or missing_source or missing_types:\n    print({'missing_header': missing_header, 'missing_source': missing_source, 'missing_types': missing_types})\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0
+        },
+        {
           "id": "generated-runtime-has-vc4-memory-api",
           "mechanism": "generated_runtime_contract",
+          "description": "Generated launch bundles consume the libpi VC4 runtime API by including vc4_runtime.h and constructing programs from the generated module image.",
           "bundle": ".vc4_auto/codegen_m2/candidates/heap_smoke",
           "required_functions": [
-            "vc4Malloc",
-            "vc4Free",
-            "vc4MemcpyHtoD",
-            "vc4MemcpyDtoH",
-            "vc4MemcpyDtoD",
-            "vc4MemsetD8"
+            "vc4_program_create"
+          ],
+          "required_patterns": [
+            "#include\\s+\"vc4_runtime\\.h\"",
+            "vc4ProgramCreateFromImage\\s*\\("
           ],
           "forbidden_patterns": [
             "static uint8_t .*user",
@@ -986,11 +997,12 @@
           "bundle": ".vc4_auto/codegen_m2/candidates/multi_kernel_chain",
           "required_functions": [
             "vc4_program_create",
-            "vc4Malloc",
-            "vc4MemcpyHtoD",
-            "vc4MemcpyDtoH",
             "memory_output_launch",
             "read_nop_write_launch"
+          ],
+          "required_patterns": [
+            "#include\\s+\"vc4_runtime\\.h\"",
+            "vc4ProgramCreateFromImage\\s*\\("
           ],
           "forbidden_patterns": [
             "VC4_TEST_RESULT",
