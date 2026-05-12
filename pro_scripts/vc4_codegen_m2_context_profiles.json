@@ -804,7 +804,7 @@
       "_post_slice7_to_10_handselected_context": {
         "existing_codegen_extractors_removed_in_this_run": 0,
         "fixture_tree_entries_removed_in_this_run": 5,
-        "prompt_web_transport_limit_default_chars": 1000000
+        "prompt_web_transport_limit_default_chars": 0
       }
     },
     "cooperative_block": {
@@ -1188,7 +1188,7 @@
       "_post_slice7_to_10_handselected_context": {
         "existing_codegen_extractors_removed_in_this_run": 0,
         "fixture_tree_entries_removed_in_this_run": 6,
-        "prompt_web_transport_limit_default_chars": 1000000
+        "prompt_web_transport_limit_default_chars": 0
       }
     },
     "fixture_matrix": {
@@ -1925,7 +1925,7 @@
       "_post_slice7_to_10_handselected_context": {
         "existing_codegen_extractors_removed_in_this_run": 0,
         "fixture_tree_entries_removed_in_this_run": 21,
-        "prompt_web_transport_limit_default_chars": 1000000
+        "prompt_web_transport_limit_default_chars": 0
       }
     },
     "final_acceptance": {
@@ -2664,7 +2664,7 @@
       "_post_slice7_to_10_handselected_context": {
         "existing_codegen_extractors_removed_in_this_run": 0,
         "fixture_tree_entries_removed_in_this_run": 21,
-        "prompt_web_transport_limit_default_chars": 1000000
+        "prompt_web_transport_limit_default_chars": 0
       }
     }
   },

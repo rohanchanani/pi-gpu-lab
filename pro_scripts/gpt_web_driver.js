@@ -104,7 +104,7 @@ function requireArg(args, name) {
 }
 
 function promptCharLimit() {
-  const raw = process.env.VC4_GPT_MAX_PROMPT_CHARS || process.env.GPT_WEB_MAX_PROMPT_CHARS || "1000000";
+  const raw = process.env.VC4_GPT_MAX_PROMPT_CHARS || process.env.GPT_WEB_MAX_PROMPT_CHARS || "0";
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) {
     throw new Error(`Invalid VC4_GPT_MAX_PROMPT_CHARS/GPT_WEB_MAX_PROMPT_CHARS: ${raw}`);
