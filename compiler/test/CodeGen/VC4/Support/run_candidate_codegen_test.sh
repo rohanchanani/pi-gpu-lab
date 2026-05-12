@@ -7,8 +7,8 @@
 #   * manifest-v2 kernels[] are treated as the general case, including the
 #     single-kernel case.
 #   * every manifest-listed qasm_path is assembled to its code_symbol .c/.h.
-#   * candidate/<test>_candidate_harness.c is preferred when present, so M2
-#     CUDA-like device-pointer harnesses can coexist with immutable references.
+#   * candidate/<test>_candidate_harness.c is required for normal M2 hardware
+#     candidates; reference harness fallback is debug-only and opt-in.
 
 set -euo pipefail
 
@@ -216,6 +216,13 @@ derive_kernel_base() {
 select_harness_path() {
   local candidate="$CANDIDATE_DIR/${TEST_NAME}_candidate_harness.c"
   if [[ -f "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
+
+  if [[ "${VC4_ALLOW_REFERENCE_HARNESS_FALLBACK:-0}" != "1" ]]; then
+    fail "M2 candidate fixture $TEST_NAME needs $(relpath "$candidate") using kernel_launch.h and vc4Malloc/vc4Memcpy APIs; reference harness fallback is disabled"
+  fi
+
+  log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and forbidden for normal M2 candidate verification."
+
   local named="$CANDIDATE_DIR/${TEST_NAME}_harness.c"
   if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
   local -a matches
@@ -225,7 +232,7 @@ select_harness_path() {
     mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
     if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
   fi
-  fail "could not find candidate/<test>_candidate_harness.c or exactly one reference harness"
+  fail "VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1 but no legacy fallback harness was found for $TEST_NAME"
 }
 
 write_candidate_makefile() {
@@ -331,18 +338,6 @@ check_candidate_runtime_symbols() {
   done
 }
 
-write_header_alias() {
-  local alias_name="$1"
-  local code_symbol="$2"
-  cat > "$WORK_DIR/${alias_name}.h" <<EOF_ALIAS
-#ifndef VC4_CODEGEN_${alias_name}_ALIAS_H
-#define VC4_CODEGEN_${alias_name}_ALIAS_H
-#include "${code_symbol}.h"
-#define ${alias_name} ${code_symbol}
-#endif
-EOF_ALIAS
-}
-
 write_bundle_smoke_harness() {
   local harness_name="$1"
   python3 - "$GENERATED_DIR/manifest.json" "$WORK_DIR/$harness_name" <<'PY_HARNESS'
@@ -425,9 +420,7 @@ prepare_workdir() {
   fi
 
   assemble_candidate
-  local public_name kernel_base harness_path harness_name bin_name shader_sources first_code_symbol
-  public_name="$(extract_public_name || true)"
-  kernel_base="$(derive_kernel_base "${public_name:-$TEST_NAME}")"
+  local harness_path harness_name bin_name shader_sources
   harness_path="$(select_harness_path)"
   harness_name="$(basename "$harness_path")"
   bin_name="${harness_name%.c}.bin"
@@ -446,22 +439,11 @@ prepare_workdir() {
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
 
   shader_sources=()
-  first_code_symbol=""
   while IFS=$'\t' read -r qasm_rel code_symbol public; do
     cp "$GENERATED_DIR/$qasm_rel" "$WORK_DIR/$(basename "$qasm_rel")"
     cp "$GENERATED_DIR/${code_symbol}.c" "$WORK_DIR/${code_symbol}.c"
     cp "$GENERATED_DIR/${code_symbol}.h" "$WORK_DIR/${code_symbol}.h"
     shader_sources+=("${code_symbol}.c")
-    if [[ -z "$first_code_symbol" ]]; then
-      first_code_symbol="$code_symbol"
-      # Compatibility headers for older harnesses that include legacy shader
-      # names.  These are aliases to the manifest-declared code_symbol; all
-      # linked code arrays still come from kernels[].code_symbol.
-      write_header_alias "kernelshader" "$code_symbol"
-      write_header_alias "${kernel_base}shader" "$code_symbol"
-      cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/${kernel_base}_launch.c"
-      cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/${kernel_base}_launch.h"
-    fi
   done < <(manifest_kernel_records)
 
   write_candidate_makefile "$harness_name" "${shader_sources[@]}"

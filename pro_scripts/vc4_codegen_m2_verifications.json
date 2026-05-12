@@ -192,7 +192,12 @@
           "required_patterns": [
             "VC4_CODEGEN_STATE_ROOT",
             "AUTO_ROOT_RAW",
-            "candidates/\\$TEST_NAME"
+            "candidates/\\$TEST_NAME",
+            "\\$\\{TEST_NAME\\}_candidate_harness\\.c",
+            "VC4_ALLOW_REFERENCE_HARNESS_FALLBACK",
+            "reference harness fallback is disabled",
+            "kernel_launch\\.h",
+            "vc4Malloc/vc4Memcpy APIs"
           ]
         },
         {
@@ -1482,6 +1487,19 @@
           "stop_on_failure": true
         },
         {
+          "id": "m2-candidate-harnesses-present",
+          "mechanism": "command",
+          "description": "All M2 required candidate-hardware fixtures must have explicit M2 candidate harnesses; generated candidates must not fall back to reference harnesses.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json\nimport sys\nfrom pathlib import Path\n\nspec = Path('pro_scripts/vc4_codegen_m2_verifications.json')\ndata = json.loads(spec.read_text(encoding='utf-8'))\nfixtures = data.get('defaults', {}).get('fixture_matrices', {}).get('m2_required', [])\nexceptions = {'multi_kernel_minimal'}\nmissing = []\nfor name in fixtures:\n    if name in exceptions:\n        continue\n    path = Path('compiler/test/CodeGen/VC4/Hardware/Run') / name / 'candidate' / f'{name}_candidate_harness.c'\n    if not path.is_file():\n        missing.append(str(path))\nif missing:\n    print('M2 candidate fixtures missing candidate/<fixture>_candidate_harness.c using kernel_launch.h and vc4Malloc/vc4Memcpy APIs:')\n    for path in missing:\n        print('  ' + path)\n    sys.exit(1)\nprint('all M2 candidate harnesses present')\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
           "id": "m2-smoke-runtime-matrix",
           "mechanism": "fixture_matrix",
           "matrix": "smoke_runtime",
@@ -1567,6 +1585,19 @@
             "{python}",
             "-c",
             "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "m2-candidate-harnesses-present",
+          "mechanism": "command",
+          "description": "All M2 required candidate-hardware fixtures must have explicit M2 candidate harnesses; generated candidates must not fall back to reference harnesses.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json\nimport sys\nfrom pathlib import Path\n\nspec = Path('pro_scripts/vc4_codegen_m2_verifications.json')\ndata = json.loads(spec.read_text(encoding='utf-8'))\nfixtures = data.get('defaults', {}).get('fixture_matrices', {}).get('m2_required', [])\nexceptions = {'multi_kernel_minimal'}\nmissing = []\nfor name in fixtures:\n    if name in exceptions:\n        continue\n    path = Path('compiler/test/CodeGen/VC4/Hardware/Run') / name / 'candidate' / f'{name}_candidate_harness.c'\n    if not path.is_file():\n        missing.append(str(path))\nif missing:\n    print('M2 candidate fixtures missing candidate/<fixture>_candidate_harness.c using kernel_launch.h and vc4Malloc/vc4Memcpy APIs:')\n    for path in missing:\n        print('  ' + path)\n    sys.exit(1)\nprint('all M2 candidate harnesses present')\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",

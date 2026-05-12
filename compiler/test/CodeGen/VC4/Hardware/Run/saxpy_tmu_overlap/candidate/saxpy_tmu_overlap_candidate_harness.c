@@ -2,17 +2,16 @@
 #include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
-#define SAXPY_BASIC_EPSILON 0.0001f
+#define SAXPY_TMU_OVERLAP_EPSILON 0.0001f
 #define CHECKSUM_SCALE 1024.0f
-#define EXPECTED_CHECKSUM 2834240
-#define SAXPY_BASIC_ACTIVE_QPUS 12u
-#define SAXPY_BASIC_LANE_WIDTH 16u
-#define SAXPY_BASIC_N (SAXPY_BASIC_ACTIVE_QPUS * SAXPY_BASIC_LANE_WIDTH)
+#define SAXPY_TMU_OVERLAP_ACTIVE_QPUS 12u
+#define SAXPY_TMU_OVERLAP_LANE_WIDTH 16u
+#define SAXPY_TMU_OVERLAP_N (SAXPY_TMU_OVERLAP_ACTIVE_QPUS * SAXPY_TMU_OVERLAP_LANE_WIDTH)
 
-static float x_values[SAXPY_BASIC_N];
-static float y_values[SAXPY_BASIC_N];
-static float y_initial[SAXPY_BASIC_N];
-static float expected_values[SAXPY_BASIC_N];
+static float x_values[SAXPY_TMU_OVERLAP_N];
+static float y_values[SAXPY_TMU_OVERLAP_N];
+static float y_initial[SAXPY_TMU_OVERLAP_N];
+static float expected_values[SAXPY_TMU_OVERLAP_N];
 
 static float absf_local(float value) { return value < 0.0f ? -value : value; }
 
@@ -44,7 +43,7 @@ static void verify_results(uint32_t n, int *mismatch_count, float *max_abs_diff)
         float abs_diff = absf_local(diff);
         if (abs_diff > *max_abs_diff)
             *max_abs_diff = abs_diff;
-        if (abs_diff > SAXPY_BASIC_EPSILON) {
+        if (abs_diff > SAXPY_TMU_OVERLAP_EPSILON) {
             if (*mismatch_count < 8)
                 printk("ERROR: i=%d gpu=%f cpu=%f diff=%f\n", (int)i, y_values[i], expected_values[i], diff);
             (*mismatch_count)++;
@@ -53,55 +52,46 @@ static void verify_results(uint32_t n, int *mismatch_count, float *max_abs_diff)
 }
 
 void notmain(void) {
-    const float alpha = 2.5f;
-    const uint32_t activeQpus = SAXPY_BASIC_ACTIVE_QPUS;
-    const uint32_t laneWidth = SAXPY_BASIC_LANE_WIDTH;
-    const uint32_t n = SAXPY_BASIC_N;
     struct vc4_program *program = 0;
-
+    const float alpha = 2.5f;
     if (vc4_program_create(&program, 0) < 0 || !program)
         panic("vc4_program_create failed");
 
-    fill_inputs(n);
-    run_cpu_reference(alpha, n);
+    fill_inputs(SAXPY_TMU_OVERLAP_N);
+    run_cpu_reference(alpha, SAXPY_TMU_OVERLAP_N);
 
     vc4_deviceptr_t x_dev = 0, y_dev = 0;
-    uint32_t bytes = n * sizeof(float);
+    uint32_t bytes = SAXPY_TMU_OVERLAP_N * sizeof(float);
     if (vc4_m2_malloc(program, &x_dev, bytes) < 0 ||
         vc4_m2_malloc(program, &y_dev, bytes) < 0 ||
         vc4_m2_copy_htod(program, x_dev, x_values, bytes) < 0 ||
         vc4_m2_copy_htod(program, y_dev, y_values, bytes) < 0)
-        panic("saxpy_basic device setup failed");
+        panic("saxpy_tmu_overlap device setup failed");
 
     vc4_dim3 grid = vc4_m2_dim3(1, 1, 1);
-    vc4_dim3 block = vc4_m2_dim3(activeQpus * laneWidth, 1, 1);
+    vc4_dim3 block = vc4_m2_dim3(SAXPY_TMU_OVERLAP_N, 1, 1);
 
-    printk("Running VC4 saxpy_basic M2 candidate bundle...\n");
+    printk("Running VC4 saxpy_tmu_overlap M2 candidate bundle...\n");
     int start = timer_get_usec();
-    int launchFailures = 0;
-    if (saxpy_basic_launch(program, grid, block, x_dev, y_dev, alpha, n) < 0 ||
+    int launch_failures = 0;
+    if (saxpy_tmu_overlap_launch(program, grid, block, x_dev, y_dev, alpha, SAXPY_TMU_OVERLAP_N) < 0 ||
         vc4_m2_copy_dtoh(program, y_values, y_dev, bytes) < 0)
-        launchFailures++;
+        launch_failures++;
     int elapsed = timer_get_usec() - start;
 
     int mismatches = 0;
     float max_abs_diff = 0.0f;
-    verify_results(n, &mismatches, &max_abs_diff);
-
-    int checksum = scaled_checksum(y_values, n);
-    int expected_checksum = scaled_checksum(expected_values, n);
+    verify_results(SAXPY_TMU_OVERLAP_N, &mismatches, &max_abs_diff);
+    int checksum = scaled_checksum(y_values, SAXPY_TMU_OVERLAP_N);
+    int expected_checksum = scaled_checksum(expected_values, SAXPY_TMU_OVERLAP_N);
     if (checksum != expected_checksum) {
         printk("ERROR: checksum mismatch gpu=%d cpu=%d\n", checksum, expected_checksum);
         mismatches++;
     }
-    if (checksum != EXPECTED_CHECKSUM) {
-        printk("ERROR: unexpected checksum got=%d expected=%d\n", checksum, EXPECTED_CHECKSUM);
-        mismatches++;
-    }
 
-    const char *status = (mismatches == 0 && launchFailures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=saxpy_basic status=%s mismatches=%d active_qpus=%d n=%d checksum=%d max_abs_diff=%f elapsed_usec=%d\n",
-           status, mismatches, (int)activeQpus, (int)n, checksum, max_abs_diff, elapsed);
+    printk("VC4_TEST_RESULT name=saxpy_tmu_overlap status=%s mismatches=%d active_qpus=%d n=%d checksum=%d max_abs_diff=%f elapsed_usec=%d\n",
+           (mismatches || launch_failures) ? "FAIL" : "PASS", mismatches,
+           (int)SAXPY_TMU_OVERLAP_ACTIVE_QPUS, (int)SAXPY_TMU_OVERLAP_N, checksum, max_abs_diff, elapsed);
 
     vc4Free(program, x_dev);
     vc4Free(program, y_dev);

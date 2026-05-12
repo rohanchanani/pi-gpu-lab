@@ -1,4 +1,5 @@
 #include "rpi.h"
+#include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
 #define SAXPY_16_CHUNKS_PER_QPU 4u

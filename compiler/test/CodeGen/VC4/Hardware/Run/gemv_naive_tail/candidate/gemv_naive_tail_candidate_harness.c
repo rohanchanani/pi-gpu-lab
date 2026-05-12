@@ -1,4 +1,5 @@
 #include "rpi.h"
+#include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
 #define GEMV_NAIVE_TAIL_CASES 9u

@@ -1,4 +1,5 @@
 #include "rpi.h"
+#include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
 #define GLOBAL_STORE_COHERENT_MAX_N 1000u
