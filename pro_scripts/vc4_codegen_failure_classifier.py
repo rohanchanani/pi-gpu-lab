@@ -233,30 +233,39 @@ def _diagnostic_text_for_phase(phase_record: Mapping[str, Any], log_text: str) -
 
 
 def _fixture_matrix_category(failure: Mapping[str, Any], log_text: str, reason: str) -> tuple[str, str]:
+    """Classify typed fixture_matrix failures by the first failed phase.
+
+    Contract:
+      generate           -> GPT Pro semantic/codegen diagnosis
+      assemble           -> GPT Pro QASM/assembler diagnosis
+      build              -> Codex mechanical candidate-build repair
+      candidate_hardware -> GPT Pro hardware/runtime diagnosis
+      expected_json      -> GPT Pro semantic result diagnosis
+
+    Keep this deliberately phase-based.  In particular, do not route
+    candidate_hardware to Codex even if its log contains make/compiler-looking
+    text: once the run phase is entered, failures may involve bootloader,
+    timeout, runtime, or hardware semantics, and GPT Pro should inspect them.
+    """
     phase_record = _primary_fixture_phase_failure(failure)
     if phase_record is None:
         return "hardware_or_result", reason + "; fixture-matrix failure did not expose phase records"
+
     phase = str(phase_record.get("phase") or "")
     fixture = str(phase_record.get("fixture") or phase_record.get("name") or "<unknown-fixture>")
-    diagnostic = _diagnostic_text_for_phase(phase_record, log_text)
     prefix = f"{reason}; first failed fixture phase is {fixture}:{phase}"
 
     if phase == "generate":
         return "typed_verifier", prefix + "; generation failures are semantic/codegen and route to GPT Pro"
     if phase == "assemble":
         return "qasm_assembler", prefix + "; vc4asm/qasm failures route to GPT Pro"
+    if phase == "build":
+        return "mechanical_candidate_build", prefix + "; candidate build failures route to Codex"
+    if phase == "candidate_hardware":
+        return "hardware_or_result", prefix + "; candidate_hardware failures route to GPT Pro"
     if phase == "expected_json":
         return "hardware_or_result", prefix + "; result mismatches route to GPT Pro"
-    if phase == "build":
-        if MECHANICAL_COMPILE_RE.search(diagnostic) or "arm-none-eabi-" in diagnostic or "make:" in diagnostic.lower():
-            return "mechanical_candidate_build", prefix + "; C/GCC/linker build diagnostics are narrow mechanical repair"
-        return "candidate_build_semantic", prefix + "; build phase lacked obvious compile/link diagnostics"
-    if phase == "candidate_hardware":
-        if (MECHANICAL_COMPILE_RE.search(diagnostic) or "arm-none-eabi-" in diagnostic or "make:" in diagnostic.lower()) and not RUNTIME_OR_HARDWARE_RE.search(diagnostic):
-            return "mechanical_candidate_build", prefix + "; candidate_hardware failed during make/compile, before semantic hardware execution"
-        return "hardware_or_result", prefix + "; candidate_hardware runtime/hardware failures route to GPT Pro"
     return "hardware_or_result", prefix + "; unrecognized fixture phase routes to GPT Pro"
-
 
 def _route_details_for_typed_failure(gate: str, log_text: str) -> dict[str, Any]:
     if not gate.lower().startswith("typed-verifier:"):
