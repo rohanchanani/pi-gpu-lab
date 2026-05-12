@@ -74,6 +74,18 @@ DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000
 CODEX_NEEDS_GPT_SENTINEL = "VC4_CODEX_NEEDS_GPT"
 CODEX_DIAGNOSTIC_MAX_CHARS = 24000
 
+# Text files whose full contents are safe/useful to include in failure packets.
+# Used by collect_candidate_change_report() for untracked files created during
+# failed attempts. Keep this local to the autorun script so failure-packet
+# generation cannot crash when the verifier fails.
+TEXT_EXTS = {
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".inc",
+    ".mlir", ".qasm", ".json", ".txt", ".md",
+    ".py", ".sh", ".cmake", ".td", ".ll",
+    ".log", ".list",
+}
+TEXT_FILE_NAMES = {"CMakeLists.txt", "Makefile"}
+
 
 # ---------------------------------------------------------------------------
 # Terminal display
@@ -495,7 +507,7 @@ def collect_candidate_change_report(repo: Path) -> dict[str, Any]:
         tracked = subprocess.run(["git", "ls-files", "--error-unmatch", "--", rel], cwd=str(repo), text=True, capture_output=True)
         if tracked.returncode == 0:
             continue
-        if path.suffix.lower() not in TEXT_EXTS:
+        if path.suffix.lower() not in TEXT_EXTS and path.name not in TEXT_FILE_NAMES:
             continue
         try:
             data = path.read_text(encoding="utf-8", errors="replace")
@@ -878,7 +890,17 @@ def write_gate_failure_packet(
     slice_entry: Mapping[str, Any],
     failed: CommandResult,
 ) -> Path:
-    extra = {"gate": failed.gate, **collect_candidate_change_report(state.config.repo)}
+    try:
+        change_report = collect_candidate_change_report(state.config.repo)
+    except Exception as exc:
+        change_report = {
+            "candidate_changed_paths": [],
+            "candidate_diff_stat": "",
+            "candidate_diff": "",
+            "candidate_untracked_file_excerpts": {},
+            "candidate_change_report_error": str(exc),
+        }
+    extra = {"gate": failed.gate, **change_report}
     extra.update(collect_typed_verifier_report(failed))
     packet = write_failure_packet(
         paths.failure_packet_path,

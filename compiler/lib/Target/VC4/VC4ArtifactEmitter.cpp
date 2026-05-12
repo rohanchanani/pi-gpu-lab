@@ -24,6 +24,7 @@
 #include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <optional>
@@ -63,12 +64,25 @@ struct LaunchABIModel {
   llvm::SmallVector<LaunchABIBuiltinModel, 4> builtins;
 };
 
+struct KernelResourceModel {
+  std::string scheduleMode = "independent_vector";
+  bool usesBarrier = false;
+  bool usesSharedVPM = false;
+  bool requireFullBlockResidency = false;
+  int64_t vpmBytesPerBlock = 0;
+  int64_t vpmRowsPerBlock = 0;
+  int64_t semaphoresPerBlock = 0;
+  int64_t warpsPerBlockMax = 1;
+  int64_t maxResidentBlocks = 12;
+};
+
 struct KernelRecord {
   explicit KernelRecord(mlir::vc4::FuncOp func) : func(func) {}
 
   mlir::vc4::FuncOp func;
   mlir::vc4::VC4ArtifactKernelInfo info;
   LaunchABIModel launchABI;
+  KernelResourceModel resources;
   unsigned kernelId = 0;
   std::string qasmPath;
   llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
@@ -161,6 +175,11 @@ static LogicalResult emitLaunchABIModelError(mlir::vc4::FuncOp func,
   return func.emitOpError() << "vc4.launch_abi " << message;
 }
 
+static LogicalResult emitResourceModelError(mlir::vc4::FuncOp func,
+                                            const llvm::Twine &message) {
+  return func.emitOpError() << "vc4.resource " << message;
+}
+
 static mlir::StringAttr getDictionaryStringAttr(mlir::DictionaryAttr dict,
                                                 llvm::StringRef name) {
   return llvm::dyn_cast_or_null<mlir::StringAttr>(dict.get(name));
@@ -173,6 +192,14 @@ getDictionaryIntegerAttrValue(mlir::DictionaryAttr dict,
   if (!integerAttr)
     return std::nullopt;
   return integerAttr.getInt();
+}
+
+static std::optional<bool> getDictionaryBoolAttrValue(mlir::DictionaryAttr dict,
+                                                      llvm::StringRef name) {
+  auto boolAttr = llvm::dyn_cast_or_null<mlir::BoolAttr>(dict.get(name));
+  if (!boolAttr)
+    return std::nullopt;
+  return boolAttr.getValue();
 }
 
 static std::optional<std::string> getScalarCType(llvm::StringRef type) {
@@ -516,6 +543,134 @@ static LogicalResult validateLaunchABIUniformPacking(
   }
 
   return success();
+}
+
+static constexpr int64_t kVC4TargetActiveQPUs = 12;
+static constexpr int64_t kVC4TargetVPMBytes = 4096;
+static constexpr int64_t kVC4TargetSemaphores = 16;
+static constexpr int64_t kVC4VPMRowBytes = 64;
+
+static int64_t ceilDivPositive(int64_t value, int64_t divisor) {
+  if (value <= 0)
+    return 0;
+  return 1 + (value - 1) / divisor;
+}
+
+static int64_t resourceLimitFor(int64_t total, int64_t perBlock) {
+  if (perBlock <= 0)
+    return total;
+  return total / perBlock;
+}
+
+static int64_t min3(int64_t a, int64_t b, int64_t c) {
+  return std::min(a, std::min(b, c));
+}
+
+static LogicalResult parseResourceModel(mlir::vc4::FuncOp func,
+                                        mlir::DictionaryAttr resourceDict,
+                                        KernelResourceModel &resources) {
+  KernelResourceModel parsed;
+  if (!resourceDict) {
+    resources = std::move(parsed);
+    return success();
+  }
+
+  if (auto scheduleMode = getDictionaryStringAttr(resourceDict, "schedule_mode"))
+    parsed.scheduleMode = scheduleMode.getValue().str();
+
+  if (parsed.scheduleMode != "independent_vector" &&
+      parsed.scheduleMode != "cooperative_block") {
+    return emitResourceModelError(func,
+        "requires schedule_mode = \"independent_vector\" or \"cooperative_block\"");
+  }
+
+  parsed.usesBarrier = getDictionaryBoolAttrValue(resourceDict, "uses_barrier").value_or(false);
+  parsed.usesSharedVPM = getDictionaryBoolAttrValue(resourceDict, "uses_shared_vpm").value_or(false);
+  parsed.requireFullBlockResidency = getDictionaryBoolAttrValue(resourceDict, "require_full_block_residency")
+      .value_or(parsed.usesBarrier || parsed.usesSharedVPM || parsed.scheduleMode == "cooperative_block");
+
+  if (std::optional<int64_t> warps = getDictionaryIntegerAttrValue(resourceDict, "warps_per_block_max"))
+    parsed.warpsPerBlockMax = *warps;
+  else if (parsed.scheduleMode == "cooperative_block")
+    parsed.warpsPerBlockMax = kVC4TargetActiveQPUs;
+
+  if (std::optional<int64_t> semaphores = getDictionaryIntegerAttrValue(resourceDict, "semaphores_per_block"))
+    parsed.semaphoresPerBlock = *semaphores;
+  else if (parsed.usesBarrier)
+    parsed.semaphoresPerBlock = 4;
+
+  if (std::optional<int64_t> vpmBytes = getDictionaryIntegerAttrValue(resourceDict, "vpm_bytes_per_block"))
+    parsed.vpmBytesPerBlock = *vpmBytes;
+  if (std::optional<int64_t> sharedVPMBytes = getDictionaryIntegerAttrValue(resourceDict, "shared_vpm_bytes"))
+    parsed.vpmBytesPerBlock = *sharedVPMBytes;
+  if (std::optional<int64_t> vpmRows = getDictionaryIntegerAttrValue(resourceDict, "vpm_rows_per_block"))
+    parsed.vpmRowsPerBlock = *vpmRows;
+  else
+    parsed.vpmRowsPerBlock = ceilDivPositive(parsed.vpmBytesPerBlock, kVC4VPMRowBytes);
+
+  if (parsed.warpsPerBlockMax <= 0)
+    return emitResourceModelError(func, "warps_per_block_max must be greater than zero");
+  if (parsed.semaphoresPerBlock < 0)
+    return emitResourceModelError(func, "semaphores_per_block must be non-negative");
+  if (parsed.vpmBytesPerBlock < 0 || parsed.vpmRowsPerBlock < 0)
+    return emitResourceModelError(func, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
+
+  if (parsed.scheduleMode == "independent_vector") {
+    if (parsed.usesBarrier || parsed.usesSharedVPM || parsed.requireFullBlockResidency ||
+        parsed.semaphoresPerBlock != 0 || parsed.vpmBytesPerBlock != 0)
+      return emitResourceModelError(func, "independent_vector kernels must not request barrier/shared cooperative resources");
+    parsed.warpsPerBlockMax = 1;
+    parsed.maxResidentBlocks = kVC4TargetActiveQPUs;
+    resources = std::move(parsed);
+    return success();
+  }
+
+  if ((parsed.usesBarrier || parsed.usesSharedVPM) && !parsed.requireFullBlockResidency)
+    return emitResourceModelError(func, "cooperative barrier/shared kernels require require_full_block_residency = true");
+  if (parsed.warpsPerBlockMax > kVC4TargetActiveQPUs)
+    return emitResourceModelError(func, llvm::Twine("warps_per_block_max must fit the target active QPU limit 12; got ") + llvm::Twine(parsed.warpsPerBlockMax));
+  if (parsed.semaphoresPerBlock > kVC4TargetSemaphores)
+    return emitResourceModelError(func, llvm::Twine("semaphores_per_block must fit the target hardware semaphore limit 16; got ") + llvm::Twine(parsed.semaphoresPerBlock));
+  if (parsed.usesBarrier && parsed.semaphoresPerBlock <= 0)
+    return emitResourceModelError(func, "barrier cooperative kernels require semaphores_per_block > 0");
+  if (parsed.vpmBytesPerBlock > kVC4TargetVPMBytes)
+    return emitResourceModelError(func, llvm::Twine("vpm_bytes_per_block/shared_vpm_bytes must fit the 4096 byte user-visible VPM window; got ") + llvm::Twine(parsed.vpmBytesPerBlock));
+
+  int64_t byQPU = resourceLimitFor(kVC4TargetActiveQPUs, parsed.warpsPerBlockMax);
+  int64_t bySem = resourceLimitFor(kVC4TargetSemaphores, parsed.semaphoresPerBlock);
+  int64_t byVPM = resourceLimitFor(kVC4TargetVPMBytes, parsed.vpmBytesPerBlock);
+  parsed.maxResidentBlocks = min3(byQPU, bySem, byVPM);
+  if (parsed.maxResidentBlocks <= 0)
+    return emitResourceModelError(func, "cooperative_block resource request leaves zero resident_blocks; check warps_per_block_max, vpm_bytes_per_block, and semaphores_per_block");
+
+  resources = std::move(parsed);
+  return success();
+}
+
+static LogicalResult populateResourceInfo(KernelRecord &kernel) {
+  auto resource = kernel.func->getAttrOfType<mlir::DictionaryAttr>("vc4.resource");
+  return parseResourceModel(kernel.func, resource, kernel.resources);
+}
+
+static const char *getScheduleModeMacro(const KernelResourceModel &resources) {
+  if (resources.scheduleMode == "cooperative_block")
+    return "VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK";
+  return "VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR";
+}
+
+static std::string getKernelResourceFlagsExpression(const KernelResourceModel &resources) {
+  std::string flags = "0u";
+  auto addFlag = [&](const char *flag) {
+    if (flags == "0u")
+      flags = flag;
+    else
+      flags += std::string(" | ") + flag;
+  };
+  if (resources.scheduleMode == "cooperative_block") addFlag("VC4_KERNEL_FLAG_COOPERATIVE_BLOCK");
+  if (resources.requireFullBlockResidency) addFlag("VC4_KERNEL_FLAG_REQUIRE_FULL_BLOCK_RESIDENCY");
+  if (resources.usesBarrier) addFlag("VC4_KERNEL_FLAG_USES_BARRIER");
+  if (resources.usesSharedVPM) addFlag("VC4_KERNEL_FLAG_USES_SHARED_VPM");
+  return flags;
 }
 
 static void appendJSONEscapedString(llvm::raw_ostream &os,
@@ -865,6 +1020,8 @@ collectProgramKernels(mlir::vc4::ModuleOp vc4Module,
 
   for (KernelRecord &kernel : kernels) {
     if (failed(populateLaunchABIInfo(kernel)))
+      return failure();
+    if (failed(populateResourceInfo(kernel)))
       return failure();
   }
 
@@ -1410,6 +1567,22 @@ formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
   return source + " << " + std::to_string(selector - 48);
 }
 
+static std::optional<std::string>
+formatAccumulatorVectorRotateSource(mlir::vc4::QPUMux sourceMux,
+                                    int64_t selector) {
+  if (!isVectorRotateSmallImm(selector))
+    return std::nullopt;
+
+  std::optional<unsigned> accumulator = getAccumulatorIndexForMux(sourceMux);
+  if (!accumulator || *accumulator > 3)
+    return std::nullopt;
+
+  std::string source = "r" + std::to_string(*accumulator);
+  if (selector == 48)
+    return source + " >> r5";
+  return source + " << " + std::to_string(selector - 48);
+}
+
 static std::optional<unsigned> getAccumulatorIndexForWriteAddress(int64_t address) {
   if (address >= 32 && address <= 36)
     return static_cast<unsigned>(address - 32);
@@ -1536,6 +1709,30 @@ getAddVectorRotateSmallImmSelector(mlir::vc4::QPUBundleOp bundle) {
   return std::nullopt;
 }
 
+static std::optional<std::string>
+formatStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
+  // Several scheduled reduction fixtures materialize a rotate as the canonical
+  // ADD-side move shape `or rD, rS, rotate(rS)`.  vc4asm spells this as a
+  // unary rotate move.  Treat only that pure ADD shape as a move so reductions
+  // can be assembled without needing a fixture-specific rewrite.
+  if (bundle.getOpAdd() != mlir::vc4::AddOpcode::bit_or ||
+      bundle.getOpMul() != mlir::vc4::MulOpcode::nop ||
+      bundle.getCondAdd() == mlir::vc4::Cond::never ||
+      bundle.getOperation()->hasAttr("set_flags"))
+    return std::nullopt;
+
+  std::optional<int64_t> selector =
+      getVectorRotateSmallImmSelectorForMux(bundle, bundle.getAddB());
+  if (!selector)
+    return std::nullopt;
+
+  return formatAccumulatorVectorRotateSource(bundle.getAddA(), *selector);
+}
+
+static bool canEmitStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
+  return formatStandaloneAddVectorRotateMove(bundle).has_value();
+}
+
 static bool accumulatorIsForbidden(unsigned accumulator,
                                    llvm::ArrayRef<unsigned> forbidden) {
   for (unsigned value : forbidden) {
@@ -1589,6 +1786,7 @@ static bool isPureNopBundle(mlir::vc4::QPUBundleOp bundle) {
 static bool canPrepareVectorRotateFromSpacer(mlir::vc4::QPUBundleOp spacer,
                                              mlir::vc4::QPUBundleOp next) {
   return isPureNopBundle(spacer) && getAddVectorRotateSmallImmSelector(next) &&
+         !canEmitStandaloneAddVectorRotateMove(next) &&
          getPreparedVectorRotateDestination(next);
 }
 
@@ -1649,6 +1847,31 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
            << bundle.getOperation()->getAttr("unpack") << "'";
   }
 
+  if (std::optional<std::string> rotateMove =
+          formatStandaloneAddVectorRotateMove(bundle)) {
+    if (needSeparator)
+      line += "; ";
+    needSeparator = true;
+    line += "mov";
+    if (bundle.getCondAdd() != mlir::vc4::Cond::never)
+      line += getConditionSuffix(bundle.getCondAdd());
+    line += " ";
+    line += formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
+                                                   "waddr_add"),
+                               /*forAddALU=*/true,
+                               bundle.getOperation()->hasAttr("write_swap"),
+                               getIntegerAttrValue(bundle.getOperation(),
+                                                   "waddr_add") == 50
+                                   ? state.pendingAddressKind
+                                   : setupKind) +
+            *packSuffix;
+    line += ", ";
+    line += *rotateMove;
+    state.preparedVectorRotateDest = std::nullopt;
+    state.preparedVectorRotateSelector = std::nullopt;
+    return success();
+  }
+
   std::string src0;
   std::string src1;
   VPMTransferAliasKind readKind = state.pendingAddressKind;
@@ -1662,23 +1885,25 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
 
   if (std::optional<int64_t> rotateSelector =
           getAddVectorRotateSmallImmSelector(bundle)) {
-    std::optional<unsigned> destination = getPreparedVectorRotateDestination(bundle);
-    if (!destination || !state.preparedVectorRotateDest ||
-        !state.preparedVectorRotateSelector ||
-        *state.preparedVectorRotateDest != *destination ||
-        *state.preparedVectorRotateSelector != *rotateSelector) {
-      return bundle.emitOpError()
-             << "ADD-side vector-rotate small_imm selector " << *rotateSelector
-             << " requires a prepared MUL-side rotate in the preceding spacer";
+    if (!canEmitStandaloneAddVectorRotateMove(bundle)) {
+      std::optional<unsigned> destination = getPreparedVectorRotateDestination(bundle);
+      if (!destination || !state.preparedVectorRotateDest ||
+          !state.preparedVectorRotateSelector ||
+          *state.preparedVectorRotateDest != *destination ||
+          *state.preparedVectorRotateSelector != *rotateSelector) {
+        return bundle.emitOpError()
+               << "ADD-side vector-rotate small_imm selector " << *rotateSelector
+               << " requires a prepared MUL-side rotate in the preceding spacer";
+      }
+      std::string preparedSource = "r" + std::to_string(*destination);
+      if (bundle.getAddA() == mlir::vc4::QPUMux::b)
+        src0 = preparedSource;
+      if (!isUnaryAddOpcode(opcode) &&
+          bundle.getAddB() == mlir::vc4::QPUMux::b)
+        src1 = preparedSource;
+      state.preparedVectorRotateDest = std::nullopt;
+      state.preparedVectorRotateSelector = std::nullopt;
     }
-    std::string preparedSource = "r" + std::to_string(*destination);
-    if (bundle.getAddA() == mlir::vc4::QPUMux::b)
-      src0 = preparedSource;
-    if (!isUnaryAddOpcode(opcode) &&
-        bundle.getAddB() == mlir::vc4::QPUMux::b)
-      src1 = preparedSource;
-    state.preparedVectorRotateDest = std::nullopt;
-    state.preparedVectorRotateSelector = std::nullopt;
   }
 
   if (needSeparator)
@@ -1957,6 +2182,18 @@ static std::string formatU32Immediate(int64_t signedValue) {
   return result;
 }
 
+static std::string
+formatPerElementLDIImmediate(llvm::ArrayRef<int32_t> values) {
+  std::string result = "[";
+  for (unsigned i = 0; i != values.size(); ++i) {
+    if (i != 0)
+      result += ",";
+    result += std::to_string(values[i]);
+  }
+  result += "]";
+  return result;
+}
+
 static LogicalResult buildLoadLikeDestinationList(
     mlir::Operation *op, mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
     bool pm, llvm::StringRef packSuffix, std::string &destList,
@@ -2085,6 +2322,17 @@ static void recordLDIAccumulatorSetupKind(QASMEmissionState &state,
       classifyVPMSetupImmediate(value, *accumulator);
 }
 
+static void clearLDIAccumulatorSetupKind(QASMEmissionState &state,
+                                         mlir::vc4::Cond cond,
+                                         int64_t address) {
+  if (cond == mlir::vc4::Cond::never)
+    return;
+  std::optional<unsigned> accumulator = getAccumulatorIndexForWriteAddress(address);
+  if (!accumulator || *accumulator >= 6)
+    return;
+  state.accumulatorSetupKind[*accumulator] = VPMTransferAliasKind::Unknown;
+}
+
 static void updateQASMAfterLDI(QASMEmissionState &state,
                                mlir::vc4::QPULDIOp ldi, uint32_t value) {
   mlir::Operation *op = ldi.getOperation();
@@ -2094,23 +2342,18 @@ static void updateQASMAfterLDI(QASMEmissionState &state,
                                 getIntegerAttrValue(op, "waddr_mul"), value);
 }
 
+static void updateQASMAfterPerElementLDI(QASMEmissionState &state,
+                                         mlir::vc4::QPULDIOp ldi) {
+  mlir::Operation *op = ldi.getOperation();
+  clearLDIAccumulatorSetupKind(state, ldi.getCondAdd(),
+                               getIntegerAttrValue(op, "waddr_add"));
+  clearLDIAccumulatorSetupKind(state, ldi.getCondMul(),
+                               getIntegerAttrValue(op, "waddr_mul"));
+}
+
 static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
                                     QASMEmissionState &state,
                                     llvm::raw_ostream &os) {
-  if (ldi.getMode() != mlir::vc4::LoadImmMode::splat32) {
-    return ldi.emitOpError()
-           << "only splat32 vc4.qpu.ldi qasm emission is supported in this "
-              "slice";
-  }
-
-  auto valueAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(
-      ldi.getOperation()->getAttr("value"));
-  if (!valueAttr) {
-    return ldi.emitOpError()
-           << "requires an integer 'value' attribute for splat32 qasm "
-              "emission";
-  }
-
   std::optional<std::string> packSuffix =
       getPackSuffix(ldi.getOperation()->getAttr("pack"));
   if (!packSuffix) {
@@ -2130,13 +2373,47 @@ static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
   std::string opcode = "ldi";
   appendLoadLikeOpcodeSuffix(ldi.getOperation(), emittedCond, opcode);
 
-  uint32_t immediateValue = static_cast<uint32_t>(valueAttr.getInt());
-  uint32_t emittedImmediateValue =
-      canonicalizeLDIImmediateForQASM(ldi, immediateValue);
-  os << opcode << " " << destinations << ", "
-     << formatU32Immediate(emittedImmediateValue) << "\n";
-  updateQASMAfterLDI(state, ldi, emittedImmediateValue);
-  return success();
+  switch (ldi.getMode()) {
+  case mlir::vc4::LoadImmMode::splat32: {
+    auto valueAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(
+        ldi.getOperation()->getAttr("value"));
+    if (!valueAttr) {
+      return ldi.emitOpError()
+             << "requires an integer 'value' attribute for splat32 qasm "
+                "emission";
+    }
+
+    uint32_t immediateValue = static_cast<uint32_t>(valueAttr.getInt());
+    uint32_t emittedImmediateValue =
+        canonicalizeLDIImmediateForQASM(ldi, immediateValue);
+    os << opcode << " " << destinations << ", "
+       << formatU32Immediate(emittedImmediateValue) << "\n";
+    updateQASMAfterLDI(state, ldi, emittedImmediateValue);
+    return success();
+  }
+  case mlir::vc4::LoadImmMode::per_elem_i2:
+  case mlir::vc4::LoadImmMode::per_elem_u2: {
+    auto valueAttr = llvm::dyn_cast_or_null<mlir::DenseI32ArrayAttr>(
+        ldi.getOperation()->getAttr("value"));
+    if (!valueAttr) {
+      return ldi.emitOpError()
+             << "requires a dense i32 array 'value' attribute for "
+                "per-element qasm emission";
+    }
+    if (valueAttr.asArrayRef().size() != 16) {
+      return ldi.emitOpError()
+             << "requires exactly 16 lane values for per-element qasm "
+                "emission";
+    }
+
+    os << opcode << " " << destinations << ", "
+       << formatPerElementLDIImmediate(valueAttr.asArrayRef()) << "\n";
+    updateQASMAfterPerElementLDI(state, ldi);
+    return success();
+  }
+  }
+
+  llvm_unreachable("unhandled vc4.qpu.ldi mode");
 }
 
 static const char *getSemaphoreSourceMnemonic(mlir::vc4::SemaphoreMode mode) {
@@ -2639,17 +2916,21 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
 
   bool requiresF32Packing = false;
   bool requiresLaunchElements = false;
+  bool requiresCooperativeScheduling = false;
   for (const KernelRecord &kernel : kernels) {
     requiresF32Packing |= launchABIRequiresF32Packing(kernel.launchABI);
+    requiresCooperativeScheduling |=
+        kernel.resources.scheduleMode == "cooperative_block";
     const LaunchABIArgumentModel *rowCountArgForLaunchShape =
         findLaunchABIScalarArgumentNamed(kernel.launchABI, "m");
     // Kernels with both m and n, such as GEMV, use m/n as semantic dimensions;
     // neither scalar is necessarily the one-dimensional launch element count.
     // Those kernels must use CUDA-like grid/block launch geometry to choose
     // logical QPU requests.  Elementwise kernels with only an n scalar keep the
-    // convenient n-as-logical-count behavior.
+    // convenient n-as-logical-count behavior.  Cooperative-block kernels also
+    // use launch geometry because block dimensions define resident warps.
     requiresLaunchElements |=
-        rowCountArgForLaunchShape ||
+        requiresCooperativeScheduling || rowCountArgForLaunchShape ||
         !findLaunchABILogicalCountArgument(kernel.launchABI);
   }
 
@@ -2664,9 +2945,36 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "#include <string.h>\n\n";
   os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
      << programLayout.heapBytes << "u\n";
+  os << "#ifndef VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK\n";
+  os << "#define VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR\n";
+  os << "#endif\n";
+  os << "#ifndef VC4_KERNEL_FLAG_COOPERATIVE_BLOCK\n";
+  os << "#define VC4_KERNEL_FLAG_COOPERATIVE_BLOCK 0x00000001u\n";
+  os << "#endif\n";
+  os << "#ifndef VC4_KERNEL_FLAG_REQUIRE_FULL_BLOCK_RESIDENCY\n";
+  os << "#define VC4_KERNEL_FLAG_REQUIRE_FULL_BLOCK_RESIDENCY 0x00000002u\n";
+  os << "#endif\n";
+  os << "#ifndef VC4_KERNEL_FLAG_USES_BARRIER\n";
+  os << "#define VC4_KERNEL_FLAG_USES_BARRIER 0x00000004u\n";
+  os << "#endif\n";
+  os << "#ifndef VC4_KERNEL_FLAG_USES_SHARED_VPM\n";
+  os << "#define VC4_KERNEL_FLAG_USES_SHARED_VPM 0x00000008u\n";
+  os << "#endif\n";
+  os << "#define VC4_CODEGEN_TARGET_VPM_BYTES 4096u\n";
+  os << "#define VC4_CODEGEN_TARGET_SEMAPHORES 16u\n";
   for (const KernelRecord &macroKernel : kernels) {
     os << "#define KERNEL_" << macroKernel.kernelId << "_NUM_UNIFS "
        << macroKernel.info.uniformWordsPerQPU << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_WARPS_PER_BLOCK_MAX "
+       << macroKernel.resources.warpsPerBlockMax << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_SEMAPHORES_PER_BLOCK "
+       << macroKernel.resources.semaphoresPerBlock << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_VPM_BYTES_PER_BLOCK "
+       << macroKernel.resources.vpmBytesPerBlock << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_VPM_ROWS_PER_BLOCK "
+       << macroKernel.resources.vpmRowsPerBlock << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_MAX_RESIDENT_BLOCKS "
+       << macroKernel.resources.maxResidentBlocks << "u\n";
   }
   os << "\n";
   os << "/* VC4_RUNTIME_LAYOUT program_bytes=" << programLayout.programBytes
@@ -2712,6 +3020,26 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "}\n\n";
   }
 
+  if (requiresCooperativeScheduling) {
+    os << "static uint32_t vc4_codegen_min_u32(uint32_t lhs, uint32_t rhs) {\n";
+    os << "  return lhs < rhs ? lhs : rhs;\n";
+    os << "}\n\n";
+    os << "static uint32_t vc4_codegen_grid_blocks(vc4_dim3 grid) {\n";
+    os << "  uint32_t total = 1u;\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.x);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.y);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, grid.z);\n";
+    os << "  return total;\n";
+    os << "}\n\n";
+    os << "static uint32_t vc4_codegen_block_warps(vc4_dim3 block) {\n";
+    os << "  uint32_t total = 1u;\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.x);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.y);\n";
+    os << "  total = vc4_codegen_saturating_mul_u32(total, block.z);\n";
+    os << "  return total;\n";
+    os << "}\n\n";
+  }
+
   os << "static const struct vc4_kernel_image vc4_codegen_kernels[] = {\n";
   for (const KernelRecord &kernel : kernels) {
     os << "  { \"" << kernel.launchABI.publicName << "\", "
@@ -2719,9 +3047,23 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << kernel.launchABI.codeSymbol << ") / sizeof(uint32_t)), KERNEL_"
        << kernel.kernelId
        << "_NUM_UNIFS, VC4_RUNTIME_MAX_QPUS, "
-          "VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR, 0u },\n";
+       << getScheduleModeMacro(kernel.resources) << ", "
+       << getKernelResourceFlagsExpression(kernel.resources) << " },\n";
   }
   os << "};\n\n";
+  for (const KernelRecord &resourceKernel : kernels) {
+    os << "/* VC4_KERNEL_RESOURCE kernel_id=" << resourceKernel.kernelId
+       << " public_name=" << resourceKernel.launchABI.publicName
+       << " schedule_mode=" << resourceKernel.resources.scheduleMode
+       << " resident_blocks=" << resourceKernel.resources.maxResidentBlocks
+       << " warps_per_block_max=" << resourceKernel.resources.warpsPerBlockMax
+       << " semaphore_base=resident_slot*" << resourceKernel.resources.semaphoresPerBlock
+       << " vpm_base_row=resident_slot*" << resourceKernel.resources.vpmRowsPerBlock
+       << " full_residency resident_wave_wait_before_resource_reuse="
+       << (resourceKernel.resources.requireFullBlockResidency ? 1 : 0)
+       << " */\n";
+  }
+  os << "\n";
   os << "static const struct vc4_module_image vc4_codegen_module = {\n";
   os << "  VC4_RUNTIME_MODULE_VERSION,\n";
   os << "  (uint32_t)(sizeof(vc4_codegen_kernels) / sizeof(vc4_codegen_kernels[0])),\n";
@@ -2736,7 +3078,13 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     const LaunchABIModel &kernelABI = launchKernel.launchABI;
     const std::string kernelBase = getLaunchAPIBaseName(kernelABI);
     os << "struct " << kernelBase << "_pack_ctx {\n";
-    os << "  uint32_t total_requests;\n";
+    os << "  uint32_t __vc4_total_requests;\n";
+    os << "  uint32_t __vc4_resident_blocks;\n";
+    os << "  uint32_t __vc4_warps_per_block;\n";
+    os << "  uint32_t __vc4_logical_block_id;\n";
+    os << "  uint32_t __vc4_logical_warp_id;\n";
+    os << "  uint32_t __vc4_vpm_base_row;\n";
+    os << "  uint32_t __vc4_semaphore_base;\n";
     for (const LaunchABIArgumentModel &arg : kernelABI.arguments) {
       if (arg.kind == LaunchABIArgumentKind::Buffer) {
         os << "  vc4_deviceptr_t " << arg.name << ";\n";
@@ -2760,10 +3108,49 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "  if (!ctx || !uniformWords || uniformWordsPerRequest < KERNEL_"
        << launchKernel.kernelId << "_NUM_UNIFS)\n";
     os << "    return -1;\n";
+    os << "  uint32_t logical_block_id = 0u;\n";
+    os << "  uint32_t logical_warp_id = logicalRequest;\n";
+    os << "  if (ctx->__vc4_warps_per_block != 0u) {\n";
+    os << "    logical_block_id = logicalRequest / ctx->__vc4_warps_per_block;\n";
+    os << "    logical_warp_id = logicalRequest % ctx->__vc4_warps_per_block;\n";
+    os << "  }\n";
+    os << "  uint32_t resident_slot = ctx->__vc4_resident_blocks ? (logical_block_id % ctx->__vc4_resident_blocks) : 0u;\n";
+    os << "  uint32_t vpm_base_row = resident_slot * KERNEL_" << launchKernel.kernelId << "_VPM_ROWS_PER_BLOCK;\n";
+    os << "  uint32_t semaphore_base = resident_slot * KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK;\n";
+    os << "  ctx->__vc4_logical_block_id = logical_block_id;\n";
+    os << "  ctx->__vc4_logical_warp_id = logical_warp_id;\n";
+    os << "  ctx->__vc4_vpm_base_row = vpm_base_row;\n";
+    os << "  ctx->__vc4_semaphore_base = semaphore_base;\n";
+    os << "  (void)vpm_base_row;\n";
+    os << "  (void)semaphore_base;\n";
     appendLauncherUniformLayoutComment(os, kernelABI);
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
+        if (launchKernel.resources.scheduleMode == "cooperative_block" &&
+            arg->kind == LaunchABIArgumentKind::Scalar) {
+          if (arg->name == "logical_warp_id") {
+            os << "  uniformWords[" << index << "] = logical_warp_id; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "warps_per_block") {
+            os << "  uniformWords[" << index
+               << "] = ctx->__vc4_warps_per_block; /* arg " << arg->name
+               << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "vpm_base_row") {
+            os << "  uniformWords[" << index << "] = vpm_base_row; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+          if (arg->name == "semaphore_base") {
+            os << "  uniformWords[" << index << "] = semaphore_base; /* arg "
+               << arg->name << " supplied by cooperative scheduler */\n";
+            continue;
+          }
+        }
         if (arg->kind == LaunchABIArgumentKind::Buffer) {
           os << "  uniformWords[" << index << "] = (uint32_t)ctx->"
              << arg->name << "; /* arg " << arg->name << " */\n";
@@ -2780,13 +3167,21 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       if (const LaunchABIBuiltinModel *builtin =
               findLaunchABIBuiltinForUniformIndex(kernelABI, index)) {
         if (builtin->kind == "qpu_num") {
-          os << "  uniformWords[" << index
-             << "] = logicalRequest; /* builtin " << builtin->name
-             << " */\n";
+          if (launchKernel.resources.scheduleMode == "cooperative_block") {
+            os << "  uniformWords[" << index << "] = logical_warp_id; /* builtin "
+               << builtin->name << " logical_warp_id for cooperative_block */\n";
+          } else {
+            os << "  uniformWords[" << index << "] = logicalRequest; /* builtin "
+               << builtin->name << " */\n";
+          }
         } else if (builtin->kind == "num_qpus") {
-          os << "  uniformWords[" << index
-             << "] = ctx->total_requests; /* builtin " << builtin->name
-             << " */\n";
+          if (launchKernel.resources.scheduleMode == "cooperative_block") {
+            os << "  uniformWords[" << index << "] = ctx->__vc4_warps_per_block; /* builtin "
+               << builtin->name << " warps_per_block for cooperative_block */\n";
+          } else {
+            os << "  uniformWords[" << index << "] = ctx->__vc4_total_requests; /* builtin "
+               << builtin->name << " */\n";
+          }
         } else {
           return emitLaunchABIModelError(
               launchKernel.func, llvm::Twine("builtin '") + builtin->name +
@@ -2817,19 +3212,41 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
 
     appendLauncherPrototype(os, kernelABI);
     os << " {\n";
-    if (validationCountArg) {
-      os << "  uint32_t logicalN = (uint32_t)" << validationCountArg->name
-         << ";\n";
+    if (launchKernel.resources.scheduleMode == "cooperative_block") {
+      os << "  uint32_t gridBlocks = vc4_codegen_grid_blocks(grid);\n";
+      os << "  uint32_t warpsPerBlock = vc4_codegen_block_warps(block);\n";
+      os << "  uint32_t residentBlocks = 0u;\n";
+      os << "  uint32_t logicalN = gridBlocks;\n";
+      os << "  if (warpsPerBlock == 0u || warpsPerBlock > KERNEL_" << launchKernel.kernelId << "_WARPS_PER_BLOCK_MAX || warpsPerBlock > VC4_RUNTIME_MAX_QPUS) {\n";
+      os << "    vc4ProgramRecordLaunchFailure(program);\n";
+      os << "    return -1;\n";
+      os << "  }\n";
+      os << "  residentBlocks = VC4_RUNTIME_MAX_QPUS / warpsPerBlock;\n";
+      os << "  if (KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK != 0u)\n";
+      os << "    residentBlocks = vc4_codegen_min_u32(residentBlocks, VC4_CODEGEN_TARGET_SEMAPHORES / KERNEL_" << launchKernel.kernelId << "_SEMAPHORES_PER_BLOCK);\n";
+      os << "  if (KERNEL_" << launchKernel.kernelId << "_VPM_BYTES_PER_BLOCK != 0u)\n";
+      os << "    residentBlocks = vc4_codegen_min_u32(residentBlocks, VC4_CODEGEN_TARGET_VPM_BYTES / KERNEL_" << launchKernel.kernelId << "_VPM_BYTES_PER_BLOCK);\n";
+      os << "  if (residentBlocks == 0u) {\n";
+      os << "    vc4ProgramRecordLaunchFailure(program);\n";
+      os << "    return -1;\n";
+      os << "  }\n";
+      os << "  /* schedule_mode=cooperative_block resident_blocks computed before enqueue; each resident_wave waits before VPM/semaphore resource reuse. */\n";
+      os << "  uint32_t totalRequests = vc4_codegen_saturating_mul_u32(gridBlocks, warpsPerBlock);\n";
     } else {
-      os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
+      if (validationCountArg) {
+        os << "  uint32_t logicalN = (uint32_t)" << validationCountArg->name << ";\n";
+      } else {
+        os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
+      }
+      if (kernelABI.tailPolicy == "exact_multiple")
+        os << "  uint32_t totalRequests = logicalN == 0u ? 0u : VC4_RUNTIME_MAX_QPUS;\n";
+      else
+        os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
+      os << "  uint32_t residentBlocks = VC4_RUNTIME_MAX_QPUS;\n";
+      os << "  uint32_t warpsPerBlock = 1u;\n";
+      os << "  (void)grid;\n";
+      os << "  (void)block;\n";
     }
-    if (kernelABI.tailPolicy == "exact_multiple") {
-      os << "  uint32_t totalRequests = logicalN == 0u ? 0u : VC4_RUNTIME_MAX_QPUS;\n";
-    } else {
-      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
-    }
-    os << "  (void)grid;\n";
-    os << "  (void)block;\n";
     os << "  (void)logicalN;\n";
     for (const LaunchABIArgumentModel *arg : bufferArgs) {
       std::string elemType = getBufferElementCTypeForCodegen(*arg);
@@ -2844,7 +3261,13 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     }
     os << "  struct " << kernelBase << "_pack_ctx ctx;\n";
     os << "  memset(&ctx, 0, sizeof(ctx));\n";
-    os << "  ctx.total_requests = totalRequests;\n";
+    os << "  ctx.__vc4_total_requests = totalRequests;\n";
+    os << "  ctx.__vc4_resident_blocks = residentBlocks;\n";
+    os << "  ctx.__vc4_warps_per_block = warpsPerBlock;\n";
+    os << "  ctx.__vc4_logical_block_id = 0u;\n";
+    os << "  ctx.__vc4_logical_warp_id = 0u;\n";
+    os << "  ctx.__vc4_vpm_base_row = 0u;\n";
+    os << "  ctx.__vc4_semaphore_base = 0u;\n";
     for (const LaunchABIArgumentModel &arg : kernelABI.arguments)
       os << "  ctx." << arg.name << " = " << arg.name << ";\n";
     os << "  return vc4LaunchKernel(program, " << launchKernel.kernelId
@@ -2964,7 +3387,9 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "      \"tail_policy\": ";
   appendJSONEscapedString(os, kernel.launchABI.tailPolicy);
   os << ",\n";
-  os << "      \"schedule_mode\": \"independent_vector\",\n";
+  os << "      \"schedule_mode\": ";
+  appendJSONEscapedString(os, kernel.resources.scheduleMode);
+  os << ",\n";
   os << "      \"args\": [\n";
   appendManifestKernelArguments(os, kernel.launchABI);
   os << "      ],\n";
@@ -2972,11 +3397,15 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   appendManifestKernelBuiltins(os, kernel.launchABI);
   os << "      ],\n";
   os << "      \"resources\": {\n";
-  os << "        \"uses_barrier\": false,\n";
-  os << "        \"uses_shared_vpm\": false,\n";
-  os << "        \"vpm_bytes_per_block\": 0,\n";
-  os << "        \"semaphores_per_block\": 0,\n";
-  os << "        \"warps_per_block_max\": 1\n";
+  os << "        \"uses_barrier\": " << (kernel.resources.usesBarrier ? "true" : "false") << ",\n";
+  os << "        \"uses_shared_vpm\": " << (kernel.resources.usesSharedVPM ? "true" : "false") << ",\n";
+  os << "        \"require_full_block_residency\": " << (kernel.resources.requireFullBlockResidency ? "true" : "false") << ",\n";
+  os << "        \"vpm_bytes_per_block\": " << kernel.resources.vpmBytesPerBlock << ",\n";
+  os << "        \"shared_vpm_bytes\": " << kernel.resources.vpmBytesPerBlock << ",\n";
+  os << "        \"vpm_rows_per_block\": " << kernel.resources.vpmRowsPerBlock << ",\n";
+  os << "        \"semaphores_per_block\": " << kernel.resources.semaphoresPerBlock << ",\n";
+  os << "        \"warps_per_block_max\": " << kernel.resources.warpsPerBlockMax << ",\n";
+  os << "        \"max_resident_blocks\": " << kernel.resources.maxResidentBlocks << "\n";
   os << "      }\n";
   os << "    }";
   if (trailingComma)
