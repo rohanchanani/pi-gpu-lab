@@ -267,9 +267,7 @@ select_harness_path() {
   if [[ -f "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
 
   if [[ "${VC4_ALLOW_REFERENCE_HARNESS_FALLBACK:-0}" != "1" ]]; then
-    printf '%s
-' "__VC4_GENERATE_EXPECTED_HARNESS__"
-    return 0
+    fail "M2 candidate fixture $TEST_NAME needs $(relpath "$candidate") using kernel_launch.h and vc4Malloc/vc4Memcpy APIs; reference harness fallback is disabled"
   fi
 
   log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and forbidden for normal M2 candidate verification."
@@ -474,69 +472,6 @@ EOF_README
   log "program-bundle smoke workdir ready: $(relpath "$WORK_DIR")"
 }
 
-write_expected_result_harness() {
-  local out_path="$1"
-  require_file "$EXPECTED_JSON"
-  require_file "$GENERATED_DIR/manifest.json"
-  python3 - "$EXPECTED_JSON" "$GENERATED_DIR/manifest.json" "$out_path" <<'PY_EXPECTED_HARNESS'
-import json
-import re
-import sys
-from pathlib import Path
-
-expected_path = Path(sys.argv[1])
-manifest_path = Path(sys.argv[2])
-out_path = Path(sys.argv[3])
-expected = json.loads(expected_path.read_text(encoding='utf-8'))
-manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
-
-def c_string(value: str) -> str:
-    return json.dumps(value)
-
-def field_value(value):
-    if isinstance(value, bool):
-        return 'true' if value else 'false'
-    return str(value)
-
-fields = [('name', expected.get('name', 'unknown')), ('status', expected.get('status', 'PASS'))]
-required = expected.get('required') or {}
-if isinstance(required, dict):
-    fields.extend((str(k), field_value(v)) for k, v in required.items())
-float_max = expected.get('float_max') or {}
-if isinstance(float_max, dict):
-    fields.extend((str(k), '0') for k in float_max)
-
-prefix = 'VC4_TEST_' + 'RESULT'
-result_line = prefix + ' ' + ' '.join(f'{k}={v}' for k, v in fields) + '\n'
-
-kernels = manifest.get('kernels') or []
-launch_name = None
-if kernels and isinstance(kernels[0], dict):
-    public_name = kernels[0].get('public_name') or kernels[0].get('symbol_name')
-    if isinstance(public_name, str) and re.match(r'^[A-Za-z_][A-Za-z0-9_]*$', public_name):
-        launch_name = public_name if public_name.endswith('_launch') else public_name + '_launch'
-
-lines = [
-    '#include "vc4_m2_candidate_test_helpers.h"',
-    '',
-    'void notmain(void) {',
-    '    struct vc4_program *program = 0;',
-    '    int rc = vc4_program_create(&program, 0);',
-    '    (void)rc;',
-]
-if launch_name:
-    lines.append(f'    (void)&{launch_name};')
-lines.extend([
-    '    if (program)',
-    '        vc4_program_destroy(program);',
-    f'    printk({c_string(result_line)});',
-    '}',
-    '',
-])
-out_path.write_text('\n'.join(lines), encoding='utf-8')
-PY_EXPECTED_HARNESS
-}
-
 prepare_workdir() {
   if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
     prepare_bundle_only_workdir
@@ -544,26 +479,16 @@ prepare_workdir() {
   fi
 
   assemble_candidate
-  local harness_path harness_name bin_name shader_sources generated_harness
-  generated_harness=0
+  local harness_path harness_name bin_name shader_sources
   harness_path="$(select_harness_path)"
-  if [[ "$harness_path" == "__VC4_GENERATE_EXPECTED_HARNESS__" ]]; then
-    harness_name="${TEST_NAME}_candidate_harness.c"
-    generated_harness=1
-  else
-    harness_name="$(basename "$harness_path")"
-  fi
+  harness_name="$(basename "$harness_path")"
   bin_name="${harness_name%.c}.bin"
 
   log "preparing candidate workdir $(relpath "$WORK_DIR")"
   rm -rf "$WORK_DIR"
   mkdir -p "$WORK_DIR"
 
-  if [[ "$generated_harness" -eq 1 ]]; then
-    write_expected_result_harness "$WORK_DIR/$harness_name"
-  else
-    cp "$harness_path" "$WORK_DIR/$harness_name"
-  fi
+  cp "$harness_path" "$WORK_DIR/$harness_name"
   if [[ -f "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" ]]; then
     cp "$SCRIPT_DIR/vc4_m2_candidate_test_helpers.h" "$WORK_DIR/vc4_m2_candidate_test_helpers.h"
   fi

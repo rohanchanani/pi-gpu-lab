@@ -842,7 +842,7 @@ This is backend work because the scheduled QPU program already contains the barr
 
 #### Expected end state
 
-The backend passes a curated matrix of scheduled-VC4 hardware fixtures exercising TMU loads, SFU reads, VPM/VDW stores, VPM setup serialization, reductions, and tail behavior. Fixtures that require structured lowering are explicitly deferred and not counted as M2 failures.
+The backend passes a curated matrix of scheduled-VC4 hardware fixtures exercising TMU loads, SFU reads, VPM/VDW stores, reductions, and tail behavior. Fixtures that require structured lowering or physical-QPU hardware characterization are explicitly deferred and not counted as M2 failures.
 
 #### Matrix groups
 
@@ -867,7 +867,6 @@ Memory/SFU paths:
   tmu_read_nop_write
   tmu_strided_load
   sfu_recip
-  vpm_setup_clobber
   vpm_slice_visibility
 
 Cooperative/shared/reduction:
@@ -876,6 +875,9 @@ Cooperative/shared/reduction:
   warp_prefix_sum
   block_reduce_sum
   shared_transpose_16x16
+
+Post-M2 hardware characterization:
+  vpm_setup_clobber
 
 Realistic/stress, stretch if scheduled inputs are already M2-compatible:
   matmul_naive
@@ -1454,8 +1456,11 @@ saxpy_tmu, saxpy_tmu_overlap, tmu_read_nop_write, tmu_strided_load
 sfu_recip
   SFU issue/read coverage.
 
-vpm_setup_clobber, vpm_slice_visibility
-  VPM setup and visibility coverage.
+vpm_slice_visibility
+  VPM visibility coverage required for M2.
+
+vpm_setup_clobber
+  Post-M2 physical-QPU/VPM setup litmus for validating whether conservative VPM setup serialization can be relaxed.
 
 qpu_barrier_syncthreads
   Cooperative-block scheduler/resource allocator anchor.

@@ -32,8 +32,10 @@
         "tmu_read_nop_write",
         "tmu_strided_load",
         "sfu_recip",
-        "vpm_setup_clobber",
         "vpm_slice_visibility"
+      ],
+      "hardware_characterization_post_m2": [
+        "vpm_setup_clobber"
       ],
       "cooperative_shared_reduction": [
         "qpu_barrier_syncthreads",
@@ -61,7 +63,6 @@
         "shared_transpose_16x16",
         "tmu_read_nop_write",
         "tmu_strided_load",
-        "vpm_setup_clobber",
         "vpm_slice_visibility",
         "warp_prefix_sum",
         "warp_reduce_sum"
@@ -77,7 +78,8 @@
     "M2 slice 6 reference_hardware probes are side-effect cleaned by the verifier; checked-in reference trees are source inputs, not generated-output sinks.",
     "M2 static runtime/layout contracts are stop_on_failure gates: generated launch code must call vc4LaunchKernel while invariant libpi runtime owns raw V3D enqueue and bounded wait behavior.",
     "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware.",
-    "Post-slice-6 anti-shortcut checks keep QASM emission scheduled-stream based and prevent support-script VC4_TEST_RESULT/runtime-event injection in later hardware slices."
+    "Post-slice-6 anti-shortcut checks keep QASM emission scheduled-stream based and prevent support-script VC4_TEST_RESULT/runtime-event injection in later hardware slices.",
+    "vpm_setup_clobber is a physical-QPU/VPM setup hardware-characterization litmus, not a required M2 codegen fixture; it remains useful post-M2 for validating whether conservative VPM setup serialization can be relaxed."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -100,8 +102,10 @@
       "tmu_read_nop_write",
       "tmu_strided_load",
       "sfu_recip",
-      "vpm_setup_clobber",
       "vpm_slice_visibility"
+    ],
+    "hardware_characterization_post_m2": [
+      "vpm_setup_clobber"
     ],
     "cooperative_shared_reduction": [
       "qpu_barrier_syncthreads",
@@ -129,7 +133,6 @@
       "shared_transpose_16x16",
       "tmu_read_nop_write",
       "tmu_strided_load",
-      "vpm_setup_clobber",
       "vpm_slice_visibility",
       "warp_prefix_sum",
       "warp_reduce_sum"
