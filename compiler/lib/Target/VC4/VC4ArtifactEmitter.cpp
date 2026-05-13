@@ -1659,6 +1659,28 @@ static bool qpuBundleReadsAddress(mlir::vc4::QPUBundleOp bundle,
   return false;
 }
 
+static VPMTransferAliasKind inferVPMSetupUseFromFollowingOps(
+    mlir::vc4::QPUBundleOp setupBundle) {
+  constexpr unsigned kMaxVPMSetupLookahead = 8;
+  unsigned inspected = 0;
+  for (mlir::Operation *next = setupBundle->getNextNode(); next && inspected < kMaxVPMSetupLookahead;
+       next = next->getNextNode(), ++inspected) {
+    if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(next)) {
+      if (qpuBundleReadsAddress(bundle, 48))
+        return VPMTransferAliasKind::Read;
+      if (qpuBundleWritesAddress(bundle, 48))
+        return VPMTransferAliasKind::Write;
+      if (qpuBundleWritesAddress(bundle, 49) || qpuBundleWritesAddress(bundle, 50))
+        return VPMTransferAliasKind::Unknown;
+      continue;
+    }
+    if (llvm::isa<mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp>(next))
+      continue;
+    break;
+  }
+  return VPMTransferAliasKind::Unknown;
+}
+
 static void clearAccumulatorSetupWrite(QASMEmissionState &state,
                                        mlir::vc4::Cond cond,
                                        int64_t address) {
@@ -2149,6 +2171,11 @@ static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
   std::string line;
   bool needSeparator = false;
   VPMTransferAliasKind setupKind = inferVPMSetupWriteKind(state, bundle);
+  if (qpuBundleWritesAddress(bundle, 49)) {
+    VPMTransferAliasKind followingUse = inferVPMSetupUseFromFollowingOps(bundle);
+    if (followingUse != VPMTransferAliasKind::Unknown)
+      setupKind = followingUse;
+  }
 
   const bool addActive = bundle.getOpAdd() != mlir::vc4::AddOpcode::nop;
   if (failed(appendAddInstruction(bundle, state, setupKind, line,
@@ -2461,10 +2488,19 @@ static LogicalResult emitQPUSemaQASM(mlir::vc4::QPUSemaOp sema,
           sema.getPm(), *packSuffix, destinations, emittedCond)))
     return failure();
 
+  // For side-effect-only semaphore ops, prefer the direct vc4asm spelling used
+  // by the hardware references.  Destination-writing semaphore moves are still
+  // available for tests that intentionally model that form.
+  if (destinations == "-") {
+    os << getSemaphoreSourceMnemonic(sema.getMode()) << " -, " << id << "\n";
+    return success();
+  }
+
   // vc4asm documents both the direct `sacq`/`srel` syntax and the Broadcom
-  // compatible `mov dest, sacqN` form.  Use the latter uniformly so conditions,
-  // flags, pack suffixes, write-swap, and dual ADD/MUL destinations share the
-  // same deterministic printer path as ordinary load-immediate output.
+  // compatible `mov dest, sacqN` form.  Use the latter when destinations are
+  // present so conditions, flags, pack suffixes, write-swap, and dual ADD/MUL
+  // destinations share the same deterministic printer path as ordinary
+  // load-immediate output.
   std::string opcode = "mov";
   appendLoadLikeOpcodeSuffix(sema.getOperation(), emittedCond, opcode);
 
