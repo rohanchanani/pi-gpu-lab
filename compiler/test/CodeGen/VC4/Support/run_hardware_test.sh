@@ -3,8 +3,6 @@
 
 set -euo pipefail
 
-TTY_READ_ZERO_PATTERN='tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]'
-
 usage() {
   cat >&2 <<'USAGE'
 usage:
@@ -26,6 +24,46 @@ CHECKER="$SCRIPT_DIR/check_vc4_test_result.py"
 fail() {
   printf '[vc4-hw] ERROR: %s\n' "$*" >&2
   exit 1
+}
+
+vc4_hw_transient_preboot_failure_reason() {
+  local log_path="$1"
+  [[ -f "$log_path" ]] || return 1
+
+  if grep -Eq 'VC4_RUNTIME_LAYOUT|VC4_KERNEL_LAUNCH|VC4_TEST_RESULT|VC4_KERNEL_LAUNCH_ERROR|VC4_HEAP_STATS|DONE!!!' "$log_path"; then
+    return 1
+  fi
+
+  if grep -Fq 'tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]' "$log_path"; then
+    printf '%s\n' 'tty-USB read returned 0 bytes'
+    return 0
+  fi
+  if grep -Fq 'GET_CODE op mismatch' "$log_path"; then
+    printf '%s\n' 'GET_CODE op mismatch'
+    return 0
+  fi
+  if grep -Fq 'PANIC:pi-boot failed' "$log_path"; then
+    printf '%s\n' 'PANIC:pi-boot failed'
+    return 0
+  fi
+  if grep -Fq 'simple-boot.c:ck_eq32' "$log_path"; then
+    printf '%s\n' 'simple-boot.c:ck_eq32'
+    return 0
+  fi
+  if grep -Fq 'waiting for a start' "$log_path"; then
+    printf '%s\n' 'waiting for a start'
+    return 0
+  fi
+  if grep -Eq 'pi-install: .* about to boot' "$log_path"; then
+    printf '%s\n' 'pi-install about to boot'
+    return 0
+  fi
+
+  return 1
+}
+
+vc4_hw_is_transient_preboot_failure() {
+  vc4_hw_transient_preboot_failure_reason "$1" >/dev/null
 }
 
 run_power_cycle() {
@@ -123,8 +161,10 @@ run_one() {
       continue
     fi
 
-    if grep -Fq "$TTY_READ_ZERO_PATTERN" "$log_path" && [[ "$attempt" -lt "$max_attempts" ]]; then
-      printf '[vc4-hw] transient serial read failure; retrying\n' >&2
+    local retry_reason
+    if retry_reason="$(vc4_hw_transient_preboot_failure_reason "$log_path")" && [[ "$attempt" -lt "$max_attempts" ]]; then
+      printf '[vc4-hw] retrying %s side after transient pre-boot failure (attempt %d/%d; matched: %s)\n' "$side" "$((attempt + 1))" "$max_attempts" "$retry_reason" >&2
+      printf '[vc4-hw] transient pre-boot failure matched: %s\n' "$retry_reason" >> "$log_path"
       run_power_cycle
       continue
     fi
@@ -133,10 +173,54 @@ run_one() {
   done
 }
 
+vc4_hw_self_test_assert_true() {
+  local name="$1"
+  local log_path="$2"
+  local reason
+  if ! reason="$(vc4_hw_transient_preboot_failure_reason "$log_path")"; then
+    fail "self-test expected transient pre-boot true: $name"
+  fi
+  printf '[vc4-hw] self-test true: %s (%s)\n' "$name" "$reason"
+}
+
+vc4_hw_self_test_assert_false() {
+  local name="$1"
+  local log_path="$2"
+  if vc4_hw_is_transient_preboot_failure "$log_path"; then
+    fail "self-test expected transient pre-boot false: $name"
+  fi
+  printf '[vc4-hw] self-test false: %s\n' "$name"
+}
+
 self_test() {
-  local tmp
+  local tmp marker
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' RETURN
+
+  printf '%s\n' 'tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]' > "$tmp/tty-read-zero.log"
+  vc4_hw_self_test_assert_true "tty-read-zero log" "$tmp/tty-read-zero.log"
+
+  {
+    printf '%s\n' 'GET_CODE op mismatch: expected 55556666, got 00000000'
+    printf '%s\n' 'simple-boot.c:ck_eq32:30:PANIC:pi-boot failed'
+  } > "$tmp/get-code-panic.log"
+  vc4_hw_self_test_assert_true "GET_CODE mismatch plus pi-boot panic log" "$tmp/get-code-panic.log"
+
+  marker='VC4_KERNEL_LAUNCH_ERROR'
+  printf '%s\n' "${marker} reason=wave_timeout" > "$tmp/launch-error.log"
+  vc4_hw_self_test_assert_false "kernel launch error log" "$tmp/launch-error.log"
+
+  marker='VC4_TEST_''RESULT'
+  printf '%s\n' "${marker} status=FAIL" > "$tmp/test-result-fail.log"
+  vc4_hw_self_test_assert_false "test result fail log" "$tmp/test-result-fail.log"
+
+  marker='VC4_RUNTIME_''LAYOUT'
+  {
+    printf '%s\n' "${marker} heap_base=0x1000"
+    printf '%s\n' 'PANIC:pi-boot failed'
+  } > "$tmp/runtime-layout-crash.log"
+  vc4_hw_self_test_assert_false "runtime layout then crash log" "$tmp/runtime-layout-crash.log"
+
   mkdir -p "$tmp/reference"
   cat > "$tmp/input.mlir" <<'EOF'
 // self-test placeholder

@@ -14,15 +14,24 @@ set -euo pipefail
 
 usage() {
   cat >&2 <<'USAGE'
-usage: run_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|clean]
+usage:
+  run_candidate_codegen_test.sh --self-test
+  run_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|clean]
 USAGE
 }
 
-if [[ $# -lt 2 ]]; then usage; exit 2; fi
-
-TEST_NAME="$1"
-PHASE="$2"
-shift 2
+if [[ $# -eq 1 && "$1" == "--self-test" ]]; then
+  TEST_NAME="__self_test__"
+  PHASE="self-test"
+  shift
+elif [[ $# -lt 2 ]]; then
+  usage
+  exit 2
+else
+  TEST_NAME="$1"
+  PHASE="$2"
+  shift 2
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -67,6 +76,46 @@ fail() { printf '[vc4-candidate] ERROR: %s\n' "$*" >&2; exit 1; }
 relpath() { case "$1" in "$REPO_ROOT"/*) printf '%s\n' "${1#$REPO_ROOT/}" ;; *) printf '%s\n' "$1" ;; esac; }
 require_file() { [[ -f "$1" ]] || fail "required file not found: $(relpath "$1")"; }
 require_dir() { [[ -d "$1" ]] || fail "required directory not found: $(relpath "$1")"; }
+
+vc4_candidate_transient_preboot_failure_reason() {
+  local log_path="$1"
+  [[ -f "$log_path" ]] || return 1
+
+  if grep -Eq 'VC4_RUNTIME_LAYOUT|VC4_KERNEL_LAUNCH|VC4_TEST_RESULT|VC4_KERNEL_LAUNCH_ERROR|VC4_HEAP_STATS|DONE!!!' "$log_path"; then
+    return 1
+  fi
+
+  if grep -Fq 'tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]' "$log_path"; then
+    printf '%s\n' 'tty-USB read returned 0 bytes'
+    return 0
+  fi
+  if grep -Fq 'GET_CODE op mismatch' "$log_path"; then
+    printf '%s\n' 'GET_CODE op mismatch'
+    return 0
+  fi
+  if grep -Fq 'PANIC:pi-boot failed' "$log_path"; then
+    printf '%s\n' 'PANIC:pi-boot failed'
+    return 0
+  fi
+  if grep -Fq 'simple-boot.c:ck_eq32' "$log_path"; then
+    printf '%s\n' 'simple-boot.c:ck_eq32'
+    return 0
+  fi
+  if grep -Fq 'waiting for a start' "$log_path"; then
+    printf '%s\n' 'waiting for a start'
+    return 0
+  fi
+  if grep -Eq 'pi-install: .* about to boot' "$log_path"; then
+    printf '%s\n' 'pi-install about to boot'
+    return 0
+  fi
+
+  return 1
+}
+
+vc4_candidate_is_transient_preboot_failure() {
+  vc4_candidate_transient_preboot_failure_reason "$1" >/dev/null
+}
 
 find_tool() {
   local tool="$1"
@@ -579,7 +628,6 @@ run_candidate() {
   prepare_workdir
   log "running candidate hardware workdir $(relpath "$WORK_DIR")"
 
-  local tty_read_zero_pattern='tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]'
   local max_attempts="${VC4_RUN_SH_MAX_ATTEMPTS:-3}"
   if ! [[ "$max_attempts" =~ ^[0-9]+$ ]] || [[ "$max_attempts" -lt 1 ]]; then
     fail "VC4_RUN_SH_MAX_ATTEMPTS must be a positive integer, got: $max_attempts"
@@ -588,11 +636,12 @@ run_candidate() {
   local attempt=1
   local run_rc=0
   local attempt_log="$WORK_DIR/.vc4_candidate_run_attempt.log"
+  local retry_reason=""
   while true; do
     if [[ "$attempt" -eq 1 ]]; then
       vc4_candidate_power_cycle_if_needed "power cycling Pi before candidate run"
     else
-      log "retrying candidate run after transient tty read failure (attempt ${attempt}/${max_attempts})"
+      log "retrying candidate run after transient pre-boot failure (attempt ${attempt}/${max_attempts}; matched: ${retry_reason})"
       vc4_candidate_power_cycle_if_needed "power cycling Pi before retry"
     fi
 
@@ -605,7 +654,9 @@ run_candidate() {
     run_rc=${PIPESTATUS[0]}
     set -e
 
-    if [[ "$run_rc" -ne 0 ]] &&        grep -Fq "$tty_read_zero_pattern" "$attempt_log" &&        [[ "$attempt" -lt "$max_attempts" ]]; then
+    if [[ "$run_rc" -ne 0 ]] && retry_reason="$(vc4_candidate_transient_preboot_failure_reason "$attempt_log")" && [[ "$attempt" -lt "$max_attempts" ]]; then
+      log "transient pre-boot failure matched in attempt log: ${retry_reason}"
+      printf '[vc4-candidate] transient pre-boot failure matched: %s\n' "$retry_reason" >> "$attempt_log"
       attempt=$((attempt + 1))
       continue
     fi
@@ -616,6 +667,57 @@ run_candidate() {
   return "$run_rc"
 }
 
+vc4_candidate_self_test_assert_true() {
+  local name="$1"
+  local log_path="$2"
+  local reason
+  if ! reason="$(vc4_candidate_transient_preboot_failure_reason "$log_path")"; then
+    fail "self-test expected transient pre-boot true: $name"
+  fi
+  log "self-test true: ${name} (${reason})"
+}
+
+vc4_candidate_self_test_assert_false() {
+  local name="$1"
+  local log_path="$2"
+  if vc4_candidate_is_transient_preboot_failure "$log_path"; then
+    fail "self-test expected transient pre-boot false: $name"
+  fi
+  log "self-test false: ${name}"
+}
+
+vc4_candidate_self_test() {
+  local tmp marker
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+
+  printf '%s\n' 'tty-USB read() returned 0 bytes.  r/pi not responding [reboot it?]' > "$tmp/tty-read-zero.log"
+  vc4_candidate_self_test_assert_true "tty-read-zero log" "$tmp/tty-read-zero.log"
+
+  {
+    printf '%s\n' 'GET_CODE op mismatch: expected 55556666, got 00000000'
+    printf '%s\n' 'simple-boot.c:ck_eq32:30:PANIC:pi-boot failed'
+  } > "$tmp/get-code-panic.log"
+  vc4_candidate_self_test_assert_true "GET_CODE mismatch plus pi-boot panic log" "$tmp/get-code-panic.log"
+
+  marker='VC4_KERNEL_LAUNCH_ERROR'
+  printf '%s\n' "${marker} reason=wave_timeout" > "$tmp/launch-error.log"
+  vc4_candidate_self_test_assert_false "kernel launch error log" "$tmp/launch-error.log"
+
+  marker='VC4_TEST_''RESULT'
+  printf '%s\n' "${marker} status=FAIL" > "$tmp/test-result-fail.log"
+  vc4_candidate_self_test_assert_false "test result fail log" "$tmp/test-result-fail.log"
+
+  marker='VC4_RUNTIME_''LAYOUT'
+  {
+    printf '%s\n' "${marker} heap_base=0x1000"
+    printf '%s\n' 'PANIC:pi-boot failed'
+  } > "$tmp/runtime-layout-crash.log"
+  vc4_candidate_self_test_assert_false "runtime layout then crash log" "$tmp/runtime-layout-crash.log"
+
+  echo "run_candidate_codegen_test.sh self-test PASS"
+}
+
 case "$PHASE" in
   clean) rm -rf "$GENERATED_DIR" "$HARDWARE_ROOT"; log "removed generated candidate state for $TEST_NAME" ;;
   generate) check_fixture; run_vc4_codegen ;;
@@ -623,5 +725,6 @@ case "$PHASE" in
   build) build_candidate ;;
   run|all) run_candidate ;;
   workdir) prepare_workdir; printf '%s\n' "$WORK_DIR" ;;
+  self-test) vc4_candidate_self_test ;;
   *) usage; exit 2 ;;
 esac
