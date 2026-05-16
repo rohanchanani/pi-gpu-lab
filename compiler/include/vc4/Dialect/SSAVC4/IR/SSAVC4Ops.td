@@ -2,11 +2,112 @@
 #define SSAVC4_OPS_TD
 
 include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.td"
-include "mlir/IR/OpBase.td"
+include "vc4/Dialect/SSAVC4/IR/SSAVC4Types.td"
+include "vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td"
+include "vc4/Dialect/VC4/IR/VC4Attrs.td"
 
-// Intentionally empty for the scaffold slice.  Later M3 slices add the
-// operation surface vertically with verifiers, effects, lowering, and tests.
+include "mlir/IR/BuiltinAttributes.td"
+include "mlir/IR/BuiltinTypes.td"
+include "mlir/IR/CommonAttrConstraints.td"
+include "mlir/IR/OpBase.td"
+include "mlir/Interfaces/SideEffectInterfaces.td"
+
 class SSAVC4_Op<string mnemonic, list<Trait> traits = []>
     : Op<SSAVC4_Dialect, mnemonic, traits>;
+
+class SSAVC4_PureOp<string mnemonic, list<Trait> traits = []>
+    : SSAVC4_Op<mnemonic, [Pure] # traits>;
+
+def SSAVC4_LoadImmOp : SSAVC4_PureOp<"load_imm"> {
+  let summary = "SSAVC4 pure immediate value";
+  let arguments = (ins
+    VC4_LoadImmModeAttr:$mode,
+    OptionalAttr<AnyAttr>:$value,
+    OptionalAttr<AnyAttr>:$values
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$mode attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_ElementNumberOp : SSAVC4_PureOp<"element_number"> {
+  let summary = "SSAVC4 vector lane id value";
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_SplatOp : SSAVC4_PureOp<"splat"> {
+  let summary = "SSAVC4 scalar-to-vector splat";
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_MovOp : SSAVC4_PureOp<"mov"> {
+  let summary = "SSAVC4 pure SSA move";
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_ALUAddOp : SSAVC4_PureOp<"alu.add"> {
+  let summary = "SSAVC4 ADD-pipe ALU operation before scheduling";
+  let arguments = (ins
+    Variadic<AnyType>:$inputs,
+    VC4_AddOpcodeAttr:$opcode
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_ALUMulOp : SSAVC4_PureOp<"alu.mul"> {
+  let summary = "SSAVC4 MUL-pipe ALU operation before scheduling";
+  let arguments = (ins
+    Variadic<AnyType>:$inputs,
+    VC4_MulOpcodeAttr:$opcode
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_PackOp : SSAVC4_PureOp<"pack"> {
+  let summary = "SSAVC4 pack value transform";
+  let arguments = (ins AnyType:$input, OptionalAttr<AnyAttr>:$mode);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_UnpackOp : SSAVC4_PureOp<"unpack"> {
+  let summary = "SSAVC4 unpack value transform";
+  let arguments = (ins AnyType:$input, OptionalAttr<AnyAttr>:$mode);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_RotateOp : SSAVC4_PureOp<"rotate"> {
+  let summary = "SSAVC4 vector lane rotate";
+  let arguments = (ins AnyType:$input, I32Attr:$amount);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_MakeFlagsOp : SSAVC4_PureOp<"make_flags"> {
+  let summary = "SSAVC4 pure flag pseudo-value producer";
+  let arguments = (ins
+    Variadic<AnyType>:$inputs,
+    SSAVC4_FlagKindAttr:$kind
+  );
+  let results = (outs SSAVC4_Flags:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
 
 #endif // SSAVC4_OPS_TD

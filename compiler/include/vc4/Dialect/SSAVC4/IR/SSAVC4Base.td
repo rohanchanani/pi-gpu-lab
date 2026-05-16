@@ -1,21 +1,23 @@
 #ifndef SSAVC4_BASE_TD
 #define SSAVC4_BASE_TD
 
-include "mlir/IR/DialectBase.td"
+include "mlir/IR/OpBase.td"
 
-// SSAVC4 is the pre-register-allocation, pre-scheduling machine-SSA
-// VideoCore IV dialect.  This scaffold deliberately defines only the dialect
-// identity; operation, type, attribute, and lowering semantics arrive in later
-// M3 slices.
+// SSAVC4 is the pre-register-allocation, pre-scheduling VC4 machine SSA IR.
 def SSAVC4_Dialect : Dialect {
   let name = "ssavc4";
   let cppNamespace = "::mlir::ssavc4";
-  let summary = "VideoCore IV QPU machine-SSA dialect";
+  let dependentDialects = ["::mlir::vc4::VC4Dialect"];
+  let summary = "SSA VideoCore IV target machine IR";
   let description = [{
-    SSAVC4 models target-specific VideoCore IV QPU semantics before physical
-    register allocation and final scheduling.  It is separate from the locked
-    scheduled `vc4` artifact sink.
+    SSAVC4 models low-level VideoCore IV QPU/VPM/TMU/VDW/SFU semantics with
+    SSA values and explicit effect ordering before lowering to the scheduled
+    `vc4` artifact sink.  It intentionally does not expose final physical
+    register addresses, final instruction order, branch immediates, or branch
+    delay-slot layout.
   }];
+  let useDefaultTypePrinterParser = 1;
+  let useDefaultAttributePrinterParser = 1;
 }
 
 #endif // SSAVC4_BASE_TD

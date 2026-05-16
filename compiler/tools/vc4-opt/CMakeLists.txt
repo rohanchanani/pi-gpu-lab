@@ -4,12 +4,15 @@ add_mlir_tool(vc4-opt
 
 add_dependencies(vc4-opt
   SSAVC4DialectIncGen
+  SSAVC4EnumsIncGen
+  SSAVC4AttrDefsIncGen
+  SSAVC4TypesIncGen
   SSAVC4OpsIncGen
 )
 
 target_link_libraries(vc4-opt
   PRIVATE
-    VC4Dialect
-    SSAVC4Dialect
-    MLIR
+  VC4Dialect
+  SSAVC4Dialect
+  MLIR
 )
