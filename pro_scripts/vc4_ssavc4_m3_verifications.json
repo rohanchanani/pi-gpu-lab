@@ -100,7 +100,12 @@
             "pro_scripts/vc4_milestone_verifier.py",
             "pro_scripts/vc4_milestone_autorun.py",
             "pro_scripts/vc4_milestone_resume.py",
-            "pro_scripts/vc4_milestone_failure_router.py"
+            "pro_scripts/vc4_milestone_failure_router.py",
+            "pro_scripts/prompts/vc4_ssavc4_m3/gpt_slice_prompt.md.j2",
+            "pro_scripts/prompts/vc4_ssavc4_m3/gpt_failure_prompt.md.j2",
+            "pro_scripts/prompts/vc4_ssavc4_m3/gpt_diagnosis_prompt.md.j2",
+            "pro_scripts/prompts/vc4_ssavc4_m3/codex_mechanical_prompt.md.j2",
+            "pro_scripts/prompts/vc4_ssavc4_m3/codex_contract.md"
           ]
         },
         {
