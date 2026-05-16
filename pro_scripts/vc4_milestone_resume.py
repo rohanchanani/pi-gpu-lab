@@ -10,6 +10,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
+try:
+    from vc4_codegen_state import MilestoneConfig, StateStore, git_head
+except ModuleNotFoundError:  # pragma: no cover
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from vc4_codegen_state import MilestoneConfig, StateStore, git_head  # type: ignore
+
 
 DEFAULT_WORKLIST = "pro_scripts/vc4_codegen_m2_worklist.json"
 DEFAULT_CONTEXT_PROFILES = "pro_scripts/vc4_codegen_m2_context_profiles.json"
@@ -139,6 +145,98 @@ def load_worklist(path: Path) -> dict[str, Any]:
     if not isinstance(data.get("slices"), list):
         raise SystemExit(f"error: {path} has no slices[]")
     return data
+
+
+def build_resume_state_store(
+    *,
+    repo: Path,
+    worklist: Path,
+    context_profiles: Path,
+    spec: Path,
+    state_root: Path,
+    milestone_config: dict[str, Any] | None,
+) -> tuple[MilestoneConfig, StateStore]:
+    """Create the same StateStore view used by vc4_milestone_autorun.
+
+    The resume driver can prove a slice is already complete by running the
+    typed verifier directly.  When that happens, the autorun StateStore must be
+    synchronized too; otherwise the next slice may fail dependency checks even
+    though resume just verified its predecessor.  Keep this helper descriptor-
+    driven and behavior-preserving: it only mirrors the milestone defaults that
+    autorun applies before constructing StateStore.
+    """
+    config = MilestoneConfig.load(
+        repo,
+        worklist_path=str(worklist),
+        context_profiles_path=str(context_profiles),
+    )
+
+    defaults = config.worklist.setdefault("defaults", {})
+    if not isinstance(defaults, dict):
+        raise SystemExit("error: worklist.defaults must be an object for resume state synchronization")
+
+    defaults["state_root"] = str(state_root)
+    defaults["verification_spec"] = str(spec)
+
+    if milestone_config is not None:
+        if milestone_config.get("candidate_state_root"):
+            defaults["candidate_state_root"] = str(milestone_config["candidate_state_root"])
+        if milestone_config.get("prompt_template_dir"):
+            defaults["prompt_template_dir"] = str(milestone_config["prompt_template_dir"])
+        generic_scripts = milestone_config.get("generic_scripts")
+        if isinstance(generic_scripts, dict):
+            if generic_scripts.get("verifier"):
+                defaults["typed_verifier_script"] = str(generic_scripts["verifier"])
+
+    state = StateStore(config)
+    state.ensure_dirs()
+    return config, state
+
+
+def sync_verified_slice_state(
+    *,
+    config: MilestoneConfig,
+    state: StateStore,
+    slice_entry: dict[str, Any],
+    prefix: str,
+    reason: str,
+) -> None:
+    """Mark a verifier-passing slice as passed in autorun state.
+
+    Resume skips GPT/autorun for slices whose typed verifier already passes.
+    Those skips are correct, but dependency checks for later slices consult the
+    autorun StateStore.  Synchronize that state exactly when the typed verifier
+    has established the slice is complete.
+    """
+    slice_id = str(slice_entry["id"])
+    data = state.load()
+    slices = data.get("slices", {})
+    if isinstance(slices, dict):
+        entry = slices.get(slice_id)
+        if isinstance(entry, dict) and entry.get("status") == "passed":
+            return
+
+    gate_results = [
+        {
+            "gate": "resume-typed-verifier",
+            "ok": True,
+            "source": "vc4_milestone_resume.py",
+            "reason": reason,
+        }
+    ]
+    state.mark_slice_passed(
+        slice_id=slice_id,
+        gate_results=gate_results,
+        repo_head=git_head(config.repo, allow_missing=True),
+    )
+    attempt = state.next_attempt_index(slice_id)
+    state.record_attempt(
+        slice_id=slice_id,
+        attempt=attempt,
+        status="passed",
+        details={"resume_state_sync": True, "reason": reason},
+    )
+    print(f"{prefix} state synchronized: marked {slice_id} passed ({reason})", flush=True)
 
 
 def select_slices(
@@ -376,6 +474,14 @@ def main() -> int:
     env["PATH"] = f"{repo / 'compiler/build/bin'}{os.pathsep}{env.get('PATH', '')}"
 
     data = load_worklist(worklist)
+    resume_state_config, resume_state = build_resume_state_store(
+        repo=repo,
+        worklist=worklist,
+        context_profiles=context_profiles,
+        spec=spec,
+        state_root=state_root,
+        milestone_config=milestone_config,
+    )
     milestone = str((milestone_config or {}).get("milestone") or data.get("milestone") or "vc4-codegen")
     prefix = log_prefix(milestone)
     slices = select_slices(
@@ -422,6 +528,13 @@ def main() -> int:
             verbose=args.verbose,
             prefix=prefix,
         ):
+            sync_verified_slice_state(
+                config=resume_state_config,
+                state=resume_state,
+                slice_entry=s,
+                prefix=prefix,
+                reason="already_satisfied",
+            )
             print(f"{prefix} PASS already satisfied; skipping GPT for {slice_id}")
             continue
 
@@ -462,6 +575,13 @@ def main() -> int:
             print(f"{prefix} STOP: {slice_id} did not verify after autorun", file=sys.stderr)
             return 1
 
+        sync_verified_slice_state(
+            config=resume_state_config,
+            state=resume_state,
+            slice_entry=s,
+            prefix=prefix,
+            reason="post_autorun_verifier",
+        )
         print(f"{prefix} PASS {slice_id}")
 
         prefix_ids = [str(item["id"]) for item in slices[: slice_index + 1]]
