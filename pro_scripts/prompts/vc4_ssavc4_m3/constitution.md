@@ -8,6 +8,8 @@ The scheduled `vc4` dialect is the locked M2 backend sink. It contains `vc4.modu
 
 The conversion `ssavc4 -> scheduled vc4` must perform instruction selection, out-of-SSA, conservative no-spill register allocation, scheduling, bundling, hazard insertion, branch layout, and metadata preservation. Correctness beats optimality in M3 v1.
 
+M3 v1 remains no-spill: if the allocator cannot place values in available QPU registers, it must emit a deterministic diagnostic rather than silently generating invalid scheduled VC4. However, the lowering must be structured so spilling can be added later without changing SSAVC4 syntax, future `gpu -> ssavc4` lowering, or the scheduled VC4 sink. Keep internal seams for instruction selection/templates, virtual values, liveness, allocation, scheduling, hazard insertion, and branch layout. Do not expose public `ssavc4.push`/`ssavc4.pop` or stack operations. Future spilling is a lowering-private allocator feature; the first future spill target will be a private per-logical-request spill frame in global GPU memory allocated from the existing VC4 program heap, with shared/VPM spilling deferred as a later optimization.
+
 M3 implementation must be vertical after the early scaffold slices. When a slice adds an executable feature, it must add dialect ops/types/attrs, verifiers/effects, lowering, scheduled-output checks, artifact checks, and fixture verification for that feature in the same slice or the immediately adjacent slice.
 
 M3 regression is cumulative. Each committed slice must keep `ninja -C compiler/build check-vc4` green. Future-slice SSAVC4 tests must not be checked into active lit paths before their owning implementation slice, and expected-red tests must not live under global `check-vc4`.

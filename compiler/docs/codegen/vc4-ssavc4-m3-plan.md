@@ -24,6 +24,15 @@ VideoCore IV hardware
 
 M3 is accepted only when SSAVC4-input fixtures lower into scheduled VC4, emit M2-compatible artifacts, and run through the existing M2 backend path. Dialect scaffolding alone is not sufficient.
 
+## Register allocation and spilling policy
+
+M3 v1 uses a conservative no-spill register allocator. If supported SSAVC4 input creates register pressure beyond the allocator's current capability, the lowering must fail with a deterministic diagnostic rather than generating invalid scheduled VC4.
+
+This no-spill policy must not hard-code the architecture into a dead end. The SSAVC4-to-VC4 lowering should keep separate internal phases for instruction selection/templates, virtual values, liveness, allocation, scheduling, hazard insertion, and branch layout, so future allocator and scheduler improvements do not require changing SSAVC4 syntax, M4 `gpu -> ssavc4` lowering, or the scheduled VC4 sink.
+
+Future spilling is a lowering-private allocator feature, not public SSAVC4 syntax. Do not add public push/pop/stack operations. The first future spill target should be a private per-logical-request spill frame in global GPU memory allocated from the existing VC4 program heap. The compiler will statically compute frame bytes per request; launcher/runtime support will allocate hidden scratch storage. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
+
+
 ---
 
 ## 2. What M3 is not

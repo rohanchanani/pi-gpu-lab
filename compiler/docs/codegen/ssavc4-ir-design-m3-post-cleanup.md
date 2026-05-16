@@ -1587,3 +1587,15 @@ matmul/attention/layernorm/softmax high-level kernels
 15. Bring up hardware fixtures incrementally: store, branch/tail, TMU/saxpy, reductions, cooperative barriers.
 16. Keep M3 below `gpu` lowering and above scheduled `vc4`.
 17. M3 final verification must prove both SSAVC4 progress and M2 scheduled-backend persistence.
+
+
+## Register allocation and future spill-frame policy
+
+M3 v1 uses a conservative no-spill allocator. It must reject excessive register pressure with a deterministic diagnostic rather than silently producing invalid scheduled VC4.
+
+Even though M3 v1 does not spill, the lowering implementation must be structured around allocator and scheduler seams that can later support spilling. The pipeline should separate instruction template selection, virtual value/liveness analysis, physical allocation, scheduling, hazard insertion, and branch layout.
+
+Spilling is not represented as public `ssavc4.push`, `ssavc4.pop`, or stack operations. Future spill loads/stores are lowering-internal templates inserted by the allocator/spill planner. Upstream `gpu -> ssavc4` lowering must not know whether values are spilled.
+
+The first future spill target is a private per-logical-request spill frame in global GPU memory, allocated from the existing VC4 program heap by generated launcher/runtime support. The compiler statically computes frame bytes per request from spill slots. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
+
