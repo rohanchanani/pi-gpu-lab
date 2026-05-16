@@ -26,45 +26,9 @@ def VC4_MulPackModeAttr
     : VC4_DialectEnumAttr<VC4_MulPackMode, "mul_pack_mode">;
 def VC4_QPUSignalAttr : VC4_DialectEnumAttr<VC4_QPUSignal, "qpu_signal">;
 def VC4_QPUMuxAttr : VC4_DialectEnumAttr<VC4_QPUMux, "qpu_mux">;
-def VC4_TMUUnitAttr : VC4_DialectEnumAttr<VC4_TMUUnit, "tmu_unit">;
-def VC4_TMUModeAttr : VC4_DialectEnumAttr<VC4_TMUMode, "tmu_mode">;
-def VC4_TextureTypeAttr
-    : VC4_DialectEnumAttr<VC4_TextureType, "texture_type">;
-def VC4_MagFilterAttr
-    : VC4_DialectEnumAttr<VC4_MagFilter, "mag_filter">;
-def VC4_MinFilterAttr
-    : VC4_DialectEnumAttr<VC4_MinFilter, "min_filter">;
-def VC4_WrapModeAttr : VC4_DialectEnumAttr<VC4_WrapMode, "wrap_mode">;
-def VC4_TMUReadPartAttr
-    : VC4_DialectEnumAttr<VC4_TMUReadPart, "tmu_read_part">;
-def VC4_SFUKindAttr : VC4_DialectEnumAttr<VC4_SFUKind, "sfu_kind">;
-def VC4_VPMDescKindAttr
-    : VC4_DialectEnumAttr<VC4_VPMDescKind, "vpm_desc_kind">;
-def VC4_VPMOrientationAttr
-    : VC4_DialectEnumAttr<VC4_VPMOrientation, "vpm_orientation">;
-def VC4_VPMLaneModeAttr
-    : VC4_DialectEnumAttr<VC4_VPMLaneMode, "vpm_lane_mode">;
-def VC4_VPMElemWidthAttr
-    : VC4_DialectEnumAttr<VC4_VPMElemWidth, "vpm_elem_width">;
-def VC4_DMADescKindAttr
-    : VC4_DialectEnumAttr<VC4_DMADescKind, "dma_desc_kind">;
-def VC4_DMABlockModeAttr
-    : VC4_DialectEnumAttr<VC4_DMABlockMode, "dma_block_mode">;
-def VC4_DMAOrientationAttr
-    : VC4_DialectEnumAttr<VC4_DMAOrientation, "dma_orientation">;
-def VC4_DMAElemWidthAttr
-    : VC4_DialectEnumAttr<VC4_DMAElemWidth, "dma_elem_width">;
 def VC4_SemaphoreModeAttr
     : VC4_DialectEnumAttr<VC4_SemaphoreMode, "semaphore_mode">;
-def VC4_MutexModeAttr
-    : VC4_DialectEnumAttr<VC4_MutexMode, "mutex_mode">;
-def VC4_ThreadSwitchModeAttr
-    : VC4_DialectEnumAttr<VC4_ThreadSwitchMode, "thread_switch_mode">;
 def VC4_BranchCondAttr
     : VC4_DialectEnumAttr<VC4_BranchCond, "branch_cond">;
-def VC4_V3DQueryKindAttr
-    : VC4_DialectEnumAttr<VC4_V3DQueryKind, "v3d_query_kind">;
-def VC4_V3DConfigureKindAttr
-    : VC4_DialectEnumAttr<VC4_V3DConfigureKind, "v3d_configure_kind">;
 
 #endif // VC4_ATTRS_TD

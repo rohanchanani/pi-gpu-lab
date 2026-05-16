@@ -1,12 +1,5 @@
 // RUN: vc4-opt %s --verify-diagnostics
 
-vc4.module @branch_requires_scheduled_form {
-  // expected-error@+1 {{structured vc4 form has been removed; use ssavc4 for pre-scheduled SSA IR}}
-  vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
-    %0 = "builtin.unrealized_conversion_cast"() : () -> i32
-  }
-}
-
 vc4.module @branch_zero_delay_slots {
   vc4.func @bad_zero_slots() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
     // expected-error@+1 {{delay-slot region must contain exactly 3 scheduled QPU ops}}

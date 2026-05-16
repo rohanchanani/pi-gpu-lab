@@ -87,7 +87,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -132,7 +132,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -172,7 +172,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -216,7 +216,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -260,7 +260,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -334,7 +334,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -468,7 +468,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -832,7 +832,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -1216,7 +1216,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",
@@ -1953,7 +1953,7 @@
         },
         {
           "kind": "file",
-          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4StructuredOps.td",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Ops.td",
           "focus": [
             "VC4_ModuleOp",
             "VC4_FuncOp",

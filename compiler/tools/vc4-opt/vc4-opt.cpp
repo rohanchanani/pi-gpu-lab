@@ -601,29 +601,11 @@ struct VC4VerifyEmitContractPass
       if (!domain || !form)
         return mlir::WalkResult::advance();
 
-      if (*domain == mlir::vc4::ExecutionDomain::qpu &&
-          *form == mlir::vc4::FunctionForm::structured) {
-        func.emitOpError(
-            "uses removed structured vc4 form; use ssavc4 for pre-scheduled "
-            "SSA IR or provide domain = #vc4.execution_domain<qpu>, "
-            "form = #vc4.function_form<scheduled>");
-        sawError = true;
-        return mlir::WalkResult::interrupt();
-      }
-
       if (*domain == mlir::vc4::ExecutionDomain::host &&
           *form == mlir::vc4::FunctionForm::scheduled) {
         func.emitOpError(
             "is not directly emittable: scheduled VC4 functions require "
             "domain = #vc4.execution_domain<qpu>");
-        sawError = true;
-        return mlir::WalkResult::interrupt();
-      }
-
-      if (*form == mlir::vc4::FunctionForm::structured) {
-        func.emitOpError(
-            "uses removed structured vc4 form; use ssavc4 for pre-scheduled "
-            "SSA IR");
         sawError = true;
         return mlir::WalkResult::interrupt();
       }

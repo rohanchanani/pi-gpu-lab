@@ -663,11 +663,6 @@ LogicalResult mlir::vc4::FuncOp::verify() {
   if (isExternal())
     return success();
 
-  if (form == mlir::vc4::FunctionForm::structured) {
-    return emitOpError("structured vc4 form has been removed; use ssavc4 for "
-                       "pre-scheduled SSA IR");
-  }
-
   if (form != mlir::vc4::FunctionForm::scheduled) {
     return emitOpError(
         "requires form = #vc4.function_form<scheduled>");

@@ -8,6 +8,13 @@
 
 **Runtime-image conclusion:** A VC4 “CUDA” program should have **one persistent device-visible program allocation**. That allocation owns the compiled kernel code blobs, kernel descriptors, uniform streams, uniform-pointer arrays, VPM/semaphore scheduling metadata, and any fixed test/runtime payloads. Each compiled kernel is copied into that allocation **once** during runtime/program setup. Later kernel launches reuse the same device code address and only rewrite the relevant uniform streams and scheduling metadata.
 
+**Dialect boundary conclusion:** active `vc4` is the scheduled sink dialect.
+TMU loads, SFU operations, VPM/VDW stores, DMA-facing sequences, barriers, and
+waits are represented through scheduled `vc4.qpu.*` instructions, raw register
+addresses, QPU signals, setup immediates, and runtime metadata. Future
+pre-register-allocation/pre-scheduling target SSA belongs in `ssavc4`, not in
+legacy structured `vc4` ops.
+
 **Current validation status:**
 
 ```text

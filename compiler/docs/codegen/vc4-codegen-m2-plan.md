@@ -37,6 +37,12 @@ versioned artifact bundle
 
 M2 should not lower pre-scheduled SSA VC4 IR to scheduled QPU instructions. That remains M3 and will use a separate `ssavc4` dialect. M2 may add metadata contracts that `ssavc4` and `gpu` lowering will later target.
 
+After the post-M2 cleanup, active `vc4` is only the scheduled sink dialect:
+TMU/SFU/VPM/VDW/DMA behavior appears as scheduled QPU bundles, load-immediates,
+semaphores, branches, raw register accesses, signals, setup immediates, and
+wait/synchronization sequences. The removed structured `vc4.*` op families are
+not part of the active M2 sink and must not be reintroduced as an M2 shortcut.
+
 ### 1.2 CUDA-like host ABI decision
 
 M2 should **not** generate a public host convenience wrapper that automatically allocates device memory, copies `in` buffers to the device, launches, copies `out` buffers back, and frees device memory.

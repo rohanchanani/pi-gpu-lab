@@ -1,14 +1,5 @@
 // RUN: vc4-opt --vc4-verify-emit-contract %s --split-input-file --verify-diagnostics
 
-vc4.module @qpu_structured_not_directly_emittable {
-  // expected-error@+1 {{structured vc4 form has been removed; use ssavc4 for pre-scheduled SSA IR}}
-  vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>} {
-    %0 = "builtin.unrealized_conversion_cast"() : () -> i32
-  }
-}
-
-// -----
-
 vc4.module @host_scheduled_not_directly_emittable {
   // Generic syntax keeps the function non-external without introducing
   // scheduled-body ops that would trigger unrelated dialect verifiers first.

@@ -113,6 +113,12 @@ Characteristics:
 - direct modeling of QPU instruction forms
 - no high-level SSA arithmetic ops
 - branch delay slots are explicit
+
+TMU, SFU, VPM, VDR/VDW, and DMA behavior in active scheduled VC4 is represented
+through `vc4.qpu.bundle`, `vc4.qpu.ldi`, `vc4.qpu.sema`, and `vc4.qpu.branch`
+using raw register addresses, QPU signals, setup immediates, and explicit wait
+or synchronization instruction sequences. Active `vc4` no longer has separate
+semantic ops such as `vc4.tmu.*`, `vc4.sfu.*`, `vc4.vpm.*`, or `vc4.dma.*`.
 - register-file / mux / small-immediate / signal legality is verified here
 
 Allowed ops in active scheduled form are:
@@ -145,7 +151,7 @@ Recommended attributes:
 
 - `kernel` unit attr: marks entry-point kernels produced from upstream `gpu.func kernel`
 - `threading` enum attr: `single | threadable`
-- `form` enum attr: `structured | scheduled`
+- `form` enum attr: `scheduled`
 - `domain` enum attr: `qpu | host`
 - optional target config attrs or metadata as needed later
 
@@ -159,18 +165,13 @@ Use builtin MLIR types for ordinary data whenever possible:
 - `index`
 - `vector<16xi32>`, `vector<16xf32>`, and other builtin 16-lane vector types
 
-Add only the following custom types in the first milestone:
-
-1. `!vc4.async.token`
-2. `!vc4.tmu.desc`
-3. `!vc4.vpm.desc`
-4. `!vc4.dma.desc`
+Active scheduled-sink VC4 currently has no custom types.
 
 ### 6.1 Type invariants
 
 - All QPU value ops operate on scalars or 16-lane vectors.
 - The dialect must reject unsupported lane counts for QPU arithmetic/value-shape ops.
-- Descriptor types are opaque semantic objects. They are not pointers, not memories, and not raw integers.
+- Legacy descriptor/token types were removed with the structured `vc4` surface.
 
 ## 7. Attributes and enums
 
@@ -179,7 +180,7 @@ The exact C++/ODS naming can vary, but the dialect must expose the following enu
 ## 7.1 Function/container enums
 
 - `VC4ThreadingMode`: `single`, `threadable`
-- `VC4FunctionForm`: `structured`, `scheduled`
+- `VC4FunctionForm`: `scheduled`
 - `VC4ExecutionDomain`: `qpu`, `host`
 
 ## 7.2 Builtin enums
@@ -289,77 +290,11 @@ The exact C++/ODS naming can vary, but the dialect must expose the following enu
   - `to_8c`
   - `to_8d`
 
-## 7.5 TMU enums
-
-- `VC4TMUUnit`: `tmu0`, `tmu1`
-- `VC4TMUMode`: `direct`, `texture2d`, `cubemap`
-- `VC4TextureType`
-  - `rgba8888`
-  - `rgbx8888`
-  - `rgba4444`
-  - `rgba5551`
-  - `rgb565`
-  - `luminance`
-  - `alpha`
-  - `lumalpha`
-  - `etc1`
-  - `s16f`
-  - `s8`
-  - `s16`
-  - `bw1`
-  - `a4`
-  - `a1`
-  - `rgba64`
-  - `rgba32r`
-  - `yuyv422r`
-- `VC4MagFilter`: `linear`, `nearest`
-- `VC4MinFilter`
-  - `linear`
-  - `nearest`
-  - `near_mip_near`
-  - `near_mip_lin`
-  - `lin_mip_near`
-  - `lin_mip_lin`
-- `VC4WrapMode`: `repeat`, `clamp`, `mirror`, `border`
-- `VC4TMUReadPart`
-  - `raw32`
-  - `rgba8888`
-  - `rg1616`
-  - `ba1616`
-
-## 7.6 SFU enums
-
-- `VC4SFUKind`
-  - `recip`
-  - `recipsqrt`
-  - `exp`
-  - `log`
-
-## 7.7 VPM/DMA enums
-
-- `VC4VPMDescKind`: `read`, `write`
-- `VC4VPMOrientation`: `horizontal`, `vertical`
-- `VC4VPMLaneMode`: `packed`, `laned`
-- `VC4VPMElemWidth`: `w8`, `w16`, `w32`
-
-- `VC4DMADescKind`: `load`, `store`
-- `VC4DMABlockMode`: `row_row`, `packed_rows`
-- additional DMA setup enums may be introduced if needed, but the descriptor op must preserve all hardware fields necessary to model:
-  - width/start-byte-halfword selection
-  - mpitch/vpitch
-  - nrows/rowlen
-  - units/depth
-  - orientation
-  - VPM base
-  - stride / extended stride
-
-## 7.8 Sync/thread/system enums
+## 7.5 Sync/thread/system enums
 
 - `VC4SemaphoreMode`: `acquire`, `release`
-- `VC4MutexMode`: `acquire`, `release`
-- `VC4ThreadSwitchMode`: `switch`, `last_switch`
 
-## 7.9 Structured branch enums
+## 7.6 QPU branch enums
 
 - `VC4BranchCond`
   - `all_z_set`
@@ -433,6 +368,12 @@ Recommended resources:
 - `HostIRQ`
 - `QPUScheduler`
 - `V3DSystem`
+
+These names are shared VC4 hardware resource identifiers. In the active
+scheduled-sink dialect, only resources used by remaining scheduled ops, such as
+`Semaphore` for `vc4.qpu.sema`, imply registered operations. The other resource
+names are retained for future SSAVC4/resource modeling and do not imply active
+structured `vc4` ops.
 
 ## 8.3 Verification layers
 
@@ -520,10 +461,9 @@ Recommended file split:
 - `VC4Dialect.td`
 - `VC4Enums.td`
 - `VC4Types.td`
-- `VC4StructuredOps.td`
-- `VC4MemoryOps.td`
-- `VC4SystemOps.td`
-- `VC4QPUOps.td`
+- `VC4Ops.td`
+- `VC4CoreOps.td`
+- `VC4ScheduledQPUOps.td`
 
 ## 9.2 C++ split
 
@@ -533,10 +473,6 @@ Recommended source split:
 - `VC4Types.cpp`
 - `VC4Enums.cpp` if needed
 - `VC4Ops.cpp` for shared logic
-- `VC4StructuredOps.cpp`
-- `VC4MemoryOps.cpp`
-- `VC4SystemOps.cpp`
-- `VC4QPUOps.cpp`
 - `VC4SideEffects.cpp` if resources are separated
 
 ## 9.3 Assembly syntax goals
@@ -600,15 +536,14 @@ The following op list is the implementation target for the milestone.
 **Attributes**
 - `kernel` unit attr (optional)
 - `threading` = `single | threadable`
-- `form` = `structured | scheduled`
+- `form` = `scheduled`
 
 **Semantics**
 - target-specific device function
 - `kernel` marks externally launched entry points
-- `form` declares whether the function is in structured or scheduled QPU form
+- `form` declares that the function is in scheduled QPU form
 
 **Verifier**
-- structured form must not contain `vc4.qpu.*`
 - scheduled form must contain only `vc4.qpu.*` plus structural container ops/terminators if absolutely needed
 - `thread_switch` is illegal unless `threading = threadable`
 

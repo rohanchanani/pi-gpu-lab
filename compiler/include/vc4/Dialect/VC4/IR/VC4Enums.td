@@ -24,7 +24,6 @@ class VC4_EnumAttr<EnumAttrInfo enumInfo, string name>
 
 def VC4_FunctionForm : VC4_DialectI32Enum<"FunctionForm",
     "VC4 function form", [
-      I32EnumAttrCase<"structured", 0>,
       I32EnumAttrCase<"scheduled", 1>
     ]>;
 
@@ -198,151 +197,14 @@ def VC4_QPUMux : VC4_DialectI32Enum<"QPUMux",
       I32EnumAttrCase<"b", 7>
     ]>;
 
-def VC4_TMUUnit : VC4_DialectI32Enum<"TMUUnit",
-    "VC4 TMU unit selection", [
-      I32EnumAttrCase<"tmu0", 0>,
-      I32EnumAttrCase<"tmu1", 1>
-    ]>;
-
-def VC4_TMUMode : VC4_DialectI32Enum<"TMUMode",
-    "VC4 TMU descriptor mode", [
-      I32EnumAttrCase<"direct", 0>,
-      I32EnumAttrCase<"texture2d", 1>,
-      I32EnumAttrCase<"cubemap", 2>
-    ]>;
-
-def VC4_TextureType : VC4_DialectI32Enum<"TextureType",
-    "VC4 texture format selection", [
-      I32EnumAttrCase<"rgba8888", 0>,
-      I32EnumAttrCase<"rgbx8888", 1>,
-      I32EnumAttrCase<"rgba4444", 2>,
-      I32EnumAttrCase<"rgba5551", 3>,
-      I32EnumAttrCase<"rgb565", 4>,
-      I32EnumAttrCase<"luminance", 5>,
-      I32EnumAttrCase<"alpha", 6>,
-      I32EnumAttrCase<"lumalpha", 7>,
-      I32EnumAttrCase<"etc1", 8>,
-      I32EnumAttrCase<"s16f", 9>,
-      I32EnumAttrCase<"s8", 10>,
-      I32EnumAttrCase<"s16", 11>,
-      I32EnumAttrCase<"bw1", 12>,
-      I32EnumAttrCase<"a4", 13>,
-      I32EnumAttrCase<"a1", 14>,
-      I32EnumAttrCase<"rgba64", 15>,
-      I32EnumAttrCase<"rgba32r", 16>,
-      I32EnumAttrCase<"yuyv422r", 17>
-    ]>;
-
-def VC4_MagFilter : VC4_DialectI32Enum<"MagFilter",
-    "VC4 TMU magnification filter", [
-      I32EnumAttrCase<"linear", 0>,
-      I32EnumAttrCase<"nearest", 1>
-    ]>;
-
-def VC4_MinFilter : VC4_DialectI32Enum<"MinFilter",
-    "VC4 TMU minification and mip filter", [
-      I32EnumAttrCase<"linear", 0>,
-      I32EnumAttrCase<"nearest", 1>,
-      I32EnumAttrCase<"near_mip_near", 2>,
-      I32EnumAttrCase<"near_mip_lin", 3>,
-      I32EnumAttrCase<"lin_mip_near", 4>,
-      I32EnumAttrCase<"lin_mip_lin", 5>
-    ]>;
-
-def VC4_WrapMode : VC4_DialectI32Enum<"WrapMode",
-    "VC4 TMU wrap mode", [
-      I32EnumAttrCase<"repeat", 0>,
-      I32EnumAttrCase<"clamp", 1>,
-      I32EnumAttrCase<"mirror", 2>,
-      I32EnumAttrCase<"border", 3>
-    ]>;
-
-def VC4_TMUReadPart : VC4_DialectI32Enum<"TMUReadPart",
-    "VC4 TMU receive selection", [
-      I32EnumAttrCase<"raw32", 0>,
-      I32EnumAttrCase<"rgba8888", 1>,
-      I32EnumAttrCase<"rg1616", 2>,
-      I32EnumAttrCase<"ba1616", 3>
-    ]>;
-
-def VC4_SFUKind : VC4_DialectI32Enum<"SFUKind",
-    "VC4 SFU operation kind", [
-      I32EnumAttrCase<"recip", 0>,
-      I32EnumAttrCase<"recipsqrt", 1>,
-      I32EnumAttrCase<"exp", 2>,
-      I32EnumAttrCase<"log", 3>
-    ]>;
-
-def VC4_VPMDescKind : VC4_DialectI32Enum<"VPMDescKind",
-    "VC4 VPM descriptor direction", [
-      I32EnumAttrCase<"read", 0>,
-      I32EnumAttrCase<"write", 1>
-    ]>;
-
-def VC4_VPMOrientation : VC4_DialectI32Enum<"VPMOrientation",
-    "VC4 VPM block orientation", [
-      I32EnumAttrCase<"horizontal", 0>,
-      I32EnumAttrCase<"vertical", 1>
-    ]>;
-
-def VC4_VPMLaneMode : VC4_DialectI32Enum<"VPMLaneMode",
-    "VC4 VPM lane layout", [
-      I32EnumAttrCase<"packed", 0>,
-      I32EnumAttrCase<"laned", 1>
-    ]>;
-
-def VC4_VPMElemWidth : VC4_DialectI32Enum<"VPMElemWidth",
-    "VC4 VPM element width", [
-      I32EnumAttrCase<"w8", 0>,
-      I32EnumAttrCase<"w16", 1>,
-      I32EnumAttrCase<"w32", 2>
-    ]>;
-
-def VC4_DMADescKind : VC4_DialectI32Enum<"DMADescKind",
-    "VC4 DMA descriptor direction", [
-      I32EnumAttrCase<"load", 0>,
-      I32EnumAttrCase<"store", 1>
-    ]>;
-
-def VC4_DMABlockMode : VC4_DialectI32Enum<"DMABlockMode",
-    "VC4 DMA block layout mode", [
-      I32EnumAttrCase<"row_row", 0>,
-      I32EnumAttrCase<"packed_rows", 1>
-    ]>;
-
-def VC4_DMAOrientation : VC4_DialectI32Enum<"DMAOrientation",
-    "VC4 DMA orientation", [
-      I32EnumAttrCase<"horizontal", 0>,
-      I32EnumAttrCase<"vertical", 1>
-    ]>;
-
-def VC4_DMAElemWidth : VC4_DialectI32Enum<"DMAElemWidth",
-    "VC4 DMA transfer element width", [
-      I32EnumAttrCase<"w8", 0>,
-      I32EnumAttrCase<"w16", 1>,
-      I32EnumAttrCase<"w32", 2>
-    ]>;
-
 def VC4_SemaphoreMode : VC4_DialectI32Enum<"SemaphoreMode",
     "VC4 hardware semaphore mode", [
       I32EnumAttrCase<"acquire", 0>,
       I32EnumAttrCase<"release", 1>
     ]>;
 
-def VC4_MutexMode : VC4_DialectI32Enum<"MutexMode",
-    "VC4 hardware mutex mode", [
-      I32EnumAttrCase<"acquire", 0>,
-      I32EnumAttrCase<"release", 1>
-    ]>;
-
-def VC4_ThreadSwitchMode : VC4_DialectI32Enum<"ThreadSwitchMode",
-    "VC4 hardware thread-switch mode", [
-      I32EnumAttrCase<"thread_switch", 0, "switch">,
-      I32EnumAttrCase<"last_switch", 1>
-    ]>;
-
 def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
-    "VC4 structured branch condition", [
+    "VC4 QPU branch condition", [
       I32EnumAttrCase<"all_z_set", 0>,
       I32EnumAttrCase<"all_z_clear", 1>,
       I32EnumAttrCase<"any_z_set", 2>,
@@ -356,29 +218,6 @@ def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
       I32EnumAttrCase<"any_c_set", 10>,
       I32EnumAttrCase<"any_c_clear", 11>,
       I32EnumAttrCase<"always", 15>
-    ]>;
-
-def VC4_V3DQueryKind : VC4_DialectI32Enum<"V3DQueryKind",
-    "VC4 V3D system query kind", [
-      I32EnumAttrCase<"ident", 0>,
-      I32EnumAttrCase<"queue_status", 1>,
-      I32EnumAttrCase<"perf_counter", 2>,
-      I32EnumAttrCase<"interrupt_status", 3>,
-      I32EnumAttrCase<"error_status", 4>,
-      I32EnumAttrCase<"scratch", 5>
-    ]>;
-
-def VC4_V3DConfigureKind : VC4_DialectI32Enum<"V3DConfigureKind",
-    "VC4 V3D system configure kind", [
-      I32EnumAttrCase<"cache_control", 0>,
-      I32EnumAttrCase<"interrupt_enable", 1>,
-      I32EnumAttrCase<"interrupt_disable", 2>,
-      I32EnumAttrCase<"perf_map", 3>,
-      I32EnumAttrCase<"perf_clear", 4>,
-      I32EnumAttrCase<"perf_enable", 5>,
-      I32EnumAttrCase<"vpm_reservation", 6>,
-      I32EnumAttrCase<"vpm_allocator", 7>,
-      I32EnumAttrCase<"scratch", 8>
     ]>;
 
 #endif // VC4_ENUMS_TD

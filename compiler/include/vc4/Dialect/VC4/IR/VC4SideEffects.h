@@ -13,6 +13,8 @@
 
 namespace mlir::vc4::effects {
 
+// Shared VC4 hardware resources. Most are not consumed by the scheduled-only
+// vc4 dialect today, but they remain target resources for future SSAVC4 work.
 #define VC4_DECLARE_RESOURCE(ResourceName)                                        \
   struct ResourceName : public SideEffects::Resource::Base<ResourceName> {        \
     StringRef getName() final { return #ResourceName; }                           \

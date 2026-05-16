@@ -38,7 +38,6 @@ compiler/
             VC4Ops.td
             VC4CoreOps.td
             VC4ScheduledQPUOps.td
-            VC4LegacyStructuredOps.td
   lib/
     Dialect/
       VC4/
@@ -87,18 +86,17 @@ Use separate `.td` files by concern:
 
 - `VC4Dialect.td`: dialect definition and common bases
 - `VC4Enums.td`: all enum definitions
-- `VC4Types.td`: `!vc4.async.token`, `!vc4.tmu.desc`, `!vc4.vpm.desc`, `!vc4.dma.desc`
+- `VC4Types.td`: active scheduled-sink VC4 currently has no custom types
 - `VC4Ops.td`: active top-level op include for scheduled-sink VC4
 - `VC4CoreOps.td`: `vc4.module`, `vc4.func`, and shared op bases
 - `VC4ScheduledQPUOps.td`: `vc4.qpu.*` sink ops
-- `VC4LegacyStructuredOps.td`: quarantined historical structured ops, not included by active `VC4Ops.td`
 
 ### 4.2 C++ files
 
 Keep custom logic localized:
 
 - `VC4Dialect.cpp`: dialect registration, type parsing hooks, op registration
-- `VC4Types.cpp`: custom types
+- `VC4Types.cpp`: generated type hook point; currently no active custom types
 - `VC4Ops.cpp`: module/func verification, launch/resource metadata verification, and scheduled QPU op verifiers
 - `VC4SideEffects.h`: custom resource declarations used by remaining scheduled side-effect ops
 
@@ -264,22 +262,20 @@ Keep the later codegen boundary explicit and verifier-only.
 - qasm emission later consumes only `vc4.func` operations with
   `domain = #vc4.execution_domain<qpu>` and
   `form = #vc4.function_form<scheduled>`.
-- launcher generation later consumes only `vc4.func` operations with
-  `domain = #vc4.execution_domain<host>` and
-  `form = #vc4.function_form<structured>`.
 - a dedicated verifier-only pass may reject functions that are dialect-legal
   but not yet legal codegen inputs
-- `domain = #vc4.execution_domain<qpu>`,
-  `form = #vc4.function_form<structured>` functions are not directly emittable.
 - `domain = #vc4.execution_domain<host>`,
   `form = #vc4.function_form<scheduled>` functions are not directly emittable.
-- Structured device ops such as uniforms, TMU, VPM, DMA, and value-shape ops
-  must be lowered or normalized to scheduled sink ops before qasm emission.
+- TMU, SFU, VPM, VDR/VDW, DMA, uniform, and value-shape behavior must arrive in
+  active `vc4` as scheduled sink instructions: `vc4.qpu.bundle`,
+  `vc4.qpu.ldi`, `vc4.qpu.sema`, and `vc4.qpu.branch`, using raw register
+  addresses, QPU signals, setup immediates, and explicit waits/synchronization.
+  The old semantic structured `vc4.*` op families are not active dialect ops.
 
-#### Structured value-shape SSA contract
+#### Future SSA value-shape contract
 
-The value-shape family stays on the structured side of the dialect. These ops
-are not sink instructions and are not direct qasm inputs.
+Future value-shape operations belong in `ssavc4`, not active `vc4`. They are
+not sink instructions and are not direct qasm inputs.
 
 - `vc4.load_imm` is a structured constant-materialization op that models the
   load-immediate instruction family before sink lowering. It may lower fairly
@@ -355,20 +351,13 @@ distance rules, and trailing end-of-program checks remain out of scope here.
 
 Implement `MemoryEffectOpInterface` using custom resources.
 
-Suggested mapping:
+Active scheduled VC4 currently uses `Semaphore` through `vc4.qpu.sema`. Other
+resource names in `VC4SideEffects.h` are shared VC4 hardware identifiers kept
+for future SSAVC4/resource modeling; they do not imply that the old structured
+`vc4` op families are still registered.
 
-- `vc4.uniform.read` / `vc4.uniform.seek` -> `UniformStream`
-- `vc4.tmu.request` -> `TMUReq0` / `TMUReq1` and `MainMemory`
-- `vc4.tmu.read` -> `TMURcv0` / `TMURcv1`
-- `vc4.sfu.issue` / `vc4.sfu.read` -> `SFU`
-- `vc4.vpm.read` -> `VPMReadFIFO`
-- `vc4.vpm.write` -> `VPMWriteFIFO`
-- `vc4.dma.start` / `status` / `wait` -> `VDR` / `VDW` and `MainMemory`
-- `vc4.mutex` -> `Mutex`
-- `vc4.semaphore` -> `Semaphore`
-- `vc4.host_interrupt` -> `HostIRQ`
-- `vc4.enqueue_qpu` / `vc4.reserve_qpu` -> `QPUScheduler`
-- `vc4.v3d.query` / `vc4.v3d.configure` -> `V3DSystem`
+Historical structured-op mappings should be redesigned in `ssavc4` if those
+semantic operations return.
 
 ## 12. Testing matrix
 
@@ -380,9 +369,10 @@ Every op family should have:
 
 Add dedicated tests for:
 
-- `vc4.func` `form = structured` rejecting `vc4.qpu.*`
-- `vc4.func` `form = scheduled` rejecting structured ops
-- `vc4.thread_switch` rejected in `threading = single`
+- active scheduled-sink roundtrip coverage for `vc4.qpu.*`,
+  `vc4.launch_abi`, and `vc4.resource`
+- parser-boundary tests proving removed structured names remain unknown
+- `vc4.func` `form = scheduled` rejecting non-`vc4.qpu.*` body ops
 - `vc4.qpu.branch` delay-slot count rules
 - `vc4.qpu.bundle` local encoding legality
 - `--vc4-verify-scheduled-hardware-rules` accepted and rejected cases matching
