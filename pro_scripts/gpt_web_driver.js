@@ -1673,8 +1673,14 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
   );
 }
 
-async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs) {
-  vlog("waitForNewAssistantToSettle: start", { beforeCount, responseTimeoutMs });
+async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs, downloadContract = null) {
+  vlog("waitForNewAssistantToSettle: start", {
+    beforeCount,
+    responseTimeoutMs,
+    hasDownloadContract: !!(downloadContract && !downloadContract.error),
+    bundleZip: downloadContract && downloadContract.bundleZip ? downloadContract.bundleZip : null,
+    applyScript: downloadContract && downloadContract.applyScript ? downloadContract.applyScript : null,
+  });
   let previous = "";
   let stableCount = 0;
   let lastNonEmpty = "";
@@ -1713,6 +1719,20 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs)
         stable: stableCount,
       });
       lastShortLog = Date.now();
+    }
+
+    if (downloadContract && !downloadContract.error && sawNewMessage && !generating) {
+      const artifactLinksReady = await visibleDownloadBundleReady(page, downloadContract);
+      if (artifactLinksReady) {
+        vlog("settle: exact downloadable bundle links are visible -> done", {
+          iter,
+          bundleZip: downloadContract.bundleZip,
+          applyScript: downloadContract.applyScript,
+          finalLen: current.length,
+        });
+        await waitForComposerReadyForNextPrompt(page, 120000, "follow-up after visible bundle links");
+        return { text: current || lastNonEmpty, settled: true, sawNewMessage, artifactLinksReady: true };
+      }
     }
 
     if (current && current === previous && !generating && sawNewMessage) {
@@ -2006,6 +2026,40 @@ function validateDownloadBundleContract(contract) {
     bundleZip,
     applyScript,
   };
+}
+
+function hasExactDownloadBundleLinks(candidates, contract) {
+  if (!contract || contract.error) return false;
+  const wanted = [contract.bundleZip, contract.applyScript].filter(Boolean);
+  if (wanted.length !== 2) return false;
+  const seen = new Set();
+  for (const c of candidates || []) {
+    if (!c || c.visible === false) continue;
+    const fields = [c.text, c.aria, c.title, c.download, c.href].map((x) => String(x || ""));
+    for (const filename of wanted) {
+      if (fields.some((field) => field.includes(filename))) seen.add(filename);
+    }
+  }
+  return wanted.every((filename) => seen.has(filename));
+}
+
+async function visibleDownloadBundleReady(page, contract) {
+  if (!contract || contract.error) return false;
+  const candidates = await page
+    .evaluate(() => {
+      const els = [...document.querySelectorAll("a, button")];
+      return els.map((el) => ({
+        tag: el.tagName.toLowerCase(),
+        text: (el.innerText || el.textContent || "").trim(),
+        aria: el.getAttribute("aria-label") || "",
+        title: el.getAttribute("title") || "",
+        href: el.getAttribute("href") || "",
+        download: el.getAttribute("download") || "",
+        visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
+      }));
+    })
+    .catch(() => []);
+  return hasExactDownloadBundleLinks(candidates, contract);
 }
 
 function statStableEnough(filePath, minMtimeMs) {
@@ -2347,6 +2401,13 @@ async function run(mode, argv) {
     safeTransportLimitChars: promptCharLimit(),
   });
   enforcePromptCharLimit(promptFile, userPrompt.length, outDir);
+  const promptDownloadContract = parseDownloadBundleContract(userPrompt);
+  vlog("download contract parsed", {
+    hasContract: !!promptDownloadContract,
+    error: promptDownloadContract && promptDownloadContract.error ? promptDownloadContract.error : null,
+    bundleZip: promptDownloadContract && promptDownloadContract.bundleZip ? promptDownloadContract.bundleZip : null,
+    applyScript: promptDownloadContract && promptDownloadContract.applyScript ? promptDownloadContract.applyScript : null,
+  });
 
   vlog("connecting to Chrome via CDP...");
   const browser = await connectBrowser(connectTimeoutMs);
@@ -2440,7 +2501,7 @@ async function run(mode, argv) {
       });
       vlog("post-submit: waiting for response to settle", { tabUrl });
 
-      const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
+      const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs, promptDownloadContract);
       vlog("settle result", {
         settled: result.settled,
         sawNewMessage: result.sawNewMessage,
@@ -2470,7 +2531,7 @@ async function run(mode, argv) {
       beforeCount = Math.max(0, cur - 1);
     }
     vlog("resume: waiting for assistant message to settle", { beforeCount });
-    const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs);
+    const result = await waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs, promptDownloadContract);
     vlog("resume settle result", {
       settled: result.settled,
       textLen: (result.text || "").length,

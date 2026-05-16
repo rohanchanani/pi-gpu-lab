@@ -45,6 +45,6 @@ Rules:
 - `changed_paths[].path` is repo-relative and has no leading `repo/`.
 - Every `write` entry has a matching zip member at `repo/<path>`.
 - The zip must not contain `.vc4_auto/**`, lit output, `.lit_test_times.txt`, hardware `run.log`, binary files, symlinks, or extra repo members not listed in `changed_paths`.
-- The shell script must be a tiny launcher for `pro_scripts/vc4_codegen_download_bundle_apply.py validate-apply` with the exact current slice id, bundle filename, apply-script filename, and attempt number.
+- The shell script must be a tiny launcher for `pro_scripts/vc4_codegen_download_bundle_apply.py validate-apply` and must pass `--repo "$REPO_DIR"`, the exact current slice id, the exact attempt number, the exact bundle filename, and the exact apply-script filename.
 
 For M3 specifically, implementation bundles must not include M2 reference-bundle mutations, `generated_examples` mutations, generic driver rewrites, or direct `gpu -> vc4` lowering.
