@@ -36,3 +36,4 @@ compiler/context.txt
 *__pycache__/
 .DS_Store
 .vc4*
+vc4*.txt

@@ -13,7 +13,7 @@ mlir_tablegen(VC4Types.h.inc -gen-typedef-decls -typedefs-dialect=vc4)
 mlir_tablegen(VC4Types.cpp.inc -gen-typedef-defs -typedefs-dialect=vc4)
 add_mlir_dialect_tablegen_target(VC4TypesIncGen)
 
-set(LLVM_TARGET_DEFINITIONS VC4StructuredOps.td)
+set(LLVM_TARGET_DEFINITIONS VC4Ops.td)
 mlir_tablegen(VC4Ops.h.inc -gen-op-decls)
 mlir_tablegen(VC4Ops.cpp.inc -gen-op-defs)
 add_mlir_dialect_tablegen_target(VC4OpsIncGen)
