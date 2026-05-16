@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
 #include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
 
 #include "mlir/IR/BuiltinOps.h"
@@ -1237,7 +1238,7 @@ int main(int argc, char **argv) {
   mlir::PassRegistration<VC4VerifyScheduledPeripheralAccessesPass>();
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::vc4::VC4Dialect>();
+  registry.insert<mlir::vc4::VC4Dialect, mlir::ssavc4::SSAVC4Dialect>();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "VC4 modular optimizer driver\n", registry));
