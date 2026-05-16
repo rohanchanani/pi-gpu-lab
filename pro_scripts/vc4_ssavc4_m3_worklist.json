@@ -83,6 +83,8 @@
       "scheduled_vc4_is_only_artifact_emitter_sink": true,
       "m2_artifact_shape_is_preserved": true,
       "vertical_feature_bringup_after_scaffold": true,
+      "future_slice_tests_are_not_active_early": true,
+      "active_lit_tests_must_pass_in_global_check_vc4": true,
       "no_fixture_name_special_cases": true,
       "no_reference_qasm_substitution": true,
       "no_gpu_lowering_in_m3": true
@@ -173,7 +175,7 @@
         "m3-00-milestone-package"
       ],
       "context_profile": "ssavc4_scaffold",
-      "intent": "Create the separate ssavc4 dialect skeleton, CMake/tablegen integration, vc4-opt registration, and a minimal dialect visibility test; do not add the full op library yet.",
+      "intent": "Create the separate ssavc4 dialect skeleton, CMake/tablegen integration, vc4-opt registration, and a minimal dialect visibility test; do not add active tests or implementation for load_imm, pure ops, flags, type model, TMU/VPM/VDW/DMA, lowering, or fixtures yet.",
       "non_goals": [
         "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
@@ -198,6 +200,7 @@
       "forbidden_paths": [],
       "gates": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-01-ssavc4-dialect-scaffold"
       ],
       "hardware_required": false,
@@ -224,6 +227,7 @@
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-01-ssavc4-dialect-scaffold"
       ]
     },
@@ -234,7 +238,7 @@
         "m3-01-ssavc4-dialect-scaffold"
       ],
       "context_profile": "ssavc4_pure_ops",
-      "intent": "Add the builtin scalar/vector type policy, minimal SSAVC4 custom token/descriptor/flags types, minimal attrs, pure value ops, verifier restrictions, roundtrip tests, and invalid tests.",
+      "intent": "Add the builtin scalar/vector type policy, minimal SSAVC4 custom token/descriptor/flags types, minimal attrs, pure value ops, verifier restrictions, roundtrip tests, and invalid tests in the same slice that implements them, while keeping full check-vc4 green.",
       "non_goals": [
         "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
@@ -259,6 +263,7 @@
       "forbidden_paths": [],
       "gates": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-02-type-model-and-pure-ops"
       ],
       "hardware_required": false,
@@ -288,6 +293,7 @@
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-02-type-model-and-pure-ops"
       ]
     },

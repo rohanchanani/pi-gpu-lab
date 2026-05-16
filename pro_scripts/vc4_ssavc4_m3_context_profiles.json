@@ -92,7 +92,7 @@
       "max_chars_ignored_by_no_truncation_patch": 160000
     },
     "ssavc4_scaffold": {
-      "purpose": "Create the separate ssavc4 dialect skeleton and register it without reviving structured vc4.",
+      "purpose": "Create the separate ssavc4 dialect skeleton and register it without reviving structured vc4 or activating later-slice SSAVC4 tests.",
       "include": [
         {
           "kind": "file",
@@ -154,7 +154,7 @@
       "max_chars_ignored_by_no_truncation_patch": 220000
     },
     "ssavc4_pure_ops": {
-      "purpose": "Add SSAVC4 type predicates, custom token/descriptor/flags types, attrs, pure ops, parser/printer/verifier tests.",
+      "purpose": "Add SSAVC4 type predicates, custom token/descriptor/flags types, attrs, pure ops, and their owning parser/printer/verifier tests while keeping check-vc4 green.",
       "include": [
         {
           "kind": "file",

@@ -10,6 +10,8 @@ The conversion `ssavc4 -> scheduled vc4` must perform instruction selection, out
 
 M3 implementation must be vertical after the early scaffold slices. When a slice adds an executable feature, it must add dialect ops/types/attrs, verifiers/effects, lowering, scheduled-output checks, artifact checks, and fixture verification for that feature in the same slice or the immediately adjacent slice.
 
+M3 regression is cumulative. Each committed slice must keep `ninja -C compiler/build check-vc4` green. Future-slice SSAVC4 tests must not be checked into active lit paths before their owning implementation slice, and expected-red tests must not live under global `check-vc4`.
+
 Non-negotiable bans:
 
 - Do not special-case fixture names or public names.

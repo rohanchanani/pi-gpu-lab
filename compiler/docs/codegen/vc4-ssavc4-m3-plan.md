@@ -81,11 +81,11 @@ Install the milestone descriptor, worklist, verification spec, context profiles,
 
 ### m3-01-ssavc4-dialect-scaffold
 
-Create the separate `ssavc4` dialect skeleton, CMake integration, `vc4-opt` registration, and a minimal dialect visibility test.
+Create the separate `ssavc4` dialect skeleton, CMake integration, `vc4-opt` registration, and only scaffold smoke tests such as dialect visibility or minimal roundtrip. This slice must keep full `check-vc4` green and must not add active tests for `load_imm`, pure ops, flags, the type model, TMU/VPM/VDW/DMA, lowering, or fixtures.
 
 ### m3-02-type-model-and-pure-ops
 
-Add the SSAVC4 type model, minimal custom types/attrs, pure value operations, parser/printer/verifier tests, and invalid tests.
+Add the SSAVC4 type model, minimal custom types/attrs, pure value operations, parser/printer/verifier tests, and invalid tests. These pure-op/type-model tests are owned by this slice and must pass under global `check-vc4`.
 
 ### m3-03-lowering-skeleton
 

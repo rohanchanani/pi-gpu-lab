@@ -168,7 +168,7 @@
     },
     "m3-01-ssavc4-dialect-scaffold": {
       "title": "SSAVC4 dialect scaffold",
-      "expected_end_state": "The new ssavc4 dialect is present, separate from vc4, registered with vc4-opt, and visible via --show-dialects. No substantive SSAVC4 operation surface is required yet.",
+      "expected_end_state": "The new ssavc4 dialect is present, separate from vc4, registered with vc4-opt, and visible via --show-dialects. Only scaffold-owned smoke tests are active; no substantive SSAVC4 operation surface or future-slice lit tests are required yet, and full check-vc4 remains green.",
       "verifications": [
         {
           "id": "m3-01-ssavc4-dialect-scaffold-source-products",
@@ -189,6 +189,13 @@
           "mechanism": "build",
           "description": "Build vc4-opt",
           "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 after the scaffold so active future-slice tests cannot make the cumulative regression red",
+          "target": "check-vc4",
           "route_hint": "codex_mechanical"
         },
         {
@@ -219,12 +226,26 @@
             "show-dialects.mlir"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-scaffold-active-test-hygiene",
+          "mechanism": "command",
+          "description": "Active scaffold-slice SSAVC4 dialect tests must not mention future-slice operation families before their owning implementation products exist",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport sys\nroot = Path('compiler/test/Dialect/SSAVC4')\nfuture = ['ssavc4.load_imm', 'ssavc4.element_number', 'ssavc4.alu.', 'ssavc4.make_flags', 'ssavc4.tmu.', 'ssavc4.vpm.', 'ssavc4.vdw.', 'ssavc4.dma.']\npure_marker = Path('compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td')\ntype_marker = Path('compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Types.td')\nowners = {\n  'ssavc4.load_imm': pure_marker,\n  'ssavc4.element_number': pure_marker,\n  'ssavc4.alu.': pure_marker,\n  'ssavc4.make_flags': pure_marker,\n  'ssavc4.vdw.': Path('compiler/test/Dialect/SSAVC4/vdw-store-roundtrip.mlir'),\n  'ssavc4.dma.': Path('compiler/test/Dialect/SSAVC4/dma-roundtrip.mlir'),\n}\ndef owner_ready(token, line):\n    if token == 'ssavc4.tmu.':\n        if '!ssavc4.tmu.desc' in line:\n            return type_marker.exists()\n        return Path('compiler/test/Dialect/SSAVC4/tmu-direct-roundtrip.mlir').exists()\n    if token == 'ssavc4.vpm.':\n        if '!ssavc4.vpm.desc' in line:\n            return type_marker.exists()\n        return Path('compiler/test/Dialect/SSAVC4/vpm-shared-roundtrip.mlir').exists()\n    marker = owners[token]\n    return marker.exists()\nbad = []\nfor path in sorted(root.glob('*.mlir')):\n    text = path.read_text(encoding='utf-8', errors='replace')\n    for lineno, line in enumerate(text.splitlines(), 1):\n        for token in future:\n            if token in line and not owner_ready(token, line):\n                bad.append(f'{path}:{lineno}: {token}')\nif bad:\n    print('future SSAVC4 tests are active before their owning slice products exist:')\n    print('\\n'.join(bad[:100]))\n    sys.exit(1)\nprint('ssavc4 scaffold active-test hygiene ok')\n"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "ssavc4 scaffold active-test hygiene ok"
+          ]
         }
       ]
     },
     "m3-02-type-model-and-pure-ops": {
       "title": "SSAVC4 type model and pure ops",
-      "expected_end_state": "SSAVC4 value-shape predicates, minimal custom types, minimal attrs, and pure ops parse/print/verify. Effectful hardware ops are not introduced as pure placeholders.",
+      "expected_end_state": "SSAVC4 value-shape predicates, minimal custom types, minimal attrs, and pure ops parse/print/verify with their owning lit tests. Effectful hardware ops are not introduced as pure placeholders, and full check-vc4 remains green.",
       "verifications": [
         {
           "id": "m3-02-type-model-and-pure-ops-source-products",
@@ -248,6 +269,13 @@
           "mechanism": "build",
           "description": "Build vc4-opt",
           "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 after type-model and pure-op tests are added",
+          "target": "check-vc4",
           "route_hint": "codex_mechanical"
         },
         {
