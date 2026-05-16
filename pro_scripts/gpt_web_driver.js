@@ -1721,10 +1721,10 @@ async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs,
       lastShortLog = Date.now();
     }
 
-    if (downloadContract && !downloadContract.error && sawNewMessage && !generating) {
+    if (downloadContract && !downloadContract.error && !generating) {
       const artifactLinksReady = await visibleDownloadBundleReady(page, downloadContract);
       if (artifactLinksReady) {
-        vlog("settle: exact downloadable bundle links are visible -> done", {
+        vlog("settle: exact current-contract downloadable bundle links are visible -> done", {
           iter,
           bundleZip: downloadContract.bundleZip,
           applyScript: downloadContract.applyScript,
