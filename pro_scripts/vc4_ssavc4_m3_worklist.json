@@ -269,13 +269,13 @@
       "hardware_required": false,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 4,
       "commit_message": "vc4 ssavc4 m3: type-model-pure-ops",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 4,
+        "mechanical_build": 2,
+        "lit_tool_resolution": 2,
+        "test_invocation": 2
       },
       "products": {
         "required_source_files": [
