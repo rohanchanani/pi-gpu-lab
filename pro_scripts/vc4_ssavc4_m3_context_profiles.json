@@ -1,0 +1,573 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-ssavc4-m3",
+  "defaults": {
+    "max_chars": 220000,
+    "always_include": [
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_ssavc4_m3/constitution.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_ssavc4_m3/output_contract.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice_contract.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_ssavc4_m3/m3_handoff.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md"
+      }
+    ],
+    "failure_includes": [
+      {
+        "kind": "failure_packet"
+      },
+      {
+        "kind": "git_diff_summary"
+      },
+      {
+        "kind": "changed_files_excerpt"
+      }
+    ]
+  },
+  "profiles": {
+    "m3_package": {
+      "purpose": "Validate and reason about the milestone package only. No compiler source implementation is in scope.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-ssavc4-m3.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_worklist.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_context_profiles.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/README.md"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-codegen-m2.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_worklist.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_context_profiles.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_milestone_verifier.py"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 160000
+    },
+    "ssavc4_scaffold": {
+      "purpose": "Create the separate ssavc4 dialect skeleton and register it without reviving structured vc4.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice1_dialect_scaffold.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/CMakeLists.txt"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/tools/vc4-opt/vc4-opt.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Dialect.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4CoreOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4ScheduledQPUOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4/scheduled-sink-contract.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary",
+        "existing_codegen_files"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 220000
+    },
+    "ssavc4_pure_ops": {
+      "purpose": "Add SSAVC4 type predicates, custom token/descriptor/flags types, attrs, pure ops, parser/printer/verifier tests.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice2_type_and_pure_ops.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Enums.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4OpEnums.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Attrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4Types.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4SideEffects.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4/qpu-bundle-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4/qpu-ldi-sema-roundtrip.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "ssavc4_lowering_skeleton": {
+      "purpose": "Build the conversion pass skeleton and minimal scheduled VC4 output path.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice3_lowering_skeleton.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4ScheduledQPUOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Target/VC4/VC4ArtifactEmitter.h"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-minimal-thrend.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/vc4-codegen-emit-contract-valid.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/candidate/vector_store_smoke_candidate_harness.c"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary",
+        "existing_codegen_files"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 260000
+    },
+    "global_store": {
+      "purpose": "Bring up ssavc4.vdw.store vertically with effects, lowering, scheduled checks, artifact shape, and vector_store_smoke hardware semantics.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice4_global_store.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/candidate/vector_store_smoke_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/vector_store_smoke/expected.json"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/candidate/global_store_coalesced_multi_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 300000
+    },
+    "branches_tail": {
+      "purpose": "Implement restricted flags and branch layout from final scheduled slot order, with delay slots and tail fixture verification.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice5_branch_tail.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4/IR/VC4ScheduledQPUOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-qpu-branch-delay-slots.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4/qpu-branch-roundtrip.mlir"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/global_store_coalesced_multi/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/gemv_naive_tail/input.mlir"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 280000
+    },
+    "tmu_saxpy": {
+      "purpose": "Implement direct TMU tmu0/raw32 request/read with token/effect ordering and saxpy_full SSAVC4 fixture.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice6_tmu_saxpy.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/candidate/saxpy_full_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/input.mlir"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/input.mlir"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 340000
+    },
+    "reductions": {
+      "purpose": "Implement rotate/pack/unpack and harden register allocation/liveness for independent-vector reductions.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice7_reductions.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/candidate/warp_reduce_sum_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/expected.json"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_reduce_sum/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/warp_prefix_sum/input.mlir"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 320000
+    },
+    "cooperative_barrier": {
+      "purpose": "Implement semaphore/barrier lowering and cooperative resource metadata checks for a barrier fixture.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice8_cooperative_barrier.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/candidate/qpu_barrier_syncthreads_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Emit/emit-resource-cooperative-block.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/input.mlir"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 320000
+    },
+    "shared_vpm": {
+      "purpose": "Implement minimal shared VPM cooperative behavior and verify shared transpose/block reduction semantics.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice9_shared_vpm.md"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/candidate/block_reduce_sum_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/expected.json"
+        },
+        {
+          "kind": "fixture",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/candidate/shared_transpose_16x16_candidate_harness.c"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/expected.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/block_reduce_sum/input.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Hardware/Run/shared_transpose_16x16/input.mlir"
+        }
+      ],
+      "extractors": [
+        "hardware_fixture_summary",
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 380000
+    },
+    "m3_final": {
+      "purpose": "Final acceptance: review all M3 fixtures, source-contract audits, full check-vc4, and full M2 regression.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_ssavc4_m3/slice10_final_acceptance.md"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-codegen-m2.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_worklist.json"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-codegen-m2-plan.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-artifact-manifest-v2.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4-runtime-abi.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary",
+        "existing_codegen_files",
+        "hardware_fixture_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 420000
+    }
+  },
+  "notes": [
+    "Profiles include the SSAVC4 design document, M3 plan, and M3 prompt contracts by default.",
+    "Context profile file paths are repo-relative and should exist after the M3 package is placed; generated_examples and external handoff-only paths are intentionally not referenced.",
+    "Fixture reference trees are not bulk-included; use current M2 input.mlir/candidate harness/expected.json and docs for active architecture evidence.",
+    "Profiles are narrow by slice and should not be replaced by whole-repo dumps."
+  ]
+}

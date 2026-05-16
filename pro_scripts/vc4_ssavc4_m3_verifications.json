@@ -1,0 +1,1586 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-ssavc4-m3",
+  "title": "VC4 SSAVC4 M3 typed verification specification",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/ssavc4_m3/verifier",
+    "candidate_state_root": ".vc4_auto/ssavc4_m3",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 7200,
+    "hardware_timeout_sec": 60,
+    "fixture_matrices": {
+      "m3_smoke": [
+        "minimal_thrend_ssavc4",
+        "vector_store_smoke_ssavc4"
+      ],
+      "m3_independent_vector": [
+        "vector_store_smoke_ssavc4",
+        "global_store_coalesced_multi_ssavc4",
+        "saxpy_full_ssavc4",
+        "warp_reduce_sum_ssavc4"
+      ],
+      "m3_cooperative_block": [
+        "qpu_barrier_syncthreads_ssavc4",
+        "shared_transpose_16x16_ssavc4"
+      ],
+      "m3_required": [
+        "vector_store_smoke_ssavc4",
+        "global_store_coalesced_multi_ssavc4",
+        "saxpy_full_ssavc4",
+        "warp_reduce_sum_ssavc4",
+        "qpu_barrier_syncthreads_ssavc4",
+        "shared_transpose_16x16_ssavc4"
+      ]
+    }
+  },
+  "notes": [
+    "M3 uses only generic verifier mechanisms already present in vc4_milestone_verifier.py.",
+    "SSAVC4 hardware fixture checks are command-based around an M3 wrapper that must lower SSAVC4 input to scheduled VC4 before reusing the M2 artifact runner.",
+    "Final M3 acceptance must be invoked cumulatively by requesting all M3 slices; m3-10 additionally runs the full generic M2 regression."
+  ],
+  "fixture_matrices": {
+    "m3_smoke": [
+      "minimal_thrend_ssavc4",
+      "vector_store_smoke_ssavc4"
+    ],
+    "m3_independent_vector": [
+      "vector_store_smoke_ssavc4",
+      "global_store_coalesced_multi_ssavc4",
+      "saxpy_full_ssavc4",
+      "warp_reduce_sum_ssavc4"
+    ],
+    "m3_cooperative_block": [
+      "qpu_barrier_syncthreads_ssavc4",
+      "shared_transpose_16x16_ssavc4"
+    ],
+    "m3_required": [
+      "vector_store_smoke_ssavc4",
+      "global_store_coalesced_multi_ssavc4",
+      "saxpy_full_ssavc4",
+      "warp_reduce_sum_ssavc4",
+      "qpu_barrier_syncthreads_ssavc4",
+      "shared_transpose_16x16_ssavc4"
+    ]
+  },
+  "slices": {
+    "m3-00-milestone-package": {
+      "title": "M3 milestone package",
+      "expected_end_state": "M3 package files exist, JSON parses, generic verifier mechanisms are available, and the spec/worklist audit passes. No compiler source changes are required for this slice.",
+      "verifications": [
+        {
+          "id": "m3-00-milestone-package-source-products",
+          "mechanism": "source_products",
+          "description": "M3 package and generic automation source products exist",
+          "files": [
+            "pro_scripts/milestones/vc4-ssavc4-m3.json",
+            "pro_scripts/vc4_ssavc4_m3_worklist.json",
+            "pro_scripts/vc4_ssavc4_m3_verifications.json",
+            "pro_scripts/vc4_ssavc4_m3_context_profiles.json",
+            "pro_scripts/prompts/vc4_ssavc4_m3/README.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/constitution.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/output_contract.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice_contract.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/m3_handoff.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice0_scaffold.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice1_dialect_scaffold.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice2_type_and_pure_ops.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice3_lowering_skeleton.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice4_global_store.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice5_branch_tail.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice6_tmu_saxpy.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice7_reductions.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice8_cooperative_barrier.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice9_shared_vpm.md",
+            "pro_scripts/prompts/vc4_ssavc4_m3/slice10_final_acceptance.md",
+            "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+            "compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "pro_scripts/vc4_milestone_autorun.py",
+            "pro_scripts/vc4_milestone_resume.py",
+            "pro_scripts/vc4_milestone_failure_router.py"
+          ]
+        },
+        {
+          "id": "json-parse-m3-package",
+          "mechanism": "command",
+          "description": "M3 descriptor/worklist/verifications/context profile JSON parses",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json,sys,pathlib\nfor raw in sys.argv[1:]:\n    p=pathlib.Path(raw)\n    with p.open(encoding='utf-8') as f: json.load(f)\nprint('json-ok')\n",
+            "pro_scripts/milestones/vc4-ssavc4-m3.json",
+            "pro_scripts/vc4_ssavc4_m3_worklist.json",
+            "pro_scripts/vc4_ssavc4_m3_verifications.json",
+            "pro_scripts/vc4_ssavc4_m3_context_profiles.json"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "json-ok"
+          ]
+        },
+        {
+          "id": "generic-mechanisms-available",
+          "mechanism": "command",
+          "description": "Generic verifier lists mechanisms needed by M3",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "mechanisms",
+            "--repo",
+            "{repo}"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "source_products",
+            "command",
+            "build",
+            "manifest_schema",
+            "program_artifact_bundle",
+            "all_qasm_assemble"
+          ]
+        },
+        {
+          "id": "audit-m3-spec",
+          "mechanism": "command",
+          "description": "M3 spec audits against M3 worklist",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "audit-contract",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_ssavc4_m3_verifications.json",
+            "--worklist",
+            "pro_scripts/vc4_ssavc4_m3_worklist.json"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-01-ssavc4-dialect-scaffold": {
+      "title": "SSAVC4 dialect scaffold",
+      "expected_end_state": "The new ssavc4 dialect is present, separate from vc4, registered with vc4-opt, and visible via --show-dialects. No substantive SSAVC4 operation surface is required yet.",
+      "verifications": [
+        {
+          "id": "m3-01-ssavc4-dialect-scaffold-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Dialect/SSAVC4/IR/CMakeLists.txt",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Base.td",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.td",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h",
+            "compiler/lib/Dialect/SSAVC4/IR/CMakeLists.txt",
+            "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Dialect.cpp",
+            "compiler/test/Dialect/SSAVC4/show-dialects.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "show-dialects-contains-ssavc4",
+          "mechanism": "command",
+          "description": "vc4-opt registers ssavc4 dialect",
+          "argv": [
+            "vc4-opt",
+            "--show-dialects"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "ssavc4"
+          ]
+        },
+        {
+          "id": "ssavc4-scaffold-lit",
+          "mechanism": "command",
+          "description": "Run scaffold dialect lit tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "show-dialects.mlir"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-02-type-model-and-pure-ops": {
+      "title": "SSAVC4 type model and pure ops",
+      "expected_end_state": "SSAVC4 value-shape predicates, minimal custom types, minimal attrs, and pure ops parse/print/verify. Effectful hardware ops are not introduced as pure placeholders.",
+      "verifications": [
+        {
+          "id": "m3-02-type-model-and-pure-ops-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Types.td",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.h",
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Types.h",
+            "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp",
+            "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Types.cpp",
+            "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir",
+            "compiler/test/Dialect/SSAVC4/effect-model-roundtrip.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-pure-ops-lit",
+          "mechanism": "command",
+          "description": "Run pure-op and invalid dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "pure-ops-roundtrip.mlir",
+            "--include",
+            "pure-ops-invalid.mlir",
+            "--include",
+            "effect-model-roundtrip.mlir"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-03-lowering-skeleton": {
+      "title": "SSAVC4 to scheduled VC4 lowering skeleton",
+      "expected_end_state": "--convert-ssavc4-to-vc4 exists, lowers a minimal SSAVC4 kernel to scheduled vc4.module/vc4.func/vc4.qpu.* output, copies metadata, and output passes scheduled emit-contract verification.",
+      "verifications": [
+        {
+          "id": "m3-03-lowering-skeleton-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.h",
+            "compiler/lib/Conversion/SSAVC4ToVC4/CMakeLists.txt",
+            "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp",
+            "compiler/test/Conversion/SSAVC4ToVC4/minimal-thrend.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/metadata-copy.mlir",
+            "compiler/test/CodeGen/SSAVC4/Emit/minimal-thrend-ssavc4.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-conversion-lit-minimal",
+          "mechanism": "command",
+          "description": "Run minimal conversion lit tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "minimal-thrend.mlir",
+            "--include",
+            "metadata-copy.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-minimal-codegen-lit",
+          "mechanism": "command",
+          "description": "Run minimal SSAVC4 codegen lit test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/SSAVC4/Emit",
+            "--include",
+            "minimal-thrend-ssavc4.mlir"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-04-global-store": {
+      "title": "SSAVC4 global vector store path",
+      "expected_end_state": "ssavc4.vdw.store is effectful, lowers through a known-good VPM/VDW store template to scheduled vc4, and vector_store_smoke_ssavc4 can generate M2-compatible artifacts and run on hardware.",
+      "verifications": [
+        {
+          "id": "m3-04-global-store-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/vdw-store-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/vdw-store-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-vdw-lit",
+          "mechanism": "command",
+          "description": "Run VDW store dialect and conversion lit tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "vdw-store-roundtrip.mlir",
+            "--include",
+            "vdw-store-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-vdw-conversion-lit",
+          "mechanism": "command",
+          "description": "Run VDW store conversion lit test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "vdw-store.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-vector_store_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture vector_store_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "vector_store_smoke_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-vector_store_smoke_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for vector_store_smoke_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/vector_store_smoke_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-vector_store_smoke_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for vector_store_smoke_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/vector_store_smoke_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-vector_store_smoke_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for vector_store_smoke_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/vector_store_smoke_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-vector_store_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for vector_store_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "vector_store_smoke_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-vector_store_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for vector_store_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "vector_store_smoke_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-vector_store_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture vector_store_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "vector_store_smoke_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-vector_store_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for vector_store_smoke_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/vector_store_smoke_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-05-branch-tail-lowering": {
+      "title": "SSAVC4 branch and tail lowering",
+      "expected_end_state": "make_flags/br/cond_br parse and verify; branch immediates are computed after final scheduled layout; delay slots are explicit and conservative; a tail-control global-store fixture runs.",
+      "verifications": [
+        {
+          "id": "m3-05-branch-tail-lowering-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/branch-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/branch-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/branch-tail.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-branch-lit",
+          "mechanism": "command",
+          "description": "Run branch dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "branch-roundtrip.mlir",
+            "--include",
+            "branch-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-branch-conversion-lit",
+          "mechanism": "command",
+          "description": "Run branch/tail conversion lit test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "branch-tail.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-global_store_coalesced_multi_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture global_store_coalesced_multi_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "global_store_coalesced_multi_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-global_store_coalesced_multi_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for global_store_coalesced_multi_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/global_store_coalesced_multi_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-global_store_coalesced_multi_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for global_store_coalesced_multi_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/global_store_coalesced_multi_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-global_store_coalesced_multi_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for global_store_coalesced_multi_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/global_store_coalesced_multi_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-global_store_coalesced_multi_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for global_store_coalesced_multi_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "global_store_coalesced_multi_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-global_store_coalesced_multi_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for global_store_coalesced_multi_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "global_store_coalesced_multi_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-global_store_coalesced_multi_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture global_store_coalesced_multi_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "global_store_coalesced_multi_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-global_store_coalesced_multi_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for global_store_coalesced_multi_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/global_store_coalesced_multi_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-06-tmu-direct-load-saxpy": {
+      "title": "SSAVC4 direct TMU load and saxpy",
+      "expected_end_state": "tmu.request/tmu.read direct tmu0/raw32 parse and verify with token/effect ordering, lower conservatively with correct r4 lifetime, and saxpy_full_ssavc4 runs through M2 artifacts.",
+      "verifications": [
+        {
+          "id": "m3-06-tmu-direct-load-saxpy-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/tmu-direct-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/tmu-direct-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/tmu-direct-load.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-tmu-lit",
+          "mechanism": "command",
+          "description": "Run TMU dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "tmu-direct-roundtrip.mlir",
+            "--include",
+            "tmu-direct-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-tmu-conversion-lit",
+          "mechanism": "command",
+          "description": "Run TMU conversion test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "tmu-direct-load.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-saxpy_full_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture saxpy_full_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "saxpy_full_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-saxpy_full_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for saxpy_full_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/saxpy_full_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-saxpy_full_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for saxpy_full_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/saxpy_full_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-saxpy_full_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for saxpy_full_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/saxpy_full_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-saxpy_full_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for saxpy_full_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "saxpy_full_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-saxpy_full_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for saxpy_full_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "saxpy_full_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-saxpy_full_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture saxpy_full_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "saxpy_full_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-saxpy_full_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for saxpy_full_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/saxpy_full_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-07-reductions-and-rotate": {
+      "title": "SSAVC4 reductions and rotate",
+      "expected_end_state": "rotate/pack/unpack are legal pure transforms with scheduled lowering; liveness/no-spill RA handles reduction pressure; warp_reduce_sum_ssavc4 or equivalent independent-vector fixture runs.",
+      "verifications": [
+        {
+          "id": "m3-07-reductions-and-rotate-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/rotate-pack-unpack-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/rotate-pack-unpack-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/rotate-reduction.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-rotate-lit",
+          "mechanism": "command",
+          "description": "Run rotate/pack/unpack dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "rotate-pack-unpack-roundtrip.mlir",
+            "--include",
+            "rotate-pack-unpack-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-rotate-conversion-lit",
+          "mechanism": "command",
+          "description": "Run rotate reduction conversion test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "rotate-reduction.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-warp_reduce_sum_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture warp_reduce_sum_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "warp_reduce_sum_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-warp_reduce_sum_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for warp_reduce_sum_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/warp_reduce_sum_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-warp_reduce_sum_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for warp_reduce_sum_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/warp_reduce_sum_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-warp_reduce_sum_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for warp_reduce_sum_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/warp_reduce_sum_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-warp_reduce_sum_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for warp_reduce_sum_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "warp_reduce_sum_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-warp_reduce_sum_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for warp_reduce_sum_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "warp_reduce_sum_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-warp_reduce_sum_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture warp_reduce_sum_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "warp_reduce_sum_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-warp_reduce_sum_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for warp_reduce_sum_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/warp_reduce_sum_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-08-cooperative-barrier-basics": {
+      "title": "SSAVC4 cooperative barrier basics",
+      "expected_end_state": "sema acquire/release and ssavc4.barrier are effectful, require cooperative resource metadata, lower to scheduled sema/barrier protocol, and a barrier fixture runs.",
+      "verifications": [
+        {
+          "id": "m3-08-cooperative-barrier-basics-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/sema-barrier-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/sema-barrier-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/cooperative-barrier.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-barrier-lit",
+          "mechanism": "command",
+          "description": "Run sema/barrier dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "sema-barrier-roundtrip.mlir",
+            "--include",
+            "sema-barrier-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-barrier-conversion-lit",
+          "mechanism": "command",
+          "description": "Run cooperative barrier conversion test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "cooperative-barrier.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture qpu_barrier_syncthreads_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "qpu_barrier_syncthreads_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for qpu_barrier_syncthreads_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/qpu_barrier_syncthreads_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for qpu_barrier_syncthreads_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/qpu_barrier_syncthreads_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for qpu_barrier_syncthreads_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/qpu_barrier_syncthreads_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for qpu_barrier_syncthreads_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "qpu_barrier_syncthreads_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for qpu_barrier_syncthreads_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "qpu_barrier_syncthreads_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture qpu_barrier_syncthreads_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "qpu_barrier_syncthreads_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-qpu_barrier_syncthreads_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for qpu_barrier_syncthreads_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/qpu_barrier_syncthreads_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-09-shared-vpm-cooperative": {
+      "title": "SSAVC4 shared VPM cooperative path",
+      "expected_end_state": "The minimal shared VPM read/write subset is effectful and ordered; lowering preserves cooperative resource metadata and shared_transpose_16x16_ssavc4 or an explicitly reduced shared-VPM fixture runs.",
+      "verifications": [
+        {
+          "id": "m3-09-shared-vpm-cooperative-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Dialect/SSAVC4/vpm-shared-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/vpm-shared-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "ssavc4-shared-vpm-lit",
+          "mechanism": "command",
+          "description": "Run shared VPM dialect tests",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "vpm-shared-roundtrip.mlir",
+            "--include",
+            "vpm-shared-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-shared-vpm-conversion-lit",
+          "mechanism": "command",
+          "description": "Run shared VPM conversion test",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "shared-vpm-cooperative.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-shared_transpose_16x16_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture shared_transpose_16x16_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "shared_transpose_16x16_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "program-artifact-bundle-shared_transpose_16x16_ssavc4",
+          "mechanism": "program_artifact_bundle",
+          "description": "M2-compatible artifact shape for shared_transpose_16x16_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/shared_transpose_16x16_ssavc4",
+          "expected_kernel_count": 1,
+          "require_layout": true,
+          "forbidden_common_files": [
+            "kernel.qasm"
+          ]
+        },
+        {
+          "id": "manifest-v2-shared_transpose_16x16_ssavc4",
+          "mechanism": "manifest_schema",
+          "description": "Manifest v2 for shared_transpose_16x16_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/shared_transpose_16x16_ssavc4",
+          "schema_version": 2,
+          "expected_kernel_count": 1,
+          "required_top_level_keys": [
+            "schema_version",
+            "kind",
+            "program_name",
+            "target",
+            "kernels"
+          ],
+          "forbid_top_level_keys": [
+            "kernel",
+            "public_name",
+            "qasm_path",
+            "launch_abi"
+          ],
+          "required_kernel_keys": [
+            "kernel_id",
+            "symbol_name",
+            "public_name",
+            "qasm_path",
+            "code_symbol",
+            "scheduled_sink_ops",
+            "uniform_words_per_request",
+            "uniform_words_per_qpu",
+            "max_requests_per_wave",
+            "tail_policy",
+            "schedule_mode",
+            "args",
+            "builtins",
+            "resources"
+          ]
+        },
+        {
+          "id": "assemble-all-qasm-shared_transpose_16x16_ssavc4",
+          "mechanism": "all_qasm_assemble",
+          "description": "All manifest-listed QASM assembles for shared_transpose_16x16_ssavc4",
+          "bundle": ".vc4_auto/ssavc4_m3/candidates/shared_transpose_16x16_ssavc4"
+        },
+        {
+          "id": "candidate-assemble-shared_transpose_16x16_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for shared_transpose_16x16_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "shared_transpose_16x16_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-shared_transpose_16x16_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for shared_transpose_16x16_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "shared_transpose_16x16_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-shared_transpose_16x16_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture shared_transpose_16x16_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "shared_transpose_16x16_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-shared_transpose_16x16_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for shared_transpose_16x16_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/shared_transpose_16x16_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m3-10-final-acceptance": {
+      "title": "Final M3 acceptance and M2 regression",
+      "expected_end_state": "All M3 slices are complete, SSAVC4-input fixtures lower to scheduled VC4 and emit/run M2-compatible artifacts, source-contract audits pass, check-vc4 passes, and the generic M2 verifier passes all M2 slices.",
+      "verifications": [
+        {
+          "id": "m3-10-final-acceptance-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "command",
+          "description": "Run full check-vc4 target",
+          "argv": [
+            "ninja",
+            "-C",
+            "compiler/build",
+            "check-vc4"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "no-structured-vc4-resurrection",
+          "mechanism": "command",
+          "description": "Active VC4 dialect still has no removed structured VC4 surface",
+          "argv": [
+            "{python}",
+            "-c",
+            "\nfrom pathlib import Path\nliterals = [\n  'vc4.uniform.', 'vc4.tmu.', 'vc4.vpm.', 'vc4.dma.', 'vc4.sfu.',\n  'vc4.return', 'vc4.program_end', 'vc4.async.wait', 'vc4.enqueue_qpu',\n  'vc4.reserve_qpu', 'vc4.v3d.', 'function_form<structured>'\n]\nroots = [Path('compiler/include/vc4/Dialect/VC4/IR'), Path('compiler/lib/Dialect/VC4/IR')]\nbad = []\nfor root in roots:\n    if not root.exists():\n        continue\n    for p in root.rglob('*'):\n        if not p.is_file() or p.suffix not in {'.td', '.h', '.cpp', '.cc'}:\n            continue\n        text = p.read_text(encoding='utf-8', errors='replace')\n        for lit in literals:\n            if lit in text:\n                bad.append((str(p), lit))\nif bad:\n    print('removed structured vc4 surface appears in active VC4 IR:', bad[:50])\n    raise SystemExit(1)\nprint('active VC4 IR remains scheduled-sink only')\n"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "no-fixture-name-special-cases",
+          "mechanism": "command",
+          "description": "Compiler source does not branch on fixture/public names",
+          "argv": [
+            "{python}",
+            "-c",
+            "\nfrom pathlib import Path\nfixtures = [\n  'vector_store_smoke', 'global_store_coalesced_multi', 'saxpy_full',\n  'saxpy_16', 'saxpy_tmu', 'tmu_read_nop_write', 'warp_reduce_sum',\n  'warp_prefix_sum', 'qpu_barrier_syncthreads', 'block_reduce_sum',\n  'shared_transpose_16x16', 'gemv_naive_tail'\n]\nroots = [Path('compiler/include'), Path('compiler/lib'), Path('compiler/tools')]\nallowed_dirs = {'compiler/test', 'compiler/docs'}\nbad = []\nfor root in roots:\n    if not root.exists():\n        continue\n    for p in root.rglob('*'):\n        if not p.is_file() or p.suffix not in {'.td', '.h', '.hpp', '.cpp', '.cc', '.c', '.py', '.sh'}:\n            continue\n        text = p.read_text(encoding='utf-8', errors='replace')\n        for lit in fixtures:\n            if lit in text:\n                bad.append((str(p), lit))\nif bad:\n    print('fixture/public-name literals found in compiler source:', bad[:50])\n    raise SystemExit(1)\nprint('no fixture-name special cases in compiler source')\n"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "no-fake-vc4-test-result-support",
+          "mechanism": "command",
+          "description": "SSAVC4 support scripts do not fake VC4_TEST_RESULT",
+          "argv": [
+            "{python}",
+            "-c",
+            "\nfrom pathlib import Path\nroots = [Path('compiler/test/CodeGen/SSAVC4/Support')]\nbad = []\nfor root in roots:\n    if not root.exists():\n        continue\n    for p in root.rglob('*'):\n        if p.is_file() and p.suffix in {'.sh', '.py'}:\n            text = p.read_text(encoding='utf-8', errors='replace')\n            if 'echo \"VC4_TEST_RESULT' in text or \"echo 'VC4_TEST_RESULT\" in text:\n                bad.append(str(p))\nif bad:\n    print('support scripts must not fake VC4_TEST_RESULT:', bad)\n    raise SystemExit(1)\nprint('support scripts do not fake VC4_TEST_RESULT')\n"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "m2-regression-from-m3-final",
+          "mechanism": "command",
+          "description": "Run full generic M2 verifier after M3 final acceptance",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "verify",
+            "--repo",
+            "{repo}",
+            "--milestone-config",
+            "pro_scripts/milestones/vc4-codegen-m2.json",
+            "--slice",
+            "m2-00-scaffold",
+            "--slice",
+            "m2-01-manifest-v2",
+            "--slice",
+            "m2-02-program-bundle-assembly",
+            "--slice",
+            "m2-03-persistent-program-layout",
+            "--slice",
+            "m2-04-device-heap",
+            "--slice",
+            "m2-05-cuda-like-launch-abi",
+            "--slice",
+            "m2-06-multi-kernel-chain-hardware",
+            "--slice",
+            "m2-07-independent-vector-scheduler",
+            "--slice",
+            "m2-08-cooperative-block-scheduler",
+            "--slice",
+            "m2-09-memory-subsystem-matrix",
+            "--slice",
+            "m2-10-final-acceptance",
+            "--out",
+            ".vc4_auto/ssavc4_m3/manual/m2-regression-from-m3-final.json",
+            "--timeout-sec",
+            "7200",
+            "--keep-going"
+          ],
+          "expect_exit_code": 0,
+          "requires_hardware": true,
+          "timeout_sec": 7200,
+          "route_hint": "gpt_pro"
+        }
+      ]
+    }
+  }
+}

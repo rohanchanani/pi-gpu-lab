@@ -1,0 +1,827 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-ssavc4-m3",
+  "title": "Milestone 3: implement SSAVC4 and lower to scheduled VC4",
+  "locked_goal": "Define a new target-specific ssavc4 dialect and implement incremental ssavc4 -> scheduled vc4 lowering so SSAVC4-input fixtures emit M2-compatible artifacts and preserve all M2 scheduled-backend behavior.",
+  "defaults": {
+    "repo_script_dir": "pro_scripts",
+    "gpt_web_driver": "pro_scripts/gpt_web_driver.js",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/ssavc4_m3",
+    "candidate_state_root": ".vc4_auto/ssavc4_m3",
+    "typed_verifier_script": "pro_scripts/vc4_milestone_verifier.py",
+    "verification_spec": "pro_scripts/vc4_ssavc4_m3_verifications.json",
+    "prompt_template_dir": "pro_scripts/prompts/vc4_ssavc4_m3",
+    "auto_commit_on_pass": true,
+    "hardware_gates_required_by_default": true,
+    "gpt_output_files": [
+      "artifact_transport.json",
+      "bundle.zip",
+      "apply_bundle.sh"
+    ],
+    "build_commands": {
+      "build_vc4_opt": "ninja -C compiler/build vc4-opt",
+      "build_vc4_codegen": "ninja -C compiler/build vc4-codegen",
+      "check_vc4": "ninja -C compiler/build check-vc4"
+    },
+    "required_verifier_pipeline": [
+      "--vc4-verify-emit-contract",
+      "--vc4-verify-scheduled-hardware-rules",
+      "--vc4-verify-scheduled-adjacent-hazards",
+      "--vc4-verify-scheduled-io-spacing",
+      "--vc4-verify-scheduled-peripheral-accesses"
+    ],
+    "forbidden_paths": [
+      ".vc4_auto/**",
+      "compiler/test/**/Output/**",
+      "compiler/test/**/.lit_test_times.txt",
+      "compiler/test/**/run.log",
+      "compiler/test/CodeGen/VC4/catalog.json",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+      "generated_examples/**",
+      "external/libpi/**",
+      "pro_scripts/gpt_web_driver.js",
+      "pro_scripts/current_tab.js",
+      "pro_scripts/new_tab.js"
+    ],
+    "path_policy": {
+      "paths_are_repo_relative": true,
+      "reject_absolute_paths": true,
+      "reject_parent_directory_components": true,
+      "reject_binary_patches": true,
+      "reject_existing_vc4_fixture_reference_mutation": true,
+      "reject_existing_vc4_expected_json_mutation": true,
+      "reject_generated_example_mutation": true,
+      "reject_generic_driver_mutation_by_default": true
+    },
+    "gate_environment_contract": {
+      "path_prefix": [
+        "compiler/build/bin"
+      ],
+      "candidate_state_root_env": "VC4_CODEGEN_STATE_ROOT=.vc4_auto/ssavc4_m3",
+      "lit_run_line_contract": "Every %token in changed RUN lines must be defined by lit config or be a lit builtin."
+    },
+    "gpt_output_transport": "download_bundle",
+    "download_bundle_transport": {
+      "schema_version": 1,
+      "transport": "vc4_codegen_download_bundle_v1",
+      "staged_files": [
+        "artifact_transport.json",
+        "bundle.zip",
+        "apply_bundle.sh"
+      ],
+      "zip_layout": [
+        "manifest.json",
+        "repo/<repo-relative changed files>"
+      ],
+      "trusted_applier": "pro_scripts/vc4_codegen_download_bundle_apply.py",
+      "legacy_patch_transport_retained": true
+    },
+    "test_design_contract": {
+      "m3_input_fixtures_are_ssavc4": true,
+      "scheduled_vc4_is_only_artifact_emitter_sink": true,
+      "m2_artifact_shape_is_preserved": true,
+      "vertical_feature_bringup_after_scaffold": true,
+      "no_fixture_name_special_cases": true,
+      "no_reference_qasm_substitution": true,
+      "no_gpu_lowering_in_m3": true
+    },
+    "milestone_config": "pro_scripts/milestones/vc4-ssavc4-m3.json"
+  },
+  "slices": [
+    {
+      "id": "m3-00-milestone-package",
+      "title": "M3 milestone package",
+      "depends_on": [],
+      "context_profile": "m3_package",
+      "intent": "Install the M3 descriptor, worklist, verification spec, context profiles, prompt handoffs, and plan document without changing compiler source.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "pro_scripts/milestones/vc4-ssavc4-m3.json",
+        "pro_scripts/vc4_ssavc4_m3_worklist.json",
+        "pro_scripts/vc4_ssavc4_m3_verifications.json",
+        "pro_scripts/vc4_ssavc4_m3_context_profiles.json",
+        "pro_scripts/prompts/vc4_ssavc4_m3/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m3-00-milestone-package"
+      ],
+      "hardware_required": false,
+      "codex_policy": "never",
+      "max_gpt_attempts": 0,
+      "max_codex_attempts": 0,
+      "commit_message": "vc4 ssavc4 m3: m3-milestone-package",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "pro_scripts/milestones/vc4-ssavc4-m3.json",
+          "pro_scripts/vc4_ssavc4_m3_worklist.json",
+          "pro_scripts/vc4_ssavc4_m3_verifications.json",
+          "pro_scripts/vc4_ssavc4_m3_context_profiles.json",
+          "pro_scripts/prompts/vc4_ssavc4_m3/README.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/constitution.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/output_contract.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice_contract.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/m3_handoff.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice0_scaffold.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice1_dialect_scaffold.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice2_type_and_pure_ops.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice3_lowering_skeleton.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice4_global_store.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice5_branch_tail.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice6_tmu_saxpy.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice7_reductions.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice8_cooperative_barrier.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice9_shared_vpm.md",
+          "pro_scripts/prompts/vc4_ssavc4_m3/slice10_final_acceptance.md",
+          "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+          "compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md",
+          "pro_scripts/vc4_milestone_verifier.py",
+          "pro_scripts/vc4_milestone_autorun.py",
+          "pro_scripts/vc4_milestone_resume.py",
+          "pro_scripts/vc4_milestone_failure_router.py"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m3-00-milestone-package"
+      ]
+    },
+    {
+      "id": "m3-01-ssavc4-dialect-scaffold",
+      "title": "SSAVC4 dialect scaffold",
+      "depends_on": [
+        "m3-00-milestone-package"
+      ],
+      "context_profile": "ssavc4_scaffold",
+      "intent": "Create the separate ssavc4 dialect skeleton, CMake/tablegen integration, vc4-opt registration, and a minimal dialect visibility test; do not add the full op library yet.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-01-ssavc4-dialect-scaffold"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: dialect-scaffold",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/SSAVC4/IR/CMakeLists.txt",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Base.td",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.td",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h",
+          "compiler/lib/Dialect/SSAVC4/IR/CMakeLists.txt",
+          "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Dialect.cpp",
+          "compiler/test/Dialect/SSAVC4/show-dialects.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-01-ssavc4-dialect-scaffold"
+      ]
+    },
+    {
+      "id": "m3-02-type-model-and-pure-ops",
+      "title": "SSAVC4 type model and pure ops",
+      "depends_on": [
+        "m3-01-ssavc4-dialect-scaffold"
+      ],
+      "context_profile": "ssavc4_pure_ops",
+      "intent": "Add the builtin scalar/vector type policy, minimal SSAVC4 custom token/descriptor/flags types, minimal attrs, pure value ops, verifier restrictions, roundtrip tests, and invalid tests.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-02-type-model-and-pure-ops"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: type-model-pure-ops",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Types.td",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.h",
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Types.h",
+          "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp",
+          "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Types.cpp",
+          "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir",
+          "compiler/test/Dialect/SSAVC4/effect-model-roundtrip.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-02-type-model-and-pure-ops"
+      ]
+    },
+    {
+      "id": "m3-03-lowering-skeleton",
+      "title": "SSAVC4 to scheduled VC4 lowering skeleton",
+      "depends_on": [
+        "m3-02-type-model-and-pure-ops"
+      ],
+      "context_profile": "ssavc4_lowering_skeleton",
+      "intent": "Add --convert-ssavc4-to-vc4, copy launch/resource metadata, lower a minimal SSAVC4 kernel to scheduled vc4.func/vc4.qpu.* output, and verify the output through existing scheduled checks.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-03-lowering-skeleton"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: to-scheduled-vc4-lowering-skeleton",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.h",
+          "compiler/lib/Conversion/SSAVC4ToVC4/CMakeLists.txt",
+          "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp",
+          "compiler/test/Conversion/SSAVC4ToVC4/minimal-thrend.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/metadata-copy.mlir",
+          "compiler/test/CodeGen/SSAVC4/Emit/minimal-thrend-ssavc4.mlir"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-03-lowering-skeleton"
+      ]
+    },
+    {
+      "id": "m3-04-global-store",
+      "title": "SSAVC4 global vector store path",
+      "depends_on": [
+        "m3-03-lowering-skeleton"
+      ],
+      "context_profile": "global_store",
+      "intent": "Bring up the first observable SSAVC4 hardware-style feature vertically: ssavc4.vdw.store, effects, lowering through VPM/VDW store sequences, scheduled-output tests, bundle generation, and vector_store_smoke_ssavc4 fixture verification.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-04-global-store"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: global-vector-store-path",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/vdw-store-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/vdw-store-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir",
+          "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-04-global-store"
+      ]
+    },
+    {
+      "id": "m3-05-branch-tail-lowering",
+      "title": "SSAVC4 branch and tail lowering",
+      "depends_on": [
+        "m3-04-global-store"
+      ],
+      "context_profile": "branches_tail",
+      "intent": "Implement restricted SSA flags, br/cond_br, computed branch layout from final scheduled slot order, three nop delay slots in v1, and a tail-control global-store fixture.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-05-branch-tail-lowering"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: branch-tail-lowering",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/branch-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/branch-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/branch-tail.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-05-branch-tail-lowering"
+      ]
+    },
+    {
+      "id": "m3-06-tmu-direct-load-saxpy",
+      "title": "SSAVC4 direct TMU load and saxpy",
+      "depends_on": [
+        "m3-05-branch-tail-lowering"
+      ],
+      "context_profile": "tmu_saxpy",
+      "intent": "Implement direct TMU request/read with token/effect ordering, r4 lifetime preservation, conservative non-overlapped scheduling, and a saxpy_full_ssavc4 fixture.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-06-tmu-direct-load-saxpy"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: direct-tmu-load-saxpy",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/tmu-direct-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/tmu-direct-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/tmu-direct-load.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-06-tmu-direct-load-saxpy"
+      ]
+    },
+    {
+      "id": "m3-07-reductions-and-rotate",
+      "title": "SSAVC4 reductions and rotate",
+      "depends_on": [
+        "m3-06-tmu-direct-load-saxpy"
+      ],
+      "context_profile": "reductions",
+      "intent": "Implement rotate/pack/unpack lowering and harden no-spill liveness enough for an independent-vector reduction fixture such as warp_reduce_sum_ssavc4.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-07-reductions-and-rotate"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: reductions-rotate",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/rotate-pack-unpack-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/rotate-pack-unpack-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/rotate-reduction.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-07-reductions-and-rotate"
+      ]
+    },
+    {
+      "id": "m3-08-cooperative-barrier-basics",
+      "title": "SSAVC4 cooperative barrier basics",
+      "depends_on": [
+        "m3-07-reductions-and-rotate"
+      ],
+      "context_profile": "cooperative_barrier",
+      "intent": "Implement sema acquire/release and ssavc4.barrier with cooperative resource metadata validation and a qpu_barrier_syncthreads_ssavc4-style fixture.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-08-cooperative-barrier-basics"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: cooperative-barrier-basics",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/sema-barrier-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/sema-barrier-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/cooperative-barrier.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-08-cooperative-barrier-basics"
+      ]
+    },
+    {
+      "id": "m3-09-shared-vpm-cooperative",
+      "title": "SSAVC4 shared VPM cooperative path",
+      "depends_on": [
+        "m3-08-cooperative-barrier-basics"
+      ],
+      "context_profile": "shared_vpm",
+      "intent": "Implement the minimal shared VPM read/write subset and cooperative lowering needed for shared_transpose_16x16_ssavc4 or an explicitly reduced shared-VPM acceptance fixture.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-09-shared-vpm-cooperative"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: shared-vpm-cooperative-path",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/SSAVC4/vpm-shared-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/vpm-shared-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-09-shared-vpm-cooperative"
+      ]
+    },
+    {
+      "id": "m3-10-final-acceptance",
+      "title": "Final M3 acceptance and M2 regression",
+      "depends_on": [
+        "m3-09-shared-vpm-cooperative"
+      ],
+      "context_profile": "m3_final",
+      "intent": "Run the cumulative M3 verifier, M3 hardware fixture set, source-contract audits, full check-vc4, and the generic M2 verifier regression to prove scheduled backend persistence.",
+      "non_goals": [
+        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not resurrect removed structured vc4 operations or function_form<structured>.",
+        "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
+        "Do not replace generated SSAVC4 lowering output with reference QASM.",
+        "Do not weaken scheduled vc4 sink verifiers or M2 regression gates."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "compiler/include/vc4/Conversion/CMakeLists.txt",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/CMakeLists.txt",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md",
+        "pro_scripts/milestones/vc4-ssavc4-m3.json",
+        "pro_scripts/vc4_ssavc4_m3_worklist.json",
+        "pro_scripts/vc4_ssavc4_m3_verifications.json",
+        "pro_scripts/vc4_ssavc4_m3_context_profiles.json",
+        "pro_scripts/prompts/vc4_ssavc4_m3/**",
+        "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "build:vc4-opt",
+        "typed-verifier:m3-10-final-acceptance"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 ssavc4 m3: final-m3-acceptance-m2-regression",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/docs/codegen/vc4-ssavc4-m3-plan.md"
+        ]
+      },
+      "success_probes": [
+        "build:vc4-opt",
+        "typed-verifier:m3-10-final-acceptance"
+      ]
+    }
+  ]
+}

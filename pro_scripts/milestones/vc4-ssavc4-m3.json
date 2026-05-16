@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-ssavc4-m3",
+  "title": "VC4 Milestone 3: SSAVC4 dialect and lowering to scheduled VC4",
+  "worklist": "pro_scripts/vc4_ssavc4_m3_worklist.json",
+  "verifications": "pro_scripts/vc4_ssavc4_m3_verifications.json",
+  "context_profiles": "pro_scripts/vc4_ssavc4_m3_context_profiles.json",
+  "prompt_template_dir": "pro_scripts/prompts/vc4_ssavc4_m3",
+  "state_root": ".vc4_auto/ssavc4_m3",
+  "candidate_state_root": ".vc4_auto/ssavc4_m3",
+  "default_from_slice": "m3-00-milestone-package",
+  "default_timeout_sec": 7200,
+  "hardware_required_by_default": true,
+  "generic_scripts": {
+    "verifier": "pro_scripts/vc4_milestone_verifier.py",
+    "autorun": "pro_scripts/vc4_milestone_autorun.py",
+    "resume": "pro_scripts/vc4_milestone_resume.py",
+    "failure_router": "pro_scripts/vc4_milestone_failure_router.py"
+  }
+}
