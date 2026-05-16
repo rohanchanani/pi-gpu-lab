@@ -1,7 +1,9 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK-LABEL: vc4.module @kernels
-// CHECK-LABEL: vc4.func @saxpy_kernel
+// CHECK-LABEL: vc4.func private @saxpy_kernel
+// CHECK-SAME: domain = #vc4.execution_domain<qpu>
+// CHECK-SAME: form = #vc4.function_form<scheduled>
 // CHECK-SAME: kernel
 // CHECK-SAME: vc4.launch_abi =
 // CHECK-SAME: direction = "in"
@@ -18,13 +20,11 @@
 // CHECK-SAME: public_name = "saxpy"
 // CHECK-SAME: tail_policy = "exact_multiple"
 // CHECK-SAME: uniform_words_per_qpu = 6 : i32
-// CHECK-LABEL: vc4.func @uses_num_qpus
-// CHECK: %{{.*}} = vc4.builtin num_qpus : i32
 
 vc4.module @kernels {
-  vc4.func @saxpy_kernel() attributes {
+  vc4.func private @saxpy_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
-    form = #vc4.function_form<structured>,
+    form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
@@ -42,12 +42,5 @@ vc4.module @kernels {
         {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32}
       ]
     }
-  } {
-    vc4.return
-  }
-
-  vc4.func @uses_num_qpus() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
-    %0 = vc4.builtin num_qpus : i32
-    vc4.return
   }
 }

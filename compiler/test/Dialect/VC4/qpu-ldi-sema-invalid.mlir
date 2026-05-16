@@ -1,10 +1,9 @@
 // RUN: vc4-opt %s --verify-diagnostics
 
 vc4.module @ldi_requires_scheduled_form {
+  // expected-error@+1 {{structured vc4 form has been removed; use ssavc4 for pre-scheduled SSA IR}}
   vc4.func @bad_structured() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, threading = #vc4.threading_mode<single>} {
-    // expected-error@+1 {{is only legal in functions with form = scheduled}}
-    vc4.qpu.ldi <splat32> {value = 0 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<always>, waddr_add = 0 : i32, waddr_mul = 0 : i32}
-    vc4.return
+    %0 = "builtin.unrealized_conversion_cast"() : () -> i32
   }
 }
 

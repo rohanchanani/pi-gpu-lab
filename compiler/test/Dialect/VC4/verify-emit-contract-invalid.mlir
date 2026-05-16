@@ -1,12 +1,9 @@
 // RUN: vc4-opt --vc4-verify-emit-contract %s --split-input-file --verify-diagnostics
 
 vc4.module @qpu_structured_not_directly_emittable {
-  // expected-error@+1 {{is not directly emittable: qasm emission later consumes only domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled> functions}}
+  // expected-error@+1 {{structured vc4 form has been removed; use ssavc4 for pre-scheduled SSA IR}}
   vc4.func @kernel_entry() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<structured>, kernel, threading = #vc4.threading_mode<threadable>} {
-    %0 = vc4.uniform.read : i32
-    "vc4.semaphore"() <{id = 2 : i32, mode = #vc4.semaphore_mode<release>}> : () -> ()
-    vc4.program_end
-    vc4.return
+    %0 = "builtin.unrealized_conversion_cast"() : () -> i32
   }
 }
 
@@ -15,7 +12,7 @@ vc4.module @qpu_structured_not_directly_emittable {
 vc4.module @host_scheduled_not_directly_emittable {
   // Generic syntax keeps the function non-external without introducing
   // scheduled-body ops that would trigger unrelated dialect verifiers first.
-  // expected-error@+1 {{'vc4.func' op is not directly emittable: launcher generation later consumes only domain = #vc4.execution_domain<host>, form = #vc4.function_form<structured> functions}}
+  // expected-error@+1 {{'vc4.func' op scheduled VC4 functions require domain = #vc4.execution_domain<qpu>}}
   "vc4.func"() <{domain = #vc4.execution_domain<host>, form = #vc4.function_form<scheduled>, function_type = () -> (), sym_name = "driver_stub", sym_visibility = "private", threading = #vc4.threading_mode<single>}> ({
   ^bb0:
   }) : () -> ()

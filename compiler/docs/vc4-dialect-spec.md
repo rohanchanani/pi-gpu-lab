@@ -1,5 +1,11 @@
 # VC4 MLIR Dialect Specification (compute/QPU scope)
 
+> **Post-M2 status:** the active `vc4` dialect is now the scheduled sink
+> dialect. The legacy structured `vc4` ops described in older sections of this
+> document were removed from the active dialect before M3. `ssavc4` will be
+> introduced separately for pre-register-allocation, pre-scheduling SSA VC4 IR.
+> Scheduled VC4 remains the M2-proven artifact/codegen sink.
+
 ## 1. Purpose and pipeline position
 
 This document is the implementation specification for the `vc4` dialect milestone.
@@ -9,9 +15,9 @@ The intent is:
 ```text
 upstream whole-program MLIR
   └─ gpu.module / gpu.func / gpu.launch_func / generic MLIR IR
-      └─ vc4.module / vc4.func (structured form)
-          └─ vc4.func (scheduled QPU form)
-              └─ qasm + launcher generation (later, out of scope here)
+      └─ ssavc4 module/function IR (future M3 SSA lowering dialect)
+          └─ vc4.module / vc4.func (scheduled QPU sink form)
+              └─ qasm + launcher generation
 ```
 
 `gpu.module` and `gpu.func` remain the upstream source representation. `vc4.module` and `vc4.func`
@@ -24,20 +30,18 @@ This dialect is intentionally **hardware-facing** and **compute/QPU focused**.
 
 The original design included the full graphics-side hardware surface. That is now intentionally pruned.
 
-### Included in this milestone
+### Active after M2
 
-- QPU structured compute IR
-- QPU scheduled / emission-adjacent IR
-- uniforms
-- TMU (including async/direct-address usage)
-- SFU
-- VPM
-- VDR / VDW DMA
-- semaphores
-- inter-QPU mutex
-- host interrupt
-- thread switching / program end
-- user-program queue submission and relevant V3D scheduler / system configuration hooks
+- scheduled QPU emission-adjacent IR
+- `vc4.module`
+- `vc4.func`
+- `vc4.launch_abi` metadata
+- `vc4.resource` metadata
+- `vc4.qpu.bundle`
+- `vc4.qpu.ldi`
+- `vc4.qpu.sema`
+- `vc4.qpu.branch`
+- QPU enum/attribute/register helpers needed by the scheduled sink
 
 ### Explicitly out of scope for this milestone
 
@@ -58,13 +62,13 @@ not reintroduced accidentally during this milestone.
 
 ## 3. Design principles
 
-1. **Two canonical strata inside one dialect**
-   - A **structured** SSA form for target-specific semantics.
-   - A **scheduled QPU form** for actual instruction encoding and final emission adjacency.
+1. **One active stratum in `vc4`**
+   - `vc4` is the scheduled QPU sink dialect for actual instruction encoding and final emission adjacency.
+   - Pre-scheduled SSA VC4 semantics belong in the future `ssavc4` dialect, not in active `vc4`.
 
 2. **Hardware truth wins**
    - QPU instruction bundling, branch delay slots, load-immediate, and semaphore instructions are modeled explicitly.
-   - TMU/VPM/DMA/SFU are represented as semantic ops in structured form and as encoding-level ops in scheduled form.
+   - TMU/VPM/DMA/SFU activity reaches the active `vc4` dialect only after it has been scheduled into QPU sink operations.
 
 3. **Do not model source metaprogramming as runtime IR**
    - vc4asm directives such as `.macro`, `.rep`, `.include`, `.func`, and source helper macros are not dialect ops.
@@ -81,11 +85,12 @@ not reintroduced accidentally during this milestone.
 
 ## 4. Canonical forms
 
-## 4.1 Structured form
+## 4.1 Legacy structured form (removed)
 
-Structured form is the normal target IR used after lowering from upstream GPU-ish IR and before scheduling.
+Legacy structured `vc4` form was removed from the active dialect before M3.
+The future pre-scheduled SSA surface will be designed as `ssavc4`.
 
-Characteristics:
+Historical characteristics:
 
 - SSA values
 - analyzable
@@ -94,7 +99,8 @@ Characteristics:
 - may contain CFG with `vc4.cf.branch`
 - may contain `vc4.return`
 
-Allowed ops in structured form are the ops listed in sections 10.1 through 10.8 below, excluding `vc4.qpu.*`.
+The old structured operation families listed later in this document are
+historical design notes, not active `vc4` operations.
 
 ## 4.2 Scheduled QPU form
 
@@ -109,7 +115,7 @@ Characteristics:
 - branch delay slots are explicit
 - register-file / mux / small-immediate / signal legality is verified here
 
-Allowed ops in scheduled form are:
+Allowed ops in active scheduled form are:
 
 - `vc4.qpu.bundle`
 - `vc4.qpu.branch`

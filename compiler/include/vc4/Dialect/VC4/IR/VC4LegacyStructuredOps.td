@@ -1,6 +1,8 @@
 #ifndef VC4_LEGACY_STRUCTURED_OPS_TD
 #define VC4_LEGACY_STRUCTURED_OPS_TD
 
+// Quarantined legacy structured VC4 surface. Do not include this from
+// VC4Ops.td; the active dialect is scheduled-sink-only after M2.
 include "vc4/Dialect/VC4/IR/VC4CoreOps.td"
 
 def VC4_ReturnOp : VC4_Op<"return", [

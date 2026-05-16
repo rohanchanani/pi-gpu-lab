@@ -4,7 +4,7 @@
 // This intentionally locks dialect-verifier precedence for non-scheduled
 // operations inside scheduled vc4.func bodies; such IR never reaches the
 // artifact emitter boundary.
-// CHECK: is not a legal operation in functions with form = scheduled
+// CHECK: is not legal in scheduled VC4 functions; expected a vc4.qpu.* op
 // CHECK: vc4-codegen: error: failed to parse
 
 vc4.module @vc4_codegen_emit_contract_unsupported_op {

@@ -23,27 +23,9 @@ static bool isAllowedVC4QASMInputOp(mlir::Operation &op) {
                    mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp>(op);
 }
 
-static bool isAllowedVC4LauncherInputOp(mlir::Operation &op) {
-  return llvm::isa<mlir::vc4::AsyncWaitOp, mlir::vc4::CFBranchOp,
-                   mlir::vc4::EnqueueQPUOp, mlir::vc4::ReserveQPUOp,
-                   mlir::vc4::V3DQueryOp, mlir::vc4::V3DConfigureOp,
-                   mlir::vc4::ReturnOp>(op);
-}
-
-static bool isVC4ScheduledSinkFamilyOp(mlir::Operation &op) {
-  return op.getName().getStringRef().starts_with("vc4.qpu.");
-}
-
 static bool isVC4ScheduledNonBranchOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                    mlir::vc4::QPUSemaOp>(op);
-}
-
-static bool isVC4LauncherOrSystemOp(mlir::Operation &op) {
-  return llvm::isa<mlir::vc4::AsyncWaitOp, mlir::vc4::CFBranchOp,
-                   mlir::vc4::EnqueueQPUOp, mlir::vc4::ReserveQPUOp,
-                   mlir::vc4::V3DQueryOp, mlir::vc4::V3DConfigureOp,
-                   mlir::vc4::ReturnOp>(op);
 }
 
 static bool isVC4StructuredFamilyOp(mlir::Operation &op) {
@@ -622,10 +604,9 @@ struct VC4VerifyEmitContractPass
       if (*domain == mlir::vc4::ExecutionDomain::qpu &&
           *form == mlir::vc4::FunctionForm::structured) {
         func.emitOpError(
-            "is not directly emittable: qasm emission later consumes only "
-            "domain = #vc4.execution_domain<qpu>, "
-            "form = #vc4.function_form<scheduled> functions; lower structured "
-            "QPU ops such as uniforms/TMU/VPM/DMA/value-shape ops first");
+            "uses removed structured vc4 form; use ssavc4 for pre-scheduled "
+            "SSA IR or provide domain = #vc4.execution_domain<qpu>, "
+            "form = #vc4.function_form<scheduled>");
         sawError = true;
         return mlir::WalkResult::interrupt();
       }
@@ -633,9 +614,16 @@ struct VC4VerifyEmitContractPass
       if (*domain == mlir::vc4::ExecutionDomain::host &&
           *form == mlir::vc4::FunctionForm::scheduled) {
         func.emitOpError(
-            "is not directly emittable: launcher generation later consumes "
-            "only domain = #vc4.execution_domain<host>, "
-            "form = #vc4.function_form<structured> functions");
+            "is not directly emittable: scheduled VC4 functions require "
+            "domain = #vc4.execution_domain<qpu>");
+        sawError = true;
+        return mlir::WalkResult::interrupt();
+      }
+
+      if (*form == mlir::vc4::FunctionForm::structured) {
+        func.emitOpError(
+            "uses removed structured vc4 form; use ssavc4 for pre-scheduled "
+            "SSA IR");
         sawError = true;
         return mlir::WalkResult::interrupt();
       }
@@ -645,16 +633,6 @@ struct VC4VerifyEmitContractPass
         func.getBody().walk([&](mlir::Operation *op) {
           if (isAllowedVC4QASMInputOp(*op))
             return mlir::WalkResult::advance();
-
-          if (isVC4LauncherOrSystemOp(*op)) {
-            op->emitOpError()
-                << "is not a legal qasm-input op in "
-                   "domain = #vc4.execution_domain<qpu>, "
-                   "form = #vc4.function_form<scheduled> functions; "
-                   "host/system ops belong in host structured functions";
-            sawError = true;
-            return mlir::WalkResult::interrupt();
-          }
 
           if (isVC4StructuredFamilyOp(*op)) {
             op->emitOpError()
@@ -748,44 +726,6 @@ struct VC4VerifyEmitContractPass
         }
 
         return mlir::WalkResult::advance();
-      }
-
-      if (*domain == mlir::vc4::ExecutionDomain::host &&
-          *form == mlir::vc4::FunctionForm::structured) {
-        func.getBody().walk([&](mlir::Operation *op) {
-          if (isAllowedVC4LauncherInputOp(*op))
-            return mlir::WalkResult::advance();
-
-          if (isVC4ScheduledSinkFamilyOp(*op)) {
-            op->emitOpError()
-                << "is not a legal launcher-input op in "
-                   "domain = #vc4.execution_domain<host>, "
-                   "form = #vc4.function_form<structured> functions; "
-                   "scheduled sink ops belong in qpu scheduled functions";
-            sawError = true;
-            return mlir::WalkResult::interrupt();
-          }
-
-          if (isVC4StructuredFamilyOp(*op)) {
-            op->emitOpError()
-                << "is not a legal launcher-input op in "
-                   "domain = #vc4.execution_domain<host>, "
-                   "form = #vc4.function_form<structured> functions; "
-                   "QPU/device ops belong in qpu functions";
-            sawError = true;
-            return mlir::WalkResult::interrupt();
-          }
-
-          op->emitOpError()
-              << "is not a supported host/system launcher-input op; "
-                 "expected only vc4.enqueue_qpu, vc4.reserve_qpu, "
-                 "vc4.v3d.query, vc4.v3d.configure, vc4.async.wait, "
-                 "vc4.cf.branch, or vc4.return";
-          sawError = true;
-          return mlir::WalkResult::interrupt();
-        });
-        return sawError ? mlir::WalkResult::interrupt()
-                        : mlir::WalkResult::advance();
       }
 
       return mlir::WalkResult::advance();
