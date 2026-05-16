@@ -16,6 +16,24 @@ DEFAULT_CONTEXT_PROFILES = "pro_scripts/vc4_codegen_m2_context_profiles.json"
 DEFAULT_SPEC = "pro_scripts/vc4_codegen_m2_verifications.json"
 DEFAULT_STATE_ROOT = ".vc4_auto/codegen_m2"
 DEFAULT_FROM_SLICE = "m2-02-program-bundle-assembly"
+DEFAULT_TIMEOUT_SEC = 1800
+DEFAULT_VERIFIER_SCRIPT = "pro_scripts/vc4_milestone_verifier.py"
+DEFAULT_AUTORUN_SCRIPT = "pro_scripts/vc4_milestone_autorun.py"
+MILESTONE_CONFIG_REQUIRED_FIELDS = (
+    "schema_version",
+    "milestone",
+    "title",
+    "worklist",
+    "verifications",
+    "context_profiles",
+    "prompt_template_dir",
+    "state_root",
+    "candidate_state_root",
+    "default_from_slice",
+    "default_timeout_sec",
+    "hardware_required_by_default",
+    "generic_scripts",
+)
 
 
 def q(cmd: list[str]) -> str:
@@ -42,10 +60,52 @@ def run_cmd(
 
 
 def require_file(repo: Path, rel: str) -> Path:
-    path = repo / rel
+    raw = Path(rel)
+    path = raw if raw.is_absolute() else repo / raw
     if not path.exists():
         raise SystemExit(f"error: missing {rel}")
     return path
+
+
+def resolve_repo_path(repo: Path, path: str) -> Path:
+    raw = Path(path)
+    return raw if raw.is_absolute() else repo / raw
+
+
+def cli_option_present(argv: list[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(option + "=") for arg in argv)
+
+
+def load_milestone_config(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as e:
+        raise SystemExit(f"error: missing milestone config: {path}") from e
+    except json.JSONDecodeError as e:
+        raise SystemExit(f"error: invalid milestone config JSON {path}: {e}") from e
+    if not isinstance(data, dict):
+        raise SystemExit("error: milestone config must be a JSON object")
+    missing = [key for key in MILESTONE_CONFIG_REQUIRED_FIELDS if key not in data]
+    if missing:
+        raise SystemExit(f"error: milestone config missing required fields: {', '.join(missing)}")
+    if data.get("schema_version") != 1:
+        raise SystemExit(f"error: milestone config schema_version must be 1: {data.get('schema_version')}")
+    for key in ("worklist", "context_profiles", "verifications", "state_root", "default_from_slice"):
+        if not isinstance(data.get(key), str) or not data.get(key):
+            raise SystemExit(f"error: milestone config field must be a non-empty string: {key}")
+    try:
+        data["default_timeout_sec"] = int(data["default_timeout_sec"])
+    except (TypeError, ValueError) as e:
+        raise SystemExit("error: milestone config default_timeout_sec must be an integer") from e
+    generic_scripts = data.get("generic_scripts")
+    if not isinstance(generic_scripts, dict):
+        raise SystemExit("error: milestone config generic_scripts must be an object")
+    return data
+
+
+def log_prefix(milestone: str) -> str:
+    safe = str(milestone or "vc4-milestone").strip() or "vc4-milestone"
+    return f"[{safe}-resume]"
 
 
 def git_status(repo: Path, env: dict[str, str]) -> str:
@@ -120,6 +180,8 @@ def verifier_probe(
     *,
     repo: Path,
     python: str,
+    verifier_script: Path,
+    milestone_config: Path | None,
     spec: Path,
     worklist: Path,
     state_root: Path,
@@ -127,6 +189,7 @@ def verifier_probe(
     timeout_sec: int,
     env: dict[str, str],
     verbose: bool,
+    prefix: str,
 ) -> bool:
     out_dir = repo / state_root / "resume_probe"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -134,7 +197,7 @@ def verifier_probe(
 
     cmd = [
         python,
-        str(repo / "pro_scripts/vc4_codegen_m1_verifier.py"),
+        str(verifier_script),
         "verify",
         "--repo",
         str(repo),
@@ -150,6 +213,8 @@ def verifier_probe(
         str(timeout_sec),
         "--keep-going",
     ]
+    if milestone_config is not None:
+        cmd += ["--milestone-config", str(milestone_config)]
 
     if verbose:
         proc = run_cmd(cmd, cwd=repo, env=env)
@@ -163,17 +228,60 @@ def verifier_probe(
             stderr=subprocess.PIPE,
         )
         if proc.returncode != 0:
-            print(f"[m2-resume] verifier says not yet passed: {slice_id}")
+            print(f"{prefix} verifier says not yet passed: {slice_id}")
             tail = "\n".join((proc.stdout + proc.stderr).splitlines()[-40:])
             if tail:
                 print(tail)
     return proc.returncode == 0
 
 
+def cumulative_prefix_probe(
+    *,
+    repo: Path,
+    python: str,
+    verifier_script: Path,
+    milestone_config: Path | None,
+    spec: Path,
+    worklist: Path,
+    state_root: Path,
+    slice_ids: list[str],
+    timeout_sec: int,
+    env: dict[str, str],
+    verbose: bool,
+    prefix: str,
+) -> bool:
+    """Re-verify all selected prior slices after a new slice commit.
+
+    This catches cross-slice regressions before the runner starts the next slice.
+    Hardware flakiness is handled inside the typed verifier; this function does
+    not skip or weaken redundant verification.
+    """
+    for sid in slice_ids:
+        if not verifier_probe(
+            repo=repo,
+            python=python,
+            verifier_script=verifier_script,
+            milestone_config=milestone_config,
+            spec=spec,
+            worklist=worklist,
+            state_root=state_root,
+            slice_id=sid,
+            timeout_sec=timeout_sec,
+            env=env,
+            verbose=verbose,
+            prefix=prefix,
+        ):
+            print(f"{prefix} cumulative prefix check failed at {sid}", file=sys.stderr)
+            return False
+    return True
+
+
 def run_slice(
     *,
     repo: Path,
     python: str,
+    autorun_script: Path,
+    milestone_config: Path | None,
     worklist: Path,
     context_profiles: Path,
     spec: Path,
@@ -185,7 +293,7 @@ def run_slice(
 ) -> int:
     cmd = [
         python,
-        str(repo / "pro_scripts/vc4_codegen_m1_autorun.py"),
+        str(autorun_script),
         "--repo",
         str(repo),
         "--worklist",
@@ -200,6 +308,8 @@ def run_slice(
         "--gpt-mode",
         gpt_mode,
     ]
+    if milestone_config is not None:
+        cmd += ["--milestone-config", str(milestone_config)]
 
     if verbose:
         cmd.append("--verbose")
@@ -211,9 +321,10 @@ def run_slice(
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Resumable one-slice-at-a-time runner for VC4 Codegen M2."
+        description="Resumable one-slice-at-a-time runner for VC4 codegen milestones."
     )
     ap.add_argument("--repo", default=os.getcwd())
+    ap.add_argument("--milestone-config", default="")
     ap.add_argument("--worklist", default=DEFAULT_WORKLIST)
     ap.add_argument("--context-profiles", default=DEFAULT_CONTEXT_PROFILES)
     ap.add_argument("--spec", default=DEFAULT_SPEC)
@@ -222,25 +333,51 @@ def main() -> int:
     ap.add_argument("--to-slice", default=None)
     ap.add_argument("--only-slice", action="append", default=None)
     ap.add_argument("--gpt-mode", default="current_tab", choices=["current_tab", "new"])
-    ap.add_argument("--timeout-sec", type=int, default=1800)
+    ap.add_argument("--timeout-sec", type=int, default=DEFAULT_TIMEOUT_SEC)
     ap.add_argument("--allow-dirty", action="store_true")
     ap.add_argument("--skip-hardware", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--verbose", action="store_true")
-    args = ap.parse_args()
+    raw_args = sys.argv[1:]
+    args = ap.parse_args(raw_args)
 
     repo = Path(args.repo).resolve()
+    milestone_config: dict[str, Any] | None = None
+    milestone_config_path: Path | None = None
+    if args.milestone_config:
+        milestone_config_path = resolve_repo_path(repo, args.milestone_config)
+        milestone_config = load_milestone_config(milestone_config_path)
+
+        if not cli_option_present(raw_args, "--worklist"):
+            args.worklist = str(milestone_config["worklist"])
+        if not cli_option_present(raw_args, "--context-profiles"):
+            args.context_profiles = str(milestone_config["context_profiles"])
+        if not cli_option_present(raw_args, "--spec"):
+            args.spec = str(milestone_config["verifications"])
+        if not cli_option_present(raw_args, "--state-root"):
+            args.state_root = str(milestone_config["state_root"])
+        if not cli_option_present(raw_args, "--from-slice"):
+            args.from_slice = str(milestone_config["default_from_slice"])
+        if not cli_option_present(raw_args, "--timeout-sec"):
+            args.timeout_sec = int(milestone_config["default_timeout_sec"])
+
+    generic_scripts = milestone_config.get("generic_scripts", {}) if milestone_config else {}
+    verifier_script_arg = str(generic_scripts.get("verifier") or DEFAULT_VERIFIER_SCRIPT)
+    autorun_script_arg = str(generic_scripts.get("autorun") or DEFAULT_AUTORUN_SCRIPT)
+
     worklist = require_file(repo, args.worklist)
     context_profiles = require_file(repo, args.context_profiles)
     spec = require_file(repo, args.spec)
-    require_file(repo, "pro_scripts/vc4_codegen_m1_autorun.py")
-    require_file(repo, "pro_scripts/vc4_codegen_m1_verifier.py")
+    autorun_script = require_file(repo, autorun_script_arg)
+    verifier_script = require_file(repo, verifier_script_arg)
 
     state_root = Path(args.state_root)
     env = os.environ.copy()
     env["PATH"] = f"{repo / 'compiler/build/bin'}{os.pathsep}{env.get('PATH', '')}"
 
     data = load_worklist(worklist)
+    milestone = str((milestone_config or {}).get("milestone") or data.get("milestone") or "vc4-codegen")
+    prefix = log_prefix(milestone)
     slices = select_slices(
         data["slices"],
         from_slice=args.from_slice,
@@ -250,10 +387,10 @@ def main() -> int:
     )
 
     if not slices:
-        print("[m2-resume] no slices selected")
+        print(f"{prefix} no slices selected")
         return 0
 
-    print("[m2-resume] selected slices:")
+    print(f"{prefix} selected slices:")
     for s in slices:
         hw = " hardware" if s.get("hardware_required") else ""
         print(f"  - {s['id']}{hw}: {s.get('title', '')}")
@@ -265,15 +402,17 @@ def main() -> int:
 
     python = sys.executable or "python3"
 
-    for s in slices:
+    for slice_index, s in enumerate(slices):
         slice_id = str(s["id"])
-        print(f"\n[m2-resume] === {slice_id} ===", flush=True)
+        print(f"\n{prefix} === {slice_id} ===", flush=True)
 
         ensure_clean(repo, env, allow_dirty=args.allow_dirty)
 
         if verifier_probe(
             repo=repo,
             python=python,
+            verifier_script=verifier_script,
+            milestone_config=milestone_config_path,
             spec=spec,
             worklist=worklist,
             state_root=state_root,
@@ -281,13 +420,16 @@ def main() -> int:
             timeout_sec=args.timeout_sec,
             env=env,
             verbose=args.verbose,
+            prefix=prefix,
         ):
-            print(f"[m2-resume] PASS already satisfied; skipping GPT for {slice_id}")
+            print(f"{prefix} PASS already satisfied; skipping GPT for {slice_id}")
             continue
 
         rc = run_slice(
             repo=repo,
             python=python,
+            autorun_script=autorun_script,
+            milestone_config=milestone_config_path,
             worklist=worklist,
             context_profiles=context_profiles,
             spec=spec,
@@ -298,7 +440,7 @@ def main() -> int:
             env=env,
         )
         if rc != 0:
-            print(f"[m2-resume] STOP: {slice_id} failed with exit code {rc}", file=sys.stderr)
+            print(f"{prefix} STOP: {slice_id} failed with exit code {rc}", file=sys.stderr)
             return rc
 
         ensure_clean(repo, env, allow_dirty=args.allow_dirty)
@@ -306,6 +448,8 @@ def main() -> int:
         if not verifier_probe(
             repo=repo,
             python=python,
+            verifier_script=verifier_script,
+            milestone_config=milestone_config_path,
             spec=spec,
             worklist=worklist,
             state_root=state_root,
@@ -313,13 +457,33 @@ def main() -> int:
             timeout_sec=args.timeout_sec,
             env=env,
             verbose=args.verbose,
+            prefix=prefix,
         ):
-            print(f"[m2-resume] STOP: {slice_id} did not verify after autorun", file=sys.stderr)
+            print(f"{prefix} STOP: {slice_id} did not verify after autorun", file=sys.stderr)
             return 1
 
-        print(f"[m2-resume] PASS {slice_id}")
+        print(f"{prefix} PASS {slice_id}")
 
-    print("\n[m2-resume] all selected M2 slices passed or were already satisfied")
+        prefix_ids = [str(item["id"]) for item in slices[: slice_index + 1]]
+        print(f"{prefix} cumulative prefix recheck after commit: " + ", ".join(prefix_ids), flush=True)
+        if not cumulative_prefix_probe(
+            repo=repo,
+            python=python,
+            verifier_script=verifier_script,
+            milestone_config=milestone_config_path,
+            spec=spec,
+            worklist=worklist,
+            state_root=state_root,
+            slice_ids=prefix_ids,
+            timeout_sec=args.timeout_sec,
+            env=env,
+            verbose=args.verbose,
+            prefix=prefix,
+        ):
+            print(f"{prefix} STOP: cumulative prefix did not verify after {slice_id}", file=sys.stderr)
+            return 1
+
+    print(f"\n{prefix} all selected slices passed or were already satisfied")
     return 0
 
 

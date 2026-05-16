@@ -166,7 +166,9 @@ cooperative_block schedule mode
 
 #### Expected end state
 
-The repo has a first-class M2 worklist, M2 verification spec, M2 context profiles, prompt templates, and either a dedicated M2 verifier or a generalized typed verifier that can consume both M1 and M2 specifications. M1 tests still pass.
+The repo has a first-class M2 descriptor, worklist, verification spec, context profiles, prompt templates, and generic milestone automation that consumes those files. M1 tests still pass.
+
+M2 is now an example milestone consumed by the generic milestone scripts. Future milestones provide a descriptor plus worklist, verifications, context profiles, and prompts. M1-specific expected state is not a persistent acceptance target; M2 and later milestones are cumulative.
 
 #### Source products
 
@@ -174,7 +176,11 @@ The repo has a first-class M2 worklist, M2 verification spec, M2 context profile
 pro_scripts/vc4_codegen_m2_worklist.json
 pro_scripts/vc4_codegen_m2_verifications.json
 pro_scripts/vc4_codegen_m2_context_profiles.json
-pro_scripts/vc4_codegen_m2_verifier.py  OR pro_scripts/vc4_codegen_verifier.py
+pro_scripts/vc4_milestone_verifier.py
+pro_scripts/vc4_milestone_autorun.py
+pro_scripts/vc4_milestone_resume.py
+pro_scripts/vc4_milestone_failure_router.py
+pro_scripts/milestones/vc4-codegen-m2.json
 pro_scripts/prompts/vc4_codegen_m2/constitution.md
 pro_scripts/prompts/vc4_codegen_m2/output_contract.md
 pro_scripts/prompts/vc4_codegen_m2/slice_contract.md
@@ -1485,7 +1491,11 @@ Before starting implementation slices, produce these files:
 pro_scripts/vc4_codegen_m2_worklist.json
 pro_scripts/vc4_codegen_m2_verifications.json
 pro_scripts/vc4_codegen_m2_context_profiles.json
-pro_scripts/vc4_codegen_m2_verifier.py
+pro_scripts/vc4_milestone_verifier.py
+pro_scripts/vc4_milestone_autorun.py
+pro_scripts/vc4_milestone_resume.py
+pro_scripts/vc4_milestone_failure_router.py
+pro_scripts/milestones/vc4-codegen-m2.json
 pro_scripts/prompts/vc4_codegen_m2/constitution.md
 pro_scripts/prompts/vc4_codegen_m2/output_contract.md
 pro_scripts/prompts/vc4_codegen_m2/slice_contract.md
@@ -1542,20 +1552,18 @@ ninja -C compiler/build vc4-codegen check-vc4
 llvm-lit -v compiler/build/test/CodeGen/VC4/Emit
 
 # After adding M2 scaffold.
-python3 pro_scripts/vc4_codegen_m2_verifier.py verify \
+python3 pro_scripts/vc4_milestone_verifier.py verify \
   --repo "$PWD" \
-  --spec pro_scripts/vc4_codegen_m2_verifications.json \
-  --worklist pro_scripts/vc4_codegen_m2_worklist.json \
+  --milestone-config pro_scripts/milestones/vc4-codegen-m2.json \
   --slice m2-00-scaffold \
   --out .vc4_auto/codegen_m2/manual/m2-00-scaffold.json \
   --timeout-sec 7200 \
   --keep-going
 
 # After each implementation slice.
-python3 pro_scripts/vc4_codegen_m2_verifier.py verify \
+python3 pro_scripts/vc4_milestone_verifier.py verify \
   --repo "$PWD" \
-  --spec pro_scripts/vc4_codegen_m2_verifications.json \
-  --worklist pro_scripts/vc4_codegen_m2_worklist.json \
+  --milestone-config pro_scripts/milestones/vc4-codegen-m2.json \
   --slice <slice-id> \
   --out .vc4_auto/codegen_m2/manual/<slice-id>.json \
   --timeout-sec 7200 \

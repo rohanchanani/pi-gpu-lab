@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Typed deterministic verifier for VC4 Codegen Milestones 1 and 2 slices.
+"""VC4 milestone verifier for typed deterministic slice verification.
 
 The verifier consumes a declarative JSON spec whose top-level ``slices`` map
 contains a list of typed ``verifications`` for each slice.  Each verification
 uses a named mechanism with mechanism-specific fields.  The verifier returns a
 machine-readable packet that can be routed by automation, and it also supports
-contract auditing and human explanations.
+contract auditing and human explanations.  A milestone descriptor can supply
+the default spec, worklist, and timeout while preserving explicit CLI overrides.
 
 The script intentionally depends only on the Python standard library.
 """
@@ -32,6 +33,27 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Seque
 SCHEMA_VERSION = 1
 DEFAULT_SPEC = "pro_scripts/vc4_codegen_m1_verifications.json"
 DEFAULT_WORKLIST = "pro_scripts/vc4_codegen_m1_worklist.json"
+MILESTONE_CONFIG_PATH_FIELDS = (
+    "worklist",
+    "verifications",
+    "context_profiles",
+    "prompt_template_dir",
+)
+MILESTONE_CONFIG_REQUIRED_FIELDS = (
+    "schema_version",
+    "milestone",
+    "title",
+    "worklist",
+    "verifications",
+    "context_profiles",
+    "prompt_template_dir",
+    "state_root",
+    "candidate_state_root",
+    "default_from_slice",
+    "default_timeout_sec",
+    "hardware_required_by_default",
+    "generic_scripts",
+)
 TAIL_CHARS = 6000
 
 
@@ -441,6 +463,38 @@ def load_json(path: Path) -> Dict[str, Any]:
         raise SystemExit(f"invalid JSON in {path}: {e}") from e
 
 
+def resolve_cli_path(repo: Path, path: str) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else repo / p
+
+
+def load_milestone_config(path: Path, repo: Path) -> Dict[str, Any]:
+    config = load_json(path)
+    if not isinstance(config, dict):
+        raise SystemExit(f"milestone config must be a JSON object: {path}")
+    missing = [key for key in MILESTONE_CONFIG_REQUIRED_FIELDS if key not in config]
+    if missing:
+        raise SystemExit(f"milestone config missing required fields: {', '.join(missing)}")
+    if config.get("schema_version") != SCHEMA_VERSION:
+        raise SystemExit(
+            f"milestone config schema_version must be {SCHEMA_VERSION}: {config.get('schema_version')}"
+        )
+
+    resolved = dict(config)
+    for key in MILESTONE_CONFIG_PATH_FIELDS:
+        value = resolved.get(key)
+        if not isinstance(value, str) or not value:
+            raise SystemExit(f"milestone config field must be a non-empty string: {key}")
+        resolved[key] = str(resolve_cli_path(repo, value))
+
+    try:
+        resolved["default_timeout_sec"] = int(resolved["default_timeout_sec"])
+    except (TypeError, ValueError) as e:
+        raise SystemExit("milestone config default_timeout_sec must be an integer") from e
+
+    return resolved
+
+
 def tail(text: str, limit: int = TAIL_CHARS) -> str:
     if text is None:
         return ""
@@ -499,7 +553,7 @@ def read_text(path: Path) -> str:
 
 # ---------------------------------------------------------------------------
 # MLIR launch ABI extraction helpers.  This is intentionally light-weight: it
-# extracts the dictionary shape that is stable in Milestone 1 inputs without
+# extracts the dictionary shape that is stable in legacy milestone inputs without
 # becoming a full MLIR parser.
 # ---------------------------------------------------------------------------
 
@@ -2385,16 +2439,22 @@ def explain_slice(spec: Dict[str, Any], slice_id: str) -> Dict[str, Any]:
     }
 
 
+def cli_option_present(argv: Sequence[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(option + "=") for arg in argv)
+
+
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["list", "mechanisms", "explain", "audit-contract", "verify"])
     parser.add_argument("--repo", default=".", help="repo root (default: cwd)")
-    parser.add_argument("--spec", default=DEFAULT_SPEC, help=f"verification spec JSON (default: {DEFAULT_SPEC})")
-    parser.add_argument("--worklist", default=DEFAULT_WORKLIST, help=f"worklist JSON for audit-contract (default: {DEFAULT_WORKLIST})")
+    parser.add_argument("--milestone-config", help="milestone descriptor JSON supplying default spec, worklist, and timeout")
+    parser.add_argument("--spec", default=DEFAULT_SPEC, help=f"verification spec JSON (default without --milestone-config: {DEFAULT_SPEC})")
+    parser.add_argument("--worklist", default=DEFAULT_WORKLIST, help=f"worklist JSON for audit-contract (default without --milestone-config: {DEFAULT_WORKLIST})")
     parser.add_argument("--slice", dest="slice_id", action="append", help="slice id; repeatable; use 'all' for all slices")
     parser.add_argument("--out", help="write JSON report to this path")
     parser.add_argument("--state-root", help="override generated verifier state root")
-    parser.add_argument("--timeout-sec", type=int, default=0)
+    parser.add_argument("--timeout-sec", type=int, default=0, help="default verification timeout in seconds (can come from --milestone-config)")
     parser.add_argument("--hardware-timeout-sec", type=int, default=0, help="default timeout for hardware-like verifications (default: env VC4_HW_ATTEMPT_TIMEOUT_SEC, env VC4_HARDWARE_TIMEOUT_SEC, spec defaults.hardware_timeout_sec, or 60)")
     parser.add_argument("--keep-going", action="store_true", help="run all requested verifications even after failures")
     parser.add_argument("--no-hardware", action="store_true", help="skip verifications marked requires_hardware")
@@ -2402,7 +2462,11 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--only-mechanism", action="append", default=[], help="verify only entries with this mechanism; repeatable")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--json", action="store_true", help="print JSON output (default for verify/audit)")
-    return parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
+    args.spec_explicit = cli_option_present(raw_args, "--spec")
+    args.worklist_explicit = cli_option_present(raw_args, "--worklist")
+    args.timeout_sec_explicit = cli_option_present(raw_args, "--timeout-sec")
+    return args
 
 
 def selected_slices(spec: Dict[str, Any], args: argparse.Namespace) -> List[str]:
@@ -2642,10 +2706,22 @@ def emit_report(report: Dict[str, Any], args: argparse.Namespace) -> None:
 def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parse_args(argv)
     repo = Path(args.repo).resolve()
-    spec_path = repo / args.spec if not Path(args.spec).is_absolute() else Path(args.spec)
+
+    if args.milestone_config:
+        milestone_config_path = resolve_cli_path(repo, args.milestone_config)
+        milestone_config = load_milestone_config(milestone_config_path, repo)
+        args.milestone_config = str(milestone_config_path)
+        if not args.spec_explicit:
+            args.spec = str(milestone_config["verifications"])
+        if not args.worklist_explicit:
+            args.worklist = str(milestone_config["worklist"])
+        if not args.timeout_sec_explicit:
+            args.timeout_sec = int(milestone_config["default_timeout_sec"])
+
+    spec_path = resolve_cli_path(repo, args.spec)
     spec = load_json(spec_path)
     args.spec = str(spec_path)
-    worklist_path = repo / args.worklist if not Path(args.worklist).is_absolute() else Path(args.worklist)
+    worklist_path = resolve_cli_path(repo, args.worklist)
     worklist = load_json(worklist_path) if worklist_path.exists() else None
     if args.command in {"explain", "verify", "audit-contract"}:
         spec = augment_spec_with_worklist_source_products(spec, worklist)

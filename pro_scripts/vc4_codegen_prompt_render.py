@@ -2,7 +2,7 @@
 """Render GPT Pro prompts for VC4 codegen slices.
 
 This script combines a prompt template with a deterministic context pack. It is
-called by vc4_codegen_m1_autorun.py immediately before invoking the unchanged
+called by vc4_milestone_autorun.py immediately before invoking the unchanged
 pro_scripts/gpt_web_driver.js transport.
 """
 

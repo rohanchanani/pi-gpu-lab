@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Deterministic orchestrator for VC4 codegen milestones.
 
-Stage 2 installs the core controller.  It can already run status/preflight/gates
-for the Stage 1 worklist.  GPT prompt rendering is intentionally deferred to
-Stage 3; when prompt rendering is installed, this same orchestrator will use it
-to drive GPT Pro one slice at a time through gpt_web_driver.js.
+The driver can run status, preflight, gates, prompt rendering, GPT/Codex
+attempts, artifact application, failure routing, and commits for descriptor
+selected milestone files.
 """
 
 from __future__ import annotations
@@ -22,7 +21,7 @@ from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 try:
-    from vc4_codegen_failure_classifier import classify_failure
+    from vc4_milestone_failure_router import classify_failure
     from vc4_codegen_gate_runner import CommandResult, GateRunner
     from vc4_codegen_patch_gate import guard_worktree, validate_and_apply
     from vc4_codegen_state import (
@@ -44,7 +43,7 @@ try:
     )
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from vc4_codegen_failure_classifier import classify_failure  # type: ignore
+    from vc4_milestone_failure_router import classify_failure  # type: ignore
     from vc4_codegen_gate_runner import CommandResult, GateRunner  # type: ignore
     from vc4_codegen_patch_gate import guard_worktree, validate_and_apply  # type: ignore
     from vc4_codegen_state import (  # type: ignore
@@ -73,6 +72,23 @@ DEFAULT_BROWSER_INTERNAL_TIMEOUT_MS = 5 * 60 * 1000
 DEFAULT_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 3 * 60 * 1000
 CODEX_NEEDS_GPT_SENTINEL = "VC4_CODEX_NEEDS_GPT"
 CODEX_DIAGNOSTIC_MAX_CHARS = 24000
+DEFAULT_WORKLIST = "pro_scripts/vc4_codegen_m1_worklist.json"
+DEFAULT_CONTEXT_PROFILES = "pro_scripts/vc4_codegen_m1_context_profiles.json"
+MILESTONE_CONFIG_REQUIRED_FIELDS = (
+    "schema_version",
+    "milestone",
+    "title",
+    "worklist",
+    "verifications",
+    "context_profiles",
+    "prompt_template_dir",
+    "state_root",
+    "candidate_state_root",
+    "default_from_slice",
+    "default_timeout_sec",
+    "hardware_required_by_default",
+    "generic_scripts",
+)
 
 # Text files whose full contents are safe/useful to include in failure packets.
 # Used by collect_candidate_change_report() for untracked files created during
@@ -93,11 +109,11 @@ TEXT_FILE_NAMES = {"CMakeLists.txt", "Makefile"}
 
 
 def log(msg: str) -> None:
-    print(f"[vc4-m1] {msg}", flush=True)
+    print(f"[vc4-milestone] {msg}", flush=True)
 
 
 def warn(msg: str) -> None:
-    print(f"[vc4-m1] WARN: {msg}", file=sys.stderr, flush=True)
+    print(f"[vc4-milestone] WARN: {msg}", file=sys.stderr, flush=True)
 
 
 # ---------------------------------------------------------------------------
@@ -111,10 +127,11 @@ def run_subprocess(
     cmd: Sequence[str],
     log_path: Path,
     cwd: Path | None = None,
+    config: MilestoneConfig | None = None,
     timeout_sec: int,
     verbose: bool = False,
 ) -> CommandResult:
-    runner = GateRunner(MilestoneConfig.load(repo), verbose=verbose, timeout_sec=timeout_sec)
+    runner = GateRunner(config or MilestoneConfig.load(repo), verbose=verbose, timeout_sec=timeout_sec)
     return runner.run_command(gate="subprocess", cmd=list(cmd), log_dir=log_path.parent, cwd=cwd or repo, timeout_sec=timeout_sec)
 
 
@@ -125,6 +142,7 @@ def prompt_renderer_path(repo: Path) -> Path:
 def render_prompt(
     *,
     repo: Path,
+    config: MilestoneConfig | None = None,
     slice_id: str,
     attempt: int,
     mode: str,
@@ -151,7 +169,7 @@ def render_prompt(
     if failure_packet:
         cmd += ["--failure-packet", str(failure_packet)]
     log_path = out_path.with_suffix(out_path.suffix + ".render.log")
-    result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, timeout_sec=300, verbose=verbose)
+    result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, config=config, timeout_sec=300, verbose=verbose)
     if not result.ok:
         raise DriverError(f"prompt rendering failed; see {relpath(repo, result.log_path)}")
     if not out_path.exists():
@@ -208,6 +226,7 @@ def gpt_driver_command(
 def invoke_gpt(
     *,
     repo: Path,
+    config: MilestoneConfig | None = None,
     mode: str,
     prompt_path: Path,
     staging_dir: Path,
@@ -226,7 +245,7 @@ def invoke_gpt(
         browser_timeout_ms=browser_internal_timeout_ms,
         artifact_download_timeout_ms=artifact_download_timeout_ms,
     )
-    runner = GateRunner(MilestoneConfig.load(repo), verbose=verbose, timeout_sec=chat_timeout_sec)
+    runner = GateRunner(config or MilestoneConfig.load(repo), verbose=verbose, timeout_sec=chat_timeout_sec)
     return runner.run_command(gate="chat:gpt-pro", cmd=cmd, log_dir=log_dir, timeout_sec=chat_timeout_sec)
 
 
@@ -259,6 +278,40 @@ def _packet_typed_verifier(packet: Mapping[str, Any] | None) -> Mapping[str, Any
         if isinstance(typed, Mapping):
             return typed
     return {}
+
+
+def resolve_cli_path(repo: Path, path: str) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else repo / p
+
+
+def load_milestone_config(path: Path, repo: Path) -> dict[str, Any]:
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError as e:
+        raise DriverError(f"missing milestone config: {relpath(repo, path)}") from e
+    except json.JSONDecodeError as e:
+        raise DriverError(f"invalid milestone config JSON: {relpath(repo, path)}: {e}") from e
+    if not isinstance(raw, dict):
+        raise DriverError("milestone config must be a JSON object")
+    missing = [key for key in MILESTONE_CONFIG_REQUIRED_FIELDS if key not in raw]
+    if missing:
+        raise DriverError(f"milestone config missing required fields: {', '.join(missing)}")
+    if raw.get("schema_version") != 1:
+        raise DriverError(f"milestone config schema_version must be 1: {raw.get('schema_version')}")
+
+    config = dict(raw)
+    for key in ("worklist", "verifications", "context_profiles", "prompt_template_dir", "state_root", "candidate_state_root"):
+        value = config.get(key)
+        if not isinstance(value, str) or not value:
+            raise DriverError(f"milestone config field must be a non-empty string: {key}")
+    if not isinstance(config.get("generic_scripts"), dict):
+        raise DriverError("milestone config generic_scripts must be an object")
+    return config
+
+
+def cli_option_present(argv: Sequence[str], option: str) -> bool:
+    return any(arg == option or arg.startswith(option + "=") for arg in argv)
 
 
 def _codex_referenced_log_sections(packet: Mapping[str, Any] | None, route: Mapping[str, Any]) -> str:
@@ -391,7 +444,7 @@ Suggested verification loop:
 4. Run the exact failed build command if available in the referenced log; for fixture matrix build failures this is usually:
    bash compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh <fixture> build
 5. Then run the typed verifier slice if the narrow build fix passes:
-   python3 pro_scripts/vc4_codegen_m1_verifier.py verify --repo . --spec pro_scripts/vc4_codegen_m2_verifications.json --worklist pro_scripts/vc4_codegen_m2_worklist.json --slice {slice_entry.get('id')} --out /tmp/vc4_codex_after.json --timeout-sec 1800 --keep-going
+   python3 pro_scripts/vc4_milestone_verifier.py verify --repo . --spec pro_scripts/vc4_codegen_m2_verifications.json --worklist pro_scripts/vc4_codegen_m2_worklist.json --slice {slice_entry.get('id')} --out /tmp/vc4_codex_after.json --timeout-sec 1800 --keep-going
 
 Final response format:
 - If you patched: briefly summarize the exact mechanical compile/API fix and commands run.
@@ -403,6 +456,7 @@ Final response format:
 def invoke_codex(
     *,
     repo: Path,
+    config: MilestoneConfig | None = None,
     prompt_path: Path,
     log_dir: Path,
     timeout_sec: int,
@@ -410,7 +464,7 @@ def invoke_codex(
 ) -> CommandResult:
     prompt_text = prompt_path.read_text(encoding="utf-8")
     cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", prompt_text]
-    runner = GateRunner(MilestoneConfig.load(repo), verbose=verbose, timeout_sec=timeout_sec)
+    runner = GateRunner(config or MilestoneConfig.load(repo), verbose=verbose, timeout_sec=timeout_sec)
     return runner.run_command(gate="codex:mechanical", cmd=cmd, log_dir=log_dir, timeout_sec=timeout_sec)
 
 
@@ -1058,6 +1112,7 @@ def run_gpt_slice(
 
         render_prompt(
             repo=config.repo,
+            config=config,
             slice_id=slice_id,
             attempt=attempt,
             mode=mode,
@@ -1071,6 +1126,7 @@ def run_gpt_slice(
 
         chat = invoke_gpt(
             repo=config.repo,
+            config=config,
             mode=gpt_mode,
             prompt_path=paths.prompt_path,
             staging_dir=paths.staging_dir,
@@ -1183,7 +1239,7 @@ def run_gpt_slice(
                 out_path=codex_prompt,
                 failure_packet_path=failure_packet,
             )
-            codex = invoke_codex(repo=config.repo, prompt_path=codex_prompt, log_dir=paths.log_dir, timeout_sec=codex_timeout_sec, verbose=verbose)
+            codex = invoke_codex(repo=config.repo, config=config, prompt_path=codex_prompt, log_dir=paths.log_dir, timeout_sec=codex_timeout_sec, verbose=verbose)
             codex_attempts_used += 1
             category = str(route.get("category", "mechanical"))
             codex_attempts_by_category[category] = codex_attempts_by_category.get(category, 0) + 1
@@ -1352,7 +1408,7 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
         "--metadata-out",
         str(context_meta),
     ]
-    context_result = run_subprocess(repo=repo, cmd=context_cmd, log_path=logs / "context.log", timeout_sec=300, verbose=args.verbose)
+    context_result = run_subprocess(repo=repo, cmd=context_cmd, log_path=logs / "context.log", config=config, timeout_sec=300, verbose=args.verbose)
     context_ok = context_result.ok and context_out.exists() and context_out.stat().st_size > 0 and context_meta.exists()
     _dry_run_record(
         records,
@@ -1385,7 +1441,7 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
         "--metadata-out",
         str(prompt_meta),
     ]
-    render_result = run_subprocess(repo=repo, cmd=render_cmd, log_path=logs / "render_prompt.log", timeout_sec=300, verbose=args.verbose)
+    render_result = run_subprocess(repo=repo, cmd=render_cmd, log_path=logs / "render_prompt.log", config=config, timeout_sec=300, verbose=args.verbose)
     prompt_text = prompt_out.read_text(encoding="utf-8") if prompt_out.exists() else ""
     required_prompt_needles = [
         "Slice: `m1-01-artifact-tool-skeleton`",
@@ -1458,7 +1514,7 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
         write_json_file(root / "summary.json", {"ok": False, "records": records})
         return 1
 
-    # Failure classifier smoke checks.
+    # Failure router smoke checks.
     route_compile = classify_failure(
         slice_entry=slice_entry,
         stage="gate",
@@ -1522,21 +1578,45 @@ def load_config_and_state(args: argparse.Namespace) -> tuple[Path, MilestoneConf
     # value supplied before the subcommand is not overwritten when the same
     # switch is omitted after the subcommand.
     repo_arg = getattr(args, "repo", ".")
-    worklist_arg = getattr(args, "worklist", "pro_scripts/vc4_codegen_m1_worklist.json")
+    worklist_arg = getattr(args, "worklist", DEFAULT_WORKLIST)
     context_profiles_arg = getattr(
         args,
         "context_profiles",
-        "pro_scripts/vc4_codegen_m1_context_profiles.json",
+        DEFAULT_CONTEXT_PROFILES,
     )
     spec_arg = getattr(args, "spec", "")
 
     repo = find_repo_root(repo_arg)
+    milestone_config: dict[str, Any] | None = None
+    milestone_config_arg = getattr(args, "milestone_config", "")
+    if milestone_config_arg:
+        milestone_config_path = resolve_cli_path(repo, str(milestone_config_arg))
+        milestone_config = load_milestone_config(milestone_config_path, repo)
+        if not getattr(args, "worklist_explicit", False):
+            worklist_arg = str(milestone_config["worklist"])
+        if not getattr(args, "context_profiles_explicit", False):
+            context_profiles_arg = str(milestone_config["context_profiles"])
+        if not getattr(args, "spec_explicit", False):
+            spec_arg = str(milestone_config["verifications"])
+
     ensure_auto_excluded(repo)
     config = MilestoneConfig.load(
         repo,
         worklist_path=worklist_arg,
         context_profiles_path=context_profiles_arg,
     )
+
+    if milestone_config is not None:
+        defaults = config.worklist.setdefault("defaults", {})
+        if not isinstance(defaults, dict):
+            raise DriverError("worklist.defaults must be an object before --milestone-config can be applied")
+        defaults["state_root"] = str(milestone_config["state_root"])
+        defaults["candidate_state_root"] = str(milestone_config["candidate_state_root"])
+        defaults["prompt_template_dir"] = str(milestone_config["prompt_template_dir"])
+        defaults["verification_spec"] = str(milestone_config["verifications"])
+        generic_scripts = milestone_config.get("generic_scripts")
+        if isinstance(generic_scripts, dict) and generic_scripts.get("verifier"):
+            defaults["typed_verifier_script"] = str(generic_scripts["verifier"])
 
     # M2 worklists already carry defaults.verification_spec, but accepting
     # --spec lets callers override it and keeps the CLI symmetric with the
@@ -1555,8 +1635,8 @@ def load_config_and_state(args: argparse.Namespace) -> tuple[Path, MilestoneConf
 def default_preflight_slice(config: MilestoneConfig) -> Mapping[str, Any]:
     """Return the best no-GPT/bootstrap slice for this milestone.
 
-    The original M1-only workflow hard-coded m1-00-preflight.  M2 uses
-    m2-00-scaffold instead, and future milestones may choose a different name.
+    The legacy workflow hard-coded m1-00-preflight.  M2 uses m2-00-scaffold
+    instead, and future milestones may choose a different name.
     Prefer a milestone-prefixed 00/preflight slice, then any root no-GPT slice,
     then the first declared slice.
     """
@@ -1712,7 +1792,7 @@ def cmd_context(args: argparse.Namespace) -> int:
         warn("--max-chars is ignored because no-truncation context is enabled")
     cmd += ["--allow-large-context"]
     log_path = out.with_suffix(out.suffix + ".context.log")
-    result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, timeout_sec=300, verbose=args.verbose)
+    result = run_subprocess(repo=repo, cmd=cmd, log_path=log_path, config=config, timeout_sec=300, verbose=args.verbose)
     if not result.ok:
         raise DriverError(f"context generation failed; see {relpath(repo, result.log_path)}")
     log(f"context: {relpath(repo, out)}")
@@ -1727,6 +1807,7 @@ def cmd_render_prompt(args: argparse.Namespace) -> int:
     failure_packet = Path(args.failure_packet) if args.failure_packet else None
     render_prompt(
         repo=repo,
+        config=config,
         slice_id=args.slice,
         attempt=attempt,
         mode=args.mode,
@@ -1892,9 +1973,9 @@ def _add_common_config_args(parser: argparse.ArgumentParser, *, hidden: bool = F
     """Allow milestone config options either before or after the subcommand.
 
     argparse normally requires parent-parser options to appear before the
-    subcommand.  The M2 workflow commonly invokes:
+    subcommand.  Milestone workflows commonly invoke:
 
-      vc4_codegen_m1_autorun.py run --repo ... --worklist ... --spec ... --slice ...
+      vc4_milestone_autorun.py run --repo ... --worklist ... --spec ... --slice ...
 
     so every subparser also accepts the same configuration switches.  Suppressed
     defaults preserve values supplied before the subcommand.
@@ -1920,14 +2001,20 @@ def _add_common_config_args(parser: argparse.ArgumentParser, *, hidden: bool = F
         default=argparse.SUPPRESS,
         help=help_text or "typed verifier spec JSON override",
     )
+    parser.add_argument(
+        "--milestone-config",
+        default=argparse.SUPPRESS,
+        help=help_text or "milestone descriptor JSON supplying default automation files",
+    )
 
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=".", help="repo root, default: current directory")
-    parser.add_argument("--worklist", default="pro_scripts/vc4_codegen_m1_worklist.json")
-    parser.add_argument("--context-profiles", default="pro_scripts/vc4_codegen_m1_context_profiles.json")
+    parser.add_argument("--milestone-config", default="", help="milestone descriptor JSON supplying default automation files")
+    parser.add_argument("--worklist", default=DEFAULT_WORKLIST)
+    parser.add_argument("--context-profiles", default=DEFAULT_CONTEXT_PROFILES)
     parser.add_argument("--spec", default="", help="typed verifier spec JSON override")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -1936,7 +2023,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_status.add_argument("--verbose", action="store_true")
     p_status.set_defaults(func=cmd_status)
 
-    p_preflight = sub.add_parser("preflight", help="run m1-00 gates without marking state")
+    p_preflight = sub.add_parser("preflight", help="run the milestone bootstrap gates without marking state")
     _add_common_config_args(p_preflight, hidden=True)
     p_preflight.add_argument("--allow-dirty", action="store_true")
     p_preflight.add_argument("--verbose", action="store_true")
@@ -1996,7 +2083,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_prompt.set_defaults(func=cmd_render_prompt)
 
 
-    p_dry = sub.add_parser("dry-run", help="safe no-GPT integration dry run of Milestone 1 automation plumbing")
+    p_dry = sub.add_parser("dry-run", help="safe no-GPT integration dry run of milestone automation plumbing")
     _add_common_config_args(p_dry, hidden=True)
     p_dry.add_argument("--allow-dirty", action="store_true", help="allow dirty repo during preflight gate")
     p_dry.add_argument("--skip-preflight", action="store_true", help="skip build/check preflight gates during the dry run")
@@ -2020,11 +2107,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_arg_parser()
-    args = parser.parse_args(argv)
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(raw_args)
+    args.worklist_explicit = cli_option_present(raw_args, "--worklist")
+    args.context_profiles_explicit = cli_option_present(raw_args, "--context-profiles")
+    args.spec_explicit = cli_option_present(raw_args, "--spec")
     try:
         return int(args.func(args))
     except DriverError as exc:
-        print(f"[vc4-m1] ERROR: {exc}", file=sys.stderr, flush=True)
+        print(f"[vc4-milestone] ERROR: {exc}", file=sys.stderr, flush=True)
         return 1
 
 

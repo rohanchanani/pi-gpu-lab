@@ -9,7 +9,7 @@
     "build_dir": "compiler/build",
     "state_root": ".vc4_auto/codegen_m2",
     "candidate_state_root": ".vc4_auto/codegen_m2",
-    "typed_verifier_script": "pro_scripts/vc4_codegen_m1_verifier.py",
+    "typed_verifier_script": "pro_scripts/vc4_milestone_verifier.py",
     "verification_spec": "pro_scripts/vc4_codegen_m2_verifications.json",
     "prompt_template_dir": "pro_scripts/prompts/vc4_codegen_m2",
     "auto_commit_on_pass": true,
@@ -79,7 +79,8 @@
       "single_kernel_is_program_bundle_with_one_kernel": true,
       "public_launch_abi_is_cuda_like_no_implicit_host_copies": true,
       "root_kernel_qasm_is_not_m2_canonical": true
-    }
+    },
+    "milestone_config": "pro_scripts/milestones/vc4-codegen-m2.json"
   },
   "slices": [
     {
@@ -100,15 +101,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -131,8 +134,7 @@
           "pro_scripts/vc4_codegen_m2_worklist.json",
           "pro_scripts/vc4_codegen_m2_verifications.json",
           "pro_scripts/vc4_codegen_m2_context_profiles.json",
-          "pro_scripts/vc4_codegen_m1_verifier.py",
-          "pro_scripts/vc4_codegen_m2_verifier.py",
+          "pro_scripts/vc4_milestone_verifier.py",
           "pro_scripts/prompts/vc4_codegen_m2/constitution.md",
           "pro_scripts/prompts/vc4_codegen_m2/output_contract.md",
           "pro_scripts/prompts/vc4_codegen_m2/slice_contract.md",
@@ -143,7 +145,11 @@
           "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
           "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h",
           "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py",
-          "compiler/test/CodeGen/VC4/Support/check_m2_layout.py"
+          "compiler/test/CodeGen/VC4/Support/check_m2_layout.py",
+          "pro_scripts/vc4_milestone_autorun.py",
+          "pro_scripts/vc4_milestone_resume.py",
+          "pro_scripts/vc4_milestone_failure_router.py",
+          "pro_scripts/milestones/vc4-codegen-m2.json"
         ]
       },
       "success_probes": [
@@ -171,15 +177,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -229,15 +237,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -291,15 +301,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -346,15 +358,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -407,15 +421,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -473,13 +489,18 @@
         "compiler/tools/vc4-codegen/**",
         "compiler/test/CodeGen/VC4/Emit/**",
         "compiler/test/CodeGen/VC4/Runtime/**",
-        "compiler/docs/codegen/**"
+        "compiler/docs/codegen/**",
+        "pro_scripts/vc4_milestone_verifier.py",
+        "pro_scripts/vc4_milestone_autorun.py",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [
         "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh",
         "compiler/test/CodeGen/VC4/Hardware/Run/multi_kernel_chain/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
@@ -551,15 +572,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -611,15 +634,17 @@
         "compiler/test/CodeGen/VC4/Hardware/Run/qpu_barrier_syncthreads/**",
         "compiler/test/CodeGen/VC4/Hardware/Run/vpm_slice_visibility/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -668,15 +693,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [
@@ -719,15 +746,17 @@
         "compiler/test/CodeGen/VC4/Runtime/**",
         "compiler/test/CodeGen/VC4/Support/**",
         "compiler/docs/codegen/**",
-        "pro_scripts/vc4_codegen_m1_verifier.py",
-        "pro_scripts/vc4_codegen_m2_verifier.py",
+        "pro_scripts/vc4_milestone_verifier.py",
         "pro_scripts/vc4_codegen_m2_worklist.json",
         "pro_scripts/vc4_codegen_m2_verifications.json",
         "pro_scripts/vc4_codegen_m2_context_profiles.json",
-        "pro_scripts/vc4_codegen_m1_autorun.py",
+        "pro_scripts/vc4_milestone_autorun.py",
         "pro_scripts/vc4_codegen_prompt_render.py",
         "pro_scripts/vc4_codegen_gate_runner.py",
-        "pro_scripts/prompts/vc4_codegen_m2/**"
+        "pro_scripts/prompts/vc4_codegen_m2/**",
+        "pro_scripts/vc4_milestone_resume.py",
+        "pro_scripts/vc4_milestone_failure_router.py",
+        "pro_scripts/milestones/vc4-codegen-m2.json"
       ],
       "forbidden_paths": [],
       "gates": [

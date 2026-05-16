@@ -125,8 +125,8 @@ else
 fi
 REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
 
-AUTORUN="$REPO_ROOT/pro_scripts/vc4_codegen_m1_autorun.py"
-VERIFIER="$REPO_ROOT/pro_scripts/vc4_codegen_m1_verifier.py"
+AUTORUN="$REPO_ROOT/pro_scripts/vc4_milestone_autorun.py"
+VERIFIER="$REPO_ROOT/pro_scripts/vc4_milestone_verifier.py"
 SPEC="$REPO_ROOT/pro_scripts/vc4_codegen_m1_verifications.json"
 WORKLIST="$REPO_ROOT/pro_scripts/vc4_codegen_m1_worklist.json"
 STATE_ROOT="$REPO_ROOT/.vc4_auto/codegen_m1"

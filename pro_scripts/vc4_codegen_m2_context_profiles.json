@@ -25,6 +25,10 @@
       {
         "kind": "file",
         "path": "compiler/docs/codegen/vc4-codegen-m2-plan.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/milestones/vc4-codegen-m2.json"
       }
     ],
     "failure_includes": [
@@ -46,7 +50,7 @@
       "include": [
         {
           "kind": "file",
-          "path": "pro_scripts/vc4_codegen_m1_verifier.py"
+          "path": "pro_scripts/vc4_milestone_verifier.py"
         },
         {
           "kind": "file",
@@ -63,6 +67,22 @@
         {
           "kind": "file",
           "path": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_milestone_autorun.py"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_milestone_resume.py"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_milestone_failure_router.py"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-codegen-m2.json"
         }
       ],
       "extractors": [

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic failure routing for VC4 codegen Milestone 1.
+"""Deterministic failure routing for VC4 codegen milestones.
 
 Classify by normalized failure signature first, not by broad gate name.  Codex
 is available only for narrow mechanical classes and only within per-category

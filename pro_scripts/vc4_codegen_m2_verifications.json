@@ -70,7 +70,10 @@
     }
   },
   "notes": [
-    "The verifier script is cumulative and remains pro_scripts/vc4_codegen_m1_verifier.py for backward compatibility.",
+    "M2 is an example milestone consumed by generic milestone automation: descriptor + worklist + verifications + context profiles + prompts.",
+    "Future milestones provide their own descriptor and milestone-specific files without changing generic verifier, autorun, resume, or router scripts.",
+    "M1-specific expected state is not a persistent acceptance target; M2 and later milestones are cumulative.",
+    "The verifier script is cumulative and remains pro_scripts/vc4_milestone_verifier.py for backward compatibility.",
     "M2 introduces general program-bundle mechanisms; a single-kernel bundle is a kernels.length == 1 program.",
     "Hardware entries are marked requires_hardware and may be skipped only with --no-hardware.",
     "M2 slice 5 owns emit-launch-abi-header, emit-launcher-uniform-packing, and emit-saxpy-full-qasm-artifact-regression; m2-00 excludes them so the scaffold probe stays slice-local.",
@@ -151,8 +154,7 @@
             "pro_scripts/vc4_codegen_m2_worklist.json",
             "pro_scripts/vc4_codegen_m2_verifications.json",
             "pro_scripts/vc4_codegen_m2_context_profiles.json",
-            "pro_scripts/vc4_codegen_m1_verifier.py",
-            "pro_scripts/vc4_codegen_m2_verifier.py",
+            "pro_scripts/vc4_milestone_verifier.py",
             "pro_scripts/prompts/vc4_codegen_m2/constitution.md",
             "pro_scripts/prompts/vc4_codegen_m2/output_contract.md",
             "pro_scripts/prompts/vc4_codegen_m2/slice_contract.md",
@@ -164,7 +166,11 @@
             "compiler/test/CodeGen/VC4/Support/vc4_m2_candidate_test_helpers.h",
             "compiler/test/CodeGen/VC4/Support/check_m2_manifest.py",
             "compiler/test/CodeGen/VC4/Support/check_m2_layout.py",
-            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py"
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "pro_scripts/vc4_milestone_autorun.py",
+            "pro_scripts/vc4_milestone_resume.py",
+            "pro_scripts/vc4_milestone_failure_router.py",
+            "pro_scripts/milestones/vc4-codegen-m2.json"
           ]
         },
         {
@@ -173,7 +179,7 @@
           "description": "Cumulative verifier lists M2 mechanisms",
           "argv": [
             "{python}",
-            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "pro_scripts/vc4_milestone_verifier.py",
             "mechanisms",
             "--repo",
             "{repo}"
@@ -251,7 +257,7 @@
           "description": "M2 spec audits against M2 worklist",
           "argv": [
             "{python}",
-            "pro_scripts/vc4_codegen_m1_verifier.py",
+            "pro_scripts/vc4_milestone_verifier.py",
             "audit-contract",
             "--repo",
             "{repo}",

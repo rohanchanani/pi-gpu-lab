@@ -184,7 +184,7 @@ semantic oracle.
 Stage 5 adds a safe no-GPT integration dry run:
 
 ```bash
-python3 pro_scripts/vc4_codegen_m1_autorun.py dry-run --allow-dirty --verbose --gate-timeout-sec 7200
+python3 pro_scripts/vc4_milestone_autorun.py dry-run --allow-dirty --verbose --gate-timeout-sec 7200
 ```
 
 The dry run exercises:
@@ -203,12 +203,12 @@ Outputs are written under `.vc4_auto/codegen_m1/dry_run/<timestamp>/`.
 After Stage 5 is committed and the repo is clean, the handoff commands are:
 
 ```bash
-python3 pro_scripts/vc4_codegen_m1_autorun.py run \
+python3 pro_scripts/vc4_milestone_autorun.py run \
   --slice m1-00-preflight \
   --verbose \
   --gate-timeout-sec 7200
 
-python3 pro_scripts/vc4_codegen_m1_autorun.py run \
+python3 pro_scripts/vc4_milestone_autorun.py run \
   --next \
   --verbose \
   --gpt-mode current_tab \
