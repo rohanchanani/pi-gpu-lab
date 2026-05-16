@@ -1919,30 +1919,78 @@ const DOWNLOAD_TRANSPORT = "vc4_codegen_download_bundle_v1";
 function parseDownloadBundleContract(promptText) {
   const text = String(promptText || "");
   if (!text.includes(DOWNLOAD_TRANSPORT)) return null;
-  function firstString(keys, suffixRe) {
+
+  function contractFromObject(obj) {
+    if (!obj || typeof obj !== "object") return null;
+    if (obj.transport !== DOWNLOAD_TRANSPORT) return null;
+    const artifactPrefix = typeof obj.artifact_prefix === "string" ? obj.artifact_prefix : "";
+    const bundleZip = typeof obj.bundle_zip === "string"
+      ? obj.bundle_zip
+      : (typeof obj.bundle_zip_filename === "string" ? obj.bundle_zip_filename : "");
+    const applyScript = typeof obj.apply_script === "string"
+      ? obj.apply_script
+      : (typeof obj.apply_script_filename === "string" ? obj.apply_script_filename : "");
+    if (!bundleZip || !applyScript) return null;
+    return { transport: DOWNLOAD_TRANSPORT, artifactPrefix, bundleZip, applyScript };
+  }
+
+  // Prefer the current prompt's explicit DOWNLOAD_CONTRACT_JSON block. Failure
+  // packets and chat history can contain stale artifact filenames from earlier
+  // attempts; those must never override the current contract.
+  const jsonBlocks = [];
+  const fenceRe = /`{3,4}json\s*([\s\S]*?)`{3,4}/g;
+  let match;
+  while ((match = fenceRe.exec(text)) !== null) {
+    jsonBlocks.push({ index: match.index, body: match[1] });
+  }
+  for (let i = jsonBlocks.length - 1; i >= 0; --i) {
+    try {
+      const parsed = JSON.parse(jsonBlocks[i].body);
+      const contract = contractFromObject(parsed);
+      if (contract) return validateDownloadBundleContract(contract);
+    } catch (_) {
+      // Ignore unrelated/non-JSON context blocks.
+    }
+  }
+
+  // Fallback for older prompts: use the last occurrence, not the first. The
+  // renderer appends the current contract after failure/context material.
+  function lastString(keys, suffixRe) {
     for (const key of keys) {
-      const re = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"([^"]+)"`, "m");
-      const m = text.match(re);
-      if (m && (!suffixRe || suffixRe.test(m[1]))) return m[1];
+      const re = new RegExp(`"${escapeRegExp(key)}"\\s*:\\s*"([^"]+)"`, "gm");
+      let found = "";
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        if (!suffixRe || suffixRe.test(m[1])) found = m[1];
+      }
+      if (found) return found;
     }
     return "";
   }
-  let artifactPrefix = firstString(["artifact_prefix"], null);
-  let bundleZip = firstString(["bundle_zip", "bundle_zip_filename"], /\.zip$/);
-  let applyScript = firstString(["apply_script", "apply_script_filename"], /\.sh$/);
+
+  let artifactPrefix = lastString(["artifact_prefix"], null);
+  let bundleZip = lastString(["bundle_zip", "bundle_zip_filename"], /\.zip$/);
+  let applyScript = lastString(["apply_script", "apply_script_filename"], /\.sh$/);
 
   if (!artifactPrefix) {
-    const m = text.match(/ARTIFACT_PREFIX\s*[:=]\s*([A-Za-z0-9_.-]+)/);
-    if (m) artifactPrefix = m[1];
+    const re = /ARTIFACT_PREFIX\s*[:=]\s*([A-Za-z0-9_.-]+)/g;
+    let m;
+    while ((m = re.exec(text)) !== null) artifactPrefix = m[1];
   }
   if (!bundleZip && artifactPrefix) bundleZip = `${artifactPrefix}.zip`;
   if (!applyScript && artifactPrefix) applyScript = `${artifactPrefix}.sh`;
 
+  return validateDownloadBundleContract({ transport: DOWNLOAD_TRANSPORT, artifactPrefix, bundleZip, applyScript });
+}
+
+function validateDownloadBundleContract(contract) {
+  const bundleZip = contract.bundleZip || "";
+  const applyScript = contract.applyScript || "";
   if (!bundleZip || !applyScript) {
     return {
       transport: DOWNLOAD_TRANSPORT,
       error: "prompt mentions downloadable bundle transport but does not contain bundle_zip/apply_script filenames",
-      artifactPrefix,
+      artifactPrefix: contract.artifactPrefix || "",
       bundleZip,
       applyScript,
     };
@@ -1952,7 +2000,12 @@ function parseDownloadBundleContract(promptText) {
       return { transport: DOWNLOAD_TRANSPORT, error: `unsafe artifact filename in prompt: ${name}` };
     }
   }
-  return { transport: DOWNLOAD_TRANSPORT, artifactPrefix, bundleZip, applyScript };
+  return {
+    transport: DOWNLOAD_TRANSPORT,
+    artifactPrefix: contract.artifactPrefix || "",
+    bundleZip,
+    applyScript,
+  };
 }
 
 function statStableEnough(filePath, minMtimeMs) {
@@ -2497,6 +2550,7 @@ async function finalizeAnswer({
   vlog("finalizeAnswer: write summary", { written: written.length, skipped: skipped.length, fileMetadata });
 
   const artifactOk = !!(artifactResult && artifactResult.ok);
+  const effectiveSettled = !!settled || artifactOk || written.length > 0;
   if ((!artifactOk && written.length === 0) || skipped.length > 0) {
     await dumpDebugState(page, metaDir);
   } else {
@@ -2515,7 +2569,7 @@ async function finalizeAnswer({
     }
   }
 
-  if (settled) {
+  if (effectiveSettled) {
     clearMarker(repoRoot);
   } else {
     vlog(
@@ -2526,6 +2580,7 @@ async function finalizeAnswer({
   const manifest = {
     ok: artifactOk || written.length > 0,
     settled: !!settled,
+    effectiveSettled: !!effectiveSettled,
     mode:
       mode === "new"
         ? "new-chatgpt-tab-gptweb-file-parser"
@@ -2543,22 +2598,22 @@ async function finalizeAnswer({
     keptChatGptTabOpen: !closeTab,
     chatGptTabUrl: page.url(),
     note:
-      written.length === 0
-        ? "No files or downloadable bundle artifacts were written. Check .gpt-web-run/answer.md, debug.log, after-generation.png, and click-candidates.json."
-        : artifactOk
-          ? "Downloaded bundle artifacts and staged bundle.zip/apply_bundle.sh for the local bundle applier."
-          : "Parsed GPTWEB_FILE blocks and wrote generated files directly under --out.",
+      artifactOk
+        ? "Downloaded bundle artifacts and staged bundle.zip/apply_bundle.sh for the local bundle applier."
+        : written.length === 0
+          ? "No files or downloadable bundle artifacts were written. Check .gpt-web-run/answer.md, debug.log, after-generation.png, and click-candidates.json."
+          : "Parsed file blocks and wrote generated files directly under --out.",
   };
   fs.writeFileSync(path.join(metaDir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
   vlog("manifest written", manifest);
 
-  if (!settled) {
-    vlog("exit code 2 (settled=false)");
+  if (!effectiveSettled) {
+    vlog("exit code 2 (settled=false and no artifacts/files accepted)");
     process.exitCode = process.exitCode || 2;
   } else if (process.exitCode) {
     vlog("exit code preserved from artifact/file validation", { exitCode: process.exitCode });
   } else {
-    vlog("exit code 0 (settled=true)");
+    vlog("exit code 0 (response accepted)", { settled, artifactOk, written: written.length });
   }
 }
 

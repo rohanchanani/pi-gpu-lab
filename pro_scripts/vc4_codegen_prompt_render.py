@@ -252,6 +252,12 @@ def sanitize_failure_packet_for_prompt(data: Any) -> Any:
 
     out: dict[str, Any] = {}
     for key, value in data.items():
+        if key in {"artifactResult", "artifact_result", "artifact_transport", "downloaded_files", "downloadedFiles", "attempts"}:
+            out[key] = "<redacted: previous downloadable artifact result; do not copy; use current DOWNLOAD_CONTRACT_JSON>"
+            continue
+        if key in {"artifact_prefix", "apply_script", "apply_script_filename", "bundle_zip_filename"}:
+            out[key] = "<redacted: stale artifact filename field; use current DOWNLOAD_CONTRACT_JSON>"
+            continue
         if key == "apply_bundle_sh":
             out[key] = "<redacted: previous generated apply shell; do not copy; use the current prompt's apply_script filename and trusted-applier launcher>"
             continue
