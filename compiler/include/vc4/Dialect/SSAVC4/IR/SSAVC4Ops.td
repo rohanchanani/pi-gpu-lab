@@ -156,6 +156,41 @@ def SSAVC4_CondBranchOp : SSAVC4_Op<"cond_br", [Terminator]> {
   let assemblyFormat = "$flags `,` $trueDest `,` $falseDest attr-dict `:` type($flags)";
 }
 
+
+def SSAVC4_TMURequestOp : SSAVC4_Op<"tmu.request"> {
+  let summary = "SSAVC4 effectful direct TMU request";
+  let description = [{
+    Issues a direct TMU memory request.  M3 v1 supports tmu0/direct/raw32
+    request/read pairs ordered by the explicit async token produced here and
+    consumed by ssavc4.tmu.read.  The operation is intentionally not Pure.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    StrAttr:$unit,
+    StrAttr:$mode,
+    OptionalAttr<StrAttr>:$lowering_template
+  );
+  let results = (outs AnyType:$token);
+  let assemblyFormat = "$address attr-dict `:` type($address) `->` type($token)";
+}
+
+def SSAVC4_TMUReadOp : SSAVC4_Op<"tmu.read"> {
+  let summary = "SSAVC4 effectful direct TMU read";
+  let description = [{
+    Receives the value for a prior direct TMU request.  The input token ties
+    the read to the request and prevents request/read reordering in SSAVC4.
+    M3 v1 supports unit = "tmu0" and part = "raw32".
+  }];
+  let arguments = (ins
+    AnyType:$token,
+    StrAttr:$unit,
+    StrAttr:$part,
+    OptionalAttr<StrAttr>:$lowering_template
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$token attr-dict `:` type($token) `->` type($result)";
+}
+
 def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
   let summary = "SSAVC4 effectful global vector store through VPM/VDW";
   let description = [{
