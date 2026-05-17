@@ -37,7 +37,7 @@ def SSAVC4_FuncOp : SSAVC4_Op<"func", [
     OptionalAttr<UnitAttr>:$kernel,
     OptionalAttr<VC4_ThreadingModeAttr>:$threading
   );
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion:$body);
   let assemblyFormat = "$sym_name `(` `)` attr-dict-with-keyword $body";
 }
 
@@ -138,6 +138,23 @@ def SSAVC4_MakeFlagsOp : SSAVC4_PureOp<"make_flags"> {
   let hasVerifier = 1;
 }
 
+
+
+def SSAVC4_BranchOp : SSAVC4_Op<"br", [Terminator]> {
+  let summary = "SSAVC4 unconditional block branch";
+  let successors = (successor AnySuccessor:$target);
+  let assemblyFormat = "$target attr-dict";
+}
+
+def SSAVC4_CondBranchOp : SSAVC4_Op<"cond_br", [Terminator]> {
+  let summary = "SSAVC4 conditional branch consuming a flag pseudo-value";
+  let arguments = (ins
+    SSAVC4_Flags:$flags,
+    VC4_BranchCondAttr:$cond
+  );
+  let successors = (successor AnySuccessor:$trueDest, AnySuccessor:$falseDest);
+  let assemblyFormat = "$flags `,` $trueDest `,` $falseDest attr-dict `:` type($flags)";
+}
 
 def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
   let summary = "SSAVC4 effectful global vector store through VPM/VDW";
