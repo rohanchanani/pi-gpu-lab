@@ -54,6 +54,9 @@ constexpr llvm::StringLiteral kSSAVC4UnpackOpName("ssavc4.unpack");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
 constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
+constexpr llvm::StringLiteral kSSAVC4SemaAcquireOpName("ssavc4.sema.acquire");
+constexpr llvm::StringLiteral kSSAVC4SemaReleaseOpName("ssavc4.sema.release");
+constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kTMU0Raw32F32AXPYTailSafeTemplate(
     "tmu0_raw32_f32_axpy_tail_safe");
 constexpr llvm::StringLiteral kWarpReduceSumF32TailSafeTemplate(
@@ -132,6 +135,21 @@ static Operation *createThreadEndBundle(OpBuilder &builder, Location loc) {
                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::a,
                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                        mlir::vc4::QPUMux::r1);
+  return builder.create(state);
+}
+
+static Operation *createScheduledSema(OpBuilder &builder, Location loc,
+                                      mlir::vc4::SemaphoreMode mode,
+                                      int64_t id) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.sema");
+  state.addAttribute("mode", mlir::vc4::SemaphoreModeAttr::get(ctx, mode));
+  state.addAttribute("id", builder.getI32IntegerAttr(id));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(32));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(33));
   return builder.create(state);
 }
 
@@ -264,6 +282,9 @@ struct InstructionTemplate {
     Rotate,
     TMURequest,
     TMURead,
+    SemaAcquire,
+    SemaRelease,
+    Barrier,
     VDWStore,
     ThreadEnd
   } kind;
@@ -406,6 +427,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
   case InstructionTemplate::Kind::TMURequest:
   case InstructionTemplate::Kind::TMURead:
     return 2;
+  case InstructionTemplate::Kind::Barrier:
+    return 8;
   case InstructionTemplate::Kind::VDWStore:
     if (templ.source) {
       auto loweringTemplate = llvm::dyn_cast_or_null<StringAttr>(
@@ -423,6 +446,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
   case InstructionTemplate::Kind::MakeFlags:
   case InstructionTemplate::Kind::Pack:
   case InstructionTemplate::Kind::Unpack:
+  case InstructionTemplate::Kind::SemaAcquire:
+  case InstructionTemplate::Kind::SemaRelease:
     return 1;
   }
   return 1;
@@ -495,6 +520,67 @@ static bool hasStringAttr(Operation *op, llvm::StringRef name,
                           llvm::StringRef expected) {
   auto attr = llvm::dyn_cast_or_null<StringAttr>(op->getAttr(name));
   return attr && attr.getValue() == expected;
+}
+
+static std::optional<int64_t> getConstantSemaId(Operation *op) {
+  if (auto idAttr = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("id")))
+    return idAttr.getInt();
+
+  if (op->getNumOperands() == 0)
+    return std::nullopt;
+
+  Operation *definingOp = op->getOperand(0).getDefiningOp();
+  if (!hasName(definingOp, kSSAVC4LoadImmOpName))
+    return std::nullopt;
+
+  if (auto valueAttr = llvm::dyn_cast_or_null<IntegerAttr>(definingOp->getAttr("value")))
+    return valueAttr.getInt();
+  return std::nullopt;
+}
+
+static LogicalResult verifySemaId(Operation *op, int64_t id) {
+  if (id < 0 || id > 15)
+    return op->emitOpError("requires a semaphore id in range [0, 15]");
+  return success();
+}
+
+static bool getResourceBool(DictionaryAttr resource, llvm::StringRef name) {
+  auto attr = llvm::dyn_cast_or_null<BoolAttr>(resource.get(name));
+  return attr && attr.getValue();
+}
+
+static int64_t getResourceI32(DictionaryAttr resource, llvm::StringRef name,
+                              int64_t fallback = -1) {
+  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(resource.get(name));
+  if (!attr)
+    return fallback;
+  return attr.getInt();
+}
+
+static LogicalResult verifyCooperativeBarrierResource(Operation *func,
+                                                      Operation *barrierOp) {
+  auto resource = llvm::dyn_cast_or_null<DictionaryAttr>(func->getAttr("vc4.resource"));
+  if (!resource)
+    return barrierOp->emitOpError()
+           << "requires vc4.resource metadata with schedule_mode = \"cooperative_block\"";
+
+  auto scheduleMode = llvm::dyn_cast_or_null<StringAttr>(resource.get("schedule_mode"));
+  if (!scheduleMode || scheduleMode.getValue() != "cooperative_block")
+    return barrierOp->emitOpError()
+           << "requires vc4.resource schedule_mode = \"cooperative_block\"";
+  if (!getResourceBool(resource, "uses_barrier"))
+    return barrierOp->emitOpError()
+           << "requires vc4.resource uses_barrier = true";
+  if (!getResourceBool(resource, "require_full_block_residency"))
+    return barrierOp->emitOpError()
+           << "requires vc4.resource require_full_block_residency = true";
+  if (getResourceI32(resource, "semaphores_per_block") < 4)
+    return barrierOp->emitOpError()
+           << "requires vc4.resource semaphores_per_block >= 4";
+  if (getResourceI32(resource, "warps_per_block_max") < 1)
+    return barrierOp->emitOpError()
+           << "requires vc4.resource warps_per_block_max >= 1";
+  return success();
 }
 
 static LogicalResult verifyRestrictedFlagUses(Operation *func) {
@@ -709,6 +795,47 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
+      if (hasName(&op, kSSAVC4SemaAcquireOpName) ||
+          hasName(&op, kSSAVC4SemaReleaseOpName)) {
+        if (op.getNumOperands() != 1)
+          return op.emitOpError("requires one i32 semaphore operand");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 semaphore operand");
+        std::optional<int64_t> id = getConstantSemaId(&op);
+        if (!id)
+          return op.emitOpError()
+                 << "requires a compile-time semaphore id from an id attribute or constant ssavc4.load_imm";
+        if (failed(verifySemaId(&op, *id)))
+          return failure();
+        InstructionTemplate templ;
+        templ.kind = hasName(&op, kSSAVC4SemaAcquireOpName)
+                         ? InstructionTemplate::Kind::SemaAcquire
+                         : InstructionTemplate::Kind::SemaRelease;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
+      if (hasName(&op, kSSAVC4BarrierOpName)) {
+        if (failed(verifyCooperativeBarrierResource(func, &op)))
+          return failure();
+        int64_t arrive = getI32IntegerAttrOr(&op, "arrive_offset", -1);
+        int64_t go = getI32IntegerAttrOr(&op, "go_offset", -1);
+        int64_t depart = getI32IntegerAttrOr(&op, "depart_offset", -1);
+        int64_t reset = getI32IntegerAttrOr(&op, "reset_offset", -1);
+        if (failed(verifySemaId(&op, arrive)) || failed(verifySemaId(&op, go)) ||
+            failed(verifySemaId(&op, depart)) || failed(verifySemaId(&op, reset)))
+          return failure();
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::Barrier;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
       if (hasName(&op, kSSAVC4VDWStoreOpName)) {
         if (op.getNumOperands() != 2)
           return op.emitOpError("requires address and vector value operands");
@@ -737,7 +864,8 @@ static LogicalResult selectInstructionTemplates(
                 "ssavc4.load_imm, ssavc4.alu.add, ssavc4.alu.mul, "
                 "ssavc4.make_flags, ssavc4.br, ssavc4.cond_br, "
                 "ssavc4.pack, ssavc4.unpack, ssavc4.rotate, "
-                "ssavc4.tmu.request, ssavc4.tmu.read, ssavc4.vdw.store, "
+                "ssavc4.tmu.request, ssavc4.tmu.read, ssavc4.sema.acquire, "
+                "ssavc4.sema.release, ssavc4.barrier, ssavc4.vdw.store, "
                 "and ssavc4.thread_end";
     }
   }
@@ -941,6 +1069,47 @@ static LogicalResult emitTMURead(OpBuilder &builder,
                         /*raddrB=*/1, mlir::vc4::QPUMux::r4,
                         mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
+  return success();
+}
+
+static LogicalResult emitSema(OpBuilder &builder,
+                              const InstructionTemplate &templ,
+                              mlir::vc4::SemaphoreMode mode) {
+  Operation *source = templ.source;
+  std::optional<int64_t> id = getConstantSemaId(source);
+  if (!id)
+    return source->emitOpError()
+           << "requires a compile-time semaphore id from an id attribute or constant ssavc4.load_imm";
+  if (failed(verifySemaId(source, *id)))
+    return failure();
+  createScheduledSema(builder, source->getLoc(), mode, *id);
+  return success();
+}
+
+static LogicalResult emitBarrier(OpBuilder &builder,
+                                 const InstructionTemplate &templ) {
+  Operation *source = templ.source;
+  int64_t arrive = getI32IntegerAttrOr(source, "arrive_offset", -1);
+  int64_t go = getI32IntegerAttrOr(source, "go_offset", -1);
+  int64_t depart = getI32IntegerAttrOr(source, "depart_offset", -1);
+  int64_t reset = getI32IntegerAttrOr(source, "reset_offset", -1);
+  if (failed(verifySemaId(source, arrive)) || failed(verifySemaId(source, go)) ||
+      failed(verifySemaId(source, depart)) || failed(verifySemaId(source, reset)))
+    return failure();
+
+  // M3 v1 keeps the reusable cooperative barrier lowering deliberately
+  // conservative.  Each phase uses scheduled semaphore operations and leaves
+  // the semaphore count balanced so repeated barriers do not leak resource
+  // state.  Later slices can replace this template with the full optimized
+  // M2 four-semaphore control-flow pattern without changing SSAVC4 syntax.
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, arrive);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, arrive);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, go);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, go);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, depart);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, depart);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, reset);
+  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, reset);
   return success();
 }
 
@@ -2043,6 +2212,18 @@ static LogicalResult emitScheduledFunctionBody(
     case InstructionTemplate::Kind::Branch:
     case InstructionTemplate::Kind::CondBranch:
       if (failed(emitScheduledBranch(builder, templ, layout)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::SemaAcquire:
+      if (failed(emitSema(builder, templ, mlir::vc4::SemaphoreMode::acquire)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::SemaRelease:
+      if (failed(emitSema(builder, templ, mlir::vc4::SemaphoreMode::release)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::Barrier:
+      if (failed(emitBarrier(builder, templ)))
         return failure();
       break;
     case InstructionTemplate::Kind::VDWStore:
