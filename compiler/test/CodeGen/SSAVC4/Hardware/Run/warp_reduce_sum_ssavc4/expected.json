@@ -1,0 +1,18 @@
+{
+  "name": "warp_reduce_sum_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 13,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 511,
+    "runtime_allocations": 1,
+    "runtime_launches": 13
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}
