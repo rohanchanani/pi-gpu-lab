@@ -391,7 +391,7 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
             return "mechanical_test_invocation", "Changed test invocation/tool-resolution invariant failed"
         return "patch_preflight_invariant", "Patch failed deterministic repository invariant checks"
 
-    if g.startswith("hardware:") or g.startswith("result:") or hardware_required:
+    if g.startswith("hardware:") or g.startswith("result:"):
         return "hardware_or_result", "Hardware/result failures require semantic diagnosis"
     if "vc4asm" in g:
         return "qasm_assembler", "vc4asm rejection is qasm syntax/semantics, not a mechanical edit"
@@ -423,6 +423,8 @@ def _normalized_category(*, stage: str, gate: str, log_text: str, hardware_requi
         return "lit_failure", "lit failure is routed to GPT Pro by default"
     if "verify" in g:
         return "verifier_or_regression", "VC4 verifier failures are semantic by default"
+    if hardware_required:
+        return "hardware_or_result", "Hardware-required slice had an unclassified non-build failure"
 
     return "semantic_or_ambiguous", "Ambiguous failures route to GPT Pro"
 
