@@ -360,6 +360,7 @@
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-03-lowering-skeleton"
       ]
     },
@@ -493,11 +494,14 @@
           "compiler/test/Conversion/SSAVC4ToVC4/branch-tail.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-05-branch-tail-lowering"
       ]
     },
@@ -560,11 +564,14 @@
           "compiler/test/Conversion/SSAVC4ToVC4/tmu-direct-load.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-06-tmu-direct-load-saxpy"
       ]
     },
@@ -627,11 +634,14 @@
           "compiler/test/Conversion/SSAVC4ToVC4/rotate-reduction.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-07-reductions-and-rotate"
       ]
     },
@@ -694,11 +704,14 @@
           "compiler/test/Conversion/SSAVC4ToVC4/cooperative-barrier.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-08-cooperative-barrier-basics"
       ]
     },
@@ -761,11 +774,14 @@
           "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-09-shared-vpm-cooperative"
       ]
     },
@@ -834,6 +850,7 @@
       },
       "success_probes": [
         "build:vc4-opt",
+        "build:check-vc4",
         "typed-verifier:m3-10-final-acceptance"
       ]
     }

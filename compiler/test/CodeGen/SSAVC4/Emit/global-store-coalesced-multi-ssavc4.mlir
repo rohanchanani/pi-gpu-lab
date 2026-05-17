@@ -1,8 +1,10 @@
 // RUN: rm -rf %t.lowered.mlir %t.bundle
 // RUN: vc4-opt %s --convert-ssavc4-to-vc4 -o %t.lowered.mlir
 // RUN: vc4-codegen %t.lowered.mlir --emit-bundle %t.bundle
+// RUN: test -f %t.bundle/kernel_launch.c
+// RUN: test -f %t.bundle/kernel_launch.h
+// RUN: test -f %t.bundle/kernels/global_store_coalesced_multi_ssavc4.qasm
 // RUN: test -f %t.bundle/manifest.json
-// RUN: test -f %t.bundle/global_store_coalesced_multi_ssavc4_shader.c
 
 ssavc4.module @global_store_coalesced_multi_ssavc4_codegen {
   ssavc4.func @global_store_coalesced_multi_ssavc4_kernel() attributes {

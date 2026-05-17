@@ -332,6 +332,14 @@
           "route_hint": "codex_mechanical"
         },
         {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
           "id": "ssavc4-conversion-lit-minimal",
           "mechanism": "command",
           "description": "Run minimal conversion lit tests",
@@ -594,7 +602,9 @@
             "compiler/test/Conversion/SSAVC4ToVC4/branch-tail.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -610,6 +620,14 @@
           "description": "Build vc4-codegen",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-branch-lit",
@@ -765,6 +783,19 @@
             ".vc4_auto/ssavc4_m3/hardware/global_store_coalesced_multi_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
         }
       ]
     },
@@ -782,7 +813,9 @@
             "compiler/test/Conversion/SSAVC4ToVC4/tmu-direct-load.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/saxpy_full_ssavc4/candidate/saxpy_full_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -798,6 +831,14 @@
           "description": "Build vc4-codegen",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-tmu-lit",
@@ -953,6 +994,19 @@
             ".vc4_auto/ssavc4_m3/hardware/saxpy_full_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
         }
       ]
     },
@@ -970,7 +1024,9 @@
             "compiler/test/Conversion/SSAVC4ToVC4/rotate-reduction.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/warp_reduce_sum_ssavc4/candidate/warp_reduce_sum_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -986,6 +1042,14 @@
           "description": "Build vc4-codegen",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-rotate-lit",
@@ -1141,6 +1205,19 @@
             ".vc4_auto/ssavc4_m3/hardware/warp_reduce_sum_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
         }
       ]
     },
@@ -1158,7 +1235,9 @@
             "compiler/test/Conversion/SSAVC4ToVC4/cooperative-barrier.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/qpu_barrier_syncthreads_ssavc4/candidate/qpu_barrier_syncthreads_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -1174,6 +1253,14 @@
           "description": "Build vc4-codegen",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-barrier-lit",
@@ -1329,6 +1416,19 @@
             ".vc4_auto/ssavc4_m3/hardware/qpu_barrier_syncthreads_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
         }
       ]
     },
@@ -1346,7 +1446,9 @@
             "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -1362,6 +1464,14 @@
           "description": "Build vc4-codegen",
           "target": "vc4-codegen",
           "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 so this slice cannot leave global lit/build regression red",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-shared-vpm-lit",
@@ -1517,6 +1627,19 @@
             ".vc4_auto/ssavc4_m3/hardware/shared_transpose_16x16_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
         }
       ]
     },

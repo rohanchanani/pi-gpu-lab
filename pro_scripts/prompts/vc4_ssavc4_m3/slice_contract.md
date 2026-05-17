@@ -26,6 +26,7 @@ The active scheduled `vc4` sink must remain scheduled-only. SSAVC4 must be separ
 - Committed slices must keep `ninja -C compiler/build check-vc4` green.
 - Future-slice tests must not be checked into active lit paths early. Add tests in the same slice that implements the corresponding op, type, lowering, or fixture.
 - No expected-red tests may live under global `check-vc4`.
+- SSAVC4 `Hardware/Run/**/input.mlir` files are fixture inputs consumed by command/hardware wrappers, not standalone lit tests; keep the SSAVC4 Hardware/Run lit exclusion files present rather than adding fake RUN lines.
 - Dialect slices must have parser/printer/roundtrip tests and invalid verifier tests.
 - Pure ops must be pure; hardware-state ops must carry effects and/or explicit tokens.
 - Lowering slices must produce scheduled `vc4` that passes existing scheduled verifier passes.
