@@ -392,6 +392,25 @@ function clearMarker(repoRoot) {
   }
 }
 
+function clearOwnedMarkerForUnsentPrompt(repoRoot, promptHash, token) {
+  const marker = readMarker(repoRoot);
+  if (!marker) return;
+  const ownsMarker = marker.promptHash === promptHash && (!token || marker.token === token);
+  if (!ownsMarker) {
+    vlog("not clearing in-flight marker for unsent prompt because it is not owned by this invocation", {
+      markerHash: String(marker.promptHash || "").slice(0, 16),
+      promptHash: String(promptHash || "").slice(0, 16),
+      tokenMatches: !!(token && marker.token === token),
+    });
+    return;
+  }
+  vwarn("clearing owned in-flight marker for prompt that was not submitted", {
+    promptHash: String(promptHash || "").slice(0, 16),
+    token,
+  });
+  clearMarker(repoRoot);
+}
+
 // ---------------------------------------------------------------------------
 // ChatGPT URL helpers
 // ---------------------------------------------------------------------------
@@ -476,6 +495,11 @@ const STOP_BUTTON_SELECTORS = [
 
 const BIG_PROMPT_PASTE_WAIT_MS = Number(process.env.GPT_WEB_BIG_PASTE_WAIT_MS || 15000);
 const SMALL_PROMPT_INSERT_TEXT_MAX_CHARS = Number(process.env.GPT_WEB_INSERTTEXT_MAX_CHARS || 20000);
+const SUBMIT_PHASE_WATCHDOG_MS = (() => {
+  const n = Number(process.env.GPT_WEB_SUBMIT_WATCHDOG_MS || 75000);
+  if (!Number.isFinite(n) || n <= 0) return 75000;
+  return Math.max(60000, Math.min(90000, n));
+})();
 
 function promptLoadThreshold(expectedLen) {
   if (!expectedLen || expectedLen < 10000) return 1;
@@ -787,45 +811,90 @@ async function tryShowAttachmentInTextField(page) {
 }
 
 async function clearPromptBoxInDom(page) {
-  await page
+  return await page
     .evaluate((selectors) => {
-      function visibleEditable(el) {
+      function visible(el) {
         if (!el) return false;
         const style = window.getComputedStyle(el);
         if (style.visibility === "hidden" || style.display === "none") return false;
         const rect = el.getBoundingClientRect();
-        if (rect.width <= 0 || rect.height <= 0) return false;
+        return rect.width > 0 && rect.height > 0;
+      }
+      function visibleEditable(el) {
+        if (!visible(el)) return false;
         const tag = el.tagName;
         return el.isContentEditable || tag === "TEXTAREA" || tag === "INPUT";
       }
-      for (const selector of selectors) {
-        const nodes = Array.from(document.querySelectorAll(selector));
-        for (let i = nodes.length - 1; i >= 0; i--) {
-          const el = nodes[i];
-          if (!visibleEditable(el)) continue;
-          el.focus();
-          if (el.tagName === "TEXTAREA" || el.tagName === "INPUT") {
-            el.value = "";
-            el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
-            return true;
+      function labelFor(el) {
+        return [
+          el.getAttribute("aria-label") || "",
+          el.getAttribute("title") || "",
+          el.getAttribute("data-testid") || "",
+          el.getAttribute("class") || "",
+          ((el.textContent || "") + "").trim(),
+        ].join(" ").replace(/\s+/g, " ").trim();
+      }
+      function findComposer() {
+        for (const selector of selectors) {
+          const nodes = Array.from(document.querySelectorAll(selector));
+          for (let i = nodes.length - 1; i >= 0; i--) {
+            const el = nodes[i];
+            if (visibleEditable(el)) return el;
           }
+        }
+        return null;
+      }
+
+      const composer = findComposer();
+      const root =
+        (composer && (composer.closest("form") || composer.closest('[data-testid*="composer" i]'))) ||
+        (composer && composer.parentElement && composer.parentElement.parentElement) ||
+        document.body;
+      let clearedText = false;
+      let removedAttachments = 0;
+
+      if (composer) {
+        composer.focus();
+        if (composer.tagName === "TEXTAREA" || composer.tagName === "INPUT") {
+          composer.value = "";
+          composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+          clearedText = true;
+        } else {
           const sel = window.getSelection();
           const range = document.createRange();
-          range.selectNodeContents(el);
+          range.selectNodeContents(composer);
           sel.removeAllRanges();
           sel.addRange(range);
           try {
             document.execCommand("delete", false, null);
           } catch (_) {
-            el.textContent = "";
+            composer.textContent = "";
           }
-          el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
-          return true;
+          composer.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+          clearedText = true;
         }
       }
-      return false;
+
+      const removeRe =
+        /(?:remove|delete|discard|detach|clear).{0,60}(?:file|attachment|upload|pasted\s+text)|(?:file|attachment|upload|pasted\s+text).{0,60}(?:remove|delete|discard|detach|clear)/i;
+      const attachmentRe = /attachment|uploaded[-_ ]?file|file[-_ ]?chip|upload[-_ ]?preview|composer[-_ ]?file|file[-_ ]?preview|pasted\s+text/i;
+      const nodes = Array.from(root.querySelectorAll('button, [role="button"], [aria-label], [data-testid], [class]'));
+      for (const el of nodes) {
+        if (!visible(el)) continue;
+        if (composer && el === composer) continue;
+        const blob = labelFor(el);
+        if (!blob) continue;
+        if (removeRe.test(blob) || (/^(?:x|×)$/i.test(blob) && attachmentRe.test(labelFor(el.parentElement || el)))) {
+          try {
+            el.click();
+            removedAttachments++;
+          } catch (_) {}
+        }
+      }
+
+      return { clearedText, removedAttachments };
     }, PROMPT_BOX_SELECTORS)
-    .catch(() => {});
+    .catch((err) => ({ clearedText: false, removedAttachments: 0, error: String(err) }));
 }
 
 async function assistantCount(page) {
@@ -913,6 +982,21 @@ async function inspectSendButton(page) {
       return null;
     }, SEND_BUTTON_SELECTORS)
     .catch(() => null);
+}
+
+async function submitDiagnostics(page) {
+  const material = await promptMaterialState(page);
+  const sendInfo = await inspectSendButton(page);
+  const generating = await isGenerating(page);
+  return {
+    composerLen: material.composerLen || 0,
+    attachmentCount: material.attachmentCount || 0,
+    showInTextFieldCount: material.showInTextFieldCount || 0,
+    sendVisible: !!sendInfo,
+    sendDisabled: sendInfo ? !!sendInfo.disabled : null,
+    generating,
+    hasMaterial: hasPromptMaterialState(material),
+  };
 }
 
 async function clickSendButton(page) {
@@ -1381,7 +1465,7 @@ async function dumpComposerState(page, label) {
 // paste, direct DOM set, and only for small prompts keyboard.insertText/type.
 // ---------------------------------------------------------------------------
 async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
-  vlog("submitPrompt: start", { len: fullPrompt.length, promptTimeoutMs });
+  vlog("submitPrompt: start", { len: fullPrompt.length, promptTimeoutMs, submitWatchdogMs: SUBMIT_PHASE_WATCHDOG_MS });
   await page.bringToFront().catch(() => {});
   await grantClipboardPermissions(page);
 
@@ -1548,129 +1632,284 @@ async function submitPrompt(page, fullPrompt, promptTimeoutMs) {
     strategyResults,
   });
 
-  const deadline = Date.now() + promptTimeoutMs;
-  const startedAt = Date.now();
-  let iter = 0;
-  let lastShortLog = 0;
-  let lastVerboseLog = 0;
-  let clickAttempts = 0;
-  let keyboardSendAttempted = false;
-  let bareEnterAttempted = false;
-  let loopShowAttempted = false;
+  async function submitUntilDetected(phase, watchdogMs) {
+    const deadline = Date.now() + watchdogMs;
+    const startedAt = Date.now();
+    let iter = 0;
+    let lastShortLog = 0;
+    let lastVerboseLog = 0;
+    let clickAttempts = 0;
+    let keyboardSendAttempted = false;
+    let bareEnterAttempted = false;
+    let loopShowAttempted = false;
 
-  while (Date.now() < deadline) {
-    iter++;
-    const loopMaterial = await promptMaterialState(page);
-    const length = loopMaterial.composerLen || 0;
-    const hasMaterial = hasPromptMaterialState(loopMaterial);
-    const sendInfo = await inspectSendButton(page);
-    const generating = await isGenerating(page);
+    while (Date.now() < deadline) {
+      iter++;
+      const loopMaterial = await promptMaterialState(page);
+      const length = loopMaterial.composerLen || 0;
+      const hasMaterial = hasPromptMaterialState(loopMaterial);
+      const sendInfo = await inspectSendButton(page);
+      const generating = await isGenerating(page);
+      const currentAssistantCount = await assistantCount(page);
+
+      if (generating || currentAssistantCount > beforeCount) {
+        vlog("submitPrompt: submission detected", {
+          phase,
+          iter,
+          generating,
+          currentAssistantCount,
+          beforeCount,
+          clickAttempts,
+          keyboardSendAttempted,
+        });
+        return { submitted: true };
+      }
+
+      if (clickAttempts > 0 && !hasMaterial) {
+        vlog("submitPrompt: prompt material cleared after click -> treating as submitted", { phase, iter, clickAttempts });
+        return { submitted: true };
+      }
+
+      if (!loopShowAttempted && loopMaterial.showInTextFieldCount > 0 && length < threshold) {
+        loopShowAttempted = true;
+        vlog("submitPrompt: attachment still has Show in text field; trying before send", {
+          phase,
+          iter,
+          length,
+          attachmentCount: loopMaterial.attachmentCount,
+          showInTextFieldCount: loopMaterial.showInTextFieldCount,
+          attachmentHints: loopMaterial.attachmentHints,
+        });
+        await tryShowAttachmentInTextField(page);
+        await page.waitForTimeout(700);
+        continue;
+      }
+
+      if (sendInfo && hasMaterial && !sendInfo.disabled) {
+        clickAttempts++;
+        vlog("submitPrompt: enabled send button found -> clicking", {
+          phase,
+          iter,
+          clickAttempts,
+          length,
+          attachmentCount: loopMaterial.attachmentCount,
+          showInTextFieldCount: loopMaterial.showInTextFieldCount,
+          sendSelector: sendInfo.selector,
+          aria: sendInfo.aria,
+          testid: sendInfo.testid,
+        });
+        const clickResult = await clickSendButton(page);
+        vlog("submitPrompt: clickSendButton result", { phase, ...clickResult });
+        await page.waitForTimeout(650);
+        continue;
+      }
+
+      const elapsedMs = Date.now() - startedAt;
+      if (!keyboardSendAttempted && hasMaterial && elapsedMs > 2500) {
+        vlog("submitPrompt: send button not enabled quickly; trying Cmd/Ctrl+Enter fallback", { phase });
+        keyboardSendAttempted = await sendViaKeyboard(page, false);
+        await page.waitForTimeout(800);
+        continue;
+      }
+
+      if (!bareEnterAttempted && keyboardSendAttempted && hasMaterial && elapsedMs > 9000 && (!sendInfo || sendInfo.disabled)) {
+        vlog("submitPrompt: trying bare Enter fallback after Cmd/Ctrl+Enter did not submit", { phase });
+        bareEnterAttempted = await sendViaKeyboard(page, true);
+        await page.waitForTimeout(800);
+        continue;
+      }
+
+      if (Date.now() - lastShortLog > 2000) {
+        vlog("submitPrompt: waiting for submit to take", {
+          phase,
+          iter,
+          elapsedMs,
+          remainingSubmitWatchdogMs: Math.max(0, deadline - Date.now()),
+          composerLen: length,
+          hasMaterial,
+          attachmentCount: loopMaterial.attachmentCount,
+          showInTextFieldCount: loopMaterial.showInTextFieldCount,
+          sendVisible: !!sendInfo,
+          sendDisabled: sendInfo ? sendInfo.disabled : null,
+          sendAria: sendInfo ? sendInfo.aria : null,
+          sendTestid: sendInfo ? sendInfo.testid : null,
+          generating,
+          clickAttempts,
+          keyboardSendAttempted,
+          bareEnterAttempted,
+        });
+        lastShortLog = Date.now();
+      }
+
+      if (Date.now() - lastVerboseLog > 20000) {
+        await dumpComposerState(page, `submit-loop-${phase}-iter-${iter}`);
+        lastVerboseLog = Date.now();
+      }
+
+      await page.waitForTimeout(250);
+    }
+
+    const diagnostics = await submitDiagnostics(page);
     const currentAssistantCount = await assistantCount(page);
-
-    if (generating || currentAssistantCount > beforeCount) {
-      vlog("submitPrompt: submission detected", {
-        iter,
-        generating,
+    if (diagnostics.generating || currentAssistantCount > beforeCount) {
+      vlog("submitPrompt: submission detected at watchdog boundary", {
+        phase,
+        generating: diagnostics.generating,
         currentAssistantCount,
         beforeCount,
         clickAttempts,
         keyboardSendAttempted,
       });
-      return;
+      return { submitted: true };
     }
 
-    if (clickAttempts > 0 && !hasMaterial) {
-      vlog("submitPrompt: prompt material cleared after click -> treating as submitted", { iter, clickAttempts });
-      return;
-    }
-
-    if (!loopShowAttempted && loopMaterial.showInTextFieldCount > 0 && length < threshold) {
-      loopShowAttempted = true;
-      vlog("submitPrompt: attachment still has Show in text field; trying before send", {
-        iter,
-        length,
-        attachmentCount: loopMaterial.attachmentCount,
-        showInTextFieldCount: loopMaterial.showInTextFieldCount,
-        attachmentHints: loopMaterial.attachmentHints,
-      });
-      await tryShowAttachmentInTextField(page);
-      await page.waitForTimeout(700);
-      continue;
-    }
-
-    if (sendInfo && hasMaterial && !sendInfo.disabled) {
-      clickAttempts++;
-      vlog("submitPrompt: enabled send button found -> clicking", {
-        iter,
-        clickAttempts,
-        length,
-        attachmentCount: loopMaterial.attachmentCount,
-        showInTextFieldCount: loopMaterial.showInTextFieldCount,
-        sendSelector: sendInfo.selector,
-        aria: sendInfo.aria,
-        testid: sendInfo.testid,
-      });
-      const clickResult = await clickSendButton(page);
-      vlog("submitPrompt: clickSendButton result", clickResult);
-      await page.waitForTimeout(650);
-      continue;
-    }
-
-    const elapsedMs = Date.now() - startedAt;
-    if (!keyboardSendAttempted && hasMaterial && elapsedMs > 2500) {
-      vlog("submitPrompt: send button not enabled quickly; trying Cmd/Ctrl+Enter fallback");
-      keyboardSendAttempted = await sendViaKeyboard(page, false);
-      await page.waitForTimeout(800);
-      continue;
-    }
-
-    if (!bareEnterAttempted && keyboardSendAttempted && hasMaterial && elapsedMs > 9000 && (!sendInfo || sendInfo.disabled)) {
-      vlog("submitPrompt: trying bare Enter fallback after Cmd/Ctrl+Enter did not submit");
-      bareEnterAttempted = await sendViaKeyboard(page, true);
-      await page.waitForTimeout(800);
-      continue;
-    }
-
-    if (Date.now() - lastShortLog > 2000) {
-      vlog("submitPrompt: waiting for submit to take", {
-        iter,
-        elapsedMs,
-        composerLen: length,
-        hasMaterial,
-        attachmentCount: loopMaterial.attachmentCount,
-        showInTextFieldCount: loopMaterial.showInTextFieldCount,
-        sendVisible: !!sendInfo,
-        sendDisabled: sendInfo ? sendInfo.disabled : null,
-        sendAria: sendInfo ? sendInfo.aria : null,
-        sendTestid: sendInfo ? sendInfo.testid : null,
-        generating,
-        clickAttempts,
-        keyboardSendAttempted,
-        bareEnterAttempted,
-      });
-      lastShortLog = Date.now();
-    }
-
-    if (Date.now() - lastVerboseLog > 20000) {
-      await dumpComposerState(page, `submit-loop-iter-${iter}`);
-      lastVerboseLog = Date.now();
-    }
-
-    await page.waitForTimeout(250);
+    return {
+      submitted: false,
+      diagnostics,
+      currentAssistantCount,
+      clickAttempts,
+      keyboardSendAttempted,
+      bareEnterAttempted,
+    };
   }
 
-  const timeoutMaterial = await promptMaterialState(page);
-  const length = timeoutMaterial.composerLen || 0;
-  const sendInfo = await inspectSendButton(page);
-  await dumpComposerState(page, "submit-timeout");
-  throw new Error(
-    `Prompt was not submitted before timeout; composerLen=${length}, ` +
-      `attachmentCount=${timeoutMaterial.attachmentCount}, showInTextFieldCount=${timeoutMaterial.showInTextFieldCount}, ` +
-      `sendVisible=${!!sendInfo}, sendDisabled=${sendInfo ? sendInfo.disabled : "n/a"}, ` +
-      `sendAria=${sendInfo ? JSON.stringify(sendInfo.aria) : "n/a"}, ` +
-      `clickAttempts=${clickAttempts}, keyboardSendAttempted=${keyboardSendAttempted}, ` +
-      `bareEnterAttempted=${bareEnterAttempted}, strategies=${strategyResults.join(",")}`
+  async function reinsertPromptForSubmitRecovery() {
+    vlog("submitPrompt: submit watchdog fired; clearing stale material and reinserting prompt", {
+      submitWatchdogMs: SUBMIT_PHASE_WATCHDOG_MS,
+    });
+    const clearResult = await clearPromptBoxInDom(page);
+    vlog("submitPrompt: recovery clear result", clearResult);
+    await page.waitForTimeout(500);
+
+    try {
+      setClipboardText(fullPrompt);
+      strategyResults.push("recovery:clipboard:set-ok");
+    } catch (err) {
+      strategyResults.push(`recovery:clipboard:set-failed:${err.message}`);
+      vwarn("submitPrompt: recovery clipboard set failed", { err: err.message });
+    }
+
+    let recoveryMaterial = await promptMaterialState(page);
+    let recoveryLen = recoveryMaterial.composerLen || 0;
+    const recordRecovery = async (label) => {
+      recoveryMaterial = await promptMaterialState(page);
+      recoveryLen = recoveryMaterial.composerLen || 0;
+      strategyResults.push(
+        `recovery:${label}:${recoveryLen}:attachments=${recoveryMaterial.attachmentCount}:show=${recoveryMaterial.showInTextFieldCount}`
+      );
+      return recoveryMaterial;
+    };
+
+    let keyPasteOk = false;
+    if (!hasPromptMaterialState(recoveryMaterial)) {
+      keyPasteOk = await playwrightClipboardKeyPaste(page, fullPrompt);
+      await recordRecovery(`keyPaste:${keyPasteOk}`);
+      if (recoveryLen < threshold) await showAttachmentIfAvailable("recovery-after-key-paste");
+    }
+
+    let pasteOk = false;
+    if (recoveryLen < threshold && !hasPromptMaterialState(recoveryMaterial)) {
+      await clearPromptBoxInDom(page);
+      pasteOk = await playwrightPaste(page, fullPrompt);
+      const loaded = await waitForPromptLoaded(page, fullPrompt.length, 10000);
+      recoveryMaterial = loaded.material || (await promptMaterialState(page));
+      recoveryLen = Math.max(loaded.len || 0, recoveryMaterial.composerLen || 0);
+      strategyResults.push(`recovery:syntheticPaste:${pasteOk}:${recoveryLen}:attachments=${recoveryMaterial.attachmentCount}`);
+      if (recoveryLen < threshold) await showAttachmentIfAvailable("recovery-after-synthetic-paste");
+    }
+
+    if (recoveryLen < threshold && !hasPromptMaterialState(recoveryMaterial) && process.platform === "darwin") {
+      await clearPromptBoxInDom(page);
+      vlog("submitPrompt: recovery trying OS-level paste fallback after activating Chrome");
+      const activated = activateChromeOnMac();
+      vlog("submitPrompt: recovery activated Chrome.app", { activated });
+      await page.bringToFront().catch(() => {});
+      await focusPromptBox(page, 5000).catch(() => {});
+      for (const usePlain of [true, false]) {
+        try {
+          nativePlainTextPaste(usePlain);
+        } catch (err) {
+          vwarn("submitPrompt: recovery native paste failed", { usePlain, err: err.message });
+        }
+        const loaded = await waitForPromptLoaded(page, fullPrompt.length, 15000);
+        recoveryMaterial = loaded.material || (await promptMaterialState(page));
+        recoveryLen = Math.max(loaded.len || 0, recoveryMaterial.composerLen || 0);
+        strategyResults.push(
+          `recovery:nativePaste:${usePlain ? "plain" : "normal"}:${recoveryLen}:attachments=${recoveryMaterial.attachmentCount}`
+        );
+        if (recoveryLen < threshold) await showAttachmentIfAvailable(`recovery-after-native-${usePlain ? "plain" : "normal"}`);
+        if (recoveryLen >= threshold || hasPromptMaterialState(recoveryMaterial)) break;
+        await clearPromptBoxInDom(page);
+      }
+    }
+
+    let domInsertOk = false;
+    if (recoveryLen < threshold && !hasPromptMaterialState(recoveryMaterial)) {
+      await clearPromptBoxInDom(page);
+      domInsertOk = await domInsertPrompt(page, fullPrompt);
+      const loaded = await waitForPromptLoaded(page, fullPrompt.length, 5000);
+      recoveryMaterial = loaded.material || (await promptMaterialState(page));
+      recoveryLen = Math.max(loaded.len || 0, recoveryMaterial.composerLen || 0);
+      strategyResults.push(`recovery:domInsert:${domInsertOk}:${recoveryLen}:attachments=${recoveryMaterial.attachmentCount}`);
+    }
+
+    if (!hasPromptMaterialState(recoveryMaterial) && fullPrompt.length <= SMALL_PROMPT_INSERT_TEXT_MAX_CHARS) {
+      let insertTextOk = false;
+      try {
+        await focusPromptBox(page, 5000);
+        await page.keyboard.insertText(fullPrompt);
+        insertTextOk = true;
+      } catch (err) {
+        vwarn("submitPrompt: recovery keyboard.insertText failed", { err: err.message });
+      }
+      await recordRecovery(`keyboardInsertText:${insertTextOk}`);
+      if (!hasPromptMaterialState(recoveryMaterial)) {
+        const typedOk = await typePrompt(page, fullPrompt);
+        await recordRecovery(`keyboardType:${typedOk}`);
+      }
+    }
+
+    if (recoveryLen < threshold) await showAttachmentIfAvailable("recovery-final-pre-submit");
+    await dumpComposerState(page, "submit-recovery-post-insert");
+    return await promptMaterialState(page);
+  }
+
+  const firstSubmit = await submitUntilDetected("initial", SUBMIT_PHASE_WATCHDOG_MS);
+  if (firstSubmit.submitted) return;
+
+  await dumpComposerState(page, "submit-watchdog-initial-timeout");
+  vwarn("submitPrompt: submit watchdog expired before submission was detected", firstSubmit);
+
+  const recoveryMaterial = await reinsertPromptForSubmitRecovery();
+  if (!hasPromptMaterialState(recoveryMaterial)) {
+    await dumpComposerState(page, "submit-recovery-no-material");
+    const noMaterialDiagnostics = await submitDiagnostics(page);
+    const err = new Error(
+      `SUBMIT_STUCK_PROMPT_NOT_SENT: recovery failed to restage prompt material; ` +
+        `composerLen=${noMaterialDiagnostics.composerLen}, attachmentCount=${noMaterialDiagnostics.attachmentCount}, ` +
+        `showInTextFieldCount=${noMaterialDiagnostics.showInTextFieldCount}, sendVisible=${noMaterialDiagnostics.sendVisible}, ` +
+        `sendDisabled=${noMaterialDiagnostics.sendDisabled}, generating=${noMaterialDiagnostics.generating}, ` +
+        `hasMaterial=${noMaterialDiagnostics.hasMaterial}, strategies=${strategyResults.join(",")}`
+    );
+    err.code = "SUBMIT_STUCK_PROMPT_NOT_SENT";
+    throw err;
+  }
+
+  const secondSubmit = await submitUntilDetected("recovery", SUBMIT_PHASE_WATCHDOG_MS);
+  if (secondSubmit.submitted) return;
+
+  const finalDiagnostics = await submitDiagnostics(page);
+  await dumpComposerState(page, "submit-watchdog-recovery-timeout");
+  const err = new Error(
+    `SUBMIT_STUCK_PROMPT_NOT_SENT: prompt material staged but submission was not detected; ` +
+      `composerLen=${finalDiagnostics.composerLen}, attachmentCount=${finalDiagnostics.attachmentCount}, ` +
+      `showInTextFieldCount=${finalDiagnostics.showInTextFieldCount}, sendVisible=${finalDiagnostics.sendVisible}, ` +
+      `sendDisabled=${finalDiagnostics.sendDisabled}, generating=${finalDiagnostics.generating}, ` +
+      `hasMaterial=${finalDiagnostics.hasMaterial}, strategies=${strategyResults.join(",")}, ` +
+      `initialAttempts=${JSON.stringify(firstSubmit)}, recoveryAttempts=${JSON.stringify(secondSubmit)}`
   );
+  err.code = "SUBMIT_STUCK_PROMPT_NOT_SENT";
+  throw err;
 }
 
 async function waitForNewAssistantToSettle(page, beforeCount, responseTimeoutMs, downloadContract = null) {
@@ -2384,6 +2623,7 @@ async function run(mode, argv) {
     connectTimeoutMs,
     pageTimeoutMs,
     promptTimeoutMs,
+    submitWatchdogMs: SUBMIT_PHASE_WATCHDOG_MS,
     responseTimeoutMs,
     composerWaitMs,
     artifactDownloadTimeoutMs,
@@ -2487,7 +2727,14 @@ async function run(mode, argv) {
       vlog("pre-submit assistant count", { beforeCount });
 
       await dumpComposerState(page, "pre-submit");
-      await submitPrompt(page, fullPrompt, promptTimeoutMs);
+      try {
+        await submitPrompt(page, fullPrompt, promptTimeoutMs);
+      } catch (err) {
+        if (err && err.code === "SUBMIT_STUCK_PROMPT_NOT_SENT") {
+          clearOwnedMarkerForUnsentPrompt(repoRoot, promptHash, token);
+        }
+        throw err;
+      }
 
       const tabUrl = await waitForConversationUrl(page, 15000);
       writeMarker(repoRoot, {
