@@ -382,7 +382,9 @@
             "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
         },
         {
@@ -553,6 +555,28 @@
             ".vc4_auto/ssavc4_m3/hardware/vector_store_smoke_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
+        },
+        {
+          "id": "ssavc4-hardware-run-not-lit",
+          "mechanism": "command",
+          "description": "SSAVC4 Hardware/Run fixture inputs are command/hardware fixtures, not standalone lit tests",
+          "category": "command",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nrequired = [Path('compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py'), Path('compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py')]\nmissing = [str(p) for p in required if not p.exists()]\nif missing:\n    print('missing SSAVC4 hardware lit exclusion files: ' + ', '.join(missing))\n    raise SystemExit(1)\nbad = []\nfor p in Path('compiler/test/CodeGen/SSAVC4/Hardware/Run').rglob('*.mlir'):\n    txt = p.read_text(encoding='utf-8', errors='replace')\n    if '// RUN:' in txt:\n        bad.append(str(p))\nif bad:\n    print('hardware fixture input files should not be made fake lit tests with RUN lines:')\n    print('\\n'.join(bad))\n    raise SystemExit(1)\nprint('SSAVC4 Hardware/Run lit exclusion ok')\n"
+          ]
+        },
+        {
+          "id": "check-vc4",
+          "mechanism": "build",
+          "description": "Run full check-vc4 after m3-04 so SSAVC4 hardware fixture inputs do not make global lit red",
+          "category": "build",
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "target": "check-vc4"
         }
       ]
     },

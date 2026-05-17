@@ -423,12 +423,15 @@
           "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/input.mlir",
           "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/expected.json",
-          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c"
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vector_store_smoke_ssavc4/candidate/vector_store_smoke_ssavc4_candidate_harness.c",
+          "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
         ]
       },
       "success_probes": [
         "build:vc4-opt",
-        "typed-verifier:m3-04-global-store"
+        "typed-verifier:m3-04-global-store",
+        "build:check-vc4"
       ]
     },
     {
