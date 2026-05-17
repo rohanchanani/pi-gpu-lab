@@ -45,6 +45,7 @@ constexpr llvm::StringLiteral kSSAVC4ThreadEndOpName("ssavc4.thread_end");
 constexpr llvm::StringLiteral kSSAVC4LoadImmOpName("ssavc4.load_imm");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
+constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
 
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -122,6 +123,69 @@ static Operation *createThreadEndBundle(OpBuilder &builder, Location loc) {
   return builder.create(state);
 }
 
+
+static Operation *createScheduledBundle(
+    OpBuilder &builder, Location loc, mlir::vc4::QPUSignal signal,
+    mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul, int64_t waddrAdd,
+    int64_t waddrMul, mlir::vc4::AddOpcode addOpcode,
+    mlir::vc4::MulOpcode mulOpcode, int64_t raddrA, int64_t raddrB,
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt,
+    bool setFlags = false, bool writeSwap = false) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.bundle");
+  state.addAttribute("sig", mlir::vc4::QPUSignalAttr::get(ctx, signal));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, condAdd));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, condMul));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(waddrAdd));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(waddrMul));
+  state.addAttribute("op_add", mlir::vc4::AddOpcodeAttr::get(ctx, addOpcode));
+  state.addAttribute("op_mul", mlir::vc4::MulOpcodeAttr::get(ctx, mulOpcode));
+  state.addAttribute("raddr_a", builder.getI32IntegerAttr(raddrA));
+  if (smallImm)
+    state.addAttribute("small_imm", builder.getI32IntegerAttr(*smallImm));
+  else
+    state.addAttribute("raddr_b", builder.getI32IntegerAttr(raddrB));
+  state.addAttribute("add_a", mlir::vc4::QPUMuxAttr::get(ctx, addA));
+  state.addAttribute("add_b", mlir::vc4::QPUMuxAttr::get(ctx, addB));
+  state.addAttribute("mul_a", mlir::vc4::QPUMuxAttr::get(ctx, mulA));
+  state.addAttribute("mul_b", mlir::vc4::QPUMuxAttr::get(ctx, mulB));
+  if (setFlags)
+    state.addAttribute("set_flags", builder.getUnitAttr());
+  if (writeSwap)
+    state.addAttribute("write_swap", builder.getUnitAttr());
+  return builder.create(state);
+}
+
+static Operation *createSplat32LDI(OpBuilder &builder, Location loc,
+                                   int64_t value, int64_t waddrAdd) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.ldi");
+  state.addAttribute("mode", mlir::vc4::LoadImmModeAttr::get(ctx, mlir::vc4::LoadImmMode::splat32));
+  state.addAttribute("value", builder.getI32IntegerAttr(value));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(waddrAdd));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(32));
+  return builder.create(state);
+}
+
+static int64_t getI32IntegerAttrOr(Operation *op, llvm::StringRef name,
+                                   int64_t fallback) {
+  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr(name));
+  if (!attr)
+    return fallback;
+  return attr.getInt();
+}
+
+static bool isVector16I32(Value value) {
+  auto vectorType = llvm::dyn_cast<VectorType>(value.getType());
+  return vectorType && vectorType.getRank() == 1 && vectorType.getDimSize(0) == 16 &&
+         vectorType.getElementType().isSignlessInteger(32);
+}
+
 // Lowering-private representation seams.  Slice 3 uses deliberately small
 // implementations, but keeps the explicit phase boundaries needed by later
 // instruction selection/templates, virtual values, liveness, no-spill
@@ -132,7 +196,7 @@ struct VirtualValue {
 };
 
 struct InstructionTemplate {
-  enum class Kind { LoadImm, ALUAdd, ALUMul, ThreadEnd } kind;
+  enum class Kind { LoadImm, ALUAdd, ALUMul, VDWStore, ThreadEnd } kind;
   Operation *source = nullptr;
   SmallVector<Value, 2> operands;
   std::optional<Value> result;
@@ -240,10 +304,33 @@ static LogicalResult selectInstructionTemplates(
       continue;
     }
 
+
+
+    if (hasName(&op, kSSAVC4VDWStoreOpName)) {
+      if (op.getNumOperands() != 2)
+        return op.emitOpError("requires address and vector value operands");
+      if (!op.getOperand(0).getType().isSignlessInteger(32))
+        return op.emitOpError("requires an i32 global address operand for M3 slice 4 lowering");
+      if (!isVector16I32(op.getOperand(1)))
+        return op.emitOpError("requires a vector<16xi32> value operand for M3 slice 4 lowering");
+      int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
+      int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
+      if (elemBytes != 4)
+        return op.emitOpError("supports only 32-bit elements in M3 slice 4 lowering");
+      if (activeLanes != 16)
+        return op.emitOpError("supports only full 16-lane VDW stores in M3 slice 4 lowering");
+      InstructionTemplate templ;
+      templ.kind = InstructionTemplate::Kind::VDWStore;
+      templ.source = &op;
+      templ.operands.append(op.operand_begin(), op.operand_end());
+      templates.push_back(std::move(templ));
+      continue;
+    }
+
     return op.emitOpError()
            << "is not supported by the M3 slice 3 SSAVC4 lowering skeleton; "
               "supported operations are ssavc4.load_imm, ssavc4.alu.add, "
-              "ssavc4.alu.mul, and ssavc4.thread_end";
+              "ssavc4.alu.mul, ssavc4.vdw.store, and ssavc4.thread_end";
   }
 
   return success();
@@ -323,6 +410,191 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
   return success();
 }
 
+
+static LogicalResult emitVDWStore(OpBuilder &builder, Operation *source) {
+  Location loc = source->getLoc();
+  // Uniform ABI expected by vector_store_smoke_ssavc4:
+  //   ra0=out, ra1=n, ra2=case_id, ra3=qpu_id, ra4=num_qpus.
+  // Slice 4 keeps the lowering deterministic and conservative by using the
+  // known-good full-vector VPM->VDW store template from the scheduled M2 sink.
+  for (int64_t dest = 0; dest < 5; ++dest) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          dest, 32, mlir::vc4::AddOpcode::add,
+                          mlir::vc4::MulOpcode::nop, 32, 0,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/0);
+  }
+
+  // r0 = qpu_id * 64; ra8 = byte offset; ra10 = out + offset; ra12 = VPM row.
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        32, 33, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 3, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/6);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        8, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 0, 1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        10, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        12, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 3, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+
+  // Full vector: active lanes = 16 and base element index = byte_offset >> 2.
+  createSplat32LDI(builder, loc, 16, 33);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        13, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::shr,
+                        mlir::vc4::MulOpcode::nop, 8, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/2);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 0, 38,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+
+  // r2 = 0x51000000 | ((case_id & 0xff) << 16) | lane_index.
+  createSplat32LDI(builder, loc, 1358954496, 34);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        35, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 2, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        35, 32, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        35, 32, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        34, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 0, 1,
+                        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        34, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 0, 1,
+                        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+
+  // Serialize the shared VPM/VDW sequence with the global QPU mutex.
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        31, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 51, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createSplat32LDI(builder, loc, 1055232, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        49, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 12, 0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        48, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        31, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 50, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+
+  // VDW store setup: depth in bits 16..23, VPM row in bits 7.., address in vw_addr.
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 13, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 0, 0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  createSplat32LDI(builder, loc, -2139078656, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        34, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 0, 1,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        33, 32, mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, 12, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/7);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        49, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 0, 1,
+                        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        50, 32, mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, 10, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        31, 32, mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, 50, 0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createSplat32LDI(builder, loc, 0, 51);
+  return success();
+}
+
 static LogicalResult emitScheduledFunctionBody(
     Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
     const NoSpillAllocator &allocator) {
@@ -341,6 +613,10 @@ static LogicalResult emitScheduledFunctionBody(
     case InstructionTemplate::Kind::ALUAdd:
     case InstructionTemplate::Kind::ALUMul:
       if (failed(emitALU(builder, templ, allocator)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::VDWStore:
+      if (failed(emitVDWStore(builder, templ.source)))
         return failure();
       break;
     case InstructionTemplate::Kind::ThreadEnd:

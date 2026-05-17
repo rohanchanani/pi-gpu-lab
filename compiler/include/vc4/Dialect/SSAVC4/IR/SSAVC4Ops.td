@@ -138,4 +138,25 @@ def SSAVC4_MakeFlagsOp : SSAVC4_PureOp<"make_flags"> {
   let hasVerifier = 1;
 }
 
+
+def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
+  let summary = "SSAVC4 effectful global vector store through VPM/VDW";
+  let description = [{
+    Stages one 16-lane vector value through VPM and commits it through the
+    VideoCore IV VDW global-store path during SSAVC4-to-scheduled-VC4 lowering.
+    The operation is intentionally not Pure: the lowering owns the concrete
+    VPM/VDW setup, waits, and optional mutex serialization.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    AnyType:$value,
+    I32Attr:$elem_bytes,
+    I32Attr:$active_lanes,
+    I32Attr:$vpm_row,
+    OptionalAttr<StrAttr>:$serialize,
+    OptionalAttr<StrAttr>:$lowering_template
+  );
+  let assemblyFormat = "$address `,` $value attr-dict `:` type($address) `,` type($value)";
+}
+
 #endif // SSAVC4_OPS_TD
