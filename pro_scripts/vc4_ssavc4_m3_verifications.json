@@ -196,7 +196,8 @@
           "mechanism": "build",
           "description": "Run full check-vc4 after the scaffold so active future-slice tests cannot make the cumulative regression red",
           "target": "check-vc4",
-          "route_hint": "codex_mechanical"
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "show-dialects-contains-ssavc4",
@@ -276,7 +277,8 @@
           "mechanism": "build",
           "description": "Run full check-vc4 after type-model and pure-op tests are added",
           "target": "check-vc4",
-          "route_hint": "codex_mechanical"
+          "route_hint": "codex_mechanical",
+          "required": true
         },
         {
           "id": "ssavc4-pure-ops-lit",
@@ -1671,16 +1673,11 @@
         },
         {
           "id": "check-vc4",
-          "mechanism": "command",
+          "mechanism": "build",
           "description": "Run full check-vc4 target",
-          "argv": [
-            "ninja",
-            "-C",
-            "compiler/build",
-            "check-vc4"
-          ],
-          "expect_exit_code": 0,
-          "route_hint": "codex_mechanical"
+          "route_hint": "codex_mechanical",
+          "required": true,
+          "target": "check-vc4"
         },
         {
           "id": "no-structured-vc4-resurrection",
