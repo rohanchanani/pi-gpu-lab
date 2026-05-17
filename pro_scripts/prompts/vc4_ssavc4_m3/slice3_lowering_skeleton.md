@@ -22,3 +22,22 @@ Verification commands include conversion lit tests and an SSAVC4 codegen lit tes
     ## Report at the end of the slice
 
     Report the changed source files, the exact verifier command(s) run, whether hardware was required, and the first failing verifier packet if anything remains red. Do not include private reasoning. Do not claim success until the typed verifier entry for `m3-03-lowering-skeleton` passes.
+
+## Retry/source-product discipline
+
+Every retry for this slice must preserve or recreate the exact required source products from the worklist and verifier:
+
+- `compiler/include/vc4/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.h`
+- `compiler/lib/Conversion/SSAVC4ToVC4/CMakeLists.txt`
+- `compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp`
+- `compiler/test/Conversion/SSAVC4ToVC4/minimal-thrend.mlir`
+- `compiler/test/Conversion/SSAVC4ToVC4/metadata-copy.mlir`
+- `compiler/test/CodeGen/SSAVC4/Emit/minimal-thrend-ssavc4.mlir`
+
+If a later verifier/build/lit failure requires touching only one file, still keep the required conversion files and tests present. A patch that drops source products is not a valid repair.
+
+## Lowering architecture policy
+
+M3 slice 3 remains no-spill. The allocator may be conservative, but excessive register pressure must produce a deterministic diagnostic rather than invalid scheduled VC4.
+
+The implementation should keep visible internal seams for instruction selection/templates, virtual values, liveness, allocation, conservative scheduling, hazard insertion, and branch layout. Do not collapse the slice into a monolithic direct op-to-final-bundle converter that would block future allocator/scheduler replacement. Do not implement runtime spill-frame allocation in this slice.
