@@ -10,6 +10,7 @@ include "mlir/IR/BuiltinAttributes.td"
 include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/OpBase.td"
+include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 class SSAVC4_Op<string mnemonic, list<Trait> traits = []>
@@ -17,6 +18,33 @@ class SSAVC4_Op<string mnemonic, list<Trait> traits = []>
 
 class SSAVC4_PureOp<string mnemonic, list<Trait> traits = []>
     : SSAVC4_Op<mnemonic, [Pure] # traits>;
+
+def SSAVC4_ModuleOp : SSAVC4_Op<"module", [
+    IsolatedFromAbove, NoRegionArguments, Symbol, SymbolTable, NoTerminator
+  ]> {
+  let summary = "SSAVC4 target module";
+  let arguments = (ins SymbolNameAttr:$sym_name);
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
+}
+
+def SSAVC4_FuncOp : SSAVC4_Op<"func", [
+    IsolatedFromAbove, NoRegionArguments, Symbol
+  ]> {
+  let summary = "SSAVC4 pre-scheduled QPU function";
+  let arguments = (ins
+    SymbolNameAttr:$sym_name,
+    OptionalAttr<UnitAttr>:$kernel,
+    OptionalAttr<VC4_ThreadingModeAttr>:$threading
+  );
+  let regions = (region SizedRegion<1>:$body);
+  let assemblyFormat = "$sym_name `(` `)` attr-dict-with-keyword $body";
+}
+
+def SSAVC4_ThreadEndOp : SSAVC4_Op<"thread_end", [Terminator]> {
+  let summary = "SSAVC4 QPU thread termination marker";
+  let assemblyFormat = "attr-dict";
+}
 
 def SSAVC4_LoadImmOp : SSAVC4_PureOp<"load_imm"> {
   let summary = "SSAVC4 pure immediate value";
