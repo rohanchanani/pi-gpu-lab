@@ -407,13 +407,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 5,
       "commit_message": "vc4 ssavc4 m3: global-vector-store-path",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 5,
+        "mechanical_build": 4,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3
       },
       "products": {
         "required_source_files": [
@@ -475,13 +475,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 4,
       "commit_message": "vc4 ssavc4 m3: branch-tail-lowering",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 4,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 2
       },
       "products": {
         "required_source_files": [
@@ -542,13 +542,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 5,
       "commit_message": "vc4 ssavc4 m3: direct-tmu-load-saxpy",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 5,
+        "mechanical_build": 4,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3
       },
       "products": {
         "required_source_files": [
@@ -609,13 +609,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 5,
       "commit_message": "vc4 ssavc4 m3: reductions-rotate",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 5,
+        "mechanical_build": 4,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3
       },
       "products": {
         "required_source_files": [
@@ -676,13 +676,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 5,
       "commit_message": "vc4 ssavc4 m3: cooperative-barrier-basics",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 5,
+        "mechanical_build": 4,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3
       },
       "products": {
         "required_source_files": [
@@ -743,13 +743,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 5,
       "commit_message": "vc4 ssavc4 m3: shared-vpm-cooperative-path",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 5,
+        "mechanical_build": 4,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3
       },
       "products": {
         "required_source_files": [
@@ -816,13 +816,13 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 ssavc4 m3: final-m3-acceptance-m2-regression",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 2,
+        "test_invocation": 2
       },
       "products": {
         "required_source_files": [

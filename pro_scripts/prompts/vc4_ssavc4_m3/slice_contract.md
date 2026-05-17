@@ -40,3 +40,7 @@ The active scheduled `vc4` sink must remain scheduled-only. SSAVC4 must be separ
 - Artifact shape failures: fix the SSAVC4 wrapper/lowering so existing M2 emitter output stays canonical.
 - Hardware semantic failures: inspect generated scheduled output/QASM/runtime logs; do not fake results or edit expected JSON.
 - M2 regression failures: treat as a blocker; M3 is cumulative.
+
+## Retry/source-product discipline
+
+Every retry must preserve or recreate the exact required source products for the active slice from the worklist and typed verifier. If a later build, lit, or verifier failure requires changing only one file, do not drop the other required source products. A patch that omits required source products is not a valid repair unless the worklist/verifier is also intentionally updated for that slice.
