@@ -2,7 +2,6 @@ ssavc4.module @warp_reduce_sum_ssavc4 {
   ssavc4.func @warp_reduce_sum_ssavc4_kernel() attributes {
     kernel,
     threading = #vc4.threading_mode<single>,
-    lowering_template = "warp_reduce_sum_f32_tail_safe",
     "vc4.launch_abi" = {
       public_name = "warp_reduce_sum_ssavc4",
       code_symbol = "warp_reduce_sum_ssavc4_shader",
