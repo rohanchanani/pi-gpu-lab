@@ -14,7 +14,8 @@ module attributes {
   vc4.sig = #vc4.qpu_signal<last_thread_switch>,
   vc4.mux = #vc4.qpu_mux<b>,
   vc4.r4_unpack = #vc4.r4_unpack_mode<replicate_8d>,
-  vc4.unpack = #vc4.regfile_a_unpack_mode<color8c>
+  vc4.unpack = #vc4.regfile_a_unpack_mode<color8c>,
+  vc4.vpmvcd_side = #vc4.vpmvcd_side<read>
 } {
 }
 
@@ -33,3 +34,4 @@ module attributes {
 // CHECK-SAME: vc4.r4_unpack = #vc4.r4_unpack_mode<replicate_8d>
 // CHECK-SAME: vc4.sig = #vc4.qpu_signal<last_thread_switch>
 // CHECK-SAME: vc4.unpack = #vc4.regfile_a_unpack_mode<color8c>
+// CHECK-SAME: vc4.vpmvcd_side = #vc4.vpmvcd_side<read>

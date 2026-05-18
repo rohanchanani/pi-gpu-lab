@@ -402,6 +402,14 @@ static LogicalResult verifyQPUBundleReadAddressAttr(Operation *op,
   return success();
 }
 
+static LogicalResult verifyOptionalQPUReadAddressAttr(Operation *op,
+                                                      StringRef attrName,
+                                                      IntegerAttr attr) {
+  if (!attr)
+    return success();
+  return verifyQPUBundleReadAddressAttr(op, attrName, attr);
+}
+
 static LogicalResult verifyQPUBranchReadAddressAttr(Operation *op,
                                                     StringRef attrName,
                                                     IntegerAttr attr) {
@@ -516,6 +524,88 @@ static LogicalResult verifyQPUPackAttr(Operation *op, bool pm, Attribute packAtt
         "pm = true requires 'pack' to use #vc4.mul_pack_mode");
   }
   return success();
+}
+
+static LogicalResult verifyOptionalLiteralAddress(Operation *op,
+                                                  StringRef attrName,
+                                                  IntegerAttr attr,
+                                                  int64_t expected) {
+  if (!attr)
+    return success();
+  if (failed(verifyQPUWriteAddressAttr(op, attrName, attr)))
+    return failure();
+  if (attr.getInt() != expected) {
+    return op->emitOpError() << "'" << attrName << "' must be "
+                             << expected << " when present";
+  }
+  return success();
+}
+
+static LogicalResult verifyQPUOperandSelectorAttrs(
+    Operation *op, IntegerAttr raddrAAttr, IntegerAttr raddrBAttr,
+    IntegerAttr smallImmAttr, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB) {
+  bool hasRaddrB = static_cast<bool>(raddrBAttr);
+  bool hasSmallImm = static_cast<bool>(smallImmAttr);
+  if (hasRaddrB == hasSmallImm) {
+    return op->emitOpError(
+        "requires exactly one of 'raddr_b' or 'small_imm'");
+  }
+
+  if (failed(verifyQPUBundleReadAddressAttr(op, "raddr_a", raddrAAttr)))
+    return failure();
+  if (hasRaddrB &&
+      failed(verifyQPUBundleReadAddressAttr(op, "raddr_b", raddrBAttr)))
+    return failure();
+
+  if (!hasSmallImm)
+    return success();
+
+  int64_t smallImm = smallImmAttr.getInt();
+  if (!isQPUValidSmallImmSelector(smallImm)) {
+    return op->emitOpError(
+        "'small_imm' attribute must be an encoded selector in range [0, 63]");
+  }
+  if (isQPUSmallImmVectorRotateSelector(smallImm) &&
+      (!isQPUAccumulatorMuxR0ToR3(mulA) ||
+       !isQPUAccumulatorMuxR0ToR3(mulB))) {
+    return op->emitOpError(
+        "vector-rotate small_imm selectors 48..63 require both MUL inputs "
+        "to come from accumulators r0..r3");
+  }
+  return success();
+}
+
+static LogicalResult verifyQPUVPMVCDWritePseudoOp(
+    Operation *op, int64_t expectedWaddrAdd, mlir::vc4::Cond condAdd,
+    mlir::vc4::Cond condMul, mlir::vc4::AddOpcode opAdd,
+    mlir::vc4::MulOpcode opMul, IntegerAttr raddrAAttr,
+    IntegerAttr raddrBAttr, IntegerAttr smallImmAttr, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB) {
+  if (failed(verifyScheduledFormOp(op)))
+    return failure();
+
+  if (condAdd == mlir::vc4::Cond::never || opAdd == mlir::vc4::AddOpcode::nop) {
+    return op->emitOpError(
+        "requires an active ADD-side write to the implied VPM/VCD/VDW "
+        "control address");
+  }
+  if (condMul != mlir::vc4::Cond::never &&
+      opMul != mlir::vc4::MulOpcode::nop) {
+    return op->emitOpError(
+        "must not carry an active MUL-side ordinary register write");
+  }
+
+  if (failed(verifyOptionalLiteralAddress(
+          op, "waddr_add", op->getAttrOfType<IntegerAttr>("waddr_add"),
+          expectedWaddrAdd)))
+    return failure();
+  if (failed(verifyOptionalLiteralAddress(
+          op, "waddr_mul", op->getAttrOfType<IntegerAttr>("waddr_mul"), 32)))
+    return failure();
+
+  return verifyQPUOperandSelectorAttrs(op, raddrAAttr, raddrBAttr,
+                                       smallImmAttr, mulA, mulB);
 }
 
 static LogicalResult verifyQPUUnpackAttr(Operation *op, bool pm,
@@ -800,6 +890,58 @@ LogicalResult mlir::vc4::QPUBundleOp::verify() {
     break;
   }
 
+  return success();
+}
+
+void mlir::vc4::QPUVPMVCDSetupOp::getEffects(MemoryEffectList &effects) {
+  if (getSide() == mlir::vc4::VPMVCDSide::read)
+    addWriteEffect<mlir::vc4::effects::VDR>(effects);
+  else
+    addWriteEffect<mlir::vc4::effects::VDW>(effects);
+}
+
+LogicalResult mlir::vc4::QPUVPMVCDSetupOp::verify() {
+  return verifyQPUVPMVCDWritePseudoOp(
+      getOperation(), 49, getCondAdd(), getCondMul(), getOpAdd(), getOpMul(),
+      getRaddrAAttr(), getRaddrBAttr(), getSmallImmAttr(), getMulA(),
+      getMulB());
+}
+
+void mlir::vc4::QPUVPMVCDAddrOp::getEffects(MemoryEffectList &effects) {
+  if (getSide() == mlir::vc4::VPMVCDSide::read)
+    addWriteEffect<mlir::vc4::effects::VDR>(effects);
+  else
+    addWriteEffect<mlir::vc4::effects::VDW>(effects);
+}
+
+LogicalResult mlir::vc4::QPUVPMVCDAddrOp::verify() {
+  return verifyQPUVPMVCDWritePseudoOp(
+      getOperation(), 50, getCondAdd(), getCondMul(), getOpAdd(), getOpMul(),
+      getRaddrAAttr(), getRaddrBAttr(), getSmallImmAttr(), getMulA(),
+      getMulB());
+}
+
+void mlir::vc4::QPUVPMVCDWaitOp::getEffects(MemoryEffectList &effects) {
+  if (getSide() == mlir::vc4::VPMVCDSide::read)
+    addReadEffect<mlir::vc4::effects::VDR>(effects);
+  else
+    addReadEffect<mlir::vc4::effects::VDW>(effects);
+}
+
+LogicalResult mlir::vc4::QPUVPMVCDWaitOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  if (failed(verifyOptionalQPUReadAddressAttr(getOperation(), "raddr_a",
+                                              getRaddrAAttr())))
+    return failure();
+  if (getRaddrAAttr() && getRaddrAAttr().getInt() != 50)
+    return emitOpError("'raddr_a' must be 50 when present");
+
+  if (getWaddrAddAttr())
+    return emitOpError("must be read-only and must not carry 'waddr_add'");
+  if (getWaddrMulAttr())
+    return emitOpError("must be read-only and must not carry 'waddr_mul'");
   return success();
 }
 

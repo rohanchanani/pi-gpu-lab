@@ -220,4 +220,10 @@ def VC4_BranchCond : VC4_DialectI32Enum<"BranchCond",
       I32EnumAttrCase<"always", 15>
     ]>;
 
+def VC4_VPMVCDSide : VC4_DialectI32Enum<"VPMVCDSide",
+    "VC4 VPM/VCD/VDW transfer side", [
+      I32EnumAttrCase<"read", 0>,
+      I32EnumAttrCase<"write", 1>
+    ]>;
+
 #endif // VC4_ENUMS_TD

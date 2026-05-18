@@ -30,5 +30,7 @@ def VC4_SemaphoreModeAttr
     : VC4_DialectEnumAttr<VC4_SemaphoreMode, "semaphore_mode">;
 def VC4_BranchCondAttr
     : VC4_DialectEnumAttr<VC4_BranchCond, "branch_cond">;
+def VC4_VPMVCDSideAttr
+    : VC4_DialectEnumAttr<VC4_VPMVCDSide, "vpmvcd_side">;
 
 #endif // VC4_ATTRS_TD
