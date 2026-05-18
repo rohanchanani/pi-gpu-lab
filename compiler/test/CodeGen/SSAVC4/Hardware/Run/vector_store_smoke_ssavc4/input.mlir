@@ -28,7 +28,7 @@ ssavc4.module @vector_store_smoke_ssavc4 {
   } {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %value = ssavc4.load_imm <splat32> {value = 0 : i32} : vector<16xi32>
-    ssavc4.vdw.store %addr, %value {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex", lowering_template = "independent_vector_u32"} : i32, vector<16xi32>
+    ssavc4.vdw.store %addr, %value {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

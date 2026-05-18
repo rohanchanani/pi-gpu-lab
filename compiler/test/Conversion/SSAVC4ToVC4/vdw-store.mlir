@@ -6,10 +6,9 @@
 // CHECK: form = #vc4.function_form<scheduled>
 // CHECK: vc4.launch_abi =
 // CHECK: public_name = "vdw_store_lowering"
-// CHECK: vc4.qpu.bundle
-// CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
 // CHECK: waddr_add = 49 : i32
 // CHECK: waddr_add = 48 : i32
+// CHECK: sig = #vc4.qpu_signal<small_imm>
 // CHECK: waddr_add = 50 : i32
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK-NOT: ssavc4.
@@ -43,7 +42,7 @@ ssavc4.module @vdw_store_lowering {
   } {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %value = ssavc4.load_imm <splat32> {value = 0 : i32} : vector<16xi32>
-    ssavc4.vdw.store %addr, %value {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex", lowering_template = "independent_vector_u32"} : i32, vector<16xi32>
+    ssavc4.vdw.store %addr, %value {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

@@ -31,8 +31,7 @@ ssavc4.module @global_store_coalesced_multi_ssavc4_codegen {
     ssavc4.vdw.store %addr, %value {
       elem_bytes = 4 : i32,
       active_lanes = 16 : i32,
-      vpm_row = 0 : i32,
-      lowering_template = "global_store_coalesced_multi_tail_u32"
+      vpm_row = 0 : i32
     } : i32, vector<16xi32>
     ssavc4.thread_end
   }

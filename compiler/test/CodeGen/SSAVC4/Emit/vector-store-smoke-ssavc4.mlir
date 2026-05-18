@@ -1,0 +1,30 @@
+// RUN: rm -rf %t.lowered.mlir %t.bundle
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 -o %t.lowered.mlir
+// RUN: vc4-codegen %t.lowered.mlir --emit-bundle %t.bundle
+// RUN: test -f %t.bundle/kernel_launch.c
+// RUN: test -f %t.bundle/kernel_launch.h
+// RUN: test -f %t.bundle/kernels/neutral_vector_store_ssavc4.qasm
+// RUN: test -f %t.bundle/manifest.json
+
+ssavc4.module @neutral_vector_store_codegen {
+  ssavc4.func @neutral_vector_store_kernel() attributes {
+    kernel,
+    threading = #vc4.threading_mode<single>,
+    "vc4.launch_abi" = {
+      public_name = "neutral_vector_store_ssavc4",
+      code_symbol = "neutral_vector_store_shader",
+      tail_policy = "exact_multiple",
+      uniform_words_per_qpu = 2 : i32,
+      args = [],
+      builtins = [
+        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+      ]
+    }
+  } {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %value = ssavc4.load_imm <splat32> {value = 0 : i32} : vector<16xi32>
+    ssavc4.vdw.store %addr, %value {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.thread_end
+  }
+}
