@@ -1391,9 +1391,15 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
 
+  int64_t setupBase = 1055232;
+  if (auto orientation =
+          llvm::dyn_cast_or_null<StringAttr>(source->getAttr("orientation"))) {
+    if (orientation.getValue() == "vertical")
+      setupBase = 1053184;
+  }
+
   Location loc = source->getLoc();
-  // h32 VPM write setup for one vector row: 0x00101a00 + row.
-  createSplat32LDI(builder, loc, 1055232, 35);
+  createSplat32LDI(builder, loc, setupBase, 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/49, /*waddrMul=*/32,
@@ -1423,10 +1429,15 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
 
+  int64_t setupBase = 1055232;
+  if (auto orientation =
+          llvm::dyn_cast_or_null<StringAttr>(source->getAttr("orientation"))) {
+    if (orientation.getValue() == "vertical")
+      setupBase = 1053184;
+  }
+
   Location loc = source->getLoc();
-  // h32 VPM read setup for one vector row: 0x00101200 + row, followed by a
-  // conservative read latency spacer before consuming the VPM read FIFO at r48.
-  createSplat32LDI(builder, loc, 1053184, 35);
+  createSplat32LDI(builder, loc, setupBase, 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/49, /*waddrMul=*/32,

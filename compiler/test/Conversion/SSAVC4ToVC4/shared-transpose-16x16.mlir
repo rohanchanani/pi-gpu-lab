@@ -9,7 +9,7 @@
 // CHECK: waddr_add = 48 : i32
 // CHECK: vc4.qpu.sema <release>
 // CHECK: vc4.qpu.sema <acquire>
-// CHECK: value = 1053184 : i32
+// CHECK: value = 1055232 : i32
 // CHECK: raddr_a = 48 : i32
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK-NOT: ssavc4.

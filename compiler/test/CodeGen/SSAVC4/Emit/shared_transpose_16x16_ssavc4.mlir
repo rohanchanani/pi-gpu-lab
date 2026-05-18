@@ -13,14 +13,13 @@
 // CHECK: uses_barrier = true
 // CHECK: uses_shared_vpm = true
 // CHECK: vc4.qpu.sema <release>
-// CHECK: waddr_add = 48 : i32
 // CHECK: raddr_a = 48 : i32
+// CHECK: waddr_add = 48 : i32
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @shared_transpose_16x16_ssavc4 {
   ssavc4.func @shared_transpose_16x16_ssavc4_kernel() attributes {
     kernel,
     threading = #vc4.threading_mode<single>,
-    lowering_template = "shared_transpose_16x16_f32_tail_safe",
     "vc4.launch_abi" = {
       public_name = "shared_transpose_16x16_ssavc4",
       code_symbol = "shared_transpose_16x16_ssavc4_shader",
