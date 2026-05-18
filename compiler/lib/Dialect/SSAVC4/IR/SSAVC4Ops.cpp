@@ -196,6 +196,13 @@ LogicalResult ElementNumberOp::verify() {
   return emitOpError("result type must be vector<16xi32>");
 }
 
+LogicalResult UniformReadOp::verify() {
+  Operation *op = getOperation();
+  if (getIndexAttr().getInt() < 0)
+    return emitOpError("'index' must be non-negative");
+  return verifyValueType(op, getResult().getType(), "result");
+}
+
 LogicalResult SplatOp::verify() {
   Operation *op = getOperation();
   Type inputType = getInput().getType();

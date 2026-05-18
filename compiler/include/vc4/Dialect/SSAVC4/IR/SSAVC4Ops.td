@@ -65,6 +65,19 @@ def SSAVC4_ElementNumberOp : SSAVC4_PureOp<"element_number"> {
   let hasVerifier = 1;
 }
 
+def SSAVC4_UniformReadOp : SSAVC4_Op<"uniform.read"> {
+  let summary = "SSAVC4 sequential uniform stream read";
+  let description = [{
+    Reads the next physical QPU uniform word. The optional index documents the
+    expected launch ABI slot; ordering is defined by program order so lowering
+    remains independent of public kernel names.
+  }];
+  let arguments = (ins I32Attr:$index);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$index attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
 def SSAVC4_SplatOp : SSAVC4_PureOp<"splat"> {
   let summary = "SSAVC4 scalar-to-vector splat";
   let arguments = (ins AnyType:$input);
@@ -271,7 +284,7 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
 }
 
-def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
+def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
   let summary = "SSAVC4 effectful global vector store through VPM/VDW";
   let description = [{
     Stages one 16-lane vector value through VPM and commits it through the
@@ -282,12 +295,14 @@ def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
   let arguments = (ins
     AnyType:$address,
     AnyType:$value,
+    Optional<AnyType>:$active_lanes_value,
+    Optional<AnyType>:$vpm_row_value,
     I32Attr:$elem_bytes,
-    I32Attr:$active_lanes,
+    OptionalAttr<I32Attr>:$active_lanes,
     I32Attr:$vpm_row,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $value attr-dict `:` type($address) `,` type($value)";
+  let assemblyFormat = "$address `,` $value (`,` $active_lanes_value^)? (`,` $vpm_row_value^)? attr-dict `:` type($address) `,` type($value) (`,` type($active_lanes_value)^)? (`,` type($vpm_row_value)^)?";
 }
 
 #endif // SSAVC4_OPS_TD

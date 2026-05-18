@@ -45,6 +45,8 @@ constexpr llvm::StringLiteral kSSAVC4FuncOpName("ssavc4.func");
 constexpr llvm::StringLiteral kSSAVC4ThreadEndOpName("ssavc4.thread_end");
 constexpr llvm::StringLiteral kSSAVC4LoadImmOpName("ssavc4.load_imm");
 constexpr llvm::StringLiteral kSSAVC4ElementNumberOpName("ssavc4.element_number");
+constexpr llvm::StringLiteral kSSAVC4UniformReadOpName("ssavc4.uniform.read");
+constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
@@ -244,6 +246,10 @@ static bool isScalarI32OrVector16I32(Type type) {
   return type.isSignlessInteger(32) || isVector16I32Type(type);
 }
 
+static bool isMirroredLoadImm(Value value) {
+  return hasName(value.getDefiningOp(), kSSAVC4LoadImmOpName);
+}
+
 // Lowering-private representation seams.  Slice 3 uses deliberately small
 // implementations, but keeps the explicit phase boundaries needed by later
 // instruction selection/templates, virtual values, liveness, no-spill
@@ -257,6 +263,8 @@ struct InstructionTemplate {
   enum class Kind {
     LoadImm,
     ElementNumber,
+    UniformRead,
+    Splat,
     Mov,
     ALUAdd,
     ALUMul,
@@ -430,15 +438,25 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
     return 2;
   case InstructionTemplate::Kind::LoadImm:
   case InstructionTemplate::Kind::ElementNumber:
-  case InstructionTemplate::Kind::Mov:
-  case InstructionTemplate::Kind::ALUAdd:
-  case InstructionTemplate::Kind::ALUMul:
-  case InstructionTemplate::Kind::MakeFlags:
+  case InstructionTemplate::Kind::UniformRead:
   case InstructionTemplate::Kind::Pack:
   case InstructionTemplate::Kind::Unpack:
   case InstructionTemplate::Kind::SemaAcquire:
   case InstructionTemplate::Kind::SemaRelease:
     return 1;
+  case InstructionTemplate::Kind::Splat:
+  case InstructionTemplate::Kind::Mov:
+    return 2;
+  case InstructionTemplate::Kind::ALUAdd:
+  case InstructionTemplate::Kind::ALUMul:
+    return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+                ? 2
+                : 1) +
+           1;
+  case InstructionTemplate::Kind::MakeFlags:
+    return templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+               ? 2
+               : 1;
   }
   return 1;
 }
@@ -532,6 +550,13 @@ static std::optional<int64_t> getConstantI32FromLoadImm(Value value) {
   if (!attr)
     return std::nullopt;
   return attr.getInt();
+}
+
+static std::optional<int64_t> getSmallImmLiteralSelector(Value value) {
+  std::optional<int64_t> constant = getConstantI32FromLoadImm(value);
+  if (!constant || *constant < 0 || *constant > 15)
+    return std::nullopt;
+  return constant;
 }
 
 static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
@@ -791,6 +816,44 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
+      if (hasName(&op, kSSAVC4UniformReadOpName)) {
+        if (op.getNumOperands() != 0 || op.getNumResults() != 1)
+          return op.emitOpError("requires exactly one result for M3 lowering");
+        Type resultType = op.getResult(0).getType();
+        if (!resultType.isSignlessInteger(32) && !isVector16I32Type(resultType) &&
+            !isVector16F32Type(resultType))
+          return op.emitOpError("supports only i32, vector<16xi32>, or vector<16xf32> uniform reads in M3 lowering");
+        Value result = op.getResult(0);
+        virtualValues.push_back({result, nextVirtualOrdinal++});
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::UniformRead;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.result = result;
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
+      if (hasName(&op, kSSAVC4SplatOpName)) {
+        if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+          return op.emitOpError("requires one input operand and one result for M3 lowering");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 scalar input for M3 lowering");
+        if (!isVector16I32Type(op.getResult(0).getType()) &&
+            !isVector16F32Type(op.getResult(0).getType()))
+          return op.emitOpError("supports only vector<16xi32> or vector<16xf32> splat results in M3 lowering");
+        Value result = op.getResult(0);
+        virtualValues.push_back({result, nextVirtualOrdinal++});
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::Splat;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templ.result = result;
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
       if (hasName(&op, kSSAVC4MovOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
           return op.emitOpError("requires one input operand and one result for M3 lowering");
@@ -988,8 +1051,8 @@ static LogicalResult selectInstructionTemplates(
       }
 
       if (hasName(&op, kSSAVC4VDWStoreOpName)) {
-        if (op.getNumOperands() != 2)
-          return op.emitOpError("requires address and vector value operands");
+        if (op.getNumOperands() < 2 || op.getNumOperands() > 4)
+          return op.emitOpError("requires address, vector value, and optional active-lane and VPM row operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
           return op.emitOpError("requires an i32 global address operand for M3 lowering");
         if (!isVector16I32Type(op.getOperand(1).getType()) &&
@@ -999,8 +1062,17 @@ static LogicalResult selectInstructionTemplates(
         int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
         if (elemBytes != 4)
           return op.emitOpError("supports only 32-bit elements in M3 lowering");
-        if (activeLanes != 16)
-          return op.emitOpError("supports only full 16-lane VDW stores in M3 lowering");
+        if (op.getNumOperands() == 3) {
+          if (!op.getOperand(2).getType().isSignlessInteger(32))
+            return op.emitOpError("requires an i32 dynamic active-lane operand");
+        } else if (op.getNumOperands() == 4) {
+          if (!op.getOperand(2).getType().isSignlessInteger(32))
+            return op.emitOpError("requires an i32 dynamic active-lane operand");
+          if (!op.getOperand(3).getType().isSignlessInteger(32))
+            return op.emitOpError("requires an i32 dynamic VPM row operand");
+        } else if (activeLanes != 16) {
+          return op.emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
+        }
         if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
             return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M3 lowering");
@@ -1016,7 +1088,8 @@ static LogicalResult selectInstructionTemplates(
 
       return op.emitOpError()
              << "is not supported by the M3 SSAVC4 lowering; supported operations are "
-                "ssavc4.load_imm, ssavc4.element_number, ssavc4.mov, "
+                "ssavc4.load_imm, ssavc4.element_number, ssavc4.uniform.read, "
+                "ssavc4.splat, ssavc4.mov, "
                 "ssavc4.alu.add, ssavc4.alu.mul, "
                 "ssavc4.make_flags, ssavc4.br, ssavc4.cond_br, "
                 "ssavc4.pack, ssavc4.unpack, ssavc4.rotate, "
@@ -1048,9 +1121,9 @@ static LogicalResult emitLoadImm(OpBuilder &builder, Operation *source,
     state.addAttribute("value", value);
   state.addAttribute("pm", builder.getBoolAttr(false));
   state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
-  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
   state.addAttribute("waddr_add", builder.getI32IntegerAttr(destination));
-  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(32));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(destination));
   builder.create(state);
   return success();
 }
@@ -1074,6 +1147,26 @@ static LogicalResult emitElementNumber(OpBuilder &builder,
   return success();
 }
 
+static LogicalResult emitUniformRead(OpBuilder &builder,
+                                     const InstructionTemplate &templ,
+                                     const NoSpillAllocator &allocator) {
+  Operation *source = templ.source;
+  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  if (!resultReg)
+    return source->emitError("internal lowering error: result register was not allocated");
+
+  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        *resultReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/32,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/0);
+  return success();
+}
+
 static LogicalResult emitMov(OpBuilder &builder,
                              const InstructionTemplate &templ,
                              const NoSpillAllocator &allocator) {
@@ -1091,6 +1184,7 @@ static LogicalResult emitMov(OpBuilder &builder,
                         mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, source->getLoc());
   return success();
 }
 
@@ -1110,10 +1204,6 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                 "the current M3 slice 3 skeleton";
     operandRegs.push_back(*reg);
   }
-  int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
-  int64_t raddrB = operandRegs.size() < 2 ? raddrA : operandRegs[1];
-
-  OperationState state(source->getLoc(), "vc4.qpu.bundle");
   mlir::vc4::AddOpcode addOpcode = mlir::vc4::AddOpcode::nop;
   mlir::vc4::MulOpcode mulOpcode = mlir::vc4::MulOpcode::nop;
   int64_t waddrAdd = 32;
@@ -1137,12 +1227,43 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
     waddrMul = *resultReg;
   }
 
-  addCommonBundleAttrs(builder, state, mlir::vc4::QPUSignal::none, condAdd,
-                       condMul, waddrAdd, waddrMul, addOpcode, mulOpcode,
-                       raddrA, raddrB, mlir::vc4::QPUMux::a,
-                       mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::a,
-                       mlir::vc4::QPUMux::b);
-  builder.create(state);
+  std::optional<int64_t> smallImm;
+  if (templ.kind == InstructionTemplate::Kind::ALUAdd &&
+      templ.operands.size() == 2)
+    smallImm = getSmallImmLiteralSelector(templ.operands[1]);
+
+  bool useMirroredSecond = !smallImm && templ.operands.size() == 2 &&
+                           isMirroredLoadImm(templ.operands[1]);
+  int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
+  int64_t raddrB = operandRegs.size() < 2 ? raddrA
+                  : useMirroredSecond   ? operandRegs[1]
+                                        : 0;
+  mlir::vc4::QPUMux addB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
+                         : (useMirroredSecond || smallImm)
+                             ? mlir::vc4::QPUMux::b
+                             : mlir::vc4::QPUMux::r1;
+  mlir::vc4::QPUMux mulB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
+                         : useMirroredSecond     ? mlir::vc4::QPUMux::b
+                                                  : mlir::vc4::QPUMux::r1;
+
+  if (operandRegs.size() == 2 && !useMirroredSecond && !smallImm) {
+    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, operandRegs[1],
+                          operandRegs[1], mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+
+  mlir::vc4::QPUSignal signal =
+      smallImm ? mlir::vc4::QPUSignal::small_imm : mlir::vc4::QPUSignal::none;
+  createScheduledBundle(builder, source->getLoc(), signal, condAdd, condMul,
+                        waddrAdd, waddrMul, addOpcode, mulOpcode, raddrA,
+                        raddrB, mlir::vc4::QPUMux::a, addB,
+                        mlir::vc4::QPUMux::a, mulB, smallImm);
+  createNopBundle(builder, source->getLoc());
   return success();
 }
 
@@ -1343,15 +1464,33 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
              << "uses a value that is not defined by a lowerable SSAVC4 op in M3 v1";
     operandRegs.push_back(*reg);
   }
+  bool useMirroredSecond =
+      templ.operands.size() == 2 && isMirroredLoadImm(templ.operands[1]);
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
-  int64_t raddrB = operandRegs.size() < 2 ? raddrA : operandRegs[1];
+  int64_t raddrB = operandRegs.size() < 2 ? raddrA
+                  : useMirroredSecond   ? operandRegs[1]
+                                        : 0;
+  mlir::vc4::QPUMux addB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
+                         : useMirroredSecond     ? mlir::vc4::QPUMux::b
+                                                  : mlir::vc4::QPUMux::r1;
+
+  if (operandRegs.size() == 2 && !useMirroredSecond) {
+    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, operandRegs[1],
+                          operandRegs[1], mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
 
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/31, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::sub,
                         mlir::vc4::MulOpcode::nop, raddrA, raddrB,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::a, addB,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                         std::nullopt, /*setFlags=*/true);
   return success();
@@ -1463,21 +1602,35 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                                   const InstructionTemplate &templ,
                                   const NoSpillAllocator &allocator) {
   Operation *source = templ.source;
-  if (templ.operands.size() != 2)
+  if (templ.operands.size() < 2 || templ.operands.size() > 4)
     return source->emitError("internal lowering error: VDW store has wrong operand count");
   std::optional<int64_t> addressReg = allocator.lookup(templ.operands[0]);
   std::optional<int64_t> valueReg = allocator.lookup(templ.operands[1]);
   if (!addressReg || !valueReg)
     return source->emitOpError()
            << "uses a VDW address/value that is not defined by a lowerable SSAVC4 op";
+  std::optional<int64_t> dynamicActiveLanesReg;
+  if (templ.operands.size() >= 3) {
+    dynamicActiveLanesReg = allocator.lookup(templ.operands[2]);
+    if (!dynamicActiveLanesReg)
+      return source->emitOpError()
+             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
+  }
+  std::optional<int64_t> dynamicVPMRowReg;
+  if (templ.operands.size() == 4) {
+    dynamicVPMRowReg = allocator.lookup(templ.operands[3]);
+    if (!dynamicVPMRowReg)
+      return source->emitOpError()
+             << "uses a dynamic VPM row value that is not defined by a lowerable SSAVC4 op";
+  }
 
   int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
   int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
   int64_t vpmRow = getI32IntegerAttrOr(source, "vpm_row", 0);
   if (elemBytes != 4)
     return source->emitOpError("supports only 32-bit elements in M3 lowering");
-  if (activeLanes != 16)
-    return source->emitOpError("supports only full 16-lane VDW stores in M3 lowering");
+  if (!dynamicActiveLanesReg && activeLanes != 16)
+    return source->emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
   if (vpmRow < 0)
     return source->emitOpError("requires a non-negative VPM row in M3 lowering");
 
@@ -1496,7 +1649,29 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
 
   // Stage the SSA vector value into the requested VPM row.
   createSplat32LDI(builder, loc, 1055232, 35);
-  createSplat32LDI(builder, loc, vpmRow, 33);
+  if (dynamicVPMRowReg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg,
+                          *dynamicVPMRowReg, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    if (vpmRow != 0) {
+      createSplat32LDI(builder, loc, vpmRow, 34);
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/33, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::add,
+                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::r2,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    }
+  } else {
+    createSplat32LDI(builder, loc, vpmRow, 33);
+  }
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/49, /*waddrMul=*/32,
@@ -1523,7 +1698,18 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
 
   // VDW store setup: depth in bits 16..23, VPM row in bits 7.., and the
   // explicit SSA byte address in vw_addr.
-  createSplat32LDI(builder, loc, activeLanes, 33);
+  if (dynamicActiveLanesReg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
+                          *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  } else {
+    createSplat32LDI(builder, loc, activeLanes, 33);
+  }
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/33, /*waddrMul=*/32,
@@ -1551,7 +1737,29 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                         /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                         mlir::vc4::QPUMux::r1,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createSplat32LDI(builder, loc, vpmRow, 33);
+  if (dynamicVPMRowReg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg,
+                          *dynamicVPMRowReg, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    if (vpmRow != 0) {
+      createSplat32LDI(builder, loc, vpmRow, 36);
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/33, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::add,
+                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::r4,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    }
+  } else {
+    createSplat32LDI(builder, loc, vpmRow, 33);
+  }
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/33, /*waddrMul=*/32,
@@ -1608,6 +1816,11 @@ static LogicalResult emitScheduledFunctionBody(
       if (failed(emitElementNumber(builder, templ, allocator)))
         return failure();
       break;
+    case InstructionTemplate::Kind::UniformRead:
+      if (failed(emitUniformRead(builder, templ, allocator)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::Splat:
     case InstructionTemplate::Kind::Mov:
       if (failed(emitMov(builder, templ, allocator)))
         return failure();
