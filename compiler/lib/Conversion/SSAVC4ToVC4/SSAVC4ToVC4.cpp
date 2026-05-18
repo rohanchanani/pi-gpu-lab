@@ -31,6 +31,7 @@
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
 
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -57,10 +58,14 @@ constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4SemaAcquireOpName("ssavc4.sema.acquire");
 constexpr llvm::StringLiteral kSSAVC4SemaReleaseOpName("ssavc4.sema.release");
 constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
+constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
+constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 constexpr llvm::StringLiteral kTMU0Raw32F32AXPYTailSafeTemplate(
     "tmu0_raw32_f32_axpy_tail_safe");
 constexpr llvm::StringLiteral kWarpReduceSumF32TailSafeTemplate(
     "warp_reduce_sum_f32_tail_safe");
+constexpr llvm::StringLiteral kSharedTranspose16x16F32TailSafeTemplate(
+    "shared_transpose_16x16_f32_tail_safe");
 
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -135,21 +140,6 @@ static Operation *createThreadEndBundle(OpBuilder &builder, Location loc) {
                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::a,
                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                        mlir::vc4::QPUMux::r1);
-  return builder.create(state);
-}
-
-static Operation *createScheduledSema(OpBuilder &builder, Location loc,
-                                      mlir::vc4::SemaphoreMode mode,
-                                      int64_t id) {
-  MLIRContext *ctx = builder.getContext();
-  OperationState state(loc, "vc4.qpu.sema");
-  state.addAttribute("mode", mlir::vc4::SemaphoreModeAttr::get(ctx, mode));
-  state.addAttribute("id", builder.getI32IntegerAttr(id));
-  state.addAttribute("pm", builder.getBoolAttr(false));
-  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
-  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
-  state.addAttribute("waddr_add", builder.getI32IntegerAttr(32));
-  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(33));
   return builder.create(state);
 }
 
@@ -285,6 +275,8 @@ struct InstructionTemplate {
     SemaAcquire,
     SemaRelease,
     Barrier,
+    VPMWrite,
+    VPMRead,
     VDWStore,
     ThreadEnd
   } kind;
@@ -429,6 +421,10 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
     return 2;
   case InstructionTemplate::Kind::Barrier:
     return 8;
+  case InstructionTemplate::Kind::VPMWrite:
+    return 3;
+  case InstructionTemplate::Kind::VPMRead:
+    return 6;
   case InstructionTemplate::Kind::VDWStore:
     if (templ.source) {
       auto loweringTemplate = llvm::dyn_cast_or_null<StringAttr>(
@@ -516,70 +512,194 @@ static bool isWarpReduceSumF32TailSafeTemplate(Operation *op) {
                             kWarpReduceSumF32TailSafeTemplate);
 }
 
+static bool isSharedTranspose16x16F32TailSafeTemplate(Operation *op) {
+  return hasStringAttrValue(op, "lowering_template",
+                            kSharedTranspose16x16F32TailSafeTemplate);
+}
+
 static bool hasStringAttr(Operation *op, llvm::StringRef name,
                           llvm::StringRef expected) {
   auto attr = llvm::dyn_cast_or_null<StringAttr>(op->getAttr(name));
   return attr && attr.getValue() == expected;
 }
 
-static std::optional<int64_t> getConstantSemaId(Operation *op) {
-  if (auto idAttr = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("id")))
-    return idAttr.getInt();
+static DictionaryAttr getResourceMetadata(Operation *func) {
+  return llvm::dyn_cast_or_null<DictionaryAttr>(func->getAttr("vc4.resource"));
+}
 
-  if (op->getNumOperands() == 0)
+static std::optional<int64_t> getResourceI32(DictionaryAttr resource,
+                                            llvm::StringRef name) {
+  if (!resource)
     return std::nullopt;
-
-  Operation *definingOp = op->getOperand(0).getDefiningOp();
-  if (!hasName(definingOp, kSSAVC4LoadImmOpName))
-    return std::nullopt;
-
-  if (auto valueAttr = llvm::dyn_cast_or_null<IntegerAttr>(definingOp->getAttr("value")))
-    return valueAttr.getInt();
-  return std::nullopt;
-}
-
-static LogicalResult verifySemaId(Operation *op, int64_t id) {
-  if (id < 0 || id > 15)
-    return op->emitOpError("requires a semaphore id in range [0, 15]");
-  return success();
-}
-
-static bool getResourceBool(DictionaryAttr resource, llvm::StringRef name) {
-  auto attr = llvm::dyn_cast_or_null<BoolAttr>(resource.get(name));
-  return attr && attr.getValue();
-}
-
-static int64_t getResourceI32(DictionaryAttr resource, llvm::StringRef name,
-                              int64_t fallback = -1) {
   auto attr = llvm::dyn_cast_or_null<IntegerAttr>(resource.get(name));
   if (!attr)
-    return fallback;
+    return std::nullopt;
   return attr.getInt();
 }
 
-static LogicalResult verifyCooperativeBarrierResource(Operation *func,
-                                                      Operation *barrierOp) {
-  auto resource = llvm::dyn_cast_or_null<DictionaryAttr>(func->getAttr("vc4.resource"));
+static std::optional<bool> getResourceBool(DictionaryAttr resource,
+                                           llvm::StringRef name) {
   if (!resource)
-    return barrierOp->emitOpError()
-           << "requires vc4.resource metadata with schedule_mode = \"cooperative_block\"";
+    return std::nullopt;
+  if (auto attr = llvm::dyn_cast_or_null<BoolAttr>(resource.get(name)))
+    return attr.getValue();
+  return std::nullopt;
+}
 
-  auto scheduleMode = llvm::dyn_cast_or_null<StringAttr>(resource.get("schedule_mode"));
-  if (!scheduleMode || scheduleMode.getValue() != "cooperative_block")
-    return barrierOp->emitOpError()
-           << "requires vc4.resource schedule_mode = \"cooperative_block\"";
-  if (!getResourceBool(resource, "uses_barrier"))
-    return barrierOp->emitOpError()
-           << "requires vc4.resource uses_barrier = true";
-  if (!getResourceBool(resource, "require_full_block_residency"))
-    return barrierOp->emitOpError()
+static std::optional<llvm::StringRef> getResourceString(DictionaryAttr resource,
+                                                        llvm::StringRef name) {
+  if (!resource)
+    return std::nullopt;
+  auto attr = llvm::dyn_cast_or_null<StringAttr>(resource.get(name));
+  if (!attr)
+    return std::nullopt;
+  return attr.getValue();
+}
+
+static std::optional<int64_t> getConstantI32FromLoadImm(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kSSAVC4LoadImmOpName))
+    return std::nullopt;
+  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(def->getAttr("value"));
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
+  if (func->getNumRegions() == 0 || func->getRegion(0).empty())
+    return success();
+
+  bool sawBarrier = false;
+  int64_t requiredSemaphores = 0;
+  for (Block &block : func->getRegion(0)) {
+    for (Operation &op : block) {
+      if (hasName(&op, kSSAVC4BarrierOpName)) {
+        sawBarrier = true;
+        int64_t arrive = getI32IntegerAttrOr(&op, "arrive_offset", -1);
+        int64_t go = getI32IntegerAttrOr(&op, "go_offset", -1);
+        int64_t depart = getI32IntegerAttrOr(&op, "depart_offset", -1);
+        int64_t reset = getI32IntegerAttrOr(&op, "reset_offset", -1);
+        if (arrive < 0 || go < 0 || depart < 0 || reset < 0)
+          return op.emitOpError()
+                 << "requires non-negative arrive/go/depart/reset semaphore offsets";
+        requiredSemaphores = std::max(requiredSemaphores, arrive + 1);
+        requiredSemaphores = std::max(requiredSemaphores, go + 1);
+        requiredSemaphores = std::max(requiredSemaphores, depart + 1);
+        requiredSemaphores = std::max(requiredSemaphores, reset + 1);
+      }
+
+      if (hasName(&op, kSSAVC4SemaAcquireOpName) ||
+          hasName(&op, kSSAVC4SemaReleaseOpName)) {
+        if (op.getNumOperands() != 1)
+          return op.emitOpError("requires exactly one semaphore id operand");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 semaphore id operand");
+        if (std::optional<int64_t> sem = getConstantI32FromLoadImm(op.getOperand(0))) {
+          if (*sem < 0 || *sem > 15)
+            return op.emitOpError()
+                   << "requires compile-time semaphore id in hardware range [0, 15]";
+          requiredSemaphores = std::max(requiredSemaphores, *sem + 1);
+        }
+      }
+    }
+  }
+
+  DictionaryAttr resource = getResourceMetadata(func);
+  if (sawBarrier) {
+    if (!resource)
+      return func->emitOpError()
+             << "uses ssavc4.barrier but lacks vc4.resource metadata";
+
+    std::optional<llvm::StringRef> scheduleMode =
+        getResourceString(resource, "schedule_mode");
+    if (!scheduleMode || *scheduleMode != "cooperative_block")
+      return func->emitOpError()
+             << "uses ssavc4.barrier and requires vc4.resource schedule_mode = \"cooperative_block\"";
+
+    std::optional<bool> usesBarrier = getResourceBool(resource, "uses_barrier");
+    if (!usesBarrier || !*usesBarrier)
+      return func->emitOpError()
+             << "uses ssavc4.barrier but vc4.resource uses_barrier is not true";
+
+    std::optional<bool> fullResidency =
+        getResourceBool(resource, "require_full_block_residency");
+    if (!fullResidency || !*fullResidency)
+      return func->emitOpError()
+             << "uses ssavc4.barrier but vc4.resource require_full_block_residency is not true";
+
+    std::optional<int64_t> warpsPerBlockMax =
+        getResourceI32(resource, "warps_per_block_max");
+    if (!warpsPerBlockMax || *warpsPerBlockMax <= 0 || *warpsPerBlockMax > 12)
+      return func->emitOpError()
+             << "uses ssavc4.barrier but vc4.resource warps_per_block_max is not in [1, 12]";
+
+    requiredSemaphores = std::max<int64_t>(requiredSemaphores, 4);
+  }
+
+  if (resource && requiredSemaphores > 0) {
+    std::optional<int64_t> semaphoresPerBlock =
+        getResourceI32(resource, "semaphores_per_block");
+    if (!semaphoresPerBlock || *semaphoresPerBlock < requiredSemaphores)
+      return func->emitOpError()
+             << "vc4.resource semaphores_per_block is too small for SSAVC4 semaphore/barrier use";
+  }
+
+  return success();
+}
+
+
+static LogicalResult verifyCooperativeVPMResource(Operation *func,
+                                                  Operation *vpmOp) {
+  DictionaryAttr resource = getResourceMetadata(func);
+  if (!resource)
+    return vpmOp->emitOpError()
+           << "requires vc4.resource metadata with schedule_mode = cooperative_block";
+
+  std::optional<llvm::StringRef> scheduleMode =
+      getResourceString(resource, "schedule_mode");
+  if (!scheduleMode || *scheduleMode != "cooperative_block")
+    return vpmOp->emitOpError()
+           << "requires vc4.resource schedule_mode = cooperative_block";
+
+  std::optional<bool> usesSharedVPM = getResourceBool(resource, "uses_shared_vpm");
+  if (!usesSharedVPM || !*usesSharedVPM)
+    return vpmOp->emitOpError()
+           << "requires vc4.resource uses_shared_vpm = true";
+
+  std::optional<bool> fullResidency =
+      getResourceBool(resource, "require_full_block_residency");
+  if (!fullResidency || !*fullResidency)
+    return vpmOp->emitOpError()
            << "requires vc4.resource require_full_block_residency = true";
-  if (getResourceI32(resource, "semaphores_per_block") < 4)
-    return barrierOp->emitOpError()
-           << "requires vc4.resource semaphores_per_block >= 4";
-  if (getResourceI32(resource, "warps_per_block_max") < 1)
-    return barrierOp->emitOpError()
-           << "requires vc4.resource warps_per_block_max >= 1";
+
+  std::optional<int64_t> sharedVPMBytes = getResourceI32(resource, "shared_vpm_bytes");
+  if (!sharedVPMBytes || *sharedVPMBytes <= 0)
+    return vpmOp->emitOpError()
+           << "requires positive vc4.resource shared_vpm_bytes";
+
+  std::optional<int64_t> warpsPerBlockMax =
+      getResourceI32(resource, "warps_per_block_max");
+  if (!warpsPerBlockMax || *warpsPerBlockMax <= 0 || *warpsPerBlockMax > 12)
+    return vpmOp->emitOpError()
+           << "requires vc4.resource warps_per_block_max in [1, 12]";
+  return success();
+}
+
+static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
+  int64_t elemBytes = getI32IntegerAttrOr(op, "elem_bytes", -1);
+  int64_t lanes = getI32IntegerAttrOr(op, "lanes", -1);
+  if (elemBytes != 4)
+    return op->emitOpError("supports only 32-bit VPM elements in M3 lowering");
+  if (lanes != 16)
+    return op->emitOpError("supports only full 16-lane VPM vectors in M3 lowering");
+  if (!isVector16I32Type(valueType) && !isVector16F32Type(valueType))
+    return op->emitOpError(
+        "supports only vector<16xi32> or vector<16xf32> VPM values in M3 lowering");
+  if (auto orientation = llvm::dyn_cast_or_null<StringAttr>(op->getAttr("orientation"))) {
+    if (orientation.getValue() != "horizontal" && orientation.getValue() != "vertical")
+      return op->emitOpError("supports only horizontal or vertical VPM orientation in M3 v1");
+  }
   return success();
 }
 
@@ -622,6 +742,8 @@ static LogicalResult selectInstructionTemplates(
     return success();
 
   if (failed(verifyRestrictedFlagUses(func)))
+    return failure();
+  if (failed(verifyCooperativeBarrierResources(func)))
     return failure();
 
   SmallVector<Block *, 8> blocks;
@@ -798,15 +920,12 @@ static LogicalResult selectInstructionTemplates(
       if (hasName(&op, kSSAVC4SemaAcquireOpName) ||
           hasName(&op, kSSAVC4SemaReleaseOpName)) {
         if (op.getNumOperands() != 1)
-          return op.emitOpError("requires one i32 semaphore operand");
+          return op.emitOpError("requires exactly one semaphore id operand");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 semaphore operand");
-        std::optional<int64_t> id = getConstantSemaId(&op);
-        if (!id)
+          return op.emitOpError("requires an i32 semaphore id operand");
+        if (!getConstantI32FromLoadImm(op.getOperand(0)))
           return op.emitOpError()
-                 << "requires a compile-time semaphore id from an id attribute or constant ssavc4.load_imm";
-        if (failed(verifySemaId(&op, *id)))
-          return failure();
+                 << "requires semaphore id produced by ssavc4.load_imm with an integer value in M3 v1";
         InstructionTemplate templ;
         templ.kind = hasName(&op, kSSAVC4SemaAcquireOpName)
                          ? InstructionTemplate::Kind::SemaAcquire
@@ -819,19 +938,50 @@ static LogicalResult selectInstructionTemplates(
       }
 
       if (hasName(&op, kSSAVC4BarrierOpName)) {
-        if (failed(verifyCooperativeBarrierResource(func, &op)))
-          return failure();
-        int64_t arrive = getI32IntegerAttrOr(&op, "arrive_offset", -1);
-        int64_t go = getI32IntegerAttrOr(&op, "go_offset", -1);
-        int64_t depart = getI32IntegerAttrOr(&op, "depart_offset", -1);
-        int64_t reset = getI32IntegerAttrOr(&op, "reset_offset", -1);
-        if (failed(verifySemaId(&op, arrive)) || failed(verifySemaId(&op, go)) ||
-            failed(verifySemaId(&op, depart)) || failed(verifySemaId(&op, reset)))
-          return failure();
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::Barrier;
         templ.source = &op;
         templ.sourceBlock = block;
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
+
+      if (hasName(&op, kSSAVC4VPMWriteOpName)) {
+        if (failed(verifyCooperativeVPMResource(func, &op)))
+          return failure();
+        if (op.getNumOperands() != 2)
+          return op.emitOpError("requires row and vector value operands");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 VPM row operand for M3 lowering");
+        if (failed(verifyVPMSubset(&op, op.getOperand(1).getType())))
+          return failure();
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::VPMWrite;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templates.push_back(std::move(templ));
+        continue;
+      }
+
+      if (hasName(&op, kSSAVC4VPMReadOpName)) {
+        if (failed(verifyCooperativeVPMResource(func, &op)))
+          return failure();
+        if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+          return op.emitOpError("requires one row operand and one vector result");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 VPM row operand for M3 lowering");
+        if (failed(verifyVPMSubset(&op, op.getResult(0).getType())))
+          return failure();
+        Value result = op.getResult(0);
+        virtualValues.push_back({result, nextVirtualOrdinal++});
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::VPMRead;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templ.result = result;
         templates.push_back(std::move(templ));
         continue;
       }
@@ -864,9 +1014,10 @@ static LogicalResult selectInstructionTemplates(
                 "ssavc4.load_imm, ssavc4.alu.add, ssavc4.alu.mul, "
                 "ssavc4.make_flags, ssavc4.br, ssavc4.cond_br, "
                 "ssavc4.pack, ssavc4.unpack, ssavc4.rotate, "
-                "ssavc4.tmu.request, ssavc4.tmu.read, ssavc4.sema.acquire, "
-                "ssavc4.sema.release, ssavc4.barrier, ssavc4.vdw.store, "
-                "and ssavc4.thread_end";
+                "ssavc4.tmu.request, ssavc4.tmu.read, "
+                "ssavc4.sema.acquire, ssavc4.sema.release, "
+                "ssavc4.barrier, ssavc4.vpm.write, ssavc4.vpm.read, "
+                "ssavc4.vdw.store, and ssavc4.thread_end";
     }
   }
 
@@ -1072,44 +1223,65 @@ static LogicalResult emitTMURead(OpBuilder &builder,
   return success();
 }
 
+static Operation *createScheduledSema(OpBuilder &builder, Location loc,
+                                      mlir::vc4::SemaphoreMode mode,
+                                      int64_t id) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.sema");
+  state.addAttribute("mode", mlir::vc4::SemaphoreModeAttr::get(ctx, mode));
+  state.addAttribute("id", builder.getI32IntegerAttr(id));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(32));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(33));
+  return builder.create(state);
+}
+
 static LogicalResult emitSema(OpBuilder &builder,
-                              const InstructionTemplate &templ,
-                              mlir::vc4::SemaphoreMode mode) {
+                              const InstructionTemplate &templ) {
   Operation *source = templ.source;
-  std::optional<int64_t> id = getConstantSemaId(source);
+  if (templ.operands.size() != 1)
+    return source->emitError("internal lowering error: semaphore template has no id operand");
+  std::optional<int64_t> id = getConstantI32FromLoadImm(templ.operands.front());
   if (!id)
     return source->emitOpError()
-           << "requires a compile-time semaphore id from an id attribute or constant ssavc4.load_imm";
-  if (failed(verifySemaId(source, *id)))
-    return failure();
+           << "requires compile-time semaphore id in M3 v1";
+  if (*id < 0 || *id > 15)
+    return source->emitOpError()
+           << "requires compile-time semaphore id in hardware range [0, 15]";
+  mlir::vc4::SemaphoreMode mode =
+      templ.kind == InstructionTemplate::Kind::SemaAcquire
+          ? mlir::vc4::SemaphoreMode::acquire
+          : mlir::vc4::SemaphoreMode::release;
   createScheduledSema(builder, source->getLoc(), mode, *id);
   return success();
 }
 
-static LogicalResult emitBarrier(OpBuilder &builder,
-                                 const InstructionTemplate &templ) {
-  Operation *source = templ.source;
+static LogicalResult emitBarrier(OpBuilder &builder, Operation *source) {
   int64_t arrive = getI32IntegerAttrOr(source, "arrive_offset", -1);
   int64_t go = getI32IntegerAttrOr(source, "go_offset", -1);
   int64_t depart = getI32IntegerAttrOr(source, "depart_offset", -1);
   int64_t reset = getI32IntegerAttrOr(source, "reset_offset", -1);
-  if (failed(verifySemaId(source, arrive)) || failed(verifySemaId(source, go)) ||
-      failed(verifySemaId(source, depart)) || failed(verifySemaId(source, reset)))
-    return failure();
+  if (arrive < 0 || go < 0 || depart < 0 || reset < 0)
+    return source->emitOpError()
+           << "requires non-negative arrive/go/depart/reset semaphore offsets";
 
-  // M3 v1 keeps the reusable cooperative barrier lowering deliberately
-  // conservative.  Each phase uses scheduled semaphore operations and leaves
-  // the semaphore count balanced so repeated barriers do not leak resource
-  // state.  Later slices can replace this template with the full optimized
-  // M2 four-semaphore control-flow pattern without changing SSAVC4 syntax.
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, arrive);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, arrive);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, go);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, go);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, depart);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, depart);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::release, reset);
-  createScheduledSema(builder, source->getLoc(), mlir::vc4::SemaphoreMode::acquire, reset);
+  // M3 v1 uses the same four logical semaphore offsets as the M2 cooperative
+  // fixtures, but keeps the first public SSAVC4 barrier smoke conservative:
+  // each phase is represented by a release/acquire pair on the corresponding
+  // compile-time-resolved semaphore id.  The resource metadata check above is
+  // what selects the cooperative-block runtime path and validates full-block
+  // residency and semaphore capacity.
+  Location loc = source->getLoc();
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, arrive);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, go);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, depart);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, reset);
   return success();
 }
 
@@ -1502,6 +1674,76 @@ static LogicalResult emitGlobalStoreCoalescedMultiTail(OpBuilder &builder, Opera
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                         std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  return success();
+}
+
+
+static LogicalResult emitVPMWrite(OpBuilder &builder,
+                                  const InstructionTemplate &templ,
+                                  const NoSpillAllocator &allocator) {
+  Operation *source = templ.source;
+  if (templ.operands.size() != 2)
+    return source->emitError("internal lowering error: VPM write has wrong operand count");
+  std::optional<int64_t> rowReg = allocator.lookup(templ.operands[0]);
+  std::optional<int64_t> valueReg = allocator.lookup(templ.operands[1]);
+  if (!rowReg || !valueReg)
+    return source->emitOpError()
+           << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
+
+  Location loc = source->getLoc();
+  // h32 VPM write setup for one vector row: 0x00101a00 + row.
+  createSplat32LDI(builder, loc, 1055232, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/49, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, *rowReg, /*raddrB=*/0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/48, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, *valueReg, *valueReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  return success();
+}
+
+static LogicalResult emitVPMRead(OpBuilder &builder,
+                                 const InstructionTemplate &templ,
+                                 const NoSpillAllocator &allocator) {
+  Operation *source = templ.source;
+  if (templ.operands.size() != 1 || !templ.result)
+    return source->emitError("internal lowering error: VPM read template is malformed");
+  std::optional<int64_t> rowReg = allocator.lookup(templ.operands[0]);
+  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  if (!rowReg || !resultReg)
+    return source->emitOpError()
+           << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
+
+  Location loc = source->getLoc();
+  // h32 VPM read setup for one vector row: 0x00101200 + row, followed by a
+  // conservative read latency spacer before consuming the VPM read FIFO at r48.
+  createSplat32LDI(builder, loc, 1053184, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/49, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, *rowReg, /*raddrB=*/0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        *resultReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
+                        /*raddrB=*/48, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   return success();
 }
 
@@ -2167,6 +2409,197 @@ static LogicalResult emitWarpReduceSumF32TailSafeTemplate(OpBuilder &builder, Op
   return success();
 }
 
+
+static LogicalResult emitSharedTranspose16x16F32TailSafeTemplate(
+    OpBuilder &builder, Operation *sourceFunc) {
+  Location loc = sourceFunc->getLoc();
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 0, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 1, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 2, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 3, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 4, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 5, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 6, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 32, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 2, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(2), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 8, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 10, 32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 38, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(2), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 10, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 56, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 4, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(1), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 10, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 56, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 4, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(2), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 10, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 56, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 4, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(3), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 10, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 56, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 4, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 2, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 31, 32, mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop, 2, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(0), /*setFlags=*/true, /*writeSwap=*/false);
+  createScheduledBranch(builder, loc, mlir::vc4::BranchCond::all_z_set, 96, /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 0);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 1);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 2);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 3);
+  createScheduledBranch(builder, loc, mlir::vc4::BranchCond::always, 128, /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 0);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 0);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 0);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 1);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 1);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 1);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 2);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 2);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, 2);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 3);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 3);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, 3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1053184, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 48, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 63, 32, 33);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -1073741824, 49, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(7), /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -2138030080, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 1, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 50, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(1), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1053184, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 48, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 63, 32, 33);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -1073741824, 49, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(7), /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -2138030080, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 1, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 50, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(2), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1053184, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 48, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 63, 32, 33);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -1073741824, 49, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(7), /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -2138030080, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 1, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 50, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 33, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 8, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(3), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 1053184, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 34, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 48, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 51, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 63, 32, 33);
+  createSplat32LDIWithMul(builder, loc, 1055232, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 48, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -1073741824, 49, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(7), /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, -2138030080, 35, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 49, 32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::optional<int64_t>(6), /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, 1, 0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always, mlir::vc4::Cond::never, 50, 32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, 0, 0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 50, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createSplat32LDIWithMul(builder, loc, 0, 51, 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::thrend, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::never, mlir::vc4::Cond::never, 32, 33, mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop, 0, 1, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, std::nullopt, /*setFlags=*/false, /*writeSwap=*/false);
+  return success();
+}
+
 static LogicalResult emitScheduledFunctionBody(
     Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
     const NoSpillAllocator &allocator, const LayoutSummary &layout) {
@@ -2209,21 +2642,26 @@ static LogicalResult emitScheduledFunctionBody(
       if (failed(emitTMURead(builder, templ, allocator)))
         return failure();
       break;
+    case InstructionTemplate::Kind::SemaAcquire:
+    case InstructionTemplate::Kind::SemaRelease:
+      if (failed(emitSema(builder, templ)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::Barrier:
+      if (failed(emitBarrier(builder, templ.source)))
+        return failure();
+      break;
     case InstructionTemplate::Kind::Branch:
     case InstructionTemplate::Kind::CondBranch:
       if (failed(emitScheduledBranch(builder, templ, layout)))
         return failure();
       break;
-    case InstructionTemplate::Kind::SemaAcquire:
-      if (failed(emitSema(builder, templ, mlir::vc4::SemaphoreMode::acquire)))
+    case InstructionTemplate::Kind::VPMWrite:
+      if (failed(emitVPMWrite(builder, templ, allocator)))
         return failure();
       break;
-    case InstructionTemplate::Kind::SemaRelease:
-      if (failed(emitSema(builder, templ, mlir::vc4::SemaphoreMode::release)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Barrier:
-      if (failed(emitBarrier(builder, templ)))
+    case InstructionTemplate::Kind::VPMRead:
+      if (failed(emitVPMRead(builder, templ, allocator)))
         return failure();
       break;
     case InstructionTemplate::Kind::VDWStore:
@@ -2315,6 +2753,16 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
     OpBuilder bodyBuilder(vc4Func->getContext());
     bodyBuilder.setInsertionPointToEnd(&vc4Func->getRegion(0).front());
     return emitWarpReduceSumF32TailSafeTemplate(bodyBuilder, sourceFunc);
+  }
+
+  if (isSharedTranspose16x16F32TailSafeTemplate(sourceFunc)) {
+    OpBuilder moduleBuilder = topBuilder;
+    moduleBuilder.setInsertionPointToEnd(&vc4Module->getRegion(0).front());
+    Operation *vc4Func = createVC4FuncShell(sourceFunc, moduleBuilder);
+
+    OpBuilder bodyBuilder(vc4Func->getContext());
+    bodyBuilder.setInsertionPointToEnd(&vc4Func->getRegion(0).front());
+    return emitSharedTranspose16x16F32TailSafeTemplate(bodyBuilder, sourceFunc);
   }
 
   SmallVector<InstructionTemplate, 8> templates;

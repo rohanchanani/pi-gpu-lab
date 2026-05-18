@@ -157,6 +157,49 @@ def SSAVC4_CondBranchOp : SSAVC4_Op<"cond_br", [Terminator]> {
 }
 
 
+
+
+def SSAVC4_SemaAcquireOp : SSAVC4_Op<"sema.acquire"> {
+  let summary = "SSAVC4 effectful semaphore acquire";
+  let description = [{
+    Acquires a target hardware semaphore.  M3 v1 requires the semaphore
+    operand to resolve to a compile-time i32 id during SSAVC4-to-VC4 lowering.
+    Dynamic runtime semaphore ids are reserved for a later spill/resource slice.
+  }];
+  let arguments = (ins AnyType:$semaphore);
+  let assemblyFormat = "$semaphore attr-dict `:` type($semaphore)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_SemaReleaseOp : SSAVC4_Op<"sema.release"> {
+  let summary = "SSAVC4 effectful semaphore release";
+  let description = [{
+    Releases a target hardware semaphore.  M3 v1 requires the semaphore
+    operand to resolve to a compile-time i32 id during SSAVC4-to-VC4 lowering.
+  }];
+  let arguments = (ins AnyType:$semaphore);
+  let assemblyFormat = "$semaphore attr-dict `:` type($semaphore)";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_BarrierOp : SSAVC4_Op<"barrier"> {
+  let summary = "SSAVC4 cooperative-block barrier";
+  let description = [{
+    Models a block-scoped cooperative barrier backed by the M2 scheduled
+    semaphore resource contract.  The operation is legal only with
+    vc4.resource metadata declaring cooperative_block scheduling, barrier use,
+    full-block residency, a positive warps_per_block_max, and enough hardware
+    semaphores for the four offset attributes.
+  }];
+  let arguments = (ins
+    I32Attr:$arrive_offset,
+    I32Attr:$go_offset,
+    I32Attr:$depart_offset,
+    I32Attr:$reset_offset
+  );
+  let assemblyFormat = "attr-dict";
+}
+
 def SSAVC4_TMURequestOp : SSAVC4_Op<"tmu.request"> {
   let summary = "SSAVC4 effectful direct TMU request";
   let description = [{
@@ -192,45 +235,44 @@ def SSAVC4_TMUReadOp : SSAVC4_Op<"tmu.read"> {
 }
 
 
-
-def SSAVC4_SemaAcquireOp : SSAVC4_Op<"sema.acquire"> {
-  let summary = "SSAVC4 effectful QPU semaphore acquire";
+def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
+  let summary = "SSAVC4 effectful shared VPM vector write";
   let description = [{
-    Acquires a QPU semaphore.  M3 v1 lowers only compile-time-resolved
-    semaphore IDs, either from the optional id attribute or from a constant
-    ssavc4.load_imm i32 operand.  The operation is intentionally not Pure.
-  }];
-  let arguments = (ins I32:$sem, OptionalAttr<I32Attr>:$id);
-  let assemblyFormat = "$sem attr-dict `:` type($sem)";
-}
-
-def SSAVC4_SemaReleaseOp : SSAVC4_Op<"sema.release"> {
-  let summary = "SSAVC4 effectful QPU semaphore release";
-  let description = [{
-    Releases a QPU semaphore.  M3 v1 lowers only compile-time-resolved
-    semaphore IDs, either from the optional id attribute or from a constant
-    ssavc4.load_imm i32 operand.  The operation is intentionally not Pure.
-  }];
-  let arguments = (ins I32:$sem, OptionalAttr<I32Attr>:$id);
-  let assemblyFormat = "$sem attr-dict `:` type($sem)";
-}
-
-def SSAVC4_BarrierOp : SSAVC4_Op<"barrier"> {
-  let summary = "SSAVC4 cooperative block barrier";
-  let description = [{
-    A cooperative-block barrier backed by the VC4 QPU semaphore resource.
-    The operation is legal only when vc4.resource declares cooperative_block
-    scheduling, uses_barrier = true, full-block residency, and at least four
-    semaphores per block.  M3 v1 lowers the four offsets directly to
-    scheduled vc4.qpu.sema operations.
+    Writes one 16-lane vector value to a cooperative-block VPM row.  M3 v1
+    supports only the h32-style 32-bit horizontal subset needed by reduced
+    shared VPM fixtures.  The operation is intentionally not Pure and lowers to
+    scheduled QPU VPM setup/write-register traffic, not to removed structured
+    vc4.vpm.* operations.
   }];
   let arguments = (ins
-    I32Attr:$arrive_offset,
-    I32Attr:$go_offset,
-    I32Attr:$depart_offset,
-    I32Attr:$reset_offset
+    AnyType:$row,
+    AnyType:$value,
+    I32Attr:$elem_bytes,
+    I32Attr:$lanes,
+    OptionalAttr<StrAttr>:$orientation,
+    OptionalAttr<StrAttr>:$lowering_template
   );
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "$row `,` $value attr-dict `:` type($row) `,` type($value)";
+}
+
+def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
+  let summary = "SSAVC4 effectful shared VPM vector read";
+  let description = [{
+    Reads one 16-lane vector value from a cooperative-block VPM row.  M3 v1
+    supports only the h32-style 32-bit horizontal subset needed by reduced
+    shared VPM fixtures.  The operation is intentionally not Pure and lowers to
+    scheduled QPU VPM setup/read-register traffic, not to removed structured
+    vc4.vpm.* operations.
+  }];
+  let arguments = (ins
+    AnyType:$row,
+    I32Attr:$elem_bytes,
+    I32Attr:$lanes,
+    OptionalAttr<StrAttr>:$orientation,
+    OptionalAttr<StrAttr>:$lowering_template
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
 }
 
 def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {

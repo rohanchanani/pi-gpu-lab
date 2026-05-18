@@ -382,5 +382,17 @@ LogicalResult MakeFlagsOp::verify() {
   return success();
 }
 
+LogicalResult SemaAcquireOp::verify() {
+  if (getSemaphore().getType().isSignlessInteger(32))
+    return success();
+  return emitOpError("requires an i32 semaphore id operand");
+}
+
+LogicalResult SemaReleaseOp::verify() {
+  if (getSemaphore().getType().isSignlessInteger(32))
+    return success();
+  return emitOpError("requires an i32 semaphore id operand");
+}
+
 #define GET_OP_CLASSES
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Ops.cpp.inc"
