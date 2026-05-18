@@ -421,8 +421,9 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
   case InstructionTemplate::Kind::ThreadEnd:
     return 3;
   case InstructionTemplate::Kind::TMURequest:
-  case InstructionTemplate::Kind::TMURead:
     return 2;
+  case InstructionTemplate::Kind::TMURead:
+    return 3;
   case InstructionTemplate::Kind::Barrier:
     return 8;
   case InstructionTemplate::Kind::VPMWrite:
@@ -448,11 +449,15 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
   case InstructionTemplate::Kind::Mov:
     return 2;
   case InstructionTemplate::Kind::ALUAdd:
-  case InstructionTemplate::Kind::ALUMul:
     return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                 ? 2
                 : 1) +
            1;
+  case InstructionTemplate::Kind::ALUMul:
+    return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+                ? 2
+                : 1) +
+           3;
   case InstructionTemplate::Kind::MakeFlags:
     return templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                ? 2
@@ -1264,6 +1269,17 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                         raddrB, mlir::vc4::QPUMux::a, addB,
                         mlir::vc4::QPUMux::a, mulB, smallImm);
   createNopBundle(builder, source->getLoc());
+  if (templ.kind == InstructionTemplate::Kind::ALUMul) {
+    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          *resultReg, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          *resultReg, mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    createNopBundle(builder, source->getLoc());
+  }
   return success();
 }
 
@@ -1389,6 +1405,7 @@ static LogicalResult emitTMURead(OpBuilder &builder,
                         /*raddrB=*/1, mlir::vc4::QPUMux::r4,
                         mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, source->getLoc());
   return success();
 }
 
