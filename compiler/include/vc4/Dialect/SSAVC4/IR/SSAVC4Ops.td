@@ -210,8 +210,7 @@ def SSAVC4_TMURequestOp : SSAVC4_Op<"tmu.request"> {
   let arguments = (ins
     AnyType:$address,
     StrAttr:$unit,
-    StrAttr:$mode,
-    OptionalAttr<StrAttr>:$lowering_template
+    StrAttr:$mode
   );
   let results = (outs AnyType:$token);
   let assemblyFormat = "$address attr-dict `:` type($address) `->` type($token)";
@@ -227,8 +226,7 @@ def SSAVC4_TMUReadOp : SSAVC4_Op<"tmu.read"> {
   let arguments = (ins
     AnyType:$token,
     StrAttr:$unit,
-    StrAttr:$part,
-    OptionalAttr<StrAttr>:$lowering_template
+    StrAttr:$part
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = "$token attr-dict `:` type($token) `->` type($result)";
@@ -239,8 +237,8 @@ def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
   let summary = "SSAVC4 effectful shared VPM vector write";
   let description = [{
     Writes one 16-lane vector value to a cooperative-block VPM row.  M3 v1
-    supports only the h32-style 32-bit horizontal subset needed by reduced
-    shared VPM fixtures.  The operation is intentionally not Pure and lowers to
+    supports only the h32-style 32-bit horizontal subset needed by shared VPM
+    programs.  The operation is intentionally not Pure and lowers to
     scheduled QPU VPM setup/write-register traffic, not to removed structured
     vc4.vpm.* operations.
   }];
@@ -249,8 +247,7 @@ def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
     AnyType:$value,
     I32Attr:$elem_bytes,
     I32Attr:$lanes,
-    OptionalAttr<StrAttr>:$orientation,
-    OptionalAttr<StrAttr>:$lowering_template
+    OptionalAttr<StrAttr>:$orientation
   );
   let assemblyFormat = "$row `,` $value attr-dict `:` type($row) `,` type($value)";
 }
@@ -259,8 +256,8 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let summary = "SSAVC4 effectful shared VPM vector read";
   let description = [{
     Reads one 16-lane vector value from a cooperative-block VPM row.  M3 v1
-    supports only the h32-style 32-bit horizontal subset needed by reduced
-    shared VPM fixtures.  The operation is intentionally not Pure and lowers to
+    supports only the h32-style 32-bit horizontal subset needed by shared VPM
+    programs.  The operation is intentionally not Pure and lowers to
     scheduled QPU VPM setup/read-register traffic, not to removed structured
     vc4.vpm.* operations.
   }];
@@ -268,8 +265,7 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
     AnyType:$row,
     I32Attr:$elem_bytes,
     I32Attr:$lanes,
-    OptionalAttr<StrAttr>:$orientation,
-    OptionalAttr<StrAttr>:$lowering_template
+    OptionalAttr<StrAttr>:$orientation
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
@@ -289,8 +285,7 @@ def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store"> {
     I32Attr:$elem_bytes,
     I32Attr:$active_lanes,
     I32Attr:$vpm_row,
-    OptionalAttr<StrAttr>:$serialize,
-    OptionalAttr<StrAttr>:$lowering_template
+    OptionalAttr<StrAttr>:$serialize
   );
   let assemblyFormat = "$address `,` $value attr-dict `:` type($address) `,` type($value)";
 }

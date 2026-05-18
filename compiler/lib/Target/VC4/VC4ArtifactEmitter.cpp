@@ -384,9 +384,9 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
 }
 
 static std::string canonicalizeKernelPublicName(llvm::StringRef rawName) {
-  // vc4.launch_abi.public_name names the public kernel.  Historically many
-  // fixtures used a *_launch spelling because the only public API was the
-  // generated launch stub.  Canonical M2 program artifacts name the kernel,
+  // vc4.launch_abi.public_name names the public kernel. Historically some
+  // inputs used a *_launch spelling because the only public API was the
+  // generated launch stub. Canonical M2 program artifacts name the kernel,
   // QASM artifact, manifest entry, layout regions, and default code symbol
   // without that launcher suffix; the generated C API adds *_launch at the
   // function boundary.
@@ -1733,10 +1733,10 @@ getAddVectorRotateSmallImmSelector(mlir::vc4::QPUBundleOp bundle) {
 
 static std::optional<std::string>
 formatStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
-  // Several scheduled reduction fixtures materialize a rotate as the canonical
+  // Some scheduled reduction streams materialize a rotate as the canonical
   // ADD-side move shape `or rD, rS, rotate(rS)`.  vc4asm spells this as a
   // unary rotate move.  Treat only that pure ADD shape as a move so reductions
-  // can be assembled without needing a fixture-specific rewrite.
+  // can be assembled without needing a stream-specific rewrite.
   if (bundle.getOpAdd() != mlir::vc4::AddOpcode::bit_or ||
       bundle.getOpMul() != mlir::vc4::MulOpcode::nop ||
       bundle.getCondAdd() == mlir::vc4::Cond::never ||
@@ -1942,8 +1942,7 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   // vc4asm maps some wait aliases through the same regfile as the dummy source
   // and rejects that spelling with A20.  The dummy source read is not part of
   // the wait effect, so emit the canonical unary wait move while preserving the
-  // scheduled destination.  This is generic over the bundle shape and is not
-  // keyed to fixture names.
+  // scheduled destination. This is generic over the bundle shape.
   if (bundle.getOpMul() == mlir::vc4::MulOpcode::nop &&
       cond == mlir::vc4::Cond::always && opcode == mlir::vc4::AddOpcode::add &&
       !op->hasAttr("set_flags") &&
@@ -2133,9 +2132,9 @@ static std::optional<std::string>
 formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle,
                              VPMTransferAliasKind vpmKind) {
   // Some scheduled sink slots intentionally perform only a read-side effect.
-  // In saxpy_full these are the VDW wait slots represented as inactive
-  // qpu.bundle ops with raddr_b = 50.  Emitting them as plain "nop" drops the
-  // wait and lets the kernel finish before the VDW store is complete.
+  // VDW wait slots may be represented as inactive qpu.bundle ops with
+  // raddr_b = 50. Emitting them as plain "nop" drops the wait and lets the
+  // kernel finish before the VDW store is complete.
   mlir::Operation *op = bundle.getOperation();
   if (bundle.getSig() != mlir::vc4::QPUSignal::none ||
       bundle.getOpAdd() != mlir::vc4::AddOpcode::nop ||
