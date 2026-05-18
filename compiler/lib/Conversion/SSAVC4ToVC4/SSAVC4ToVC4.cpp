@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.h"
+#include "vc4/Dialect/SSAVC4/IR/SSAVC4Ops.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 
 #include "mlir/IR/Attributes.h"
@@ -33,7 +34,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <memory>
 #include <optional>
 
 using namespace mlir;
@@ -123,7 +123,7 @@ static Operation *createNopBundle(OpBuilder &builder, Location loc) {
                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
                        /*waddrAdd=*/32, /*waddrMul=*/33,
                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
-                       /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::a,
+                       /*raddrA=*/39, /*raddrB=*/39, mlir::vc4::QPUMux::a,
                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                        mlir::vc4::QPUMux::r1);
   return builder.create(state);
@@ -220,6 +220,35 @@ static Operation *createSplat32LDIWithMul(OpBuilder &builder, Location loc,
 static Operation *createSplat32LDI(OpBuilder &builder, Location loc,
                                    int64_t value, int64_t waddrAdd) {
   return createSplat32LDIWithMul(builder, loc, value, waddrAdd, /*waddrMul=*/32);
+}
+
+static Operation *createNopLDISlot(OpBuilder &builder, Location loc) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.ldi");
+  state.addAttribute("mode", mlir::vc4::LoadImmModeAttr::get(
+                                 ctx, mlir::vc4::LoadImmMode::splat32));
+  state.addAttribute("value", builder.getI32IntegerAttr(0));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(32));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(33));
+  return builder.create(state);
+}
+
+static Operation *emitMutexRelease(OpBuilder &builder, Location loc) {
+  return createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                               mlir::vc4::Cond::always,
+                               mlir::vc4::Cond::never,
+                               /*waddrAdd=*/51, /*waddrMul=*/32,
+                               mlir::vc4::AddOpcode::add,
+                               mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                               /*raddrB=*/0, mlir::vc4::QPUMux::b,
+                               mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                               mlir::vc4::QPUMux::r1,
+                               /*smallImm=*/0);
 }
 
 static int64_t getI32IntegerAttrOr(Operation *op, llvm::StringRef name,
@@ -325,12 +354,15 @@ public:
     static constexpr int64_t kForbiddenThreadEndHazardReg = 14;
     int64_t nextRegister = 0;
     SmallVector<int64_t, 8> freeRegisters;
+    auto isReservedOrForbidden = [&](int64_t reg) {
+      return reg == kForbiddenThreadEndHazardReg;
+    };
     auto allocateRegister = [&]() -> std::optional<int64_t> {
       if (!freeRegisters.empty()) {
         int64_t reg = freeRegisters.pop_back_val();
         return reg;
       }
-      while (nextRegister == kForbiddenThreadEndHazardReg)
+      while (isReservedOrForbidden(nextRegister))
         ++nextRegister;
       if (nextRegister > 31)
         return std::nullopt;
@@ -384,6 +416,32 @@ private:
   DenseMap<Value, int64_t> registers;
 };
 
+static bool isPhysicalRegFileWriteAddress(int64_t waddr) {
+  return waddr >= 0 && waddr < 32;
+}
+
+static bool emitsPhysicalRegFileResultWrite(
+    const InstructionTemplate &templ, const NoSpillAllocator &allocator) {
+  if (!templ.result)
+    return false;
+  if (templ.result->use_empty())
+    return false;
+  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  return resultReg && isPhysicalRegFileWriteAddress(*resultReg);
+}
+
+static unsigned getRegfileResultSpacerSlotCount(
+    const InstructionTemplate &templ, const NoSpillAllocator &allocator) {
+  return emitsPhysicalRegFileResultWrite(templ, allocator) ? 1 : 0;
+}
+
+static void emitRegfileResultSpacer(OpBuilder &builder, Location loc,
+                                    const InstructionTemplate &templ,
+                                    const NoSpillAllocator &allocator) {
+  if (emitsPhysicalRegFileResultWrite(templ, allocator))
+    createNopLDISlot(builder, loc);
+}
+
 struct ScheduledTemplate {
   InstructionTemplate templ;
 };
@@ -399,21 +457,15 @@ public:
   }
 };
 
-class HazardInserter {
-public:
-  SmallVector<ScheduledTemplate, 8>
-  insertHazards(ArrayRef<ScheduledTemplate> scheduled) {
-    return SmallVector<ScheduledTemplate, 8>(scheduled.begin(), scheduled.end());
-  }
-};
-
 struct LayoutSummary {
   DenseMap<Block *, unsigned> blockStartSlots;
   DenseMap<Operation *, unsigned> opStartSlots;
   DenseMap<Operation *, int64_t> branchImmediates;
 };
 
-static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
+static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
+                                      const NoSpillAllocator &allocator) {
+  unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
   switch (templ.kind) {
   case InstructionTemplate::Kind::Branch:
   case InstructionTemplate::Kind::CondBranch:
@@ -421,43 +473,52 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
   case InstructionTemplate::Kind::ThreadEnd:
     return 3;
   case InstructionTemplate::Kind::TMURequest:
-    return 2;
-  case InstructionTemplate::Kind::TMURead:
     return 3;
+  case InstructionTemplate::Kind::TMURead:
+    return 2 + resultSpacer;
   case InstructionTemplate::Kind::Barrier:
+    if (templ.operands.size() == 2)
+      return 65;
     return 8;
   case InstructionTemplate::Kind::VPMWrite:
+    if (auto serialize =
+            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
+      return serialize.getValue() == "mutex" ? 6 : 3;
     return 3;
   case InstructionTemplate::Kind::VPMRead:
-    return 6;
+    if (auto serialize =
+            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
+      return (serialize.getValue() == "mutex" ? 8 : 6) + resultSpacer;
+    return 6 + resultSpacer;
   case InstructionTemplate::Kind::VDWStore:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return serialize.getValue() == "mutex" ? 17 : 15;
-    return 15;
+      return serialize.getValue() == "mutex" ? 19 : 17;
+    return 17;
   case InstructionTemplate::Kind::Rotate:
-    return 4;
+    return 3 + resultSpacer;
   case InstructionTemplate::Kind::LoadImm:
   case InstructionTemplate::Kind::ElementNumber:
   case InstructionTemplate::Kind::UniformRead:
   case InstructionTemplate::Kind::Pack:
   case InstructionTemplate::Kind::Unpack:
+    return 1 + resultSpacer;
   case InstructionTemplate::Kind::SemaAcquire:
   case InstructionTemplate::Kind::SemaRelease:
     return 1;
   case InstructionTemplate::Kind::Splat:
   case InstructionTemplate::Kind::Mov:
-    return 2;
+    return 1 + resultSpacer;
   case InstructionTemplate::Kind::ALUAdd:
     return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
-                ? 2
-                : 1) +
-           1;
+                ? 1
+                : 0) +
+           1 + resultSpacer;
   case InstructionTemplate::Kind::ALUMul:
     return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
-                ? 2
-                : 1) +
-           3;
+                ? 1
+                : 0) +
+           2 + (2 * resultSpacer);
   case InstructionTemplate::Kind::MakeFlags:
     return templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                ? 2
@@ -470,6 +531,7 @@ class BranchLayoutPlanner {
 public:
   LogicalResult compute(Operation *diagnosticAnchor,
                         ArrayRef<ScheduledTemplate> scheduled,
+                        const NoSpillAllocator &allocator,
                         LayoutSummary &layout) {
     unsigned slot = 0;
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
@@ -478,7 +540,7 @@ public:
         layout.blockStartSlots.try_emplace(templ.sourceBlock, slot);
       if (templ.source)
         layout.opStartSlots.try_emplace(templ.source, slot);
-      slot += getFlattenedSlotCount(templ);
+      slot += getFlattenedSlotCount(templ, allocator);
     }
 
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
@@ -752,7 +814,9 @@ static LogicalResult selectInstructionTemplates(
   for (size_t i = 0; i + 1 < blocks.size(); ++i)
     nextBlock[blocks[i]] = blocks[i + 1];
 
+  DenseMap<int64_t, Value> uniformReadByIndex;
   unsigned nextVirtualOrdinal = 0;
+  int64_t nextUniformOrdinal = 0;
   for (Block *block : blocks) {
     for (Operation &op : *block) {
       if (hasName(&op, kSSAVC4ThreadEndOpName)) {
@@ -802,6 +866,9 @@ static LogicalResult selectInstructionTemplates(
         templ.sourceBlock = block;
         templ.result = result;
         templates.push_back(std::move(templ));
+        uniformReadByIndex[nextUniformOrdinal++] = result;
+        if (auto uniformRead = llvm::dyn_cast<mlir::ssavc4::UniformReadOp>(op))
+          uniformReadByIndex[uniformRead.getIndex()] = result;
         continue;
       }
 
@@ -1011,6 +1078,32 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::Barrier;
         templ.source = &op;
         templ.sourceBlock = block;
+        if (op.getNumOperands() != 0 && op.getNumOperands() != 2)
+          return op.emitOpError()
+                 << "requires either no operands or logical_warp_id and "
+                    "warps_per_block operands";
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        if (templ.operands.empty()) {
+          auto logicalIndex =
+              llvm::dyn_cast_or_null<IntegerAttr>(op.getAttr("logical_warp_id_uniform"));
+          auto warpsIndex =
+              llvm::dyn_cast_or_null<IntegerAttr>(op.getAttr("warps_per_block_uniform"));
+          if (logicalIndex || warpsIndex) {
+          if (!logicalIndex || !warpsIndex)
+            return op.emitOpError()
+                   << "requires both logical_warp_id_uniform and "
+                      "warps_per_block_uniform when either is present";
+          auto logicalIt = uniformReadByIndex.find(logicalIndex.getInt());
+          auto warpsIt = uniformReadByIndex.find(warpsIndex.getInt());
+          if (logicalIt == uniformReadByIndex.end() ||
+              warpsIt == uniformReadByIndex.end())
+            return op.emitOpError()
+                   << "requires barrier uniform-index attrs to reference prior "
+                      "ssavc4.uniform.read results";
+          templ.operands.push_back(logicalIt->second);
+          templ.operands.push_back(warpsIt->second);
+          }
+        }
         templates.push_back(std::move(templ));
         continue;
       }
@@ -1108,8 +1201,14 @@ static LogicalResult selectInstructionTemplates(
   return success();
 }
 
-static LogicalResult emitLoadImm(OpBuilder &builder, Operation *source,
-                                 int64_t destination) {
+static LogicalResult emitLoadImm(OpBuilder &builder,
+                                 const InstructionTemplate &templ,
+                                 const NoSpillAllocator &allocator) {
+  Operation *source = templ.source;
+  std::optional<int64_t> destination = allocator.lookup(*templ.result);
+  if (!destination)
+    return source->emitError("internal lowering error: result register was not allocated");
+
   OperationState state(source->getLoc(), "vc4.qpu.ldi");
   MLIRContext *ctx = builder.getContext();
   Attribute mode = source->getAttr("mode");
@@ -1127,9 +1226,10 @@ static LogicalResult emitLoadImm(OpBuilder &builder, Operation *source,
   state.addAttribute("pm", builder.getBoolAttr(false));
   state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
   state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
-  state.addAttribute("waddr_add", builder.getI32IntegerAttr(destination));
-  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(destination));
+  state.addAttribute("waddr_add", builder.getI32IntegerAttr(*destination));
+  state.addAttribute("waddr_mul", builder.getI32IntegerAttr(*destination));
   builder.create(state);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1149,6 +1249,7 @@ static LogicalResult emitElementNumber(OpBuilder &builder,
                         /*raddrB=*/38, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1169,6 +1270,7 @@ static LogicalResult emitUniformRead(OpBuilder &builder,
                         mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1,
                         /*smallImm=*/0);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1189,7 +1291,7 @@ static LogicalResult emitMov(OpBuilder &builder,
                         mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createNopBundle(builder, source->getLoc());
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1268,7 +1370,7 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                         waddrAdd, waddrMul, addOpcode, mulOpcode, raddrA,
                         raddrB, mlir::vc4::QPUMux::a, addB,
                         mlir::vc4::QPUMux::a, mulB, smallImm);
-  createNopBundle(builder, source->getLoc());
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   if (templ.kind == InstructionTemplate::Kind::ALUMul) {
     createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -1278,7 +1380,7 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                           *resultReg, mlir::vc4::QPUMux::b,
                           mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
-    createNopBundle(builder, source->getLoc());
+    emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   }
   return success();
 }
@@ -1309,6 +1411,7 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
       state.addAttribute("unpack", mode);
   }
   builder.create(state);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1344,7 +1447,7 @@ static LogicalResult emitRotate(OpBuilder &builder,
                         mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1,
                         /*smallImm=*/48 + amount);
-  createNopBundle(builder, source->getLoc());
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1370,6 +1473,13 @@ static LogicalResult emitTMURequest(OpBuilder &builder,
 
   // M3 v1 is deliberately non-overlapped: leave a conservative spacer before
   // the matching receive signal.
+  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/39, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r3);
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::never, mlir::vc4::Cond::never,
                         /*waddrAdd=*/39, /*waddrMul=*/39,
@@ -1407,7 +1517,7 @@ static LogicalResult emitTMURead(OpBuilder &builder,
                         /*raddrB=*/1, mlir::vc4::QPUMux::r4,
                         mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
-  createNopBundle(builder, source->getLoc());
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
 
@@ -1446,7 +1556,10 @@ static LogicalResult emitSema(OpBuilder &builder,
   return success();
 }
 
-static LogicalResult emitBarrier(OpBuilder &builder, Operation *source) {
+static LogicalResult emitBarrier(OpBuilder &builder,
+                                 const InstructionTemplate &templ,
+                                 const NoSpillAllocator &allocator) {
+  Operation *source = templ.source;
   int64_t arrive = getI32IntegerAttrOr(source, "arrive_offset", -1);
   int64_t go = getI32IntegerAttrOr(source, "go_offset", -1);
   int64_t depart = getI32IntegerAttrOr(source, "depart_offset", -1);
@@ -1455,19 +1568,116 @@ static LogicalResult emitBarrier(OpBuilder &builder, Operation *source) {
     return source->emitOpError()
            << "requires non-negative arrive/go/depart/reset semaphore offsets";
 
-  // M3 v1 represents each barrier phase as a release/acquire pair on the
-  // corresponding compile-time-resolved semaphore id. The resource metadata
-  // check above selects the cooperative-block runtime path and validates
-  // full-block residency and semaphore capacity.
   Location loc = source->getLoc();
+  if (templ.operands.empty()) {
+    // Degenerate barrier form retained for explicit semaphore smoke tests.
+    // Cooperative shared-memory kernels should provide logical warp and block
+    // size operands through the barrier uniform-index attrs below.
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, arrive);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, go);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, depart);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, reset);
+    return success();
+  }
+
+  if (templ.operands.size() != 2)
+    return source->emitError("internal lowering error: barrier has wrong operand count");
+  std::optional<int64_t> logicalWarpReg = allocator.lookup(templ.operands[0]);
+  std::optional<int64_t> warpsPerBlockReg = allocator.lookup(templ.operands[1]);
+  if (!logicalWarpReg || !warpsPerBlockReg)
+    return source->emitOpError()
+           << "uses barrier metadata values that are not defined by lowerable SSAVC4 ops";
+
+  auto subSetFlagsSmallImm = [&](mlir::vc4::QPUMux lhs, int64_t raddrA,
+                                 int64_t smallImm) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, raddrA, /*raddrB=*/0,
+                          lhs, mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                          smallImm, /*setFlags=*/true);
+  };
+  auto moveRegToR3 = [&](int64_t reg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, reg, reg,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  };
+  auto decrementR3 = [&]() {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                          mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/1);
+  };
+  auto branch = [&](mlir::vc4::BranchCond cond, int64_t slotDelta) {
+    createScheduledBranch(builder, loc, cond, slotDelta * 8,
+                          /*raddrA=*/0, /*waddrAdd=*/39, /*waddrMul=*/39);
+  };
+  auto testR3Zero = [&]() {
+    subSetFlagsSmallImm(mlir::vc4::QPUMux::r3, /*raddrA=*/0,
+                        /*smallImm=*/0);
+  };
+
+  // Full cooperative barrier. One leader drains arrival tokens, releases the
+  // block, waits for departure tokens, then resets the final semaphore. Other
+  // warps signal arrival, wait for release, signal departure, and wait reset.
+  subSetFlagsSmallImm(mlir::vc4::QPUMux::a, *logicalWarpReg, /*smallImm=*/0);
+  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/12);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, arrive);
-  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
-  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, go);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, depart);
-  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
-  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, reset);
+  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/56);
+
+  moveRegToR3(*warpsPerBlockReg);
+  decrementR3();
+
+  testR3Zero();
+  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
+  decrementR3();
+  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+
+  moveRegToR3(*warpsPerBlockReg);
+  decrementR3();
+
+  testR3Zero();
+  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
+  decrementR3();
+  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+
+  moveRegToR3(*warpsPerBlockReg);
+  decrementR3();
+
+  testR3Zero();
+  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
+  decrementR3();
+  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+
+  moveRegToR3(*warpsPerBlockReg);
+  decrementR3();
+
+  testR3Zero();
+  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
+  decrementR3();
+  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
   return success();
 }
 
@@ -1557,6 +1767,17 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
   }
 
   Location loc = source->getLoc();
+  bool useMutex = hasStringAttr(source, "serialize", "mutex");
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
   createSplat32LDI(builder, loc, setupBase, 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -1572,6 +1793,17 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                         mlir::vc4::MulOpcode::nop, *valueReg, *valueReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::add,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/50,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    emitMutexRelease(builder, loc);
+  }
   return success();
 }
 
@@ -1595,6 +1827,17 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
   }
 
   Location loc = source->getLoc();
+  bool useMutex = hasStringAttr(source, "serialize", "mutex");
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
   createSplat32LDI(builder, loc, setupBase, 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -1614,6 +1857,9 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                         /*raddrB=*/48, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
+  emitRegfileResultSpacer(builder, loc, templ, allocator);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
   return success();
 }
 
@@ -1717,6 +1963,15 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
 
   // VDW store setup: depth in bits 16..23, VPM row in bits 7.., and the
   // explicit SSA byte address in vw_addr.
+  createSplat32LDI(builder, loc, -1073741824, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/49, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (dynamicActiveLanesReg) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -1812,7 +2067,7 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                         mlir::vc4::QPUMux::b,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (useMutex)
-    createSplat32LDI(builder, loc, 0, 51);
+    emitMutexRelease(builder, loc);
   return success();
 }
 
@@ -1823,14 +2078,10 @@ static LogicalResult emitScheduledFunctionBody(
   for (const ScheduledTemplate &scheduledTemplate : scheduled) {
     const InstructionTemplate &templ = scheduledTemplate.templ;
     switch (templ.kind) {
-    case InstructionTemplate::Kind::LoadImm: {
-      std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
-      if (!resultReg)
-        return templ.source->emitError("internal lowering error: result register was not allocated");
-      if (failed(emitLoadImm(builder, templ.source, *resultReg)))
+    case InstructionTemplate::Kind::LoadImm:
+      if (failed(emitLoadImm(builder, templ, allocator)))
         return failure();
       break;
-    }
     case InstructionTemplate::Kind::ElementNumber:
       if (failed(emitElementNumber(builder, templ, allocator)))
         return failure();
@@ -1876,7 +2127,7 @@ static LogicalResult emitScheduledFunctionBody(
         return failure();
       break;
     case InstructionTemplate::Kind::Barrier:
-      if (failed(emitBarrier(builder, templ.source)))
+      if (failed(emitBarrier(builder, templ, allocator)))
         return failure();
       break;
     case InstructionTemplate::Kind::Branch:
@@ -1967,13 +2218,11 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
     return failure();
 
   ConservativeScheduler scheduler;
-  HazardInserter hazardInserter;
   BranchLayoutPlanner branchLayout;
   SmallVector<ScheduledTemplate, 8> scheduled =
       scheduler.schedule(templates, liveness);
-  scheduled = hazardInserter.insertHazards(scheduled);
   LayoutSummary layout;
-  if (failed(branchLayout.compute(sourceFunc, scheduled, layout)))
+  if (failed(branchLayout.compute(sourceFunc, scheduled, allocator, layout)))
     return failure();
 
   OpBuilder moduleBuilder = topBuilder;

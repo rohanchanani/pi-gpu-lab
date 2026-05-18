@@ -205,12 +205,13 @@ def SSAVC4_BarrierOp : SSAVC4_Op<"barrier"> {
     semaphores for the four offset attributes.
   }];
   let arguments = (ins
+    Variadic<AnyType>:$operands,
     I32Attr:$arrive_offset,
     I32Attr:$go_offset,
     I32Attr:$depart_offset,
     I32Attr:$reset_offset
   );
-  let assemblyFormat = "attr-dict";
+  let assemblyFormat = "($operands^ `:` type($operands))? attr-dict";
 }
 
 def SSAVC4_TMURequestOp : SSAVC4_Op<"tmu.request"> {
