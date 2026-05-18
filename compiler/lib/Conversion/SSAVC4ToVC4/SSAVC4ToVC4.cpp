@@ -436,7 +436,7 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ) {
       return serialize.getValue() == "mutex" ? 17 : 15;
     return 15;
   case InstructionTemplate::Kind::Rotate:
-    return 2;
+    return 4;
   case InstructionTemplate::Kind::LoadImm:
   case InstructionTemplate::Kind::ElementNumber:
   case InstructionTemplate::Kind::UniformRead:
@@ -1334,6 +1334,7 @@ static LogicalResult emitRotate(OpBuilder &builder,
                         mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, source->getLoc());
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         *resultReg, /*waddrMul=*/32,
@@ -1343,6 +1344,7 @@ static LogicalResult emitRotate(OpBuilder &builder,
                         mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1,
                         /*smallImm=*/48 + amount);
+  createNopBundle(builder, source->getLoc());
   return success();
 }
 
