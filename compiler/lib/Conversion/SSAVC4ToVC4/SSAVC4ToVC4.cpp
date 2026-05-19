@@ -471,7 +471,7 @@ public:
     if (succeeded(allocateWithoutSpills(templates, virtualValues, liveness)))
       return success();
 
-    if (failed(verifyS2SpillingSupported(diagnosticAnchor, templates)))
+    if (failed(verifyS3SpillingSupported(diagnosticAnchor, templates)))
       return failure();
 
     return allocateWithSpills(diagnosticAnchor, templates, virtualValues,
@@ -585,35 +585,59 @@ private:
     return success();
   }
 
-  LogicalResult verifyS2SpillingSupported(
+  LogicalResult verifyS3SpillingSupported(
       Operation *diagnosticAnchor, ArrayRef<InstructionTemplate> templates) const {
     DictionaryAttr resource = getResourceMetadata(diagnosticAnchor);
     std::optional<llvm::StringRef> scheduleMode =
         getResourceString(resource, "schedule_mode");
     if (scheduleMode && *scheduleMode == "cooperative_block") {
       return diagnosticAnchor->emitError()
-             << "S2 spilling supports only independent-vector data values; "
+             << "S3 spilling supports only independent-vector data values; "
                 "cooperative/control path requires later spill support";
     }
 
     bool sawNonUniform = false;
+    DenseMap<Block *, unsigned> blockOrder;
+    for (const InstructionTemplate &templ : templates) {
+      if (templ.sourceBlock && !blockOrder.count(templ.sourceBlock))
+        blockOrder[templ.sourceBlock] = blockOrder.size();
+    }
+
     for (const InstructionTemplate &templ : templates) {
       switch (templ.kind) {
       case InstructionTemplate::Kind::Branch:
       case InstructionTemplate::Kind::CondBranch:
+        if (!templ.source || !templ.sourceBlock ||
+            templ.source->getNumSuccessors() == 0)
+          return diagnosticAnchor->emitError()
+                 << "internal lowering error: malformed branch template";
+        for (Block *successor : templ.source->getSuccessors()) {
+          auto sourceIt = blockOrder.find(templ.sourceBlock);
+          auto successorIt = blockOrder.find(successor);
+          if (sourceIt == blockOrder.end() || successorIt == blockOrder.end())
+            return templ.source->emitOpError()
+                   << "S3 spilling requires branch successors to remain in "
+                      "the current function layout";
+          if (successorIt->second <= sourceIt->second)
+            return templ.source->emitOpError()
+                   << "S3 spilling does not support loop/backedge branch "
+                      "layouts requiring path-sensitive liveness";
+        }
+        sawNonUniform = true;
+        break;
       case InstructionTemplate::Kind::Barrier:
       case InstructionTemplate::Kind::SemaAcquire:
       case InstructionTemplate::Kind::SemaRelease:
       case InstructionTemplate::Kind::VPMWrite:
       case InstructionTemplate::Kind::VPMRead:
         return templ.source->emitOpError()
-               << "S2 spilling supports only independent-vector data values; "
+               << "S3 spilling supports only independent-vector data values; "
                   "value in cooperative/control path requires later spill "
                   "support";
       case InstructionTemplate::Kind::UniformRead:
         if (sawNonUniform) {
           return templ.source->emitOpError()
-                 << "S2 spilling requires all ssavc4.uniform.read operations "
+                 << "S3 spilling requires all ssavc4.uniform.read operations "
                     "before spillable data operations";
         }
         break;
@@ -733,6 +757,27 @@ private:
       return victimReg;
     };
 
+    auto ensureFutureLiveValuesHaveBranchSlots =
+        [&](unsigned index, SmallVectorImpl<SpillAction> &actions) {
+          for (const VirtualValue &virtualValue : virtualValues) {
+            Value value = virtualValue.value;
+            auto activeIt = activeRegisters.find(value);
+            if (activeIt == activeRegisters.end())
+              continue;
+            if (!isValueSpillable(value))
+              continue;
+            if (!nextUseAfter(value, index, liveness))
+              continue;
+            SpillSlot slot = getOrCreateSpillSlot(value);
+            if (slotValid[value])
+              continue;
+            actions.push_back(
+                SpillAction{SpillAction::Kind::Store, value, slot,
+                            activeIt->second});
+            slotValid[value] = true;
+          }
+        };
+
     for (unsigned index = 0; index < templates.size(); ++index) {
       const InstructionTemplate &templ = templates[index];
       PerTemplateAllocation &allocation = perTemplate[templ.source];
@@ -752,7 +797,7 @@ private:
               acquireRegister(index, protectedOperands, allocation.preActions);
           if (failed(reg)) {
             return templ.source->emitOpError()
-                   << "S2 spilling supports only independent-vector data "
+                   << "S3 spilling supports only independent-vector data "
                       "values; no scratch register was available to reload an "
                       "operand";
           }
@@ -765,12 +810,16 @@ private:
         allocation.operandRegisters[operand] = activeIt->second;
       }
 
+      if (templ.kind == InstructionTemplate::Kind::Branch ||
+          templ.kind == InstructionTemplate::Kind::CondBranch)
+        ensureFutureLiveValuesHaveBranchSlots(index, allocation.preActions);
+
       if (templ.result && needsAllocation.count(*templ.result)) {
         FailureOr<int64_t> reg =
             acquireRegister(index, protectedOperands, allocation.preActions);
         if (failed(reg)) {
           return templ.source->emitOpError()
-                 << "S2 spilling supports only independent-vector data values; "
+                 << "S3 spilling supports only independent-vector data values; "
                     "no register was available for a spillable result";
         }
         allocation.resultRegister = *reg;
@@ -839,6 +888,33 @@ static unsigned getRegfileResultSpacerSlotCount(
   return emitsPhysicalRegFileResultWrite(templ, allocator) ? 1 : 0;
 }
 
+static unsigned getSpillSlotBaseSlotCount(const SpillSlot &slot) {
+  return slot.offsetBytes == 0 ? 2 : 4;
+}
+
+static unsigned getRawVDWStoreSlotCount(bool useMutex,
+                                        bool hasDynamicActiveLanes,
+                                        bool hasDynamicVPMRow,
+                                        int64_t vpmRow) {
+  (void)hasDynamicActiveLanes;
+  unsigned count = 17;
+  if (useMutex)
+    count += 2;
+  if (hasDynamicVPMRow && vpmRow != 0)
+    count += 4;
+  return count;
+}
+
+static unsigned getSpillActionSlotCount(const SpillAction &action) {
+  if (action.kind == SpillAction::Kind::Store)
+    return getSpillSlotBaseSlotCount(action.slot) +
+           getRawVDWStoreSlotCount(/*useMutex=*/true,
+                                   /*hasDynamicActiveLanes=*/false,
+                                   /*hasDynamicVPMRow=*/true,
+                                   /*vpmRow=*/0);
+  return getSpillSlotBaseSlotCount(action.slot) + 13;
+}
+
 static void emitRegfileResultSpacer(OpBuilder &builder, Location loc,
                                     const InstructionTemplate &templ,
                                     const SpillAwareAllocator &allocator) {
@@ -869,66 +945,74 @@ struct LayoutSummary {
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
                                       const SpillAwareAllocator &allocator) {
+  unsigned spillActionSlots = 0;
+  for (const SpillAction &action : allocator.getPreActions(templ))
+    spillActionSlots += getSpillActionSlotCount(action);
+
   unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
   switch (templ.kind) {
   case InstructionTemplate::Kind::Branch:
   case InstructionTemplate::Kind::CondBranch:
-    return 4;
+    return spillActionSlots + 4;
   case InstructionTemplate::Kind::ThreadEnd:
-    return 3;
+    return spillActionSlots + 3;
   case InstructionTemplate::Kind::TMURequest:
-    return 3;
+    return spillActionSlots + 3;
   case InstructionTemplate::Kind::TMURead:
-    return 2 + resultSpacer;
+    return spillActionSlots + 2 + resultSpacer;
   case InstructionTemplate::Kind::Barrier:
     if (templ.operands.size() == 2)
-      return 65;
-    return 8;
+      return spillActionSlots + 65;
+    return spillActionSlots + 8;
   case InstructionTemplate::Kind::VPMWrite:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return serialize.getValue() == "mutex" ? 6 : 3;
-    return 3;
+      return spillActionSlots + (serialize.getValue() == "mutex" ? 6 : 3);
+    return spillActionSlots + 3;
   case InstructionTemplate::Kind::VPMRead:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return (serialize.getValue() == "mutex" ? 8 : 6) + resultSpacer;
-    return 6 + resultSpacer;
+      return spillActionSlots + (serialize.getValue() == "mutex" ? 8 : 6) +
+             resultSpacer;
+    return spillActionSlots + 6 + resultSpacer;
   case InstructionTemplate::Kind::VDWStore:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return serialize.getValue() == "mutex" ? 19 : 17;
-    return 17;
+      return spillActionSlots + (serialize.getValue() == "mutex" ? 19 : 17);
+    return spillActionSlots + 17;
   case InstructionTemplate::Kind::Rotate:
-    return 3 + resultSpacer;
+    return spillActionSlots + 3 + resultSpacer;
   case InstructionTemplate::Kind::LoadImm:
   case InstructionTemplate::Kind::ElementNumber:
   case InstructionTemplate::Kind::UniformRead:
   case InstructionTemplate::Kind::Pack:
   case InstructionTemplate::Kind::Unpack:
-    return 1 + resultSpacer;
+    return spillActionSlots + 1 + resultSpacer;
   case InstructionTemplate::Kind::SemaAcquire:
   case InstructionTemplate::Kind::SemaRelease:
-    return 1;
+    return spillActionSlots + 1;
   case InstructionTemplate::Kind::Splat:
   case InstructionTemplate::Kind::Mov:
-    return 1 + resultSpacer;
+    return spillActionSlots + 1 + resultSpacer;
   case InstructionTemplate::Kind::ALUAdd:
-    return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+    return spillActionSlots +
+           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                 ? 1
                 : 0) +
            1 + resultSpacer;
   case InstructionTemplate::Kind::ALUMul:
-    return (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+    return spillActionSlots +
+           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                 ? 1
                 : 0) +
            2 + (2 * resultSpacer);
   case InstructionTemplate::Kind::MakeFlags:
-    return templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
+    return spillActionSlots +
+           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
                ? 2
-               : 1;
+               : 1);
   }
-  return 1;
+  return spillActionSlots + 1;
 }
 
 class BranchLayoutPlanner {
@@ -942,8 +1026,11 @@ public:
       const InstructionTemplate &templ = scheduledTemplate.templ;
       if (templ.sourceBlock)
         layout.blockStartSlots.try_emplace(templ.sourceBlock, slot);
+      unsigned preActionSlots = 0;
+      for (const SpillAction &action : allocator.getPreActions(templ))
+        preActionSlots += getSpillActionSlotCount(action);
       if (templ.source)
-        layout.opStartSlots.try_emplace(templ.source, slot);
+        layout.opStartSlots.try_emplace(templ.source, slot + preActionSlots);
       slot += getFlattenedSlotCount(templ, allocator);
     }
 

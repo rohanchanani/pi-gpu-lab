@@ -1,6 +1,6 @@
 // RUN: not vc4-opt %s --convert-ssavc4-to-vc4 2>&1 | FileCheck %s
 
-// CHECK: S2 spilling supports only independent-vector data values; cooperative/control path requires later spill support
+// CHECK: S3 spilling supports only independent-vector data values; cooperative/control path requires later spill support
 ssavc4.module @spill_unsupported_cooperative {
   ssavc4.func @spill_unsupported_cooperative_kernel() attributes {
     kernel,
