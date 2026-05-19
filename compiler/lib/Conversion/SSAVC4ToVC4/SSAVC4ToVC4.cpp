@@ -283,7 +283,10 @@ static Operation *createSplat32LDIWithMul(OpBuilder &builder, Location loc,
   state.addAttribute("value", builder.getI32IntegerAttr(value));
   state.addAttribute("pm", builder.getBoolAttr(false));
   state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
-  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul",
+                     mlir::vc4::CondAttr::get(
+                         ctx, waddrMul == 32 ? mlir::vc4::Cond::never
+                                             : mlir::vc4::Cond::always));
   state.addAttribute("waddr_add", builder.getI32IntegerAttr(waddrAdd));
   state.addAttribute("waddr_mul", builder.getI32IntegerAttr(waddrMul));
   return builder.create(state);
@@ -394,6 +397,42 @@ struct InstructionTemplate {
 struct LivenessSummary {
   unsigned virtualValueCount = 0;
   DenseMap<Value, unsigned> lastUseIndex;
+  DenseMap<Value, SmallVector<unsigned, 4>> useIndices;
+};
+
+enum class LocationKind { Register, SpillSlot };
+
+struct SpillSlot {
+  unsigned index = 0;
+  uint32_t offsetBytes = 0;
+  uint32_t sizeBytes = 64;
+};
+
+struct ValueLocation {
+  LocationKind kind = LocationKind::Register;
+  int64_t physicalReg = -1;
+  unsigned spillSlotIndex = 0;
+};
+
+struct SpillPlan {
+  DenseMap<Value, ValueLocation> locations;
+  DenseMap<Value, SpillSlot> spillSlots;
+  uint32_t spillFrameBytes = 0;
+  uint32_t spillSlotCount = 0;
+};
+
+struct SpillAction {
+  enum class Kind { Store, Reload };
+  Kind kind = Kind::Store;
+  Value value;
+  SpillSlot slot;
+  int64_t physicalReg = -1;
+};
+
+struct PerTemplateAllocation {
+  DenseMap<Value, int64_t> operandRegisters;
+  std::optional<int64_t> resultRegister;
+  SmallVector<SpillAction, 4> preActions;
 };
 
 static bool isAllocatableSSAValue(Value value,
@@ -410,19 +449,91 @@ static LivenessSummary computeLiveness(
   summary.virtualValueCount = virtualValues.size();
   for (unsigned index = 0; index < templates.size(); ++index) {
     for (Value operand : templates[index].operands) {
-      if (isAllocatableSSAValue(operand, virtualValues))
+      if (isAllocatableSSAValue(operand, virtualValues)) {
         summary.lastUseIndex[operand] = index;
+        summary.useIndices[operand].push_back(index);
+      }
     }
   }
   return summary;
 }
 
-class NoSpillAllocator {
+static DictionaryAttr getResourceMetadata(Operation *func);
+static std::optional<llvm::StringRef> getResourceString(DictionaryAttr resource,
+                                                        llvm::StringRef name);
+
+class SpillAwareAllocator {
 public:
   LogicalResult allocate(Operation *diagnosticAnchor,
                          ArrayRef<InstructionTemplate> templates,
                          ArrayRef<VirtualValue> virtualValues,
                          const LivenessSummary &liveness) {
+    if (succeeded(allocateWithoutSpills(templates, virtualValues, liveness)))
+      return success();
+
+    if (failed(verifyS2SpillingSupported(diagnosticAnchor, templates)))
+      return failure();
+
+    return allocateWithSpills(diagnosticAnchor, templates, virtualValues,
+                              liveness);
+  }
+
+  std::optional<int64_t> lookup(Value value) const {
+    auto it = registers.find(value);
+    if (it == registers.end())
+      return std::nullopt;
+    return it->second;
+  }
+
+  std::optional<int64_t> lookup(const InstructionTemplate &templ,
+                                Value value) const {
+    if (!hasSpills())
+      return lookup(value);
+    if (templ.source) {
+      auto planIt = perTemplate.find(templ.source);
+      if (planIt != perTemplate.end()) {
+        auto operandIt = planIt->second.operandRegisters.find(value);
+        if (operandIt != planIt->second.operandRegisters.end())
+          return operandIt->second;
+        if (templ.result && *templ.result == value &&
+            planIt->second.resultRegister)
+          return *planIt->second.resultRegister;
+      }
+    }
+    return std::nullopt;
+  }
+
+  ArrayRef<SpillAction> getPreActions(const InstructionTemplate &templ) const {
+    static const SmallVector<SpillAction, 0> empty;
+    if (!templ.source)
+      return empty;
+    auto it = perTemplate.find(templ.source);
+    if (it == perTemplate.end())
+      return empty;
+    return it->second.preActions;
+  }
+
+  bool hasSpills() const { return spillPlan.spillSlotCount != 0; }
+
+  uint32_t getSpillSlotCount() const { return spillPlan.spillSlotCount; }
+  uint32_t getSpillFrameBytes() const { return spillPlan.spillFrameBytes; }
+  static constexpr int64_t spillBaseReg() { return kSpillBaseReg; }
+  static constexpr int64_t spillOffsetReg() { return kSpillOffsetReg; }
+  static constexpr int64_t spillAddrReg() { return kSpillAddrReg; }
+  static constexpr int64_t spillLaneReg() { return kSpillLaneReg; }
+  static constexpr int64_t spillRowReg() { return kSpillRowReg; }
+
+private:
+  static constexpr int64_t kForbiddenThreadEndHazardReg = 14;
+  static constexpr int64_t kSpillBaseReg = 28;
+  static constexpr int64_t kSpillOffsetReg = 29;
+  static constexpr int64_t kSpillAddrReg = 30;
+  static constexpr int64_t kSpillLaneReg = 31;
+  static constexpr int64_t kSpillRowReg = 27;
+
+  LogicalResult allocateWithoutSpills(ArrayRef<InstructionTemplate> templates,
+                                      ArrayRef<VirtualValue> virtualValues,
+                                      const LivenessSummary &liveness) {
     static constexpr int64_t kForbiddenThreadEndHazardReg = 14;
     int64_t nextRegister = 0;
     SmallVector<int64_t, 8> freeRegisters;
@@ -463,11 +574,8 @@ public:
       if (templ.result && needsAllocation.find(*templ.result) != needsAllocation.end()) {
         std::optional<int64_t> reg = allocateRegister();
         if (!reg) {
-          return diagnosticAnchor->emitError()
-                 << "ssavc4-to-vc4 no-spill allocator exhausted available QPU "
-                    "registers after "
-                 << registers.size()
-                 << " live values; spilling is not implemented in M3";
+          registers.clear();
+          return failure();
         }
         registers.try_emplace(*templ.result, *reg);
       }
@@ -477,15 +585,239 @@ public:
     return success();
   }
 
-  std::optional<int64_t> lookup(Value value) const {
-    auto it = registers.find(value);
-    if (it == registers.end())
-      return std::nullopt;
-    return it->second;
+  LogicalResult verifyS2SpillingSupported(
+      Operation *diagnosticAnchor, ArrayRef<InstructionTemplate> templates) const {
+    DictionaryAttr resource = getResourceMetadata(diagnosticAnchor);
+    std::optional<llvm::StringRef> scheduleMode =
+        getResourceString(resource, "schedule_mode");
+    if (scheduleMode && *scheduleMode == "cooperative_block") {
+      return diagnosticAnchor->emitError()
+             << "S2 spilling supports only independent-vector data values; "
+                "cooperative/control path requires later spill support";
+    }
+
+    bool sawNonUniform = false;
+    for (const InstructionTemplate &templ : templates) {
+      switch (templ.kind) {
+      case InstructionTemplate::Kind::Branch:
+      case InstructionTemplate::Kind::CondBranch:
+      case InstructionTemplate::Kind::Barrier:
+      case InstructionTemplate::Kind::SemaAcquire:
+      case InstructionTemplate::Kind::SemaRelease:
+      case InstructionTemplate::Kind::VPMWrite:
+      case InstructionTemplate::Kind::VPMRead:
+        return templ.source->emitOpError()
+               << "S2 spilling supports only independent-vector data values; "
+                  "value in cooperative/control path requires later spill "
+                  "support";
+      case InstructionTemplate::Kind::UniformRead:
+        if (sawNonUniform) {
+          return templ.source->emitOpError()
+                 << "S2 spilling requires all ssavc4.uniform.read operations "
+                    "before spillable data operations";
+        }
+        break;
+      default:
+        sawNonUniform = true;
+        break;
+      }
+    }
+    return success();
   }
 
-private:
+  bool isReservedInSpillMode(int64_t reg) const {
+    return reg == kForbiddenThreadEndHazardReg || reg == kSpillBaseReg ||
+           reg == kSpillOffsetReg || reg == kSpillAddrReg ||
+           reg == kSpillLaneReg || reg == kSpillRowReg;
+  }
+
+  bool isValueSpillable(Value value) const {
+    Type type = value.getType();
+    return isVector16I32Type(type) || isVector16F32Type(type);
+  }
+
+  std::optional<unsigned> nextUseAfter(Value value, unsigned index,
+                                       const LivenessSummary &liveness) const {
+    auto it = liveness.useIndices.find(value);
+    if (it == liveness.useIndices.end())
+      return std::nullopt;
+    for (unsigned useIndex : it->second)
+      if (useIndex > index)
+        return useIndex;
+    return std::nullopt;
+  }
+
+  SpillSlot getOrCreateSpillSlot(Value value) {
+    auto it = spillPlan.spillSlots.find(value);
+    if (it != spillPlan.spillSlots.end())
+      return it->second;
+    SpillSlot slot;
+    slot.index = spillPlan.spillSlotCount++;
+    slot.offsetBytes = slot.index * slot.sizeBytes;
+    spillPlan.spillFrameBytes = spillPlan.spillSlotCount * slot.sizeBytes;
+    spillPlan.spillSlots[value] = slot;
+    return slot;
+  }
+
+  LogicalResult allocateWithSpills(Operation *diagnosticAnchor,
+                                   ArrayRef<InstructionTemplate> templates,
+                                   ArrayRef<VirtualValue> virtualValues,
+                                   const LivenessSummary &liveness) {
+    SmallVector<int64_t, 32> freeRegisters;
+    for (int64_t reg = 31; reg >= 0; --reg)
+      if (!isReservedInSpillMode(reg))
+        freeRegisters.push_back(reg);
+
+    DenseMap<Value, int64_t> activeRegisters;
+    DenseMap<int64_t, Value> registerValues;
+    DenseMap<Value, bool> slotValid;
+    DenseMap<Value, bool> needsAllocation;
+    for (const VirtualValue &virtualValue : virtualValues) {
+      needsAllocation[virtualValue.value] = true;
+    }
+
+    auto popFreeRegister = [&]() -> std::optional<int64_t> {
+      if (freeRegisters.empty())
+        return std::nullopt;
+      return freeRegisters.pop_back_val();
+    };
+
+    auto protectContains = [](ArrayRef<Value> protectedValues, Value value) {
+      for (Value protectedValue : protectedValues)
+        if (protectedValue == value)
+          return true;
+      return false;
+    };
+
+    auto acquireRegister =
+        [&](unsigned index, ArrayRef<Value> protectedValues,
+            SmallVectorImpl<SpillAction> &actions) -> FailureOr<int64_t> {
+      if (std::optional<int64_t> reg = popFreeRegister())
+        return *reg;
+
+      Value victim;
+      int64_t victimReg = -1;
+      std::optional<unsigned> farthestNextUse;
+      bool foundVictim = false;
+      for (auto &entry : activeRegisters) {
+        Value candidate = entry.first;
+        if (protectContains(protectedValues, candidate))
+          continue;
+        if (!isValueSpillable(candidate))
+          continue;
+        std::optional<unsigned> nextUse =
+            nextUseAfter(candidate, index, liveness);
+        if (!foundVictim || !nextUse ||
+            (farthestNextUse && *nextUse > *farthestNextUse)) {
+          victim = candidate;
+          victimReg = entry.second;
+          farthestNextUse = nextUse;
+          foundVictim = true;
+          if (!nextUse)
+            break;
+        }
+      }
+      if (!foundVictim)
+        return failure();
+
+      SpillSlot slot = getOrCreateSpillSlot(victim);
+      if (!slotValid[victim]) {
+        actions.push_back(
+            SpillAction{SpillAction::Kind::Store, victim, slot, victimReg});
+        slotValid[victim] = true;
+      }
+      spillPlan.locations[victim] =
+          ValueLocation{LocationKind::SpillSlot, -1, slot.index};
+      activeRegisters.erase(victim);
+      registerValues.erase(victimReg);
+      return victimReg;
+    };
+
+    for (unsigned index = 0; index < templates.size(); ++index) {
+      const InstructionTemplate &templ = templates[index];
+      PerTemplateAllocation &allocation = perTemplate[templ.source];
+
+      SmallVector<Value, 2> protectedOperands;
+      for (Value operand : templ.operands)
+        if (needsAllocation.count(operand))
+          protectedOperands.push_back(operand);
+
+      for (Value operand : templ.operands) {
+        if (!needsAllocation.count(operand))
+          continue;
+        auto activeIt = activeRegisters.find(operand);
+        if (activeIt == activeRegisters.end()) {
+          SpillSlot slot = getOrCreateSpillSlot(operand);
+          FailureOr<int64_t> reg =
+              acquireRegister(index, protectedOperands, allocation.preActions);
+          if (failed(reg)) {
+            return templ.source->emitOpError()
+                   << "S2 spilling supports only independent-vector data "
+                      "values; no scratch register was available to reload an "
+                      "operand";
+          }
+          activeRegisters[operand] = *reg;
+          registerValues[*reg] = operand;
+          allocation.preActions.push_back(
+              SpillAction{SpillAction::Kind::Reload, operand, slot, *reg});
+          activeIt = activeRegisters.find(operand);
+        }
+        allocation.operandRegisters[operand] = activeIt->second;
+      }
+
+      if (templ.result && needsAllocation.count(*templ.result)) {
+        FailureOr<int64_t> reg =
+            acquireRegister(index, protectedOperands, allocation.preActions);
+        if (failed(reg)) {
+          return templ.source->emitOpError()
+                 << "S2 spilling supports only independent-vector data values; "
+                    "no register was available for a spillable result";
+        }
+        allocation.resultRegister = *reg;
+        registers[*templ.result] = *reg;
+        activeRegisters[*templ.result] = *reg;
+        registerValues[*reg] = *templ.result;
+        spillPlan.locations[*templ.result] =
+            ValueLocation{LocationKind::Register, *reg, 0};
+        slotValid[*templ.result] = false;
+      }
+
+      for (Value operand : templ.operands) {
+        if (!needsAllocation.count(operand))
+          continue;
+        auto lastUseIt = liveness.lastUseIndex.find(operand);
+        if (lastUseIt == liveness.lastUseIndex.end() ||
+            lastUseIt->second != index)
+          continue;
+        auto activeIt = activeRegisters.find(operand);
+        if (activeIt == activeRegisters.end())
+          continue;
+        freeRegisters.push_back(activeIt->second);
+        registerValues.erase(activeIt->second);
+        activeRegisters.erase(activeIt);
+      }
+
+      if (templ.result && needsAllocation.count(*templ.result) &&
+          liveness.lastUseIndex.find(*templ.result) ==
+              liveness.lastUseIndex.end()) {
+        int64_t reg = *allocation.resultRegister;
+        freeRegisters.push_back(reg);
+        registerValues.erase(reg);
+        activeRegisters.erase(*templ.result);
+      }
+    }
+
+    if (spillPlan.spillSlotCount == 0) {
+      return diagnosticAnchor->emitError()
+             << "ssavc4-to-vc4 allocator exhausted available QPU registers "
+                "but did not produce a spill plan";
+    }
+    return success();
+  }
+
   DenseMap<Value, int64_t> registers;
+  DenseMap<Operation *, PerTemplateAllocation> perTemplate;
+  SpillPlan spillPlan;
 };
 
 static bool isPhysicalRegFileWriteAddress(int64_t waddr) {
@@ -493,23 +825,23 @@ static bool isPhysicalRegFileWriteAddress(int64_t waddr) {
 }
 
 static bool emitsPhysicalRegFileResultWrite(
-    const InstructionTemplate &templ, const NoSpillAllocator &allocator) {
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
   if (!templ.result)
     return false;
   if (templ.result->use_empty())
     return false;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   return resultReg && isPhysicalRegFileWriteAddress(*resultReg);
 }
 
 static unsigned getRegfileResultSpacerSlotCount(
-    const InstructionTemplate &templ, const NoSpillAllocator &allocator) {
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
   return emitsPhysicalRegFileResultWrite(templ, allocator) ? 1 : 0;
 }
 
 static void emitRegfileResultSpacer(OpBuilder &builder, Location loc,
                                     const InstructionTemplate &templ,
-                                    const NoSpillAllocator &allocator) {
+                                    const SpillAwareAllocator &allocator) {
   if (emitsPhysicalRegFileResultWrite(templ, allocator))
     createNopLDISlot(builder, loc);
 }
@@ -536,7 +868,7 @@ struct LayoutSummary {
 };
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
-                                      const NoSpillAllocator &allocator) {
+                                      const SpillAwareAllocator &allocator) {
   unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
   switch (templ.kind) {
   case InstructionTemplate::Kind::Branch:
@@ -603,7 +935,7 @@ class BranchLayoutPlanner {
 public:
   LogicalResult compute(Operation *diagnosticAnchor,
                         ArrayRef<ScheduledTemplate> scheduled,
-                        const NoSpillAllocator &allocator,
+                        const SpillAwareAllocator &allocator,
                         LayoutSummary &layout) {
     unsigned slot = 0;
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
@@ -1275,9 +1607,9 @@ static LogicalResult selectInstructionTemplates(
 
 static LogicalResult emitLoadImm(OpBuilder &builder,
                                  const InstructionTemplate &templ,
-                                 const NoSpillAllocator &allocator) {
+                                 const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> destination = allocator.lookup(*templ.result);
+  std::optional<int64_t> destination = allocator.lookup(templ, *templ.result);
   if (!destination)
     return source->emitError("internal lowering error: result register was not allocated");
 
@@ -1307,9 +1639,9 @@ static LogicalResult emitLoadImm(OpBuilder &builder,
 
 static LogicalResult emitElementNumber(OpBuilder &builder,
                                        const InstructionTemplate &templ,
-                                       const NoSpillAllocator &allocator) {
+                                       const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
     return source->emitError("internal lowering error: result register was not allocated");
 
@@ -1327,9 +1659,9 @@ static LogicalResult emitElementNumber(OpBuilder &builder,
 
 static LogicalResult emitUniformRead(OpBuilder &builder,
                                      const InstructionTemplate &templ,
-                                     const NoSpillAllocator &allocator) {
+                                     const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
     return source->emitError("internal lowering error: result register was not allocated");
 
@@ -1348,10 +1680,10 @@ static LogicalResult emitUniformRead(OpBuilder &builder,
 
 static LogicalResult emitMov(OpBuilder &builder,
                              const InstructionTemplate &templ,
-                             const NoSpillAllocator &allocator) {
+                             const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ.operands.front());
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
@@ -1368,15 +1700,15 @@ static LogicalResult emitMov(OpBuilder &builder,
 }
 
 static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &templ,
-                             const NoSpillAllocator &allocator) {
+                             const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
     return source->emitError("internal lowering error: result register was not allocated");
 
   SmallVector<int64_t, 2> operandRegs;
   for (Value operand : templ.operands) {
-    std::optional<int64_t> reg = allocator.lookup(operand);
+    std::optional<int64_t> reg = allocator.lookup(templ, operand);
     if (!reg)
       return source->emitOpError()
              << "uses a value that is not defined by a lowerable SSAVC4 op in "
@@ -1411,7 +1743,8 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
       templ.operands.size() == 2)
     smallImm = getSmallImmLiteralSelector(templ.operands[1]);
 
-  bool useMirroredSecond = !smallImm && templ.operands.size() == 2 &&
+  bool useMirroredSecond = !allocator.hasSpills() && !smallImm &&
+                           templ.operands.size() == 2 &&
                            isMirroredLoadImm(templ.operands[1]);
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
   int64_t raddrB = operandRegs.size() < 2 ? raddrA
@@ -1460,10 +1793,10 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
 
 static LogicalResult emitPackOrUnpack(OpBuilder &builder,
                                       const InstructionTemplate &templ,
-                                      const NoSpillAllocator &allocator) {
+                                      const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ.operands.front());
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
@@ -1489,10 +1822,10 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
 
 static LogicalResult emitRotate(OpBuilder &builder,
                                 const InstructionTemplate &templ,
-                                const NoSpillAllocator &allocator) {
+                                const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ.operands.front());
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
@@ -1525,11 +1858,11 @@ static LogicalResult emitRotate(OpBuilder &builder,
 
 static LogicalResult emitTMURequest(OpBuilder &builder,
                                     const InstructionTemplate &templ,
-                                    const NoSpillAllocator &allocator) {
+                                    const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.empty())
     return source->emitError("internal lowering error: TMU request has no address operand");
-  std::optional<int64_t> addressReg = allocator.lookup(templ.operands.front());
+  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands.front());
   if (!addressReg)
     return source->emitOpError()
            << "uses a direct TMU address value that is not defined by a lowerable SSAVC4 op";
@@ -1564,9 +1897,9 @@ static LogicalResult emitTMURequest(OpBuilder &builder,
 
 static LogicalResult emitTMURead(OpBuilder &builder,
                                  const InstructionTemplate &templ,
-                                 const NoSpillAllocator &allocator) {
+                                 const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
     return source->emitError("internal lowering error: TMU result register was not allocated");
 
@@ -1630,7 +1963,7 @@ static LogicalResult emitSema(OpBuilder &builder,
 
 static LogicalResult emitBarrier(OpBuilder &builder,
                                  const InstructionTemplate &templ,
-                                 const NoSpillAllocator &allocator) {
+                                 const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   int64_t arrive = getI32IntegerAttrOr(source, "arrive_offset", -1);
   int64_t go = getI32IntegerAttrOr(source, "go_offset", -1);
@@ -1658,8 +1991,8 @@ static LogicalResult emitBarrier(OpBuilder &builder,
 
   if (templ.operands.size() != 2)
     return source->emitError("internal lowering error: barrier has wrong operand count");
-  std::optional<int64_t> logicalWarpReg = allocator.lookup(templ.operands[0]);
-  std::optional<int64_t> warpsPerBlockReg = allocator.lookup(templ.operands[1]);
+  std::optional<int64_t> logicalWarpReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> warpsPerBlockReg = allocator.lookup(templ, templ.operands[1]);
   if (!logicalWarpReg || !warpsPerBlockReg)
     return source->emitOpError()
            << "uses barrier metadata values that are not defined by lowerable SSAVC4 ops";
@@ -1755,11 +2088,11 @@ static LogicalResult emitBarrier(OpBuilder &builder,
 
 static LogicalResult emitMakeFlags(OpBuilder &builder,
                                    const InstructionTemplate &templ,
-                                   const NoSpillAllocator &allocator) {
+                                   const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   SmallVector<int64_t, 2> operandRegs;
   for (Value operand : templ.operands) {
-    std::optional<int64_t> reg = allocator.lookup(operand);
+    std::optional<int64_t> reg = allocator.lookup(templ, operand);
     if (!reg)
       return source->emitOpError()
              << "uses a value that is not defined by a lowerable SSAVC4 op in M3 v1";
@@ -1821,12 +2154,12 @@ static LogicalResult emitScheduledBranch(OpBuilder &builder,
 
 static LogicalResult emitVPMWrite(OpBuilder &builder,
                                   const InstructionTemplate &templ,
-                                  const NoSpillAllocator &allocator) {
+                                  const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 2)
     return source->emitError("internal lowering error: VPM write has wrong operand count");
-  std::optional<int64_t> rowReg = allocator.lookup(templ.operands[0]);
-  std::optional<int64_t> valueReg = allocator.lookup(templ.operands[1]);
+  std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> valueReg = allocator.lookup(templ, templ.operands[1]);
   if (!rowReg || !valueReg)
     return source->emitOpError()
            << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
@@ -1873,12 +2206,12 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
 
 static LogicalResult emitVPMRead(OpBuilder &builder,
                                  const InstructionTemplate &templ,
-                                 const NoSpillAllocator &allocator) {
+                                 const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 1 || !templ.result)
     return source->emitError("internal lowering error: VPM read template is malformed");
-  std::optional<int64_t> rowReg = allocator.lookup(templ.operands[0]);
-  std::optional<int64_t> resultReg = allocator.lookup(*templ.result);
+  std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!rowReg || !resultReg)
     return source->emitOpError()
            << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
@@ -1926,44 +2259,12 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
   return success();
 }
 
-static LogicalResult emitVDWStore(OpBuilder &builder,
-                                  const InstructionTemplate &templ,
-                                  const NoSpillAllocator &allocator) {
-  Operation *source = templ.source;
-  if (templ.operands.size() < 2 || templ.operands.size() > 4)
-    return source->emitError("internal lowering error: VDW store has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ.operands[0]);
-  std::optional<int64_t> valueReg = allocator.lookup(templ.operands[1]);
-  if (!addressReg || !valueReg)
-    return source->emitOpError()
-           << "uses a VDW address/value that is not defined by a lowerable SSAVC4 op";
-  std::optional<int64_t> dynamicActiveLanesReg;
-  if (templ.operands.size() >= 3) {
-    dynamicActiveLanesReg = allocator.lookup(templ.operands[2]);
-    if (!dynamicActiveLanesReg)
-      return source->emitOpError()
-             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
-  }
-  std::optional<int64_t> dynamicVPMRowReg;
-  if (templ.operands.size() == 4) {
-    dynamicVPMRowReg = allocator.lookup(templ.operands[3]);
-    if (!dynamicVPMRowReg)
-      return source->emitOpError()
-             << "uses a dynamic VPM row value that is not defined by a lowerable SSAVC4 op";
-  }
-
-  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
-  int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
-  int64_t vpmRow = getI32IntegerAttrOr(source, "vpm_row", 0);
-  if (elemBytes != 4)
-    return source->emitOpError("supports only 32-bit elements in M3 lowering");
-  if (!dynamicActiveLanesReg && activeLanes != 16)
-    return source->emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
-  if (vpmRow < 0)
-    return source->emitOpError("requires a non-negative VPM row in M3 lowering");
-
-  Location loc = source->getLoc();
-  bool useMutex = hasStringAttr(source, "serialize", "mutex");
+static void emitRawVDWStore(OpBuilder &builder, Location loc,
+                            int64_t addressReg, int64_t valueReg,
+                            std::optional<int64_t> dynamicActiveLanesReg,
+                            std::optional<int64_t> dynamicVPMRowReg,
+                            int64_t activeLanes, int64_t vpmRow,
+                            bool useMutex) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -2010,7 +2311,7 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/48, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *valueReg, *valueReg,
+                        mlir::vc4::MulOpcode::nop, valueReg, valueReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
@@ -2104,21 +2405,236 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
   createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-                   *addressReg, *addressReg, mlir::vc4::QPUMux::a,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                    mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
   if (useMutex)
     emitMutexRelease(builder, loc);
+}
+
+static LogicalResult emitVDWStore(OpBuilder &builder,
+                                  const InstructionTemplate &templ,
+                                  const SpillAwareAllocator &allocator) {
+  Operation *source = templ.source;
+  if (templ.operands.size() < 2 || templ.operands.size() > 4)
+    return source->emitError("internal lowering error: VDW store has wrong operand count");
+  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> valueReg = allocator.lookup(templ, templ.operands[1]);
+  if (!addressReg || !valueReg)
+    return source->emitOpError()
+           << "uses a VDW address/value that is not defined by a lowerable SSAVC4 op";
+  std::optional<int64_t> dynamicActiveLanesReg;
+  if (templ.operands.size() >= 3) {
+    dynamicActiveLanesReg = allocator.lookup(templ, templ.operands[2]);
+    if (!dynamicActiveLanesReg)
+      return source->emitOpError()
+             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
+  }
+  std::optional<int64_t> dynamicVPMRowReg;
+  if (templ.operands.size() == 4) {
+    dynamicVPMRowReg = allocator.lookup(templ, templ.operands[3]);
+    if (!dynamicVPMRowReg)
+      return source->emitOpError()
+             << "uses a dynamic VPM row value that is not defined by a lowerable SSAVC4 op";
+  }
+
+  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
+  int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
+  int64_t vpmRow = getI32IntegerAttrOr(source, "vpm_row", 0);
+  if (elemBytes != 4)
+    return source->emitOpError("supports only 32-bit elements in M3 lowering");
+  if (!dynamicActiveLanesReg && activeLanes != 16)
+    return source->emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
+  if (vpmRow < 0)
+    return source->emitOpError("requires a non-negative VPM row in M3 lowering");
+
+  emitRawVDWStore(builder, source->getLoc(), *addressReg, *valueReg,
+                  dynamicActiveLanesReg, dynamicVPMRowReg, activeLanes,
+                  vpmRow, hasStringAttr(source, "serialize", "mutex"));
   return success();
+}
+
+static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {
+  auto launchABI =
+      llvm::dyn_cast_or_null<DictionaryAttr>(sourceFunc->getAttr("vc4.launch_abi"));
+  if (!launchABI)
+    return 0;
+  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
+      launchABI.get("uniform_words_per_qpu"));
+  if (!attr || attr.getInt() < 0)
+    return 0;
+  return static_cast<unsigned>(attr.getInt());
+}
+
+static void emitUniformReadToReg(OpBuilder &builder, Location loc,
+                                 int64_t destinationReg) {
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        destinationReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/32,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/0);
+  createNopLDISlot(builder, loc);
+}
+
+static void emitSpillSlotBase(OpBuilder &builder, Location loc,
+                              const SpillSlot &slot) {
+  if (slot.offsetBytes == 0) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop,
+                          SpillAwareAllocator::spillBaseReg(),
+                          SpillAwareAllocator::spillBaseReg(),
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createNopLDISlot(builder, loc);
+    return;
+  }
+
+  createSplat32LDIWithMul(builder, loc, slot.offsetBytes,
+                          SpillAwareAllocator::spillOffsetReg(),
+                          SpillAwareAllocator::spillOffsetReg());
+  createNopLDISlot(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        SpillAwareAllocator::spillBaseReg(),
+                        SpillAwareAllocator::spillOffsetReg(),
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopLDISlot(builder, loc);
+}
+
+static void emitSpillStoreAction(OpBuilder &builder, Location loc,
+                                 const SpillAction &action) {
+  emitSpillSlotBase(builder, loc, action.slot);
+  emitRawVDWStore(builder, loc, SpillAwareAllocator::spillAddrReg(),
+                  action.physicalReg, std::nullopt,
+                  SpillAwareAllocator::spillRowReg(),
+                  /*activeLanes=*/16, /*vpmRow=*/0, /*useMutex=*/true);
+}
+
+static void emitSpillReloadAction(OpBuilder &builder, Location loc,
+                                  const SpillAction &action) {
+  emitSpillSlotBase(builder, loc, action.slot);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        SpillAwareAllocator::spillLaneReg(), /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/38,
+                        /*raddrB=*/38, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createNopLDISlot(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        SpillAwareAllocator::spillLaneReg(), /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        SpillAwareAllocator::spillLaneReg(), /*raddrB=*/0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/2);
+  createNopLDISlot(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop,
+                        SpillAwareAllocator::spillLaneReg(),
+                        SpillAwareAllocator::spillLaneReg(),
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        SpillAwareAllocator::spillAddrReg(), /*raddrB=*/0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopLDISlot(builder, loc);
+
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/56, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop,
+                        SpillAwareAllocator::spillAddrReg(), /*raddrB=*/0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/39, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/39, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0,
+                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/39, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        action.physicalReg, /*waddrMul=*/39,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/1, mlir::vc4::QPUMux::r4,
+                        mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createNopLDISlot(builder, loc);
+}
+
+static void emitSpillAction(OpBuilder &builder, Location loc,
+                            const SpillAction &action) {
+  if (action.kind == SpillAction::Kind::Store)
+    emitSpillStoreAction(builder, loc, action);
+  else
+    emitSpillReloadAction(builder, loc, action);
 }
 
 static LogicalResult emitScheduledFunctionBody(
     Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
-    const NoSpillAllocator &allocator, const LayoutSummary &layout) {
+    const SpillAwareAllocator &allocator, const LayoutSummary &layout) {
   bool emittedThreadEnd = false;
+  bool emittedSpillBaseUniform = !allocator.hasSpills();
+  unsigned consumedPublicUniforms = 0;
+  unsigned sourceUniformWords = getSourceUniformWordsPerQPU(sourceFunc);
   for (const ScheduledTemplate &scheduledTemplate : scheduled) {
     const InstructionTemplate &templ = scheduledTemplate.templ;
+    if (templ.kind == InstructionTemplate::Kind::UniformRead)
+      ++consumedPublicUniforms;
+    if (!emittedSpillBaseUniform &&
+        templ.kind != InstructionTemplate::Kind::UniformRead) {
+      while (consumedPublicUniforms < sourceUniformWords) {
+        emitUniformReadToReg(builder, templ.source->getLoc(),
+                             SpillAwareAllocator::spillOffsetReg());
+        ++consumedPublicUniforms;
+      }
+      emitUniformReadToReg(builder, templ.source->getLoc(),
+                           SpillAwareAllocator::spillBaseReg());
+      emitUniformReadToReg(builder, templ.source->getLoc(),
+                           SpillAwareAllocator::spillRowReg());
+      emittedSpillBaseUniform = true;
+    }
+    for (const SpillAction &action : allocator.getPreActions(templ))
+      emitSpillAction(builder, templ.source->getLoc(), action);
+
     switch (templ.kind) {
     case InstructionTemplate::Kind::LoadImm:
       if (failed(emitLoadImm(builder, templ, allocator)))
@@ -2246,6 +2762,75 @@ static Operation *createVC4FuncShell(Operation *sourceFunc, OpBuilder &builder) 
   return vc4Func;
 }
 
+static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
+                                                  DictionaryAttr launchABI) {
+  int64_t oldUniformWords = 0;
+  if (auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
+          launchABI.get("uniform_words_per_qpu")))
+    oldUniformWords = attr.getInt();
+
+  SmallVector<Attribute, 8> builtins;
+  if (auto existing =
+          llvm::dyn_cast_or_null<ArrayAttr>(launchABI.get("builtins"))) {
+    builtins.append(existing.begin(), existing.end());
+  }
+  builtins.push_back(builder.getDictionaryAttr({
+      builder.getNamedAttr("name",
+                           builder.getStringAttr("__vc4_spill_frame_base")),
+      builder.getNamedAttr("kind", builder.getStringAttr("hidden_runtime")),
+      builder.getNamedAttr("materialization",
+                           builder.getStringAttr("uniform_suffix")),
+      builder.getNamedAttr("uniform_index",
+                           builder.getI32IntegerAttr(oldUniformWords)),
+  }));
+  builtins.push_back(builder.getDictionaryAttr({
+      builder.getNamedAttr("name",
+                           builder.getStringAttr("__vc4_resident_request_id")),
+      builder.getNamedAttr("kind", builder.getStringAttr("hidden_runtime")),
+      builder.getNamedAttr("materialization",
+                           builder.getStringAttr("uniform_suffix")),
+      builder.getNamedAttr("uniform_index",
+                           builder.getI32IntegerAttr(oldUniformWords + 1)),
+  }));
+
+  SmallVector<NamedAttribute, 8> attrs;
+  for (NamedAttribute attr : launchABI)
+    attrs.push_back(attr);
+
+  auto replaceAttr = [&](StringRef name, Attribute value) {
+    StringAttr nameAttr = builder.getStringAttr(name);
+    for (NamedAttribute &attr : attrs) {
+      if (attr.getName() == nameAttr) {
+        attr.setValue(value);
+        return;
+      }
+    }
+    attrs.push_back(builder.getNamedAttr(name, value));
+  };
+
+  replaceAttr("uniform_words_per_qpu",
+              builder.getI32IntegerAttr(oldUniformWords + 2));
+  replaceAttr("builtins", builder.getArrayAttr(builtins));
+  return builder.getDictionaryAttr(attrs);
+}
+
+static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
+                                     const SpillAwareAllocator &allocator) {
+  if (!allocator.hasSpills())
+    return;
+
+  vc4Func->setAttr("spill_frame_bytes",
+                   builder.getI32IntegerAttr(allocator.getSpillFrameBytes()));
+  vc4Func->setAttr("spill_frame_stride_bytes",
+                   builder.getI32IntegerAttr(allocator.getSpillFrameBytes()));
+
+  auto launchABI =
+      llvm::dyn_cast_or_null<DictionaryAttr>(vc4Func->getAttr("vc4.launch_abi"));
+  if (launchABI)
+    vc4Func->setAttr("vc4.launch_abi",
+                     appendSpillFrameBaseBuiltin(builder, launchABI));
+}
+
 static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
                                    OpBuilder &topBuilder) {
   SmallVector<InstructionTemplate, 8> templates;
@@ -2255,7 +2840,7 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
 
   LivenessSummary liveness = computeLiveness(templates, virtualValues);
 
-  NoSpillAllocator allocator;
+  SpillAwareAllocator allocator;
   if (failed(allocator.allocate(sourceFunc, templates, virtualValues, liveness)))
     return failure();
 
@@ -2270,6 +2855,7 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
   OpBuilder moduleBuilder = topBuilder;
   moduleBuilder.setInsertionPointToEnd(&vc4Module->getRegion(0).front());
   Operation *vc4Func = createVC4FuncShell(sourceFunc, moduleBuilder);
+  attachSpillFrameMetadata(vc4Func, moduleBuilder, allocator);
 
   OpBuilder bodyBuilder(vc4Func->getContext());
   bodyBuilder.setInsertionPointToEnd(&vc4Func->getRegion(0).front());

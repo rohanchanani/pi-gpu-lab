@@ -20,7 +20,8 @@
         "vector_store_smoke_ssavc4",
         "global_store_coalesced_multi_ssavc4",
         "saxpy_full_ssavc4",
-        "warp_reduce_sum_ssavc4"
+        "warp_reduce_sum_ssavc4",
+        "spill_pressure_smoke_ssavc4"
       ],
       "m3_cooperative_block": [
         "qpu_barrier_syncthreads_ssavc4",
@@ -31,6 +32,7 @@
         "global_store_coalesced_multi_ssavc4",
         "saxpy_full_ssavc4",
         "warp_reduce_sum_ssavc4",
+        "spill_pressure_smoke_ssavc4",
         "qpu_barrier_syncthreads_ssavc4",
         "shared_transpose_16x16_ssavc4"
       ]
@@ -50,7 +52,8 @@
       "vector_store_smoke_ssavc4",
       "global_store_coalesced_multi_ssavc4",
       "saxpy_full_ssavc4",
-      "warp_reduce_sum_ssavc4"
+      "warp_reduce_sum_ssavc4",
+      "spill_pressure_smoke_ssavc4"
     ],
     "m3_cooperative_block": [
       "qpu_barrier_syncthreads_ssavc4",
@@ -61,6 +64,7 @@
       "global_store_coalesced_multi_ssavc4",
       "saxpy_full_ssavc4",
       "warp_reduce_sum_ssavc4",
+      "spill_pressure_smoke_ssavc4",
       "qpu_barrier_syncthreads_ssavc4",
       "shared_transpose_16x16_ssavc4"
     ]
