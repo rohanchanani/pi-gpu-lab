@@ -6,10 +6,19 @@
 // CHECK: form = #vc4.function_form<scheduled>
 // CHECK: vc4.launch_abi =
 // CHECK: public_name = "vdw_store_lowering"
-// CHECK: waddr_add = 49 : i32
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: waddr_add = 48 : i32
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: value = -1073741824 : i32
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<small_imm>
-// CHECK: waddr_add = 50 : i32
+// CHECK: vc4.qpu.vpmvcd_addr
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK-NOT: ssavc4.
 ssavc4.module @vdw_store_lowering {

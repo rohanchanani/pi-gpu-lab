@@ -5,6 +5,12 @@
 // CHECK: sig = #vc4.qpu_signal<ldtmu0>
 // CHECK: small_imm = 56 : i32
 // CHECK: op_add = #vc4.add_opcode<fadd>
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_addr
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @warp_reduce_sum_ssavc4 {
   ssavc4.func @warp_reduce_sum_ssavc4_kernel() attributes {

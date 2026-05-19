@@ -202,6 +202,78 @@ static Operation *createScheduledBundle(
   return builder.create(state);
 }
 
+static Operation *createVPMVCDWritePseudoOp(
+    OpBuilder &builder, Location loc, llvm::StringRef opName,
+    mlir::vc4::VPMVCDSide side, mlir::vc4::Cond condAdd,
+    mlir::vc4::Cond condMul, mlir::vc4::AddOpcode addOpcode,
+    mlir::vc4::MulOpcode mulOpcode, int64_t raddrA, int64_t raddrB,
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB,
+    mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
+    std::optional<int64_t> smallImm = std::nullopt) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, opName);
+  state.addAttribute("side", mlir::vc4::VPMVCDSideAttr::get(ctx, side));
+  state.addAttribute("pm", builder.getBoolAttr(false));
+  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, condAdd));
+  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, condMul));
+  state.addAttribute("op_add", mlir::vc4::AddOpcodeAttr::get(ctx, addOpcode));
+  state.addAttribute("op_mul", mlir::vc4::MulOpcodeAttr::get(ctx, mulOpcode));
+  state.addAttribute("raddr_a", builder.getI32IntegerAttr(raddrA));
+  if (smallImm)
+    state.addAttribute("small_imm", builder.getI32IntegerAttr(*smallImm));
+  else
+    state.addAttribute("raddr_b", builder.getI32IntegerAttr(raddrB));
+  state.addAttribute("add_a", mlir::vc4::QPUMuxAttr::get(ctx, addA));
+  state.addAttribute("add_b", mlir::vc4::QPUMuxAttr::get(ctx, addB));
+  state.addAttribute("mul_a", mlir::vc4::QPUMuxAttr::get(ctx, mulA));
+  state.addAttribute("mul_b", mlir::vc4::QPUMuxAttr::get(ctx, mulB));
+  return builder.create(state);
+}
+
+static Operation *createVPMVCDSetup(OpBuilder &builder, Location loc,
+                                    mlir::vc4::VPMVCDSide side,
+                                    mlir::vc4::Cond condAdd,
+                                    mlir::vc4::Cond condMul,
+                                    mlir::vc4::AddOpcode addOpcode,
+                                    mlir::vc4::MulOpcode mulOpcode,
+                                    int64_t raddrA, int64_t raddrB,
+                                    mlir::vc4::QPUMux addA,
+                                    mlir::vc4::QPUMux addB,
+                                    mlir::vc4::QPUMux mulA,
+                                    mlir::vc4::QPUMux mulB,
+                                    std::optional<int64_t> smallImm =
+                                        std::nullopt) {
+  return createVPMVCDWritePseudoOp(
+      builder, loc, "vc4.qpu.vpmvcd_setup", side, condAdd, condMul,
+      addOpcode, mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm);
+}
+
+static Operation *createVPMVCDAddr(OpBuilder &builder, Location loc,
+                                   mlir::vc4::VPMVCDSide side,
+                                   mlir::vc4::Cond condAdd,
+                                   mlir::vc4::Cond condMul,
+                                   mlir::vc4::AddOpcode addOpcode,
+                                   mlir::vc4::MulOpcode mulOpcode,
+                                   int64_t raddrA, int64_t raddrB,
+                                   mlir::vc4::QPUMux addA,
+                                   mlir::vc4::QPUMux addB,
+                                   mlir::vc4::QPUMux mulA,
+                                   mlir::vc4::QPUMux mulB,
+                                   std::optional<int64_t> smallImm =
+                                       std::nullopt) {
+  return createVPMVCDWritePseudoOp(
+      builder, loc, "vc4.qpu.vpmvcd_addr", side, condAdd, condMul, addOpcode,
+      mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm);
+}
+
+static Operation *createVPMVCDWait(OpBuilder &builder, Location loc,
+                                   mlir::vc4::VPMVCDSide side) {
+  MLIRContext *ctx = builder.getContext();
+  OperationState state(loc, "vc4.qpu.vpmvcd_wait");
+  state.addAttribute("side", mlir::vc4::VPMVCDSideAttr::get(ctx, side));
+  return builder.create(state);
+}
+
 static Operation *createSplat32LDIWithMul(OpBuilder &builder, Location loc,
                                           int64_t value, int64_t waddrAdd,
                                           int64_t waddrMul) {
@@ -1779,13 +1851,12 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, setupBase, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/49, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, *rowReg, /*raddrB=*/0,
-                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    *rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/48, /*waddrMul=*/32,
@@ -1794,14 +1865,7 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::add,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/50,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::b,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
     emitMutexRelease(builder, loc);
   }
   return success();
@@ -1839,13 +1903,12 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, setupBase, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/49, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, *rowReg, /*raddrB=*/0,
-                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    *rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -1937,14 +2000,12 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
   } else {
     createSplat32LDI(builder, loc, vpmRow, 33);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/49, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/48, /*waddrMul=*/32,
@@ -1952,26 +2013,17 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                         mlir::vc4::MulOpcode::nop, *valueReg, *valueReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/31, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/50,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
 
   // VDW store setup: depth in bits 16..23, VPM row in bits 7.., and the
   // explicit SSA byte address in vw_addr.
   createSplat32LDI(builder, loc, -1073741824, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/49, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
   if (dynamicActiveLanesReg) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -2043,29 +2095,19 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                         mlir::vc4::QPUMux::b,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                         /*smallImm=*/7);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/49, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/50, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *addressReg, *addressReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/31, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/50,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   *addressReg, *addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
   if (useMutex)
     emitMutexRelease(builder, loc);
   return success();

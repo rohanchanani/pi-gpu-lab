@@ -6,6 +6,12 @@
 // CHECK: sig = #vc4.qpu_signal<ldtmu0>
 // CHECK: op_mul = #vc4.mul_opcode<fmul>
 // CHECK: op_add = #vc4.add_opcode<fadd>
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_addr
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @saxpy_full_ssavc4 {
   ssavc4.func @saxpy_full_ssavc4_kernel() attributes {

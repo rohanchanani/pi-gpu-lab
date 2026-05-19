@@ -5,12 +5,17 @@
 // CHECK: schedule_mode = "cooperative_block"
 // CHECK: uses_shared_vpm = true
 // CHECK: value = 1055232 : i32
-// CHECK: waddr_add = 49 : i32
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: waddr_add = 48 : i32
 // CHECK: vc4.qpu.sema <release>
 // CHECK: vc4.qpu.sema <acquire>
 // CHECK: value = 1055232 : i32
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<read>
 // CHECK: raddr_a = 48 : i32
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK-NOT: ssavc4.
 ssavc4.module @shared_transpose_16x16_ssavc4 {

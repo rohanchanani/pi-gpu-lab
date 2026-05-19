@@ -1,10 +1,20 @@
 // RUN: rm -rf %t.lowered.mlir %t.bundle
 // RUN: vc4-opt %s --convert-ssavc4-to-vc4 -o %t.lowered.mlir
+// RUN: FileCheck %s --input-file=%t.lowered.mlir
 // RUN: vc4-codegen %t.lowered.mlir --emit-bundle %t.bundle
 // RUN: test -f %t.bundle/kernel_launch.c
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/kernels/neutral_vector_store_ssavc4.qasm
 // RUN: test -f %t.bundle/manifest.json
+
+// CHECK: public_name = "neutral_vector_store_ssavc4"
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_addr
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: sig = #vc4.qpu_signal<thrend>
 
 ssavc4.module @neutral_vector_store_codegen {
   ssavc4.func @neutral_vector_store_kernel() attributes {

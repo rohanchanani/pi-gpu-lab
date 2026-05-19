@@ -9,7 +9,10 @@
 // CHECK: op_mul = #vc4.mul_opcode<fmul>
 // CHECK: op_add = #vc4.add_opcode<fadd>
 // CHECK: waddr_add = 48 : i32
-// CHECK: waddr_add = 50 : i32
+// CHECK: vc4.qpu.vpmvcd_addr
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_wait
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK-NOT: ssavc4.
 ssavc4.module @neutral_vector_module {
