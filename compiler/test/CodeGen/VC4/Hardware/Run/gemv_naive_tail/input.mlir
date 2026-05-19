@@ -287,7 +287,20 @@ module attributes {
 
       // vw_setup = VPM row setup + ra12
       // slot 62
-      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 49 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<add>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 12 : i32, raddr_b = 31 : i32, add_a = #vc4.qpu_mux<r3>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+      vc4.qpu.vpmvcd_setup {
+        side = #vc4.vpmvcd_side<write>,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<never>,
+        op_add = #vc4.add_opcode<add>,
+        op_mul = #vc4.mul_opcode<nop>,
+        raddr_a = 12 : i32,
+        raddr_b = 31 : i32,
+        add_a = #vc4.qpu_mux<r3>,
+        add_b = #vc4.qpu_mux<a>,
+        mul_a = #vc4.qpu_mux<r0>,
+        mul_b = #vc4.qpu_mux<r1>
+      }
 
       // stage acc vector to VPM
       // slot 63
@@ -295,7 +308,7 @@ module attributes {
 
       // wait for VPM write
       // slot 64
-      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 39 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 30 : i32, raddr_b = 50 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}
+      vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
       // r1 = store_count
       // slot 65
@@ -323,15 +336,41 @@ module attributes {
 
       // vw_setup = VDW descriptor
       // slot 71
-      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 49 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<add>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 30 : i32, raddr_b = 31 : i32, add_a = #vc4.qpu_mux<r2>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+      vc4.qpu.vpmvcd_setup {
+        side = #vc4.vpmvcd_side<write>,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<never>,
+        op_add = #vc4.add_opcode<add>,
+        op_mul = #vc4.mul_opcode<nop>,
+        raddr_a = 30 : i32,
+        raddr_b = 31 : i32,
+        add_a = #vc4.qpu_mux<r2>,
+        add_b = #vc4.qpu_mux<r1>,
+        mul_a = #vc4.qpu_mux<r0>,
+        mul_b = #vc4.qpu_mux<r1>
+      }
 
       // vw_addr = y + row_base*4
       // slot 72
-      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 50 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<or>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 11 : i32, raddr_b = 31 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+      vc4.qpu.vpmvcd_addr {
+        side = #vc4.vpmvcd_side<write>,
+        pm = false,
+        cond_add = #vc4.cond<always>,
+        cond_mul = #vc4.cond<never>,
+        op_add = #vc4.add_opcode<or>,
+        op_mul = #vc4.mul_opcode<nop>,
+        raddr_a = 11 : i32,
+        raddr_b = 31 : i32,
+        add_a = #vc4.qpu_mux<a>,
+        add_b = #vc4.qpu_mux<a>,
+        mul_a = #vc4.qpu_mux<r0>,
+        mul_b = #vc4.qpu_mux<r1>
+      }
 
       // wait for VDW store
       // slot 73
-      vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 39 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 30 : i32, raddr_b = 50 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}
+      vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
       // row_base += num_requests * 16
       // slot 74

@@ -21,12 +21,17 @@ namespace {
 
 static bool isAllowedVC4QASMInputOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPUBranchOp,
-                   mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp>(op);
+                   mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp,
+                   mlir::vc4::QPUVPMVCDSetupOp,
+                   mlir::vc4::QPUVPMVCDAddrOp,
+                   mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
 
 static bool isVC4ScheduledNonBranchOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
-                   mlir::vc4::QPUSemaOp>(op);
+                   mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
+                   mlir::vc4::QPUVPMVCDAddrOp,
+                   mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
 
 static bool isVC4StructuredFamilyOp(mlir::Operation &op) {
@@ -476,7 +481,9 @@ static mlir::LogicalResult appendVC4ScheduledInstructionStream(
     mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream,
     llvm::StringRef verifierPassArg) {
   if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
-                mlir::vc4::QPUSemaOp>(op)) {
+                mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
+                mlir::vc4::QPUVPMVCDAddrOp,
+                mlir::vc4::QPUVPMVCDWaitOp>(op)) {
     stream.push_back(op);
     return mlir::success();
   }

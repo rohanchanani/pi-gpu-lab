@@ -75,7 +75,20 @@ vc4.module @sfu_recip {
     // Prepare VPM write setup while the TMU request is in flight.
     vc4.qpu.ldi <splat32> {value = 1055232 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 35 : i32, waddr_mul = 39 : i32}
 
-    vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 49 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<add>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 7 : i32, raddr_b = 39 : i32, add_a = #vc4.qpu_mux<r3>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+    vc4.qpu.vpmvcd_setup {
+      side = #vc4.vpmvcd_side<write>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      op_add = #vc4.add_opcode<add>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 7 : i32,
+      raddr_b = 39 : i32,
+      add_a = #vc4.qpu_mux<r3>,
+      add_b = #vc4.qpu_mux<a>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
 
     // Spacer before TMU receive.
     vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 39 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}
@@ -95,18 +108,44 @@ vc4.module @sfu_recip {
     // N+3: SFU result is now available in r4; stage it through VPM.
     vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 48 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<or>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<r4>, add_b = #vc4.qpu_mux<r4>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
 
-    vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 39 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 50 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}
+    vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
     // VDW DMA store VPM row to out.
     vc4.qpu.bundle {sig = #vc4.qpu_signal<small_imm>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 33 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<shl>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 7 : i32, small_imm = 7 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<b>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
 
     vc4.qpu.ldi <splat32> {value = -2138030080 : i32, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 34 : i32, waddr_mul = 39 : i32}
 
-    vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 49 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<add>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<r2>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+    vc4.qpu.vpmvcd_setup {
+      side = #vc4.vpmvcd_side<write>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      op_add = #vc4.add_opcode<add>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<r2>,
+      add_b = #vc4.qpu_mux<r1>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
 
-    vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 50 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<or>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 6 : i32, raddr_b = 39 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
+    vc4.qpu.vpmvcd_addr {
+      side = #vc4.vpmvcd_side<write>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      op_add = #vc4.add_opcode<or>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 6 : i32,
+      raddr_b = 39 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<a>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
 
-    vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 39 : i32, waddr_mul = 39 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 50 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}
+    vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
     // Thread-end epilogue: Program End plus two safe delay-slot instructions.
     vc4.qpu.bundle {sig = #vc4.qpu_signal<thrend>, pm = false, cond_add = #vc4.cond<never>, cond_mul = #vc4.cond<never>, waddr_add = 32 : i32, waddr_mul = 33 : i32, op_add = #vc4.add_opcode<nop>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 0 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<r0>, add_b = #vc4.qpu_mux<r1>, mul_a = #vc4.qpu_mux<r2>, mul_b = #vc4.qpu_mux<r3>}

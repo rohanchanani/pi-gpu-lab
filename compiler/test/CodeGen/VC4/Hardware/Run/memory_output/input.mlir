@@ -141,14 +141,12 @@ vc4.module @memory_output {
     }
 
     // add vw_setup, r3, ra1
-    vc4.qpu.bundle {
-      sig = #vc4.qpu_signal<none>,
+    vc4.qpu.vpmvcd_setup {
+      side = #vc4.vpmvcd_side<write>,
       pm = false,
       cond_add = #vc4.cond<always>,
       cond_mul = #vc4.cond<never>,
       write_swap,
-      waddr_add = 49 : i32,
-      waddr_mul = 39 : i32,
       op_add = #vc4.add_opcode<add>,
       op_mul = #vc4.mul_opcode<nop>,
       raddr_a = 1 : i32,
@@ -178,22 +176,7 @@ vc4.module @memory_output {
     }
 
     // mov -, vw_wait
-    vc4.qpu.bundle {
-      sig = #vc4.qpu_signal<none>,
-      pm = false,
-      cond_add = #vc4.cond<always>,
-      cond_mul = #vc4.cond<never>,
-      waddr_add = 39 : i32,
-      waddr_mul = 39 : i32,
-      op_add = #vc4.add_opcode<or>,
-      op_mul = #vc4.mul_opcode<nop>,
-      raddr_a = 0 : i32,
-      raddr_b = 50 : i32,
-      add_a = #vc4.qpu_mux<b>,
-      add_b = #vc4.qpu_mux<b>,
-      mul_a = #vc4.qpu_mux<r0>,
-      mul_b = #vc4.qpu_mux<r1>
-    }
+    vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
     // shl r1, ra1, 7     ; VDW setup row offset
     vc4.qpu.bundle {
@@ -224,14 +207,12 @@ vc4.module @memory_output {
     }
 
     // add vw_setup, r2, r1
-    vc4.qpu.bundle {
-      sig = #vc4.qpu_signal<none>,
+    vc4.qpu.vpmvcd_setup {
+      side = #vc4.vpmvcd_side<write>,
       pm = false,
       cond_add = #vc4.cond<always>,
       cond_mul = #vc4.cond<never>,
       write_swap,
-      waddr_add = 49 : i32,
-      waddr_mul = 39 : i32,
       op_add = #vc4.add_opcode<add>,
       op_mul = #vc4.mul_opcode<nop>,
       raddr_a = 0 : i32,
@@ -243,14 +224,12 @@ vc4.module @memory_output {
     }
 
     // mov vw_addr, ra3
-    vc4.qpu.bundle {
-      sig = #vc4.qpu_signal<none>,
+    vc4.qpu.vpmvcd_addr {
+      side = #vc4.vpmvcd_side<write>,
       pm = false,
       cond_add = #vc4.cond<always>,
       cond_mul = #vc4.cond<never>,
       write_swap,
-      waddr_add = 50 : i32,
-      waddr_mul = 39 : i32,
       op_add = #vc4.add_opcode<or>,
       op_mul = #vc4.mul_opcode<nop>,
       raddr_a = 3 : i32,
@@ -262,22 +241,7 @@ vc4.module @memory_output {
     }
 
     // mov -, vw_wait
-    vc4.qpu.bundle {
-      sig = #vc4.qpu_signal<none>,
-      pm = false,
-      cond_add = #vc4.cond<always>,
-      cond_mul = #vc4.cond<never>,
-      waddr_add = 39 : i32,
-      waddr_mul = 39 : i32,
-      op_add = #vc4.add_opcode<or>,
-      op_mul = #vc4.mul_opcode<nop>,
-      raddr_a = 0 : i32,
-      raddr_b = 50 : i32,
-      add_a = #vc4.qpu_mux<b>,
-      add_b = #vc4.qpu_mux<b>,
-      mul_a = #vc4.qpu_mux<r0>,
-      mul_b = #vc4.qpu_mux<r1>
-    }
+    vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<write>}
 
     // thrend
     vc4.qpu.bundle {
