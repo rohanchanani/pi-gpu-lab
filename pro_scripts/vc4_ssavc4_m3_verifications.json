@@ -26,7 +26,8 @@
       ],
       "m3_cooperative_block": [
         "qpu_barrier_syncthreads_ssavc4",
-        "shared_transpose_16x16_ssavc4"
+        "shared_transpose_16x16_ssavc4",
+        "spill_cooperative_vpm_smoke_ssavc4"
       ],
       "m3_required": [
         "vector_store_smoke_ssavc4",
@@ -36,7 +37,8 @@
         "spill_pressure_smoke_ssavc4",
         "spill_branch_tail_smoke_ssavc4",
         "qpu_barrier_syncthreads_ssavc4",
-        "shared_transpose_16x16_ssavc4"
+        "shared_transpose_16x16_ssavc4",
+        "spill_cooperative_vpm_smoke_ssavc4"
       ]
     }
   },
@@ -60,7 +62,8 @@
     ],
     "m3_cooperative_block": [
       "qpu_barrier_syncthreads_ssavc4",
-      "shared_transpose_16x16_ssavc4"
+      "shared_transpose_16x16_ssavc4",
+      "spill_cooperative_vpm_smoke_ssavc4"
     ],
     "m3_required": [
       "vector_store_smoke_ssavc4",
@@ -70,7 +73,8 @@
       "spill_pressure_smoke_ssavc4",
       "spill_branch_tail_smoke_ssavc4",
       "qpu_barrier_syncthreads_ssavc4",
-      "shared_transpose_16x16_ssavc4"
+      "shared_transpose_16x16_ssavc4",
+      "spill_cooperative_vpm_smoke_ssavc4"
     ]
   },
   "slices": {
@@ -1527,6 +1531,9 @@
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/candidate/shared_transpose_16x16_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_cooperative_vpm_smoke_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_cooperative_vpm_smoke_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_cooperative_vpm_smoke_ssavc4/candidate/spill_cooperative_vpm_smoke_ssavc4_candidate_harness.c",
             "compiler/test/CodeGen/SSAVC4/Hardware/lit.local.cfg.py",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/lit.local.cfg.py"
           ]
@@ -1705,6 +1712,73 @@
             "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/shared_transpose_16x16_ssavc4/expected.json",
             ".vc4_auto/ssavc4_m3/hardware/shared_transpose_16x16_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-spill_cooperative_vpm_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture spill_cooperative_vpm_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "spill_cooperative_vpm_smoke_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-assemble-spill_cooperative_vpm_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for spill_cooperative_vpm_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "spill_cooperative_vpm_smoke_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-spill_cooperative_vpm_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for spill_cooperative_vpm_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "spill_cooperative_vpm_smoke_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-spill_cooperative_vpm_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture spill_cooperative_vpm_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "spill_cooperative_vpm_smoke_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-spill_cooperative_vpm_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for spill_cooperative_vpm_smoke_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_cooperative_vpm_smoke_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/spill_cooperative_vpm_smoke_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
         },

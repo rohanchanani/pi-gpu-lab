@@ -587,15 +587,6 @@ private:
 
   LogicalResult verifyS3SpillingSupported(
       Operation *diagnosticAnchor, ArrayRef<InstructionTemplate> templates) const {
-    DictionaryAttr resource = getResourceMetadata(diagnosticAnchor);
-    std::optional<llvm::StringRef> scheduleMode =
-        getResourceString(resource, "schedule_mode");
-    if (scheduleMode && *scheduleMode == "cooperative_block") {
-      return diagnosticAnchor->emitError()
-             << "S3 spilling supports only independent-vector data values; "
-                "cooperative/control path requires later spill support";
-    }
-
     bool sawNonUniform = false;
     DenseMap<Block *, unsigned> blockOrder;
     for (const InstructionTemplate &templ : templates) {
@@ -625,19 +616,20 @@ private:
         }
         sawNonUniform = true;
         break;
-      case InstructionTemplate::Kind::Barrier:
       case InstructionTemplate::Kind::SemaAcquire:
       case InstructionTemplate::Kind::SemaRelease:
+        return templ.source->emitOpError()
+               << "S4 spilling does not support spilling semaphore/control "
+                  "protocol values";
+      case InstructionTemplate::Kind::Barrier:
       case InstructionTemplate::Kind::VPMWrite:
       case InstructionTemplate::Kind::VPMRead:
-        return templ.source->emitOpError()
-               << "S3 spilling supports only independent-vector data values; "
-                  "value in cooperative/control path requires later spill "
-                  "support";
+        sawNonUniform = true;
+        break;
       case InstructionTemplate::Kind::UniformRead:
         if (sawNonUniform) {
           return templ.source->emitOpError()
-                 << "S3 spilling requires all ssavc4.uniform.read operations "
+                 << "S4 spilling requires all ssavc4.uniform.read operations "
                     "before spillable data operations";
         }
         break;
@@ -794,12 +786,11 @@ private:
         if (activeIt == activeRegisters.end()) {
           SpillSlot slot = getOrCreateSpillSlot(operand);
           FailureOr<int64_t> reg =
-              acquireRegister(index, protectedOperands, allocation.preActions);
+            acquireRegister(index, protectedOperands, allocation.preActions);
           if (failed(reg)) {
             return templ.source->emitOpError()
-                   << "S3 spilling supports only independent-vector data "
-                      "values; no scratch register was available to reload an "
-                      "operand";
+                   << "S4 spilling supports only data vector values; no "
+                      "scratch register was available to reload an operand";
           }
           activeRegisters[operand] = *reg;
           registerValues[*reg] = operand;
@@ -819,8 +810,8 @@ private:
             acquireRegister(index, protectedOperands, allocation.preActions);
         if (failed(reg)) {
           return templ.source->emitOpError()
-                 << "S3 spilling supports only independent-vector data values; "
-                    "no register was available for a spillable result";
+                 << "S4 spilling supports only data vector values; no register "
+                    "was available for a spillable result";
         }
         allocation.resultRegister = *reg;
         registers[*templ.result] = *reg;
@@ -2872,7 +2863,7 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
   }));
   builtins.push_back(builder.getDictionaryAttr({
       builder.getNamedAttr("name",
-                           builder.getStringAttr("__vc4_resident_request_id")),
+                           builder.getStringAttr("__vc4_spill_vpm_row")),
       builder.getNamedAttr("kind", builder.getStringAttr("hidden_runtime")),
       builder.getNamedAttr("materialization",
                            builder.getStringAttr("uniform_suffix")),
@@ -2901,6 +2892,56 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
   return builder.getDictionaryAttr(attrs);
 }
 
+static int64_t ceilDivPositiveI64(int64_t value, int64_t divisor) {
+  if (value <= 0)
+    return 0;
+  return 1 + (value - 1) / divisor;
+}
+
+static DictionaryAttr attachCooperativeSpillVPMRows(OpBuilder &builder,
+                                                    DictionaryAttr resource) {
+  if (!resource)
+    return resource;
+
+  std::optional<llvm::StringRef> scheduleMode =
+      getResourceString(resource, "schedule_mode");
+  if (!scheduleMode || *scheduleMode != "cooperative_block")
+    return resource;
+
+  int64_t warpsPerBlock =
+      getResourceI32(resource, "warps_per_block_max").value_or(12);
+  int64_t sharedBytes = getResourceI32(resource, "shared_vpm_bytes")
+                            .value_or(getResourceI32(resource,
+                                                     "vpm_bytes_per_block")
+                                          .value_or(0));
+  int64_t userRows = getResourceI32(resource, "user_shared_vpm_rows_per_block")
+                         .value_or(ceilDivPositiveI64(sharedBytes, 64));
+  int64_t spillRows = warpsPerBlock;
+  int64_t totalRows = userRows + spillRows;
+
+  SmallVector<NamedAttribute, 12> attrs;
+  for (NamedAttribute attr : resource)
+    attrs.push_back(attr);
+
+  auto replaceAttr = [&](StringRef name, Attribute value) {
+    StringAttr nameAttr = builder.getStringAttr(name);
+    for (NamedAttribute &attr : attrs) {
+      if (attr.getName() == nameAttr) {
+        attr.setValue(value);
+        return;
+      }
+    }
+    attrs.push_back(builder.getNamedAttr(name, value));
+  };
+
+  replaceAttr("user_shared_vpm_rows_per_block",
+              builder.getI32IntegerAttr(userRows));
+  replaceAttr("spill_vpm_rows_per_block",
+              builder.getI32IntegerAttr(spillRows));
+  replaceAttr("vpm_rows_per_block", builder.getI32IntegerAttr(totalRows));
+  return builder.getDictionaryAttr(attrs);
+}
+
 static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
                                      const SpillAwareAllocator &allocator) {
   if (!allocator.hasSpills())
@@ -2916,6 +2957,12 @@ static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
   if (launchABI)
     vc4Func->setAttr("vc4.launch_abi",
                      appendSpillFrameBaseBuiltin(builder, launchABI));
+
+  auto resource =
+      llvm::dyn_cast_or_null<DictionaryAttr>(vc4Func->getAttr("vc4.resource"));
+  if (resource)
+    vc4Func->setAttr("vc4.resource",
+                     attachCooperativeSpillVPMRows(builder, resource));
 }
 
 static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,

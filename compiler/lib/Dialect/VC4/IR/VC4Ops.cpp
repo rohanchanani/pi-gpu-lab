@@ -169,6 +169,7 @@ static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
                        {"__vc4_spill_frame_base",
                         "__vc4_spill_frame_bytes",
                         "__vc4_spill_frame_stride_bytes",
+                        "__vc4_spill_vpm_row",
                         "__vc4_resident_request_id"})) {
       return emitLaunchAbiError(
           op, "hidden_runtime builtin has unsupported reserved name");
@@ -333,11 +334,14 @@ static LogicalResult verifyResourceMetadata(mlir::vc4::FuncOp op) {
   int64_t vpmBytesPerBlock = 0;
   if (auto bytes = getI32("vpm_bytes_per_block")) vpmBytesPerBlock = *bytes;
   if (auto bytes = getI32("shared_vpm_bytes")) vpmBytesPerBlock = *bytes;
+  int64_t userSharedVPMRowsPerBlock = getI32("user_shared_vpm_rows_per_block").value_or((vpmBytesPerBlock <= 0) ? 0 : (1 + (vpmBytesPerBlock - 1) / 64));
+  int64_t spillVPMRowsPerBlock = getI32("spill_vpm_rows_per_block").value_or(0);
+  int64_t vpmRowsPerBlock = getI32("vpm_rows_per_block").value_or(userSharedVPMRowsPerBlock + spillVPMRowsPerBlock);
   if (warpsPerBlockMax <= 0) return emitResourceError(op, "warps_per_block_max must be greater than zero");
   if (semaphoresPerBlock < 0) return emitResourceError(op, "semaphores_per_block must be non-negative");
-  if (vpmBytesPerBlock < 0) return emitResourceError(op, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
+  if (vpmBytesPerBlock < 0 || userSharedVPMRowsPerBlock < 0 || spillVPMRowsPerBlock < 0 || vpmRowsPerBlock < 0) return emitResourceError(op, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
   if (scheduleMode == "independent_vector") {
-    if (usesBarrier || usesSharedVPM || requireFullResidency || semaphoresPerBlock != 0 || vpmBytesPerBlock != 0)
+    if (usesBarrier || usesSharedVPM || requireFullResidency || semaphoresPerBlock != 0 || vpmBytesPerBlock != 0 || vpmRowsPerBlock != 0)
       return emitResourceError(op, "independent_vector kernels must not request barrier/shared cooperative resources");
     return success();
   }
@@ -351,9 +355,11 @@ static LogicalResult verifyResourceMetadata(mlir::vc4::FuncOp op) {
     return emitResourceError(op, "barrier cooperative kernels require semaphores_per_block > 0");
   if (vpmBytesPerBlock > 4096)
     return emitResourceError(op, Twine("vpm_bytes_per_block/shared_vpm_bytes must fit the 4096 byte user-visible VPM window; got ") + Twine(vpmBytesPerBlock));
+  if (vpmRowsPerBlock > 64)
+    return emitResourceError(op, Twine("vpm_rows_per_block must fit the 64 row VPM; got ") + Twine(vpmRowsPerBlock));
   int64_t byQPU = 12 / warpsPerBlockMax;
   int64_t bySem = semaphoresPerBlock <= 0 ? 12 : 16 / semaphoresPerBlock;
-  int64_t byVPM = vpmBytesPerBlock <= 0 ? 12 : 4096 / vpmBytesPerBlock;
+  int64_t byVPM = vpmRowsPerBlock > 0 ? 64 / vpmRowsPerBlock : (vpmBytesPerBlock <= 0 ? 12 : 4096 / vpmBytesPerBlock);
   if (std::min(byQPU, std::min(bySem, byVPM)) <= 0)
     return emitResourceError(op, "cooperative_block resource request leaves zero resident_blocks; check warps_per_block_max, vpm_bytes_per_block, and semaphores_per_block");
   return success();

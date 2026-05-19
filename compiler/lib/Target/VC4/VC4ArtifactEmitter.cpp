@@ -70,6 +70,8 @@ struct KernelResourceModel {
   bool usesSharedVPM = false;
   bool requireFullBlockResidency = false;
   int64_t vpmBytesPerBlock = 0;
+  int64_t userSharedVPMRowsPerBlock = 0;
+  int64_t spillVPMRowsPerBlock = 0;
   int64_t vpmRowsPerBlock = 0;
   int64_t semaphoresPerBlock = 0;
   int64_t warpsPerBlockMax = 1;
@@ -631,21 +633,40 @@ static LogicalResult parseResourceModel(mlir::vc4::FuncOp func,
     parsed.vpmBytesPerBlock = *vpmBytes;
   if (std::optional<int64_t> sharedVPMBytes = getDictionaryIntegerAttrValue(resourceDict, "shared_vpm_bytes"))
     parsed.vpmBytesPerBlock = *sharedVPMBytes;
-  if (std::optional<int64_t> vpmRows = getDictionaryIntegerAttrValue(resourceDict, "vpm_rows_per_block"))
+  parsed.userSharedVPMRowsPerBlock =
+      getDictionaryIntegerAttrValue(resourceDict, "user_shared_vpm_rows_per_block")
+          .value_or(ceilDivPositive(parsed.vpmBytesPerBlock, kVC4VPMRowBytes));
+  parsed.spillVPMRowsPerBlock =
+      getDictionaryIntegerAttrValue(resourceDict, "spill_vpm_rows_per_block")
+          .value_or(0);
+  int64_t spillFrameBytes =
+      getDictionaryIntegerAttrValue(func->getAttrDictionary(), "spill_frame_bytes")
+          .value_or(0);
+  if (parsed.scheduleMode == "cooperative_block" && spillFrameBytes > 0 &&
+      parsed.spillVPMRowsPerBlock == 0)
+    parsed.spillVPMRowsPerBlock = parsed.warpsPerBlockMax;
+  int64_t requiredVPMRows =
+      parsed.userSharedVPMRowsPerBlock + parsed.spillVPMRowsPerBlock;
+  if (std::optional<int64_t> vpmRows = getDictionaryIntegerAttrValue(resourceDict, "vpm_rows_per_block")) {
     parsed.vpmRowsPerBlock = *vpmRows;
-  else
-    parsed.vpmRowsPerBlock = ceilDivPositive(parsed.vpmBytesPerBlock, kVC4VPMRowBytes);
+    if (parsed.spillVPMRowsPerBlock != 0 && parsed.vpmRowsPerBlock < requiredVPMRows)
+      return emitResourceModelError(func, llvm::Twine("vpm_rows_per_block must include user shared rows plus spill scratch rows; expected at least ") + llvm::Twine(requiredVPMRows));
+  } else {
+    parsed.vpmRowsPerBlock = requiredVPMRows;
+  }
 
   if (parsed.warpsPerBlockMax <= 0)
     return emitResourceModelError(func, "warps_per_block_max must be greater than zero");
   if (parsed.semaphoresPerBlock < 0)
     return emitResourceModelError(func, "semaphores_per_block must be non-negative");
-  if (parsed.vpmBytesPerBlock < 0 || parsed.vpmRowsPerBlock < 0)
+  if (parsed.vpmBytesPerBlock < 0 || parsed.userSharedVPMRowsPerBlock < 0 ||
+      parsed.spillVPMRowsPerBlock < 0 || parsed.vpmRowsPerBlock < 0)
     return emitResourceModelError(func, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
 
   if (parsed.scheduleMode == "independent_vector") {
     if (parsed.usesBarrier || parsed.usesSharedVPM || parsed.requireFullBlockResidency ||
-        parsed.semaphoresPerBlock != 0 || parsed.vpmBytesPerBlock != 0)
+        parsed.semaphoresPerBlock != 0 || parsed.vpmBytesPerBlock != 0 ||
+        parsed.vpmRowsPerBlock != 0)
       return emitResourceModelError(func, "independent_vector kernels must not request barrier/shared cooperative resources");
     parsed.warpsPerBlockMax = 1;
     parsed.maxResidentBlocks = kVC4TargetActiveQPUs;
@@ -663,10 +684,16 @@ static LogicalResult parseResourceModel(mlir::vc4::FuncOp func,
     return emitResourceModelError(func, "barrier cooperative kernels require semaphores_per_block > 0");
   if (parsed.vpmBytesPerBlock > kVC4TargetVPMBytes)
     return emitResourceModelError(func, llvm::Twine("vpm_bytes_per_block/shared_vpm_bytes must fit the 4096 byte user-visible VPM window; got ") + llvm::Twine(parsed.vpmBytesPerBlock));
+  if (parsed.vpmRowsPerBlock > kVC4TargetVPMBytes / kVC4VPMRowBytes)
+    return emitResourceModelError(func, llvm::Twine("vpm_rows_per_block must fit the 64 row VPM; got ") + llvm::Twine(parsed.vpmRowsPerBlock));
 
   int64_t byQPU = resourceLimitFor(kVC4TargetActiveQPUs, parsed.warpsPerBlockMax);
   int64_t bySem = resourceLimitFor(kVC4TargetSemaphores, parsed.semaphoresPerBlock);
-  int64_t byVPM = resourceLimitFor(kVC4TargetVPMBytes, parsed.vpmBytesPerBlock);
+  int64_t byVPM = parsed.vpmRowsPerBlock > 0
+                      ? resourceLimitFor(kVC4TargetVPMBytes / kVC4VPMRowBytes,
+                                         parsed.vpmRowsPerBlock)
+                      : resourceLimitFor(kVC4TargetVPMBytes,
+                                         parsed.vpmBytesPerBlock);
   parsed.maxResidentBlocks = min3(byQPU, bySem, byVPM);
   if (parsed.maxResidentBlocks <= 0)
     return emitResourceModelError(func, "cooperative_block resource request leaves zero resident_blocks; check warps_per_block_max, vpm_bytes_per_block, and semaphores_per_block");
@@ -2868,6 +2895,7 @@ static bool isHiddenRuntimeBuiltinName(llvm::StringRef name) {
   return name == "__vc4_spill_frame_base" ||
          name == "__vc4_spill_frame_bytes" ||
          name == "__vc4_spill_frame_stride_bytes" ||
+         name == "__vc4_spill_vpm_row" ||
          name == "__vc4_resident_request_id";
 }
 
@@ -2881,6 +2909,8 @@ getHiddenRuntimeRequestInfoField(llvm::StringRef name) {
     return llvm::StringRef("spill_frame_stride_bytes");
   if (name == "__vc4_resident_request_id")
     return llvm::StringRef("resident_request_id");
+  if (name == "__vc4_spill_vpm_row")
+    return llvm::StringRef("spill_vpm_row");
   return std::nullopt;
 }
 
@@ -3053,6 +3083,12 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << macroKernel.resources.semaphoresPerBlock << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_VPM_BYTES_PER_BLOCK "
        << macroKernel.resources.vpmBytesPerBlock << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId
+       << "_USER_SHARED_VPM_ROWS_PER_BLOCK "
+       << macroKernel.resources.userSharedVPMRowsPerBlock << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId
+       << "_SPILL_VPM_ROWS_PER_BLOCK "
+       << macroKernel.resources.spillVPMRowsPerBlock << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_VPM_ROWS_PER_BLOCK "
        << macroKernel.resources.vpmRowsPerBlock << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_MAX_RESIDENT_BLOCKS "
@@ -3070,7 +3106,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
      << " hidden_arena_before_public_heap="
      << (programLayout.spillArenaBytes ? 1 : 0)
      << " request_info_fields=resident_request_id,spill_frame_base,"
-        "spill_frame_bytes,spill_frame_stride_bytes */\n";
+        "spill_frame_bytes,spill_frame_stride_bytes,spill_vpm_row */\n";
   os << "/* Generated launches pack kernel-specific uniforms; libpi owns "
         "allocation, code residency, queueing, and heap/copy APIs. */\n\n";
 
@@ -3157,6 +3193,10 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << " warps_per_block_max=" << resourceKernel.resources.warpsPerBlockMax
        << " semaphore_base=resident_slot*" << resourceKernel.resources.semaphoresPerBlock
        << " vpm_base_row=resident_slot*" << resourceKernel.resources.vpmRowsPerBlock
+       << " user_shared_vpm_rows="
+       << resourceKernel.resources.userSharedVPMRowsPerBlock
+       << " spill_vpm_rows="
+       << resourceKernel.resources.spillVPMRowsPerBlock
        << " full_residency resident_wave_wait_before_resource_reuse="
        << (resourceKernel.resources.requireFullBlockResidency ? 1 : 0)
        << " */\n";
@@ -3171,8 +3211,15 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     if (spillKernel.resources.scheduleMode == "cooperative_block") {
       os << " resident_request_id=resident_block_slot*warps_per_block+"
             "logical_warp_id";
+      if (spillKernel.resources.spillVPMRowsPerBlock != 0) {
+        os << " spill_vpm_row=vpm_base_row+"
+           << spillKernel.resources.userSharedVPMRowsPerBlock
+           << "+logical_warp_id";
+      }
     } else {
       os << " resident_request_id=wave_local_request_index";
+      if (spillKernel.spill.frameBytes != 0)
+        os << " spill_vpm_row=resident_request_id";
     }
     os << " spill_frame_base=spill_arena_base+resident_request_id*"
           "spill_frame_stride_bytes */\n";
@@ -3306,6 +3353,20 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
                << builtin->name << " */\n";
           }
         } else if (builtin->kind == "hidden_runtime") {
+          if (builtin->name == "__vc4_spill_vpm_row") {
+            if (launchKernel.resources.scheduleMode == "cooperative_block") {
+              os << "  uniformWords[" << index
+                 << "] = requestInfo->vpm_base_row + KERNEL_"
+                 << launchKernel.kernelId
+                 << "_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* hidden_runtime "
+                 << builtin->name << " */\n";
+            } else {
+              os << "  uniformWords[" << index
+                 << "] = requestInfo->resident_request_id; /* hidden_runtime "
+                 << builtin->name << " */\n";
+            }
+            continue;
+          }
           std::optional<llvm::StringRef> field =
               getHiddenRuntimeRequestInfoField(builtin->name);
           if (!field) {
@@ -3527,6 +3588,8 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "        \"require_full_block_residency\": " << (kernel.resources.requireFullBlockResidency ? "true" : "false") << ",\n";
   os << "        \"vpm_bytes_per_block\": " << kernel.resources.vpmBytesPerBlock << ",\n";
   os << "        \"shared_vpm_bytes\": " << kernel.resources.vpmBytesPerBlock << ",\n";
+  os << "        \"user_shared_vpm_rows_per_block\": " << kernel.resources.userSharedVPMRowsPerBlock << ",\n";
+  os << "        \"spill_vpm_rows_per_block\": " << kernel.resources.spillVPMRowsPerBlock << ",\n";
   os << "        \"vpm_rows_per_block\": " << kernel.resources.vpmRowsPerBlock << ",\n";
   os << "        \"semaphores_per_block\": " << kernel.resources.semaphoresPerBlock << ",\n";
   os << "        \"warps_per_block_max\": " << kernel.resources.warpsPerBlockMax << ",\n";
