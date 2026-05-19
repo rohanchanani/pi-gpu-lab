@@ -96,6 +96,22 @@ def VC4_QPUVPMVCDSetupOp
     : VC4_QPUVPMVCDWritePseudoOp<"qpu.vpmvcd_setup",
         "Scheduled VC4 VPM/VCD/VDW setup write pseudo-instruction">;
 
+def VC4_QPUVPMVCDSetupLDIOp : VC4_MemoryEffectOp<"qpu.vpmvcd_setup_ldi"> {
+  let summary = "Scheduled VC4 VPM/VCD/VDW load-immediate setup write pseudo-instruction";
+  let arguments = (ins
+    VC4_LoadImmModeAttr:$mode,
+    VC4_VPMVCDSideAttr:$side,
+    I32Attr:$value,
+    BoolAttr:$pm,
+    VC4_CondAttr:$cond_add,
+    VC4_CondAttr:$cond_mul,
+    OptionalAttr<I32Attr>:$waddr_add,
+    OptionalAttr<I32Attr>:$waddr_mul
+  );
+  let assemblyFormat = "$mode attr-dict";
+  let hasVerifier = 1;
+}
+
 def VC4_QPUVPMVCDAddrOp
     : VC4_QPUVPMVCDWritePseudoOp<"qpu.vpmvcd_addr",
         "Scheduled VC4 VPM/VCD/VDW address write pseudo-instruction">;

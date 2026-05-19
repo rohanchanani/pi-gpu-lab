@@ -608,6 +608,38 @@ static LogicalResult verifyQPUVPMVCDWritePseudoOp(
                                        smallImmAttr, mulA, mulB);
 }
 
+static LogicalResult verifyNoRawVPMVCDControlWrite(Operation *op,
+                                                   StringRef opName,
+                                                   mlir::vc4::Cond cond,
+                                                   IntegerAttr addressAttr) {
+  if (cond == mlir::vc4::Cond::never || !addressAttr)
+    return success();
+
+  int64_t address = addressAttr.getInt();
+  if (address == 49) {
+    return op->emitOpError()
+           << "raw " << opName
+           << " writes to VPM/VCD/VDW setup address 49 require "
+              "vc4.qpu.vpmvcd_setup or vc4.qpu.vpmvcd_setup_ldi";
+  }
+  if (address == 50) {
+    return op->emitOpError()
+           << "raw " << opName
+           << " writes to VPM/VCD/VDW address register 50 require "
+              "vc4.qpu.vpmvcd_addr";
+  }
+  return success();
+}
+
+static LogicalResult verifyNoRawVPMVCDWaitRead(Operation *op,
+                                               IntegerAttr addressAttr) {
+  if (!addressAttr || addressAttr.getInt() != 50)
+    return success();
+  return op->emitOpError()
+         << "raw vc4.qpu.bundle reads from VPM/VCD/VDW wait address 50 "
+            "require vc4.qpu.vpmvcd_wait";
+}
+
 static LogicalResult verifyQPUUnpackAttr(Operation *op, bool pm,
                                          Attribute unpackAttr) {
   if (!unpackAttr)
@@ -793,6 +825,12 @@ LogicalResult mlir::vc4::QPULDIOp::verify() {
   if (failed(
           verifyQPUWriteAddressAttr(getOperation(), "waddr_mul", getWaddrMulAttr())))
     return failure();
+  if (failed(verifyNoRawVPMVCDControlWrite(
+          getOperation(), "vc4.qpu.ldi", getCondAdd(), getWaddrAddAttr())))
+    return failure();
+  if (failed(verifyNoRawVPMVCDControlWrite(
+          getOperation(), "vc4.qpu.ldi", getCondMul(), getWaddrMulAttr())))
+    return failure();
   return success();
 }
 
@@ -844,15 +882,26 @@ LogicalResult mlir::vc4::QPUBundleOp::verify() {
   if (failed(verifyQPUBundleWriteConflict(getOperation(), getOpAdd(), getOpMul(),
                                           getWaddrAddAttr(), getWaddrMulAttr())))
     return failure();
+  if (failed(verifyNoRawVPMVCDControlWrite(
+          getOperation(), "vc4.qpu.bundle", getCondAdd(), getWaddrAddAttr())))
+    return failure();
+  if (failed(verifyNoRawVPMVCDControlWrite(
+          getOperation(), "vc4.qpu.bundle", getCondMul(), getWaddrMulAttr())))
+    return failure();
   if (failed(
           verifyQPUBundleReadAddressAttr(getOperation(), "raddr_a",
                                          getRaddrAAttr())))
+    return failure();
+  if (failed(verifyNoRawVPMVCDWaitRead(getOperation(), getRaddrAAttr())))
     return failure();
   if (hasRaddrB &&
       failed(verifyQPUBundleReadAddressAttr(getOperation(), "raddr_b",
                                             getRaddrBAttr()))) {
     return failure();
   }
+  if (hasRaddrB &&
+      failed(verifyNoRawVPMVCDWaitRead(getOperation(), getRaddrBAttr())))
+    return failure();
 
   if (hasSmallImm) {
     int64_t smallImm = getSmallImmAttr().getInt();
@@ -905,6 +954,37 @@ LogicalResult mlir::vc4::QPUVPMVCDSetupOp::verify() {
       getOperation(), 49, getCondAdd(), getCondMul(), getOpAdd(), getOpMul(),
       getRaddrAAttr(), getRaddrBAttr(), getSmallImmAttr(), getMulA(),
       getMulB());
+}
+
+void mlir::vc4::QPUVPMVCDSetupLDIOp::getEffects(MemoryEffectList &effects) {
+  if (getSide() == mlir::vc4::VPMVCDSide::read)
+    addWriteEffect<mlir::vc4::effects::VDR>(effects);
+  else
+    addWriteEffect<mlir::vc4::effects::VDW>(effects);
+}
+
+LogicalResult mlir::vc4::QPUVPMVCDSetupLDIOp::verify() {
+  if (failed(verifyScheduledFormOp(getOperation())))
+    return failure();
+
+  if (getMode() != mlir::vc4::LoadImmMode::splat32)
+    return emitOpError("requires mode #vc4.load_imm_mode<splat32>");
+  if (!getValueAttr().getType().isSignlessInteger(32))
+    return emitOpError("requires a signless i32 'value' attribute");
+  if (getPm())
+    return emitOpError("requires pm = false");
+  if (getCondAdd() == mlir::vc4::Cond::never)
+    return emitOpError(
+        "requires an active ADD-side write to VPM/VCD/VDW setup address 49");
+  if (getCondMul() != mlir::vc4::Cond::never)
+    return emitOpError("must not carry an active MUL-side write");
+  if (failed(verifyOptionalLiteralAddress(getOperation(), "waddr_add",
+                                          getWaddrAddAttr(), 49)))
+    return failure();
+  if (failed(verifyOptionalLiteralAddress(getOperation(), "waddr_mul",
+                                          getWaddrMulAttr(), 32)))
+    return failure();
+  return success();
 }
 
 void mlir::vc4::QPUVPMVCDAddrOp::getEffects(MemoryEffectList &effects) {

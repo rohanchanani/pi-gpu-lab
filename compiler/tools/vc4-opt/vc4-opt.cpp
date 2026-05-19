@@ -23,6 +23,7 @@ static bool isAllowedVC4QASMInputOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPUBranchOp,
                    mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp,
                    mlir::vc4::QPUVPMVCDSetupOp,
+                   mlir::vc4::QPUVPMVCDSetupLDIOp,
                    mlir::vc4::QPUVPMVCDAddrOp,
                    mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
@@ -30,6 +31,7 @@ static bool isAllowedVC4QASMInputOp(mlir::Operation &op) {
 static bool isVC4ScheduledNonBranchOp(mlir::Operation &op) {
   return llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                    mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
+                   mlir::vc4::QPUVPMVCDSetupLDIOp,
                    mlir::vc4::QPUVPMVCDAddrOp,
                    mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
@@ -482,6 +484,7 @@ static mlir::LogicalResult appendVC4ScheduledInstructionStream(
     llvm::StringRef verifierPassArg) {
   if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                 mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
+                mlir::vc4::QPUVPMVCDSetupLDIOp,
                 mlir::vc4::QPUVPMVCDAddrOp,
                 mlir::vc4::QPUVPMVCDWaitOp>(op)) {
     stream.push_back(op);
@@ -637,7 +640,7 @@ struct VC4VerifyEmitContractPass
           op->emitOpError()
               << "is not a supported scheduled sink op for qasm input; "
                  "expected only vc4.qpu.bundle, vc4.qpu.branch, "
-                 "vc4.qpu.ldi, or vc4.qpu.sema";
+                 "vc4.qpu.ldi, vc4.qpu.sema, or vc4.qpu.vpmvcd_*";
           sawError = true;
           return mlir::WalkResult::interrupt();
         });
@@ -686,7 +689,8 @@ struct VC4VerifyEmitContractPass
         if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 1])) {
           emitInvalidQASMEpilogueDiag(func)
               << "; slot N-2 must be a non-branch scheduled op "
-                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, vc4.qpu.sema, or "
+                 "vc4.qpu.vpmvcd_*)";
           sawError = true;
           return mlir::WalkResult::interrupt();
         }
@@ -694,7 +698,8 @@ struct VC4VerifyEmitContractPass
         if (!isVC4ScheduledNonBranchOp(*stream[epilogueStart + 2])) {
           emitInvalidQASMEpilogueDiag(func)
               << "; slot N-1 must be a non-branch scheduled op "
-                 "(vc4.qpu.bundle, vc4.qpu.ldi, or vc4.qpu.sema)";
+                 "(vc4.qpu.bundle, vc4.qpu.ldi, vc4.qpu.sema, or "
+                 "vc4.qpu.vpmvcd_*)";
           sawError = true;
           return mlir::WalkResult::interrupt();
         }

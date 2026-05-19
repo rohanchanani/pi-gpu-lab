@@ -124,16 +124,7 @@ struct ProgramLayoutModel {
   llvm::SmallVector<KernelLayoutRecord, 8> kernels;
 };
 
-enum class VPMTransferAliasKind { Unknown, Read, Write };
-
 struct QASMEmissionState {
-  QASMEmissionState() {
-    for (VPMTransferAliasKind &kind : accumulatorSetupKind)
-      kind = VPMTransferAliasKind::Unknown;
-  }
-
-  VPMTransferAliasKind accumulatorSetupKind[6];
-  VPMTransferAliasKind pendingAddressKind = VPMTransferAliasKind::Unknown;
   std::optional<unsigned> preparedVectorRotateDest;
   std::optional<int64_t> preparedVectorRotateSelector;
 };
@@ -726,6 +717,7 @@ static bool isNonBranchScheduledDelaySlotOpWithoutThreadEnd(
     return bundle.getSig() != mlir::vc4::QPUSignal::thrend;
   return llvm::isa<mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp,
                    mlir::vc4::QPUVPMVCDSetupOp,
+                   mlir::vc4::QPUVPMVCDSetupLDIOp,
                    mlir::vc4::QPUVPMVCDAddrOp,
                    mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
@@ -757,6 +749,7 @@ static LogicalResult appendScheduledSinkOp(
     mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream) {
   if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                 mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
+                mlir::vc4::QPUVPMVCDSetupLDIOp,
                 mlir::vc4::QPUVPMVCDAddrOp,
                 mlir::vc4::QPUVPMVCDWaitOp>(op)) {
     stream.push_back(op);
@@ -1310,38 +1303,22 @@ static std::string formatRegFileAddress(char regFile, int64_t address) {
   return result;
 }
 
-static VPMTransferAliasKind normalizeVPMAliasKind(VPMTransferAliasKind kind) {
-  return kind == VPMTransferAliasKind::Read ? VPMTransferAliasKind::Read
-                                            : VPMTransferAliasKind::Write;
+static std::string getVPMSetupName(mlir::vc4::VPMVCDSide side) {
+  return side == mlir::vc4::VPMVCDSide::read ? std::string("vr_setup")
+                                             : std::string("vw_setup");
 }
 
-static std::string getVPMSetupName(VPMTransferAliasKind kind) {
-  return normalizeVPMAliasKind(kind) == VPMTransferAliasKind::Read
-             ? std::string("vr_setup")
-             : std::string("vw_setup");
+static std::string getVPMAddressName(mlir::vc4::VPMVCDSide side) {
+  return side == mlir::vc4::VPMVCDSide::read ? std::string("vr_addr")
+                                             : std::string("vw_addr");
 }
 
-static std::string getVPMAddressName(VPMTransferAliasKind kind) {
-  return normalizeVPMAliasKind(kind) == VPMTransferAliasKind::Read
-             ? std::string("vr_addr")
-             : std::string("vw_addr");
+static std::string getVPMWaitName(mlir::vc4::VPMVCDSide side) {
+  return side == mlir::vc4::VPMVCDSide::read ? std::string("vr_wait")
+                                             : std::string("vw_wait");
 }
 
-static std::string getVPMWaitName(VPMTransferAliasKind kind) {
-  return normalizeVPMAliasKind(kind) == VPMTransferAliasKind::Read
-             ? std::string("vr_wait")
-             : std::string("vw_wait");
-}
-
-static VPMTransferAliasKind
-getVPMTransferAliasKind(mlir::vc4::VPMVCDSide side) {
-  return side == mlir::vc4::VPMVCDSide::read ? VPMTransferAliasKind::Read
-                                             : VPMTransferAliasKind::Write;
-}
-
-static std::string formatReadAddress(char regFile, int64_t address,
-                                     VPMTransferAliasKind vpmKind =
-                                         VPMTransferAliasKind::Unknown) {
+static std::string formatReadAddress(char regFile, int64_t address) {
   // vc4asm names several read-side peripheral addresses symbolically.  Do not
   // print them as ordinary regfile locations: e.g. ra32 is not a uniform read
   // in the source language the hardware reference uses.
@@ -1352,8 +1329,6 @@ static std::string formatReadAddress(char regFile, int64_t address,
     return "elem_num";
   case 48:
     return "vpm";
-  case 50:
-    return getVPMWaitName(vpmKind);
   case 51:
     return "mutex_acq";
   default:
@@ -1362,9 +1337,7 @@ static std::string formatReadAddress(char regFile, int64_t address,
 }
 
 static std::string formatWriteAddress(int64_t address, bool forAddALU,
-                                      bool writeSwap,
-                                      VPMTransferAliasKind vpmKind =
-                                          VPMTransferAliasKind::Unknown) {
+                                      bool writeSwap) {
   if (address >= 32 && address <= 36)
     return "r" + std::to_string(address - 32);
   if (address == 37)
@@ -1373,18 +1346,12 @@ static std::string formatWriteAddress(int64_t address, bool forAddALU,
     return "-";
 
   // vc4asm also requires symbolic names for side-effecting peripheral writes.
-  // Printing these as raw raN/rbN locations assembles the wrong artifact
-  // boundary for DMA/VPM/TMU traffic.  The VPM DMA setup and address registers
-  // share numeric QPU addresses between read-side (vr_*) and write-side (vw_*)
-  // forms, so the emitter tracks the setup literal flow through accumulator
-  // temporaries and chooses the corresponding vc4asm symbolic name.
+  // Address-49/50 VPM/VCD/VDW setup/address writes must use explicit
+  // vc4.qpu.vpmvcd_* pseudo-ops, where the read/write side is carried by the
+  // op itself.  Raw address-49/50 scheduled ops are rejected before emission.
   switch (address) {
   case 48:
     return "vpm";
-  case 49:
-    return getVPMSetupName(vpmKind);
-  case 50:
-    return getVPMAddressName(vpmKind);
   case 51:
     return "mutex_rel";
   case 56:
@@ -1476,7 +1443,6 @@ formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
 static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
                                      mlir::vc4::QPUMux mux,
                                      std::string unpackSuffix,
-                                     VPMTransferAliasKind vpmKind,
                                      std::string &out) {
   int64_t raddrA = getIntegerAttrValue(bundle.getOperation(), "raddr_a");
   std::optional<int64_t> raddrB =
@@ -1504,7 +1470,7 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
     out = "r5";
     return success();
   case mlir::vc4::QPUMux::a:
-    out = formatReadAddress('a', raddrA, vpmKind) + unpackSuffix;
+    out = formatReadAddress('a', raddrA) + unpackSuffix;
     return success();
   case mlir::vc4::QPUMux::b:
     if (smallImm) {
@@ -1528,7 +1494,7 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
              << "cannot emit source mux #vc4.qpu_mux<b> without raddr_b or "
                 "small_imm";
     }
-    out = formatReadAddress('b', *raddrB, vpmKind);
+    out = formatReadAddress('b', *raddrB);
     return success();
   }
   return bundle.emitOpError() << "cannot emit unknown qpu source mux";
@@ -1653,45 +1619,6 @@ formatPseudoVPMVCDMuxSource(mlir::Operation *op, mlir::vc4::QPUMux mux,
   return op->emitOpError() << "cannot emit unknown qpu source mux";
 }
 
-static std::optional<unsigned> getAccumulatorIndexForWriteAddress(int64_t address) {
-  if (address >= 32 && address <= 36)
-    return static_cast<unsigned>(address - 32);
-  if (address == 37)
-    return 5;
-  return std::nullopt;
-}
-
-static VPMTransferAliasKind mergeVPMKinds(VPMTransferAliasKind lhs,
-                                          VPMTransferAliasKind rhs) {
-  if (lhs != VPMTransferAliasKind::Unknown)
-    return lhs;
-  return rhs;
-}
-
-static VPMTransferAliasKind getSetupKindForMux(
-    const QASMEmissionState &state, mlir::vc4::QPUMux mux) {
-  std::optional<unsigned> accumulator = getAccumulatorIndexForMux(mux);
-  if (!accumulator || *accumulator >= 6)
-    return VPMTransferAliasKind::Unknown;
-  return state.accumulatorSetupKind[*accumulator];
-}
-
-static VPMTransferAliasKind inferVPMSetupWriteKind(
-    const QASMEmissionState &state, mlir::vc4::QPUBundleOp bundle) {
-  VPMTransferAliasKind kind = VPMTransferAliasKind::Unknown;
-  if (bundle.getOpAdd() != mlir::vc4::AddOpcode::nop &&
-      bundle.getCondAdd() != mlir::vc4::Cond::never) {
-    kind = mergeVPMKinds(kind, getSetupKindForMux(state, bundle.getAddA()));
-    kind = mergeVPMKinds(kind, getSetupKindForMux(state, bundle.getAddB()));
-  }
-  if (bundle.getOpMul() != mlir::vc4::MulOpcode::nop &&
-      bundle.getCondMul() != mlir::vc4::Cond::never) {
-    kind = mergeVPMKinds(kind, getSetupKindForMux(state, bundle.getMulA()));
-    kind = mergeVPMKinds(kind, getSetupKindForMux(state, bundle.getMulB()));
-  }
-  return kind;
-}
-
 static bool qpuBundleWritesAddress(mlir::vc4::QPUBundleOp bundle,
                                    int64_t address) {
   mlir::Operation *op = bundle.getOperation();
@@ -1701,83 +1628,13 @@ static bool qpuBundleWritesAddress(mlir::vc4::QPUBundleOp bundle,
           getIntegerAttrValue(op, "waddr_mul") == address);
 }
 
-static bool muxReadsRawAddress(mlir::vc4::QPUBundleOp bundle,
-                               mlir::vc4::QPUMux mux, int64_t address) {
+static bool qpuBundleCarriesReadAddress(mlir::vc4::QPUBundleOp bundle,
+                                        int64_t address) {
   mlir::Operation *op = bundle.getOperation();
-  if (mux == mlir::vc4::QPUMux::a)
-    return getIntegerAttrValue(op, "raddr_a") == address;
-  if (mux != mlir::vc4::QPUMux::b)
-    return false;
-  if (getOptionalIntegerAttrValue(op, "small_imm"))
-    return false;
+  if (getIntegerAttrValue(op, "raddr_a") == address)
+    return true;
   std::optional<int64_t> raddrB = getOptionalIntegerAttrValue(op, "raddr_b");
   return raddrB && *raddrB == address;
-}
-
-static bool qpuBundleReadsAddress(mlir::vc4::QPUBundleOp bundle,
-                                  int64_t address) {
-  if (bundle.getOpAdd() != mlir::vc4::AddOpcode::nop &&
-      bundle.getCondAdd() != mlir::vc4::Cond::never &&
-      (muxReadsRawAddress(bundle, bundle.getAddA(), address) ||
-       muxReadsRawAddress(bundle, bundle.getAddB(), address)))
-    return true;
-  if (bundle.getOpMul() != mlir::vc4::MulOpcode::nop &&
-      bundle.getCondMul() != mlir::vc4::Cond::never &&
-      (muxReadsRawAddress(bundle, bundle.getMulA(), address) ||
-       muxReadsRawAddress(bundle, bundle.getMulB(), address)))
-    return true;
-  return false;
-}
-
-static VPMTransferAliasKind inferVPMSetupUseFromFollowingOps(
-    mlir::vc4::QPUBundleOp setupBundle) {
-  constexpr unsigned kMaxVPMSetupLookahead = 8;
-  unsigned inspected = 0;
-  for (mlir::Operation *next = setupBundle->getNextNode(); next && inspected < kMaxVPMSetupLookahead;
-       next = next->getNextNode(), ++inspected) {
-    if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(next)) {
-      if (qpuBundleReadsAddress(bundle, 48))
-        return VPMTransferAliasKind::Read;
-      if (qpuBundleWritesAddress(bundle, 48))
-        return VPMTransferAliasKind::Write;
-      if (qpuBundleWritesAddress(bundle, 49) || qpuBundleWritesAddress(bundle, 50))
-        return VPMTransferAliasKind::Unknown;
-      continue;
-    }
-    if (llvm::isa<mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp,
-                  mlir::vc4::QPUVPMVCDSetupOp,
-                  mlir::vc4::QPUVPMVCDAddrOp,
-                  mlir::vc4::QPUVPMVCDWaitOp>(next))
-      continue;
-    break;
-  }
-  return VPMTransferAliasKind::Unknown;
-}
-
-static void clearAccumulatorSetupWrite(QASMEmissionState &state,
-                                       mlir::vc4::Cond cond,
-                                       int64_t address) {
-  if (cond == mlir::vc4::Cond::never)
-    return;
-  std::optional<unsigned> accumulator = getAccumulatorIndexForWriteAddress(address);
-  if (accumulator && *accumulator < 6)
-    state.accumulatorSetupKind[*accumulator] = VPMTransferAliasKind::Unknown;
-}
-
-static void updateQASMAfterBundle(QASMEmissionState &state,
-                                  mlir::vc4::QPUBundleOp bundle,
-                                  VPMTransferAliasKind setupKind) {
-  mlir::Operation *op = bundle.getOperation();
-  clearAccumulatorSetupWrite(state, bundle.getCondAdd(),
-                             getIntegerAttrValue(op, "waddr_add"));
-  clearAccumulatorSetupWrite(state, bundle.getCondMul(),
-                             getIntegerAttrValue(op, "waddr_mul"));
-  if (qpuBundleReadsAddress(bundle, 48) || qpuBundleWritesAddress(bundle, 48)) {
-    state.pendingAddressKind = VPMTransferAliasKind::Write;
-    return;
-  }
-  if (qpuBundleWritesAddress(bundle, 49))
-    state.pendingAddressKind = normalizeVPMAliasKind(setupKind);
 }
 
 static std::optional<int64_t>
@@ -1913,14 +1770,11 @@ static LogicalResult emitVectorRotatePrepBundle(mlir::vc4::QPUBundleOp spacer,
 
   state.preparedVectorRotateDest = *destination;
   state.preparedVectorRotateSelector = *selector;
-  if (*destination < 6)
-    state.accumulatorSetupKind[*destination] = VPMTransferAliasKind::Unknown;
   return success();
 }
 
 static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
                                           QASMEmissionState &state,
-                                          VPMTransferAliasKind setupKind,
                                           std::string &line,
                                           bool &needSeparator) {
   mlir::vc4::AddOpcode opcode = bundle.getOpAdd();
@@ -1954,11 +1808,7 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
     line += formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
                                                    "waddr_add"),
                                /*forAddALU=*/true,
-                               bundle.getOperation()->hasAttr("write_swap"),
-                               getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_add") == 50
-                                   ? state.pendingAddressKind
-                                   : setupKind) +
+                               bundle.getOperation()->hasAttr("write_swap")) +
             *packSuffix;
     line += ", ";
     line += *rotateMove;
@@ -1969,13 +1819,11 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
 
   std::string src0;
   std::string src1;
-  VPMTransferAliasKind readKind = state.pendingAddressKind;
-  if (failed(formatMuxSource(bundle, bundle.getAddA(), *unpackSuffix,
-                             readKind, src0)))
+  if (failed(formatMuxSource(bundle, bundle.getAddA(), *unpackSuffix, src0)))
     return failure();
   if (!isUnaryAddOpcode(opcode) &&
       failed(formatMuxSource(bundle, bundle.getAddB(), std::string(),
-                             readKind, src1)))
+                             src1)))
     return failure();
 
   if (std::optional<int64_t> rotateSelector =
@@ -2025,10 +1873,7 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
         (src0 == "vw_wait" || src1 == "vw_wait") ? "vw_wait" : "vr_wait";
     std::string dest =
         formatWriteAddress(getIntegerAttrValue(op, "waddr_add"),
-                           /*forAddALU=*/true, op->hasAttr("write_swap"),
-                           getIntegerAttrValue(op, "waddr_add") == 50
-                               ? state.pendingAddressKind
-                               : setupKind) +
+                           /*forAddALU=*/true, op->hasAttr("write_swap")) +
         *packSuffix;
     line += "mov ";
     line += dest;
@@ -2070,11 +1915,7 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
           : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
                                                    "waddr_add"),
                                /*forAddALU=*/true,
-                               bundle.getOperation()->hasAttr("write_swap"),
-                               getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_add") == 50
-                                   ? state.pendingAddressKind
-                                   : setupKind) +
+                               bundle.getOperation()->hasAttr("write_swap")) +
                 *packSuffix;
   line += " ";
   line += dest;
@@ -2088,8 +1929,6 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
 }
 
 static LogicalResult appendMulInstruction(mlir::vc4::QPUBundleOp bundle,
-                                          QASMEmissionState &state,
-                                          VPMTransferAliasKind setupKind,
                                           std::string &line,
                                           bool &needSeparator,
                                           bool setFlagsAlreadyUsed) {
@@ -2118,12 +1957,9 @@ static LogicalResult appendMulInstruction(mlir::vc4::QPUBundleOp bundle,
   // not apply to MUL accumulator operands, so only pass the textual unpack
   // suffix through when the pm-selected r4 path could use it.
   std::string maybeR4Unpack = bundle.getPm() ? *unpackSuffix : std::string();
-  VPMTransferAliasKind readKind = state.pendingAddressKind;
-  if (failed(formatMuxSource(bundle, bundle.getMulA(), maybeR4Unpack,
-                             readKind, src0)))
+  if (failed(formatMuxSource(bundle, bundle.getMulA(), maybeR4Unpack, src0)))
     return failure();
-  if (failed(formatMuxSource(bundle, bundle.getMulB(), maybeR4Unpack,
-                             readKind, src1)))
+  if (failed(formatMuxSource(bundle, bundle.getMulB(), maybeR4Unpack, src1)))
     return failure();
 
   if (needSeparator)
@@ -2143,11 +1979,7 @@ static LogicalResult appendMulInstruction(mlir::vc4::QPUBundleOp bundle,
           : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
                                                    "waddr_mul"),
                                /*forAddALU=*/false,
-                               bundle.getOperation()->hasAttr("write_swap"),
-                               getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_mul") == 50
-                                   ? state.pendingAddressKind
-                                   : setupKind) +
+                               bundle.getOperation()->hasAttr("write_swap")) +
                 *packSuffix;
   line += " ";
   line += dest;
@@ -2202,12 +2034,10 @@ static LogicalResult appendSignalInstruction(mlir::vc4::QPUBundleOp bundle,
 }
 
 static std::optional<std::string>
-formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle,
-                             VPMTransferAliasKind vpmKind) {
+formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle) {
   // Some scheduled sink slots intentionally perform only a read-side effect.
-  // VDW wait slots may be represented as inactive qpu.bundle ops with
-  // raddr_b = 50. Emitting them as plain "nop" drops the wait and lets the
-  // kernel finish before the VDW store is complete.
+  // VPM/VCD/VDW wait slots must use vc4.qpu.vpmvcd_wait; this compatibility
+  // path is only for unambiguous non-VPM peripheral reads.
   mlir::Operation *op = bundle.getOperation();
   if (bundle.getSig() != mlir::vc4::QPUSignal::none ||
       bundle.getOpAdd() != mlir::vc4::AddOpcode::nop ||
@@ -2218,10 +2048,8 @@ formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle,
     return std::nullopt;
   }
 
-  auto formatPseudoRead = [vpmKind](int64_t raddr) -> std::optional<std::string> {
+  auto formatPseudoRead = [](int64_t raddr) -> std::optional<std::string> {
     switch (raddr) {
-    case 50:
-      return std::string("read ") + getVPMWaitName(vpmKind);
     case 51:
       return std::string("read mutex_acq");
     default:
@@ -2237,47 +2065,56 @@ formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle,
   return formatPseudoRead(getIntegerAttrValue(op, "raddr_a"));
 }
 
+static std::string formatU32Immediate(int64_t signedValue);
+
 static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
                                        QASMEmissionState &state,
                                        llvm::raw_ostream &os) {
-  std::string line;
-  bool needSeparator = false;
-  VPMTransferAliasKind setupKind = inferVPMSetupWriteKind(state, bundle);
   if (qpuBundleWritesAddress(bundle, 49)) {
-    VPMTransferAliasKind followingUse = inferVPMSetupUseFromFollowingOps(bundle);
-    if (followingUse != VPMTransferAliasKind::Unknown)
-      setupKind = followingUse;
+    return bundle.emitOpError()
+           << "raw writes to VPM/VCD/VDW setup address 49 require "
+              "vc4.qpu.vpmvcd_setup";
+  }
+  if (qpuBundleWritesAddress(bundle, 50)) {
+    return bundle.emitOpError()
+           << "raw writes to VPM/VCD/VDW address register 50 require "
+              "vc4.qpu.vpmvcd_addr";
+  }
+  if (qpuBundleCarriesReadAddress(bundle, 50)) {
+    return bundle.emitOpError()
+           << "raw reads from VPM/VCD/VDW wait address 50 require "
+              "vc4.qpu.vpmvcd_wait";
   }
 
+  std::string line;
+  bool needSeparator = false;
+
   const bool addActive = bundle.getOpAdd() != mlir::vc4::AddOpcode::nop;
-  if (failed(appendAddInstruction(bundle, state, setupKind, line,
-                                  needSeparator)))
+  if (failed(appendAddInstruction(bundle, state, line, needSeparator)))
     return failure();
-  if (failed(appendMulInstruction(bundle, state, setupKind, line,
-                                  needSeparator, addActive)))
+  if (failed(appendMulInstruction(bundle, line, needSeparator, addActive)))
     return failure();
   if (failed(appendSignalInstruction(bundle, line, needSeparator)))
     return failure();
 
   if (!needSeparator) {
     if (std::optional<std::string> readOnlyAccess =
-            formatReadOnlyRegisterAccess(bundle, state.pendingAddressKind))
+            formatReadOnlyRegisterAccess(bundle))
       line = *readOnlyAccess;
     else
       line = "nop";
   }
 
-  updateQASMAfterBundle(state, bundle, setupKind);
   os << line << "\n";
   return success();
 }
 
 static LogicalResult emitQPUVPMVCDWritePseudoQASM(
-    mlir::Operation *op, mlir::vc4::VPMVCDSide side, mlir::vc4::Cond cond,
-    mlir::vc4::AddOpcode opcode, mlir::vc4::QPUMux addA,
+    mlir::Operation *op, mlir::vc4::Cond cond, mlir::vc4::AddOpcode opcode,
+    mlir::vc4::QPUMux addA,
     mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
     mlir::vc4::QPUMux mulB, llvm::StringRef destination,
-    QASMEmissionState &state, llvm::raw_ostream &os) {
+    llvm::raw_ostream &os) {
   if (cond == mlir::vc4::Cond::never || opcode == mlir::vc4::AddOpcode::nop) {
     return op->emitOpError()
            << "cannot emit inactive VPM/VCD/VDW control pseudo-op";
@@ -2316,37 +2153,52 @@ static LogicalResult emitQPUVPMVCDWritePseudoQASM(
   if (!useMovAlias && !isUnaryAddOpcode(opcode))
     os << ", " << src1;
   os << "\n";
-
-  state.pendingAddressKind = getVPMTransferAliasKind(side);
   return success();
 }
 
 static LogicalResult emitQPUVPMVCDSetupQASM(
-    mlir::vc4::QPUVPMVCDSetupOp setup, QASMEmissionState &state,
+    mlir::vc4::QPUVPMVCDSetupOp setup,
     llvm::raw_ostream &os) {
-  VPMTransferAliasKind kind = getVPMTransferAliasKind(setup.getSide());
   return emitQPUVPMVCDWritePseudoQASM(
-      setup.getOperation(), setup.getSide(), setup.getCondAdd(),
-      setup.getOpAdd(), setup.getAddA(), setup.getAddB(), setup.getMulA(),
-      setup.getMulB(), getVPMSetupName(kind), state, os);
+      setup.getOperation(), setup.getCondAdd(), setup.getOpAdd(),
+      setup.getAddA(), setup.getAddB(), setup.getMulA(),
+      setup.getMulB(), getVPMSetupName(setup.getSide()), os);
+}
+
+static LogicalResult emitQPUVPMVCDSetupLDIQASM(
+    mlir::vc4::QPUVPMVCDSetupLDIOp setup, llvm::raw_ostream &os) {
+  if (setup.getCondAdd() == mlir::vc4::Cond::never) {
+    return setup.emitOpError()
+           << "cannot emit inactive VPM/VCD/VDW setup LDI pseudo-op";
+  }
+  if (setup.getCondMul() != mlir::vc4::Cond::never) {
+    return setup.emitOpError()
+           << "cannot emit VPM/VCD/VDW setup LDI pseudo-op with an active "
+              "MUL-side write";
+  }
+
+  std::string opcode = "ldi";
+  if (setup.getCondAdd() != mlir::vc4::Cond::never)
+    opcode += getConditionSuffix(setup.getCondAdd());
+
+  os << opcode << " " << getVPMSetupName(setup.getSide()) << ", "
+     << formatU32Immediate(static_cast<uint32_t>(setup.getValueAttr().getInt()))
+     << "\n";
+  return success();
 }
 
 static LogicalResult emitQPUVPMVCDAddrQASM(
-    mlir::vc4::QPUVPMVCDAddrOp addr, QASMEmissionState &state,
+    mlir::vc4::QPUVPMVCDAddrOp addr,
     llvm::raw_ostream &os) {
-  VPMTransferAliasKind kind = getVPMTransferAliasKind(addr.getSide());
   return emitQPUVPMVCDWritePseudoQASM(
-      addr.getOperation(), addr.getSide(), addr.getCondAdd(), addr.getOpAdd(),
+      addr.getOperation(), addr.getCondAdd(), addr.getOpAdd(),
       addr.getAddA(), addr.getAddB(), addr.getMulA(), addr.getMulB(),
-      getVPMAddressName(kind), state, os);
+      getVPMAddressName(addr.getSide()), os);
 }
 
 static LogicalResult emitQPUVPMVCDWaitQASM(
-    mlir::vc4::QPUVPMVCDWaitOp wait, QASMEmissionState &state,
-    llvm::raw_ostream &os) {
-  VPMTransferAliasKind kind = getVPMTransferAliasKind(wait.getSide());
-  os << "read " << getVPMWaitName(kind) << "\n";
-  state.pendingAddressKind = kind;
+    mlir::vc4::QPUVPMVCDWaitOp wait, llvm::raw_ostream &os) {
+  os << "read " << getVPMWaitName(wait.getSide()) << "\n";
   return success();
 }
 
@@ -2430,111 +2282,7 @@ static void appendLoadLikeOpcodeSuffix(mlir::Operation *op,
     opcode += getConditionSuffix(cond);
 }
 
-static VPMTransferAliasKind classifyVPMSetupImmediate(uint32_t value,
-                                                          unsigned accumulator) {
-  // Temporary compatibility for legacy scheduled qpu.bundle/qpu.ldi streams:
-  // VPM/VDR/VDW setup literals encode the transfer shape, but the shared
-  // register address is rendered through vc4asm's vr_* or vw_* spelling.
-  // Track the literal while it sits in an accumulator so later setup/address
-  // writes choose the read-side or write-side peripheral alias generically.
-  // New generated scheduled VC4 should use explicit vc4.qpu.vpmvcd_* pseudo-ops
-  // and bypass this literal/accumulator/lookahead inference. Later hardening
-  // phases will migrate legacy inputs and remove this fallback.
-  switch (value) {
-  case 0x80011000u: // vdr_setup_0(0, 16, 1, vdr_h32(1, 0, 0))
-    return VPMTransferAliasKind::Read;
-  case 0x80904000u: // vdw_setup_0(1, 16, dma_h32(0, 0))
-  case 0x80903000u:
-    return VPMTransferAliasKind::Write;
-  case 0x00101a00u: // vpm_setup(1, 1, h32(0)); r2 is read, r3 is write.
-  case 0x00101c00u: // vpm_setup(1, 1, v32(0, 0)); same aliasing.
-    if (accumulator == 2)
-      return VPMTransferAliasKind::Read;
-    if (accumulator == 3)
-      return VPMTransferAliasKind::Write;
-    return VPMTransferAliasKind::Unknown;
-  default:
-    return VPMTransferAliasKind::Unknown;
-  }
-}
-
-static bool ldiWritesRecognizedVPMSetupImmediate(mlir::vc4::QPULDIOp ldi,
-                                                     uint32_t value) {
-  mlir::Operation *op = ldi.getOperation();
-  auto writesRecognizedSetup = [&](mlir::vc4::Cond cond,
-                                   int64_t address) -> bool {
-    if (cond == mlir::vc4::Cond::never)
-      return false;
-    std::optional<unsigned> accumulator =
-        getAccumulatorIndexForWriteAddress(address);
-    if (!accumulator || *accumulator >= 6)
-      return false;
-    return classifyVPMSetupImmediate(value, *accumulator) !=
-           VPMTransferAliasKind::Unknown;
-  };
-  return writesRecognizedSetup(ldi.getCondAdd(),
-                               getIntegerAttrValue(op, "waddr_add")) ||
-         writesRecognizedSetup(ldi.getCondMul(),
-                               getIntegerAttrValue(op, "waddr_mul"));
-}
-
-static uint32_t canonicalizeLDIImmediateForQASM(mlir::vc4::QPULDIOp ldi,
-                                                uint32_t value) {
-  // Older scheduled test inputs encode the depth-16 horizontal VDW setup shape
-  // with the legacy literal 0x80903000.  vc4asm's hardware reference spelling
-  // for vdw_setup_0(1, 16, dma_h32(0, 0)) assembles to 0x80904000, and using
-  // the stale literal corrupts the VDW store path for otherwise generic
-  // scheduled streams.  Canonicalize only while emitting a recognized VPM/VDW
-  // setup immediate, rather than rewriting arbitrary scalar constants.
-  if (value == 0x80903000u &&
-      ldiWritesRecognizedVPMSetupImmediate(ldi, value))
-    return 0x80904000u;
-  return value;
-}
-
-static void recordLDIAccumulatorSetupKind(QASMEmissionState &state,
-                                          mlir::vc4::Cond cond,
-                                          int64_t address, uint32_t value) {
-  if (cond == mlir::vc4::Cond::never)
-    return;
-  std::optional<unsigned> accumulator = getAccumulatorIndexForWriteAddress(address);
-  if (!accumulator || *accumulator >= 6)
-    return;
-  state.accumulatorSetupKind[*accumulator] =
-      classifyVPMSetupImmediate(value, *accumulator);
-}
-
-static void clearLDIAccumulatorSetupKind(QASMEmissionState &state,
-                                         mlir::vc4::Cond cond,
-                                         int64_t address) {
-  if (cond == mlir::vc4::Cond::never)
-    return;
-  std::optional<unsigned> accumulator = getAccumulatorIndexForWriteAddress(address);
-  if (!accumulator || *accumulator >= 6)
-    return;
-  state.accumulatorSetupKind[*accumulator] = VPMTransferAliasKind::Unknown;
-}
-
-static void updateQASMAfterLDI(QASMEmissionState &state,
-                               mlir::vc4::QPULDIOp ldi, uint32_t value) {
-  mlir::Operation *op = ldi.getOperation();
-  recordLDIAccumulatorSetupKind(state, ldi.getCondAdd(),
-                                getIntegerAttrValue(op, "waddr_add"), value);
-  recordLDIAccumulatorSetupKind(state, ldi.getCondMul(),
-                                getIntegerAttrValue(op, "waddr_mul"), value);
-}
-
-static void updateQASMAfterPerElementLDI(QASMEmissionState &state,
-                                         mlir::vc4::QPULDIOp ldi) {
-  mlir::Operation *op = ldi.getOperation();
-  clearLDIAccumulatorSetupKind(state, ldi.getCondAdd(),
-                               getIntegerAttrValue(op, "waddr_add"));
-  clearLDIAccumulatorSetupKind(state, ldi.getCondMul(),
-                               getIntegerAttrValue(op, "waddr_mul"));
-}
-
 static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
-                                    QASMEmissionState &state,
                                     llvm::raw_ostream &os) {
   std::optional<std::string> packSuffix =
       getPackSuffix(ldi.getOperation()->getAttr("pack"));
@@ -2565,12 +2313,8 @@ static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
                 "emission";
     }
 
-    uint32_t immediateValue = static_cast<uint32_t>(valueAttr.getInt());
-    uint32_t emittedImmediateValue =
-        canonicalizeLDIImmediateForQASM(ldi, immediateValue);
     os << opcode << " " << destinations << ", "
-       << formatU32Immediate(emittedImmediateValue) << "\n";
-    updateQASMAfterLDI(state, ldi, emittedImmediateValue);
+       << formatU32Immediate(static_cast<uint32_t>(valueAttr.getInt())) << "\n";
     return success();
   }
   case mlir::vc4::LoadImmMode::per_elem_i2:
@@ -2590,7 +2334,6 @@ static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
 
     os << opcode << " " << destinations << ", "
        << formatPerElementLDIImmediate(valueAttr.asArrayRef()) << "\n";
-    updateQASMAfterPerElementLDI(state, ldi);
     return success();
   }
   }
@@ -2847,19 +2590,25 @@ static LogicalResult writeQASM(KernelRecord &kernel,
     }
 
     if (auto setup = llvm::dyn_cast<mlir::vc4::QPUVPMVCDSetupOp>(op)) {
-      if (failed(emitQPUVPMVCDSetupQASM(setup, qasmState, qasmOS)))
+      if (failed(emitQPUVPMVCDSetupQASM(setup, qasmOS)))
+        return failure();
+      continue;
+    }
+
+    if (auto setup = llvm::dyn_cast<mlir::vc4::QPUVPMVCDSetupLDIOp>(op)) {
+      if (failed(emitQPUVPMVCDSetupLDIQASM(setup, qasmOS)))
         return failure();
       continue;
     }
 
     if (auto addr = llvm::dyn_cast<mlir::vc4::QPUVPMVCDAddrOp>(op)) {
-      if (failed(emitQPUVPMVCDAddrQASM(addr, qasmState, qasmOS)))
+      if (failed(emitQPUVPMVCDAddrQASM(addr, qasmOS)))
         return failure();
       continue;
     }
 
     if (auto wait = llvm::dyn_cast<mlir::vc4::QPUVPMVCDWaitOp>(op)) {
-      if (failed(emitQPUVPMVCDWaitQASM(wait, qasmState, qasmOS)))
+      if (failed(emitQPUVPMVCDWaitQASM(wait, qasmOS)))
         return failure();
       continue;
     }
@@ -2881,7 +2630,7 @@ static LogicalResult writeQASM(KernelRecord &kernel,
     }
 
     if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-      if (failed(emitQPULDIQASM(ldi, qasmState, qasmOS)))
+      if (failed(emitQPULDIQASM(ldi, qasmOS)))
         return failure();
       continue;
     }
