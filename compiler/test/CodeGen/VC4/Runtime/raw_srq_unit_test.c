@@ -30,7 +30,7 @@ static const struct vc4_kernel_image test_kernels[] = {
     {"raw_srq_test", test_shader,
      (uint32_t)(sizeof(test_shader) / sizeof(test_shader[0])), 3u,
      VC4_RUNTIME_MAX_QPUS, VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR, 0u,
-     1u, 0u, 0u, 0u, VC4_RUNTIME_MAX_QPUS},
+     1u, 0u, 0u, 0u, VC4_RUNTIME_MAX_QPUS, 0u, 0u, 0u, 0u},
 };
 
 static const struct vc4_module_image test_module = {

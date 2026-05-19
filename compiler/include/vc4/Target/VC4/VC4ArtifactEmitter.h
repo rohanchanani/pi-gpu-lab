@@ -22,6 +22,10 @@ struct VC4ArtifactKernelInfo {
   std::string symbolName;
   std::string publicName;
   int64_t uniformWordsPerQPU = 0;
+  uint64_t spillFrameBytes = 0;
+  uint64_t spillFrameStrideBytes = 0;
+  uint64_t spillFrameCount = 0;
+  uint64_t spillArenaBytes = 0;
   unsigned scheduledOpCount = 0;
 };
 

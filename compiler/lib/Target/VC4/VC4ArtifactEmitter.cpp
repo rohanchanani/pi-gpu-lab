@@ -76,6 +76,13 @@ struct KernelResourceModel {
   int64_t maxResidentBlocks = 12;
 };
 
+struct KernelSpillFrameModel {
+  uint64_t frameBytes = 0;
+  uint64_t strideBytes = 0;
+  uint64_t frameCount = 0;
+  uint64_t arenaBytes = 0;
+};
+
 struct KernelRecord {
   explicit KernelRecord(mlir::vc4::FuncOp func) : func(func) {}
 
@@ -83,6 +90,7 @@ struct KernelRecord {
   mlir::vc4::VC4ArtifactKernelInfo info;
   LaunchABIModel launchABI;
   KernelResourceModel resources;
+  KernelSpillFrameModel spill;
   unsigned kernelId = 0;
   std::string qasmPath;
   llvm::SmallVector<mlir::Operation *, 16> scheduledStream;
@@ -112,12 +120,18 @@ struct KernelLayoutRecord {
   uint64_t unifPtrSize = 0;
   uint64_t uniformWordsPerRequest = 0;
   uint64_t maxRequestsPerWave = 12;
+  uint64_t spillFrameBytes = 0;
+  uint64_t spillFrameStrideBytes = 0;
+  uint64_t spillFrameCount = 0;
+  uint64_t spillArenaBytes = 0;
 };
 
 struct ProgramLayoutModel {
   uint64_t alignment = 8;
   uint64_t programBytes = 0;
   uint64_t staticBytes = 0;
+  uint64_t spillArenaOffset = 0;
+  uint64_t spillArenaBytes = 0;
   uint64_t heapOffset = 0;
   uint64_t heapBytes = 4096;
   llvm::SmallVector<ProgramLayoutRegion, 16> regions;
@@ -239,6 +253,8 @@ static bool hasLaunchABIArgumentName(const LaunchABIModel &launchABI,
   return false;
 }
 
+static bool isHiddenRuntimeBuiltinName(llvm::StringRef name);
+
 static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
                                             mlir::DictionaryAttr argDict,
                                             LaunchABIModel &launchABI) {
@@ -253,7 +269,8 @@ static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
         func, llvm::Twine("argument '") + name +
                   "' requires a C identifier name for generated launcher API");
   }
-  if (name == "rt" || name == "qpu_id" || name == "num_qpus") {
+  if (name == "rt" || name == "qpu_id" || name == "num_qpus" ||
+      name.starts_with("__vc4_")) {
     return emitLaunchABIModelError(
         func, llvm::Twine("argument '") + name +
                   "' uses a reserved launcher/runtime or builtin name");
@@ -358,16 +375,36 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
       getDictionaryStringAttr(builtinDict, "materialization");
   auto kindAttr = llvm::dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(
       builtinDict.get("kind"));
+  auto stringKindAttr =
+      llvm::dyn_cast_or_null<mlir::StringAttr>(builtinDict.get("kind"));
   if (!nameAttr || nameAttr.getValue().empty() || !materializationAttr ||
-      !kindAttr) {
+      (!kindAttr && !stringKindAttr)) {
     return emitLaunchABIModelError(
         func, "builtin entry requires name, kind, and materialization metadata");
   }
 
   LaunchABIBuiltinModel parsed;
   parsed.name = nameAttr.getValue().str();
-  parsed.kind = getBuiltinKindName(kindAttr.getValue());
+  parsed.kind = kindAttr ? getBuiltinKindName(kindAttr.getValue())
+                         : stringKindAttr.getValue().str();
   parsed.materialization = materializationAttr.getValue().str();
+  if (parsed.kind == "hidden_runtime") {
+    if (!isHiddenRuntimeBuiltinName(parsed.name)) {
+      return emitLaunchABIModelError(
+          func, llvm::Twine("hidden_runtime builtin '") + parsed.name +
+                    "' has unsupported reserved name");
+    }
+    if (parsed.materialization != "uniform_suffix") {
+      return emitLaunchABIModelError(
+          func,
+          llvm::Twine("hidden_runtime builtin '") + parsed.name +
+              "' requires materialization = \"uniform_suffix\"");
+    }
+  } else if (!kindAttr) {
+    return emitLaunchABIModelError(
+        func, llvm::Twine("string builtin kind '") + parsed.kind +
+                  "' is unsupported");
+  }
   parsed.uniformIndex = getDictionaryIntegerAttrValue(builtinDict,
                                                       "uniform_index");
   launchABI.builtins.push_back(std::move(parsed));
@@ -853,19 +890,70 @@ static std::string makeKernelQASMPath(llvm::StringRef publicName) {
   return (llvm::Twine("kernels/") + publicName + ".qasm").str();
 }
 
-
 static constexpr uint64_t kVC4ProgramLayoutAlignment = 8;
 static constexpr uint64_t kVC4ProgramHeaderBytes = 64;
 static constexpr uint64_t kVC4KernelDescriptorBytes = 32;
 static constexpr uint64_t kVC4MaxRequestsPerWave = 12;
 static constexpr uint64_t kVC4RuntimeBookkeepingBytes = 48;
 static constexpr uint64_t kVC4HeapAlignment = 16;
+static constexpr uint64_t kVC4SpillFrameAlignment = 64;
 static constexpr uint64_t kVC4ReservedHeapBytes = 65536;
 
 static uint64_t alignUpTo(uint64_t value, uint64_t alignment) {
   if (alignment <= 1)
     return value;
-  return (value + alignment - 1) & ~(alignment - 1);
+  return ((value + alignment - 1) / alignment) * alignment;
+}
+
+static LogicalResult emitSpillFrameModelError(mlir::vc4::FuncOp func,
+                                              const llvm::Twine &message) {
+  return func.emitOpError() << "spill frame metadata " << message;
+}
+
+static LogicalResult populateSpillFrameInfo(KernelRecord &kernel) {
+  std::optional<int64_t> frameBytes =
+      getDictionaryIntegerAttrValue(kernel.func->getAttrDictionary(),
+                                    "spill_frame_bytes");
+  std::optional<int64_t> explicitStride =
+      getDictionaryIntegerAttrValue(kernel.func->getAttrDictionary(),
+                                    "spill_frame_stride_bytes");
+
+  KernelSpillFrameModel parsed;
+  if (frameBytes) {
+    if (*frameBytes < 0)
+      return emitSpillFrameModelError(kernel.func,
+                                      "requires non-negative spill_frame_bytes");
+    parsed.frameBytes = static_cast<uint64_t>(*frameBytes);
+  }
+
+  uint64_t computedStride =
+      parsed.frameBytes == 0
+          ? 0
+          : alignUpTo(parsed.frameBytes, kVC4SpillFrameAlignment);
+  if (explicitStride) {
+    if (*explicitStride < 0)
+      return emitSpillFrameModelError(
+          kernel.func,
+          "requires non-negative spill_frame_stride_bytes");
+    if (static_cast<uint64_t>(*explicitStride) != computedStride) {
+      return emitSpillFrameModelError(
+          kernel.func,
+          llvm::Twine("spill_frame_stride_bytes must equal align_up("
+                      "spill_frame_bytes, 64); expected ") +
+              llvm::Twine(computedStride));
+    }
+  }
+
+  parsed.strideBytes = computedStride;
+  parsed.frameCount =
+      parsed.frameBytes == 0 ? 0 : kVC4MaxRequestsPerWave;
+  parsed.arenaBytes = parsed.strideBytes * parsed.frameCount;
+  kernel.spill = parsed;
+  kernel.info.spillFrameBytes = parsed.frameBytes;
+  kernel.info.spillFrameStrideBytes = parsed.strideBytes;
+  kernel.info.spillFrameCount = parsed.frameCount;
+  kernel.info.spillArenaBytes = parsed.arenaBytes;
+  return success();
 }
 
 static std::string getKernelCodeRegionName(const KernelRecord &kernel) {
@@ -900,6 +988,9 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
   ProgramLayoutModel layout;
   layout.alignment = kVC4ProgramLayoutAlignment;
   layout.heapBytes = kVC4ReservedHeapBytes;
+  for (const KernelRecord &kernel : kernels)
+    layout.spillArenaBytes =
+        std::max(layout.spillArenaBytes, kernel.spill.arenaBytes);
 
   uint64_t offset = 0;
   offset = alignUpTo(offset, layout.alignment);
@@ -925,6 +1016,10 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
     kernelLayout.descriptorSize = kVC4KernelDescriptorBytes;
     kernelLayout.uniformWordsPerRequest = kernel.info.uniformWordsPerQPU;
     kernelLayout.maxRequestsPerWave = kVC4MaxRequestsPerWave;
+    kernelLayout.spillFrameBytes = kernel.spill.frameBytes;
+    kernelLayout.spillFrameStrideBytes = kernel.spill.strideBytes;
+    kernelLayout.spillFrameCount = kernel.spill.frameCount;
+    kernelLayout.spillArenaBytes = kernel.spill.arenaBytes;
 
     offset = alignUpTo(offset, layout.alignment);
     kernelLayout.codeOffset = offset;
@@ -962,6 +1057,15 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
                             "runtime_bookkeeping", offset,
                             kVC4RuntimeBookkeepingBytes);
   offset += kVC4RuntimeBookkeepingBytes;
+
+  if (layout.spillArenaBytes != 0) {
+    offset = alignUpTo(offset, kVC4SpillFrameAlignment);
+    layout.spillArenaOffset = offset;
+    appendProgramLayoutRegion(layout, "hidden_spill_arena",
+                              "hidden_spill_arena", offset,
+                              layout.spillArenaBytes);
+    offset += layout.spillArenaBytes;
+  }
 
   offset = alignUpTo(offset, kVC4HeapAlignment);
   layout.heapOffset = offset;
@@ -1020,6 +1124,8 @@ collectProgramKernels(mlir::vc4::ModuleOp vc4Module,
     if (failed(populateLaunchABIInfo(kernel)))
       return failure();
     if (failed(populateResourceInfo(kernel)))
+      return failure();
+    if (failed(populateSpillFrameInfo(kernel)))
       return failure();
   }
 
@@ -2758,6 +2864,26 @@ static std::string getBufferElementCTypeForCodegen(
   return "uint32_t";
 }
 
+static bool isHiddenRuntimeBuiltinName(llvm::StringRef name) {
+  return name == "__vc4_spill_frame_base" ||
+         name == "__vc4_spill_frame_bytes" ||
+         name == "__vc4_spill_frame_stride_bytes" ||
+         name == "__vc4_resident_request_id";
+}
+
+static std::optional<llvm::StringRef>
+getHiddenRuntimeRequestInfoField(llvm::StringRef name) {
+  if (name == "__vc4_spill_frame_base")
+    return llvm::StringRef("spill_frame_base");
+  if (name == "__vc4_spill_frame_bytes")
+    return llvm::StringRef("spill_frame_bytes");
+  if (name == "__vc4_spill_frame_stride_bytes")
+    return llvm::StringRef("spill_frame_stride_bytes");
+  if (name == "__vc4_resident_request_id")
+    return llvm::StringRef("resident_request_id");
+  return std::nullopt;
+}
+
 static void appendRuntimeAPIDeclarations(llvm::raw_ostream &os) {
   os << "int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);\n";
   os << "\n";
@@ -2903,11 +3029,24 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "#include <string.h>\n\n";
   os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
      << programLayout.heapBytes << "u\n";
+  os << "#define VC4_CODEGEN_SPILL_FRAME_ALIGNMENT "
+     << kVC4SpillFrameAlignment << "u\n";
+  os << "#define VC4_CODEGEN_SPILL_ARENA_BYTES "
+     << programLayout.spillArenaBytes << "u\n";
   os << "#define VC4_CODEGEN_TARGET_VPM_BYTES 4096u\n";
   os << "#define VC4_CODEGEN_TARGET_SEMAPHORES 16u\n";
   for (const KernelRecord &macroKernel : kernels) {
     os << "#define KERNEL_" << macroKernel.kernelId << "_NUM_UNIFS "
        << macroKernel.info.uniformWordsPerQPU << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_FRAME_BYTES "
+       << macroKernel.spill.frameBytes << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId
+       << "_SPILL_FRAME_STRIDE_BYTES "
+       << macroKernel.spill.strideBytes << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_FRAME_COUNT "
+       << macroKernel.spill.frameCount << "u\n";
+    os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_ARENA_BYTES "
+       << macroKernel.spill.arenaBytes << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_WARPS_PER_BLOCK_MAX "
        << macroKernel.resources.warpsPerBlockMax << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_SEMAPHORES_PER_BLOCK "
@@ -2924,7 +3063,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
      << " static_bytes=" << programLayout.staticBytes
      << " heap_offset=" << programLayout.heapOffset
      << " heap_bytes=" << programLayout.heapBytes
+     << " hidden_spill_arena_bytes=" << programLayout.spillArenaBytes
      << " kernels=" << kernels.size() << " */\n";
+  os << "/* VC4_SPILL_FRAME_ABI alignment=" << kVC4SpillFrameAlignment
+     << " max_spill_arena_bytes=" << programLayout.spillArenaBytes
+     << " hidden_arena_before_public_heap="
+     << (programLayout.spillArenaBytes ? 1 : 0)
+     << " request_info_fields=resident_request_id,spill_frame_base,"
+        "spill_frame_bytes,spill_frame_stride_bytes */\n";
   os << "/* Generated launches pack kernel-specific uniforms; libpi owns "
         "allocation, code residency, queueing, and heap/copy APIs. */\n\n";
 
@@ -2996,7 +3142,11 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << kernel.kernelId << "_SEMAPHORES_PER_BLOCK, KERNEL_"
        << kernel.kernelId << "_VPM_BYTES_PER_BLOCK, KERNEL_"
        << kernel.kernelId << "_VPM_ROWS_PER_BLOCK, KERNEL_"
-       << kernel.kernelId << "_MAX_RESIDENT_BLOCKS },\n";
+       << kernel.kernelId << "_MAX_RESIDENT_BLOCKS, KERNEL_"
+       << kernel.kernelId << "_SPILL_FRAME_BYTES, KERNEL_"
+       << kernel.kernelId << "_SPILL_FRAME_STRIDE_BYTES, KERNEL_"
+       << kernel.kernelId << "_SPILL_FRAME_COUNT, KERNEL_"
+       << kernel.kernelId << "_SPILL_ARENA_BYTES },\n";
   }
   os << "};\n\n";
   for (const KernelRecord &resourceKernel : kernels) {
@@ -3010,6 +3160,22 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << " full_residency resident_wave_wait_before_resource_reuse="
        << (resourceKernel.resources.requireFullBlockResidency ? 1 : 0)
        << " */\n";
+  }
+  for (const KernelRecord &spillKernel : kernels) {
+    os << "/* VC4_KERNEL_SPILL kernel_id=" << spillKernel.kernelId
+       << " public_name=" << spillKernel.launchABI.publicName
+       << " spill_frame_bytes=" << spillKernel.spill.frameBytes
+       << " spill_frame_stride_bytes=" << spillKernel.spill.strideBytes
+       << " spill_frame_count=" << spillKernel.spill.frameCount
+       << " spill_arena_bytes=" << spillKernel.spill.arenaBytes;
+    if (spillKernel.resources.scheduleMode == "cooperative_block") {
+      os << " resident_request_id=resident_block_slot*warps_per_block+"
+            "logical_warp_id";
+    } else {
+      os << " resident_request_id=wave_local_request_index";
+    }
+    os << " spill_frame_base=spill_arena_base+resident_request_id*"
+          "spill_frame_stride_bytes */\n";
   }
   os << "\n";
   os << "static const struct vc4_module_image vc4_codegen_module = {\n";
@@ -3139,6 +3305,17 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
             os << "  uniformWords[" << index << "] = requestInfo->total_requests; /* builtin "
                << builtin->name << " */\n";
           }
+        } else if (builtin->kind == "hidden_runtime") {
+          std::optional<llvm::StringRef> field =
+              getHiddenRuntimeRequestInfoField(builtin->name);
+          if (!field) {
+            return emitLaunchABIModelError(
+                launchKernel.func,
+                llvm::Twine("hidden_runtime builtin '") + builtin->name +
+                    "' has unsupported reserved name");
+          }
+          os << "  uniformWords[" << index << "] = requestInfo->" << *field
+             << "; /* hidden_runtime " << builtin->name << " */\n";
         } else {
           return emitLaunchABIModelError(
               launchKernel.func, llvm::Twine("builtin '") + builtin->name +
@@ -3324,6 +3501,14 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "      \"uniform_words_per_qpu\": "
      << kernel.info.uniformWordsPerQPU << ",\n";
   os << "      \"max_requests_per_wave\": 12,\n";
+  os << "      \"spill_frame_bytes\": "
+     << kernel.info.spillFrameBytes << ",\n";
+  os << "      \"spill_frame_stride_bytes\": "
+     << kernel.info.spillFrameStrideBytes << ",\n";
+  os << "      \"spill_frame_count\": "
+     << kernel.info.spillFrameCount << ",\n";
+  os << "      \"spill_arena_bytes\": "
+     << kernel.info.spillArenaBytes << ",\n";
   os << "      \"tail_policy\": ";
   appendJSONEscapedString(os, kernel.launchABI.tailPolicy);
   os << ",\n";
@@ -3411,7 +3596,15 @@ static void appendKernelLayoutJSON(llvm::raw_ostream &os,
   os << "      \"uniform_words_per_request\": "
      << kernel.uniformWordsPerRequest << ",\n";
   os << "      \"max_requests_per_wave\": "
-     << kernel.maxRequestsPerWave << "\n";
+     << kernel.maxRequestsPerWave << ",\n";
+  os << "      \"spill_frame_bytes\": "
+     << kernel.spillFrameBytes << ",\n";
+  os << "      \"spill_frame_stride_bytes\": "
+     << kernel.spillFrameStrideBytes << ",\n";
+  os << "      \"spill_frame_count\": "
+     << kernel.spillFrameCount << ",\n";
+  os << "      \"spill_arena_bytes\": "
+     << kernel.spillArenaBytes << "\n";
   os << "    }";
   if (trailingComma)
     os << ",";
@@ -3438,6 +3631,16 @@ static LogicalResult writeProgramLayout(mlir::vc4::ModuleOp vc4Module,
                               << layout.programBytes << ",\n";
                            os << "  \"static_bytes\": "
                               << layout.staticBytes << ",\n";
+                           os << "  \"spill_frame_alignment_bytes\": "
+                              << kVC4SpillFrameAlignment << ",\n";
+                           os << "  \"max_spill_arena_bytes\": "
+                              << layout.spillArenaBytes << ",\n";
+                           os << "  \"hidden_spill_arena_bytes\": "
+                              << layout.spillArenaBytes << ",\n";
+                           os << "  \"hidden_spill_arena\": ";
+                           appendLayoutByteRange(os, layout.spillArenaOffset,
+                                                 layout.spillArenaBytes);
+                           os << ",\n";
                            os << "  \"heap_offset\": "
                               << layout.heapOffset << ",\n";
                            os << "  \"heap_offset_bytes\": "
@@ -3471,6 +3674,7 @@ static LogicalResult writeProgramLayout(mlir::vc4::ModuleOp vc4Module,
 static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
                                    llvm::ArrayRef<KernelRecord> kernels,
                                    llvm::StringRef bundleDir) {
+  ProgramLayoutModel layout = buildProgramLayoutModel(kernels);
   return writeBundleFile(vc4Module.getOperation(), bundleDir, "manifest.json",
                          [&](llvm::raw_ostream &os) {
                            os << "{\n";
@@ -3486,6 +3690,10 @@ static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
                            os << "    \"shared_vpm_bytes\": 4096,\n";
                            os << "    \"semaphores\": 16\n";
                            os << "  },\n";
+                           os << "  \"spill_frame_alignment_bytes\": "
+                              << kVC4SpillFrameAlignment << ",\n";
+                           os << "  \"max_spill_arena_bytes\": "
+                              << layout.spillArenaBytes << ",\n";
                            os << "  \"kernels\": [\n";
                            for (size_t i = 0; i != kernels.size(); ++i) {
                              appendManifestKernelEntry(

@@ -1,0 +1,10 @@
+{
+  "name": "spill_frame_reservation_smoke",
+  "status": "PASS",
+  "required": {
+    "mismatches": 0,
+    "active_qpus": 12,
+    "words": 192,
+    "checksum": 1056
+  }
+}

@@ -144,9 +144,10 @@ static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
 
   auto kindAttr =
       dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(builtin.get("kind"));
-  if (!kindAttr)
+  auto stringKindAttr = dyn_cast_or_null<StringAttr>(builtin.get("kind"));
+  if (!kindAttr && !stringKindAttr)
     return emitLaunchAbiError(op, "builtin entry requires VC4 BuiltinKindAttr "
-                                  "'kind'");
+                                  "or string 'kind'");
 
   auto materializationAttr =
       dyn_cast_or_null<StringAttr>(builtin.get("materialization"));
@@ -156,6 +157,28 @@ static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
     return emitLaunchAbiError(
         op, "builtin entry requires materialization = \"uniform_suffix\" or "
             "\"register\"");
+  }
+
+  if (stringKindAttr) {
+    if (stringKindAttr.getValue() != "hidden_runtime") {
+      return emitLaunchAbiError(
+          op, "string builtin kind must be \"hidden_runtime\"");
+    }
+    auto nameAttr = cast<StringAttr>(builtin.get("name"));
+    if (!isStringOneOf(nameAttr.getValue(),
+                       {"__vc4_spill_frame_base",
+                        "__vc4_spill_frame_bytes",
+                        "__vc4_spill_frame_stride_bytes",
+                        "__vc4_resident_request_id"})) {
+      return emitLaunchAbiError(
+          op, "hidden_runtime builtin has unsupported reserved name");
+    }
+    if (materializationAttr.getValue() != "uniform_suffix") {
+      return emitLaunchAbiError(
+          op, "hidden_runtime builtin must use materialization = "
+              "\"uniform_suffix\"");
+    }
+    return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
   }
 
   mlir::vc4::BuiltinKind kind = kindAttr.getValue();

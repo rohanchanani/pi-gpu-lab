@@ -43,6 +43,8 @@ struct block_header {
 
 struct vc4_program {
   uint8_t heap[TEST_HEAP_BYTES];
+  uint32_t hidden_spill_bytes;
+  uint32_t heap_offset;
   uint32_t heap_head;
   uint32_t heap_bytes;
   uint32_t allocs;
@@ -63,8 +65,10 @@ static struct block_header *block_at(struct vc4_program *program,
                                      uint32_t offset) {
   if (!program || !program->live)
     return 0;
-  if (offset > program->heap_bytes ||
-      program->heap_bytes - offset < sizeof(struct block_header))
+  if (offset < program->heap_offset ||
+      offset > program->heap_offset + program->heap_bytes ||
+      program->heap_offset + program->heap_bytes - offset <
+          sizeof(struct block_header))
     return 0;
   struct block_header *block =
       (struct block_header *)(void *)(program->heap + offset);
@@ -78,16 +82,29 @@ static void fail_heap(struct vc4_program *program) {
     program->failures++;
 }
 
-static void init_heap(struct vc4_program *program) {
+static int init_heap_with_hidden_spill(struct vc4_program *program,
+                                       uint32_t hidden_spill_bytes) {
   memset(program, 0, sizeof(*program));
+  hidden_spill_bytes = align_up(hidden_spill_bytes);
+  if (hidden_spill_bytes > TEST_HEAP_BYTES ||
+      TEST_HEAP_BYTES - hidden_spill_bytes <= sizeof(struct block_header))
+    return -1;
   program->live = 1u;
-  program->heap_bytes = TEST_HEAP_BYTES;
-  program->heap_head = 0u;
-  struct block_header *head = (struct block_header *)(void *)program->heap;
-  head->size = TEST_HEAP_BYTES - (uint32_t)sizeof(struct block_header);
+  program->hidden_spill_bytes = hidden_spill_bytes;
+  program->heap_offset = hidden_spill_bytes;
+  program->heap_bytes = TEST_HEAP_BYTES - hidden_spill_bytes;
+  program->heap_head = program->heap_offset;
+  struct block_header *head =
+      (struct block_header *)(void *)(program->heap + program->heap_offset);
+  head->size = program->heap_bytes - (uint32_t)sizeof(struct block_header);
   head->next = TEST_NO_NEXT;
   head->free = 1u;
   head->magic = TEST_MAGIC;
+  return 0;
+}
+
+static void init_heap(struct vc4_program *program) {
+  (void)init_heap_with_hidden_spill(program, 0u);
 }
 
 static void coalesce_next(struct vc4_program *program,
@@ -106,7 +123,9 @@ static int range_offset(struct vc4_program *program, vc4_deviceptr_t ptr,
   if (!program || !program->live || ptr < TEST_GPU_BASE)
     return 0;
   uint32_t offset = ptr - TEST_GPU_BASE;
-  if (offset > program->heap_bytes || bytes > program->heap_bytes - offset)
+  if (offset < program->heap_offset ||
+      offset > program->heap_offset + program->heap_bytes ||
+      bytes > program->heap_offset + program->heap_bytes - offset)
     return 0;
   if (offset_out)
     *offset_out = offset;
@@ -301,6 +320,7 @@ int main(void) {
   struct vc4_program *program = 0;
   uint32_t failures = 0;
   vc4_deviceptr_t a = 0, b = 0, c = 0, d = 0;
+  struct vc4_program spill_program;
   uint8_t host_in[24];
   uint8_t host_out[24];
   for (uint32_t i = 0; i != sizeof(host_in); ++i)
@@ -341,6 +361,25 @@ int main(void) {
                          program->failures >= 3 && program->high_water >= 24,
                      "stats");
   vc4_program_destroy(program);
+
+  failures += expect(init_heap_with_hidden_spill(&spill_program, 64u) == 0,
+                     "hidden_spill_init");
+  program = &spill_program;
+  failures += expect(program->hidden_spill_bytes == 64u &&
+                         program->heap_bytes == TEST_HEAP_BYTES - 64u,
+                     "hidden_spill_reduces_capacity");
+  failures += expect(vc4Malloc(program, &a, 8u) == 0 &&
+                         a >= TEST_GPU_BASE + 64u + sizeof(struct block_header),
+                     "hidden_spill_alloc_after_arena");
+  failures += expect(!range_is_allocated(program, TEST_GPU_BASE + 1u, 1u),
+                     "hidden_spill_not_public");
+  failures += expect(vc4Free(program, a) == 0, "hidden_spill_free");
+  vc4_program_destroy(program);
+
+  failures += expect(init_heap_with_hidden_spill(&spill_program, 0u) == 0 &&
+                         spill_program.heap_bytes == TEST_HEAP_BYTES,
+                     "no_spill_capacity_unchanged");
+  vc4_program_destroy(&spill_program);
 
   if (failures == 0)
     printf("HEAP_UNIT_RESULT status=PASS allocs=%u frees=%u failures=%u high_water=%u\n",
