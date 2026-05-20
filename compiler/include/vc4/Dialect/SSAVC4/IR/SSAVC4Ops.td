@@ -155,18 +155,30 @@ def SSAVC4_MakeFlagsOp : SSAVC4_PureOp<"make_flags"> {
 
 def SSAVC4_BranchOp : SSAVC4_Op<"br", [Terminator]> {
   let summary = "SSAVC4 unconditional block branch";
+  let arguments = (ins Variadic<AnyType>:$targetOperands);
   let successors = (successor AnySuccessor:$target);
-  let assemblyFormat = "$target attr-dict";
+  let assemblyFormat = "$target (`(` $targetOperands^ `:` type($targetOperands) `)`)? attr-dict";
+  let hasVerifier = 1;
 }
 
-def SSAVC4_CondBranchOp : SSAVC4_Op<"cond_br", [Terminator]> {
+def SSAVC4_CondBranchOp : SSAVC4_Op<"cond_br", [
+    AttrSizedOperandSegments, Terminator
+  ]> {
   let summary = "SSAVC4 conditional branch consuming a flag pseudo-value";
   let arguments = (ins
     SSAVC4_Flags:$flags,
+    Variadic<AnyType>:$trueDestOperands,
+    Variadic<AnyType>:$falseDestOperands,
     VC4_BranchCondAttr:$cond
   );
   let successors = (successor AnySuccessor:$trueDest, AnySuccessor:$falseDest);
-  let assemblyFormat = "$flags `,` $trueDest `,` $falseDest attr-dict `:` type($flags)";
+  let assemblyFormat = [{
+    $flags `,`
+    $trueDest (`(` $trueDestOperands^ `:` type($trueDestOperands) `)`)? `,`
+    $falseDest (`(` $falseDestOperands^ `:` type($falseDestOperands) `)`)?
+    attr-dict `:` type($flags)
+  }];
+  let hasVerifier = 1;
 }
 
 

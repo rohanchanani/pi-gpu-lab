@@ -102,6 +102,36 @@ static LogicalResult verifyIntegerAttr32(Operation *op, Attribute attr,
   return success();
 }
 
+static LogicalResult verifySuccessorOperands(Operation *op, Block *successor,
+                                             OperandRange operands,
+                                             StringRef edgeName = "") {
+  unsigned operandCount = operands.size();
+  unsigned argumentCount = successor->getNumArguments();
+  if (operandCount != argumentCount) {
+    InFlightDiagnostic diag = op->emitOpError();
+    if (!edgeName.empty())
+      diag << edgeName << " ";
+    diag << "successor operand count does not match target block argument "
+            "count";
+    return failure();
+  }
+
+  for (auto [index, operand] : llvm::enumerate(operands)) {
+    Type operandType = operand.getType();
+    Type argumentType = successor->getArgument(index).getType();
+    if (operandType == argumentType)
+      continue;
+    InFlightDiagnostic diag = op->emitOpError();
+    if (!edgeName.empty())
+      diag << edgeName << " ";
+    diag << "successor operand type does not match target block argument type"
+         << " at index " << index << ": got " << operandType << ", expected "
+         << argumentType;
+    return failure();
+  }
+  return success();
+}
+
 static bool isUnaryAddOpcode(mlir::vc4::AddOpcode opcode) {
   return opcode == mlir::vc4::AddOpcode::ftoi ||
          opcode == mlir::vc4::AddOpcode::itof ||
@@ -387,6 +417,24 @@ LogicalResult MakeFlagsOp::verify() {
       return failure();
   }
   return success();
+}
+
+LogicalResult BranchOp::verify() {
+  return verifySuccessorOperands(getOperation(), getTarget(),
+                                 getTargetOperands());
+}
+
+LogicalResult CondBranchOp::verify() {
+  Operation *op = getOperation();
+  if (!isa<FlagsType>(getFlags().getType()))
+    return emitOpError("flags operand must be !ssavc4.flags");
+  if (getCond() == mlir::vc4::BranchCond::always)
+    return emitOpError("cond_br with always condition is invalid; use ssavc4.br");
+  if (failed(verifySuccessorOperands(op, getTrueDest(), getTrueDestOperands(),
+                                     "true")))
+    return failure();
+  return verifySuccessorOperands(op, getFalseDest(), getFalseDestOperands(),
+                                 "false");
 }
 
 LogicalResult SemaAcquireOp::verify() {
