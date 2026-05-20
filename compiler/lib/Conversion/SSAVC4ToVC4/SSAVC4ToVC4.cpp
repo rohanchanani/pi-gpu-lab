@@ -26,6 +26,7 @@
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LogicalResult.h"
 #include "llvm/ADT/ArrayRef.h"
+#include "llvm/ADT/BitVector.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -402,6 +403,7 @@ struct LivenessSummary {
   unsigned virtualValueCount = 0;
   DenseMap<Value, unsigned> lastUseIndex;
   DenseMap<Value, SmallVector<unsigned, 4>> useIndices;
+  DenseMap<Value, bool> pinnedValues;
 };
 
 enum class LocationKind { Register, SpillSlot };
@@ -451,11 +453,58 @@ static LivenessSummary computeLiveness(
     ArrayRef<InstructionTemplate> templates, ArrayRef<VirtualValue> virtualValues) {
   LivenessSummary summary;
   summary.virtualValueCount = virtualValues.size();
+  DenseMap<Block *, unsigned> blockOrder;
+  for (const InstructionTemplate &templ : templates) {
+    if (templ.sourceBlock && !blockOrder.count(templ.sourceBlock))
+      blockOrder[templ.sourceBlock] = blockOrder.size();
+  }
+
   for (unsigned index = 0; index < templates.size(); ++index) {
     for (Value operand : templates[index].operands) {
       if (isAllocatableSSAValue(operand, virtualValues)) {
         summary.lastUseIndex[operand] = index;
         summary.useIndices[operand].push_back(index);
+      }
+    }
+  }
+
+  auto getDefiningBlock = [](Value value) -> Block * {
+    if (auto argument = llvm::dyn_cast<BlockArgument>(value))
+      return argument.getOwner();
+    Operation *def = value.getDefiningOp();
+    return def ? def->getBlock() : nullptr;
+  };
+  for (const VirtualValue &virtualValue : virtualValues) {
+    if (llvm::isa<BlockArgument>(virtualValue.value))
+      summary.pinnedValues[virtualValue.value] = true;
+  }
+  for (const InstructionTemplate &branchTempl : templates) {
+    if ((branchTempl.kind != InstructionTemplate::Kind::Branch &&
+         branchTempl.kind != InstructionTemplate::Kind::CondBranch) ||
+        !branchTempl.sourceBlock || !branchTempl.branchTargetBlockId)
+      continue;
+    auto sourceIt = blockOrder.find(branchTempl.sourceBlock);
+    if (sourceIt == blockOrder.end() ||
+        *branchTempl.branchTargetBlockId > sourceIt->second)
+      continue;
+
+    unsigned loopHeader = *branchTempl.branchTargetBlockId;
+    unsigned loopLatch = sourceIt->second;
+    for (const InstructionTemplate &templ : templates) {
+      if (!templ.sourceBlock)
+        continue;
+      auto blockIt = blockOrder.find(templ.sourceBlock);
+      if (blockIt == blockOrder.end() || blockIt->second < loopHeader ||
+          blockIt->second > loopLatch)
+        continue;
+      for (Value operand : templ.operands) {
+        if (!isAllocatableSSAValue(operand, virtualValues))
+          continue;
+        Block *defBlock = getDefiningBlock(operand);
+        auto defIt = defBlock ? blockOrder.find(defBlock) : blockOrder.end();
+        if (!defBlock || defIt == blockOrder.end() ||
+            defIt->second < loopHeader || defIt->second > loopLatch)
+          summary.pinnedValues[operand] = true;
       }
     }
   }
@@ -484,7 +533,7 @@ public:
 
     if (hasEdgeCopies(templates))
       return diagnosticAnchor->emitError()
-             << "P2 block-argument lowering does not support spilling block "
+             << "P3 block-argument lowering does not support spilling block "
                 "arguments yet";
 
     if (failed(verifyS3SpillingSupported(diagnosticAnchor, templates)))
@@ -569,6 +618,8 @@ private:
     };
     DenseMap<Value, bool> releasedValues;
     auto releaseIfLastUse = [&](Value value, unsigned index) {
+      if (liveness.pinnedValues.count(value))
+        return;
       if (releasedValues.find(value) != releasedValues.end())
         return;
       auto regIt = registers.find(value);
@@ -1315,35 +1366,108 @@ static LogicalResult verifyP2BlockArgumentType(Operation *op, Value value,
          << role << " values";
 }
 
-static constexpr llvm::StringLiteral kP2LoopCarriedBlockArgDiagnostic(
-    "P2 block-argument lowering supports only acyclic merges; loop-carried "
-    "block arguments are deferred to P3");
+static constexpr llvm::StringLiteral kP3UnsupportedLoopDiagnostic(
+    "P3 block-argument lowering supports only natural loops with conservative "
+    "loop-carried data values");
 
-static LogicalResult verifyAcyclicSuccessorOperands(
-    Operation *op, Block *sourceBlock, Block *targetBlock,
-    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
-  if (successorOperands.empty())
-    return success();
+static constexpr llvm::StringLiteral kP3CyclicLoopCopyDiagnostic(
+    "P3 block-argument lowering does not yet support cyclic parallel copies on "
+    "loop backedges");
+
+static DenseMap<Block *, BitVector>
+computeDominance(ArrayRef<Block *> blocks,
+                 const DenseMap<Block *, SmallVector<Block *, 4>> &predecessors) {
+  DenseMap<Block *, BitVector> dominators;
+  if (blocks.empty())
+    return dominators;
+
+  unsigned blockCount = blocks.size();
+  BitVector allBlocks(blockCount, true);
+  for (auto [index, block] : llvm::enumerate(blocks)) {
+    dominators[block] = allBlocks;
+    if (index == 0) {
+      dominators[block].reset();
+      dominators[block].set(index);
+    }
+  }
+
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    for (auto [index, block] : llvm::enumerate(blocks)) {
+      if (index == 0)
+        continue;
+
+      BitVector next(blockCount, true);
+      auto predIt = predecessors.find(block);
+      if (predIt == predecessors.end() || predIt->second.empty()) {
+        next.reset();
+      } else {
+        bool sawPred = false;
+        for (Block *pred : predIt->second) {
+          auto domIt = dominators.find(pred);
+          if (domIt == dominators.end())
+            continue;
+          if (!sawPred) {
+            next = domIt->second;
+            sawPred = true;
+            continue;
+          }
+          next &= domIt->second;
+        }
+        if (!sawPred)
+          next.reset();
+      }
+      next.set(index);
+      if (next != dominators[block]) {
+        dominators[block] = std::move(next);
+        changed = true;
+      }
+    }
+  }
+  return dominators;
+}
+
+static bool isBackedge(Block *sourceBlock, Block *targetBlock,
+                       const DenseMap<Block *, unsigned> &blockOrder) {
   auto sourceIt = blockOrder.find(sourceBlock);
   auto targetIt = blockOrder.find(targetBlock);
-  if (sourceIt == blockOrder.end() || targetIt == blockOrder.end())
-    return op->emitOpError()
-           << "P2 block-argument lowering requires branch successors to remain "
-              "in the current function layout";
-  if (targetIt->second <= sourceIt->second)
-    return op->emitOpError() << kP2LoopCarriedBlockArgDiagnostic;
+  return sourceIt != blockOrder.end() && targetIt != blockOrder.end() &&
+         targetIt->second <= sourceIt->second;
+}
+
+static LogicalResult verifySuccessorOperandLoopShape(
+    Operation *op, Block *sourceBlock, Block *targetBlock,
+    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder,
+    const DenseMap<Block *, BitVector> &dominators) {
+  if (successorOperands.empty() || !isBackedge(sourceBlock, targetBlock, blockOrder))
+    return success();
+
+  auto sourceIt = blockOrder.find(sourceBlock);
+  auto targetIt = blockOrder.find(targetBlock);
+  auto domIt = dominators.find(sourceBlock);
+  if (sourceIt == blockOrder.end() || targetIt == blockOrder.end() ||
+      domIt == dominators.end())
+    return op->emitOpError() << kP3UnsupportedLoopDiagnostic;
+  if (targetIt->second >= domIt->second.size() ||
+      !domIt->second.test(targetIt->second))
+    return op->emitOpError() << kP3UnsupportedLoopDiagnostic;
   return success();
 }
 
-static LogicalResult verifyParallelEdgeCopyGroup(Operation *op,
-                                                 Block *targetBlock,
-                                                 ValueRange successorOperands) {
+static LogicalResult verifyParallelEdgeCopyGroup(
+    Operation *op, Block *sourceBlock, Block *targetBlock,
+    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
+  bool loopBackedge = !successorOperands.empty() &&
+                      isBackedge(sourceBlock, targetBlock, blockOrder);
   for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
     for (BlockArgument argument : targetBlock->getArguments()) {
       if (successorOperand != argument)
         continue;
       if (argument.getArgNumber() == index)
         break;
+      if (loopBackedge)
+        return op->emitOpError() << kP3CyclicLoopCopyDiagnostic;
       return op->emitOpError()
              << "P2 block-argument lowering requires a scratch register for "
                 "overlapping parallel edge copies, but a scratch register is "
@@ -1355,7 +1479,8 @@ static LogicalResult verifyParallelEdgeCopyGroup(Operation *op,
 
 static LogicalResult verifySuccessorOperandEdge(
     Operation *op, Block *sourceBlock, Block *targetBlock,
-    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
+    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder,
+    const DenseMap<Block *, BitVector> &dominators) {
   if (successorOperands.size() != targetBlock->getNumArguments())
     return op->emitOpError()
            << "successor operand count does not match target block argument "
@@ -1371,10 +1496,12 @@ static LogicalResult verifySuccessorOperandEdge(
         failed(verifyP2BlockArgumentType(op, argument, "block argument")))
       return failure();
   }
-  if (failed(verifyAcyclicSuccessorOperands(op, sourceBlock, targetBlock,
-                                            successorOperands, blockOrder)))
+  if (failed(verifySuccessorOperandLoopShape(op, sourceBlock, targetBlock,
+                                             successorOperands, blockOrder,
+                                             dominators)))
     return failure();
-  return verifyParallelEdgeCopyGroup(op, targetBlock, successorOperands);
+  return verifyParallelEdgeCopyGroup(op, sourceBlock, targetBlock,
+                                     successorOperands, blockOrder);
 }
 
 static LogicalResult selectInstructionTemplates(
@@ -1403,6 +1530,17 @@ static LogicalResult selectInstructionTemplates(
   for (size_t i = 0; i + 1 < blocks.size(); ++i)
     nextBlock[blocks[i]] = blocks[i + 1];
 
+  DenseMap<Block *, SmallVector<Block *, 4>> predecessors;
+  for (Block *block : blocks) {
+    Operation *terminator = block->getTerminator();
+    if (!terminator)
+      continue;
+    for (Block *successor : terminator->getSuccessors())
+      predecessors[successor].push_back(block);
+  }
+  DenseMap<Block *, BitVector> dominators =
+      computeDominance(blocks, predecessors);
+
   DenseMap<int64_t, Value> uniformReadByIndex;
   unsigned nextVirtualOrdinal = 0;
   for (Block *block : blocks) {
@@ -1424,7 +1562,8 @@ static LogicalResult selectInstructionTemplates(
                               unsigned layoutBlockId, Block *targetBlock,
                               ValueRange successorOperands) -> LogicalResult {
     if (failed(verifySuccessorOperandEdge(source, sourceBlock, targetBlock,
-                                          successorOperands, blockOrder)))
+                                          successorOperands, blockOrder,
+                                          dominators)))
       return failure();
     for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
       InstructionTemplate templ;

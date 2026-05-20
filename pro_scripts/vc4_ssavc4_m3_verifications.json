@@ -20,6 +20,7 @@
         "vector_store_smoke_ssavc4",
         "global_store_coalesced_multi_ssavc4",
         "block_args_merge_smoke_ssavc4",
+        "block_args_loop_smoke_ssavc4",
         "saxpy_full_ssavc4",
         "warp_reduce_sum_ssavc4",
         "spill_pressure_smoke_ssavc4",
@@ -34,6 +35,7 @@
         "vector_store_smoke_ssavc4",
         "global_store_coalesced_multi_ssavc4",
         "block_args_merge_smoke_ssavc4",
+        "block_args_loop_smoke_ssavc4",
         "saxpy_full_ssavc4",
         "warp_reduce_sum_ssavc4",
         "spill_pressure_smoke_ssavc4",
@@ -58,6 +60,7 @@
       "vector_store_smoke_ssavc4",
       "global_store_coalesced_multi_ssavc4",
       "block_args_merge_smoke_ssavc4",
+      "block_args_loop_smoke_ssavc4",
       "saxpy_full_ssavc4",
       "warp_reduce_sum_ssavc4",
       "spill_pressure_smoke_ssavc4",
@@ -72,6 +75,7 @@
       "vector_store_smoke_ssavc4",
       "global_store_coalesced_multi_ssavc4",
       "block_args_merge_smoke_ssavc4",
+      "block_args_loop_smoke_ssavc4",
       "saxpy_full_ssavc4",
       "warp_reduce_sum_ssavc4",
       "spill_pressure_smoke_ssavc4",
@@ -621,13 +625,20 @@
             "compiler/test/Conversion/SSAVC4ToVC4/block-args-uncond-merge.mlir",
             "compiler/test/Conversion/SSAVC4ToVC4/block-args-cond-merge.mlir",
             "compiler/test/Conversion/SSAVC4ToVC4/block-args-backedge-unsupported.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/block-args-loop.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/block-args-loop-cycle-unsupported.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/block-args-irreducible-loop-unsupported.mlir",
             "compiler/test/CodeGen/SSAVC4/Emit/block-args-cond-merge-ssavc4.mlir",
+            "compiler/test/CodeGen/SSAVC4/Emit/block-args-loop-ssavc4.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/expected.json",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/global_store_coalesced_multi_ssavc4/candidate/global_store_coalesced_multi_ssavc4_candidate_harness.c",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_merge_smoke_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_merge_smoke_ssavc4/expected.json",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_merge_smoke_ssavc4/candidate/block_args_merge_smoke_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_loop_smoke_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_loop_smoke_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_loop_smoke_ssavc4/candidate/block_args_loop_smoke_ssavc4_candidate_harness.c",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_branch_tail_smoke_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_branch_tail_smoke_ssavc4/expected.json",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/spill_branch_tail_smoke_ssavc4/candidate/spill_branch_tail_smoke_ssavc4_candidate_harness.c",
@@ -693,7 +704,13 @@
             "--include",
             "block-args-cond-merge.mlir",
             "--include",
-            "block-args-backedge-unsupported.mlir"
+            "block-args-backedge-unsupported.mlir",
+            "--include",
+            "block-args-loop.mlir",
+            "--include",
+            "block-args-loop-cycle-unsupported.mlir",
+            "--include",
+            "block-args-irreducible-loop-unsupported.mlir"
           ],
           "expect_exit_code": 0
         },
@@ -709,7 +726,9 @@
             "--root",
             "compiler/build/test/CodeGen/SSAVC4/Emit",
             "--include",
-            "block-args-cond-merge-ssavc4.mlir"
+            "block-args-cond-merge-ssavc4.mlir",
+            "--include",
+            "block-args-loop-ssavc4.mlir"
           ],
           "expect_exit_code": 0
         },
@@ -777,6 +796,73 @@
             "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_merge_smoke_ssavc4/expected.json",
             ".vc4_auto/ssavc4_m3/hardware/block_args_merge_smoke_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "generate-block_args_loop_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Generate scheduled VC4 bundle from SSAVC4 fixture block_args_loop_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "block_args_loop_smoke_ssavc4",
+            "generate"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-assemble-block_args_loop_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Assemble candidate for block_args_loop_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "block_args_loop_smoke_ssavc4",
+            "assemble"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro"
+        },
+        {
+          "id": "candidate-build-block_args_loop_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Build candidate harness for block_args_loop_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "block_args_loop_smoke_ssavc4",
+            "build"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "candidate-run-block_args_loop_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Run candidate hardware fixture block_args_loop_smoke_ssavc4",
+          "argv": [
+            "bash",
+            "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+            "block_args_loop_smoke_ssavc4",
+            "run"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "requires_hardware": true,
+          "timeout_sec": 60
+        },
+        {
+          "id": "expected-json-block_args_loop_smoke_ssavc4",
+          "mechanism": "command",
+          "description": "Check VC4_TEST_RESULT expected JSON for block_args_loop_smoke_ssavc4",
+          "route_hint": "gpt_pro",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/block_args_loop_smoke_ssavc4/expected.json",
+            ".vc4_auto/ssavc4_m3/hardware/block_args_loop_smoke_ssavc4/candidate_work/.vc4_candidate_run_attempt.log"
           ],
           "expect_exit_code": 0
         },
