@@ -373,6 +373,7 @@ struct InstructionTemplate {
     ALUAdd,
     ALUMul,
     MakeFlags,
+    EdgeCopy,
     Branch,
     CondBranch,
     Pack,
@@ -390,6 +391,9 @@ struct InstructionTemplate {
   } kind;
   Operation *source = nullptr;
   Block *sourceBlock = nullptr;
+  unsigned ordinal = 0;
+  unsigned layoutBlockId = 0;
+  std::optional<unsigned> branchTargetBlockId;
   SmallVector<Value, 2> operands;
   std::optional<Value> result;
 };
@@ -458,6 +462,13 @@ static LivenessSummary computeLiveness(
   return summary;
 }
 
+static bool hasEdgeCopies(ArrayRef<InstructionTemplate> templates) {
+  for (const InstructionTemplate &templ : templates)
+    if (templ.kind == InstructionTemplate::Kind::EdgeCopy)
+      return true;
+  return false;
+}
+
 static DictionaryAttr getResourceMetadata(Operation *func);
 static std::optional<llvm::StringRef> getResourceString(DictionaryAttr resource,
                                                         llvm::StringRef name);
@@ -470,6 +481,11 @@ public:
                          const LivenessSummary &liveness) {
     if (succeeded(allocateWithoutSpills(templates, virtualValues, liveness)))
       return success();
+
+    if (hasEdgeCopies(templates))
+      return diagnosticAnchor->emitError()
+             << "P2 block-argument lowering does not support spilling block "
+                "arguments yet";
 
     if (failed(verifyS3SpillingSupported(diagnosticAnchor, templates)))
       return failure();
@@ -571,7 +587,9 @@ private:
 
     for (unsigned index = 0; index < templates.size(); ++index) {
       const InstructionTemplate &templ = templates[index];
-      if (templ.result && needsAllocation.find(*templ.result) != needsAllocation.end()) {
+      if (templ.result &&
+          needsAllocation.find(*templ.result) != needsAllocation.end() &&
+          registers.find(*templ.result) == registers.end()) {
         std::optional<int64_t> reg = allocateRegister();
         if (!reg) {
           registers.clear();
@@ -614,6 +632,9 @@ private:
                    << "S3 spilling does not support loop/backedge branch "
                       "layouts requiring path-sensitive liveness";
         }
+        sawNonUniform = true;
+        break;
+      case InstructionTemplate::Kind::EdgeCopy:
         sawNonUniform = true;
         break;
       case InstructionTemplate::Kind::SemaAcquire:
@@ -929,9 +950,10 @@ public:
 };
 
 struct LayoutSummary {
-  DenseMap<Block *, unsigned> blockStartSlots;
+  DenseMap<unsigned, unsigned> blockStartSlots;
   DenseMap<Operation *, unsigned> opStartSlots;
-  DenseMap<Operation *, int64_t> branchImmediates;
+  DenseMap<unsigned, unsigned> templateStartSlots;
+  DenseMap<unsigned, int64_t> branchImmediates;
 };
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
@@ -942,6 +964,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
 
   unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
   switch (templ.kind) {
+  case InstructionTemplate::Kind::EdgeCopy:
+    return spillActionSlots + 1;
   case InstructionTemplate::Kind::Branch:
   case InstructionTemplate::Kind::CondBranch:
     return spillActionSlots + 4;
@@ -1015,13 +1039,14 @@ public:
     unsigned slot = 0;
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
       const InstructionTemplate &templ = scheduledTemplate.templ;
-      if (templ.sourceBlock)
-        layout.blockStartSlots.try_emplace(templ.sourceBlock, slot);
+      layout.blockStartSlots.try_emplace(templ.layoutBlockId, slot);
       unsigned preActionSlots = 0;
       for (const SpillAction &action : allocator.getPreActions(templ))
         preActionSlots += getSpillActionSlotCount(action);
       if (templ.source)
         layout.opStartSlots.try_emplace(templ.source, slot + preActionSlots);
+      layout.templateStartSlots.try_emplace(templ.ordinal,
+                                            slot + preActionSlots);
       slot += getFlattenedSlotCount(templ, allocator);
     }
 
@@ -1032,21 +1057,20 @@ public:
         continue;
 
       Operation *branchOp = templ.source;
-      if (!branchOp || branchOp->getNumSuccessors() == 0)
+      if (!branchOp || !templ.branchTargetBlockId)
         return diagnosticAnchor->emitError()
                << "internal lowering error: branch template has no successor";
 
-      Block *target = branchOp->getSuccessor(0);
-      auto sourceIt = layout.opStartSlots.find(branchOp);
-      auto targetIt = layout.blockStartSlots.find(target);
-      if (sourceIt == layout.opStartSlots.end() ||
+      auto sourceIt = layout.templateStartSlots.find(templ.ordinal);
+      auto targetIt = layout.blockStartSlots.find(*templ.branchTargetBlockId);
+      if (sourceIt == layout.templateStartSlots.end() ||
           targetIt == layout.blockStartSlots.end())
         return branchOp->emitError()
                << "could not compute final scheduled branch layout for successor";
 
       int64_t sourceSlot = static_cast<int64_t>(sourceIt->second);
       int64_t targetSlot = static_cast<int64_t>(targetIt->second);
-      layout.branchImmediates[branchOp] = (targetSlot - sourceSlot) * 8;
+      layout.branchImmediates[templ.ordinal] = (targetSlot - sourceSlot) * 8;
     }
     return success();
   }
@@ -1265,9 +1289,8 @@ static LogicalResult verifyRestrictedFlagUses(Operation *func) {
       }
 
       if (hasName(&op, kSSAVC4CondBranchOpName)) {
-        if (op.getNumOperands() != 1)
-          return op.emitOpError("requires exactly one flags operand");
-        Operation *definingOp = op.getOperand(0).getDefiningOp();
+        auto condBranch = llvm::cast<mlir::ssavc4::CondBranchOp>(op);
+        Operation *definingOp = condBranch.getFlags().getDefiningOp();
         if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
           return op.emitOpError()
                  << "requires flags produced directly by ssavc4.make_flags in M3 v1";
@@ -1275,6 +1298,83 @@ static LogicalResult verifyRestrictedFlagUses(Operation *func) {
     }
   }
   return success();
+}
+
+static bool isP2BlockArgumentType(Type type) {
+  return type.isSignlessInteger(32) || type.isF32() ||
+         isVector16I32Type(type) || isVector16F32Type(type);
+}
+
+static LogicalResult verifyP2BlockArgumentType(Operation *op, Value value,
+                                               StringRef role) {
+  if (isP2BlockArgumentType(value.getType()))
+    return success();
+  return op->emitOpError()
+         << "P2 block-argument lowering supports only i32, f32, "
+            "vector<16xi32>, or vector<16xf32> "
+         << role << " values";
+}
+
+static constexpr llvm::StringLiteral kP2LoopCarriedBlockArgDiagnostic(
+    "P2 block-argument lowering supports only acyclic merges; loop-carried "
+    "block arguments are deferred to P3");
+
+static LogicalResult verifyAcyclicSuccessorOperands(
+    Operation *op, Block *sourceBlock, Block *targetBlock,
+    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
+  if (successorOperands.empty())
+    return success();
+  auto sourceIt = blockOrder.find(sourceBlock);
+  auto targetIt = blockOrder.find(targetBlock);
+  if (sourceIt == blockOrder.end() || targetIt == blockOrder.end())
+    return op->emitOpError()
+           << "P2 block-argument lowering requires branch successors to remain "
+              "in the current function layout";
+  if (targetIt->second <= sourceIt->second)
+    return op->emitOpError() << kP2LoopCarriedBlockArgDiagnostic;
+  return success();
+}
+
+static LogicalResult verifyParallelEdgeCopyGroup(Operation *op,
+                                                 Block *targetBlock,
+                                                 ValueRange successorOperands) {
+  for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
+    for (BlockArgument argument : targetBlock->getArguments()) {
+      if (successorOperand != argument)
+        continue;
+      if (argument.getArgNumber() == index)
+        break;
+      return op->emitOpError()
+             << "P2 block-argument lowering requires a scratch register for "
+                "overlapping parallel edge copies, but a scratch register is "
+                "unavailable";
+    }
+  }
+  return success();
+}
+
+static LogicalResult verifySuccessorOperandEdge(
+    Operation *op, Block *sourceBlock, Block *targetBlock,
+    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
+  if (successorOperands.size() != targetBlock->getNumArguments())
+    return op->emitOpError()
+           << "successor operand count does not match target block argument "
+              "count";
+  for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
+    BlockArgument argument = targetBlock->getArgument(index);
+    if (successorOperand.getType() != argument.getType())
+      return op->emitOpError()
+             << "successor operand type does not match target block argument "
+                "type";
+    if (failed(verifyP2BlockArgumentType(op, successorOperand,
+                                         "successor operand")) ||
+        failed(verifyP2BlockArgumentType(op, argument, "block argument")))
+      return failure();
+  }
+  if (failed(verifyAcyclicSuccessorOperands(op, sourceBlock, targetBlock,
+                                            successorOperands, blockOrder)))
+    return failure();
+  return verifyParallelEdgeCopyGroup(op, targetBlock, successorOperands);
 }
 
 static LogicalResult selectInstructionTemplates(
@@ -1292,12 +1392,53 @@ static LogicalResult selectInstructionTemplates(
   for (Block &block : func->getRegion(0))
     blocks.push_back(&block);
 
+  DenseMap<Block *, unsigned> blockOrder;
+  DenseMap<Block *, unsigned> blockIds;
+  for (auto [index, block] : llvm::enumerate(blocks)) {
+    blockOrder[block] = index;
+    blockIds[block] = index;
+  }
+
   DenseMap<Block *, Block *> nextBlock;
   for (size_t i = 0; i + 1 < blocks.size(); ++i)
     nextBlock[blocks[i]] = blocks[i + 1];
 
   DenseMap<int64_t, Value> uniformReadByIndex;
   unsigned nextVirtualOrdinal = 0;
+  for (Block *block : blocks) {
+    for (BlockArgument argument : block->getArguments()) {
+      if (!isP2BlockArgumentType(argument.getType()))
+        return func->emitError()
+               << "P2 block-argument lowering supports only i32, f32, "
+                  "vector<16xi32>, or vector<16xf32> block arguments";
+      virtualValues.push_back({argument, nextVirtualOrdinal++});
+    }
+  }
+
+  unsigned nextLayoutBlockId = blocks.size();
+  auto appendTemplate = [&](InstructionTemplate templ) {
+    templ.ordinal = templates.size();
+    templates.push_back(std::move(templ));
+  };
+  auto appendEdgeCopies = [&](Operation *source, Block *sourceBlock,
+                              unsigned layoutBlockId, Block *targetBlock,
+                              ValueRange successorOperands) -> LogicalResult {
+    if (failed(verifySuccessorOperandEdge(source, sourceBlock, targetBlock,
+                                          successorOperands, blockOrder)))
+      return failure();
+    for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
+      InstructionTemplate templ;
+      templ.kind = InstructionTemplate::Kind::EdgeCopy;
+      templ.source = source;
+      templ.sourceBlock = sourceBlock;
+      templ.layoutBlockId = layoutBlockId;
+      templ.operands.push_back(successorOperand);
+      templ.result = targetBlock->getArgument(index);
+      appendTemplate(std::move(templ));
+    }
+    return success();
+  };
+
   int64_t nextUniformOrdinal = 0;
   for (Block *block : blocks) {
     for (Operation &op : *block) {
@@ -1306,34 +1447,80 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::ThreadEnd;
         templ.source = &op;
         templ.sourceBlock = block;
-        templates.push_back(std::move(templ));
+        templ.layoutBlockId = blockIds[block];
+        appendTemplate(std::move(templ));
         continue;
       }
 
       if (hasName(&op, kSSAVC4BranchOpName)) {
         if (op.getNumSuccessors() != 1)
           return op.emitOpError("requires exactly one successor");
+        auto branch = llvm::cast<mlir::ssavc4::BranchOp>(op);
+        if (failed(appendEdgeCopies(&op, block, blockIds[block],
+                                    branch.getTarget(),
+                                    branch.getTargetOperands())))
+          return failure();
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::Branch;
         templ.source = &op;
         templ.sourceBlock = block;
-        templates.push_back(std::move(templ));
+        templ.layoutBlockId = blockIds[block];
+        templ.branchTargetBlockId = blockIds[op.getSuccessor(0)];
+        appendTemplate(std::move(templ));
         continue;
       }
 
       if (hasName(&op, kSSAVC4CondBranchOpName)) {
         if (op.getNumSuccessors() != 2)
           return op.emitOpError("requires true and false successors");
-        auto nextIt = nextBlock.find(block);
-        if (nextIt == nextBlock.end() || op.getSuccessor(1) != nextIt->second)
-          return op.emitOpError()
-                 << "requires the false successor to be the next linear block in M3 v1";
+        auto condBranch = llvm::cast<mlir::ssavc4::CondBranchOp>(op);
+        bool hasSuccessorOperands =
+            !condBranch.getTrueDestOperands().empty() ||
+            !condBranch.getFalseDestOperands().empty();
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::CondBranch;
         templ.source = &op;
         templ.sourceBlock = block;
-        templ.operands.append(op.operand_begin(), op.operand_end());
-        templates.push_back(std::move(templ));
+        templ.layoutBlockId = blockIds[block];
+        templ.operands.push_back(condBranch.getFlags());
+        if (!hasSuccessorOperands) {
+          auto nextIt = nextBlock.find(block);
+          if (nextIt == nextBlock.end() || op.getSuccessor(1) != nextIt->second)
+            return op.emitOpError()
+                   << "requires the false successor to be the next linear block in M3 v1";
+          templ.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
+          appendTemplate(std::move(templ));
+          continue;
+        }
+
+        unsigned falseCopyBlockId = nextLayoutBlockId++;
+        unsigned trueCopyBlockId = nextLayoutBlockId++;
+        templ.branchTargetBlockId = trueCopyBlockId;
+        appendTemplate(std::move(templ));
+
+        if (failed(appendEdgeCopies(&op, block, falseCopyBlockId,
+                                    condBranch.getFalseDest(),
+                                    condBranch.getFalseDestOperands())))
+          return failure();
+        InstructionTemplate falseBranch;
+        falseBranch.kind = InstructionTemplate::Kind::Branch;
+        falseBranch.source = &op;
+        falseBranch.sourceBlock = block;
+        falseBranch.layoutBlockId = falseCopyBlockId;
+        falseBranch.branchTargetBlockId = blockIds[condBranch.getFalseDest()];
+        appendTemplate(std::move(falseBranch));
+
+        if (failed(appendEdgeCopies(&op, block, trueCopyBlockId,
+                                    condBranch.getTrueDest(),
+                                    condBranch.getTrueDestOperands())))
+          return failure();
+        InstructionTemplate trueBranch;
+        trueBranch.kind = InstructionTemplate::Kind::Branch;
+        trueBranch.source = &op;
+        trueBranch.sourceBlock = block;
+        trueBranch.layoutBlockId = trueCopyBlockId;
+        trueBranch.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
+        appendTemplate(std::move(trueBranch));
         continue;
       }
 
@@ -1346,8 +1533,9 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::LoadImm;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         uniformReadByIndex[nextUniformOrdinal++] = result;
         if (auto uniformRead = llvm::dyn_cast<mlir::ssavc4::UniformReadOp>(op))
           uniformReadByIndex[uniformRead.getIndex()] = result;
@@ -1365,8 +1553,9 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::ElementNumber;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1383,8 +1572,9 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::UniformRead;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1402,9 +1592,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::Splat;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1419,9 +1610,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::Mov;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1438,9 +1630,10 @@ static LogicalResult selectInstructionTemplates(
                          : InstructionTemplate::Kind::ALUMul;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1453,9 +1646,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::MakeFlags;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = op.getResult(0);
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1483,9 +1677,10 @@ static LogicalResult selectInstructionTemplates(
                                 : InstructionTemplate::Kind::Unpack);
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1502,9 +1697,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::TMURequest;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = op.getResult(0);
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1529,9 +1725,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::TMURead;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1550,8 +1747,9 @@ static LogicalResult selectInstructionTemplates(
                          : InstructionTemplate::Kind::SemaRelease;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1560,6 +1758,7 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::Barrier;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         if (op.getNumOperands() != 0 && op.getNumOperands() != 2)
           return op.emitOpError()
                  << "requires either no operands or logical_warp_id and "
@@ -1586,7 +1785,7 @@ static LogicalResult selectInstructionTemplates(
           templ.operands.push_back(warpsIt->second);
           }
         }
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1604,8 +1803,9 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::VPMWrite;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1624,9 +1824,10 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::VPMRead;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
         templ.result = result;
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1661,8 +1862,9 @@ static LogicalResult selectInstructionTemplates(
         templ.kind = InstructionTemplate::Kind::VDWStore;
         templ.source = &op;
         templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
         templ.operands.append(op.operand_begin(), op.operand_end());
-        templates.push_back(std::move(templ));
+        appendTemplate(std::move(templ));
         continue;
       }
 
@@ -1774,6 +1976,29 @@ static LogicalResult emitMov(OpBuilder &builder,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+  return success();
+}
+
+static LogicalResult emitEdgeCopy(OpBuilder &builder,
+                                  const InstructionTemplate &templ,
+                                  const SpillAwareAllocator &allocator) {
+  Operation *source = templ.source;
+  if (!templ.result || templ.operands.size() != 1)
+    return source->emitError("internal lowering error: malformed edge copy");
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
+  if (!resultReg || !inputReg)
+    return source->emitOpError()
+           << "P2 block-argument lowering uses a value that is not available "
+              "in a QPU register";
+
+  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        *resultReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   return success();
 }
 
@@ -2212,7 +2437,7 @@ static LogicalResult emitScheduledBranch(OpBuilder &builder,
                                          const InstructionTemplate &templ,
                                          const LayoutSummary &layout) {
   Operation *source = templ.source;
-  auto immediateIt = layout.branchImmediates.find(source);
+  auto immediateIt = layout.branchImmediates.find(templ.ordinal);
   if (immediateIt == layout.branchImmediates.end())
     return source->emitError("internal lowering error: missing scheduled branch immediate");
 
@@ -2747,6 +2972,10 @@ static LogicalResult emitScheduledFunctionBody(
       break;
     case InstructionTemplate::Kind::MakeFlags:
       if (failed(emitMakeFlags(builder, templ, allocator)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::EdgeCopy:
+      if (failed(emitEdgeCopy(builder, templ, allocator)))
         return failure();
       break;
     case InstructionTemplate::Kind::TMURequest:
