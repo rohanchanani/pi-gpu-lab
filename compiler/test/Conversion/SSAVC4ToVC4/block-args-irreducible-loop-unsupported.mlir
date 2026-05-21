@@ -1,6 +1,6 @@
 // RUN: not vc4-opt %s --convert-ssavc4-to-vc4 2>&1 | FileCheck %s
 
-// CHECK: P3 block-argument lowering supports only natural loops with conservative loop-carried data values
+// CHECK: SSAVC4 block-argument lowering supports only natural loops with conservative loop-carried data values
 ssavc4.module @block_args_irreducible_loop_unsupported {
   ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
     %zero = ssavc4.load_imm <splat32> {value = 0 : i32} : i32

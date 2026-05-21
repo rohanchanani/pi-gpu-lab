@@ -435,9 +435,21 @@ struct SpillAction {
   int64_t physicalReg = -1;
 };
 
+struct EdgeCopyEndpoint {
+  LocationKind kind = LocationKind::Register;
+  int64_t physicalReg = -1;
+  SpillSlot slot;
+};
+
+struct EdgeCopyAllocation {
+  EdgeCopyEndpoint source;
+  EdgeCopyEndpoint destination;
+};
+
 struct PerTemplateAllocation {
   DenseMap<Value, int64_t> operandRegisters;
   std::optional<int64_t> resultRegister;
+  std::optional<EdgeCopyAllocation> edgeCopy;
   SmallVector<SpillAction, 4> preActions;
 };
 
@@ -511,10 +523,15 @@ static LivenessSummary computeLiveness(
   return summary;
 }
 
-static bool hasEdgeCopies(ArrayRef<InstructionTemplate> templates) {
-  for (const InstructionTemplate &templ : templates)
-    if (templ.kind == InstructionTemplate::Kind::EdgeCopy)
-      return true;
+static bool hasSuccessorOperandsForEdge(Operation *op, unsigned successorIndex) {
+  if (auto branch = llvm::dyn_cast<mlir::ssavc4::BranchOp>(op))
+    return successorIndex == 0 && !branch.getTargetOperands().empty();
+  if (auto condBranch = llvm::dyn_cast<mlir::ssavc4::CondBranchOp>(op)) {
+    if (successorIndex == 0)
+      return !condBranch.getTrueDestOperands().empty();
+    if (successorIndex == 1)
+      return !condBranch.getFalseDestOperands().empty();
+  }
   return false;
 }
 
@@ -530,11 +547,6 @@ public:
                          const LivenessSummary &liveness) {
     if (succeeded(allocateWithoutSpills(templates, virtualValues, liveness)))
       return success();
-
-    if (hasEdgeCopies(templates))
-      return diagnosticAnchor->emitError()
-             << "P3 block-argument lowering does not support spilling block "
-                "arguments yet";
 
     if (failed(verifyS3SpillingSupported(diagnosticAnchor, templates)))
       return failure();
@@ -554,28 +566,32 @@ public:
                                 Value value) const {
     if (!hasSpills())
       return lookup(value);
-    if (templ.source) {
-      auto planIt = perTemplate.find(templ.source);
-      if (planIt != perTemplate.end()) {
-        auto operandIt = planIt->second.operandRegisters.find(value);
-        if (operandIt != planIt->second.operandRegisters.end())
-          return operandIt->second;
-        if (templ.result && *templ.result == value &&
-            planIt->second.resultRegister)
-          return *planIt->second.resultRegister;
-      }
+    auto planIt = perTemplate.find(templ.ordinal);
+    if (planIt != perTemplate.end()) {
+      auto operandIt = planIt->second.operandRegisters.find(value);
+      if (operandIt != planIt->second.operandRegisters.end())
+        return operandIt->second;
+      if (templ.result && *templ.result == value &&
+          planIt->second.resultRegister)
+        return *planIt->second.resultRegister;
     }
     return std::nullopt;
   }
 
   ArrayRef<SpillAction> getPreActions(const InstructionTemplate &templ) const {
     static const SmallVector<SpillAction, 0> empty;
-    if (!templ.source)
-      return empty;
-    auto it = perTemplate.find(templ.source);
+    auto it = perTemplate.find(templ.ordinal);
     if (it == perTemplate.end())
       return empty;
     return it->second.preActions;
+  }
+
+  std::optional<EdgeCopyAllocation>
+  getEdgeCopyAllocation(const InstructionTemplate &templ) const {
+    auto it = perTemplate.find(templ.ordinal);
+    if (it == perTemplate.end())
+      return std::nullopt;
+    return it->second.edgeCopy;
   }
 
   bool hasSpills() const { return spillPlan.spillSlotCount != 0; }
@@ -587,6 +603,7 @@ public:
   static constexpr int64_t spillAddrReg() { return kSpillAddrReg; }
   static constexpr int64_t spillLaneReg() { return kSpillLaneReg; }
   static constexpr int64_t spillRowReg() { return kSpillRowReg; }
+  static constexpr int64_t edgeCopyScratchReg() { return kEdgeCopyScratchReg; }
 
 private:
   static constexpr int64_t kForbiddenThreadEndHazardReg = 14;
@@ -595,6 +612,7 @@ private:
   static constexpr int64_t kSpillAddrReg = 30;
   static constexpr int64_t kSpillLaneReg = 31;
   static constexpr int64_t kSpillRowReg = 27;
+  static constexpr int64_t kEdgeCopyScratchReg = 26;
 
   LogicalResult allocateWithoutSpills(ArrayRef<InstructionTemplate> templates,
                                       ArrayRef<VirtualValue> virtualValues,
@@ -671,14 +689,16 @@ private:
             templ.source->getNumSuccessors() == 0)
           return diagnosticAnchor->emitError()
                  << "internal lowering error: malformed branch template";
-        for (Block *successor : templ.source->getSuccessors()) {
+        for (auto [successorIndex, successor] :
+             llvm::enumerate(templ.source->getSuccessors())) {
           auto sourceIt = blockOrder.find(templ.sourceBlock);
           auto successorIt = blockOrder.find(successor);
           if (sourceIt == blockOrder.end() || successorIt == blockOrder.end())
             return templ.source->emitOpError()
                    << "S3 spilling requires branch successors to remain in "
                       "the current function layout";
-          if (successorIt->second <= sourceIt->second)
+          if (successorIt->second <= sourceIt->second &&
+              !hasSuccessorOperandsForEdge(templ.source, successorIndex))
             return templ.source->emitOpError()
                    << "S3 spilling does not support loop/backedge branch "
                       "layouts requiring path-sensitive liveness";
@@ -716,12 +736,14 @@ private:
   bool isReservedInSpillMode(int64_t reg) const {
     return reg == kForbiddenThreadEndHazardReg || reg == kSpillBaseReg ||
            reg == kSpillOffsetReg || reg == kSpillAddrReg ||
-           reg == kSpillLaneReg || reg == kSpillRowReg;
+           reg == kSpillLaneReg || reg == kSpillRowReg ||
+           reg == kEdgeCopyScratchReg;
   }
 
   bool isValueSpillable(Value value) const {
     Type type = value.getType();
-    return isVector16I32Type(type) || isVector16F32Type(type);
+    return type.isSignlessInteger(32) || type.isF32() ||
+           isVector16I32Type(type) || isVector16F32Type(type);
   }
 
   std::optional<unsigned> nextUseAfter(Value value, unsigned index,
@@ -751,10 +773,17 @@ private:
                                    ArrayRef<InstructionTemplate> templates,
                                    ArrayRef<VirtualValue> virtualValues,
                                    const LivenessSummary &liveness) {
+    SmallVector<int64_t, 8> reservedRegisterHomes;
     SmallVector<int64_t, 32> freeRegisters;
-    for (int64_t reg = 31; reg >= 0; --reg)
-      if (!isReservedInSpillMode(reg))
-        freeRegisters.push_back(reg);
+    auto resetFreeRegisters = [&]() {
+      freeRegisters.clear();
+      for (int64_t reg = 31; reg >= 0; --reg)
+        if (!isReservedInSpillMode(reg) &&
+            std::find(reservedRegisterHomes.begin(), reservedRegisterHomes.end(),
+                      reg) == reservedRegisterHomes.end())
+          freeRegisters.push_back(reg);
+    };
+    resetFreeRegisters();
 
     DenseMap<Value, int64_t> activeRegisters;
     DenseMap<int64_t, Value> registerValues;
@@ -762,6 +791,83 @@ private:
     DenseMap<Value, bool> needsAllocation;
     for (const VirtualValue &virtualValue : virtualValues) {
       needsAllocation[virtualValue.value] = true;
+    }
+
+    DenseMap<Block *, unsigned> naturalBlockIds;
+    for (const InstructionTemplate &templ : templates)
+      if (templ.sourceBlock && !naturalBlockIds.count(templ.sourceBlock))
+        naturalBlockIds[templ.sourceBlock] = templ.layoutBlockId;
+
+    DenseMap<Block *, SmallVector<Block *, 4>> predecessors;
+    for (const InstructionTemplate &templ : templates) {
+      if ((templ.kind != InstructionTemplate::Kind::Branch &&
+           templ.kind != InstructionTemplate::Kind::CondBranch) ||
+          !templ.sourceBlock || !templ.source)
+        continue;
+      for (Block *successor : templ.source->getSuccessors()) {
+        SmallVectorImpl<Block *> &preds = predecessors[successor];
+        bool alreadyRecorded = false;
+        for (Block *predecessor : preds)
+          if (predecessor == templ.sourceBlock)
+            alreadyRecorded = true;
+        if (!alreadyRecorded)
+          preds.push_back(templ.sourceBlock);
+      }
+    }
+
+    DenseMap<Block *, bool> loopRegisterHomeBlocks;
+    for (const InstructionTemplate &templ : templates) {
+      if ((templ.kind != InstructionTemplate::Kind::Branch &&
+           templ.kind != InstructionTemplate::Kind::CondBranch) ||
+          !templ.sourceBlock || !templ.branchTargetBlockId)
+        continue;
+      auto sourceIt = naturalBlockIds.find(templ.sourceBlock);
+      if (sourceIt == naturalBlockIds.end() ||
+          *templ.branchTargetBlockId > sourceIt->second)
+        continue;
+      for (auto &entry : naturalBlockIds)
+        if (entry.second >= *templ.branchTargetBlockId &&
+            entry.second <= sourceIt->second)
+          loopRegisterHomeBlocks[entry.first] = true;
+    }
+
+    DenseMap<Value, int64_t> blockArgumentRegisterHomes;
+    int64_t nextHomeReg = 0;
+    auto reserveNextLoopCarriedHomeReg = [&]() -> std::optional<int64_t> {
+      while (nextHomeReg < 32 && isReservedInSpillMode(nextHomeReg))
+        ++nextHomeReg;
+      if (nextHomeReg >= 32)
+        return std::nullopt;
+      return nextHomeReg++;
+    };
+    for (const InstructionTemplate &templ : templates) {
+      if (templ.kind != InstructionTemplate::Kind::EdgeCopy || !templ.result)
+        continue;
+      auto blockArg = llvm::dyn_cast<BlockArgument>(*templ.result);
+      if (!blockArg || !loopRegisterHomeBlocks[blockArg.getOwner()])
+        continue;
+      if (blockArgumentRegisterHomes.count(*templ.result))
+        continue;
+      std::optional<int64_t> reg = reserveNextLoopCarriedHomeReg();
+      if (!reg)
+        return diagnosticAnchor->emitError()
+               << "SSAVC4 block-argument lowering could not reserve register "
+                  "homes for loop-carried spilled block arguments";
+      blockArgumentRegisterHomes[*templ.result] = *reg;
+      reservedRegisterHomes.push_back(*reg);
+    }
+    resetFreeRegisters();
+
+    DenseMap<Value, SpillSlot> blockArgumentHomeSlots;
+    for (const InstructionTemplate &templ : templates) {
+      if (templ.kind != InstructionTemplate::Kind::EdgeCopy || !templ.result)
+        continue;
+      if (!llvm::isa<BlockArgument>(*templ.result))
+        continue;
+      if (blockArgumentRegisterHomes.count(*templ.result))
+        continue;
+      blockArgumentHomeSlots.try_emplace(*templ.result,
+                                         getOrCreateSpillSlot(*templ.result));
     }
 
     auto popFreeRegister = [&]() -> std::optional<int64_t> {
@@ -775,6 +881,14 @@ private:
         if (protectedValue == value)
           return true;
       return false;
+    };
+
+    auto forgetRegisterValue = [&](int64_t reg) {
+      auto oldIt = registerValues.find(reg);
+      if (oldIt == registerValues.end())
+        return;
+      activeRegisters.erase(oldIt->second);
+      registerValues.erase(oldIt);
     };
 
     auto acquireRegister =
@@ -842,9 +956,198 @@ private:
           }
         };
 
+    auto getActiveOrSpilledEndpoint =
+        [&](Value value) -> std::optional<EdgeCopyEndpoint> {
+      auto activeIt = activeRegisters.find(value);
+      if (activeIt != activeRegisters.end()) {
+        EdgeCopyEndpoint endpoint;
+        endpoint.kind = LocationKind::Register;
+        endpoint.physicalReg = activeIt->second;
+        return endpoint;
+      }
+      auto slotIt = spillPlan.spillSlots.find(value);
+      if (slotIt != spillPlan.spillSlots.end() && slotValid[value]) {
+        EdgeCopyEndpoint endpoint;
+        endpoint.kind = LocationKind::SpillSlot;
+        endpoint.slot = slotIt->second;
+        return endpoint;
+      }
+      return std::nullopt;
+    };
+
+    auto releaseIfLastUse = [&](Value value, unsigned index) {
+      if (!needsAllocation.count(value) || liveness.pinnedValues.count(value))
+        return;
+      auto lastUseIt = liveness.lastUseIndex.find(value);
+      if (lastUseIt == liveness.lastUseIndex.end() ||
+          lastUseIt->second != index)
+        return;
+      auto activeIt = activeRegisters.find(value);
+      if (activeIt == activeRegisters.end())
+        return;
+      freeRegisters.push_back(activeIt->second);
+      registerValues.erase(activeIt->second);
+      activeRegisters.erase(activeIt);
+    };
+
+    auto allocateEdgeCopy =
+        [&](unsigned index, const InstructionTemplate &templ,
+            PerTemplateAllocation &allocation) -> LogicalResult {
+      if (!templ.result || templ.operands.size() != 1)
+        return templ.source->emitError(
+            "internal lowering error: malformed edge copy");
+      Value source = templ.operands.front();
+      Value destination = *templ.result;
+
+      std::optional<EdgeCopyEndpoint> sourceEndpoint =
+          getActiveOrSpilledEndpoint(source);
+      if (!sourceEndpoint)
+        return templ.source->emitOpError()
+               << "SSAVC4 block-argument edge copy source value is not "
+                  "available in a register or spill slot";
+
+      std::optional<EdgeCopyEndpoint> destinationEndpoint;
+      auto registerHomeIt = blockArgumentRegisterHomes.find(destination);
+      if (registerHomeIt != blockArgumentRegisterHomes.end()) {
+        EdgeCopyEndpoint endpoint;
+        endpoint.kind = LocationKind::Register;
+        endpoint.physicalReg = registerHomeIt->second;
+        destinationEndpoint = endpoint;
+        forgetRegisterValue(endpoint.physicalReg);
+        activeRegisters[destination] = endpoint.physicalReg;
+        registerValues[endpoint.physicalReg] = destination;
+        spillPlan.locations[destination] =
+            ValueLocation{LocationKind::Register, endpoint.physicalReg, 0};
+        slotValid[destination] = false;
+      } else if (auto blockArgHomeIt =
+                     blockArgumentHomeSlots.find(destination);
+                 blockArgHomeIt != blockArgumentHomeSlots.end()) {
+        EdgeCopyEndpoint endpoint;
+        endpoint.kind = LocationKind::SpillSlot;
+        endpoint.slot = blockArgHomeIt->second;
+        destinationEndpoint = endpoint;
+        auto activeDestIt = activeRegisters.find(destination);
+        if (activeDestIt != activeRegisters.end()) {
+          registerValues.erase(activeDestIt->second);
+          activeRegisters.erase(activeDestIt);
+        }
+        spillPlan.locations[destination] =
+            ValueLocation{LocationKind::SpillSlot, -1, endpoint.slot.index};
+        slotValid[destination] = true;
+      } else {
+        destinationEndpoint = getActiveOrSpilledEndpoint(destination);
+      }
+      if (!destinationEndpoint) {
+        auto existingDestSlot = spillPlan.spillSlots.find(destination);
+        if (existingDestSlot != spillPlan.spillSlots.end()) {
+          EdgeCopyEndpoint endpoint;
+          endpoint.kind = LocationKind::SpillSlot;
+          endpoint.slot = existingDestSlot->second;
+          destinationEndpoint = endpoint;
+          spillPlan.locations[destination] = ValueLocation{
+              LocationKind::SpillSlot, -1, endpoint.slot.index};
+          slotValid[destination] = true;
+        }
+      }
+      if (!destinationEndpoint) {
+        SmallVector<Value, 2> protectedValues;
+        if (sourceEndpoint->kind == LocationKind::Register)
+          protectedValues.push_back(source);
+        FailureOr<int64_t> reg =
+            acquireRegister(index, protectedValues, allocation.preActions);
+        if (succeeded(reg)) {
+          EdgeCopyEndpoint endpoint;
+          endpoint.kind = LocationKind::Register;
+          endpoint.physicalReg = *reg;
+          destinationEndpoint = endpoint;
+          forgetRegisterValue(*reg);
+          activeRegisters[destination] = *reg;
+          registerValues[*reg] = destination;
+          spillPlan.locations[destination] =
+              ValueLocation{LocationKind::Register, *reg, 0};
+          slotValid[destination] = false;
+        } else {
+          if (!isValueSpillable(destination))
+            return templ.source->emitOpError()
+                   << "SSAVC4 block-argument edge copy needs a spill slot for "
+                      "a non-spillable scalar destination";
+          SpillSlot slot = getOrCreateSpillSlot(destination);
+          EdgeCopyEndpoint endpoint;
+          endpoint.kind = LocationKind::SpillSlot;
+          endpoint.slot = slot;
+          destinationEndpoint = endpoint;
+          spillPlan.locations[destination] =
+              ValueLocation{LocationKind::SpillSlot, -1, slot.index};
+          slotValid[destination] = true;
+        }
+      } else if (destinationEndpoint->kind == LocationKind::Register) {
+        forgetRegisterValue(destinationEndpoint->physicalReg);
+        activeRegisters[destination] = destinationEndpoint->physicalReg;
+        registerValues[destinationEndpoint->physicalReg] = destination;
+        spillPlan.locations[destination] = ValueLocation{
+            LocationKind::Register, destinationEndpoint->physicalReg, 0};
+        slotValid[destination] = false;
+      } else {
+        spillPlan.locations[destination] = ValueLocation{
+            LocationKind::SpillSlot, -1, destinationEndpoint->slot.index};
+        slotValid[destination] = true;
+      }
+
+      allocation.edgeCopy = EdgeCopyAllocation{*sourceEndpoint,
+                                               *destinationEndpoint};
+      if (destinationEndpoint->kind == LocationKind::Register)
+        allocation.resultRegister = destinationEndpoint->physicalReg;
+      if (sourceEndpoint->kind == LocationKind::Register)
+        allocation.operandRegisters[source] = sourceEndpoint->physicalReg;
+
+      releaseIfLastUse(source, index);
+      return success();
+    };
+
+    std::optional<unsigned> activeLayoutBlockId;
+    Block *activeSourceBlock = nullptr;
     for (unsigned index = 0; index < templates.size(); ++index) {
       const InstructionTemplate &templ = templates[index];
-      PerTemplateAllocation &allocation = perTemplate[templ.source];
+      PerTemplateAllocation &allocation = perTemplate[templ.ordinal];
+
+      if (!activeLayoutBlockId || *activeLayoutBlockId != templ.layoutBlockId) {
+        bool keepActiveState = false;
+        if (activeLayoutBlockId && templ.sourceBlock && activeSourceBlock) {
+          auto predIt = predecessors.find(templ.sourceBlock);
+          auto naturalIt = naturalBlockIds.find(activeSourceBlock);
+          keepActiveState =
+              predIt != predecessors.end() && predIt->second.size() == 1 &&
+              predIt->second.front() == activeSourceBlock &&
+              naturalIt != naturalBlockIds.end() &&
+              *activeLayoutBlockId == naturalIt->second;
+        }
+        if (activeLayoutBlockId && !keepActiveState) {
+          activeRegisters.clear();
+          registerValues.clear();
+          resetFreeRegisters();
+        }
+        activeLayoutBlockId = templ.layoutBlockId;
+        activeSourceBlock = templ.sourceBlock;
+        if (templ.sourceBlock) {
+          for (BlockArgument arg : templ.sourceBlock->getArguments()) {
+            auto homeIt = blockArgumentRegisterHomes.find(arg);
+            if (homeIt == blockArgumentRegisterHomes.end())
+              continue;
+            forgetRegisterValue(homeIt->second);
+            activeRegisters[arg] = homeIt->second;
+            registerValues[homeIt->second] = arg;
+            spillPlan.locations[arg] =
+                ValueLocation{LocationKind::Register, homeIt->second, 0};
+            slotValid[arg] = false;
+          }
+        }
+      }
+
+      if (templ.kind == InstructionTemplate::Kind::EdgeCopy) {
+        if (failed(allocateEdgeCopy(index, templ, allocation)))
+          return failure();
+        continue;
+      }
 
       SmallVector<Value, 2> protectedOperands;
       for (Value operand : templ.operands)
@@ -856,14 +1159,20 @@ private:
           continue;
         auto activeIt = activeRegisters.find(operand);
         if (activeIt == activeRegisters.end()) {
-          SpillSlot slot = getOrCreateSpillSlot(operand);
+          auto slotIt = spillPlan.spillSlots.find(operand);
+          if (slotIt == spillPlan.spillSlots.end() || !slotValid[operand])
+            return templ.source->emitOpError()
+                   << "S4 spilling expected inactive operand to have a valid "
+                      "spill slot at layout block entry";
+          SpillSlot slot = slotIt->second;
           FailureOr<int64_t> reg =
-            acquireRegister(index, protectedOperands, allocation.preActions);
+              acquireRegister(index, protectedOperands, allocation.preActions);
           if (failed(reg)) {
             return templ.source->emitOpError()
                    << "S4 spilling supports only data vector values; no "
                       "scratch register was available to reload an operand";
           }
+          forgetRegisterValue(*reg);
           activeRegisters[operand] = *reg;
           registerValues[*reg] = operand;
           allocation.preActions.push_back(
@@ -873,9 +1182,17 @@ private:
         allocation.operandRegisters[operand] = activeIt->second;
       }
 
-      if (templ.kind == InstructionTemplate::Kind::Branch ||
-          templ.kind == InstructionTemplate::Kind::CondBranch)
+      if (templ.kind == InstructionTemplate::Kind::Branch) {
         ensureFutureLiveValuesHaveBranchSlots(index, allocation.preActions);
+      } else if (templ.kind == InstructionTemplate::Kind::CondBranch) {
+        SmallVectorImpl<SpillAction> *branchSlotActions = &allocation.preActions;
+        if (index > 0 &&
+            templates[index - 1].kind == InstructionTemplate::Kind::MakeFlags &&
+            templates[index - 1].sourceBlock == templ.sourceBlock)
+          branchSlotActions =
+              &perTemplate[templates[index - 1].ordinal].preActions;
+        ensureFutureLiveValuesHaveBranchSlots(index, *branchSlotActions);
+      }
 
       if (templ.result && needsAllocation.count(*templ.result)) {
         FailureOr<int64_t> reg =
@@ -887,6 +1204,7 @@ private:
         }
         allocation.resultRegister = *reg;
         registers[*templ.result] = *reg;
+        forgetRegisterValue(*reg);
         activeRegisters[*templ.result] = *reg;
         registerValues[*reg] = *templ.result;
         spillPlan.locations[*templ.result] =
@@ -894,22 +1212,11 @@ private:
         slotValid[*templ.result] = false;
       }
 
-      for (Value operand : templ.operands) {
-        if (!needsAllocation.count(operand))
-          continue;
-        auto lastUseIt = liveness.lastUseIndex.find(operand);
-        if (lastUseIt == liveness.lastUseIndex.end() ||
-            lastUseIt->second != index)
-          continue;
-        auto activeIt = activeRegisters.find(operand);
-        if (activeIt == activeRegisters.end())
-          continue;
-        freeRegisters.push_back(activeIt->second);
-        registerValues.erase(activeIt->second);
-        activeRegisters.erase(activeIt);
-      }
+      for (Value operand : templ.operands)
+        releaseIfLastUse(operand, index);
 
       if (templ.result && needsAllocation.count(*templ.result) &&
+          !liveness.pinnedValues.count(*templ.result) &&
           liveness.lastUseIndex.find(*templ.result) ==
               liveness.lastUseIndex.end()) {
         int64_t reg = *allocation.resultRegister;
@@ -928,7 +1235,7 @@ private:
   }
 
   DenseMap<Value, int64_t> registers;
-  DenseMap<Operation *, PerTemplateAllocation> perTemplate;
+  DenseMap<unsigned, PerTemplateAllocation> perTemplate;
   SpillPlan spillPlan;
 };
 
@@ -978,6 +1285,38 @@ static unsigned getSpillActionSlotCount(const SpillAction &action) {
   return getSpillSlotBaseSlotCount(action.slot) + 13;
 }
 
+static unsigned
+getEdgeCopySlotCount(const InstructionTemplate &templ,
+                     const SpillAwareAllocator &allocator) {
+  std::optional<EdgeCopyAllocation> edgeCopy =
+      allocator.getEdgeCopyAllocation(templ);
+  if (!edgeCopy)
+    return 1;
+
+  bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
+  bool destReg = edgeCopy->destination.kind == LocationKind::Register;
+  if (sourceReg && destReg)
+    return 1;
+  if (sourceReg && !destReg)
+    return getSpillActionSlotCount(SpillAction{
+        SpillAction::Kind::Store, templ.operands.front(),
+        edgeCopy->destination.slot, edgeCopy->source.physicalReg});
+  if (!sourceReg && destReg)
+    return getSpillActionSlotCount(SpillAction{
+        SpillAction::Kind::Reload, templ.operands.front(),
+        edgeCopy->source.slot, edgeCopy->destination.physicalReg});
+  if (edgeCopy->source.slot.index == edgeCopy->destination.slot.index)
+    return 0;
+  return getSpillActionSlotCount(SpillAction{
+             SpillAction::Kind::Reload, templ.operands.front(),
+             edgeCopy->source.slot,
+             SpillAwareAllocator::edgeCopyScratchReg()}) +
+         getSpillActionSlotCount(SpillAction{
+             SpillAction::Kind::Store, *templ.result,
+             edgeCopy->destination.slot,
+             SpillAwareAllocator::edgeCopyScratchReg()});
+}
+
 static void emitRegfileResultSpacer(OpBuilder &builder, Location loc,
                                     const InstructionTemplate &templ,
                                     const SpillAwareAllocator &allocator) {
@@ -1007,6 +1346,16 @@ struct LayoutSummary {
   DenseMap<unsigned, int64_t> branchImmediates;
 };
 
+static bool canUseMirroredSecondOperandForALU(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator,
+    bool smallImm);
+static bool aluNeedsSecondOperandAccumulatorMove(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
+static bool canUseMirroredSecondOperandForMakeFlags(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
+static bool makeFlagsNeedsSecondOperandAccumulatorMove(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
+
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
                                       const SpillAwareAllocator &allocator) {
   unsigned spillActionSlots = 0;
@@ -1016,7 +1365,7 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
   switch (templ.kind) {
   case InstructionTemplate::Kind::EdgeCopy:
-    return spillActionSlots + 1;
+    return spillActionSlots + getEdgeCopySlotCount(templ, allocator);
   case InstructionTemplate::Kind::Branch:
   case InstructionTemplate::Kind::CondBranch:
     return spillActionSlots + 4;
@@ -1062,21 +1411,16 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
     return spillActionSlots + 1 + resultSpacer;
   case InstructionTemplate::Kind::ALUAdd:
     return spillActionSlots +
-           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
-                ? 1
-                : 0) +
+           (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
            1 + resultSpacer;
   case InstructionTemplate::Kind::ALUMul:
     return spillActionSlots +
-           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
-                ? 1
-                : 0) +
+           (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
            2 + (2 * resultSpacer);
   case InstructionTemplate::Kind::MakeFlags:
     return spillActionSlots +
-           (templ.operands.size() == 2 && !isMirroredLoadImm(templ.operands[1])
-               ? 2
-               : 1);
+           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
+                                                                         : 1);
   }
   return spillActionSlots + 1;
 }
@@ -1181,6 +1525,36 @@ static std::optional<int64_t> getSmallImmLiteralSelector(Value value) {
   if (!constant || *constant < 0 || *constant > 15)
     return std::nullopt;
   return constant;
+}
+
+static bool canUseMirroredSecondOperandForALU(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator,
+    bool smallImm) {
+  return !allocator.hasSpills() && !smallImm && templ.operands.size() == 2 &&
+         isMirroredLoadImm(templ.operands[1]);
+}
+
+static bool aluNeedsSecondOperandAccumulatorMove(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+  if (templ.operands.size() != 2)
+    return false;
+  bool smallImm = templ.kind == InstructionTemplate::Kind::ALUAdd &&
+                  getSmallImmLiteralSelector(templ.operands[1]).has_value();
+  return !smallImm &&
+         !canUseMirroredSecondOperandForALU(templ, allocator, smallImm);
+}
+
+static bool canUseMirroredSecondOperandForMakeFlags(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+  return !allocator.hasSpills() && templ.operands.size() == 2 &&
+         isMirroredLoadImm(templ.operands[1]);
+}
+
+static bool makeFlagsNeedsSecondOperandAccumulatorMove(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+  if (templ.operands.size() != 2)
+    return false;
+  return !canUseMirroredSecondOperandForMakeFlags(templ, allocator);
 }
 
 static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
@@ -1361,18 +1735,18 @@ static LogicalResult verifyP2BlockArgumentType(Operation *op, Value value,
   if (isP2BlockArgumentType(value.getType()))
     return success();
   return op->emitOpError()
-         << "P2 block-argument lowering supports only i32, f32, "
+         << "SSAVC4 block-argument lowering supports only i32, f32, "
             "vector<16xi32>, or vector<16xf32> "
          << role << " values";
 }
 
 static constexpr llvm::StringLiteral kP3UnsupportedLoopDiagnostic(
-    "P3 block-argument lowering supports only natural loops with conservative "
-    "loop-carried data values");
+    "SSAVC4 block-argument lowering supports only natural loops with "
+    "conservative loop-carried data values");
 
 static constexpr llvm::StringLiteral kP3CyclicLoopCopyDiagnostic(
-    "P3 block-argument lowering does not yet support cyclic parallel copies on "
-    "loop backedges");
+    "SSAVC4 block-argument lowering does not yet support cyclic parallel "
+    "copies involving spilled values");
 
 static DenseMap<Block *, BitVector>
 computeDominance(ArrayRef<Block *> blocks,
@@ -1469,7 +1843,7 @@ static LogicalResult verifyParallelEdgeCopyGroup(
       if (loopBackedge)
         return op->emitOpError() << kP3CyclicLoopCopyDiagnostic;
       return op->emitOpError()
-             << "P2 block-argument lowering requires a scratch register for "
+             << "SSAVC4 block-argument lowering requires a scratch register for "
                 "overlapping parallel edge copies, but a scratch register is "
                 "unavailable";
     }
@@ -1547,7 +1921,7 @@ static LogicalResult selectInstructionTemplates(
     for (BlockArgument argument : block->getArguments()) {
       if (!isP2BlockArgumentType(argument.getType()))
         return func->emitError()
-               << "P2 block-argument lowering supports only i32, f32, "
+              << "SSAVC4 block-argument lowering supports only i32, f32, "
                   "vector<16xi32>, or vector<16xf32> block arguments";
       virtualValues.push_back({argument, nextVirtualOrdinal++});
     }
@@ -2118,17 +2492,71 @@ static LogicalResult emitMov(OpBuilder &builder,
   return success();
 }
 
+static void emitSpillStoreAction(OpBuilder &builder, Location loc,
+                                 const SpillAction &action);
+static void emitSpillReloadAction(OpBuilder &builder, Location loc,
+                                  const SpillAction &action);
+
 static LogicalResult emitEdgeCopy(OpBuilder &builder,
                                   const InstructionTemplate &templ,
                                   const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (!templ.result || templ.operands.size() != 1)
     return source->emitError("internal lowering error: malformed edge copy");
+
+  std::optional<EdgeCopyAllocation> edgeCopy =
+      allocator.getEdgeCopyAllocation(templ);
+  if (edgeCopy) {
+    bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
+    bool destReg = edgeCopy->destination.kind == LocationKind::Register;
+    if (sourceReg && destReg) {
+      createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            edgeCopy->destination.physicalReg,
+                            /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+                            mlir::vc4::MulOpcode::nop,
+                            edgeCopy->source.physicalReg,
+                            edgeCopy->source.physicalReg,
+                            mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      return success();
+    }
+    if (sourceReg && !destReg) {
+      emitSpillStoreAction(
+          builder, source->getLoc(),
+          SpillAction{SpillAction::Kind::Store, *templ.result,
+                      edgeCopy->destination.slot,
+                      edgeCopy->source.physicalReg});
+      return success();
+    }
+    if (!sourceReg && destReg) {
+      emitSpillReloadAction(
+          builder, source->getLoc(),
+          SpillAction{SpillAction::Kind::Reload, templ.operands.front(),
+                      edgeCopy->source.slot,
+                      edgeCopy->destination.physicalReg});
+      return success();
+    }
+    if (edgeCopy->source.slot.index == edgeCopy->destination.slot.index)
+      return success();
+    emitSpillReloadAction(
+        builder, source->getLoc(),
+        SpillAction{SpillAction::Kind::Reload, templ.operands.front(),
+                    edgeCopy->source.slot,
+                    SpillAwareAllocator::edgeCopyScratchReg()});
+    emitSpillStoreAction(
+        builder, source->getLoc(),
+        SpillAction{SpillAction::Kind::Store, *templ.result,
+                    edgeCopy->destination.slot,
+                    SpillAwareAllocator::edgeCopyScratchReg()});
+    return success();
+  }
+
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
-           << "P2 block-argument lowering uses a value that is not available "
+           << "SSAVC4 block-argument lowering uses a value that is not available "
               "in a QPU register";
 
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
@@ -2185,9 +2613,8 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
       templ.operands.size() == 2)
     smallImm = getSmallImmLiteralSelector(templ.operands[1]);
 
-  bool useMirroredSecond = !allocator.hasSpills() && !smallImm &&
-                           templ.operands.size() == 2 &&
-                           isMirroredLoadImm(templ.operands[1]);
+  bool useMirroredSecond = canUseMirroredSecondOperandForALU(
+      templ, allocator, smallImm.has_value());
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
   int64_t raddrB = operandRegs.size() < 2 ? raddrA
                   : useMirroredSecond   ? operandRegs[1]
@@ -2200,7 +2627,7 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                          : useMirroredSecond     ? mlir::vc4::QPUMux::b
                                                   : mlir::vc4::QPUMux::r1;
 
-  if (operandRegs.size() == 2 && !useMirroredSecond && !smallImm) {
+  if (aluNeedsSecondOperandAccumulatorMove(templ, allocator)) {
     createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/33, /*waddrMul=*/32,
@@ -2541,7 +2968,7 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
     operandRegs.push_back(*reg);
   }
   bool useMirroredSecond =
-      templ.operands.size() == 2 && isMirroredLoadImm(templ.operands[1]);
+      canUseMirroredSecondOperandForMakeFlags(templ, allocator);
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
   int64_t raddrB = operandRegs.size() < 2 ? raddrA
                   : useMirroredSecond   ? operandRegs[1]
@@ -2550,7 +2977,7 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
                          : useMirroredSecond     ? mlir::vc4::QPUMux::b
                                                   : mlir::vc4::QPUMux::r1;
 
-  if (operandRegs.size() == 2 && !useMirroredSecond) {
+  if (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator)) {
     createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/33, /*waddrMul=*/32,
