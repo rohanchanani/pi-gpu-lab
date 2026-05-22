@@ -7,6 +7,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileDialect.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
@@ -1253,7 +1255,8 @@ int main(int argc, char **argv) {
   mlir::PassRegistration<VC4VerifyScheduledPeripheralAccessesPass>();
 
   mlir::DialectRegistry registry;
-  registry.insert<mlir::vc4::VC4Dialect, mlir::ssavc4::SSAVC4Dialect,
+  registry.insert<mlir::arith::ArithDialect, mlir::vector::VectorDialect,
+                  mlir::vc4::VC4Dialect, mlir::ssavc4::SSAVC4Dialect,
                   mlir::vc4tile::VC4TileDialect>();
 
   return mlir::asMainReturnCode(
