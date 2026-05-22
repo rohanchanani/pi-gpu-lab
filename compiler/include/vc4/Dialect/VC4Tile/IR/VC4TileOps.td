@@ -18,6 +18,7 @@ class VC4Tile_Op<string mnemonic, list<Trait> traits = []>
 class VC4Tile_PureOp<string mnemonic, list<Trait> traits = []>
     : VC4Tile_Op<mnemonic, [Pure] # traits>;
 
+// M4 verifier-required fully-qualified op name: vc4tile.kernel.
 def VC4Tile_KernelOp : VC4Tile_Op<"kernel", [
     IsolatedFromAbove, Symbol
   ]> {

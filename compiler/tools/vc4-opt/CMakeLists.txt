@@ -1,6 +1,7 @@
 add_mlir_tool(vc4-opt
   vc4-opt.cpp
   ${PROJECT_SOURCE_DIR}/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp
+  ${PROJECT_SOURCE_DIR}/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp
 )
 
 add_dependencies(vc4-opt

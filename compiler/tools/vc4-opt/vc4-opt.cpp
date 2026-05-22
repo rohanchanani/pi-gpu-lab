@@ -6,6 +6,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileDialect.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
@@ -1243,6 +1244,7 @@ struct VC4VerifyScheduledPeripheralAccessesPass
 
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
+  mlir::vc4::registerConvertVC4TileToSSAVC4Pass();
   mlir::PassRegistration<VC4TestPrintEffectsPass>();
   mlir::PassRegistration<VC4VerifyEmitContractPass>();
   mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
