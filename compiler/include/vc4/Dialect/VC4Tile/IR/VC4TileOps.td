@@ -42,7 +42,7 @@ def VC4Tile_KernelOp : VC4Tile_Op<"kernel", [
     OptionalAttr<DictionaryAttr>:$launch_abi,
     OptionalAttr<DictionaryAttr>:$resource
   );
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region AnyRegion:$body);
   let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
   let hasVerifier = 1;
 }

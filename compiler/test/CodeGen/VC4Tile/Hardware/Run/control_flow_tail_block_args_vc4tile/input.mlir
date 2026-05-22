@@ -1,0 +1,39 @@
+// RUN: bash %S/../../../Support/run_vc4tile_candidate_codegen_test.sh control_flow_tail_block_args_vc4tile generate
+
+vc4tile.kernel @control_flow_tail_block_args_vc4tile attributes {
+  public_name = "control_flow_tail_block_args_vc4tile",
+  launch_abi = {
+    public_name = "control_flow_tail_block_args_vc4tile",
+    code_symbol = "control_flow_tail_block_args_vc4tile_shader",
+    tail_policy = "exact_multiple",
+    uniform_words_per_qpu = 1 : i32,
+    args = [{direction = "by_value", kind = "scalar", name = "out", type = "u32", uniform_index = 0 : i32}],
+    builtins = []
+  }
+} {
+  %base = vc4tile.program_id : i32
+  %lanes = vc4tile.lane_range : vector<16xi32>
+  %zero = arith.constant 0 : i32
+  %one = arith.constant 1 : i32
+  %limit = arith.constant 8 : i32
+  %bias = arith.constant 700 : i32
+  %bias_vec = vector.broadcast %bias : i32 to vector<16xi32>
+  %value = arith.addi %lanes, %bias_vec : vector<16xi32>
+  %go = arith.cmpi ult, %zero, %one : i32
+  cf.cond_br %go,
+      ^then(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>),
+      ^else(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>)
+^then(%tbase: i32, %tlo: i32, %tlimit: i32, %tvalue: vector<16xi32>):
+  cf.br ^merge(%tbase, %tlo, %tlimit, %tvalue : i32, i32, i32, vector<16xi32>)
+^else(%fbase: i32, %flo: i32, %flimit: i32, %fvalue: vector<16xi32>):
+  cf.br ^merge(%fbase, %flo, %flimit, %fvalue : i32, i32, i32, vector<16xi32>)
+^merge(%mbase: i32, %mlo: i32, %mlimit: i32, %mvalue: vector<16xi32>):
+  %mask = vc4tile.tail_mask %mlo, %mlimit : i32, i32 -> vector<16xi1>
+  vc4tile.masked_store_global %mbase, %lanes, %mvalue, %mask {
+    elem_bytes = 4 : i32,
+    offset_unit = #vc4tile.offset_unit<element>,
+    memory_space = #vc4tile.memory_space<global>,
+    access = #vc4tile.memory_access<coalesced>
+  } : i32, vector<16xi32>, vector<16xi32>, vector<16xi1>
+  vc4tile.return
+}

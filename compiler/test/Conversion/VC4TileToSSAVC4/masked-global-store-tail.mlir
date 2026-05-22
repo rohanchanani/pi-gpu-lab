@@ -3,7 +3,7 @@
 // CHECK-LABEL: ssavc4.func @masked_global_store_tail
 // CHECK: ssavc4.alu.add
 // CHECK: ssavc4.vdw.store
-// CHECK: active_lanes = 16 : i32
+// CHECK: active_lanes = 13 : i32
 // CHECK: elem_bytes = 4 : i32
 // CHECK: ssavc4.thread_end
 vc4tile.kernel @masked_global_store_tail attributes {
