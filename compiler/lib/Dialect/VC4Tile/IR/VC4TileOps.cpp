@@ -141,6 +141,16 @@ static LogicalResult verifyMemoryAccessNotGeneric(Operation *op,
   return success();
 }
 
+static LogicalResult verifyLoadAccessNotGeneric(Operation *op,
+                                                MemoryAccessAttr accessAttr) {
+  if (accessAttr && accessAttr.getValue() == MemoryAccess::generic) {
+    return op->emitOpError(
+        "generic per-lane load access is outside the M4 hardware-lowered "
+        "contract; use coalesced or affine_contiguous");
+  }
+  return success();
+}
+
 static LogicalResult verifyMemorySpace(Operation *op, MemorySpaceAttr spaceAttr,
                                        MemorySpace expected,
                                        StringRef expectedName) {
@@ -296,7 +306,8 @@ LogicalResult MaskedLoadGlobalOp::verify() {
       failed(verifyVector16Data(op, getResult().getType(), "result")) ||
       failed(verifyElemBytes4(op, getElemBytesAttr())) ||
       failed(verifyMemorySpace(op, getMemorySpaceAttr(), MemorySpace::global,
-                               "global")))
+                               "global")) ||
+      failed(verifyLoadAccessNotGeneric(op, getAccessAttr())))
     return failure();
   return success();
 }

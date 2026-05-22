@@ -56,6 +56,8 @@ constexpr llvm::StringLiteral kVC4TileLaneRangeOpName("vc4tile.lane_range");
 constexpr llvm::StringLiteral kVC4TileThreadIdOpName("vc4tile.thread_id");
 constexpr llvm::StringLiteral kVC4TileMaskAllOpName("vc4tile.mask_all");
 constexpr llvm::StringLiteral kVC4TileTailMaskOpName("vc4tile.tail_mask");
+constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
+    "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
     "vc4tile.masked_store_global");
 
@@ -83,6 +85,8 @@ constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
 constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
+constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
+constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
 
 static bool hasName(Operation *op, llvm::StringRef name) {
@@ -346,6 +350,13 @@ static bool isVector16I32(Type type) {
          vectorType.getElementType().isSignlessInteger(32);
 }
 
+static bool isVector16I1(Type type) {
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  return vectorType && vectorType.getRank() == 1 &&
+         vectorType.getDimSize(0) == 16 &&
+         vectorType.getElementType().isSignlessInteger(1);
+}
+
 static bool isVector16F32(Type type) {
   auto vectorType = llvm::dyn_cast<VectorType>(type);
   return vectorType && vectorType.getRank() == 1 &&
@@ -452,6 +463,27 @@ static Value createMakeFlags(OpBuilder &builder, Location loc,
       builder, loc, kSSAVC4MakeFlagsOpName, operands,
       {builder.getNamedAttr("kind", kindAttr)},
       mlir::ssavc4::FlagsType::get(builder.getContext()));
+}
+
+static Type getAsyncTokenType(OpBuilder &builder) {
+  return mlir::ssavc4::AsyncTokenType::get(builder.getContext());
+}
+
+static Value createTMURequest(OpBuilder &builder, Location loc, Value address) {
+  return createSSAVC4OpWithResult(
+      builder, loc, kSSAVC4TMURequestOpName, {address},
+      {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+       builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
+      getAsyncTokenType(builder));
+}
+
+static Value createTMURead(OpBuilder &builder, Location loc, Value token,
+                           Type resultType) {
+  return createSSAVC4OpWithResult(
+      builder, loc, kSSAVC4TMUReadOpName, {token},
+      {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+       builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
+      resultType);
 }
 
 static Value lookupMappedValue(Operation *user, Value source,
@@ -679,17 +711,22 @@ static bool isDirectLaneRangeValue(Value value) {
   return hasName(def, kVC4TileLaneRangeOpName);
 }
 
-static bool valueHasOnlyMaskedStoreUsers(Value value) {
+static bool isMaskedGlobalMemoryOp(Operation *op) {
+  return hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
+         hasName(op, kVC4TileMaskedStoreGlobalOpName);
+}
+
+static bool valueHasOnlyMaskedGlobalMemoryUsers(Value value) {
   for (OpOperand &use : value.getUses()) {
-    if (!hasName(use.getOwner(), kVC4TileMaskedStoreGlobalOpName))
+    if (!isMaskedGlobalMemoryOp(use.getOwner()))
       return false;
   }
   return true;
 }
 
-static void eraseLoweredFlagMaskIfStoreOnly(Value sourceMask,
-                                            llvm::DenseMap<Value, Value> &valueMap) {
-  if (!valueHasOnlyMaskedStoreUsers(sourceMask))
+static void eraseLoweredFlagMaskIfMemoryOnly(
+    Value sourceMask, llvm::DenseMap<Value, Value> &valueMap) {
+  if (!valueHasOnlyMaskedGlobalMemoryUsers(sourceMask))
     return;
   auto it = valueMap.find(sourceMask);
   if (it == valueMap.end())
@@ -711,7 +748,7 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
 
   if (hasName(maskDef, kVC4TileMaskAllOpName)) {
     activeLanesAttr = 16;
-    eraseLoweredFlagMaskIfStoreOnly(sourceMask, valueMap);
+    eraseLoweredFlagMaskIfMemoryOnly(sourceMask, valueMap);
     return success();
   }
 
@@ -728,12 +765,91 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
                                      builder.getI32Type());
     operands.push_back(activeLanes);
     activeLanesAttr = 16;
-    eraseLoweredFlagMaskIfStoreOnly(sourceMask, valueMap);
+    eraseLoweredFlagMaskIfMemoryOnly(sourceMask, valueMap);
     return success();
   }
 
   return op->emitOpError(
       "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for coalesced VDW stores");
+}
+
+static LogicalResult verifyMaskedLoadShape(Operation *op) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return op->emitOpError("expected base, offsets, mask, and one result");
+  if (!op->getOperand(0).getType().isSignlessInteger(32))
+    return op->emitOpError("requires an i32 scalar global base address");
+  if (!isVector16I32(op->getOperand(1).getType()))
+    return op->emitOpError("requires vector<16xi32> offsets");
+  if (!isVector16I1(op->getOperand(2).getType()))
+    return op->emitOpError("requires a vector<16xi1> mask");
+  if (!isVector16Data(op->getResult(0).getType()))
+    return op->emitOpError("requires a vector<16xi32> or vector<16xf32> result");
+
+  auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
+  if (!elemBytes || elemBytes.getInt() != 4)
+    return op->emitOpError("supports only elem_bytes = 4 for TMU loads");
+
+  auto offsetUnit = op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
+  if (!offsetUnit)
+    return op->emitOpError("requires an offset_unit attribute");
+  if (offsetUnit.getValue() != mlir::vc4tile::OffsetUnit::element)
+    return op->emitOpError("supports only element offsets for coalesced TMU loads");
+
+  Operation *offsetDef = op->getOperand(1).getDefiningOp();
+  if (!hasName(offsetDef, kVC4TileLaneRangeOpName)) {
+    return op->emitOpError(
+        "requires offsets to be the direct vc4tile.lane_range value for the M4 coalesced TMU subset");
+  }
+
+  auto access = op->getAttrOfType<mlir::vc4tile::MemoryAccessAttr>("access");
+  if (access && access.getValue() != mlir::vc4tile::MemoryAccess::coalesced)
+    return op->emitOpError("supports only access = #vc4tile.memory_access<coalesced> for TMU loads");
+
+  auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+  if (memorySpace && memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
+    return op->emitOpError("requires memory_space = #vc4tile.memory_space<global>");
+
+  Operation *maskDef = op->getOperand(2).getDefiningOp();
+  if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
+      !hasName(maskDef, kVC4TileTailMaskOpName)) {
+    return op->emitOpError(
+        "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for TMU loads");
+  }
+
+  return success();
+}
+
+static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
+                                           llvm::DenseMap<Value, Value> &valueMap) {
+  if (failed(verifyMaskedLoadShape(op)))
+    return failure();
+
+  Value base = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value offsets = lookupMappedValue(op, op->getOperand(1), valueMap);
+  if (!base || !offsets)
+    return failure();
+
+  Type addressType = getVector16I32Type(builder);
+  Value baseVec = createSplat(builder, op->getLoc(), base, addressType);
+  Value byteOffsets = offsets;
+
+  auto offsetUnit =
+      op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
+  if (offsetUnit.getValue() == mlir::vc4tile::OffsetUnit::element) {
+    Value four = createLoadImmI32(builder, op->getLoc(), addressType, 4);
+    SmallVector<Value, 2> mulOperands{offsets, four};
+    byteOffsets = createALUMul(builder, op->getLoc(), mulOperands,
+                               mlir::vc4::MulOpcode::mul24, addressType);
+  }
+
+  SmallVector<Value, 2> addressOperands{baseVec, byteOffsets};
+  Value address = createALUAdd(builder, op->getLoc(), addressOperands,
+                               mlir::vc4::AddOpcode::add, addressType);
+  Value token = createTMURequest(builder, op->getLoc(), address);
+  valueMap[op->getResult(0)] =
+      createTMURead(builder, op->getLoc(), token, op->getResult(0).getType());
+  eraseLoweredFlagMaskIfMemoryOnly(op->getOperand(2), valueMap);
+  return success();
 }
 
 static LogicalResult verifyCoalescedStoreShape(Operation *op) {
@@ -795,8 +911,8 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
                                           activeLanesAttr)))
     return failure();
 
-  const int32_t activeLaneOperands = operands.size() > 2 ? 1 : 0;
-  const int32_t vpmRowOperands = operands.size() > 3 ? 1 : 0;
+  SmallVector<int32_t, 4> operandSegmentSizes{
+      1, 1, static_cast<int32_t>(operands.size() == 3), 0};
   createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
                  {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
                   builder.getNamedAttr("active_lanes",
@@ -805,8 +921,8 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
                   builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
                   builder.getNamedAttr(
                       "operandSegmentSizes",
-                      builder.getDenseI32ArrayAttr(
-                          {1, 1, activeLaneOperands, vpmRowOperands}))});
+                      DenseI32ArrayAttr::get(builder.getContext(),
+                                             operandSegmentSizes))});
   return success();
 }
 
@@ -834,6 +950,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerMaskAll(op, builder, valueMap);
   if (hasName(op, kVC4TileTailMaskOpName))
     return lowerTailMask(op, builder, valueMap);
+  if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
+    return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
     return lowerMaskedStoreGlobal(op, builder, valueMap);
 
@@ -870,7 +988,7 @@ struct ConvertVC4TileToSSAVC4Pass
 
   StringRef getArgument() const override { return "convert-vc4tile-to-ssavc4"; }
   StringRef getDescription() const override {
-    return "Lower supported VC4Tile kernels, IDs, masks, global stores, and metadata to SSAVC4";
+    return "Lower supported VC4Tile kernels, IDs, masks, global loads/stores, and metadata to SSAVC4";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
