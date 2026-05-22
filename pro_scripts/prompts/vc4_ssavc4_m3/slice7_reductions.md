@@ -7,12 +7,12 @@ Implementation expectations:
 - Keep carrier types as `i32`, `f32`, `vector<16xi32>`, or `vector<16xf32>`; do not introduce i8/i16 storage value types.
 - Immediate rotate amounts must be in [0, 15].
 - Lower rotate through legal scheduled VC4 rotate paths and rely on scheduled verifiers for physical constraints.
-- Harden no-spill liveness/register allocation for reduction dataflow pressure; reject unsupported pressure with a deterministic diagnostic rather than emitting unsafe code.
+- Harden liveness/register allocation for reduction dataflow pressure, using existing spill-frame support where needed; reject unsupported pressure with a deterministic diagnostic rather than emitting unsafe code.
 - Add `warp_reduce_sum_ssavc4` as an independent-vector fixture.
 
 Forbidden work:
 - Do not classify warp reductions as cooperative-block fixtures unless they actually require block-wide shared state.
-- Do not implement full spilling or aggressive ADD/MUL bundling just to pass this slice.
+- Do not implement aggressive ADD/MUL bundling just to pass this slice, and do not expose spilling as public SSAVC4 syntax.
 
 Verification includes rotate/pack/unpack tests, conversion lit, M2-compatible artifacts, and hardware expected JSON.
 

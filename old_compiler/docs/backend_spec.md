@@ -2,6 +2,8 @@
 
 # VC4 MLIR Backend Interface and Artifact Specification
 
+Historical/obsolete planning note: this document records an old MLIR `gpu`-centered backend plan. The active project stack has since changed: M4 is the VC4 Tile dialect (`vc4tile`) and `vc4tile -> ssavc4` lowering; producer adapters from Triton/IREE/MLIR-GPU-like forms into `vc4tile` are future work after M4.
+
 ## 2. Status / purpose of document
 
 This document is the standing architecture and interface specification for the Raspberry Pi VideoCore IV backend below the MLIR `gpu` dialect. It freezes the canonical backend input interface, the generated artifact interface, and the runtime split that future implementation work must follow. It is intended to be durable ground truth for both human implementation and future LLM-guided work. fileciteturn22file0
@@ -481,4 +483,3 @@ Extract generic mailbox, memory, upload, and launch plumbing out of the kernel-s
 Treat the generated launcher boundary, not the current handwritten `saxpy.h`, as the public kernel-specific interface.
 
 Then drive the compiler work toward that reference target: the MLIR `gpu` input should lower to backend-specific VC4 IR, and the backend should emit `saxpy.qasm` plus `saxpy_launch.c/h` that match the reference ABI and execution model exactly.
-

@@ -66,10 +66,12 @@ M3 must be built on this cleaned state.
 
 `ssavc4` is a target-specific MLIR SSA machine IR for VideoCore IV QPU programs. It models the same low-level QPU/VPM/TMU/VDW/SFU/semaphore/runtime-resource semantics that scheduled `vc4` ultimately emits, but it does so with SSA values, explicit effects, virtual resources, and no physical register addresses, no fixed final instruction order, and no branch-distance scheduling. It lowers to scheduled `vc4.qpu.*` through instruction selection, out-of-SSA, register allocation, conservative scheduling, bundling, hazard insertion, branch layout, and metadata preservation.
 
-Canonical pipeline:
+Canonical pipeline after M4 and later producer work:
 
 ```text
-MLIR gpu dialect
+Triton TTIR / IREE late executable IR / producer kernel IR
+  ↓ future producer adapters, after M4
+vc4tile dialect
   ↓ M4, not part of M3
 ssavc4 dialect
   ↓ M3
@@ -78,7 +80,7 @@ scheduled vc4 dialect
 QASM + kernel_launch.c/h + shader arrays + libpi runtime execution
 ```
 
-M3 is **not** `gpu -> ssavc4`; that is M4. M3 is **only** `ssavc4 -> scheduled vc4` plus the SSAVC4 IR definition and tests.
+M3 is **not** producer lowering from `gpu`, Triton, IREE, or any other frontend IR. M3 is **only** `ssavc4 -> scheduled vc4` plus the SSAVC4 IR definition and tests. M4 is the VC4 Tile dialect (`vc4tile`) and `vc4tile -> ssavc4` lowering; producer lowering into `vc4tile` is later work.
 
 ---
 
@@ -86,7 +88,7 @@ M3 is **not** `gpu -> ssavc4`; that is M4. M3 is **only** `ssavc4 -> scheduled v
 
 The scheduled `vc4` dialect is close to QASM. It exposes physical read/write register addresses, mux selections, ADD/MUL opcodes, pack/unpack modes, QPU signals, load-immediate forms, branch immediates, branch delay slots, semaphores, VPM/VDW/TMU/SFU setup words, waits, thread-end epilogues, launch ABI metadata, and resource metadata.
 
-That is exactly right for the post-scheduling artifact boundary, but it is too physical for direct lowering from upstream IR. If M4 lowered `gpu` directly to scheduled `vc4`, it would have to make these decisions too early:
+That is exactly right for the post-scheduling artifact boundary, but it is too physical for direct lowering from upstream IR. M4 must not lower directly from `gpu` or other producer IR to scheduled `vc4`; it introduces `vc4tile` so producer-like tile/kernel structure can be normalized before SSAVC4 lowering. Direct producer-to-`vc4` lowering would have to make these decisions too early:
 
 ```text
 physical register allocation
@@ -125,7 +127,7 @@ M3 must implement:
 
 M3 must not:
 
-1. Lower directly from MLIR `gpu` to scheduled `vc4`.
+1. Lower directly from MLIR `gpu` or another producer IR to scheduled `vc4`.
 2. Reintroduce legacy structured `vc4` ops.
 3. Replace or weaken the scheduled `vc4` sink.
 4. Change `VC4ArtifactEmitter.cpp` except for strictly necessary generic support that preserves all M2 tests. In normal M3 slices, the emitter should not need changes.
@@ -1002,7 +1004,7 @@ Implement the conversion pass in phases:
 4. Select each SSAVC4 op into a target instruction template or template sequence.
 5. Assign virtual registers/value classes.
 6. Perform simple liveness analysis.
-7. Allocate physical locations with a conservative no-spill allocator.
+7. Allocate physical locations, using spill-frame support when needed.
 8. Schedule into linear QPU slots with hazards/nops.
 9. Lay out branches and delay slots.
 10. Emit scheduled vc4.qpu.* operations.
@@ -1373,7 +1375,7 @@ Deliver:
 ```text
 rotate lowering
 more robust liveness
-more robust no-spill register allocation
+more robust register allocation
 warp_reduce_sum_ssavc4 or warp_prefix_sum_ssavc4
 ```
 
@@ -1418,7 +1420,7 @@ Deliver:
 full M3 verifier pass
 full M2 generic verifier pass or required M2 cumulative subset
 final documentation
-handoff for M4 gpu -> ssavc4
+handoff for M4 vc4tile -> ssavc4
 ```
 
 ---
@@ -1554,8 +1556,8 @@ M3 is accepted only when all of the following are true:
 Out of M3 v1 unless a later M3 slice explicitly adds them:
 
 ```text
-MLIR gpu -> ssavc4 lowering
-full register spilling
+vc4tile -> ssavc4 lowering
+more spill placement optimization
 aggressive ADD/MUL bundling
 useful branch delay-slot filling
 TMU texture/cubemap paths
@@ -1581,21 +1583,20 @@ matmul/attention/layernorm/softmax high-level kernels
 9. Model uniform/TMU/SFU/VPM/VDW/semaphore/mutex/barrier/thread-end as effectful.
 10. Represent flags as restricted SSA pseudo-values.
 11. Hide physical register addresses from SSAVC4 users.
-12. Lower by selection, out-of-SSA, no-spill register allocation, conservative scheduling, hazard insertion, and branch layout.
+12. Lower by selection, out-of-SSA, register allocation with spill-frame support, conservative scheduling, hazard insertion, and branch layout.
 13. Start with conservative one-active-pipe scheduling and no useful delay-slot filling.
 14. Use `ssavc4.vdw.store` as the first practical 1:N low-level global-store op.
 15. Bring up hardware fixtures incrementally: store, branch/tail, TMU/saxpy, reductions, cooperative barriers.
-16. Keep M3 below `gpu` lowering and above scheduled `vc4`.
+16. Keep M3 below `vc4tile` lowering and above scheduled `vc4`; producer lowering into `vc4tile` is later work.
 17. M3 final verification must prove both SSAVC4 progress and M2 scheduled-backend persistence.
 
 
 ## Register allocation and future spill-frame policy
 
-M3 v1 uses a conservative no-spill allocator. It must reject excessive register pressure with a deterministic diagnostic rather than silently producing invalid scheduled VC4.
+M3 originally planned a conservative no-spill allocator, but the current SSAVC4 lower half now includes spilling support and block-argument/edge-copy lowering. Future milestones should treat spilling and SSAVC4 block arguments as existing lower-half capabilities, while still generating low-pressure IR where practical.
 
-Even though M3 v1 does not spill, the lowering implementation must be structured around allocator and scheduler seams that can later support spilling. The pipeline should separate instruction template selection, virtual value/liveness analysis, physical allocation, scheduling, hazard insertion, and branch layout.
+The lowering implementation remains structured around allocator and scheduler phases. The pipeline should separate instruction template selection, virtual value/liveness analysis, physical allocation and spill planning, scheduling, hazard insertion, and branch layout.
 
-Spilling is not represented as public `ssavc4.push`, `ssavc4.pop`, or stack operations. Future spill loads/stores are lowering-internal templates inserted by the allocator/spill planner. Upstream `gpu -> ssavc4` lowering must not know whether values are spilled.
+Spilling is not represented as public `ssavc4.push`, `ssavc4.pop`, or stack operations. Spill loads/stores are lowering-internal templates inserted by the allocator/spill planner. Upstream producer lowering to `vc4tile` must not know whether later SSAVC4 values are spilled.
 
-The first future spill target is a private per-logical-request spill frame in global GPU memory, allocated from the existing VC4 program heap by generated launcher/runtime support. The compiler statically computes frame bytes per request from spill slots. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
-
+The spill target is a private per-logical-request spill frame in global GPU memory, allocated from the existing VC4 program heap by generated launcher/runtime support. The compiler statically computes frame bytes per request from spill slots. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.

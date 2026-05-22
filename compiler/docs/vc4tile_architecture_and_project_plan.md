@@ -115,9 +115,9 @@ ssavc4 = pre-register-allocation / pre-scheduling SSA target machine IR
 vc4    = post-register-allocation / post-scheduling artifact sink IR
 ```
 
-It also says M3 is not the `gpu → ssavc4` milestone, and that the future frontend lowering should target SSAVC4 rather than bypassing into scheduled `vc4`.
+It also says M3 is not a frontend producer-lowering milestone. The current milestone boundary is M4 `vc4tile → ssavc4`; later Triton/IREE/MLIR-GPU-like producer adapters should target `vc4tile` rather than bypassing into SSAVC4 or scheduled `vc4`.
 
-Parts of the historical M3 plan are now stale: the plan described a no-spill initial policy, while the current uploaded runtime and later project state include spill-frame metadata and the user stated that spilling and block-argument / phi-like merging have been added. The stable part of the M3 evidence is the dialect boundary: `ssavc4` is the correct target machine-SSA sink for frontend lowering, and scheduled `vc4` remains the QASM-near sink.
+Parts of the historical M3 plan are now stale: the plan described a no-spill initial policy, while the current lower half includes spill-frame metadata, spilling, and block-argument / phi-like edge-copy lowering. The stable part of the M3 evidence is the dialect boundary: `ssavc4` is the correct target machine-SSA sink below `vc4tile`, and scheduled `vc4` remains the QASM-near sink.
 
 ### 1.4 Upstream ecosystem evidence
 

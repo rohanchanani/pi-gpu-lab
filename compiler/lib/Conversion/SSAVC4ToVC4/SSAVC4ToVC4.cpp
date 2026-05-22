@@ -357,8 +357,8 @@ static bool isMirroredLoadImm(Value value) {
 
 // Lowering-private representation seams.  Slice 3 uses deliberately small
 // implementations, but keeps the explicit phase boundaries needed by later
-// instruction selection/templates, virtual values, liveness, no-spill
-// allocation, conservative scheduling, hazard insertion, and branch layout.
+// instruction selection/templates, virtual values, liveness, allocation and
+// spill planning, conservative scheduling, hazard insertion, and branch layout.
 struct VirtualValue {
   Value value;
   unsigned ordinal = 0;

@@ -5,7 +5,7 @@ M3 starts from the completed M2 backend. M2 accepts already-scheduled `vc4` QPU 
 The architecture is:
 
 ```text
-future M4: MLIR gpu dialect
+future M4: VC4 Tile dialect (`vc4tile`) above SSAVC4
     ↓
 M3: ssavc4 dialect
     ↓
@@ -44,3 +44,5 @@ Important hazards from M2:
 - M2 and later milestones are cumulative; final M3 acceptance must run the generic M2 verifier.
 
 Detailed design source: `compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md`. Treat it as the ground-truth implementation design for M3.
+
+Producer adapters from Triton/IREE/MLIR-GPU-like forms into `vc4tile` are later milestones after M4.

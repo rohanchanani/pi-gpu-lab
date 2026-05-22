@@ -4,51 +4,53 @@
 
 This repository is building an MLIR-based backend for the Raspberry Pi VideoCore IV GPU (VC4/QPU).
 
-## Current milestone
+## Current compiler stack
 
-The current milestone is **only** the `vc4` MLIR dialect.
+The active lower stack is:
 
-That means:
+```text
+vc4tile        // planned M4 VC4 Tile dialect above SSAVC4
+  v
+ssavc4        // implemented M3 target-specific SSA machine IR
+  v
+vc4           // scheduled, QASM-near sink dialect
+  v
+QASM / shader arrays / kernel_launch.c/h / manifest/layout artifacts
+  v
+vc4_runtime
+```
 
-- implement the `vc4` dialect IR surface
-- implement dialect registration, parser/printer, verifiers, types, attrs, and tests
-- keep the implementation aligned with `docs/vc4-dialect-spec.md`
+M4 is the VC4 Tile dialect (`vc4tile`) and lowering from `vc4tile` to `ssavc4`. Direct producer lowering from Triton, IREE, MLIR `gpu`, or other frontend IR into `vc4tile` is future work after M4.
 
 Do **not** implement any of the following unless the task explicitly asks for them:
 
-- lowering from upstream `gpu` dialect
-- code generation to qasm
-- kernel launcher generation (`kernel_launch.c` / `.h`)
-- runtime integration
+- lowering from upstream producer IR such as MLIR `gpu`, Triton, or IREE
+- direct `gpu -> ssavc4` or `gpu -> vc4` shortcuts
+- changes to the scheduled `vc4` artifact/runtime lower half unless required by the task
 - fragment/TLB/stencil/scoreboard/control-list/shader-state features
 
 ## Source of truth
 
-Read these first before changing the dialect:
+Read these first before changing the relevant dialect layer:
 
-1. `docs/vc4-dialect-spec.md`
-2. `docs/vc4-implementation-guide.md`
-3. `docs/codex-vc4-prompts.md` when following the staged implementation plan
+1. `docs/vc4tile_architecture_and_project_plan.md` for M4 `vc4tile` work
+2. `docs/codegen/ssavc4-ir-design-m3-post-cleanup.md` for the SSAVC4 lower half
+3. `docs/vc4-dialect-spec.md` for the scheduled `vc4` sink
 
-If code and docs disagree, prefer the dialect spec unless the task explicitly says to revise the spec.
+If code and docs disagree, prefer the layer-specific current design doc unless the task explicitly says to revise it.
 
 ## Scope guardrails
 
-This milestone is **compute/QPU focused**.
+Compiler work is **compute/QPU focused**.
 
 Keep:
-- QPU structured ops
-- QPU scheduled sink ops
-- uniforms
-- TMU / SFU
-- VPM / DMA
-- semaphore
-- mutex
-- host interrupt
-- thread switching / program end
-- user-program queue and relevant V3D system hooks
+- `vc4tile` as the planned tile/kernel IR above SSAVC4
+- `ssavc4` as target-specific machine SSA with existing spilling and block-argument/edge-copy lowering support
+- scheduled `vc4` as the QASM-near artifact sink
+- launch/resource metadata and the existing `vc4_runtime` ABI
 
 Do not reintroduce:
+- removed structured `vc4` operations as the active sink surface
 - TLB / tile buffer
 - scoreboard
 - stencil
@@ -63,8 +65,8 @@ Do not reintroduce:
 - Prefer CMake + Ninja.
 - Prefer TableGen/ODS for op/type/attr definitions.
 - Add custom C++ only where ODS/declarative assembly is not enough.
-- Keep structured and scheduled forms separate.
-- Do not mix speculative future work into the current milestone.
+- Keep `vc4tile`, `ssavc4`, and scheduled `vc4` forms separate.
+- Do not mix producer-integration work into M4 unless the task explicitly asks for it.
 
 ## Expected layout
 
@@ -76,7 +78,7 @@ Use or preserve this general layout:
 - `test/...`
 - `docs/...`
 
-Keep dialect IR code under a clear `Dialect/VC4` or equivalent subtree.
+Keep dialect IR code under clear dialect subtrees such as `Dialect/VC4Tile`, `Dialect/SSAVC4`, or `Dialect/VC4`.
 
 ## Build and test expectations
 
@@ -96,8 +98,8 @@ Minimum expected tests for dialect work:
 - parser/printer round-trip tests
 - verifier-negative tests
 - `vc4-opt` smoke tests
-- scheduled-form legality tests
-- function-form segregation tests
+- lowering legality tests for the layer being changed
+- scheduled-form legality tests when touching scheduled `vc4`
 
 ## Change checklist
 
@@ -120,4 +122,4 @@ Before considering a task done:
 
 ## When uncertain
 
-If there is ambiguity, do not invent a new design. Reconcile the code with `docs/vc4-dialect-spec.md` and keep the implementation narrowly within the milestone.
+If there is ambiguity, do not invent a new design. Reconcile the code with the layer-specific current design doc and keep the implementation narrowly within the requested milestone.

@@ -19,7 +19,7 @@ ssavc4 input
   -> existing libpi-backed runtime path
 ```
 
-The active scheduled `vc4` sink must remain scheduled-only. SSAVC4 must be separate. M3 must not implement `gpu -> ssavc4`.
+The active scheduled `vc4` sink must remain scheduled-only. SSAVC4 must be separate. M3 must not implement producer lowering from MLIR `gpu`, Triton, IREE, or direct `gpu -> vc4` / `gpu -> ssavc4` shortcuts. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.
 
 ## Verification expectations
 

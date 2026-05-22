@@ -99,7 +99,7 @@
       "context_profile": "m3_package",
       "intent": "Install the M3 descriptor, worklist, verification spec, context profiles, prompt handoffs, and plan document without changing compiler source.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -177,7 +177,7 @@
       "context_profile": "ssavc4_scaffold",
       "intent": "Create the separate ssavc4 dialect skeleton, CMake/tablegen integration, vc4-opt registration, and a minimal dialect visibility test; do not add active tests or implementation for load_imm, pure ops, flags, type model, TMU/VPM/VDW/DMA, lowering, or fixtures yet.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -240,7 +240,7 @@
       "context_profile": "ssavc4_pure_ops",
       "intent": "Add the builtin scalar/vector type policy, minimal SSAVC4 custom token/descriptor/flags types, minimal attrs, pure value ops, verifier restrictions, roundtrip tests, and invalid tests in the same slice that implements them, while keeping full check-vc4 green.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -306,7 +306,7 @@
       "context_profile": "ssavc4_lowering_skeleton",
       "intent": "Add --convert-ssavc4-to-vc4, copy launch/resource metadata, lower a minimal SSAVC4 kernel to scheduled vc4.func/vc4.qpu.* output, and verify the output through existing scheduled checks.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -373,7 +373,7 @@
       "context_profile": "global_store",
       "intent": "Bring up the first observable SSAVC4 hardware-style feature vertically: ssavc4.vdw.store, effects, lowering through VPM/VDW store sequences, scheduled-output tests, bundle generation, and vector_store_smoke_ssavc4 fixture verification.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -444,7 +444,7 @@
       "context_profile": "branches_tail",
       "intent": "Implement restricted SSA flags, br/cond_br, computed branch layout from final scheduled slot order, three nop delay slots in v1, and a tail-control global-store fixture.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -514,7 +514,7 @@
       "context_profile": "tmu_saxpy",
       "intent": "Implement direct TMU request/read with token/effect ordering, r4 lifetime preservation, conservative non-overlapped scheduling, and a saxpy_full_ssavc4 fixture.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -582,9 +582,9 @@
         "m3-06-tmu-direct-load-saxpy"
       ],
       "context_profile": "reductions",
-      "intent": "Implement rotate/pack/unpack lowering and harden no-spill liveness enough for an independent-vector reduction fixture such as warp_reduce_sum_ssavc4.",
+      "intent": "Implement rotate/pack/unpack lowering and harden liveness/register allocation enough for an independent-vector reduction fixture such as warp_reduce_sum_ssavc4.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -654,7 +654,7 @@
       "context_profile": "cooperative_barrier",
       "intent": "Implement sema acquire/release and ssavc4.barrier with cooperative resource metadata validation and a qpu_barrier_syncthreads_ssavc4-style fixture.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -724,7 +724,7 @@
       "context_profile": "shared_vpm",
       "intent": "Implement the minimal shared VPM read/write subset and cooperative lowering needed for shared_transpose_16x16_ssavc4 or an explicitly reduced shared-VPM acceptance fixture.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",
@@ -794,7 +794,7 @@
       "context_profile": "m3_final",
       "intent": "Run the cumulative M3 verifier, M3 hardware fixture set, source-contract audits, full check-vc4, and the generic M2 verifier regression to prove scheduled backend persistence.",
       "non_goals": [
-        "Do not lower MLIR gpu dialect in M3; gpu -> ssavc4 is M4.",
+        "Do not lower MLIR `gpu`, Triton, IREE, or other producer IR in M3. M3 is SSAVC4 -> scheduled VC4. M4 is `vc4tile -> ssavc4`; producer lowering into `vc4tile` is later work.",
         "Do not resurrect removed structured vc4 operations or function_form<structured>.",
         "Do not special-case fixture or public names in compiler, lowering, emitter, support runner, or runtime code.",
         "Do not replace generated SSAVC4 lowering output with reference QASM.",

@@ -2,7 +2,7 @@
 
 **Document status:** M3 automation and implementation plan for the post-M2, post-structured-`vc4` cleanup repository state.  
 **Scope:** define the target-specific `ssavc4` dialect and implement incremental lowering from `ssavc4` to the existing scheduled `vc4` sink.  
-**Non-scope:** MLIR `gpu -> ssavc4` lowering, direct `gpu -> vc4` lowering, resurrecting structured `vc4`, replacing the M2 artifact emitter, or changing the M2 runtime/artifact shape.
+**Non-scope:** producer lowering from MLIR `gpu`, Triton, IREE, or other frontend IR; direct `gpu -> ssavc4` or `gpu -> vc4` shortcuts; resurrecting structured `vc4`; replacing the M2 artifact emitter; or changing the M2 runtime/artifact shape.
 
 ---
 
@@ -26,18 +26,18 @@ M3 is accepted only when SSAVC4-input fixtures lower into scheduled VC4, emit M2
 
 ## Register allocation and spilling policy
 
-M3 v1 uses a conservative no-spill register allocator. If supported SSAVC4 input creates register pressure beyond the allocator's current capability, the lowering must fail with a deterministic diagnostic rather than generating invalid scheduled VC4.
+Historical note: this document records the original M3 plan. The implemented M3 state has since advanced: SSAVC4 now includes spilling and block-argument/edge-copy support, and the next milestone is `vc4tile -> ssavc4`, not `gpu -> ssavc4`.
 
-This no-spill policy must not hard-code the architecture into a dead end. The SSAVC4-to-VC4 lowering should keep separate internal phases for instruction selection/templates, virtual values, liveness, allocation, scheduling, hazard insertion, and branch layout, so future allocator and scheduler improvements do not require changing SSAVC4 syntax, M4 `gpu -> ssavc4` lowering, or the scheduled VC4 sink.
+M3 originally planned a conservative no-spill allocator, but the current SSAVC4 lower half now includes spilling support and block-argument/edge-copy lowering. Future milestones should treat spilling and SSAVC4 block arguments as existing lower-half capabilities, while still generating low-pressure IR where practical.
 
-Future spilling is a lowering-private allocator feature, not public SSAVC4 syntax. Do not add public push/pop/stack operations. The first future spill target should be a private per-logical-request spill frame in global GPU memory allocated from the existing VC4 program heap. The compiler will statically compute frame bytes per request; launcher/runtime support will allocate hidden scratch storage. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
+Spilling remains a lowering-private allocator feature, not public SSAVC4 syntax. Do not add public push/pop/stack operations. Spill loads/stores use private per-logical-request spill frames in global GPU memory allocated from the existing VC4 program heap. Shared/VPM spilling remains a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
 
 
 ---
 
 ## 2. What M3 is not
 
-M3 does not lower MLIR `gpu` dialect. That is M4. M3 must not lower directly from `gpu` to scheduled `vc4`, even as a convenience shortcut.
+M3 does not lower MLIR `gpu`, Triton, IREE, or any frontend producer IR. M3's scope is SSAVC4 -> scheduled VC4. M4's scope is `vc4tile -> ssavc4`. Producer lowering into `vc4tile` is future work.
 
 M3 does not revive the old structured `vc4` operation surface. The active `vc4` dialect remains the scheduled sink with `vc4.module`, `vc4.func`, `vc4.qpu.ldi`, `vc4.qpu.sema`, `vc4.qpu.bundle`, and `vc4.qpu.branch`, plus metadata and live scheduled-QPU attrs/enums.
 
@@ -78,7 +78,7 @@ SSAVC4 is new, explicitly separate, and can define only the minimal descriptor/e
 - Pure ops: immediate/value-shape/ALU/pack/unpack/rotate operations only.
 - Effectful ops: uniform, TMU, SFU, VPM, VDW, sema, mutex, barrier, and thread termination.
 - Flags: restricted SSA pseudo-values, single-use in M3 v1.
-- Scheduling v1: conservative one-active-pipe bundles, nops for hazards/delay slots, no spilling, no useful delay-slot filling.
+- Scheduling/lowering: conservative one-active-pipe bundles, nops for hazards/delay slots, spill-frame support, and no useful delay-slot filling by default.
 
 ---
 
@@ -190,7 +190,7 @@ M3 is accepted only when:
 
 M2 is cumulative and preserved. M3 final acceptance proves this by running the M2 milestone verifier from `m2-00-scaffold` through `m2-10-final-acceptance`.
 
-M4 will lower MLIR `gpu` to SSAVC4. M3 should leave M4 with a stable target-specific SSA dialect, documented launch/resource metadata expectations, and tested SSAVC4-to-scheduled-VC4 lowering.
+M4 will define the VC4 Tile dialect (`vc4tile`) and lower `vc4tile` to SSAVC4. Producer lowerings such as Triton TTIR -> `vc4tile`, IREE executable/kernel IR -> `vc4tile`, or MLIR GPU-like normalization -> `vc4tile` are future work after M4. M3 should leave M4 with a stable target-specific SSA dialect, documented launch/resource metadata expectations, and tested SSAVC4-to-scheduled-VC4 lowering.
 
 ---
 

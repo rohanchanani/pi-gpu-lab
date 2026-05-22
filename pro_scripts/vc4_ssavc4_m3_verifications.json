@@ -1365,7 +1365,7 @@
     },
     "m3-07-reductions-and-rotate": {
       "title": "SSAVC4 reductions and rotate",
-      "expected_end_state": "rotate/pack/unpack are legal pure transforms with scheduled lowering; liveness/no-spill RA handles reduction pressure; warp_reduce_sum_ssavc4 or equivalent independent-vector fixture runs.",
+      "expected_end_state": "rotate/pack/unpack are legal pure transforms with scheduled lowering; liveness/register allocation handles reduction pressure with spill-frame support where needed; warp_reduce_sum_ssavc4 or equivalent independent-vector fixture runs.",
       "verifications": [
         {
           "id": "m3-07-reductions-and-rotate-source-products",

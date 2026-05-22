@@ -9,12 +9,12 @@ Implementation expectations:
 - Copy `kernel`, `threading`, `vc4.launch_abi`, and `vc4.resource` metadata unchanged.
 - Lower `ssavc4.thread_end` or the minimal kernel terminator to a conservative scheduled thread-end epilogue.
 - Lower minimal `load_imm`/simple ALU if needed for the test.
-- Structure the lowering skeleton around explicit internal seams: instruction selection/templates, virtual values, liveness, no-spill allocation, conservative scheduling, hazard insertion, and branch layout. A simple implementation is fine, but it must not become a monolithic direct op-to-final-bundle converter that blocks future allocator/scheduler replacement.
-- The allocator for this slice is no-spill. It may be trivial/conservative, but excessive register pressure must fail with a deterministic diagnostic rather than invalid scheduled output.
+- Structure the lowering skeleton around explicit internal seams: instruction selection/templates, virtual values, liveness, allocation, conservative scheduling, hazard insertion, and branch layout. A simple implementation is fine, but it must not become a monolithic direct op-to-final-bundle converter that blocks future allocator/scheduler replacement.
+- Historical slice note: this early slice originally allowed a trivial allocator that rejected excessive pressure. The current SSAVC4 lower half includes spill-frame support, so future work should preserve allocator/spill-planner seams rather than treating no-spill as the project state.
 
 Forbidden work:
-- Do not attempt aggressive scheduling, useful delay-slot filling, TMU overlap, or spilling.
-- Do not implement runtime spill-frame allocation or spill load/store insertion in M3 slice 3; only leave the lowering architecture ready for that future work.
+- Do not attempt aggressive scheduling, useful delay-slot filling, or TMU overlap in this early slice.
+- Do not remove or bypass spill-frame support in current lower-half code; this slice text is historical context for the original scaffold.
 - Do not require `vc4-codegen` to parse SSAVC4 directly.
 
 Verification commands include conversion lit tests and an SSAVC4 codegen lit test that pipes lowered scheduled output through the existing scheduled verifier pipeline.
@@ -38,6 +38,6 @@ If a later verifier/build/lit failure requires touching only one file, still kee
 
 ## Lowering architecture policy
 
-M3 slice 3 remains no-spill. The allocator may be conservative, but excessive register pressure must produce a deterministic diagnostic rather than invalid scheduled VC4.
+Historical slice note: M3 slice 3 began with a conservative allocator that could reject excessive pressure. The current lower half now has spill-frame support, so keep the allocator/spill-planner boundary explicit.
 
-The implementation should keep visible internal seams for instruction selection/templates, virtual values, liveness, allocation, conservative scheduling, hazard insertion, and branch layout. Do not collapse the slice into a monolithic direct op-to-final-bundle converter that would block future allocator/scheduler replacement. Do not implement runtime spill-frame allocation in this slice.
+The implementation should keep visible internal seams for instruction selection/templates, virtual values, liveness, allocation, conservative scheduling, hazard insertion, and branch layout. Do not collapse the slice into a monolithic direct op-to-final-bundle converter that would block allocator/scheduler replacement.
