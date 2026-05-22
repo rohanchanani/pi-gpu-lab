@@ -11,6 +11,10 @@ add_dependencies(vc4-opt
   SSAVC4TypesIncGen
   SSAVC4OpsIncGen
   VC4TileDialectIncGen
+  VC4TileEnumsIncGen
+  VC4TileAttrDefsIncGen
+  VC4TileTypesIncGen
+  VC4TileOpsIncGen
 )
 
 target_link_libraries(vc4-opt
