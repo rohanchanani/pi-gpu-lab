@@ -112,6 +112,7 @@
         "pro_scripts/vc4_vc4tile_m4_worklist.json",
         "pro_scripts/vc4_vc4tile_m4_verifications.json",
         "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+        "pro_scripts/MISTAKES.md",
         "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
         "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
         "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
@@ -161,6 +162,7 @@
           "pro_scripts/vc4_vc4tile_m4_worklist.json",
           "pro_scripts/vc4_vc4tile_m4_verifications.json",
           "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+          "pro_scripts/MISTAKES.md",
           "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
           "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
           "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
@@ -235,14 +237,16 @@
       "hardware_required": false,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 8,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 01-vc4tile-dialect-scaffold",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -301,14 +305,16 @@
       "hardware_required": false,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 10,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 02-full-op-contract-types-attrs",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -377,14 +383,16 @@
       "hardware_required": false,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 10,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 03-lowering-skeleton-and-metadata",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -445,14 +453,16 @@
       "hardware_required": false,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 10,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 04-independent-tile-ids-arith-masks",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -507,14 +517,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 05-masked-global-store",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -572,14 +584,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 06-masked-global-load-saxpy",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -638,14 +652,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 07-control-flow-tail-block-args",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -705,14 +721,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 08-rotate-reduce",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -770,14 +788,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 09-cooperative-block-resources",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -835,14 +855,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 10-shared-vpm",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -900,14 +922,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 12,
-      "max_codex_attempts": 1,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 11-barrier",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": [
@@ -993,14 +1017,16 @@
       "hardware_required": true,
       "codex_policy": "mechanical_by_category",
       "max_gpt_attempts": 4,
-      "max_codex_attempts": 0,
+      "max_codex_attempts": 3,
       "commit_message": "vc4 vc4tile m4: 12-final-acceptance",
       "mechanical_budgets": {
-        "mechanical_compile": 1,
-        "mechanical_build": 1,
-        "lit_tool_resolution": 1,
-        "test_invocation": 1,
-        "path_plumbing": 1
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "mechanical_cmake_or_target": 3,
+        "mechanical_candidate_build": 3
       },
       "products": {
         "required_source_files": []

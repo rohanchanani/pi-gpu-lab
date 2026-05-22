@@ -11,3 +11,7 @@ vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware
 ```
 
 Every implementation slice must satisfy the canonical M4 feature layers: dialect contract, invalid diagnostic contract, lowered-IR contract, scheduled/artifact contract, and hardware CPU/reference contract when executable.
+
+## Codex mechanical prompt contract
+
+This milestone package owns the Codex mechanical prompt. The generic autorun driver must render `codex_mechanical_prompt.md.j2` from this directory and include `codex_contract.md` when routing mechanical compile/build/API/path failures to Codex. Do not rely on hard-coded Codex prompt text in `vc4_milestone_autorun.py`; future milestones must provide their own prompt template and contract files as source products.

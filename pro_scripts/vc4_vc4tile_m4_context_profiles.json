@@ -6,6 +6,10 @@
     "always_include": [
       {
         "kind": "file",
+        "path": "pro_scripts/MISTAKES.md"
+      },
+      {
+        "kind": "file",
         "path": "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md"
       },
       {
@@ -53,6 +57,10 @@
     "m4_package": {
       "purpose": "Validate and reason about the M4 milestone package only. No compiler source implementation is in scope.",
       "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/MISTAKES.md"
+        },
         {
           "kind": "file",
           "path": "pro_scripts/milestones/vc4-vc4tile-m4.json"

@@ -55,13 +55,15 @@ FIXTURE_PHASE_ORDER = {"generate": 0, "assemble": 1, "build": 2, "candidate_hard
 RUNTIME_OR_HARDWARE_RE = re.compile(r"(VC4_TEST_RESULT|mismatch|PANIC|SUCCESS:|timeout|timed out|hang|NRF:|sentinel|launch_failures)", re.IGNORECASE)
 CODEX_NEEDS_GPT_SENTINEL = "VC4_CODEX_NEEDS_GPT"
 
+DEFAULT_CODEX_ATTEMPTS = 3
+
 DEFAULT_MECHANICAL_BUDGETS = {
-    "mechanical_compile": 1,
-    "mechanical_cmake_or_target": 1,
-    "mechanical_test_invocation": 1,
-    "mechanical_lit_config": 1,
-    "mechanical_candidate_build": 1,
-    "mechanical_artifact_transport": 1,
+    "mechanical_compile": DEFAULT_CODEX_ATTEMPTS,
+    "mechanical_cmake_or_target": DEFAULT_CODEX_ATTEMPTS,
+    "mechanical_test_invocation": DEFAULT_CODEX_ATTEMPTS,
+    "mechanical_lit_config": DEFAULT_CODEX_ATTEMPTS,
+    "mechanical_candidate_build": DEFAULT_CODEX_ATTEMPTS,
+    "mechanical_artifact_transport": DEFAULT_CODEX_ATTEMPTS,
 }
 
 MECHANICAL_BUDGET_ALIASES = {
@@ -439,13 +441,18 @@ def classify_failure(
     codex_attempts_by_category: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     policy = str(slice_entry.get("codex_policy", "never"))
-    max_codex = int(slice_entry.get("max_codex_attempts", 0) or 0)
+    if "max_codex_attempts" in slice_entry:
+        max_codex = int(slice_entry.get("max_codex_attempts", 0) or 0)
+    else:
+        max_codex = DEFAULT_CODEX_ATTEMPTS if policy in CODEX_POLICIES_ALLOWING_MECHANICAL else 0
     raw_max_codex = os.environ.get("VC4_MAX_CODEX_ATTEMPTS") or os.environ.get("VC4_M2_MAX_CODEX_ATTEMPTS")
     if raw_max_codex:
         try:
             max_codex = int(raw_max_codex)
         except Exception:
             max_codex = 0
+    elif policy in CODEX_POLICIES_ALLOWING_MECHANICAL and 0 < max_codex < DEFAULT_CODEX_ATTEMPTS:
+        max_codex = DEFAULT_CODEX_ATTEMPTS
     hardware_required = bool(slice_entry.get("hardware_required", False))
     category, reason = _normalized_category(stage=stage, gate=gate, log_text=log_text, hardware_required=hardware_required)
     route_details = _route_details_for_typed_failure(gate, log_text)

@@ -2365,7 +2365,14 @@ def _run_contract_steps(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any
 
 
 def _check_text_expectations(ctx: VerifierContext, v: Mapping[str, Any], *, default_paths: Any = None) -> Dict[str, Any]:
-    paths = _paths_from_spec(ctx, v.get("inspect_files", default_paths or v.get("output", v.get("output_file"))))
+    path_spec = v.get("inspect_files")
+    if path_spec is None:
+        path_spec = default_paths
+    if path_spec is None:
+        path_spec = v.get("output", v.get("output_file"))
+    if path_spec is None:
+        path_spec = v.get("files")
+    paths = _paths_from_spec(ctx, path_spec)
     texts, missing = _read_existing_texts(paths)
     combined = "\n".join(texts.values())
     must_contain = [str(x) for x in as_list(v.get("must_contain"))]

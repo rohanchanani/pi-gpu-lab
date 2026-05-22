@@ -85,7 +85,7 @@
           "id": "m4-smoke-lowered-ir-contract",
           "mechanism": "lowered_ir_contract",
           "feature": "mechanical_smoke_feature",
-          "description": "Mechanically exercise intermediate lowered-IR inspection by writing a tiny SSAVC4-looking file under .vc4_auto.",
+          "description": "Mechanically exercise intermediate lowered-IR inspection by writing a tiny SSAVC4-looking file under .vc4_auto. This smoke intentionally uses the backward-compatible `files` alias to prevent the m4-03 files_checked=[] regression from recurring.",
           "steps": [
             {
               "name": "write-lowered-ir",
@@ -96,15 +96,15 @@
               ]
             }
           ],
-          "inspect_files": [
-            ".vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.func",
             "ssavc4.thread_end"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "files": [
+            ".vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir"
           ]
         },
         {

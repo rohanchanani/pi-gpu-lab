@@ -38,7 +38,8 @@
     "M4 uses the canonical feature contract layers: dialect, invalid diagnostic, vc4tile -> ssavc4 lowered IR, ssavc4 -> scheduled vc4 artifact/resource, and hardware CPU/reference comparison when executable.",
     "Hardware gates are the gold standard and are required for executable VC4Tile features unless a feature is strictly metadata-only and has an explicit feature_gate_contract exception.",
     "M4 must never lower directly from vc4tile to scheduled vc4; scheduled vc4 remains the QASM-near artifact sink.",
-    "Producer adapters from Triton/IREE/MLIR gpu-like forms are future work after M4."
+    "Producer adapters from Triton/IREE/MLIR gpu-like forms are future work after M4.",
+    "Text-inspection contract verifications use `inspect_files`; the verifier also accepts `files` as a backward-compatible alias so a wrong field name cannot produce files_checked=[] again."
   ],
   "fixture_matrices": {
     "m4_independent_vector": [
@@ -76,6 +77,7 @@
             "pro_scripts/vc4_vc4tile_m4_worklist.json",
             "pro_scripts/vc4_vc4tile_m4_verifications.json",
             "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+            "pro_scripts/MISTAKES.md",
             "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
             "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
             "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
@@ -196,7 +198,8 @@
             "pro_scripts/vc4_milestone_resume.py",
             "pro_scripts/vc4_milestone_failure_router.py",
             "pro_scripts/milestones/vc4-ssavc4-m3.json",
-            "pro_scripts/vc4_ssavc4_m3_verifications.json"
+            "pro_scripts/vc4_ssavc4_m3_verifications.json",
+            "pro_scripts/MISTAKES.md"
           ]
         },
         {
@@ -650,9 +653,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-03-lowered-ir-minimal/minimal-kernel.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.func",
             "ssavc4.thread_end",
@@ -661,6 +661,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-03-lowered-ir-minimal/minimal-kernel.ssavc4.mlir"
           ]
         },
         {
@@ -899,9 +902,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-ids-arith-masks/ids-arith-masks.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.element_number",
             "ssavc4.uniform.read",
@@ -909,6 +909,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-ids-arith-masks/ids-arith-masks.ssavc4.mlir"
           ]
         },
         {
@@ -936,15 +939,15 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-tail-mask/tail-mask.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.element_number",
             "ssavc4.make_flags"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-tail-mask/tail-mask.ssavc4.mlir"
           ]
         },
         {
@@ -1147,15 +1150,15 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-05-lowered-ir-masked-store/masked-global-store.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.vdw.store",
             "ssavc4.element_number"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-05-lowered-ir-masked-store/masked-global-store.ssavc4.mlir"
           ]
         },
         {
@@ -1455,15 +1458,15 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-masked-load/masked-global-load.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.tmu.request",
             "ssavc4.tmu.read"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-masked-load/masked-global-load.ssavc4.mlir"
           ]
         },
         {
@@ -1491,9 +1494,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-saxpy/saxpy-independent-vector.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.tmu.request",
             "ssavc4.tmu.read",
@@ -1503,6 +1503,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-saxpy/saxpy-independent-vector.ssavc4.mlir"
           ]
         },
         {
@@ -1844,15 +1847,15 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-control-flow/uniform-control-flow.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.cond_br",
             "ssavc4.br"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-control-flow/uniform-control-flow.ssavc4.mlir"
           ]
         },
         {
@@ -1880,9 +1883,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-block-args-tail/block-args-tail-loop.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.cond_br",
             "ssavc4.br",
@@ -1890,6 +1890,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-block-args-tail/block-args-tail-loop.ssavc4.mlir"
           ]
         },
         {
@@ -2197,14 +2200,14 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-08-lowered-ir-rotate-reduce/rotate-reduction.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.rotate"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-08-lowered-ir-rotate-reduce/rotate-reduction.ssavc4.mlir"
           ]
         },
         {
@@ -2481,9 +2484,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-09-lowered-ir-cooperative-resources/cooperative-block-resources.ssavc4.mlir"
-          ],
           "must_contain": [
             "vc4.resource",
             "logical_warp_id",
@@ -2491,6 +2491,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-09-lowered-ir-cooperative-resources/cooperative-block-resources.ssavc4.mlir"
           ]
         },
         {
@@ -2773,9 +2776,6 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-10-lowered-ir-shared-vpm/shared-vpm.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.vpm.write",
             "ssavc4.vpm.read",
@@ -2783,6 +2783,9 @@
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-lowered-ir-shared-vpm/shared-vpm.ssavc4.mlir"
           ]
         },
         {
@@ -3059,15 +3062,15 @@
               ]
             }
           ],
-          "files": [
-            ".vc4_auto/vc4tile_m4/verifier/m4-11-lowered-ir-barrier/barrier.ssavc4.mlir"
-          ],
           "must_contain": [
             "ssavc4.barrier",
             "vc4.resource"
           ],
           "must_not_contain": [
             "vc4tile."
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-lowered-ir-barrier/barrier.ssavc4.mlir"
           ]
         },
         {

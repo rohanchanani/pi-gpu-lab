@@ -362,15 +362,35 @@ def _codex_generated_artifact_summary(packet: Mapping[str, Any] | None) -> str:
     return "\n".join(rows)
 
 
-def render_codex_prompt(
+def _resolve_prompt_template_dir(repo: Path, config: MilestoneConfig | None, slice_entry: Mapping[str, Any]) -> Path | None:
+    raw = slice_entry.get("prompt_template_dir")
+    if not raw and config is not None:
+        defaults = config.worklist.get("defaults", {})
+        if isinstance(defaults, Mapping):
+            raw = defaults.get("prompt_template_dir")
+    if not isinstance(raw, str) or not raw:
+        return None
+    path = Path(raw)
+    return path if path.is_absolute() else repo / path
+
+
+def _render_milestone_template(template: str, values: Mapping[str, str]) -> str:
+    rendered = template
+    for key, value in values.items():
+        rendered = rendered.replace("{{" + key + "}}", value)
+        rendered = rendered.replace("{{ " + key + " }}", value)
+    return rendered
+
+
+def _codex_prompt_values(
     *,
     repo: Path,
+    config: MilestoneConfig | None,
     slice_entry: Mapping[str, Any],
     failed_result: CommandResult,
     route: Mapping[str, Any],
-    out_path: Path,
-    failure_packet_path: Path | None = None,
-) -> None:
+    failure_packet_path: Path | None,
+) -> dict[str, str]:
     allowed = "\n".join(f"- {p}" for p in slice_entry.get("allowed_paths", [])) or "- <none listed>"
     forbidden = "\n".join(f"- {p}" for p in slice_entry.get("forbidden_paths", [])) or "- <none listed>"
     packet = _load_json_if_exists(failure_packet_path)
@@ -380,78 +400,107 @@ def render_codex_prompt(
     artifact_summary = _codex_generated_artifact_summary(packet)
     failure_packet_rel = relpath(repo, failure_packet_path) if failure_packet_path and failure_packet_path.exists() else "<missing>"
     failed_log_rel = relpath(repo, failed_result.log_path) if failed_result.log_path.exists() else str(failed_result.log_path)
+    milestone = str(getattr(config, "milestone", "") or slice_entry.get("milestone", "") or "<unknown milestone>")
+    title = ""
+    if config is not None and isinstance(config.worklist, Mapping):
+        title = str(config.worklist.get("title", ""))
+    return {
+        "MILESTONE_ID": milestone,
+        "MILESTONE_TITLE": title,
+        "SLICE_ID": str(slice_entry.get("id", "")),
+        "SLICE_TITLE": str(slice_entry.get("title", "")),
+        "SLICE_INTENT": str(slice_entry.get("intent", "")),
+        "FAILED_GATE": str(failed_result.gate),
+        "FAILED_COMMAND": shlex.join(failed_result.command),
+        "FAILED_LOG": failed_log_rel,
+        "FAILURE_PACKET": failure_packet_rel,
+        "CLASSIFICATION_JSON": _safe_json_for_prompt(dict(route), max_chars=12000),
+        "FIRST_TYPED_FAILURE_JSON": _safe_json_for_prompt(first_failure if isinstance(first_failure, Mapping) else {}, max_chars=20000),
+        "GENERATED_ARTIFACT_SUMMARY": artifact_summary or "- <none recorded>",
+        "REFERENCED_LOG_SECTIONS": referenced_logs,
+        "ALLOWED_PATHS": allowed,
+        "FORBIDDEN_PATHS": forbidden,
+        "FAILED_LOG_TAIL": tail_file(failed_result.log_path, max_lines=180),
+        "CODEX_NEEDS_GPT_SENTINEL": CODEX_NEEDS_GPT_SENTINEL,
+    }
 
-    text = f"""You are Codex acting as a HIGHLY TARGETED mechanical patcher for VC4 codegen Milestone 2.
 
-Slice: {slice_entry.get('id')} — {slice_entry.get('title')}
-Intent: {slice_entry.get('intent')}
+def render_codex_prompt(
+    *,
+    repo: Path,
+    config: MilestoneConfig | None,
+    slice_entry: Mapping[str, Any],
+    failed_result: CommandResult,
+    route: Mapping[str, Any],
+    out_path: Path,
+    failure_packet_path: Path | None = None,
+) -> None:
+    values = _codex_prompt_values(
+        repo=repo,
+        config=config,
+        slice_entry=slice_entry,
+        failed_result=failed_result,
+        route=route,
+        failure_packet_path=failure_packet_path,
+    )
+    template_dir = _resolve_prompt_template_dir(repo, config, slice_entry)
+    template_path = template_dir / "codex_mechanical_prompt.md.j2" if template_dir else None
+    contract_path = template_dir / "codex_contract.md" if template_dir else None
+    contract_text = ""
+    if contract_path and contract_path.exists():
+        contract_text = contract_path.read_text(encoding="utf-8", errors="replace")
+    values["CODEX_CONTRACT"] = contract_text or "<no milestone-specific codex_contract.md found>"
+
+    if template_path and template_path.exists():
+        template = template_path.read_text(encoding="utf-8", errors="replace")
+        text = _render_milestone_template(template, values)
+        if contract_text and "CODEX_CONTRACT" not in template:
+            text += "\n\n# Milestone-specific Codex contract\n\n" + contract_text
+    else:
+        text = f"""You are Codex acting as a HIGHLY TARGETED mechanical patcher for {values['MILESTONE_ID']}.
+
+Slice: {values['SLICE_ID']} — {values['SLICE_TITLE']}
+Intent: {values['SLICE_INTENT']}
 
 Routing decision:
-{_safe_json_for_prompt(dict(route), max_chars=12000)}
+{values['CLASSIFICATION_JSON']}
 
-This prompt is intentionally narrow. You are being invoked because the deterministic router saw a compile/build-style failure, not because it wants semantic scheduling/QASM/runtime design work.
-
-Your responsibility:
-- Fix only the obvious mechanical compile/API/path issue shown by the failed build log.
-- Examples of allowed mechanical fixes: make generated C use the actual API names/types/struct fields already present in the repo, add a missing declaration/include when the referenced API already exists, copy/include a required source file that the support runner clearly forgot to stage, or adjust a tiny generated helper/prototype mismatch.
-- Prefer the smallest local change, usually in compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp.
-- If the failure is caused by generated candidate C, fix the compiler emitter that generated it; do not hand-edit .vc4_auto outputs.
-
-Hard stop / route back to GPT Pro:
-- If the fix requires scheduler design, QASM semantics, launch ABI policy, runtime allocation policy, hardware behavior decisions, expected-result/oracle changes, or broad refactoring, do not patch.
-- If you are not confident the fix is a simple API/compile integration repair, leave the worktree unchanged and print exactly: {CODEX_NEEDS_GPT_SENTINEL}
-- Do not guess fixture semantics just to silence the compiler.
+Rules:
+- Fix only the obvious compile/build/API/path issue shown by the failed command/log.
+- Prefer the smallest local source change inside the current slice's allowed paths.
+- If generated candidate C fails to compile, fix the compiler emitter or support runner; do not edit `.vc4_auto` generated outputs.
+- Do not change QASM semantics, launch ABI semantics, scheduler policy, runtime allocation policy, hardware behavior, expected JSON, reference bundles, catalog.json, gpt_web_driver.js, or `.vc4_auto`.
+- If this requires semantic design or guessing, leave the worktree unchanged and print exactly: {CODEX_NEEDS_GPT_SENTINEL}
 
 Allowed paths:
-{allowed}
+{values['ALLOWED_PATHS']}
 
 Forbidden paths:
-{forbidden}
+{values['FORBIDDEN_PATHS']}
 
-Additional forbidden behavior:
-- Do not edit reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, .vc4_auto, generated candidate outputs, or hardware run logs.
-- Do not change qasm semantics.
-- Do not change launch ABI semantics.
-- Do not change hardware harness/oracle behavior.
-- Do not refactor.
-- Do not perform large rewrites.
-
-Failed gate: {failed_result.gate}
-Failed command: {shlex.join(failed_result.command)}
-Exit code: {failed_result.exit_code}
-Gate log: {failed_log_rel}
-Failure packet: {failure_packet_rel}
+Failed gate: {values['FAILED_GATE']}
+Failed command: {values['FAILED_COMMAND']}
+Gate log: {values['FAILED_LOG']}
+Failure packet: {values['FAILURE_PACKET']}
 
 First typed-verifier failure summary:
 ````json
-{_safe_json_for_prompt(first_failure if isinstance(first_failure, Mapping) else {}, max_chars=20000)}
+{values['FIRST_TYPED_FAILURE_JSON']}
 ````
 
-Generated artifact paths available for inspection in the live repo (do not edit these; use them as diagnostics):
-{artifact_summary or '- <none recorded>'}
+Generated artifact paths available for inspection in the live repo:
+{values['GENERATED_ARTIFACT_SUMMARY']}
 
 Primary gate log tail:
 ````text
-{tail_file(failed_result.log_path, max_lines=180)}
+{values['FAILED_LOG_TAIL']}
 ````
 
-{referenced_logs}
-
-Suggested verification loop:
-1. Inspect the referenced build log and generated artifact under .vc4_auto to identify the exact missing symbol/type/API.
-2. Apply the smallest allowed source change.
-3. Run: ninja -C compiler/build vc4-codegen
-4. Run the exact failed build command if available in the referenced log; for fixture matrix build failures this is usually:
-   bash compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh <fixture> build
-5. Then run the typed verifier slice if the narrow build fix passes:
-   python3 pro_scripts/vc4_milestone_verifier.py verify --repo . --spec pro_scripts/vc4_codegen_m2_verifications.json --worklist pro_scripts/vc4_codegen_m2_worklist.json --slice {slice_entry.get('id')} --out /tmp/vc4_codex_after.json --timeout-sec 1800 --keep-going
-
-Final response format:
-- If you patched: briefly summarize the exact mechanical compile/API fix and commands run.
-- If you declined: print {CODEX_NEEDS_GPT_SENTINEL} and explain the semantic uncertainty in one sentence.
+{values['REFERENCED_LOG_SECTIONS']}
 """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(text, encoding="utf-8")
+
 
 def invoke_codex(
     *,
@@ -463,7 +512,23 @@ def invoke_codex(
     verbose: bool,
 ) -> CommandResult:
     prompt_text = prompt_path.read_text(encoding="utf-8")
-    cmd = ["codex", "exec", "--dangerously-bypass-approvals-and-sandbox", prompt_text]
+    model = os.environ.get("VC4_CODEX_MODEL", "gpt-5.5")
+    effort = os.environ.get("VC4_CODEX_REASONING_EFFORT", "high")
+    verbosity = os.environ.get("VC4_CODEX_VERBOSITY", "high")
+    cmd = [
+        "codex",
+        "exec",
+        "--cd",
+        str(repo),
+        "--model",
+        model,
+        "--config",
+        f"model_reasoning_effort={json.dumps(effort)}",
+        "--config",
+        f"model_verbosity={json.dumps(verbosity)}",
+        "--dangerously-bypass-approvals-and-sandbox",
+        prompt_text,
+    ]
     runner = GateRunner(config or MilestoneConfig.load(repo), verbose=verbose, timeout_sec=timeout_sec)
     return runner.run_command(gate="codex:mechanical", cmd=cmd, log_dir=log_dir, timeout_sec=timeout_sec)
 
@@ -1233,6 +1298,7 @@ def run_gpt_slice(
             codex_prompt = paths.log_dir / "codex_mechanical_prompt.md"
             render_codex_prompt(
                 repo=config.repo,
+                config=config,
                 slice_entry=slice_entry,
                 failed_result=failed,
                 route=route,
