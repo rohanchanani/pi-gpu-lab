@@ -1,0 +1,19 @@
+# Keep the scaffold lit root materialized in the build tree.  The typed
+# verifier runs llvm-lit against compiler/build/test/Dialect/VC4Tile directly,
+# so this directory and its lit config must exist after CMake reconfiguration.
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+
+configure_file(
+  "${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/lit.site.cfg.py"
+  @ONLY)
+
+file(GLOB VC4TILE_DIALECT_MLIR_TESTS CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/*.mlir")
+foreach(test_file ${VC4TILE_DIALECT_MLIR_TESTS})
+  get_filename_component(test_name "${test_file}" NAME)
+  configure_file(
+    "${test_file}"
+    "${CMAKE_CURRENT_BINARY_DIR}/${test_name}"
+    COPYONLY)
+endforeach()
