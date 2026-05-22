@@ -635,16 +635,57 @@ def collect_candidate_change_report(repo: Path) -> dict[str, Any]:
         excerpts[rel] = data
     report["candidate_untracked_file_excerpts"] = excerpts
     return report
+def build_test_counterparts_for_source_tests(repo: Path, paths: Sequence[str]) -> list[str]:
+    """Map restored compiler/test files to copied compiler/build/test paths.
+
+    CMake/lit globbing can leave generated/copy-tree tests under
+    compiler/build/test after a failed attempt restores source files.  Those
+    stale build-tree copies can make earlier prefix slices fail despite a clean
+    source worktree.
+    """
+    out: list[str] = []
+    for raw in paths:
+        norm = normalize_relpath(raw)
+        if not norm.startswith("compiler/test/"):
+            continue
+        suffix = norm[len("compiler/test/"):]
+        candidate = repo / "compiler/build/test" / suffix
+        if candidate.exists():
+            out.append(str(candidate.relative_to(repo)))
+        parent = candidate.parent
+        if parent.exists() and candidate.suffix:
+            # Lit may materialize Output/ side effects next to the stale test.
+            output_dir = parent / "Output"
+            if output_dir.exists():
+                out.append(str(output_dir.relative_to(repo)))
+    return sorted(set(out))
+
+
 def cleanup_failed_attempt_changes(repo: Path, *, baseline_paths: Sequence[str], log_dir: Path | None = None) -> list[str]:
     """Restore changes introduced by a failed attempt, preserving baseline dirt."""
     baseline = set(baseline_paths)
     current = set(git_changed_paths(repo, include_untracked=True))
     to_restore = sorted(current - baseline)
+    cleaned_build_tests: list[str] = []
     if to_restore:
         restore_paths(repo, to_restore)
+        for rel in build_test_counterparts_for_source_tests(repo, to_restore):
+            path = repo / rel
+            if path.exists():
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+                cleaned_build_tests.append(rel)
         if log_dir is not None:
-            write_json_file(log_dir / "failed_attempt_cleanup.json", {"restored_paths": to_restore})
-        log(f"cleaned failed candidate changes: {len(to_restore)} path(s)")
+            write_json_file(log_dir / "failed_attempt_cleanup.json", {
+                "restored_paths": to_restore,
+                "cleaned_build_test_paths": cleaned_build_tests,
+            })
+        msg = f"cleaned failed candidate changes: {len(to_restore)} path(s)"
+        if cleaned_build_tests:
+            msg += f"; removed {len(cleaned_build_tests)} build-test stale path(s)"
+        log(msg)
     return to_restore
 
 

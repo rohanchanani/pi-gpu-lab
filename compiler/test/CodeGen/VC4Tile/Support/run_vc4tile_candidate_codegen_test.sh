@@ -169,6 +169,27 @@ for i, k in enumerate(kernels):
 PY_RECORDS
 }
 
+validate_scheduled_vc4_file() {
+  local path="$1"
+  require_file "$path"
+  python3 - "$path" <<'PY_VALIDATE_VC4'
+from pathlib import Path
+import re
+import sys
+path = Path(sys.argv[1])
+text = path.read_text(encoding='utf-8', errors='replace')
+count = len(re.findall(r'(?<![A-Za-z0-9_.])(?:"vc4\.module"|vc4\.module)(?![A-Za-z0-9_.])', text))
+if count != 1:
+    raise SystemExit(f'{path}: expected exactly one scheduled vc4.module, found {count}')
+if 'ssavc4.' in text:
+    raise SystemExit(f'{path}: still contains ssavc4 operations after --convert-ssavc4-to-vc4')
+if 'vc4tile.' in text:
+    raise SystemExit(f'{path}: still contains vc4tile operations after lowering')
+if 'vc4.qpu.' not in text:
+    raise SystemExit(f'{path}: scheduled VC4 output contains no vc4.qpu.* operations')
+PY_VALIDATE_VC4
+}
+
 check_generated_bundle() {
   require_file "$GENERATED_DIR/manifest.json"
   require_file "$GENERATED_DIR/kernel_launch.c"
@@ -186,6 +207,7 @@ run_vc4_codegen() {
   mkdir -p "$lowered_dir"
   lowered_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
   scheduled_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
+  rm -f "$lowered_ssavc4" "$scheduled_vc4"
   log "lowering $(relpath "$INPUT_MLIR") to SSAVC4 at $(relpath "$lowered_ssavc4")"
   "$vc4_opt" "$INPUT_MLIR" --convert-vc4tile-to-ssavc4 -o "$lowered_ssavc4"
   log "lowering $(relpath "$lowered_ssavc4") to scheduled VC4 at $(relpath "$scheduled_vc4")"
@@ -197,6 +219,7 @@ run_vc4_codegen() {
     --vc4-verify-scheduled-io-spacing \
     --vc4-verify-scheduled-peripheral-accesses \
     -o "$scheduled_vc4"
+  validate_scheduled_vc4_file "$scheduled_vc4"
   log "generating $(relpath "$GENERATED_DIR") from $(relpath "$scheduled_vc4")"
   "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
   cp "$INPUT_MLIR" "$GENERATED_DIR/input.vc4tile.mlir"

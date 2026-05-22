@@ -285,6 +285,62 @@ def include_tests(repo: Path, item: Mapping[str, Any]) -> list[Section]:
     return sections
 
 
+
+
+def include_glob(repo: Path, item: Mapping[str, Any]) -> list[Section]:
+    """Include all text files matching a deterministic repo-relative glob.
+
+    Context profiles use kind=glob for feature-reference material.  Treating it
+    as unknown silently starves GPT of the exact tests/docs that a slice needs.
+    Missing globs are reported as sections instead of failing prompt rendering,
+    because some future-slice references are intentionally absent until their
+    owning slice lands.
+    """
+    raw_pattern = str(item.get("path") or item.get("glob") or "")
+    if not raw_pattern:
+        return [Section("Glob include", "Missing `path`/`glob` field for glob include.", "")]
+    pattern_path = Path(raw_pattern)
+    if pattern_path.is_absolute() or ".." in pattern_path.parts:
+        return [Section("Glob include rejected", f"Unsafe glob include path: `{raw_pattern}`", raw_pattern)]
+    matches = sorted(repo.glob(raw_pattern))
+    files: list[Path] = []
+    for path in matches:
+        if not path.is_file():
+            continue
+        rel = relpath(repo, path)
+        if any(part in {".git", ".vc4_auto", "build", "__pycache__"} for part in path.parts):
+            continue
+        if path.suffix.lower() not in TEXT_EXTS and path.name not in {"CMakeLists.txt", "Makefile"}:
+            continue
+        files.append(path)
+    if not files:
+        return [Section("Glob include no matches", f"No text files matched glob include `{raw_pattern}`.", raw_pattern)]
+    limit_raw = item.get("max_files", item.get("limit_files", 0))
+    try:
+        limit = int(limit_raw or 0)
+    except Exception:
+        limit = 0
+    if limit > 0:
+        selected = files[:limit]
+        omitted = files[limit:]
+    else:
+        selected = files
+        omitted = []
+    sections: list[Section] = []
+    manifest = [f"Matched {len(files)} text file(s) for `{raw_pattern}`."]
+    if omitted:
+        manifest.append(f"Included first {len(selected)} file(s); omitted {len(omitted)} due to max_files={limit}.")
+    manifest.extend(f"- {relpath(repo, f)}" for f in selected)
+    sections.append(Section(f"Glob include: {raw_pattern}", "\n".join(manifest), raw_pattern))
+    for path in selected:
+        raw = relpath(repo, path)
+        sections.append(Section(
+            f"Glob file: {raw}",
+            "FULL FILE INCLUDED FROM GLOB. No context/profile max_chars budget was applied.\n\n"
+            + fenced(read_text(path), language=language_for(path)),
+            raw,
+        ))
+    return sections
 def include_fixture_tree(repo: Path, item: Mapping[str, Any]) -> Section:
     raw_path = str(item.get("path", ""))
     root = repo / raw_path
@@ -750,6 +806,8 @@ def build_sections(
         kind = item.get("kind")
         if kind == "file":
             sections.append(include_file(repo, item))
+        elif kind == "glob":
+            sections.extend(include_glob(repo, item))
         elif kind == "worklist_slice":
             # Already included as a normalized section, but keep an explicit marker.
             sections.append(Section("Default include: worklist slice", "The active slice contract above is generated from `pro_scripts/vc4_codegen_m1_worklist.json`."))
@@ -772,6 +830,8 @@ def build_sections(
                 sections.append(Section("Failure include: git diff summary", extractor_git_diff_summary(repo)))
             elif kind == "changed_files_excerpt":
                 sections.append(Section("Failure include: changed files excerpt", extractor_changed_files_excerpt(repo, slice_entry, config)))
+            elif kind == "glob":
+                sections.extend(include_glob(repo, item))
             else:
                 sections.append(Section("Unknown failure include", f"Unknown failure include kind `{kind}`: {item}"))
 
@@ -779,6 +839,8 @@ def build_sections(
         kind = item.get("kind")
         if kind == "file":
             sections.append(include_file(repo, item))
+        elif kind == "glob":
+            sections.extend(include_glob(repo, item))
         elif kind == "file_excerpt":
             sections.append(include_file_excerpt(repo, item))
         elif kind == "tests":

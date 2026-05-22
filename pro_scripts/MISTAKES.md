@@ -95,3 +95,58 @@ Codex mechanical repair is allowed to fix compile/build/API/path issues only. If
 ## Stale build-tree lit tests after cancelled or failed attempts
 
 Failed or cancelled attempts can leave copied tests under `compiler/build/test` even after source files are restored. Prefix rechecks can then fail on stale build-tree tests that are not present in the source tree. Failed-attempt cleanup should delete or refresh corresponding `compiler/build/test/...` paths for changed `compiler/test/...` files before cumulative prefix rechecks.
+
+
+## 2026-05-22: Slice-local checks passed before fresh global `check-vc4` failed
+
+**Symptom:** M4 slice 8 passed its own gate and auto-committed, but the cumulative prefix recheck failed back at an earlier slice on `build-check_vc4`.
+
+**Root cause:** The slice ran a global `check-vc4` too early, before later scheduled-artifact and hardware/reference checks exercised fresh candidate/test paths. Stale or divergent generated artifacts could therefore pass the slice-local gate but fail a fresh cumulative check.
+
+**Permanent rule:** Every implementation slice must keep the early `build-check_vc4` gate and also run a final `build-check_vc4-post` after all lowered-IR, scheduled-artifact, hardware/reference, and integrity checks. Fresh global regression must fail inside the owning slice, not only during prefix recheck.
+
+## 2026-05-22: Context profiles used unsupported `kind: glob`
+
+**Symptom:** M4 prompts printed `Unknown include kind glob` for high-value reference tests such as SSAVC4 block-argument, VPM, barrier, and rotate/reduce fixtures.
+
+**Root cause:** The milestone context profiles used `kind: "glob"`, but the generic context packer did not implement glob expansion.
+
+**Permanent rule:** If a milestone context profile uses an include kind, the context packer must support it before the milestone starts. `kind: "glob"` must expand deterministic repo-relative text-file matches, include matched files, and report no-match globs explicitly.
+
+## 2026-05-22: Hardware candidate evidence must be fresh
+
+**Symptom:** A hardware/scheduled-artifact verifier could pass using candidate artifacts under `.vc4_auto` while a fresh `check-vc4` invocation later failed for the same fixture.
+
+**Root cause:** Candidate generation and hardware/reference contracts did not force a clean generation boundary strongly enough.
+
+**Permanent rule:** VC4Tile scheduled-artifact and hardware CPU-reference contracts must clean the relevant candidate bundle before generation and require fresh debug artifacts (`input.vc4tile.mlir`, `lowered.ssavc4.mlir`, `scheduled.vc4.mlir`, manifest/layout, and launch wrappers). Support runners should validate that scheduled output contains exactly one `vc4.module` and no remaining `vc4tile`/`ssavc4` operations before invoking `vc4-codegen`.
+
+## Final check-vc4 must run after slice artifact/hardware checks
+
+A slice can pass an early `check-vc4`, then later scheduled-artifact or hardware
+steps can create fresh build-tree/candidate state that only fails during the
+cumulative prefix recheck. Every implementation slice should keep the early
+`build-check_vc4` gate and also run a final `build-check_vc4-post` after all
+slice-owned lowered-IR, scheduled-artifact, hardware/reference, and integrity
+checks.
+
+
+## Context profiles must not use unsupported include kinds
+
+M4 context profiles used `kind: "glob"` before the context packer implemented it,
+so prompts reported `Unknown include kind glob` and omitted key SSAVC4 reference
+tests. Any new include kind in a milestone context profile must be implemented in
+`vc4_codegen_context_pack.py` and should produce deterministic no-match/skip
+sections instead of silently losing context.
+
+
+## Hardware and scheduled-artifact checks must generate fresh candidates
+
+Hardware and scheduled-artifact verifications must not pass by reusing stale
+`.vc4_auto` bundles. Scheduled-artifact checks should clean their bundle and
+intermediate outputs before generation. Hardware CPU/reference checks should
+clean the fixture candidate/hardware directories before running phases. Support
+runners should validate that scheduled intermediates contain exactly one
+`vc4.module` and no remaining `vc4tile`/`ssavc4` operations before calling
+`vc4-codegen`.
+

@@ -41,7 +41,13 @@
     "Producer adapters from Triton/IREE/MLIR gpu-like forms are future work after M4.",
     "Text-inspection contract verifications use `inspect_files`; the verifier also accepts `files` as a backward-compatible alias so a wrong field name cannot produce files_checked=[] again.",
     "Dialect contracts distinguish source-native ODS op definitions (`op_defs`) from assembled MLIR operation names (`assembly_ops`); comments are stripped and must not satisfy op-existence checks.",
-    "Do not add verifier-only comments/literals such as fully-qualified op names to source files. If a check would require such a comment, fix the verification contract instead."
+    "Do not add verifier-only comments/literals such as fully-qualified op names to source files. If a check would require such a comment, fix the verification contract instead.",
+    "Every implementation slice has an early build-check_vc4 and a final build-check_vc4-post so fresh artifact/hardware side effects cannot pass a slice while breaking cumulative prefix verification.",
+    "Scheduled/artifact and hardware CPU-reference contracts must force fresh candidate generation; stale .vc4_auto candidate bundles are not valid evidence.",
+    "Hardware matrix case values are exposed to runners through VC4_MATRIX_* and VC4_CASE_* environment variables.",
+    "Implementation slices run an early build-check_vc4 and a final build-check_vc4-post so fresh scheduled/artifact/hardware side effects cannot pass locally and fail only during cumulative prefix recheck.",
+    "Scheduled artifact contracts validate fresh scheduled VC4 intermediates: exactly one vc4.module, no remaining vc4tile/ssavc4 ops, and vc4.qpu.* scheduled ops before vc4-codegen.",
+    "Hardware CPU-reference contracts clean candidate/hardware state by default before running fixture phases, so stale bundles cannot satisfy fresh hardware checks."
   ],
   "fixture_matrices": {
     "m4_independent_vector": [
@@ -345,6 +351,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -635,6 +649,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -823,7 +845,12 @@
             "schedule_mode": "independent_vector",
             "uses_barrier": false,
             "uses_shared_vpm": false
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-03-support-runner-contract",
@@ -901,6 +928,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -1182,6 +1217,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -1389,7 +1432,12 @@
             "semaphores_per_block": 0,
             "vpm_rows_per_block": 0,
             "warps_per_block_max": 1
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-05-hardware-vector-store",
@@ -1442,7 +1490,10 @@
             ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-05-feature-gate",
@@ -1495,6 +1546,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -1742,7 +1801,12 @@
             "semaphores_per_block": 0,
             "vpm_rows_per_block": 0,
             "warps_per_block_max": 1
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-06-hardware-saxpy",
@@ -1792,7 +1856,10 @@
             ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-06-feature-gate",
@@ -1863,6 +1930,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -2149,7 +2224,12 @@
             "semaphores_per_block": 0,
             "vpm_rows_per_block": 0,
             "warps_per_block_max": 1
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-07-hardware-global-store-multi",
@@ -2199,7 +2279,10 @@
             ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-07-feature-gate",
@@ -2263,6 +2346,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -2474,7 +2565,12 @@
             "semaphores_per_block": 0,
             "vpm_rows_per_block": 0,
             "warps_per_block_max": 1
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-08-hardware-warp-reduce",
@@ -2504,7 +2600,10 @@
             ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-08-feature-gate",
@@ -2557,6 +2656,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -2767,7 +2874,12 @@
             "schedule_mode": "cooperative_block",
             "uses_barrier": false,
             "uses_shared_vpm": false
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-09-hardware-cooperative-id",
@@ -2805,7 +2917,10 @@
             ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-09-feature-gate",
@@ -2858,6 +2973,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -3072,7 +3195,12 @@
             "public_name": "shared_transpose_16x16_vc4tile",
             "schedule_mode": "cooperative_block",
             "uses_shared_vpm": true
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-10-hardware-shared-transpose",
@@ -3107,7 +3235,10 @@
             ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-10-feature-gate",
@@ -3160,6 +3291,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -3365,7 +3504,12 @@
             "uses_shared_vpm": true,
             "uses_barrier": true,
             "semaphores_per_block": 4
-          }
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true
         },
         {
           "id": "m4-11-hardware-barrier",
@@ -3407,7 +3551,10 @@
             ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-11-feature-gate",
@@ -3460,6 +3607,14 @@
               "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
             }
           ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     },
@@ -3811,7 +3966,10 @@
             ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-saxpy",
@@ -3841,7 +3999,10 @@
             ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-global-store-multi",
@@ -3871,7 +4032,10 @@
             ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-warp-reduce",
@@ -3901,7 +4065,10 @@
             ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-cooperative-id",
@@ -3931,7 +4098,10 @@
             ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-shared-vpm",
@@ -3961,7 +4131,10 @@
             ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
         },
         {
           "id": "m4-12-hardware-barrier",
@@ -3991,7 +4164,18 @@
             ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.h"
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
-          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "description": "Final full check-vc4 after all slice-owned generation/artifact/hardware checks so cumulative prefix regressions are caught inside the owning slice.",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
         }
       ]
     }

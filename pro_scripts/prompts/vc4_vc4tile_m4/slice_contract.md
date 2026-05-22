@@ -27,3 +27,11 @@ Every implemented vc4tile feature must pass:
 Hardware is the gold standard. If the feature can be executed on VC4 hardware, it should have a hardware fixture and reference comparison. If a feature is metadata-only or intentionally not yet executable, the feature gate must document why hardware is not required for that feature in that slice.
 
 No slice may make future-slice tests active before the owning implementation exists. Global `check-vc4` must remain green.
+
+Implementation slices must run `check-vc4` both before and after slice-owned scheduled/artifact/hardware verifications. The final post-artifact `check-vc4` catches stale candidate reuse, build-tree lit drift, and fresh-regeneration failures that an early build check cannot see.
+
+Candidate runners must treat generated intermediates as disposable. A `generate` phase must clean stale candidate outputs before regenerating `input.vc4tile.mlir`, lowered SSAVC4, scheduled VC4, manifest/layout, launch wrappers, QASM, and shader arrays. Stale `.vc4_auto` bundles are never proof of a feature.
+
+Scheduled-artifact checks must validate the fresh scheduled VC4 intermediate before invoking `vc4-codegen`: exactly one top-level `vc4.module`, no remaining `vc4tile` or `ssavc4` operations, and at least one scheduled `vc4.qpu.*` operation for executable kernels.
+
+Hardware matrix parameters must be real inputs to the runner/harness, not decorative JSON. The verifier exports matrix values as `VC4_MATRIX_*` / `VC4_CASE_*`; runners and harnesses must consume them or the feature should not claim matrix coverage.

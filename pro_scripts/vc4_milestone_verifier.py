@@ -2576,17 +2576,70 @@ def _check_artifact_files(ctx: VerifierContext, bundle: Path, required: Sequence
     return {"missing_required_artifacts": missing, "forbidden_artifacts_present": present_forbidden}
 
 
+def _vc4_module_count(text: str) -> int:
+    return len(re.findall(r'(?<![A-Za-z0-9_.])(?:"vc4\.module"|vc4\.module)(?![A-Za-z0-9_.])', text))
+
+
+def _validate_scheduled_vc4_intermediates(ctx: VerifierContext, v: Mapping[str, Any]) -> Dict[str, Any]:
+    """Validate scheduled VC4 intermediate files before artifact emission.
+
+    `vc4-codegen` consumes exactly one scheduled `vc4.module`.  Multi-kernel
+    programs are represented as multiple kernels/functions inside that one
+    module, not as multiple module ops.  This check catches stale or partially
+    lowered intermediates before vc4-codegen reports the generic module-count
+    error.
+    """
+    if not bool(v.get("validate_scheduled_vc4", True)):
+        return {"checked": [], "failures": []}
+    candidates = []
+    for raw in as_list(v.get("scheduled_vc4_files")):
+        candidates.append(resolve_repo_or_auto_path(ctx, str(raw)))
+    if not candidates:
+        for raw in as_list(v.get("intermediate_files")):
+            s = str(raw)
+            if "scheduled" in Path(s).name or s.endswith(".vc4.mlir"):
+                candidates.append(resolve_repo_or_auto_path(ctx, s))
+    checked: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
+    for path in candidates:
+        rec: Dict[str, Any] = {"path": str(path)}
+        if not path.exists():
+            rec["missing"] = True
+            failures.append(rec)
+            checked.append(rec)
+            continue
+        text = read_text(path)
+        count = _vc4_module_count(text)
+        rec["vc4_module_count"] = count
+        rec["contains_vc4tile"] = "vc4tile." in text
+        rec["contains_ssavc4"] = "ssavc4." in text
+        rec["contains_vc4_qpu"] = "vc4.qpu." in text
+        if count != 1 or rec["contains_vc4tile"] or rec["contains_ssavc4"] or not rec["contains_vc4_qpu"]:
+            failures.append(rec)
+        checked.append(rec)
+    return {"checked": checked, "failures": failures}
+
+
 def mechanism_scheduled_artifact_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
+    bundle = bundle_path(ctx, v) if v.get("bundle") else None
+    if bundle is not None and bool(v.get("clean_bundle_before_steps", True)) and bundle.exists() and not ctx.dry_run:
+        shutil.rmtree(bundle)
     step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "artifact")
     checks = _check_text_expectations(ctx, v, default_paths=v.get("intermediate_files"))
     failures = step_failures[:]
     if any(checks[k] for k in ("missing_files", "missing_literals", "forbidden_literals", "missing_regex", "forbidden_regex")):
         failures.append({"text_expectations": checks})
 
-    artifact_details: Dict[str, Any] = {}
+    scheduled_checks = _validate_scheduled_vc4_intermediates(ctx, v)
+    if scheduled_checks["failures"]:
+        failures.append({"scheduled_vc4_shape": scheduled_checks})
+
+    artifact_details: Dict[str, Any] = {"scheduled_vc4_shape": scheduled_checks}
+
     if v.get("bundle"):
-        bundle = bundle_path(ctx, v)
+        if bundle is None:
+            bundle = bundle_path(ctx, v)
         required_artifacts = [str(x) for x in as_list(v.get("expected_artifacts"))]
         forbidden_artifacts = [str(x) for x in as_list(v.get("forbidden_artifacts"))]
         artifact_details.update(_check_artifact_files(ctx, bundle, required_artifacts, forbidden_artifacts))
@@ -2633,6 +2686,26 @@ def _expand_case_argv(ctx: VerifierContext, argv: Sequence[Any], case: Mapping[s
     return [_format_case_value(str(x), case, index, fixture) for x in base]
 
 
+def _case_env_prefix(case: Mapping[str, Any], index: int, fixture: str) -> List[str]:
+    """Return env(1) assignments for hardware matrix cases.
+
+    M4 hardware matrices are part of the verification contract.  Even when a
+    fixture harness ignores a specific parameter today, the runner must expose
+    the case values so future harnesses can consume them instead of making the
+    matrix decorative.
+    """
+    entries = [
+        f"VC4_MATRIX_INDEX={index}",
+        f"VC4_CASE_INDEX={index}",
+        f"VC4_FIXTURE={fixture}",
+    ]
+    for key, value in sorted(case.items(), key=lambda kv: str(kv[0])):
+        safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(key)).upper().strip("_") or "VALUE"
+        entries.append(f"VC4_MATRIX_{safe}={value}")
+        entries.append(f"VC4_CASE_{safe}={value}")
+    return entries
+
+
 def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     if bool(v.get("requires_hardware", False)) and ctx.no_hardware:
         return skip_result(ctx, slice_id, v, "hardware CPU-reference contract skipped by --no-hardware")
@@ -2645,13 +2718,27 @@ def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: st
 
     runner = v.get("runner")
     phases = [str(x) for x in as_list(v.get("phases"))]
+    candidate_root = ctx.repo / str(ctx.spec.get("defaults", {}).get("candidate_state_root", ".vc4_auto/codegen_m1"))
+    if fixture and bool(v.get("clean", True)) and not ctx.dry_run:
+        for rel in (Path("candidates") / fixture, Path("hardware") / fixture):
+            target = candidate_root / rel
+            if target.exists():
+                shutil.rmtree(target)
     for i, raw_case in enumerate(cases):
         case = raw_case if isinstance(raw_case, Mapping) else {"value": raw_case}
         case_result: Dict[str, Any] = {"case": i, "params": dict(case)}
         phase_results = []
         if runner and phases:
             for phase in phases:
-                argv = ["bash", str(runner), fixture, phase]
+                if phase == "generate" and bool(v.get("clean_before_generate", True)):
+                    clean_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_clean")
+                    clean_argv = ["env", *_case_env_prefix(case, i, fixture), "bash", str(runner), fixture, "clean"]
+                    clean = ctx.run_command(clean_argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=clean_log)
+                    phase_results.append({"phase": "clean", "exit_code": clean.exit_code, "ok": clean.ok, "log_path": str(clean_log)})
+                    if not clean.ok:
+                        failures.append({"case": i, "phase": "clean", "exit_code": clean.exit_code, "log_path": str(clean_log), "stdout_tail": tail(clean.stdout), "stderr_tail": tail(clean.stderr)})
+                        break
+                argv = ["env", *_case_env_prefix(case, i, fixture), "bash", str(runner), fixture, phase]
                 log_path = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_{phase}")
                 result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
                 phase_results.append({"phase": phase, "exit_code": result.exit_code, "ok": result.ok, "log_path": str(log_path)})
@@ -2674,13 +2761,22 @@ def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: st
 
     required_debug = [str(x) for x in as_list(v.get("required_debug_artifacts"))]
     missing_debug = []
+    stale_debug = []
     for raw in required_debug:
         raw = _format_case_value(raw, {}, 0, fixture)
         path = resolve_repo_or_auto_path(ctx, raw)
         if not path.exists():
             missing_debug.append(raw)
+        elif bool(v.get("require_fresh_debug_artifacts", True)) and str(raw).startswith(".vc4_auto/"):
+            try:
+                if path.stat().st_mtime + 1.0 < started:
+                    stale_debug.append(raw)
+            except OSError:
+                pass
     if missing_debug:
         failures.append({"missing_debug_artifacts": missing_debug})
+    if stale_debug:
+        failures.append({"stale_debug_artifacts": stale_debug})
 
     if v.get("expected_json") and v.get("log"):
         check_v = {**v, "expected": v.get("expected_json"), "mechanism": "expected_json_result"}

@@ -1,8 +1,25 @@
 You are Codex acting as a HIGHLY TARGETED mechanical patcher for VC4 VC4Tile Milestone 4.
 
+Milestone: {{MILESTONE_ID}} — {{MILESTONE_TITLE}}
 Slice: {{SLICE_ID}} — {{SLICE_TITLE}}
+Intent: {{SLICE_INTENT}}
+
 Failed gate: {{FAILED_GATE}}
-Classification: {{CLASSIFICATION_JSON}}
+Failed command:
+{{FAILED_COMMAND}}
+
+Failure packet: {{FAILURE_PACKET}}
+Gate log: {{FAILED_LOG}}
+
+Routing/classification:
+````json
+{{CLASSIFICATION_JSON}}
+````
+
+First typed-verifier failure:
+````json
+{{FIRST_TYPED_FAILURE_JSON}}
+````
 
 Allowed paths:
 {{ALLOWED_PATHS}}
@@ -17,15 +34,22 @@ Rules:
 - Do not change QASM semantics, launch ABI semantics, scheduler policy, runtime allocation policy, hardware behavior, expected JSON, reference bundles, catalog.json, gpt_web_driver.js, or `.vc4_auto`.
 - Do not implement producer lowering from Triton, IREE, StableHLO, Torch, JAX, PyTorch, or MLIR `gpu` in M4.
 - Do not create a direct `vc4tile -> vc4` conversion path.
-
-- Do not add comments, dummy literals, or source-only strings to satisfy verifier text scans. If the verifier appears to require a source string that is not semantically needed, leave the worktree unchanged and print exactly: VC4_CODEX_NEEDS_GPT.
-- Do not satisfy dialect/op existence checks through comments. Real op evidence must be ODS definitions and MLIR roundtrip/invalid tests.
+- Do not bypass the required M4 path: `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.
+- Do not add comments or string literals solely to satisfy verifier scans.
+- Do not change logical identity semantics such as `vc4tile.program_id`; if a fix needs that semantic decision, print `VC4_CODEX_NEEDS_GPT`.
 - If this requires semantic design or guessing, leave the worktree unchanged and print exactly: VC4_CODEX_NEEDS_GPT
 
-Failed command:
-{{FAILED_COMMAND}}
+Milestone-specific Codex contract:
+````text
+{{CODEX_CONTRACT}}
+````
 
-Log tail:
+Generated artifact paths available for inspection in the live repo:
+{{GENERATED_ARTIFACT_SUMMARY}}
+
+Primary gate log tail:
 ````text
 {{FAILED_LOG_TAIL}}
 ````
+
+{{REFERENCED_LOG_SECTIONS}}
