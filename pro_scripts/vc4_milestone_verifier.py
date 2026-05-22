@@ -2229,6 +2229,104 @@ def _read_existing_texts(paths: Sequence[Path]) -> Tuple[Dict[str, str], List[st
     return texts, missing
 
 
+def _strip_contract_comments(text: str) -> str:
+    """Remove C++/MLIR comments while preserving string literals.
+
+    Dialect contracts must not accept verifier-gaming comments as evidence of
+    op existence.  ODS source often contains op mnemonics without the assembled
+    dialect-qualified name, so the verifier checks source-native op definitions
+    separately from actual MLIR assembly spellings.
+    """
+    out: List[str] = []
+    i = 0
+    in_string = False
+    escaped = False
+    in_line_comment = False
+    in_block_comment = False
+    while i < len(text):
+        ch = text[i]
+        nxt = text[i + 1] if i + 1 < len(text) else ""
+        if in_line_comment:
+            if ch == "\n":
+                in_line_comment = False
+                out.append(ch)
+            i += 1
+            continue
+        if in_block_comment:
+            if ch == "*" and nxt == "/":
+                in_block_comment = False
+                i += 2
+                continue
+            if ch == "\n":
+                out.append(ch)
+            i += 1
+            continue
+        if in_string:
+            out.append(ch)
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            i += 1
+            continue
+        if ch == '"':
+            in_string = True
+            out.append(ch)
+            i += 1
+            continue
+        if ch == "/" and nxt == "/":
+            in_line_comment = True
+            i += 2
+            continue
+        if ch == "/" and nxt == "*":
+            in_block_comment = True
+            i += 2
+            continue
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def _contract_name_from_entry(entry: Any, *keys: str) -> str:
+    if isinstance(entry, Mapping):
+        for key in keys:
+            value = entry.get(key)
+            if value is not None:
+                return str(value)
+        value = entry.get("name")
+        if value is not None:
+            return str(value)
+        value = entry.get("def")
+        if value is not None:
+            return str(value)
+        return ""
+    return str(entry)
+
+
+def _missing_defs(entries: Sequence[Any], text: str) -> List[Any]:
+    missing: List[Any] = []
+    for entry in entries:
+        name = _contract_name_from_entry(entry, "def", "name")
+        if not name:
+            continue
+        pattern = r"\bdef\s+" + re.escape(name) + r"\b"
+        if not re.search(pattern, text):
+            missing.append(entry)
+            continue
+        if isinstance(entry, Mapping) and entry.get("mnemonic") is not None:
+            mnemonic = str(entry.get("mnemonic"))
+            mnemonic_patterns = [
+                r"<\s*\"" + re.escape(mnemonic) + r"\"",
+                r"\bmnemonic\s*=\s*\"" + re.escape(mnemonic) + r"\"",
+                r"\"" + re.escape(mnemonic) + r"\"",
+            ]
+            if not any(re.search(pat, text) for pat in mnemonic_patterns):
+                missing.append(entry)
+    return missing
+
+
 def mechanism_dialect_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
     dialect = str(v.get("dialect", v.get("dialect_name", "")))
@@ -2236,19 +2334,41 @@ def mechanism_dialect_contract(ctx: VerifierContext, slice_id: str, v: Mapping[s
     globs = [str(x) for x in as_list(v.get("required_globs")) + as_list(v.get("globs"))]
     for pattern in globs:
         files.extend(ctx.repo_path(m) for m in glob_repo(ctx.repo, pattern))
-    texts, missing = _read_existing_texts(files)
-    required_ops = [str(x) for x in as_list(v.get("required_ops"))]
-    required_attrs = [str(x) for x in as_list(v.get("required_attrs"))]
-    required_types = [str(x) for x in as_list(v.get("required_types"))]
-    required_patterns = [str(x) for x in as_list(v.get("required_patterns"))]
-    combined = "\n".join(texts.values())
-    missing_ops = [op for op in required_ops if op not in combined]
-    missing_attrs = [attr for attr in required_attrs if attr not in combined]
-    missing_types = [typ for typ in required_types if typ not in combined]
-    missing_patterns = [pat for pat in required_patterns if not re.search(pat, combined, flags=re.S)]
 
     roundtrip_tests = [normalize_repo_relpath(str(x)) for x in as_list(v.get("roundtrip_tests"))]
     invalid_tests = [normalize_repo_relpath(str(x)) for x in as_list(v.get("invalid_tests"))]
+    assembly_files = _paths_from_spec(ctx, as_list(v.get("assembly_files")))
+    assembly_files.extend(ctx.repo_path(p) for p in roundtrip_tests + invalid_tests)
+    assembly_files.extend(path for path in files if path.suffix == ".mlir")
+
+    definition_texts, missing = _read_existing_texts(files)
+    assembly_texts, assembly_missing = _read_existing_texts(assembly_files)
+    missing.extend(p for p in assembly_missing if p not in missing)
+
+    definition_combined = "\n".join(definition_texts.values())
+    assembly_combined = "\n".join(assembly_texts.values())
+    definition_clean = _strip_contract_comments(definition_combined)
+    assembly_clean = _strip_contract_comments(assembly_combined)
+    combined_clean = definition_clean + "\n" + assembly_clean
+
+    op_defs = as_list(v.get("op_defs"))
+    attr_defs = as_list(v.get("attr_defs"))
+    type_defs = as_list(v.get("type_defs"))
+    required_ops = [str(x) for x in as_list(v.get("required_ops"))]
+    assembly_ops = [str(x) for x in as_list(v.get("assembly_ops"))] + required_ops
+    assembly_attrs = [str(x) for x in as_list(v.get("assembly_attrs"))]
+    required_attrs = [str(x) for x in as_list(v.get("required_attrs"))]
+    required_types = [str(x) for x in as_list(v.get("required_types"))]
+    required_patterns = [str(x) for x in as_list(v.get("required_patterns"))]
+
+    missing_op_defs = _missing_defs(op_defs, definition_clean)
+    missing_attr_defs = _missing_defs(attr_defs, definition_clean)
+    missing_type_defs = _missing_defs(type_defs, definition_clean)
+    missing_ops = [op for op in assembly_ops if op not in assembly_clean]
+    missing_assembly_attrs = [attr for attr in assembly_attrs if attr not in assembly_clean]
+    missing_attrs = [attr for attr in required_attrs if attr not in combined_clean]
+    missing_types = [typ for typ in required_types if typ not in combined_clean]
+    missing_patterns = [pat for pat in required_patterns if not re.search(pat, combined_clean, flags=re.S)]
     missing_tests = [p for p in roundtrip_tests + invalid_tests if not ctx.repo_path(p).exists()]
 
     show_details: Optional[Dict[str, Any]] = None
@@ -2263,14 +2383,50 @@ def mechanism_dialect_contract(ctx: VerifierContext, slice_id: str, v: Mapping[s
         except VerificationError as exc:
             return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
 
-    if missing or missing_ops or missing_attrs or missing_types or missing_patterns or missing_tests:
+    if (missing or missing_op_defs or missing_attr_defs or missing_type_defs or
+            missing_ops or missing_assembly_attrs or missing_attrs or
+            missing_types or missing_patterns or missing_tests):
         return make_failure(
             ctx, slice_id, v, "dialect contract failed",
-            expected={"dialect": dialect, "required_ops": required_ops, "required_attrs": required_attrs, "required_types": required_types, "required_patterns": required_patterns, "roundtrip_tests": roundtrip_tests, "invalid_tests": invalid_tests},
-            actual={"missing_files": missing, "missing_ops": missing_ops, "missing_attrs": missing_attrs, "missing_types": missing_types, "missing_patterns": missing_patterns, "missing_tests": missing_tests},
+            expected={
+                "dialect": dialect,
+                "op_defs": op_defs,
+                "attr_defs": attr_defs,
+                "type_defs": type_defs,
+                "assembly_ops": assembly_ops,
+                "assembly_attrs": assembly_attrs,
+                "required_attrs": required_attrs,
+                "required_types": required_types,
+                "required_patterns": required_patterns,
+                "roundtrip_tests": roundtrip_tests,
+                "invalid_tests": invalid_tests,
+            },
+            actual={
+                "missing_files": missing,
+                "missing_op_defs": missing_op_defs,
+                "missing_attr_defs": missing_attr_defs,
+                "missing_type_defs": missing_type_defs,
+                "missing_ops": missing_ops,
+                "missing_assembly_attrs": missing_assembly_attrs,
+                "missing_attrs": missing_attrs,
+                "missing_types": missing_types,
+                "missing_patterns": missing_patterns,
+                "missing_tests": missing_tests,
+                "definition_files_checked": list(definition_texts),
+                "assembly_files_checked": list(assembly_texts),
+            },
             duration=time.time() - started,
         )
-    return make_success(ctx, slice_id, v, message="dialect contract passed", details={"dialect": dialect, "files_checked": list(texts), "show_dialects": show_details}, duration=time.time() - started)
+    return make_success(
+        ctx, slice_id, v, message="dialect contract passed",
+        details={
+            "dialect": dialect,
+            "definition_files_checked": list(definition_texts),
+            "assembly_files_checked": list(assembly_texts),
+            "show_dialects": show_details,
+        },
+        duration=time.time() - started,
+    )
 
 
 def _run_negative_case(ctx: VerifierContext, slice_id: str, parent: Mapping[str, Any], case: Mapping[str, Any], index: int) -> Tuple[bool, Dict[str, Any]]:
@@ -2597,7 +2753,19 @@ def mechanism_implementation_integrity_contract(ctx: VerifierContext, slice_id: 
     failures: List[Dict[str, Any]] = []
     static_results: List[Dict[str, Any]] = []
 
-    for i, check in enumerate(as_list(v.get("static_forbidden"))):
+    default_static_forbidden = [
+        {
+            "description": "No verifier-gaming comments or source literals may be added to satisfy dialect_contract text scans.",
+            "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+            ],
+            "pattern": r"verifier-required|fully-qualified op name|required fully-qualified|satisfy the verifier",
+        }
+    ]
+
+    for i, check in enumerate(default_static_forbidden + as_list(v.get("static_forbidden"))):
         if not isinstance(check, Mapping):
             continue
         paths = _paths_from_spec(ctx, check.get("files", check.get("paths", check.get("globs", []))))

@@ -77,3 +77,21 @@ or stdout hack introduced solely to satisfy the broken verifier.
 **Verification implication:** After fixing a verifier/spec mismatch, audit the
 current worktree and recent failed-attempt patches for workaround markers before
 resuming.
+
+## Dialect-contract raw text checks can be gamed by comments
+
+Do not verify dialect operation existence by scanning arbitrary source text for fully qualified operation names such as `vc4tile.program_id`. ODS often stores the operation mnemonic as `"program_id"` and composes the dialect prefix through MLIR, so source code does not naturally need to contain the assembled spelling. Raw scans also let agents satisfy the verifier with comments such as "verifier-required fully-qualified op name".
+
+Persistent rule: `dialect_contract` must distinguish source-native evidence (`op_defs`, `attr_defs`, `type_defs`) from assembled MLIR evidence (`assembly_ops`, `assembly_attrs`). Comments must be stripped before matching, and fully qualified operation names must appear in real MLIR roundtrip/invalid tests or generated roundtrip output, not in verifier-only comments.
+
+## Feature gates must match real feature ownership
+
+If a feature is marked implemented in `feature_gate_contract`, every required verification layer for that feature must exist in the same scope. Do not mark a behavior as its own implemented feature unless the slice also provides the dialect, invalid diagnostic, lowered-IR, scheduled/artifact, and hardware/reference layers that the feature requires. If a behavior is only part of another feature, fold it into that feature or explicitly document the non-required layers.
+
+## Codex must not repair verifier/spec bugs with implementation comments
+
+Codex mechanical repair is allowed to fix compile/build/API/path issues only. If a failure is caused by a verifier/spec mismatch, missing feature layer, or semantic ownership decision, Codex must print `VC4_CODEX_NEEDS_GPT`. It must not add dummy comments, string literals, or source text only to satisfy a verifier scan.
+
+## Stale build-tree lit tests after cancelled or failed attempts
+
+Failed or cancelled attempts can leave copied tests under `compiler/build/test` even after source files are restored. Prefix rechecks can then fail on stale build-tree tests that are not present in the source tree. Failed-attempt cleanup should delete or refresh corresponding `compiler/build/test/...` paths for changed `compiler/test/...` files before cumulative prefix rechecks.

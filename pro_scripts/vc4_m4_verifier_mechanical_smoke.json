@@ -39,16 +39,12 @@
           "id": "m4-smoke-dialect-contract",
           "mechanism": "dialect_contract",
           "feature": "mechanical_smoke_feature",
-          "description": "Use the existing SSAVC4 pure-op dialect/test surface to mechanically exercise dialect contract checks without assuming a function op appears in the pure-op fixture.",
+          "description": "Use the existing SSAVC4 pure-op dialect/test surface to mechanically exercise ODS definition checks and comment-stripped assembly op checks.",
           "dialect": "ssavc4",
           "required_files": [
             "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
             "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir",
             "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir"
-          ],
-          "required_ops": [
-            "ssavc4.load_imm",
-            "ssavc4.element_number"
           ],
           "roundtrip_tests": [
             "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir"
@@ -59,6 +55,20 @@
           "required_patterns": [
             "def\\s+SSAVC4_FuncOp",
             "def\\s+SSAVC4_LoadImmOp"
+          ],
+          "op_defs": [
+            {
+              "def": "SSAVC4_LoadImmOp",
+              "mnemonic": "load_imm"
+            },
+            {
+              "def": "SSAVC4_ElementNumberOp",
+              "mnemonic": "element_number"
+            }
+          ],
+          "assembly_ops": [
+            "ssavc4.load_imm",
+            "ssavc4.element_number"
           ]
         },
         {
@@ -85,7 +95,7 @@
           "id": "m4-smoke-lowered-ir-contract",
           "mechanism": "lowered_ir_contract",
           "feature": "mechanical_smoke_feature",
-          "description": "Mechanically exercise intermediate lowered-IR inspection by writing a tiny SSAVC4-looking file under .vc4_auto. This smoke intentionally uses the backward-compatible `files` alias to prevent the m4-03 files_checked=[] regression from recurring.",
+          "description": "Mechanically exercise intermediate lowered-IR inspection by writing a tiny SSAVC4-looking file under .vc4_auto.",
           "steps": [
             {
               "name": "write-lowered-ir",
@@ -96,15 +106,15 @@
               ]
             }
           ],
+          "inspect_files": [
+            ".vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir"
+          ],
           "must_contain": [
             "ssavc4.func",
             "ssavc4.thread_end"
           ],
           "must_not_contain": [
             "vc4tile."
-          ],
-          "files": [
-            ".vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir"
           ]
         },
         {

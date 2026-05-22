@@ -39,7 +39,9 @@
     "Hardware gates are the gold standard and are required for executable VC4Tile features unless a feature is strictly metadata-only and has an explicit feature_gate_contract exception.",
     "M4 must never lower directly from vc4tile to scheduled vc4; scheduled vc4 remains the QASM-near artifact sink.",
     "Producer adapters from Triton/IREE/MLIR gpu-like forms are future work after M4.",
-    "Text-inspection contract verifications use `inspect_files`; the verifier also accepts `files` as a backward-compatible alias so a wrong field name cannot produce files_checked=[] again."
+    "Text-inspection contract verifications use `inspect_files`; the verifier also accepts `files` as a backward-compatible alias so a wrong field name cannot produce files_checked=[] again.",
+    "Dialect contracts distinguish source-native ODS op definitions (`op_defs`) from assembled MLIR operation names (`assembly_ops`); comments are stripped and must not satisfy op-existence checks.",
+    "Do not add verifier-only comments/literals such as fully-qualified op names to source files. If a check would require such a comment, fix the verification contract instead."
   ],
   "fixture_matrices": {
     "m4_independent_vector": [
@@ -271,7 +273,6 @@
             "compiler/lib/Dialect/VC4Tile/IR/VC4TileDialect.cpp",
             "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
           ],
-          "required_ops": [],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -283,7 +284,8 @@
             "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
           ],
           "invalid_tests": [],
-          "show_dialects": true
+          "show_dialects": true,
+          "assembly_ops": []
         },
         {
           "id": "m4-01-feature-gate",
@@ -422,19 +424,6 @@
             "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
             "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
           ],
-          "required_ops": [
-            "vc4tile.kernel",
-            "vc4tile.program_id",
-            "vc4tile.lane_range",
-            "vc4tile.masked_load_global",
-            "vc4tile.masked_store_global",
-            "vc4tile.rotate",
-            "vc4tile.reduce",
-            "vc4tile.shared_alloc",
-            "vc4tile.shared_load",
-            "vc4tile.shared_store",
-            "vc4tile.barrier"
-          ],
           "required_attrs": [
             "schedule",
             "tail",
@@ -458,6 +447,93 @@
             "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir",
             "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
             "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.kernel",
+            "vc4tile.program_id",
+            "vc4tile.lane_range",
+            "vc4tile.masked_load_global",
+            "vc4tile.masked_store_global",
+            "vc4tile.rotate",
+            "vc4tile.reduce",
+            "vc4tile.shared_alloc",
+            "vc4tile.shared_load",
+            "vc4tile.shared_store",
+            "vc4tile.barrier"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_KernelOp",
+              "mnemonic": "kernel"
+            },
+            {
+              "def": "VC4Tile_ProgramIdOp",
+              "mnemonic": "program_id"
+            },
+            {
+              "def": "VC4Tile_LaneRangeOp",
+              "mnemonic": "lane_range"
+            },
+            {
+              "def": "VC4Tile_MaskedLoadGlobalOp",
+              "mnemonic": "masked_load_global"
+            },
+            {
+              "def": "VC4Tile_MaskedStoreGlobalOp",
+              "mnemonic": "masked_store_global"
+            },
+            {
+              "def": "VC4Tile_RotateOp",
+              "mnemonic": "rotate"
+            },
+            {
+              "def": "VC4Tile_ReduceOp",
+              "mnemonic": "reduce"
+            },
+            {
+              "def": "VC4Tile_SharedAllocOp",
+              "mnemonic": "shared_alloc"
+            },
+            {
+              "def": "VC4Tile_SharedLoadOp",
+              "mnemonic": "shared_load"
+            },
+            {
+              "def": "VC4Tile_SharedStoreOp",
+              "mnemonic": "shared_store"
+            },
+            {
+              "def": "VC4Tile_BarrierOp",
+              "mnemonic": "barrier"
+            },
+            {
+              "def": "VC4Tile_ReturnOp",
+              "mnemonic": "return"
+            },
+            {
+              "def": "VC4Tile_BlockIdOp",
+              "mnemonic": "block_id"
+            },
+            {
+              "def": "VC4Tile_WarpIdOp",
+              "mnemonic": "warp_id"
+            },
+            {
+              "def": "VC4Tile_LaneIdOp",
+              "mnemonic": "lane_id"
+            },
+            {
+              "def": "VC4Tile_ThreadIdOp",
+              "mnemonic": "thread_id"
+            },
+            {
+              "def": "VC4Tile_MaskAllOp",
+              "mnemonic": "mask_all"
+            },
+            {
+              "def": "VC4Tile_TailMaskOp",
+              "mnemonic": "tail_mask"
+            }
           ]
         },
         {
@@ -615,9 +691,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.kernel"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -626,7 +699,16 @@
           "roundtrip_tests": [
             "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
           ],
-          "invalid_tests": []
+          "invalid_tests": [],
+          "assembly_ops": [
+            "vc4tile.kernel"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_KernelOp",
+              "mnemonic": "kernel"
+            }
+          ]
         },
         {
           "id": "m4-03-lowered-ir-minimal",
@@ -833,7 +915,9 @@
           "files": [
             "compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir",
             "compiler/test/Conversion/VC4TileToSSAVC4/tail-mask.mlir",
-            "compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir"
+            "compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir",
+            "compiler/test/Dialect/VC4Tile/masks-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-tail-mask.mlir"
           ]
         },
         {
@@ -856,14 +940,10 @@
           "id": "m4-04-dialect-contract-ids-masks",
           "mechanism": "dialect_contract",
           "feature": "independent_tile_ids",
-          "description": "independent_tile_ids dialect surface exists",
+          "description": "Independent tile ID ops are defined in ODS and appear in real MLIR roundtrip assembly, not verifier-only comments.",
           "dialect": "vc4tile",
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
-          ],
-          "required_ops": [
-            "vc4tile.program_id",
-            "vc4tile.lane_range"
           ],
           "required_attrs": [],
           "required_types": [],
@@ -875,6 +955,51 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.program_id",
+            "vc4tile.lane_range"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_ProgramIdOp",
+              "mnemonic": "program_id"
+            },
+            {
+              "def": "VC4Tile_LaneRangeOp",
+              "mnemonic": "lane_range"
+            }
+          ]
+        },
+        {
+          "id": "m4-04-dialect-contract-tail-masks",
+          "mechanism": "dialect_contract",
+          "feature": "tail_masks",
+          "description": "VC4Tile mask values/tail-mask syntax is real dialect assembly and not verifier-only source text.",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/test/Dialect/VC4Tile/masks-roundtrip.mlir"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_MaskAllOp",
+              "mnemonic": "mask_all"
+            },
+            {
+              "def": "VC4Tile_TailMaskOp",
+              "mnemonic": "tail_mask"
+            }
+          ],
+          "assembly_ops": [
+            "vc4tile.mask_all",
+            "vc4tile.tail_mask"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/masks-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-tail-mask.mlir"
           ]
         },
         {
@@ -961,6 +1086,25 @@
               "argv": [
                 "vc4-opt",
                 "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-04-invalid-diagnostics-tail-masks",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "tail_masks",
+          "description": "Tail mask invalid diagnostics are deterministic.",
+          "cases": [
+            {
+              "description": "invalid tail mask diagnostics",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-tail-mask.mlir"
               ],
               "expect_exit_code": 1,
               "stderr_contains": [
@@ -1091,9 +1235,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.masked_store_global"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -1104,6 +1245,15 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-masked-global-store.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.masked_store_global"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_MaskedStoreGlobalOp",
+              "mnemonic": "masked_store_global"
+            }
           ]
         },
         {
@@ -1399,9 +1549,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.masked_load_global"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -1412,6 +1559,15 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-masked-global-load.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.masked_load_global"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_MaskedLoadGlobalOp",
+              "mnemonic": "masked_load_global"
+            }
           ]
         },
         {
@@ -1762,10 +1918,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.kernel",
-            "vc4tile.lane_range"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -1775,7 +1927,21 @@
             "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
             "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir"
           ],
-          "invalid_tests": []
+          "invalid_tests": [],
+          "assembly_ops": [
+            "vc4tile.kernel",
+            "vc4tile.lane_range"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_KernelOp",
+              "mnemonic": "kernel"
+            },
+            {
+              "def": "VC4Tile_LaneRangeOp",
+              "mnemonic": "lane_range"
+            }
+          ]
         },
         {
           "id": "m4-07-dialect-contract-control-flow-tail",
@@ -1785,10 +1951,6 @@
           "dialect": "vc4tile",
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
-          ],
-          "required_ops": [
-            "vc4tile.kernel",
-            "vc4tile.lane_range"
           ],
           "required_attrs": [],
           "required_types": [],
@@ -1801,6 +1963,20 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-divergent-side-effecting-branch.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.kernel",
+            "vc4tile.lane_range"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_KernelOp",
+              "mnemonic": "kernel"
+            },
+            {
+              "def": "VC4Tile_LaneRangeOp",
+              "mnemonic": "lane_range"
+            }
           ]
         },
         {
@@ -2140,10 +2316,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.rotate",
-            "vc4tile.reduce"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -2154,6 +2326,20 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-rotate-reduce.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.rotate",
+            "vc4tile.reduce"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_RotateOp",
+              "mnemonic": "rotate"
+            },
+            {
+              "def": "VC4Tile_ReduceOp",
+              "mnemonic": "reduce"
+            }
           ]
         },
         {
@@ -2424,10 +2610,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.block_id",
-            "vc4tile.warp_id"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -2438,6 +2620,20 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-cooperative-resource-limits.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.block_id",
+            "vc4tile.warp_id"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_BlockIdOp",
+              "mnemonic": "block_id"
+            },
+            {
+              "def": "VC4Tile_WarpIdOp",
+              "mnemonic": "warp_id"
+            }
           ]
         },
         {
@@ -2715,11 +2911,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.shared_alloc",
-            "vc4tile.shared_load",
-            "vc4tile.shared_store"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -2730,6 +2921,25 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-shared-vpm.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.shared_alloc",
+            "vc4tile.shared_load",
+            "vc4tile.shared_store"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_SharedAllocOp",
+              "mnemonic": "shared_alloc"
+            },
+            {
+              "def": "VC4Tile_SharedLoadOp",
+              "mnemonic": "shared_load"
+            },
+            {
+              "def": "VC4Tile_SharedStoreOp",
+              "mnemonic": "shared_store"
+            }
           ]
         },
         {
@@ -3003,9 +3213,6 @@
           "required_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
           ],
-          "required_ops": [
-            "vc4tile.barrier"
-          ],
           "required_attrs": [],
           "required_types": [],
           "required_patterns": [
@@ -3016,6 +3223,15 @@
           ],
           "invalid_tests": [
             "compiler/test/Dialect/VC4Tile/invalid-barrier.mlir"
+          ],
+          "assembly_ops": [
+            "vc4tile.barrier"
+          ],
+          "op_defs": [
+            {
+              "def": "VC4Tile_BarrierOp",
+              "mnemonic": "barrier"
+            }
           ]
         },
         {

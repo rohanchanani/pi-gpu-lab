@@ -13,7 +13,4 @@ Codex must decline and route back to GPT Pro by printing `VC4_CODEX_NEEDS_GPT` w
 
 Codex must not edit reference bundles, expected.json, catalog.json, pro_scripts/gpt_web_driver.js, `.vc4_auto` generated outputs, or hardware logs.
 
-
-## Milestone-package requirement
-
-This contract is milestone-specific. The generic autorun driver must render Codex mechanical prompts from the active milestone's `prompt_template_dir` (`codex_mechanical_prompt.md.j2` plus this `codex_contract.md`) rather than using hard-coded language from an older milestone. Future milestone packages must provide their own Codex prompt template and contract, and their package-source verification should require both files.
+Codex must not add verifier-only comments, dummy string literals, or non-semantic source text to satisfy a deterministic verifier scan. If a verifier asks for a fully qualified operation name that source code does not naturally need, Codex must route back to GPT Pro by printing `VC4_CODEX_NEEDS_GPT`; the verifier/spec should be fixed to check ODS definitions and real MLIR assembly tests instead.
