@@ -1,0 +1,241 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-verifier-m4-contract-smoke",
+  "title": "Mechanical smoke tests for M4 verifier contract mechanisms",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/m4_verifier_contract_smoke/verifier",
+    "candidate_state_root": ".vc4_auto/m4_verifier_contract_smoke",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 120,
+    "hardware_timeout_sec": 30
+  },
+  "slices": {
+    "m4-verifier-contract-smoke": {
+      "title": "Mechanical smoke for new M4 verifier classes",
+      "expected_end_state": "The new verifier mechanisms can be parsed and executed on the current M3/M2 repo without requiring a VC4Tile implementation.",
+      "verifications": [
+        {
+          "id": "m4-smoke-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "The smoke feature has all canonical verification layers represented in this slice.",
+          "features": [
+            {
+              "name": "mechanical_smoke_feature",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m4-smoke-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "mechanical_smoke_feature",
+          "description": "Use the existing SSAVC4 pure-op dialect/test surface to mechanically exercise dialect contract checks without assuming a function op appears in the pure-op fixture.",
+          "dialect": "ssavc4",
+          "required_files": [
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+            "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir"
+          ],
+          "required_ops": [
+            "ssavc4.load_imm",
+            "ssavc4.element_number"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/SSAVC4/pure-ops-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir"
+          ],
+          "required_patterns": [
+            "def\\s+SSAVC4_FuncOp",
+            "def\\s+SSAVC4_LoadImmOp"
+          ]
+        },
+        {
+          "id": "m4-smoke-invalid-diagnostic-contract",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "mechanical_smoke_feature",
+          "description": "Mechanically exercise deterministic invalid diagnostic handling with a tiny failing Python command.",
+          "cases": [
+            {
+              "description": "synthetic deterministic failure",
+              "argv": [
+                "{python}",
+                "-c",
+                "import sys; print('expected mechanical diagnostic', file=sys.stderr); sys.exit(7)"
+              ],
+              "expect_exit_code": 7,
+              "stderr_contains": [
+                "expected mechanical diagnostic"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-smoke-lowered-ir-contract",
+          "mechanism": "lowered_ir_contract",
+          "feature": "mechanical_smoke_feature",
+          "description": "Mechanically exercise intermediate lowered-IR inspection by writing a tiny SSAVC4-looking file under .vc4_auto.",
+          "steps": [
+            {
+              "name": "write-lowered-ir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; p=Path('.vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir'); p.parent.mkdir(parents=True, exist_ok=True); p.write_text('ssavc4.func @mechanical_smoke() {\\n  ssavc4.thread_end\\n}\\n', encoding='utf-8')"
+              ]
+            }
+          ],
+          "inspect_files": [
+            ".vc4_auto/m4_verifier_contract_smoke/lowered.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.func",
+            "ssavc4.thread_end"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-smoke-scheduled-artifact-contract",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "mechanical_smoke_feature",
+          "description": "Mechanically exercise artifact/resource checks with a tiny synthetic bundle under .vc4_auto.",
+          "steps": [
+            {
+              "name": "write-synthetic-bundle",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; import json; b=Path('.vc4_auto/m4_verifier_contract_smoke/bundle'); (b/'kernels').mkdir(parents=True, exist_ok=True); (b/'manifest.json').write_text(json.dumps({'schema_version':2,'kind':'program','program_name':'mechanical_smoke','target':{'max_active_qpus':12,'shared_vpm_bytes':4096,'semaphores':16},'kernels':[{'kernel_id':0,'symbol_name':'mechanical_smoke','public_name':'mechanical_smoke','qasm_path':'kernels/mechanical_smoke.qasm','code_symbol':'mechanical_smoke_shader','scheduled_sink_ops':1,'uniform_words_per_request':1,'uniform_words_per_qpu':1,'max_requests_per_wave':12,'tail_policy':'none','schedule_mode':'independent_vector','args':[],'builtins':[],'resources':{'uses_barrier':False,'uses_shared_vpm':False,'warps_per_block_max':1,'semaphores_per_block':0,'vpm_rows_per_block':0,'vpm_bytes_per_block':0}}]}, indent=2), encoding='utf-8'); (b/'layout.json').write_text(json.dumps({'regions':[],'kernels':[],'heap_size_bytes':0}, indent=2), encoding='utf-8'); (b/'kernel_launch.c').write_text('/* mechanical smoke */\\n', encoding='utf-8'); (b/'kernel_launch.h').write_text('/* mechanical smoke */\\n', encoding='utf-8'); (b/'kernels'/'mechanical_smoke.qasm').write_text('# mechanical smoke\\n', encoding='utf-8'); (b/'mechanical_smoke_shader.c').write_text('/* mechanical smoke */\\n', encoding='utf-8')"
+              ]
+            }
+          ],
+          "bundle": ".vc4_auto/m4_verifier_contract_smoke/bundle",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h",
+            "kernels/mechanical_smoke.qasm",
+            "mechanical_smoke_shader.c"
+          ],
+          "expected_resource": {
+            "public_name": "mechanical_smoke",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false,
+            "warps_per_block_max": 1,
+            "semaphores_per_block": 0,
+            "vpm_rows_per_block": 0
+          }
+        },
+        {
+          "id": "m4-smoke-hardware-cpu-reference-contract",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "mechanical_smoke_feature",
+          "description": "Mechanically exercise CPU/reference comparison without hardware; real M4 feature specs should set requires_hardware and use fixture runners.",
+          "cases": [
+            {
+              "n": 0
+            },
+            {
+              "n": 16
+            },
+            {
+              "n": 17
+            }
+          ],
+          "cpu_reference_argv": [
+            "{python}",
+            "-c",
+            "import json; print(json.dumps({'status':'PASS','n':int('{n}'),'value':int('{n}')*2}, sort_keys=True))"
+          ],
+          "candidate_argv": [
+            "{python}",
+            "-c",
+            "import json; print(json.dumps({'status':'PASS','n':int('{n}'),'value':int('{n}')*2}, sort_keys=True))"
+          ]
+        },
+        {
+          "id": "m4-smoke-milestone-scope-contract",
+          "mechanism": "milestone_scope_contract",
+          "description": "The current docs should identify M4 as vc4tile-to-ssavc4 work, not gpu-to-ssavc4 work, while allowing backticks/prose/unicode arrows.",
+          "files": [
+            "compiler/docs/vc4tile_architecture_and_project_plan.md",
+            "compiler/AGENTS.md"
+          ],
+          "required_literals": [
+            "vc4tile",
+            "ssavc4"
+          ],
+          "forbidden_literals": [
+            "M4 will lower MLIR `gpu` to SSAVC4"
+          ],
+          "required_regex": [
+            "M4[\\s\\S]{0,400}vc4tile",
+            "vc4tile[\\s\\S]{0,180}ssavc4"
+          ],
+          "forbidden_regex": []
+        },
+        {
+          "id": "m4-smoke-implementation-integrity-contract",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Mechanically exercise static integrity scans; Codex exec is supported by this mechanism but disabled in this smoke spec.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion should already exist before M4.",
+              "files": [
+                "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4"
+            }
+          ],
+          "codex_exec": {
+            "enabled": false
+          }
+        },
+        {
+          "id": "m4-smoke-regression-contract",
+          "mechanism": "regression_contract",
+          "description": "Mechanically exercise regression contract plumbing and assert the new mechanisms are registered.",
+          "required_mechanisms": [
+            "feature_gate_contract",
+            "dialect_contract",
+            "invalid_diagnostic_contract",
+            "lowered_ir_contract",
+            "scheduled_artifact_contract",
+            "hardware_cpu_reference_contract",
+            "milestone_scope_contract",
+            "implementation_integrity_contract",
+            "regression_contract"
+          ],
+          "commands": [
+            {
+              "name": "regression-smoke-command",
+              "argv": [
+                "{python}",
+                "-c",
+                "print('regression-smoke-ok')"
+              ],
+              "stdout_contains": [
+                "regression-smoke-ok"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

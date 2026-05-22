@@ -1,0 +1,1013 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m4",
+  "title": "Milestone 4: implement VC4Tile and lower to SSAVC4",
+  "locked_goal": "Define the VC4 Tile dialect (`vc4tile`) as the VC4-specific tile/kernel IR above SSAVC4, and implement incremental `vc4tile -> ssavc4` lowering so VC4Tile-authored fixtures lower through the existing `ssavc4 -> scheduled vc4 -> artifacts/runtime` lower half. M4 does not implement producer lowering from Triton, IREE, StableHLO, Torch-MLIR, JAX, PyTorch, or upstream MLIR `gpu`.",
+  "defaults": {
+    "repo_script_dir": "pro_scripts",
+    "gpt_web_driver": "pro_scripts/gpt_web_driver.js",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/vc4tile_m4",
+    "candidate_state_root": ".vc4_auto/vc4tile_m4",
+    "typed_verifier_script": "pro_scripts/vc4_milestone_verifier.py",
+    "verification_spec": "pro_scripts/vc4_vc4tile_m4_verifications.json",
+    "prompt_template_dir": "pro_scripts/prompts/vc4_vc4tile_m4",
+    "auto_commit_on_pass": true,
+    "hardware_gates_required_by_default": true,
+    "gpt_output_files": [
+      "artifact_transport.json",
+      "bundle.zip",
+      "apply_bundle.sh"
+    ],
+    "build_commands": {
+      "build_vc4_opt": "ninja -C compiler/build vc4-opt",
+      "build_vc4_codegen": "ninja -C compiler/build vc4-codegen",
+      "check_vc4": "ninja -C compiler/build check-vc4"
+    },
+    "required_verifier_pipeline": [
+      "--vc4-verify-emit-contract",
+      "--vc4-verify-scheduled-hardware-rules",
+      "--vc4-verify-scheduled-adjacent-hazards",
+      "--vc4-verify-scheduled-io-spacing",
+      "--vc4-verify-scheduled-peripheral-accesses"
+    ],
+    "forbidden_paths": [
+      ".vc4_auto/**",
+      "compiler/test/**/Output/**",
+      "compiler/test/**/.lit_test_times.txt",
+      "compiler/test/**/run.log",
+      "compiler/test/CodeGen/VC4/catalog.json",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+      "generated_examples/**",
+      "external/libpi/**",
+      "pro_scripts/gpt_web_driver.js",
+      "pro_scripts/current_tab.js",
+      "pro_scripts/new_tab.js"
+    ],
+    "path_policy": {
+      "paths_are_repo_relative": true,
+      "reject_absolute_paths": true,
+      "reject_parent_directory_components": true,
+      "reject_binary_patches": true,
+      "reject_existing_vc4_fixture_reference_mutation": true,
+      "reject_existing_vc4_expected_json_mutation": true,
+      "reject_generated_example_mutation": true,
+      "reject_generic_driver_mutation_by_default": true
+    },
+    "gate_environment_contract": {
+      "path_prefix": [
+        "compiler/build/bin"
+      ],
+      "candidate_state_root_env": "VC4_CODEGEN_STATE_ROOT=.vc4_auto/vc4tile_m4",
+      "lit_run_line_contract": "Every %token in changed RUN lines must be defined by lit config or be a lit builtin."
+    },
+    "gpt_output_transport": "download_bundle",
+    "download_bundle_transport": {
+      "schema_version": 1,
+      "transport": "vc4_codegen_download_bundle_v1",
+      "staged_files": [
+        "artifact_transport.json",
+        "bundle.zip",
+        "apply_bundle.sh"
+      ],
+      "zip_layout": [
+        "manifest.json",
+        "repo/<repo-relative changed files>"
+      ]
+    },
+    "test_design_contract": {
+      "m4_is_vc4tile_to_ssavc4": true,
+      "no_producer_lowering_in_m4": true,
+      "no_direct_vc4tile_to_vc4": true,
+      "reuse_existing_ssavc4_to_vc4_lower_half": true,
+      "reuse_existing_m2_artifact_runtime_path": true,
+      "full_vc4tile_contract_defined_early": true,
+      "lowering_implemented_in_vertical_slices": true,
+      "every_implemented_feature_has_canonical_contract_layers": true,
+      "hardware_cpu_reference_is_gold_standard_when_executable": true,
+      "no_fixture_name_special_cases": true,
+      "no_reference_qasm_substitution": true,
+      "no_physical_qpu_number_for_logical_identity": true
+    },
+    "milestone_config": "pro_scripts/milestones/vc4-vc4tile-m4.json"
+  },
+  "slices": [
+    {
+      "id": "m4-00-milestone-package",
+      "title": "M4 milestone package",
+      "depends_on": [],
+      "context_profile": "m4_package",
+      "intent": "Install the M4 descriptor, worklist, verification spec, context profiles, prompt package, and design/plan documents. No compiler implementation source is allowed in this slice.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "pro_scripts/milestones/vc4-vc4tile-m4.json",
+        "pro_scripts/vc4_vc4tile_m4_worklist.json",
+        "pro_scripts/vc4_vc4tile_m4_verifications.json",
+        "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+        "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/m4_handoff.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice00_milestone_package.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice01_dialect_scaffold.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice02_full_op_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice03_lowering_skeleton.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice04_independent_tile_ids_arith_masks.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice05_masked_global_store.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice06_masked_global_load_saxpy.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice07_control_flow_tail_block_args.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice08_rotate_reduce.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice09_cooperative_block_resources.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice10_shared_vpm.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice11_barrier.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice12_final_acceptance.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_slice_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_failure_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_diagnosis_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/codex_mechanical_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/codex_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-00-milestone-package"
+      ],
+      "hardware_required": false,
+      "codex_policy": "never",
+      "max_gpt_attempts": 0,
+      "max_codex_attempts": 0,
+      "commit_message": "vc4 vc4tile m4: 00-milestone-package",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "pro_scripts/milestones/vc4-vc4tile-m4.json",
+          "pro_scripts/vc4_vc4tile_m4_worklist.json",
+          "pro_scripts/vc4_vc4tile_m4_verifications.json",
+          "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+          "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/m4_handoff.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice00_milestone_package.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice01_dialect_scaffold.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice02_full_op_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice03_lowering_skeleton.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice04_independent_tile_ids_arith_masks.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice05_masked_global_store.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice06_masked_global_load_saxpy.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice07_control_flow_tail_block_args.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice08_rotate_reduce.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice09_cooperative_block_resources.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice10_shared_vpm.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice11_barrier.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/slice12_final_acceptance.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/gpt_slice_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m4/gpt_failure_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m4/gpt_diagnosis_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m4/codex_mechanical_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m4/codex_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md",
+          "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+          "compiler/docs/codegen/vc4tile-m4-plan.md"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-00-milestone-package"
+      ]
+    },
+    {
+      "id": "m4-01-vc4tile-dialect-scaffold",
+      "title": "VC4Tile dialect scaffold",
+      "depends_on": [
+        "m4-00-milestone-package"
+      ],
+      "context_profile": "vc4tile_scaffold",
+      "intent": "Create the separate `vc4tile` dialect skeleton, CMake/TableGen integration, vc4-opt registration, and a minimal dialect visibility smoke test without adding substantive op lowering.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-01-vc4tile-dialect-scaffold"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 8,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 01-vc4tile-dialect-scaffold",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/VC4Tile/IR/CMakeLists.txt",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileBase.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.h",
+          "compiler/lib/Dialect/VC4Tile/IR/CMakeLists.txt",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileDialect.cpp",
+          "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-01-vc4tile-dialect-scaffold"
+      ]
+    },
+    {
+      "id": "m4-02-full-op-contract-types-attrs",
+      "title": "VC4Tile full op/type/attr contract",
+      "depends_on": [
+        "m4-01-vc4tile-dialect-scaffold"
+      ],
+      "context_profile": "vc4tile_ops",
+      "intent": "Define the broad `vc4tile` type, attribute, operation, parser/printer, verifier, trait, and effect contract for independent and cooperative features. Lowering may remain unimplemented for later feature tiers.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-02-full-op-contract-types-attrs"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 10,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 02-full-op-contract-types-attrs",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.h",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.h",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileAttrs.cpp",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileTypes.cpp",
+          "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/barrier-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-02-full-op-contract-types-attrs"
+      ]
+    },
+    {
+      "id": "m4-03-lowering-skeleton-and-metadata",
+      "title": "VC4Tile to SSAVC4 lowering skeleton and metadata",
+      "depends_on": [
+        "m4-02-full-op-contract-types-attrs"
+      ],
+      "context_profile": "vc4tile_lowering_skeleton",
+      "intent": "Add `--convert-vc4tile-to-ssavc4`, lower a minimal `vc4tile.kernel` to `ssavc4.func`, generate/carry `vc4.launch_abi` and `vc4.resource`, and install the VC4Tile candidate support runner.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-03-lowering-skeleton-and-metadata"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 10,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 03-lowering-skeleton-and-metadata",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h",
+          "compiler/lib/Conversion/VC4TileToSSAVC4/CMakeLists.txt",
+          "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+          "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "compiler/test/CodeGen/VC4Tile/Hardware/lit.local.cfg.py",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/lit.local.cfg.py"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-03-lowering-skeleton-and-metadata"
+      ]
+    },
+    {
+      "id": "m4-04-independent-tile-ids-arith-masks",
+      "title": "Independent tile IDs, arithmetic, and masks",
+      "depends_on": [
+        "m4-03-lowering-skeleton-and-metadata"
+      ],
+      "context_profile": "independent_tile_ids",
+      "intent": "Implement the core independent-vector 16-lane tile model: request/program IDs, lane range, basic scalar/vector constants, arithmetic, splats, comparisons, and masks lowered to SSAVC4.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-04-independent-tile-ids-arith-masks"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 10,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 04-independent-tile-ids-arith-masks",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tail-mask.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-04-independent-tile-ids-arith-masks"
+      ]
+    },
+    {
+      "id": "m4-05-masked-global-store",
+      "title": "Masked coalesced global store",
+      "depends_on": [
+        "m4-04-independent-tile-ids-arith-masks"
+      ],
+      "context_profile": "masked_global_store",
+      "intent": "Lower `vc4tile.masked_store_global` for coalesced contiguous 16-lane stores through SSAVC4 VDW and prove the first VC4Tile-authored hardware fixture.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-05-masked-global-store"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 05-masked-global-store",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-masked-global-store.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/candidate/vector_store_smoke_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-05-masked-global-store"
+      ]
+    },
+    {
+      "id": "m4-06-masked-global-load-saxpy",
+      "title": "Masked global load and SAXPY",
+      "depends_on": [
+        "m4-05-masked-global-store"
+      ],
+      "context_profile": "masked_global_load_saxpy",
+      "intent": "Lower masked global loads through SSAVC4 TMU request/read and prove a SAXPY/vector-add style VC4Tile hardware fixture.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-06-masked-global-load-saxpy"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 06-masked-global-load-saxpy",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/saxpy-independent-vector.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-masked-global-load.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/candidate/saxpy_full_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-06-masked-global-load-saxpy"
+      ]
+    },
+    {
+      "id": "m4-07-control-flow-tail-block-args",
+      "title": "Control flow, tail masks, and SSAVC4 block arguments",
+      "depends_on": [
+        "m4-06-masked-global-load-saxpy"
+      ],
+      "context_profile": "control_flow_tail",
+      "intent": "Lower uniform control flow, tail predicates, and simple loop/merge block arguments from VC4Tile into SSAVC4 successor operands, using the current spill-aware lower half.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-07-control-flow-tail-block-args"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 07-control-flow-tail-block-args",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/uniform-control-flow.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/block-args-tail-loop.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-divergent-side-effecting-branch.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/global-store-coalesced-multi-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/block-args-loop-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/candidate/global_store_coalesced_multi_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-07-control-flow-tail-block-args"
+      ]
+    },
+    {
+      "id": "m4-08-rotate-reduce",
+      "title": "Warp-local rotate and reductions",
+      "depends_on": [
+        "m4-07-control-flow-tail-block-args"
+      ],
+      "context_profile": "rotate_reduce",
+      "intent": "Lower VC4Tile warp-local rotate/reduce operations to existing SSAVC4 rotate/reduction forms and prove a warp-reduce hardware fixture.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-08-rotate-reduce"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 08-rotate-reduce",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-rotate-reduce.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/candidate/warp_reduce_sum_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-08-rotate-reduce"
+      ]
+    },
+    {
+      "id": "m4-09-cooperative-block-resources",
+      "title": "Cooperative block identity and resources",
+      "depends_on": [
+        "m4-08-rotate-reduce"
+      ],
+      "context_profile": "cooperative_block_resources",
+      "intent": "Add cooperative-block schedule metadata and logical block/warp/thread identity without yet requiring shared VPM or barrier, and prove logical ID/resource behavior on hardware.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-09-cooperative-block-resources"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 09-cooperative-block-resources",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/cooperative-block-resources.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-cooperative-resource-limits.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/cooperative-id-writeback-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/candidate/cooperative_id_writeback_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-09-cooperative-block-resources"
+      ]
+    },
+    {
+      "id": "m4-10-shared-vpm",
+      "title": "Shared VPM tile memory",
+      "depends_on": [
+        "m4-09-cooperative-block-resources"
+      ],
+      "context_profile": "shared_vpm",
+      "intent": "Lower `vc4tile.shared_*` row-granular shared tile operations into SSAVC4 VPM read/write operations and resource metadata, then prove shared tile behavior on hardware.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-10-shared-vpm"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 10-shared-vpm",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-shared-vpm.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/candidate/shared_transpose_16x16_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-10-shared-vpm"
+      ]
+    },
+    {
+      "id": "m4-11-barrier",
+      "title": "Cooperative barrier",
+      "depends_on": [
+        "m4-10-shared-vpm"
+      ],
+      "context_profile": "barrier",
+      "intent": "Lower `vc4tile.barrier` through SSAVC4 barrier/semaphore support and prove reusable `__syncthreads()`-like block synchronization from VC4Tile input on hardware.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-11-barrier"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 1,
+      "commit_message": "vc4 vc4tile m4: 11-barrier",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir",
+          "compiler/test/Dialect/VC4Tile/invalid-barrier.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/candidate/qpu_barrier_syncthreads_vc4tile_candidate_harness.c"
+        ]
+      },
+      "success_probes": [
+        "typed-verifier:m4-11-barrier"
+      ]
+    },
+    {
+      "id": "m4-12-final-acceptance",
+      "title": "M4 final acceptance",
+      "depends_on": [
+        "m4-11-barrier"
+      ],
+      "context_profile": "m4_final",
+      "intent": "Run cumulative M4 verification, final implementation-integrity audit, full `check-vc4`, all active VC4Tile hardware CPU-reference fixtures, and lower-half M3/M2 regression.",
+      "non_goals": [
+        "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
+        "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
+        "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
+        "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
+        "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+        "compiler/docs/codegen/vc4tile-m4-plan.md",
+        "pro_scripts/milestones/vc4-vc4tile-m4.json",
+        "pro_scripts/vc4_vc4tile_m4_worklist.json",
+        "pro_scripts/vc4_vc4tile_m4_verifications.json",
+        "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+        "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/m4_handoff.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice00_milestone_package.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice01_dialect_scaffold.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice02_full_op_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice03_lowering_skeleton.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice04_independent_tile_ids_arith_masks.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice05_masked_global_store.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice06_masked_global_load_saxpy.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice07_control_flow_tail_block_args.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice08_rotate_reduce.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice09_cooperative_block_resources.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice10_shared_vpm.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice11_barrier.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/slice12_final_acceptance.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_slice_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_failure_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/gpt_diagnosis_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/codex_mechanical_prompt.md.j2",
+        "pro_scripts/prompts/vc4_vc4tile_m4/codex_contract.md",
+        "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m4-12-final-acceptance"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 4,
+      "max_codex_attempts": 0,
+      "commit_message": "vc4 vc4tile m4: 12-final-acceptance",
+      "mechanical_budgets": {
+        "mechanical_compile": 1,
+        "mechanical_build": 1,
+        "lit_tool_resolution": 1,
+        "test_invocation": 1,
+        "path_plumbing": 1
+      },
+      "products": {
+        "required_source_files": []
+      },
+      "success_probes": [
+        "typed-verifier:m4-12-final-acceptance"
+      ]
+    }
+  ]
+}

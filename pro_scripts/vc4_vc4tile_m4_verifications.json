@@ -1,0 +1,3780 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m4",
+  "title": "VC4Tile M4 typed verification specification",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/vc4tile_m4/verifier",
+    "candidate_state_root": ".vc4_auto/vc4tile_m4",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 7200,
+    "hardware_timeout_sec": 60,
+    "fixture_matrices": {
+      "m4_independent_vector": [
+        "vector_store_smoke_vc4tile",
+        "saxpy_full_vc4tile",
+        "global_store_coalesced_multi_vc4tile",
+        "warp_reduce_sum_vc4tile"
+      ],
+      "m4_cooperative_block": [
+        "cooperative_id_writeback_vc4tile",
+        "shared_transpose_16x16_vc4tile",
+        "qpu_barrier_syncthreads_vc4tile"
+      ],
+      "m4_required": [
+        "vector_store_smoke_vc4tile",
+        "saxpy_full_vc4tile",
+        "global_store_coalesced_multi_vc4tile",
+        "warp_reduce_sum_vc4tile",
+        "cooperative_id_writeback_vc4tile",
+        "shared_transpose_16x16_vc4tile",
+        "qpu_barrier_syncthreads_vc4tile"
+      ]
+    }
+  },
+  "notes": [
+    "M4 uses the canonical feature contract layers: dialect, invalid diagnostic, vc4tile -> ssavc4 lowered IR, ssavc4 -> scheduled vc4 artifact/resource, and hardware CPU/reference comparison when executable.",
+    "Hardware gates are the gold standard and are required for executable VC4Tile features unless a feature is strictly metadata-only and has an explicit feature_gate_contract exception.",
+    "M4 must never lower directly from vc4tile to scheduled vc4; scheduled vc4 remains the QASM-near artifact sink.",
+    "Producer adapters from Triton/IREE/MLIR gpu-like forms are future work after M4."
+  ],
+  "fixture_matrices": {
+    "m4_independent_vector": [
+      "vector_store_smoke_vc4tile",
+      "saxpy_full_vc4tile",
+      "global_store_coalesced_multi_vc4tile",
+      "warp_reduce_sum_vc4tile"
+    ],
+    "m4_cooperative_block": [
+      "cooperative_id_writeback_vc4tile",
+      "shared_transpose_16x16_vc4tile",
+      "qpu_barrier_syncthreads_vc4tile"
+    ],
+    "m4_required": [
+      "vector_store_smoke_vc4tile",
+      "saxpy_full_vc4tile",
+      "global_store_coalesced_multi_vc4tile",
+      "warp_reduce_sum_vc4tile",
+      "cooperative_id_writeback_vc4tile",
+      "shared_transpose_16x16_vc4tile",
+      "qpu_barrier_syncthreads_vc4tile"
+    ]
+  },
+  "slices": {
+    "m4-00-milestone-package": {
+      "title": "M4 milestone package",
+      "expected_end_state": "M4 package files exist, JSON parses, new M4 verifier mechanisms are available, and active scope language is vc4tile -> ssavc4. No compiler implementation source is required.",
+      "verifications": [
+        {
+          "id": "m4-00-package-source-products",
+          "mechanism": "source_products",
+          "description": "M4 package source products exist",
+          "files": [
+            "pro_scripts/milestones/vc4-vc4tile-m4.json",
+            "pro_scripts/vc4_vc4tile_m4_worklist.json",
+            "pro_scripts/vc4_vc4tile_m4_verifications.json",
+            "pro_scripts/vc4_vc4tile_m4_context_profiles.json",
+            "pro_scripts/prompts/vc4_vc4tile_m4/README.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/output_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/m4_handoff.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice00_milestone_package.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice01_dialect_scaffold.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice02_full_op_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice03_lowering_skeleton.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice04_independent_tile_ids_arith_masks.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice05_masked_global_store.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice06_masked_global_load_saxpy.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice07_control_flow_tail_block_args.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice08_rotate_reduce.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice09_cooperative_block_resources.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice10_shared_vpm.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice11_barrier.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice12_final_acceptance.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/gpt_slice_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m4/gpt_failure_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m4/gpt_diagnosis_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m4/codex_mechanical_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m4/codex_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md",
+            "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+            "compiler/docs/codegen/vc4tile-m4-plan.md"
+          ]
+        },
+        {
+          "id": "m4-00-json-parse",
+          "mechanism": "command",
+          "description": "M4 descriptor/worklist/verifications/context profile JSON parses",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json,sys,pathlib\nfor raw in sys.argv[1:]:\n    json.load(open(raw, encoding='utf-8'))\nprint('json-ok')",
+            "pro_scripts/milestones/vc4-vc4tile-m4.json",
+            "pro_scripts/vc4_vc4tile_m4_worklist.json",
+            "pro_scripts/vc4_vc4tile_m4_verifications.json",
+            "pro_scripts/vc4_vc4tile_m4_context_profiles.json"
+          ],
+          "expect_exit_code": 0,
+          "required": true,
+          "stdout_contains": [
+            "json-ok"
+          ]
+        },
+        {
+          "id": "m4-00-new-mechanisms-registered",
+          "mechanism": "command",
+          "description": "Verifier exposes canonical M4 mechanisms",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "mechanisms",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_vc4tile_m4_verifications.json"
+          ],
+          "expect_exit_code": 0,
+          "required": true,
+          "stdout_contains": [
+            "feature_gate_contract",
+            "dialect_contract",
+            "invalid_diagnostic_contract",
+            "lowered_ir_contract",
+            "scheduled_artifact_contract",
+            "hardware_cpu_reference_contract",
+            "milestone_scope_contract",
+            "implementation_integrity_contract",
+            "regression_contract"
+          ]
+        },
+        {
+          "id": "m4-00-scope-contract",
+          "mechanism": "milestone_scope_contract",
+          "description": "M4 package/current docs consistently define M4 as vc4tile -> ssavc4 and keep producer adapters after M4.",
+          "files": [
+            "pro_scripts/vc4_vc4tile_m4_worklist.json",
+            "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+            "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+            "compiler/docs/codegen/vc4tile-m4-plan.md"
+          ],
+          "required_literals": [
+            "vc4tile",
+            "ssavc4"
+          ],
+          "required_regex": [
+            "M4[^\n]{0,160}vc4tile[^\n]{0,160}ssavc4|vc4tile[^\n]{0,80}->[^\n]{0,80}ssavc4|vc4tile[^\n]{0,160}SSAVC4",
+            "(?i)producer[^\n]{0,80}future work after M4"
+          ],
+          "forbidden_literals": [
+            "M4 will lower MLIR `gpu` to SSAVC4",
+            "gpu -> ssavc4 is M4",
+            "M4 is the gpu lowering stage"
+          ]
+        },
+        {
+          "id": "m4-00-regression-contract",
+          "mechanism": "regression_contract",
+          "description": "Mechanical package regression: required M4 mechanisms and existing automation files are present.",
+          "required_mechanisms": [
+            "feature_gate_contract",
+            "dialect_contract",
+            "invalid_diagnostic_contract",
+            "lowered_ir_contract",
+            "scheduled_artifact_contract",
+            "hardware_cpu_reference_contract",
+            "milestone_scope_contract",
+            "implementation_integrity_contract",
+            "regression_contract"
+          ],
+          "required_files": [
+            "pro_scripts/vc4_milestone_verifier.py",
+            "pro_scripts/vc4_milestone_autorun.py",
+            "pro_scripts/vc4_milestone_resume.py",
+            "pro_scripts/vc4_milestone_failure_router.py",
+            "pro_scripts/milestones/vc4-ssavc4-m3.json",
+            "pro_scripts/vc4_ssavc4_m3_verifications.json"
+          ]
+        },
+        {
+          "id": "m4-00-audit-contract",
+          "mechanism": "command",
+          "description": "M4 spec audits against M4 worklist",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "audit-contract",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_vc4tile_m4_verifications.json",
+            "--worklist",
+            "pro_scripts/vc4_vc4tile_m4_worklist.json"
+          ],
+          "expect_exit_code": 0,
+          "required": true
+        }
+      ]
+    },
+    "m4-01-vc4tile-dialect-scaffold": {
+      "title": "VC4Tile dialect scaffold",
+      "expected_end_state": "The separate `vc4tile` dialect exists, is registered with vc4-opt, and has only scaffold-owned smoke tests active.",
+      "verifications": [
+        {
+          "id": "m4-01-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileBase.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.h",
+            "compiler/lib/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileDialect.cpp",
+            "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-01-vc4tile-dialect-visible",
+          "mechanism": "dialect_contract",
+          "feature": "vc4tile_scaffold",
+          "description": "VC4Tile dialect scaffold is visible and named correctly",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileBase.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.h",
+            "compiler/lib/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileDialect.cpp",
+            "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
+          ],
+          "required_ops": [],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "def VC4Tile_Dialect",
+            "VC4TileDialect",
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/show-dialects.mlir"
+          ],
+          "invalid_tests": [],
+          "show_dialects": true
+        },
+        {
+          "id": "m4-01-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "vc4tile_scaffold",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": false,
+                "lowered_ir": false,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-01-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-02-full-op-contract-types-attrs": {
+      "title": "VC4Tile full op/type/attr contract",
+      "expected_end_state": "The full VC4Tile operation/type/attribute contract parses, prints, verifies, and has invalid tests, while later lowering remains sliced.",
+      "verifications": [
+        {
+          "id": "m4-02-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.h",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.h",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileAttrs.cpp",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileTypes.cpp",
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/barrier-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-02-full-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "vc4tile_full_op_contract",
+          "description": "Full VC4Tile op surface exists with roundtrip and invalid tests",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileBase.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileDialect.h",
+            "compiler/lib/Dialect/VC4Tile/IR/CMakeLists.txt",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileDialect.cpp",
+            "compiler/test/Dialect/VC4Tile/show-dialects.mlir",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.h",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.h",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileAttrs.cpp",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileTypes.cpp",
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/barrier-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+          ],
+          "required_ops": [
+            "vc4tile.kernel",
+            "vc4tile.program_id",
+            "vc4tile.lane_range",
+            "vc4tile.masked_load_global",
+            "vc4tile.masked_store_global",
+            "vc4tile.rotate",
+            "vc4tile.reduce",
+            "vc4tile.shared_alloc",
+            "vc4tile.shared_load",
+            "vc4tile.shared_store",
+            "vc4tile.barrier"
+          ],
+          "required_attrs": [
+            "schedule",
+            "tail",
+            "memory_space"
+          ],
+          "required_types": [],
+          "required_patterns": [
+            "NoMemoryEffect|MemoryEffects",
+            "AttrDef|EnumAttr|I32EnumAttrCase",
+            "vector<16x"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/barrier-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-memory.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+          ]
+        },
+        {
+          "id": "m4-02-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "vc4tile_full_op_contract",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "invalid kernel resource diagnostics",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "description": "invalid memory diagnostics",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "description": "invalid cooperative diagnostics",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-cooperative.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-02-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "vc4tile_full_op_contract",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": false,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-02-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-03-lowering-skeleton-and-metadata": {
+      "title": "VC4Tile to SSAVC4 lowering skeleton and metadata",
+      "expected_end_state": "`--convert-vc4tile-to-ssavc4` exists, minimal kernels lower to SSAVC4, launch/resource metadata is generated/carried, and the VC4Tile candidate support runner is installed.",
+      "verifications": [
+        {
+          "id": "m4-03-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/include/vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h",
+            "compiler/lib/Conversion/VC4TileToSSAVC4/CMakeLists.txt",
+            "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+            "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+            "compiler/test/CodeGen/VC4Tile/Hardware/lit.local.cfg.py",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/lit.local.cfg.py"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-03-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "vc4tile_lowering_skeleton",
+          "description": "VC4Tile kernel dialect surface remains available for lowering skeleton",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.kernel"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+          ],
+          "invalid_tests": []
+        },
+        {
+          "id": "m4-03-lowered-ir-minimal",
+          "mechanism": "lowered_ir_contract",
+          "feature": "vc4tile_lowering_skeleton",
+          "description": "Minimal VC4Tile kernel lowers to SSAVC4 with metadata",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-03-lowered-ir-minimal').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-03-lowered-ir-minimal/minimal-kernel.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-03-lowered-ir-minimal/minimal-kernel.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.func",
+            "ssavc4.thread_end",
+            "vc4.launch_abi",
+            "vc4.resource"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-03-scheduled-artifact-minimal",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "vc4tile_lowering_skeleton",
+          "description": "Minimal VC4Tile kernel reaches scheduled VC4 and emits M2-shaped artifacts",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-03-scheduled-artifact-minimal/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "minimal_thrend_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false
+          }
+        },
+        {
+          "id": "m4-03-support-runner-contract",
+          "mechanism": "support_script_contract",
+          "description": "VC4Tile support runner lowers vc4tile -> ssavc4 -> scheduled vc4 before artifact emission and preserves intermediates.",
+          "script": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "required_patterns": [
+            "convert-vc4tile-to-ssavc4",
+            "convert-ssavc4-to-vc4",
+            "vc4-codegen",
+            "lowered.ssavc4.mlir",
+            "scheduled.vc4.mlir",
+            "VC4_CODEGEN_STATE_ROOT"
+          ],
+          "forbidden_literals": [
+            "VC4_TEST_RESULT status=PASS",
+            "reference.qasm"
+          ]
+        },
+        {
+          "id": "m4-03-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "vc4tile_lowering_skeleton",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": false,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": false
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-03-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-04-independent-tile-ids-arith-masks": {
+      "title": "Independent tile IDs, arithmetic, and masks",
+      "expected_end_state": "Request/program IDs, lane range, arithmetic, comparisons, and masks lower to SSAVC4 values without using physical QPU identity.",
+      "verifications": [
+        {
+          "id": "m4-04-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tail-mask.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-04-dialect-contract-ids-masks",
+          "mechanism": "dialect_contract",
+          "feature": "independent_tile_ids",
+          "description": "independent_tile_ids dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.program_id",
+            "vc4tile.lane_range"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+          ]
+        },
+        {
+          "id": "m4-04-lowered-ir-ids-arith-masks",
+          "mechanism": "lowered_ir_contract",
+          "feature": "independent_tile_ids",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-ids-arith-masks').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-ids-arith-masks/ids-arith-masks.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-ids-arith-masks/ids-arith-masks.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.element_number",
+            "ssavc4.uniform.read",
+            "ssavc4.alu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-04-lowered-ir-tail-mask",
+          "mechanism": "lowered_ir_contract",
+          "feature": "tail_masks",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-tail-mask').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/tail-mask.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-tail-mask/tail-mask.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-04-lowered-ir-tail-mask/tail-mask.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.element_number",
+            "ssavc4.make_flags"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-04-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "independent_tile_ids",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "unsupported vector width/type diagnostic remains deterministic",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-04-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "independent_tile_ids",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "tail_masks",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-04-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-05-masked-global-store": {
+      "title": "Masked coalesced global store",
+      "expected_end_state": "Coalesced 16-lane masked global stores lower through SSAVC4 VDW and pass hardware/reference comparison.",
+      "verifications": [
+        {
+          "id": "m4-05-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-masked-global-store.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/candidate/vector_store_smoke_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-05-dialect-contract-masked-store",
+          "mechanism": "dialect_contract",
+          "feature": "masked_global_store",
+          "description": "masked_global_store dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.masked_store_global"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-masked-global-store.mlir"
+          ]
+        },
+        {
+          "id": "m4-05-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "masked_global_store",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "arbitrary/non-coalesced store is rejected or diagnosed",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-masked-global-store.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-05-lowered-ir-masked-store",
+          "mechanism": "lowered_ir_contract",
+          "feature": "masked_global_store",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-05-lowered-ir-masked-store').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-05-lowered-ir-masked-store/masked-global-store.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-05-lowered-ir-masked-store/masked-global-store.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.vdw.store",
+            "ssavc4.element_number"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-05-scheduled-artifact-vector-store",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "masked_global_store",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-05-scheduled-artifact-vector-store/vector_store_smoke_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "vector_store_smoke_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false,
+            "semaphores_per_block": 0,
+            "vpm_rows_per_block": 0,
+            "warps_per_block_max": 1
+          }
+        },
+        {
+          "id": "m4-05-hardware-vector-store",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "masked_global_store",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "vector_store_smoke_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "n": 0
+            },
+            {
+              "n": 1
+            },
+            {
+              "n": 15
+            },
+            {
+              "n": 16
+            },
+            {
+              "n": 17
+            },
+            {
+              "n": 31
+            },
+            {
+              "n": 32
+            },
+            {
+              "n": 33
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-05-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "masked_global_store",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-05-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-06-masked-global-load-saxpy": {
+      "title": "Masked global load and SAXPY",
+      "expected_end_state": "Masked global loads lower through SSAVC4 TMU, and a SAXPY/vector-add VC4Tile fixture passes hardware/reference comparison.",
+      "verifications": [
+        {
+          "id": "m4-06-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/saxpy-independent-vector.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-masked-global-load.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/candidate/saxpy_full_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-06-dialect-contract-masked-load",
+          "mechanism": "dialect_contract",
+          "feature": "masked_global_load",
+          "description": "masked_global_load dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.masked_load_global"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-masked-global-load.mlir"
+          ]
+        },
+        {
+          "id": "m4-06-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "masked_global_load",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "unsupported masked load form is rejected or diagnosed",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-masked-global-load.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-06-lowered-ir-masked-load",
+          "mechanism": "lowered_ir_contract",
+          "feature": "masked_global_load",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-masked-load').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-masked-load/masked-global-load.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-masked-load/masked-global-load.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.tmu.request",
+            "ssavc4.tmu.read"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-06-lowered-ir-saxpy",
+          "mechanism": "lowered_ir_contract",
+          "feature": "saxpy_independent_vector",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-saxpy').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/saxpy-independent-vector.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-saxpy/saxpy-independent-vector.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-lowered-ir-saxpy/saxpy-independent-vector.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.tmu.request",
+            "ssavc4.tmu.read",
+            "ssavc4.alu.mul",
+            "ssavc4.alu.add",
+            "ssavc4.vdw.store"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-06-scheduled-artifact-saxpy",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "saxpy_independent_vector",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-06-scheduled-artifact-saxpy/saxpy_full_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "saxpy_full_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false,
+            "semaphores_per_block": 0,
+            "vpm_rows_per_block": 0,
+            "warps_per_block_max": 1
+          }
+        },
+        {
+          "id": "m4-06-hardware-saxpy",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "saxpy_independent_vector",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "saxpy_full_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "n": 0
+            },
+            {
+              "n": 1
+            },
+            {
+              "n": 16
+            },
+            {
+              "n": 17
+            },
+            {
+              "n": 191
+            },
+            {
+              "n": 192
+            },
+            {
+              "n": 193
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-06-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "masked_global_load",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "saxpy_independent_vector",
+              "status": "implemented",
+              "requires": {
+                "dialect": false,
+                "invalid_diagnostics": false,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-06-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-07-control-flow-tail-block-args": {
+      "title": "Control flow, tail masks, and block args",
+      "expected_end_state": "Uniform branches, simple loops/merges, and tail masks lower through SSAVC4 successor operands/block arguments and pass hardware comparison.",
+      "verifications": [
+        {
+          "id": "m4-07-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/uniform-control-flow.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/block-args-tail-loop.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-divergent-side-effecting-branch.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/global-store-coalesced-multi-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/block-args-loop-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/candidate/global_store_coalesced_multi_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-07-dialect-contract-block-args-tail",
+          "mechanism": "dialect_contract",
+          "feature": "block_args_tail",
+          "description": "block_args_tail dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.kernel",
+            "vc4tile.lane_range"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir"
+          ],
+          "invalid_tests": []
+        },
+        {
+          "id": "m4-07-dialect-contract-control-flow-tail",
+          "mechanism": "dialect_contract",
+          "feature": "control_flow_tail",
+          "description": "control_flow_tail dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.kernel",
+            "vc4tile.lane_range"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-divergent-side-effecting-branch.mlir"
+          ]
+        },
+        {
+          "id": "m4-07-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "control_flow_tail",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "divergent side-effecting branch rejected",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-divergent-side-effecting-branch.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-07-lowered-ir-control-flow",
+          "mechanism": "lowered_ir_contract",
+          "feature": "control_flow_tail",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-control-flow').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/uniform-control-flow.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-control-flow/uniform-control-flow.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-control-flow/uniform-control-flow.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.cond_br",
+            "ssavc4.br"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-07-lowered-ir-block-args-tail",
+          "mechanism": "lowered_ir_contract",
+          "feature": "block_args_tail",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-block-args-tail').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/block-args-tail-loop.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-block-args-tail/block-args-tail-loop.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-lowered-ir-block-args-tail/block-args-tail-loop.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.cond_br",
+            "ssavc4.br",
+            "^"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-07-scheduled-artifact-global-store-multi",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "control_flow_tail",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-07-scheduled-artifact-global-store-multi/global_store_coalesced_multi_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "global_store_coalesced_multi_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false,
+            "semaphores_per_block": 0,
+            "vpm_rows_per_block": 0,
+            "warps_per_block_max": 1
+          }
+        },
+        {
+          "id": "m4-07-hardware-global-store-multi",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "control_flow_tail",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "global_store_coalesced_multi_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "n": 1
+            },
+            {
+              "n": 15
+            },
+            {
+              "n": 16
+            },
+            {
+              "n": 17
+            },
+            {
+              "n": 31
+            },
+            {
+              "n": 32
+            },
+            {
+              "n": 33
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-07-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "control_flow_tail",
+              "status": "implemented"
+            },
+            {
+              "name": "block_args_tail",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": false,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-07-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-08-rotate-reduce": {
+      "title": "Warp-local rotate and reductions",
+      "expected_end_state": "VC4Tile rotate/reduce lower through SSAVC4 rotate/reduction forms and pass a warp-reduce hardware fixture.",
+      "verifications": [
+        {
+          "id": "m4-08-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-rotate-reduce.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/candidate/warp_reduce_sum_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-08-dialect-contract-rotate-reduce",
+          "mechanism": "dialect_contract",
+          "feature": "rotate_reduce",
+          "description": "rotate_reduce dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.rotate",
+            "vc4tile.reduce"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-rotate-reduce.mlir"
+          ]
+        },
+        {
+          "id": "m4-08-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "rotate_reduce",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "unsupported reduction/rotate form rejected",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-rotate-reduce.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-08-lowered-ir-rotate-reduce",
+          "mechanism": "lowered_ir_contract",
+          "feature": "rotate_reduce",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-08-lowered-ir-rotate-reduce').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-08-lowered-ir-rotate-reduce/rotate-reduction.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-08-lowered-ir-rotate-reduce/rotate-reduction.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.rotate"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-08-scheduled-artifact-warp-reduce",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "rotate_reduce",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-08-scheduled-artifact-warp-reduce/warp_reduce_sum_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "warp_reduce_sum_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false,
+            "semaphores_per_block": 0,
+            "vpm_rows_per_block": 0,
+            "warps_per_block_max": 1
+          }
+        },
+        {
+          "id": "m4-08-hardware-warp-reduce",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "rotate_reduce",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "warp_reduce_sum_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-08-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "rotate_reduce",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-08-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-09-cooperative-block-resources": {
+      "title": "Cooperative block identity and resources",
+      "expected_end_state": "VC4Tile cooperative metadata lowers to existing launch/resource metadata and logical block/warp identity works on hardware without physical QPU identity.",
+      "verifications": [
+        {
+          "id": "m4-09-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/cooperative-block-resources.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-cooperative-resource-limits.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cooperative-id-writeback-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/candidate/cooperative_id_writeback_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-09-dialect-contract-cooperative",
+          "mechanism": "dialect_contract",
+          "feature": "cooperative_block_resources",
+          "description": "cooperative_block_resources dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.block_id",
+            "vc4tile.warp_id"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/ids-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-cooperative-resource-limits.mlir"
+          ]
+        },
+        {
+          "id": "m4-09-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "cooperative_block_resources",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "cooperative resource limits rejected",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-cooperative-resource-limits.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-09-lowered-ir-cooperative-resources",
+          "mechanism": "lowered_ir_contract",
+          "feature": "cooperative_block_resources",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-09-lowered-ir-cooperative-resources').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/cooperative-block-resources.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-09-lowered-ir-cooperative-resources/cooperative-block-resources.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-09-lowered-ir-cooperative-resources/cooperative-block-resources.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "vc4.resource",
+            "logical_warp_id",
+            "logical_block_id"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-09-scheduled-artifact-cooperative-id",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "cooperative_block_resources",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-09-scheduled-artifact-cooperative-id/cooperative_id_writeback_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "cooperative_id_writeback_vc4tile",
+            "schedule_mode": "cooperative_block",
+            "uses_barrier": false,
+            "uses_shared_vpm": false
+          }
+        },
+        {
+          "id": "m4-09-hardware-cooperative-id",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "cooperative_block_resources",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "cooperative_id_writeback_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "warps_per_block": 2
+            },
+            {
+              "warps_per_block": 4
+            },
+            {
+              "warps_per_block": 12
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-09-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "cooperative_block_resources",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-09-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-10-shared-vpm": {
+      "title": "Shared VPM tile memory",
+      "expected_end_state": "VC4Tile shared VPM tile allocation/load/store lower to SSAVC4 VPM ops/resource metadata and pass hardware comparison.",
+      "verifications": [
+        {
+          "id": "m4-10-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-shared-vpm.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/candidate/shared_transpose_16x16_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-10-dialect-contract-shared-vpm",
+          "mechanism": "dialect_contract",
+          "feature": "shared_vpm",
+          "description": "shared_vpm dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.shared_alloc",
+            "vc4tile.shared_load",
+            "vc4tile.shared_store"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-shared-vpm.mlir"
+          ]
+        },
+        {
+          "id": "m4-10-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "shared_vpm",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "invalid shared VPM layout/resource rejected",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-shared-vpm.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-10-lowered-ir-shared-vpm",
+          "mechanism": "lowered_ir_contract",
+          "feature": "shared_vpm",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-10-lowered-ir-shared-vpm').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-lowered-ir-shared-vpm/shared-vpm.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-lowered-ir-shared-vpm/shared-vpm.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.vpm.write",
+            "ssavc4.vpm.read",
+            "vc4.resource"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-10-scheduled-artifact-shared-transpose",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "shared_vpm",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-scheduled-artifact-shared-transpose/shared_transpose_16x16_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "shared_transpose_16x16_vc4tile",
+            "schedule_mode": "cooperative_block",
+            "uses_shared_vpm": true
+          }
+        },
+        {
+          "id": "m4-10-hardware-shared-transpose",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "shared_transpose_16x16_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "warps_per_block": 4
+            },
+            {
+              "warps_per_block": 12
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-10-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "shared_vpm",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-10-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-11-barrier": {
+      "title": "Cooperative barrier",
+      "expected_end_state": "VC4Tile barrier lowers through SSAVC4 barrier/semaphore support with full-residency metadata and passes repeated synchronization hardware comparison.",
+      "verifications": [
+        {
+          "id": "m4-11-source-products",
+          "mechanism": "source_products",
+          "description": "Source products exist",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir",
+            "compiler/test/Dialect/VC4Tile/invalid-barrier.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/candidate/qpu_barrier_syncthreads_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-11-dialect-contract-barrier",
+          "mechanism": "dialect_contract",
+          "feature": "barrier",
+          "description": "barrier dialect surface exists",
+          "dialect": "vc4tile",
+          "required_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_ops": [
+            "vc4tile.barrier"
+          ],
+          "required_attrs": [],
+          "required_types": [],
+          "required_patterns": [
+            "vc4tile"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/barrier-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/invalid-barrier.mlir"
+          ]
+        },
+        {
+          "id": "m4-11-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "barrier",
+          "description": "Invalid diagnostics are deterministic",
+          "cases": [
+            {
+              "description": "barrier outside cooperative block or divergent barrier rejected",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/invalid-barrier.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m4-11-lowered-ir-barrier",
+          "mechanism": "lowered_ir_contract",
+          "feature": "barrier",
+          "description": "Lowered IR shape",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-11-lowered-ir-barrier').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-lowered-ir-barrier/barrier.ssavc4.mlir"
+              ]
+            }
+          ],
+          "files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-lowered-ir-barrier/barrier.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.barrier",
+            "vc4.resource"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m4-11-scheduled-artifact-barrier",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "barrier",
+          "description": "Scheduled artifact pipeline",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/input.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-scheduled-artifact-barrier/qpu_barrier_syncthreads_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "qpu_barrier_syncthreads_vc4tile",
+            "schedule_mode": "cooperative_block",
+            "uses_shared_vpm": true,
+            "uses_barrier": true,
+            "semaphores_per_block": 4
+          }
+        },
+        {
+          "id": "m4-11-hardware-barrier",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "barrier",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "qpu_barrier_syncthreads_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {
+              "warps_per_block": 2,
+              "iterations": 4
+            },
+            {
+              "warps_per_block": 12,
+              "iterations": 64
+            },
+            {
+              "warps_per_block": 4,
+              "resident_blocks": 2,
+              "iterations": 32
+            }
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-11-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "barrier",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "m4-11-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        }
+      ]
+    },
+    "m4-12-final-acceptance": {
+      "title": "M4 final acceptance",
+      "expected_end_state": "All implemented VC4Tile features satisfy dialect, invalid, lowered-IR, scheduled/artifact, and hardware CPU-reference contracts; full check-vc4 and M3/M2 lower-half regressions pass; final Codex integrity audit returns YES.",
+      "verifications": [
+        {
+          "id": "m4-12-scope-contract",
+          "mechanism": "milestone_scope_contract",
+          "description": "M4 package/current docs consistently define M4 as vc4tile -> ssavc4 and keep producer adapters after M4.",
+          "files": [
+            "pro_scripts/vc4_vc4tile_m4_worklist.json",
+            "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+            "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+            "compiler/docs/codegen/vc4tile-m4-plan.md"
+          ],
+          "required_literals": [
+            "vc4tile",
+            "ssavc4"
+          ],
+          "required_regex": [
+            "M4[^\n]{0,160}vc4tile[^\n]{0,160}ssavc4|vc4tile[^\n]{0,80}->[^\n]{0,80}ssavc4|vc4tile[^\n]{0,160}SSAVC4",
+            "(?i)producer[^\n]{0,80}future work after M4"
+          ],
+          "forbidden_literals": [
+            "M4 will lower MLIR `gpu` to SSAVC4",
+            "gpu -> ssavc4 is M4",
+            "M4 is the gpu lowering stage"
+          ]
+        },
+        {
+          "id": "m4-12-feature-gate-all",
+          "mechanism": "feature_gate_contract",
+          "description": "Every implemented feature in this slice has the canonical M4 verification layers required by its feature status.",
+          "scope": "all",
+          "features": [
+            {
+              "name": "vc4tile_scaffold",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": false,
+                "lowered_ir": false,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "vc4tile_full_op_contract",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": false,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "vc4tile_lowering_skeleton",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": false,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "independent_tile_ids",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "tail_masks",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "masked_global_store",
+              "status": "implemented"
+            },
+            {
+              "name": "masked_global_load",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "saxpy_independent_vector",
+              "status": "implemented",
+              "requires": {
+                "dialect": false,
+                "invalid_diagnostics": false,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "control_flow_tail",
+              "status": "implemented"
+            },
+            {
+              "name": "block_args_tail",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": false,
+                "hardware_cpu_reference": false
+              }
+            },
+            {
+              "name": "rotate_reduce",
+              "status": "implemented"
+            },
+            {
+              "name": "cooperative_block_resources",
+              "status": "implemented"
+            },
+            {
+              "name": "shared_vpm",
+              "status": "implemented"
+            },
+            {
+              "name": "barrier",
+              "status": "implemented"
+            }
+          ],
+          "required": true
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "description": "Build vc4-opt",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "description": "Build check-vc4",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-12-static-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Static anti-shortcut scans for M4 architecture.",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        },
+        {
+          "id": "m4-12-codex-implementation-integrity-audit",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Read-only Codex implementation-integrity audit. This is the human-like anti-cheat classifier for the completed M4 implementation.",
+          "focus": "completed M4 VC4Tile dialect and VC4TileToSSAVC4 implementation",
+          "codex_exec": {
+            "enabled": true,
+            "prompt_file": "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md",
+            "model": "gpt-5.5",
+            "reasoning_effort": "high",
+            "verbosity": "high",
+            "sandbox": "read-only",
+            "ask_for_approval": "never",
+            "classification_field": "integrity_pass",
+            "pass_value": "YES",
+            "timeout_sec": 1800
+          },
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass may exist.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**",
+                "compiler/tools/vc4-opt/**"
+              ],
+              "pattern": "VC4TileToVC4|convert-vc4tile-to-vc4|convert_vc4tile_to_vc4"
+            },
+            {
+              "description": "No producer lowering may be implemented during M4.",
+              "globs": [
+                "compiler/include/vc4/Conversion/**",
+                "compiler/lib/Conversion/**"
+              ],
+              "pattern": "GPUToVC4Tile|GPUToSSAVC4|TritonToVC4Tile|IREEToVC4Tile|StableHLOToVC4Tile|Torch.*VC4Tile"
+            },
+            {
+              "description": "No fixture-name special-casing in VC4Tile conversion.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "vector_store_smoke_vc4tile|saxpy_full_vc4tile|warp_reduce_sum_vc4tile|qpu_barrier_syncthreads_vc4tile|shared_transpose_16x16_vc4tile"
+            },
+            {
+              "description": "Do not use physical QPU_NUMBER for logical identity.",
+              "globs": [
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "QPU_NUMBER|qpu_num|qpuNum|physical_qpu"
+            }
+          ]
+        },
+        {
+          "id": "m4-12-regression-contract",
+          "mechanism": "regression_contract",
+          "description": "Cumulative M4 lower-half regression: run full check-vc4 and the existing M3 milestone verifier.",
+          "required_mechanisms": [
+            "feature_gate_contract",
+            "dialect_contract",
+            "invalid_diagnostic_contract",
+            "lowered_ir_contract",
+            "scheduled_artifact_contract",
+            "hardware_cpu_reference_contract",
+            "milestone_scope_contract",
+            "implementation_integrity_contract",
+            "regression_contract"
+          ],
+          "required_files": [
+            "pro_scripts/milestones/vc4-ssavc4-m3.json",
+            "pro_scripts/vc4_ssavc4_m3_verifications.json",
+            "pro_scripts/vc4_vc4tile_m4_verifications.json"
+          ],
+          "commands": [
+            {
+              "name": "check-vc4",
+              "argv": [
+                "ninja",
+                "-C",
+                "compiler/build",
+                "check-vc4"
+              ],
+              "expect_exit_code": 0,
+              "timeout_sec": 7200
+            },
+            {
+              "name": "m3-cumulative-regression",
+              "argv": [
+                "{python}",
+                "pro_scripts/vc4_milestone_verifier.py",
+                "verify",
+                "--repo",
+                "{repo}",
+                "--milestone-config",
+                "pro_scripts/milestones/vc4-ssavc4-m3.json",
+                "--slice",
+                "all",
+                "--out",
+                ".vc4_auto/vc4tile_m4/regressions/m3-final.json",
+                "--timeout-sec",
+                "7200",
+                "--keep-going"
+              ],
+              "expect_exit_code": 0,
+              "timeout_sec": 7200
+            }
+          ]
+        },
+        {
+          "id": "m4-12-hardware-vector-store",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "masked_global_store",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "vector_store_smoke_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/vector_store_smoke_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-saxpy",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "saxpy_independent_vector",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "saxpy_full_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/saxpy_full_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/saxpy_full_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/saxpy_full_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-global-store-multi",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "control_flow_tail",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "global_store_coalesced_multi_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/global_store_coalesced_multi_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_store_coalesced_multi_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/global_store_coalesced_multi_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-warp-reduce",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "rotate_reduce",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "warp_reduce_sum_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/warp_reduce_sum_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-cooperative-id",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "cooperative_block_resources",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "cooperative_id_writeback_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/cooperative_id_writeback_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/cooperative_id_writeback_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/cooperative_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-shared-vpm",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "shared_transpose_16x16_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/shared_transpose_16x16_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/shared_transpose_16x16_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        },
+        {
+          "id": "m4-12-hardware-barrier",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "barrier",
+          "description": "Hardware CPU/reference contract",
+          "fixture": "qpu_barrier_syncthreads_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/qpu_barrier_syncthreads_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/qpu_barrier_syncthreads_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/qpu_barrier_syncthreads_vc4tile/candidate_work/.vc4_candidate_run_attempt.log"
+        }
+      ]
+    }
+  }
+}

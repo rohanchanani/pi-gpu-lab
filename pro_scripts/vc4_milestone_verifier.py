@@ -2071,6 +2071,625 @@ def mechanism_negative_diagnostic(ctx: VerifierContext, slice_id: str, v: Mappin
     return make_success(ctx, slice_id, v, message="negative diagnostic passed", duration=result.duration_sec, details={"log_path": str(log_path)})
 
 
+# ---------------------------------------------------------------------------
+# M4-style feature contract verifier mechanisms
+# ---------------------------------------------------------------------------
+
+FEATURE_REQUIREMENT_TO_MECHANISM = {
+    "dialect": "dialect_contract",
+    "invalid_diagnostics": "invalid_diagnostic_contract",
+    "lowered_ir": "lowered_ir_contract",
+    "scheduled_artifact": "scheduled_artifact_contract",
+    "hardware_cpu_reference": "hardware_cpu_reference_contract",
+}
+
+
+def _verification_feature_names(v: Mapping[str, Any]) -> set[str]:
+    names: set[str] = set()
+    for key in ("feature", "name"):
+        value = v.get(key)
+        if isinstance(value, str) and value:
+            names.add(value)
+    for key in ("features", "feature_tags", "semantic_tags"):
+        value = v.get(key)
+        if isinstance(value, list):
+            for item in value:
+                if isinstance(item, Mapping):
+                    raw_name = item.get("name")
+                    if isinstance(raw_name, str) and raw_name:
+                        names.add(raw_name)
+                elif str(item):
+                    names.add(str(item))
+    return names
+
+
+def _slice_verifications(ctx: VerifierContext, slice_id: str) -> List[Mapping[str, Any]]:
+    sspec = get_slices(ctx.spec).get(slice_id, {})
+    raw = sspec.get("verifications") if isinstance(sspec, Mapping) else []
+    return [v for v in raw if isinstance(v, Mapping)] if isinstance(raw, list) else []
+
+
+def _required_feature_entries(v: Mapping[str, Any]) -> List[Mapping[str, Any]]:
+    raw = v.get("features")
+    if isinstance(raw, Mapping):
+        return [{"name": str(name), **(value if isinstance(value, Mapping) else {"requires": value})} for name, value in raw.items()]
+    if isinstance(raw, list):
+        out: List[Mapping[str, Any]] = []
+        for item in raw:
+            if isinstance(item, Mapping):
+                out.append(item)
+            elif isinstance(item, str):
+                out.append({"name": item, "status": "implemented"})
+        return out
+    return []
+
+
+def mechanism_feature_gate_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    """Ensure implemented features have their required verification layers.
+
+    The feature gate is deliberately meta-level: a slice declares implemented
+    feature names and the verifier checks that corresponding per-feature contract
+    mechanisms are present in the requested scope.  This keeps M4 from accepting
+    a feature with only one narrow happy-path check.
+    """
+    started = time.time()
+    scope = str(v.get("scope", "slice"))
+    if scope not in {"slice", "all"}:
+        return make_failure(ctx, slice_id, v, "feature_gate_contract scope must be 'slice' or 'all'", expected=["slice", "all"], actual=scope)
+    if scope == "slice":
+        candidates = _slice_verifications(ctx, slice_id)
+    else:
+        candidates = []
+        for _sid, sspec in get_slices(ctx.spec).items():
+            raw = sspec.get("verifications") if isinstance(sspec, Mapping) else []
+            if isinstance(raw, list):
+                candidates.extend(x for x in raw if isinstance(x, Mapping))
+
+    failures: List[Dict[str, Any]] = []
+    present = []
+    for cv in candidates:
+        present.append({
+            "id": cv.get("id"),
+            "mechanism": cv.get("mechanism"),
+            "features": sorted(_verification_feature_names(cv)),
+        })
+    for entry in _required_feature_entries(v):
+        name = str(entry.get("name", ""))
+        if not name:
+            failures.append({"feature": "<missing>", "error": "feature entry missing name"})
+            continue
+        status = str(entry.get("status", "implemented"))
+        if status not in {"implemented", "active", "required"}:
+            continue
+        requires = entry.get("requires") if isinstance(entry.get("requires"), Mapping) else {}
+        if not requires:
+            requires = {k: True for k in FEATURE_REQUIREMENT_TO_MECHANISM}
+        for req_name, raw_required in requires.items():
+            if isinstance(raw_required, Mapping):
+                required = bool(raw_required.get("required", True))
+                reason = raw_required.get("reason")
+            else:
+                required = bool(raw_required)
+                reason = None
+            if not required:
+                # Documented non-requirements are acceptable; the feature gate
+                # records them in details but does not fail.
+                continue
+            mechanism = FEATURE_REQUIREMENT_TO_MECHANISM.get(str(req_name), str(req_name))
+            matched = False
+            for cv in candidates:
+                if str(cv.get("mechanism", "")) != mechanism:
+                    continue
+                cfeatures = _verification_feature_names(cv)
+                if name in cfeatures or "*" in cfeatures or bool(cv.get("applies_to_all_features", False)):
+                    matched = True
+                    break
+            if not matched:
+                failures.append({
+                    "feature": name,
+                    "requirement": req_name,
+                    "expected_mechanism": mechanism,
+                    "reason": reason,
+                })
+    if failures:
+        return make_failure(ctx, slice_id, v, "implemented features are missing required verification layers", actual={"missing": failures, "present": present}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="feature gate contract passed", details={"scope": scope, "present": present}, duration=time.time() - started)
+
+
+def _paths_from_spec(ctx: VerifierContext, value: Any) -> List[Path]:
+    paths: List[Path] = []
+    for raw in as_list(value):
+        if raw is None:
+            continue
+        s = str(raw)
+        if "*" in s or "?" in s or "[" in s:
+            paths.extend(ctx.repo_path(m) for m in glob_repo(ctx.repo, s))
+        else:
+            paths.append(resolve_repo_or_auto_path(ctx, s))
+    # de-dupe preserving order
+    out: List[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            out.append(path)
+            seen.add(key)
+    return out
+
+
+def _read_existing_texts(paths: Sequence[Path]) -> Tuple[Dict[str, str], List[str]]:
+    texts: Dict[str, str] = {}
+    missing: List[str] = []
+    for path in paths:
+        if not path.exists():
+            missing.append(str(path))
+            continue
+        if path.is_file():
+            texts[str(path)] = read_text(path)
+    return texts, missing
+
+
+def mechanism_dialect_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    dialect = str(v.get("dialect", v.get("dialect_name", "")))
+    files = _paths_from_spec(ctx, as_list(v.get("required_files")) + as_list(v.get("files")))
+    globs = [str(x) for x in as_list(v.get("required_globs")) + as_list(v.get("globs"))]
+    for pattern in globs:
+        files.extend(ctx.repo_path(m) for m in glob_repo(ctx.repo, pattern))
+    texts, missing = _read_existing_texts(files)
+    required_ops = [str(x) for x in as_list(v.get("required_ops"))]
+    required_attrs = [str(x) for x in as_list(v.get("required_attrs"))]
+    required_types = [str(x) for x in as_list(v.get("required_types"))]
+    required_patterns = [str(x) for x in as_list(v.get("required_patterns"))]
+    combined = "\n".join(texts.values())
+    missing_ops = [op for op in required_ops if op not in combined]
+    missing_attrs = [attr for attr in required_attrs if attr not in combined]
+    missing_types = [typ for typ in required_types if typ not in combined]
+    missing_patterns = [pat for pat in required_patterns if not re.search(pat, combined, flags=re.S)]
+
+    roundtrip_tests = [normalize_repo_relpath(str(x)) for x in as_list(v.get("roundtrip_tests"))]
+    invalid_tests = [normalize_repo_relpath(str(x)) for x in as_list(v.get("invalid_tests"))]
+    missing_tests = [p for p in roundtrip_tests + invalid_tests if not ctx.repo_path(p).exists()]
+
+    show_details: Optional[Dict[str, Any]] = None
+    if v.get("show_dialects"):
+        try:
+            tool = ctx.resolve_tool(str(v.get("tool", "vc4-opt")))
+            log_path = ctx.command_log_path(slice_id, str(v.get("id", "dialect_contract")) + "_show_dialects")
+            result = ctx.run_command([tool, "--show-dialects"], cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+            show_details = {"exit_code": result.exit_code, "log_path": str(log_path)}
+            if not result.ok or (dialect and dialect not in result.stdout):
+                return make_failure(ctx, slice_id, v, "dialect visibility check failed", expected={"dialect": dialect}, actual={"exit_code": result.exit_code, "stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr), "log_path": str(log_path)}, command_result=result)
+        except VerificationError as exc:
+            return make_failure(ctx, slice_id, v, str(exc), actual=exc.details, duration=time.time() - started)
+
+    if missing or missing_ops or missing_attrs or missing_types or missing_patterns or missing_tests:
+        return make_failure(
+            ctx, slice_id, v, "dialect contract failed",
+            expected={"dialect": dialect, "required_ops": required_ops, "required_attrs": required_attrs, "required_types": required_types, "required_patterns": required_patterns, "roundtrip_tests": roundtrip_tests, "invalid_tests": invalid_tests},
+            actual={"missing_files": missing, "missing_ops": missing_ops, "missing_attrs": missing_attrs, "missing_types": missing_types, "missing_patterns": missing_patterns, "missing_tests": missing_tests},
+            duration=time.time() - started,
+        )
+    return make_success(ctx, slice_id, v, message="dialect contract passed", details={"dialect": dialect, "files_checked": list(texts), "show_dialects": show_details}, duration=time.time() - started)
+
+
+def _run_negative_case(ctx: VerifierContext, slice_id: str, parent: Mapping[str, Any], case: Mapping[str, Any], index: int) -> Tuple[bool, Dict[str, Any]]:
+    argv = case.get("argv") or case.get("command")
+    if not isinstance(argv, list) or not argv:
+        return False, {"case": index, "error": "case requires argv array"}
+    cmd = expand_command(ctx, argv, parent)
+    cwd = ctx.repo_path(str(case.get("cwd", parent.get("cwd", ".")))) if (case.get("cwd") or parent.get("cwd")) else ctx.repo
+    log_path = ctx.command_log_path(slice_id, f"{parent.get('id', 'invalid_diagnostic_contract')}_case_{index}")
+    merged = dict(parent)
+    merged.update(case)
+    result = ctx.run_command(cmd, cwd=cwd, timeout_sec=verification_timeout_sec(ctx, merged), log_path=log_path)
+    expect_exit = case.get("expect_exit_code", parent.get("expect_exit_code", "nonzero"))
+    if expect_exit == "nonzero":
+        exit_ok = result.exit_code != 0
+    else:
+        exit_ok = result.exit_code == int(expect_exit)
+    stdout_contains = [str(x) for x in as_list(case.get("stdout_contains", parent.get("stdout_contains")))]
+    stderr_contains = [str(x) for x in as_list(case.get("stderr_contains", parent.get("stderr_contains")))]
+    combined_contains = [str(x) for x in as_list(case.get("contains", parent.get("contains")))]
+    combined = result.stdout + "\n" + result.stderr
+    missing_stdout = [s for s in stdout_contains if s not in result.stdout]
+    missing_stderr = [s for s in stderr_contains if s not in result.stderr]
+    missing_combined = [s for s in combined_contains if s not in combined]
+    ok = exit_ok and not missing_stdout and not missing_stderr and not missing_combined
+    return ok, {
+        "case": index,
+        "description": case.get("description", ""),
+        "exit_code": result.exit_code,
+        "expected_exit": expect_exit,
+        "missing_stdout": missing_stdout,
+        "missing_stderr": missing_stderr,
+        "missing_combined": missing_combined,
+        "log_path": str(log_path),
+        "stdout_tail": tail(result.stdout),
+        "stderr_tail": tail(result.stderr),
+    }
+
+
+def mechanism_invalid_diagnostic_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    cases = v.get("cases")
+    if not isinstance(cases, list) or not cases:
+        # Compatibility shorthand: a single argv on the verification itself.
+        cases = [v]
+    results = []
+    failures = []
+    for i, case in enumerate(cases):
+        if not isinstance(case, Mapping):
+            failures.append({"case": i, "error": "case is not an object"})
+            continue
+        ok, details = _run_negative_case(ctx, slice_id, v, case, i)
+        results.append(details)
+        if not ok:
+            failures.append(details)
+    if failures:
+        return make_failure(ctx, slice_id, v, "invalid diagnostic contract failed", actual={"failures": failures, "results": results}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="invalid diagnostic contract passed", details={"results": results}, duration=time.time() - started)
+
+
+def _run_contract_steps(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any], default_name: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    steps_raw = v.get("steps")
+    if not isinstance(steps_raw, list):
+        if isinstance(v.get("argv"), list):
+            steps_raw = [{"name": default_name, "argv": v.get("argv")}]
+        else:
+            steps_raw = []
+    results: List[Dict[str, Any]] = []
+    failures: List[Dict[str, Any]] = []
+    for i, step in enumerate(steps_raw):
+        if not isinstance(step, Mapping):
+            failures.append({"step": i, "error": "step is not object"})
+            continue
+        argv = step.get("argv")
+        if not isinstance(argv, list) or not argv:
+            failures.append({"step": i, "error": "step requires argv array"})
+            continue
+        merged = dict(v)
+        merged.update(step)
+        name = str(step.get("name", f"{default_name}_{i}"))
+        log_path = ctx.command_log_path(slice_id, f"{v.get('id', default_name)}_{name}")
+        result = ctx.run_command(expand_command(ctx, argv, v), cwd=ctx.repo_path(str(step.get("cwd", v.get("cwd", ".")))) if (step.get("cwd") or v.get("cwd")) else ctx.repo, timeout_sec=verification_timeout_sec(ctx, merged), log_path=log_path)
+        expected_exit = int(step.get("expect_exit_code", v.get("expect_exit_code", 0)))
+        missing_stdout = [str(x) for x in as_list(step.get("stdout_contains")) if str(x) not in result.stdout]
+        missing_stderr = [str(x) for x in as_list(step.get("stderr_contains")) if str(x) not in result.stderr]
+        rec = {"step": i, "name": name, "exit_code": result.exit_code, "log_path": str(log_path), "missing_stdout": missing_stdout, "missing_stderr": missing_stderr}
+        results.append(rec)
+        if result.exit_code != expected_exit or missing_stdout or missing_stderr or result.timed_out:
+            rec.update({"stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr), "timed_out": result.timed_out})
+            failures.append(rec)
+    return results, failures
+
+
+def _check_text_expectations(ctx: VerifierContext, v: Mapping[str, Any], *, default_paths: Any = None) -> Dict[str, Any]:
+    paths = _paths_from_spec(ctx, v.get("inspect_files", default_paths or v.get("output", v.get("output_file"))))
+    texts, missing = _read_existing_texts(paths)
+    combined = "\n".join(texts.values())
+    must_contain = [str(x) for x in as_list(v.get("must_contain"))]
+    must_not_contain = [str(x) for x in as_list(v.get("must_not_contain"))]
+    regex_must_contain = [str(x) for x in as_list(v.get("regex_must_contain"))]
+    regex_must_not_contain = [str(x) for x in as_list(v.get("regex_must_not_contain"))]
+    return {
+        "files_checked": list(texts),
+        "missing_files": missing,
+        "missing_literals": [s for s in must_contain if s not in combined],
+        "forbidden_literals": [s for s in must_not_contain if s in combined],
+        "missing_regex": [s for s in regex_must_contain if not re.search(s, combined, flags=re.S)],
+        "forbidden_regex": [s for s in regex_must_not_contain if re.search(s, combined, flags=re.S)],
+    }
+
+
+def mechanism_lowered_ir_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "lower")
+    checks = _check_text_expectations(ctx, v)
+    failures = step_failures[:]
+    if any(checks[k] for k in ("missing_files", "missing_literals", "forbidden_literals", "missing_regex", "forbidden_regex")):
+        failures.append({"text_expectations": checks})
+    if failures:
+        return make_failure(ctx, slice_id, v, "lowered IR contract failed", actual={"step_results": step_results, "checks": checks, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="lowered IR contract passed", details={"step_results": step_results, "checks": checks}, duration=time.time() - started)
+
+
+def _check_artifact_files(ctx: VerifierContext, bundle: Path, required: Sequence[str], forbidden: Sequence[str]) -> Dict[str, Any]:
+    missing = []
+    for raw in required:
+        pattern = str(raw)
+        if any(ch in pattern for ch in "*?["):
+            if not list(bundle.glob(pattern)):
+                missing.append(pattern)
+        elif not (bundle / pattern).exists():
+            missing.append(pattern)
+    present_forbidden = []
+    for raw in forbidden:
+        pattern = str(raw)
+        if any(ch in pattern for ch in "*?["):
+            present_forbidden.extend(p.relative_to(bundle).as_posix() for p in bundle.glob(pattern))
+        elif (bundle / pattern).exists():
+            present_forbidden.append(pattern)
+    return {"missing_required_artifacts": missing, "forbidden_artifacts_present": present_forbidden}
+
+
+def mechanism_scheduled_artifact_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "artifact")
+    checks = _check_text_expectations(ctx, v, default_paths=v.get("intermediate_files"))
+    failures = step_failures[:]
+    if any(checks[k] for k in ("missing_files", "missing_literals", "forbidden_literals", "missing_regex", "forbidden_regex")):
+        failures.append({"text_expectations": checks})
+
+    artifact_details: Dict[str, Any] = {}
+    if v.get("bundle"):
+        bundle = bundle_path(ctx, v)
+        required_artifacts = [str(x) for x in as_list(v.get("expected_artifacts"))]
+        forbidden_artifacts = [str(x) for x in as_list(v.get("forbidden_artifacts"))]
+        artifact_details.update(_check_artifact_files(ctx, bundle, required_artifacts, forbidden_artifacts))
+        if artifact_details["missing_required_artifacts"] or artifact_details["forbidden_artifacts_present"]:
+            failures.append({"artifact_files": artifact_details})
+        if v.get("manifest_schema") or v.get("expected_resource") or v.get("resource_expectations"):
+            try:
+                _manifest_path, manifest = manifest_from_bundle(ctx, v)
+                artifact_details["manifest_kernel_count"] = len(manifest_kernels(manifest))
+                expected_resource = v.get("expected_resource") or v.get("resource_expectations")
+                if isinstance(expected_resource, Mapping):
+                    public = str(expected_resource.get("public_name", ""))
+                    kernels = manifest_kernels(manifest)
+                    kernel = next((k for k in kernels if not public or k.get("public_name") == public), None)
+                    if not kernel:
+                        failures.append({"resource": {"error": "no matching manifest kernel", "public_name": public}})
+                    else:
+                        resource_failures = []
+                        resources = kernel.get("resources") if isinstance(kernel.get("resources"), Mapping) else {}
+                        for key, expected in expected_resource.items():
+                            if key == "public_name":
+                                continue
+                            actual = kernel.get(key) if key in kernel else resources.get(key)
+                            if actual != expected:
+                                resource_failures.append({"key": key, "expected": expected, "actual": actual})
+                        if resource_failures:
+                            failures.append({"resource_mismatches": resource_failures})
+            except VerificationError as exc:
+                failures.append({"manifest": {"error": str(exc), "details": exc.details}})
+    if failures:
+        return make_failure(ctx, slice_id, v, "scheduled/artifact contract failed", actual={"step_results": step_results, "checks": checks, "artifact_details": artifact_details, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="scheduled/artifact contract passed", details={"step_results": step_results, "checks": checks, "artifact_details": artifact_details}, duration=time.time() - started)
+
+
+def _format_case_value(value: str, case: Mapping[str, Any], index: int, fixture: str) -> str:
+    out = value.replace("{matrix_index}", str(index)).replace("{case_index}", str(index)).replace("{fixture}", fixture)
+    for k, v in case.items():
+        out = out.replace("{" + str(k) + "}", str(v))
+    return out
+
+
+def _expand_case_argv(ctx: VerifierContext, argv: Sequence[Any], case: Mapping[str, Any], index: int, fixture: str) -> List[str]:
+    base = expand_command(ctx, argv, {})
+    return [_format_case_value(str(x), case, index, fixture) for x in base]
+
+
+def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    if bool(v.get("requires_hardware", False)) and ctx.no_hardware:
+        return skip_result(ctx, slice_id, v, "hardware CPU-reference contract skipped by --no-hardware")
+    started = time.time()
+    fixture = str(v.get("fixture", ""))
+    cases_raw = v.get("matrix", v.get("cases", [{}]))
+    cases = cases_raw if isinstance(cases_raw, list) else [{}]
+    failures: List[Dict[str, Any]] = []
+    results: List[Dict[str, Any]] = []
+
+    runner = v.get("runner")
+    phases = [str(x) for x in as_list(v.get("phases"))]
+    for i, raw_case in enumerate(cases):
+        case = raw_case if isinstance(raw_case, Mapping) else {"value": raw_case}
+        case_result: Dict[str, Any] = {"case": i, "params": dict(case)}
+        phase_results = []
+        if runner and phases:
+            for phase in phases:
+                argv = ["bash", str(runner), fixture, phase]
+                log_path = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_{phase}")
+                result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+                phase_results.append({"phase": phase, "exit_code": result.exit_code, "ok": result.ok, "log_path": str(log_path)})
+                if not result.ok:
+                    failures.append({"case": i, "phase": phase, "exit_code": result.exit_code, "log_path": str(log_path), "stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr)})
+                    break
+        case_result["phases"] = phase_results
+
+        cpu_argv = v.get("cpu_reference_argv")
+        cand_argv = v.get("candidate_argv")
+        if isinstance(cpu_argv, list) and isinstance(cand_argv, list):
+            cpu_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_cpu")
+            cand_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_candidate")
+            cpu = ctx.run_command(_expand_case_argv(ctx, cpu_argv, case, i, fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cpu_log)
+            cand = ctx.run_command(_expand_case_argv(ctx, cand_argv, case, i, fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cand_log)
+            case_result.update({"cpu_exit_code": cpu.exit_code, "candidate_exit_code": cand.exit_code, "cpu_log": str(cpu_log), "candidate_log": str(cand_log)})
+            if not cpu.ok or not cand.ok or cpu.stdout.strip() != cand.stdout.strip():
+                failures.append({"case": i, "error": "CPU reference and candidate output differ", "cpu_exit_code": cpu.exit_code, "candidate_exit_code": cand.exit_code, "cpu_stdout": tail(cpu.stdout), "candidate_stdout": tail(cand.stdout), "cpu_stderr": tail(cpu.stderr), "candidate_stderr": tail(cand.stderr), "cpu_log": str(cpu_log), "candidate_log": str(cand_log)})
+        results.append(case_result)
+
+    required_debug = [str(x) for x in as_list(v.get("required_debug_artifacts"))]
+    missing_debug = []
+    for raw in required_debug:
+        raw = _format_case_value(raw, {}, 0, fixture)
+        path = resolve_repo_or_auto_path(ctx, raw)
+        if not path.exists():
+            missing_debug.append(raw)
+    if missing_debug:
+        failures.append({"missing_debug_artifacts": missing_debug})
+
+    if v.get("expected_json") and v.get("log"):
+        check_v = {**v, "expected": v.get("expected_json"), "mechanism": "expected_json_result"}
+        check = mechanism_expected_json_result(ctx, slice_id, check_v)
+        if not check.ok:
+            failures.append({"expected_json_result": check.to_packet()})
+
+    if failures:
+        return make_failure(ctx, slice_id, v, "hardware CPU-reference contract failed", actual={"failures": failures, "results": results}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="hardware CPU-reference contract passed", details={"results": results}, duration=time.time() - started)
+
+
+def mechanism_milestone_scope_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    files = _paths_from_spec(ctx, as_list(v.get("files")) + as_list(v.get("required_files")) + as_list(v.get("search_paths")))
+    texts, missing = _read_existing_texts(files)
+    combined = "\n".join(texts.values())
+    required_literals = [str(x) for x in as_list(v.get("required_literals")) + as_list(v.get("must_contain"))]
+    forbidden_literals = [str(x) for x in as_list(v.get("forbidden_literals")) + as_list(v.get("must_not_contain"))]
+    required_regex = [str(x) for x in as_list(v.get("required_regex"))]
+    forbidden_regex = [str(x) for x in as_list(v.get("forbidden_regex"))]
+    missing_required = [s for s in required_literals if s not in combined]
+    present_forbidden = [s for s in forbidden_literals if s in combined]
+    missing_required_regex = [s for s in required_regex if not re.search(s, combined, flags=re.S)]
+    present_forbidden_regex = [s for s in forbidden_regex if re.search(s, combined, flags=re.S)]
+    if missing or missing_required or present_forbidden or missing_required_regex or present_forbidden_regex:
+        return make_failure(ctx, slice_id, v, "milestone scope contract failed", expected={"required_literals": required_literals, "forbidden_literals": forbidden_literals, "required_regex": required_regex, "forbidden_regex": forbidden_regex}, actual={"missing_files": missing, "missing_required": missing_required, "present_forbidden": present_forbidden, "missing_required_regex": missing_required_regex, "present_forbidden_regex": present_forbidden_regex, "files_checked": list(texts)}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="milestone scope contract passed", details={"files_checked": list(texts)}, duration=time.time() - started)
+
+
+def _extract_json_object_from_text(text: str) -> Optional[Mapping[str, Any]]:
+    decoder = json.JSONDecoder()
+    for index, ch in enumerate(text):
+        if ch != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def _implementation_integrity_default_prompt(v: Mapping[str, Any]) -> str:
+    focus = v.get("focus", "the current implementation changes")
+    return textwrap.dedent(f"""
+    You are performing a read-only implementation-integrity audit for the VC4 MLIR backend.
+
+    Focus: {focus}
+
+    Inspect the repository freely, but do not write files, do not stage files, and do not commit.
+    Classify whether the implementation appears legitimate or whether it cheats, special-cases,
+    bypasses required compiler layers, hard-codes fixtures, substitutes reference artifacts, fakes
+    hardware results, or weakens existing verifier/runtime/artifact contracts.
+
+    Return exactly one JSON object and no markdown:
+    {{
+      "integrity_pass": "YES" | "NO",
+      "summary": "short explanation",
+      "findings": [
+        {{"severity": "blocking|warning", "path": "repo-relative path", "reason": "specific reason"}}
+      ]
+    }}
+    """).strip()
+
+
+def mechanism_implementation_integrity_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    failures: List[Dict[str, Any]] = []
+    static_results: List[Dict[str, Any]] = []
+
+    for i, check in enumerate(as_list(v.get("static_forbidden"))):
+        if not isinstance(check, Mapping):
+            continue
+        paths = _paths_from_spec(ctx, check.get("files", check.get("paths", check.get("globs", []))))
+        if not paths and check.get("path"):
+            paths = _paths_from_spec(ctx, [check.get("path")])
+        pattern = str(check.get("pattern", ""))
+        literal = str(check.get("literal", ""))
+        if not pattern and not literal:
+            continue
+        texts, missing = _read_existing_texts(paths)
+        matches = []
+        for path, text in texts.items():
+            if literal and literal in text:
+                matches.append({"path": path, "literal": literal})
+            if pattern and re.search(pattern, text, flags=re.S):
+                matches.append({"path": path, "pattern": pattern})
+        rec = {"check": i, "description": check.get("description", ""), "missing_files": missing, "matches": matches}
+        static_results.append(rec)
+        if matches or (missing and bool(check.get("fail_on_missing", False))):
+            failures.append(rec)
+
+    codex_cfg = v.get("codex_exec") if isinstance(v.get("codex_exec"), Mapping) else {}
+    codex_details: Optional[Dict[str, Any]] = None
+    if bool(codex_cfg.get("enabled", False)):
+        prompt = str(codex_cfg.get("prompt", ""))
+        if codex_cfg.get("prompt_file"):
+            prompt_path = resolve_repo_or_auto_path(ctx, str(codex_cfg.get("prompt_file")))
+            if not prompt_path.exists():
+                return make_failure(ctx, slice_id, v, "implementation integrity prompt file missing", actual={"prompt_file": str(prompt_path)}, duration=time.time() - started)
+            prompt = read_text(prompt_path)
+        if not prompt:
+            prompt = _implementation_integrity_default_prompt(v)
+        model = str(codex_cfg.get("model", "gpt-5.5"))
+        effort = str(codex_cfg.get("reasoning_effort", "high"))
+        verbosity = str(codex_cfg.get("verbosity", "high"))
+        sandbox = str(codex_cfg.get("sandbox", "read-only"))
+        approval = str(codex_cfg.get("ask_for_approval", "never"))
+        last_message = ctx.command_log_path(slice_id, str(v.get("id", "implementation_integrity")) + "_codex_last_message").with_suffix(".txt")
+        cmd = [
+            "codex", "exec",
+            "--cd", str(ctx.repo),
+            "--model", model,
+            "--config", f"model_reasoning_effort={json.dumps(effort)}",
+            "--config", f"model_verbosity={json.dumps(verbosity)}",
+        ]
+        if bool(codex_cfg.get("dangerously_bypass_approvals_and_sandbox", False)):
+            cmd.append("--dangerously-bypass-approvals-and-sandbox")
+        else:
+            cmd.extend(["--sandbox", sandbox, "--ask-for-approval", approval])
+        for extra in as_list(codex_cfg.get("extra_args")):
+            cmd.append(str(extra))
+        cmd.extend(["--output-last-message", str(last_message), "-"])
+        if codex_cfg.get("json_events"):
+            cmd.insert(-1, "--json")
+        log_path = ctx.command_log_path(slice_id, str(v.get("id", "implementation_integrity")) + "_codex")
+        result = ctx.run_command(cmd, cwd=ctx.repo, timeout_sec=int(codex_cfg.get("timeout_sec", v.get("timeout_sec", ctx.timeout_sec))), log_path=log_path, input_text=prompt)
+        output_text = read_text(last_message) if last_message.exists() else (result.stdout + "\n" + result.stderr)
+        parsed = _extract_json_object_from_text(output_text)
+        codex_details = {"exit_code": result.exit_code, "log_path": str(log_path), "last_message_path": str(last_message), "parsed": parsed}
+        if not result.ok:
+            failures.append({"codex_exec": "failed", "exit_code": result.exit_code, "log_path": str(log_path), "stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr)})
+        elif parsed is None:
+            failures.append({"codex_exec": "missing_json", "last_message_tail": tail(output_text), "log_path": str(log_path)})
+        else:
+            pass_value = str(codex_cfg.get("pass_value", "YES"))
+            field = str(codex_cfg.get("classification_field", "integrity_pass"))
+            actual = str(parsed.get(field, ""))
+            if actual != pass_value:
+                failures.append({"codex_exec": "integrity_failed", "expected": {field: pass_value}, "actual": parsed, "log_path": str(log_path)})
+
+    if failures:
+        return make_failure(ctx, slice_id, v, "implementation integrity contract failed", actual={"failures": failures, "static_results": static_results, "codex": codex_details}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="implementation integrity contract passed", details={"static_results": static_results, "codex": codex_details}, duration=time.time() - started)
+
+
+def mechanism_regression_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    commands = v.get("commands")
+    if not isinstance(commands, list):
+        commands = []
+    step_v = dict(v)
+    step_v["steps"] = commands
+    step_results, step_failures = _run_contract_steps(ctx, slice_id, step_v, "regression")
+    required_mechanisms = [str(x) for x in as_list(v.get("required_mechanisms"))]
+    mechanism_missing = [m for m in required_mechanisms if m not in MECHANISMS]
+    required_files = [normalize_repo_relpath(str(x)) for x in as_list(v.get("required_files"))]
+    file_missing = [p for p in required_files if not ctx.repo_path(p).exists()]
+    failures: List[Any] = []
+    if step_failures:
+        failures.append({"command_failures": step_failures})
+    if mechanism_missing:
+        failures.append({"missing_mechanisms": mechanism_missing})
+    if file_missing:
+        failures.append({"missing_files": file_missing})
+    if failures:
+        return make_failure(ctx, slice_id, v, "regression contract failed", actual={"failures": failures, "step_results": step_results}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="regression contract passed", details={"step_results": step_results, "required_mechanisms": required_mechanisms, "required_files": required_files}, duration=time.time() - started)
+
+
 MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], VerificationResult]] = {
     "source_products": mechanism_source_products,
     "forbidden_absent": mechanism_forbidden_absent,
@@ -2101,6 +2720,15 @@ MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], Verifi
     "resource_contract": mechanism_resource_contract,
     "support_script_contract": mechanism_support_script_contract,
     "negative_diagnostic": mechanism_negative_diagnostic,
+    "feature_gate_contract": mechanism_feature_gate_contract,
+    "dialect_contract": mechanism_dialect_contract,
+    "invalid_diagnostic_contract": mechanism_invalid_diagnostic_contract,
+    "lowered_ir_contract": mechanism_lowered_ir_contract,
+    "scheduled_artifact_contract": mechanism_scheduled_artifact_contract,
+    "hardware_cpu_reference_contract": mechanism_hardware_cpu_reference_contract,
+    "milestone_scope_contract": mechanism_milestone_scope_contract,
+    "implementation_integrity_contract": mechanism_implementation_integrity_contract,
+    "regression_contract": mechanism_regression_contract,
 }
 
 MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
@@ -2133,6 +2761,15 @@ MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
     "resource_contract": ["bundle"],
     "support_script_contract": ["script"],
     "negative_diagnostic": ["argv"],
+    "feature_gate_contract": ["features"],
+    "dialect_contract": [],
+    "invalid_diagnostic_contract": [],
+    "lowered_ir_contract": [],
+    "scheduled_artifact_contract": [],
+    "hardware_cpu_reference_contract": [],
+    "milestone_scope_contract": [],
+    "implementation_integrity_contract": [],
+    "regression_contract": [],
 }
 
 MECHANISM_DOCS: Dict[str, str] = {
@@ -2165,6 +2802,15 @@ MECHANISM_DOCS: Dict[str, str] = {
     "resource_contract": "Validate independent/cooperative scheduler resource metadata against target QPU/VPM/semaphore limits.",
     "support_script_contract": "Scan support scripts for required program-bundle patterns and forbidden single-kernel literals.",
     "negative_diagnostic": "Run a command expected to fail and check deterministic diagnostics.",
+    "feature_gate_contract": "Meta-contract: implemented features must have required dialect, diagnostic, lowered-IR, artifact, and hardware-reference layers.",
+    "dialect_contract": "Verify a dialect/feature surface: files, ops/types/attrs, parser-printer tests, invalid tests, optional --show-dialects.",
+    "invalid_diagnostic_contract": "Run one or more intentionally-invalid cases and require precise deterministic diagnostics.",
+    "lowered_ir_contract": "Run lowering steps and inspect intermediate IR for required/forbidden literals or regexes.",
+    "scheduled_artifact_contract": "Run scheduled/artifact steps and validate intermediates, bundle files, manifest/resource expectations.",
+    "hardware_cpu_reference_contract": "Run executable fixture/case matrices and compare candidate behavior against a CPU/reference oracle; skippable by --no-hardware.",
+    "milestone_scope_contract": "Verify milestone docs/specs/prompts use the intended scope and avoid stale/forbidden scope language.",
+    "implementation_integrity_contract": "Audit implementation integrity with static scans and optional read-only Codex exec YES/NO classifier.",
+    "regression_contract": "Run cumulative regression commands and assert required lower-stack mechanisms/files still exist.",
 }
 
 
