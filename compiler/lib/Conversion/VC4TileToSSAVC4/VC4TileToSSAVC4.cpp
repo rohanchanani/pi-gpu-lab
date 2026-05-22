@@ -63,6 +63,8 @@ constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
     "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
     "vc4tile.masked_store_global");
+constexpr llvm::StringLiteral kVC4TileRotateOpName("vc4tile.rotate");
+constexpr llvm::StringLiteral kVC4TileReduceOpName("vc4tile.reduce");
 
 constexpr llvm::StringLiteral kArithConstantOpName("arith.constant");
 constexpr llvm::StringLiteral kArithAddIOpName("arith.addi");
@@ -93,6 +95,7 @@ constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
 constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
+constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
 
@@ -497,6 +500,14 @@ static Value createMakeFlags(OpBuilder &builder, Location loc,
       builder, loc, kSSAVC4MakeFlagsOpName, operands,
       {builder.getNamedAttr("kind", kindAttr)},
       mlir::ssavc4::FlagsType::get(builder.getContext()));
+}
+
+static Value createRotate(OpBuilder &builder, Location loc, Value input,
+                          int64_t amount, Type resultType) {
+  return createSSAVC4OpWithResult(
+      builder, loc, kSSAVC4RotateOpName, {input},
+      {builder.getNamedAttr("amount", builder.getI32IntegerAttr(amount))},
+      resultType);
 }
 
 static Type getAsyncTokenType(OpBuilder &builder) {
@@ -987,6 +998,101 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static LogicalResult lowerRotate(Operation *op, OpBuilder &builder,
+                                 llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return op->emitOpError("expected one input operand and one result");
+
+  Type inputType = op->getOperand(0).getType();
+  Type resultType = op->getResult(0).getType();
+  if (!isVector16Data(inputType) || inputType != resultType)
+    return op->emitOpError(
+        "requires matching vector<16xi32> or vector<16xf32> input/result types");
+
+  auto amountAttr = op->getAttrOfType<IntegerAttr>("amount");
+  if (!amountAttr)
+    return op->emitOpError("requires an i32 amount attribute");
+  int64_t amount = amountAttr.getInt();
+  if (amount < 0 || amount > 15)
+    return op->emitOpError("amount must be in range [0, 15]");
+
+  Value input = lookupMappedValue(op, op->getOperand(0), valueMap);
+  if (!input)
+    return failure();
+  valueMap[op->getResult(0)] =
+      createRotate(builder, op->getLoc(), input, amount, resultType);
+  return success();
+}
+
+static bool maskIsAllLanes(Operation *op, unsigned operandIndex) {
+  if (operandIndex >= op->getNumOperands())
+    return false;
+  return hasName(op->getOperand(operandIndex).getDefiningOp(),
+                 kVC4TileMaskAllOpName);
+}
+
+static bool valueHasOnlyReduceOrMaskedGlobalMemoryUsers(Value value) {
+  for (OpOperand &use : value.getUses()) {
+    Operation *user = use.getOwner();
+    if (!hasName(user, kVC4TileReduceOpName) &&
+        !hasName(user, kVC4TileMaskedLoadGlobalOpName) &&
+        !hasName(user, kVC4TileMaskedStoreGlobalOpName))
+      return false;
+  }
+  return true;
+}
+
+static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
+                                 llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("expected input, mask, and one result");
+
+  Type inputType = op->getOperand(0).getType();
+  Type resultType = op->getResult(0).getType();
+  if (!isVector16Data(inputType) || inputType != resultType)
+    return op->emitOpError(
+        "requires matching vector<16xi32> or vector<16xf32> input/result types");
+  if (!isVector16I1(op->getOperand(1).getType()))
+    return op->emitOpError("requires a vector<16xi1> mask");
+  if (!maskIsAllLanes(op, 1))
+    return op->emitOpError(
+        "currently lowers only vc4tile.mask_all masks for warp reductions");
+  Value sourceMask = op->getOperand(1);
+  if (valueHasOnlyReduceOrMaskedGlobalMemoryUsers(sourceMask)) {
+    auto it = valueMap.find(sourceMask);
+    if (it != valueMap.end()) {
+      Operation *def = it->second.getDefiningOp();
+      if (hasName(def, kSSAVC4MakeFlagsOpName) && def->use_empty()) {
+        def->erase();
+        valueMap.erase(it);
+      }
+    }
+  }
+
+  auto kind = op->getAttrOfType<mlir::vc4tile::ReduceKindAttr>("kind");
+  if (!kind)
+    return op->emitOpError("requires a reduce kind attribute");
+  if (kind.getValue() != mlir::vc4tile::ReduceKind::add)
+    return op->emitOpError(
+        "currently lowers only add reductions through SSAVC4 rotate/add");
+
+  Value acc = lookupMappedValue(op, op->getOperand(0), valueMap);
+  if (!acc)
+    return failure();
+
+  mlir::vc4::AddOpcode addOpcode = isVector16F32(inputType)
+                                      ? mlir::vc4::AddOpcode::fadd
+                                      : mlir::vc4::AddOpcode::add;
+  for (int64_t amount : {8, 4, 2, 1}) {
+    Value rotated = createRotate(builder, op->getLoc(), acc, amount, resultType);
+    SmallVector<Value, 2> operands{acc, rotated};
+    acc = createALUAdd(builder, op->getLoc(), operands, addOpcode, resultType);
+  }
+
+  valueMap[op->getResult(0)] = acc;
+  return success();
+}
+
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  llvm::DenseMap<Value, Value> &valueMap) {
   if (hasName(op, kArithConstantOpName))
@@ -1015,6 +1121,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
     return lowerMaskedStoreGlobal(op, builder, valueMap);
+  if (hasName(op, kVC4TileRotateOpName))
+    return lowerRotate(op, builder, valueMap);
+  if (hasName(op, kVC4TileReduceOpName))
+    return lowerReduce(op, builder, valueMap);
 
   return op->emitOpError(
       "is not supported yet by --convert-vc4tile-to-ssavc4 in this M4 slice");
@@ -1280,7 +1390,7 @@ struct ConvertVC4TileToSSAVC4Pass
 
   StringRef getArgument() const override { return "convert-vc4tile-to-ssavc4"; }
   StringRef getDescription() const override {
-    return "Lower supported VC4Tile kernels, IDs, masks, global loads/stores, uniform control flow, block arguments, and metadata to SSAVC4";
+    return "Lower supported VC4Tile kernels, IDs, masks, global loads/stores, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
