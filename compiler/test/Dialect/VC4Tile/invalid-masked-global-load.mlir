@@ -3,7 +3,7 @@
 vc4tile.kernel @invalid_masked_global_load_generic_access attributes {
   public_name = "invalid_masked_global_load_generic_access"
 } {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %mask = vc4tile.mask_all : vector<16xi1>
   // CHECK: generic per-lane load access is outside the M4 hardware-lowered contract

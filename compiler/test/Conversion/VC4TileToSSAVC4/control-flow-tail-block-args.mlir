@@ -10,18 +10,12 @@
 // CHECK: active_lanes = 16 : i32
 // CHECK: ssavc4.thread_end
 // CHECK-NOT: vc4tile.
-vc4tile.kernel @control_flow_tail_block_args attributes {
+vc4tile.kernel @control_flow_tail_block_args(%out : i32) attributes {
   public_name = "control_flow_tail_block_args",
-  launch_abi = {
-    public_name = "control_flow_tail_block_args",
-    code_symbol = "control_flow_tail_block_args_shader",
-    tail_policy = "exact_multiple",
-    uniform_words_per_qpu = 1 : i32,
-    args = [{direction = "by_value", kind = "scalar", name = "out", type = "u32", uniform_index = 0 : i32}],
-    builtins = []
-  }
+  arg_attrs = [
+    {abi_name = "out", kind = "buffer", direction = "out", type = "u32", elem_type = "u32"}
+  ]
 } {
-  %base = vc4tile.program_id : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %one = arith.constant 1 : i32
@@ -31,8 +25,8 @@ vc4tile.kernel @control_flow_tail_block_args attributes {
   %value = arith.addi %lanes, %bias_vec : vector<16xi32>
   %go = arith.cmpi ult, %zero, %one : i32
   cf.cond_br %go,
-      ^then(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>),
-      ^else(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>)
+      ^then(%out, %zero, %limit, %value : i32, i32, i32, vector<16xi32>),
+      ^else(%out, %zero, %limit, %value : i32, i32, i32, vector<16xi32>)
 ^then(%tbase: i32, %tlo: i32, %tlimit: i32, %tvalue: vector<16xi32>):
   cf.br ^merge(%tbase, %tlo, %tlimit, %tvalue : i32, i32, i32, vector<16xi32>)
 ^else(%fbase: i32, %flo: i32, %flimit: i32, %fvalue: vector<16xi32>):

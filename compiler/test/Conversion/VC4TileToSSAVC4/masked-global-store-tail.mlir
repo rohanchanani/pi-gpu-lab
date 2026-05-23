@@ -6,23 +6,17 @@
 // CHECK: active_lanes = 13 : i32
 // CHECK: elem_bytes = 4 : i32
 // CHECK: ssavc4.thread_end
-vc4tile.kernel @masked_global_store_tail attributes {
+vc4tile.kernel @masked_global_store_tail(%out : i32) attributes {
   public_name = "masked_global_store_tail",
-  launch_abi = {
-    public_name = "masked_global_store_tail",
-    code_symbol = "masked_global_store_tail_shader",
-    tail_policy = "exact_multiple",
-    uniform_words_per_qpu = 1 : i32,
-    args = [{direction = "by_value", kind = "scalar", name = "out", type = "u32", uniform_index = 0 : i32}],
-    builtins = []
-  }
+  arg_attrs = [
+    {abi_name = "out", kind = "buffer", direction = "out", type = "u32", elem_type = "u32"}
+  ]
 } {
-  %base_addr = vc4tile.program_id : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
   %mask = vc4tile.tail_mask %zero, %limit : i32, i32 -> vector<16xi1>
-  vc4tile.masked_store_global %base_addr, %lanes, %lanes, %mask {
+  vc4tile.masked_store_global %out, %lanes, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,
     memory_space = #vc4tile.memory_space<global>,

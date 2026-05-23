@@ -6,7 +6,7 @@ vc4tile.kernel @masked_memory attributes {
   warps_per_block_max = 1 : i32,
   semaphores_per_block = 0 : i32
 } {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %offsets = vc4tile.lane_range : vector<16xi32>
   %mask = vc4tile.mask_all : vector<16xi1>
   // CHECK: vc4tile.masked_load_global

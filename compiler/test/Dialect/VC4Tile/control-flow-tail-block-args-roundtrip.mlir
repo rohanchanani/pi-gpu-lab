@@ -5,7 +5,7 @@
 // CHECK: cf.br
 // CHECK: vc4tile.tail_mask
 vc4tile.kernel @control_flow_tail_block_args_roundtrip attributes {public_name = "control_flow_tail_block_args_roundtrip"} {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %one = arith.constant 1 : i32

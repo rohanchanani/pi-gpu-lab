@@ -3,7 +3,7 @@
 vc4tile.kernel @masked_global_store_scatter attributes {
   public_name = "masked_global_store_scatter"
 } {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %offsets = arith.addi %lanes, %lanes : vector<16xi32>
   %mask = vc4tile.mask_all : vector<16xi1>

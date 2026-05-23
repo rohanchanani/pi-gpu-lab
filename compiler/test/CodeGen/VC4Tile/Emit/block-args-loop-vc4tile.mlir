@@ -3,15 +3,7 @@
 // CHECK-LABEL: vc4.func @block_args_loop_vc4tile
 // CHECK: vc4.qpu.
 vc4tile.kernel @block_args_loop_vc4tile attributes {
-  public_name = "block_args_loop_vc4tile",
-  launch_abi = {
-    public_name = "block_args_loop_vc4tile",
-    code_symbol = "block_args_loop_vc4tile_shader",
-    tail_policy = "exact_multiple",
-    uniform_words_per_qpu = 1 : i32,
-    args = [{direction = "by_value", kind = "scalar", name = "dummy", type = "u32", uniform_index = 0 : i32}],
-    builtins = []
-  }
+  public_name = "block_args_loop_vc4tile"
 } {
   %zero = arith.constant 0 : i32
   %one = arith.constant 1 : i32

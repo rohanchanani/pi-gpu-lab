@@ -14,6 +14,7 @@
     "fixture_matrices": {
       "m4_independent_vector": [
         "vector_store_smoke_vc4tile",
+        "program_id_writeback_vc4tile",
         "saxpy_full_vc4tile",
         "global_store_coalesced_multi_vc4tile",
         "warp_reduce_sum_vc4tile"
@@ -25,6 +26,7 @@
       ],
       "m4_required": [
         "vector_store_smoke_vc4tile",
+        "program_id_writeback_vc4tile",
         "saxpy_full_vc4tile",
         "global_store_coalesced_multi_vc4tile",
         "warp_reduce_sum_vc4tile",
@@ -54,6 +56,7 @@
   "fixture_matrices": {
     "m4_independent_vector": [
       "vector_store_smoke_vc4tile",
+      "program_id_writeback_vc4tile",
       "saxpy_full_vc4tile",
       "global_store_coalesced_multi_vc4tile",
       "warp_reduce_sum_vc4tile"
@@ -65,6 +68,7 @@
     ],
     "m4_required": [
       "vector_store_smoke_vc4tile",
+      "program_id_writeback_vc4tile",
       "saxpy_full_vc4tile",
       "global_store_coalesced_multi_vc4tile",
       "warp_reduce_sum_vc4tile",
@@ -953,6 +957,11 @@
             "compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir",
             "compiler/test/Conversion/VC4TileToSSAVC4/tail-mask.mlir",
             "compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/program-id-writeback-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/input.vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/candidate/program_id_writeback_vc4tile_candidate_harness.c",
             "compiler/test/Dialect/VC4Tile/masks-roundtrip.mlir",
             "compiler/test/Dialect/VC4Tile/invalid-tail-mask.mlir"
           ]
@@ -1164,7 +1173,7 @@
                 "invalid_diagnostics": true,
                 "lowered_ir": true,
                 "scheduled_artifact": false,
-                "hardware_cpu_reference": false
+                "hardware_cpu_reference": true
               }
             },
             {
@@ -1180,6 +1189,55 @@
             }
           ],
           "required": true
+        },
+        {
+          "id": "m4-04-hardware-program-id-writeback",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "independent_tile_ids",
+          "description": "Program ID hardware proof. The fixture harness launches request counts 1, 12, 13, and 25 and the expected result requires proof for logical request 12 and request 24.",
+          "fixture": "program_id_writeback_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/program_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
+        },
+        {
+          "id": "m4-04-vc4tile-abi-cleanup-static",
+          "mechanism": "command",
+          "feature": "independent_tile_ids",
+          "description": "Persistent ABI cleanup scan: no active VC4Tile test may use program_id as a user argument/base, attach uniform_index to runtime IDs, or use manual launch_abi for user arguments.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import re, sys\nfrom pathlib import Path\nroots = [Path('compiler/test/CodeGen/VC4Tile'), Path('compiler/test/Conversion/VC4TileToSSAVC4'), Path('compiler/test/Dialect/VC4Tile')]\nfiles = sorted({p for root in roots for p in root.rglob('*.mlir') if 'Output' not in p.parts})\nlaunch_allowed = {'compiler/test/Dialect/VC4Tile/formal-args-invalid.mlir', 'compiler/test/Conversion/VC4TileToSSAVC4/metadata-copy.mlir', 'compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.ssavc4.mlir'}\nuniform_allowed = {'compiler/test/Dialect/VC4Tile/formal-args-invalid.mlir'}\nidentity_files = {'compiler/test/Conversion/VC4TileToSSAVC4/ids-arith-masks.mlir', 'compiler/test/Conversion/VC4TileToSSAVC4/uniform-control-flow.mlir', 'compiler/test/Conversion/VC4TileToSSAVC4/formal-args-lowering.mlir', 'compiler/test/CodeGen/VC4Tile/Emit/ids-arith-masks-vc4tile.mlir', 'compiler/test/CodeGen/VC4Tile/Emit/program-id-writeback-vc4tile.mlir', 'compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/input.mlir'}\nfail = []\nfor p in files:\n    rel = p.as_posix()\n    text = p.read_text(encoding='utf-8')\n    code = '\\n'.join(line for line in text.splitlines() if not line.lstrip().startswith('//'))\n    if re.search(r'vc4tile\\.program_id[^\\n]*uniform_index|program_id\\s*\\{uniform_index', code) and rel not in uniform_allowed:\n        fail.append(f'{rel}: program_id carries uniform_index')\n    if re.search(r'\\blaunch_abi\\s*=', code) and rel not in launch_allowed:\n        fail.append(f'{rel}: manual launch_abi in active VC4Tile source')\n    if re.search(r'%(base|out|ptr|buffer|n|x|y|alpha)[A-Za-z0-9_]*\\s*=\\s*vc4tile\\.program_id', code) and rel not in identity_files:\n        fail.append(f'{rel}: program_id assigned to user/base-like name')\n    if re.search(r'vc4tile\\.masked_(load|store)_global\\s+%[A-Za-z0-9_]*(base|out|ptr|program)\\b', code) and 'vc4tile.program_id' in code and rel not in identity_files:\n        fail.append(f'{rel}: program_id-bearing file stores/loads through base-like operand outside identity allowlist')\nfor p in sorted(Path('compiler/test/CodeGen/VC4Tile/Hardware/Run').glob('*/input.vc4tile.mlir')):\n    text = p.read_text(encoding='utf-8')\n    if 'vc4tile.kernel' in text or not re.search(r'^\\s*// RUN: true\\s*$', text, flags=re.M):\n        fail.append(f'{p.as_posix()}: stale input.vc4tile.mlir must be a non-generating compatibility stub')\nif fail:\n    print('\\n'.join(fail))\n    sys.exit(1)\nprint(f'vc4tile-abi-cleanup-ok files={len(files)}')"
+          ],
+          "expect_exit_code": 0,
+          "required": true,
+          "stdout_contains": [
+            "vc4tile-abi-cleanup-ok"
+          ]
         },
         {
           "id": "m4-04-implementation-integrity",
@@ -3696,7 +3754,7 @@
                 "invalid_diagnostics": true,
                 "lowered_ir": true,
                 "scheduled_artifact": false,
-                "hardware_cpu_reference": false
+                "hardware_cpu_reference": true
               }
             },
             {
@@ -4068,6 +4126,39 @@
           ],
           "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_vc4tile/expected.json",
           "log": ".vc4_auto/vc4tile_m4/hardware/warp_reduce_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "clean_before_generate": true,
+          "require_fresh_debug_artifacts": true,
+          "clean": true
+        },
+        {
+          "id": "m4-12-hardware-program-id-writeback",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "independent_tile_ids",
+          "description": "Final acceptance program ID hardware proof. The fixture harness launches request counts 1, 12, 13, and 25 and the expected result requires proof for logical request 12 and request 24.",
+          "fixture": "program_id_writeback_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "requires_hardware": true,
+          "timeout_sec": 60,
+          "matrix": [
+            {}
+          ],
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/scheduled.vc4.mlir",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/manifest.json",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/layout.json",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/kernel_launch.c",
+            ".vc4_auto/vc4tile_m4/candidates/program_id_writeback_vc4tile/kernel_launch.h"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/program_id_writeback_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m4/hardware/program_id_writeback_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
           "clean_before_generate": true,
           "require_fresh_debug_artifacts": true,
           "clean": true

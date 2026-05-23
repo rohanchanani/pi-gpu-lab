@@ -4,7 +4,7 @@ vc4tile.kernel @bad_store attributes {
   schedule_mode = #vc4tile.schedule_mode<independent_vector>,
   warps_per_block_max = 1 : i32
 } {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %offsets = vc4tile.lane_range : vector<16xi32>
   %mask = vc4tile.mask_all : vector<16xi1>
   // CHECK: generic per-lane store access is outside the M4 hardware-lowered contract

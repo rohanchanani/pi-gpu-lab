@@ -12,7 +12,7 @@ vc4tile.kernel @masks_roundtrip attributes {
   vpm_rows_per_block = 0 : i32,
   vpm_bytes_per_block = 0 : i32
 } {
-  %base = vc4tile.program_id : i32
+  %base = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
   // CHECK: vc4tile.mask_all
   %all = vc4tile.mask_all : vector<16xi1>
