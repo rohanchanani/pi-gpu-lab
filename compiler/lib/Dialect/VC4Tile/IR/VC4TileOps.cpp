@@ -13,8 +13,14 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/SymbolTable.h"
 
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/StringExtras.h"
+#include "llvm/ADT/StringSet.h"
+#include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include <optional>
@@ -54,8 +60,7 @@ static LogicalResult verifyVector16Data(Operation *op, Type type,
                                         StringRef role) {
   if (isVC4TileVector16DataType(type))
     return success();
-  return emitTypeError(op, type, role,
-                       "vector<16xi32> or vector<16xf32>");
+  return emitTypeError(op, type, role, "vector<16xi32> or vector<16xf32>");
 }
 
 static LogicalResult verifySharedTile(Operation *op, Type type,
@@ -93,6 +98,68 @@ static bool getBoolAttr(Operation *op, StringRef name) {
   return attr && attr.getValue();
 }
 
+static bool isCIdentifierLike(StringRef name) {
+  if (name.empty())
+    return false;
+  if (!llvm::isAlpha(name.front()) && name.front() != '_')
+    return false;
+  return llvm::all_of(name.drop_front(),
+                      [](char c) { return llvm::isAlnum(c) || c == '_'; });
+}
+
+static bool isReservedABIName(StringRef name) {
+  return llvm::StringSwitch<bool>(name)
+      .Case("logical_request", true)
+      .Case("total_requests", true)
+      .Case("logical_block_id", true)
+      .Case("logical_warp_id", true)
+      .Case("warps_per_block", true)
+      .Case("vpm_base_row", true)
+      .Case("vpm_rows", true)
+      .Case("semaphore_base", true)
+      .Case("barrier_arrive_sem", true)
+      .Case("barrier_go_sem", true)
+      .Case("barrier_depart_sem", true)
+      .Case("barrier_reset_sem", true)
+      .Case("resident_request_id", true)
+      .Case("spill_frame_base", true)
+      .Case("spill_frame_bytes", true)
+      .Case("spill_frame_stride_bytes", true)
+      .Case("spill_vpm_row", true)
+      .Case("program_id", true)
+      .Case("block_id", true)
+      .Case("warp_id", true)
+      .Case("lane_id", true)
+      .Case("lane_range", true)
+      .Default(false);
+}
+
+static bool isKernelFormalArgType(Type type) {
+  return type.isSignlessInteger(32) || type.isF32();
+}
+
+static LogicalResult verifyNoUniformTransportAttrs(Operation *op) {
+  if (op->hasAttr("uniform_arg")) {
+    return op->emitOpError()
+           << "must not carry 'uniform_arg'; runtime identity is not a "
+              "VC4Tile formal argument";
+  }
+  if (!op->hasAttr("uniform_index"))
+    return success();
+
+  if (auto kernel = op->getParentOfType<KernelOp>()) {
+    bool legacyManualABI =
+        kernel.getFunctionType().getNumInputs() == 0 &&
+        (kernel->hasAttr("launch_abi") || kernel->hasAttr("vc4.launch_abi"));
+    if (legacyManualABI)
+      return success();
+  }
+
+  return op->emitOpError()
+         << "must not carry 'uniform_index'; runtime identity is not a "
+            "VC4Tile formal argument";
+}
+
 static std::optional<ScheduleMode> getKernelScheduleMode(KernelOp kernel) {
   if (auto attr = kernel.getScheduleModeAttr())
     return attr.getValue();
@@ -124,9 +191,8 @@ static LogicalResult verifySharedKernelContract(Operation *op) {
         "requires parent vc4tile.kernel to set uses_shared_vpm = true");
   }
   if (!isKernelCooperative(kernel)) {
-    return op->emitOpError(
-        "requires parent vc4tile.kernel schedule_mode = "
-        "#vc4tile.schedule_mode<cooperative_block>");
+    return op->emitOpError("requires parent vc4tile.kernel schedule_mode = "
+                           "#vc4tile.schedule_mode<cooperative_block>");
   }
   return success();
 }
@@ -162,11 +228,207 @@ static LogicalResult verifyMemorySpace(Operation *op, MemorySpaceAttr spaceAttr,
 
 } // namespace
 
+ParseResult KernelOp::parse(OpAsmParser &parser, OperationState &result) {
+  StringAttr symName;
+  if (parser.parseSymbolName(symName, SymbolTable::getSymbolAttrName(),
+                             result.attributes))
+    return failure();
+
+  SmallVector<OpAsmParser::Argument, 4> args;
+  if (parser.parseArgumentList(args, OpAsmParser::Delimiter::OptionalParen,
+                               /*allowType=*/true, /*allowAttrs=*/false))
+    return failure();
+
+  SmallVector<Type, 4> argTypes;
+  argTypes.reserve(args.size());
+  for (OpAsmParser::Argument &arg : args) {
+    if (!arg.type)
+      return parser.emitError(arg.ssaName.location,
+                              "expected type for vc4tile.kernel argument");
+    argTypes.push_back(arg.type);
+  }
+
+  result.addAttribute("function_type", TypeAttr::get(FunctionType::get(
+                                           parser.getContext(), argTypes, {})));
+
+  if (parser.parseOptionalAttrDictWithKeyword(result.attributes))
+    return failure();
+
+  Region *body = result.addRegion();
+  if (parser.parseRegion(*body, args, /*enableNameShadowing=*/true))
+    return failure();
+  return success();
+}
+
+void KernelOp::print(OpAsmPrinter &printer) {
+  printer << ' ';
+  printer.printSymbolName(getSymName());
+
+  Block &entry = getBody().front();
+  if (entry.getNumArguments() != 0) {
+    printer << '(';
+    llvm::interleaveComma(
+        entry.getArguments(), printer,
+        [&](BlockArgument arg) { printer.printRegionArgument(arg); });
+    printer << ')';
+  }
+
+  printer.printOptionalAttrDictWithKeyword(
+      getOperation()->getAttrs(),
+      {SymbolTable::getSymbolAttrName(), "function_type"});
+  printer << ' ';
+  printer.printRegion(getBody(), /*printEntryBlockArgs=*/false);
+}
+
 LogicalResult KernelOp::verify() {
   Operation *op = getOperation();
+  FunctionType functionType = getFunctionType();
+  if (functionType.getNumResults() != 0)
+    return emitOpError("function_type must have zero results");
+  if (getBody().empty())
+    return emitOpError("requires a non-empty body region");
+
+  Block &entry = getBody().front();
+  unsigned formalArgCount = functionType.getNumInputs();
+  if (entry.getNumArguments() != formalArgCount) {
+    return emitOpError()
+           << "entry block argument count must match function_type inputs; got "
+           << entry.getNumArguments() << " and " << formalArgCount;
+  }
+  for (unsigned index = 0, end = formalArgCount; index != end; ++index) {
+    Type entryType = entry.getArgument(index).getType();
+    Type formalType = functionType.getInput(index);
+    if (entryType != formalType) {
+      return emitOpError() << "entry block argument " << index
+                           << " type must match function_type input; got "
+                           << entryType << " and " << formalType;
+    }
+    if (!isKernelFormalArgType(formalType)) {
+      return emitOpError() << "formal argument " << index
+                           << " type must be i32 or f32; got " << formalType;
+    }
+  }
+
+  if (formalArgCount != 0 &&
+      (op->hasAttr("launch_abi") || op->hasAttr("vc4.launch_abi"))) {
+    return emitOpError(
+        "kernels with formal arguments must not carry manual launch_abi");
+  }
+
+  ArrayAttr argAttrs = getArgAttrsAttr();
+  if (formalArgCount != 0 && !argAttrs)
+    return emitOpError("requires arg_attrs for formal arguments");
+  if (argAttrs && argAttrs.size() != formalArgCount) {
+    return emitOpError()
+           << "arg_attrs length must match formal argument count; got "
+           << argAttrs.size() << " and " << formalArgCount;
+  }
+
+  llvm::StringSet<> abiNames;
+  for (unsigned index = 0, end = argAttrs ? argAttrs.size() : 0; index != end;
+       ++index) {
+    Attribute attr = argAttrs[index];
+    Type formalType = functionType.getInput(index);
+    auto dict = llvm::dyn_cast<DictionaryAttr>(attr);
+    if (!dict)
+      return emitOpError() << "arg_attrs entry " << index
+                           << " must be a dictionary";
+    if (dict.get("uniform_index"))
+      return emitOpError() << "arg_attrs entry " << index
+                           << " must not contain uniform_index";
+
+    auto abiNameAttr = llvm::dyn_cast_or_null<StringAttr>(dict.get("abi_name"));
+    if (!abiNameAttr || abiNameAttr.getValue().empty()) {
+      return emitOpError() << "arg_attrs entry " << index
+                           << " requires non-empty abi_name";
+    }
+    StringRef abiName = abiNameAttr.getValue();
+    if (!isCIdentifierLike(abiName)) {
+      return emitOpError() << "arg_attrs entry " << index
+                           << " has invalid abi_name '" << abiName << "'";
+    }
+    if (!abiNames.insert(abiName).second) {
+      return emitOpError() << "duplicate abi_name '" << abiName
+                           << "' in arg_attrs";
+    }
+    if (isReservedABIName(abiName)) {
+      return emitOpError()
+             << "abi_name '" << abiName
+             << "' is reserved for VC4Tile runtime or lane identity";
+    }
+
+    auto kindAttr = llvm::dyn_cast_or_null<StringAttr>(dict.get("kind"));
+    auto directionAttr =
+        llvm::dyn_cast_or_null<StringAttr>(dict.get("direction"));
+    auto typeAttr = llvm::dyn_cast_or_null<StringAttr>(dict.get("type"));
+    if (!kindAttr)
+      return emitOpError() << "arg_attrs entry " << index
+                           << " requires string kind";
+    if (!directionAttr)
+      return emitOpError() << "arg_attrs entry " << index
+                           << " requires string direction";
+    if (!typeAttr)
+      return emitOpError() << "arg_attrs entry " << index
+                           << " requires string type";
+
+    StringRef kind = kindAttr.getValue();
+    StringRef direction = directionAttr.getValue();
+    StringRef abiType = typeAttr.getValue();
+    if (kind == "buffer") {
+      if (formalType != IntegerType::get(getContext(), 32)) {
+        return emitOpError() << "buffer argument '" << abiName
+                             << "' must have i32 pointer-word MLIR type";
+      }
+      if (direction != "in" && direction != "out" && direction != "inout") {
+        return emitOpError() << "buffer argument '" << abiName
+                             << "' direction must be in, out, or inout";
+      }
+      if (abiType != "u32") {
+        return emitOpError() << "buffer argument '" << abiName
+                             << "' type must be u32 pointer word";
+      }
+      Attribute elemTypeAttr = dict.get("elem_type");
+      if (elemTypeAttr) {
+        auto elemString = llvm::dyn_cast<StringAttr>(elemTypeAttr);
+        if (!elemString || (elemString.getValue() != "u32" &&
+                            elemString.getValue() != "f32")) {
+          return emitOpError() << "buffer argument '" << abiName
+                               << "' elem_type must be u32 or f32";
+        }
+      }
+    } else if (kind == "scalar") {
+      if (direction != "by_value") {
+        return emitOpError() << "scalar argument '" << abiName
+                             << "' direction must be by_value";
+      }
+      if (dict.get("elem_type")) {
+        return emitOpError() << "scalar argument '" << abiName
+                             << "' must not carry elem_type";
+      }
+      if (abiType == "u32") {
+        if (formalType != IntegerType::get(getContext(), 32)) {
+          return emitOpError() << "scalar u32 argument '" << abiName
+                               << "' must have i32 MLIR type";
+        }
+      } else if (abiType == "f32") {
+        if (!formalType.isF32()) {
+          return emitOpError() << "scalar f32 argument '" << abiName
+                               << "' must have f32 MLIR type";
+        }
+      } else {
+        return emitOpError()
+               << "scalar argument '" << abiName << "' type must be u32 or f32";
+      }
+    } else {
+      return emitOpError() << "arg_attrs entry " << index
+                           << " kind must be buffer or scalar";
+    }
+  }
+
   std::optional<ScheduleMode> mode = getKernelScheduleMode(*this);
-  int64_t warpsPerBlock = getI32Attr(op, "warps_per_block_max").value_or(
-      mode && *mode == ScheduleMode::cooperative_block ? 12 : 1);
+  int64_t warpsPerBlock =
+      getI32Attr(op, "warps_per_block_max")
+          .value_or(mode && *mode == ScheduleMode::cooperative_block ? 12 : 1);
   int64_t vpmRows = getI32Attr(op, "vpm_rows_per_block").value_or(0);
   int64_t vpmBytes = getI32Attr(op, "vpm_bytes_per_block").value_or(0);
   int64_t semaphores = getI32Attr(op, "semaphores_per_block").value_or(0);
@@ -203,9 +465,8 @@ LogicalResult KernelOp::verify() {
 
   if (usesBarrier) {
     if (!isKernelCooperative(*this)) {
-      return emitOpError(
-          "uses_barrier requires schedule_mode = "
-          "#vc4tile.schedule_mode<cooperative_block>");
+      return emitOpError("uses_barrier requires schedule_mode = "
+                         "#vc4tile.schedule_mode<cooperative_block>");
     }
     if (semaphores != 4)
       return emitOpError("uses_barrier requires semaphores_per_block = 4");
@@ -226,7 +487,8 @@ LogicalResult KernelOp::verify() {
   if (sawBarrier && !usesBarrier)
     return emitOpError("contains vc4tile.barrier but uses_barrier is not true");
   if (sawSharedOp && !usesShared)
-    return emitOpError("contains shared VPM ops but uses_shared_vpm is not true");
+    return emitOpError(
+        "contains shared VPM ops but uses_shared_vpm is not true");
 
   return success();
 }
@@ -235,14 +497,16 @@ LogicalResult ReturnOp::verify() { return verifyInsideKernel(getOperation()); }
 
 LogicalResult ProgramIdOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyInsideKernel(op)))
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoUniformTransportAttrs(op)))
     return failure();
   return verifyScalarId(op, getResult().getType(), "result");
 }
 
 LogicalResult BlockIdOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyInsideKernel(op)))
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoUniformTransportAttrs(op)))
     return failure();
   auto kernel = op->getParentOfType<KernelOp>();
   if (isKernelIndependent(kernel))
@@ -252,7 +516,8 @@ LogicalResult BlockIdOp::verify() {
 
 LogicalResult WarpIdOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyInsideKernel(op)))
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoUniformTransportAttrs(op)))
     return failure();
   auto kernel = op->getParentOfType<KernelOp>();
   if (isKernelIndependent(kernel))
@@ -421,18 +686,16 @@ LogicalResult BarrierOp::verify() {
     return failure();
   auto kernel = op->getParentOfType<KernelOp>();
   if (!isKernelCooperative(kernel)) {
-    return emitOpError(
-        "requires parent vc4tile.kernel schedule_mode = "
-        "#vc4tile.schedule_mode<cooperative_block>");
+    return emitOpError("requires parent vc4tile.kernel schedule_mode = "
+                       "#vc4tile.schedule_mode<cooperative_block>");
   }
   if (!getBoolAttr(kernel.getOperation(), "uses_barrier")) {
     return emitOpError(
         "requires parent vc4tile.kernel to set uses_barrier = true");
   }
   if (!getBoolAttr(kernel.getOperation(), "require_full_block_residency")) {
-    return emitOpError(
-        "requires parent vc4tile.kernel to set "
-        "require_full_block_residency = true");
+    return emitOpError("requires parent vc4tile.kernel to set "
+                       "require_full_block_residency = true");
   }
   int64_t semaphores =
       getI32Attr(kernel.getOperation(), "semaphores_per_block").value_or(0);

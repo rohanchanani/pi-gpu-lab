@@ -30,6 +30,7 @@ def VC4Tile_KernelOp : VC4Tile_Op<"kernel", [
   }];
   let arguments = (ins
     SymbolNameAttr:$sym_name,
+    TypeAttrOf<FunctionType>:$function_type,
     OptionalAttr<StrAttr>:$public_name,
     OptionalAttr<VC4Tile_ScheduleModeAttr>:$schedule_mode,
     OptionalAttr<I32Attr>:$warps_per_block_max,
@@ -39,11 +40,12 @@ def VC4Tile_KernelOp : VC4Tile_Op<"kernel", [
     OptionalAttr<BoolAttr>:$uses_shared_vpm,
     OptionalAttr<BoolAttr>:$uses_barrier,
     OptionalAttr<BoolAttr>:$require_full_block_residency,
+    OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictionaryAttr>:$launch_abi,
     OptionalAttr<DictionaryAttr>:$resource
   );
   let regions = (region AnyRegion:$body);
-  let assemblyFormat = "$sym_name attr-dict-with-keyword $body";
+  let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
 

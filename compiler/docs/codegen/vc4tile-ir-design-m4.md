@@ -110,11 +110,17 @@ The exact ODS names may be refined during implementation, but M4 must provide th
 ### 7.1 Kernel and terminator
 
 ```mlir
-vc4tile.kernel @name(...) attributes { ... } { ... }
+vc4tile.kernel @name(%out : i32, %n : i32, %alpha : f32) attributes {
+  arg_attrs = [
+    {abi_name = "out", kind = "buffer", direction = "out", type = "u32", elem_type = "f32"},
+    {abi_name = "n", kind = "scalar", direction = "by_value", type = "u32"},
+    {abi_name = "alpha", kind = "scalar", direction = "by_value", type = "f32"}
+  ]
+} { ... }
 vc4tile.return
 ```
 
-`vc4tile.kernel` is isolated from above, has a symbol name/public name, owns a region, and carries or derives schedule/resource metadata. It must be possible to generate existing `vc4.launch_abi` and `vc4.resource` dictionaries from the kernel.
+`vc4tile.kernel` is isolated from above, has a symbol name/public name, owns a region, and carries or derives schedule/resource metadata. Its formal arguments represent user/caller ABI inputs and are described by `function_type` plus one `arg_attrs` dictionary per argument. Stage ABI-4 accepts the dialect surface and verifier contract, but conversion to SSAVC4 rejects nonzero formal arguments until the later ABI lowering stage generates `vc4.launch_abi.args[]`.
 
 ### 7.2 Identity and lane operations
 

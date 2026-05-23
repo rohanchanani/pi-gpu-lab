@@ -23,8 +23,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
-#include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Operation.h"
@@ -59,10 +59,10 @@ constexpr llvm::StringLiteral kVC4TileLaneRangeOpName("vc4tile.lane_range");
 constexpr llvm::StringLiteral kVC4TileThreadIdOpName("vc4tile.thread_id");
 constexpr llvm::StringLiteral kVC4TileMaskAllOpName("vc4tile.mask_all");
 constexpr llvm::StringLiteral kVC4TileTailMaskOpName("vc4tile.tail_mask");
-constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
-    "vc4tile.masked_load_global");
-constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
-    "vc4tile.masked_store_global");
+constexpr llvm::StringLiteral
+    kVC4TileMaskedLoadGlobalOpName("vc4tile.masked_load_global");
+constexpr llvm::StringLiteral
+    kVC4TileMaskedStoreGlobalOpName("vc4tile.masked_store_global");
 constexpr llvm::StringLiteral kVC4TileRotateOpName("vc4tile.rotate");
 constexpr llvm::StringLiteral kVC4TileReduceOpName("vc4tile.reduce");
 
@@ -85,8 +85,8 @@ constexpr llvm::StringLiteral kSSAVC4ModuleOpName("ssavc4.module");
 constexpr llvm::StringLiteral kSSAVC4FuncOpName("ssavc4.func");
 constexpr llvm::StringLiteral kSSAVC4ThreadEndOpName("ssavc4.thread_end");
 constexpr llvm::StringLiteral kSSAVC4LoadImmOpName("ssavc4.load_imm");
-constexpr llvm::StringLiteral kSSAVC4ElementNumberOpName(
-    "ssavc4.element_number");
+constexpr llvm::StringLiteral
+    kSSAVC4ElementNumberOpName("ssavc4.element_number");
 constexpr llvm::StringLiteral kSSAVC4UniformReadOpName("ssavc4.uniform.read");
 constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
@@ -148,8 +148,8 @@ static bool getBoolAttr(Operation *op, StringRef name, bool fallback = false) {
 }
 
 static llvm::StringRef getScheduleModeString(Operation *kernel) {
-  auto attr = kernel->getAttrOfType<mlir::vc4tile::ScheduleModeAttr>(
-      "schedule_mode");
+  auto attr =
+      kernel->getAttrOfType<mlir::vc4tile::ScheduleModeAttr>("schedule_mode");
   if (!attr)
     return "independent_vector";
 
@@ -195,7 +195,7 @@ static bool kernelContains(Operation *kernel, llvm::StringRef opName) {
 }
 
 static DictionaryAttr normalizeLaunchABIForSSAVC4(DictionaryAttr launchABI,
-                                                   OpBuilder &builder) {
+                                                  OpBuilder &builder) {
   SmallVector<NamedAttribute, 8> attrs;
   attrs.reserve(launchABI.size());
   for (NamedAttribute attr : launchABI) {
@@ -244,14 +244,16 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
 
   return builder.getDictionaryAttr({
       builder.getNamedAttr("public_name", builder.getStringAttr(publicName)),
-      builder.getNamedAttr("symbol_name",
-                           symName ? symName : builder.getStringAttr(publicName)),
+      builder.getNamedAttr(
+          "symbol_name", symName ? symName : builder.getStringAttr(publicName)),
       builder.getNamedAttr("code_symbol", builder.getStringAttr(codeSymbol)),
-      builder.getNamedAttr("uniform_words_per_qpu",
-                           builder.getI32IntegerAttr(needsLogicalRequest ? 1 : 0)),
+      builder.getNamedAttr(
+          "uniform_words_per_qpu",
+          builder.getI32IntegerAttr(needsLogicalRequest ? 1 : 0)),
       builder.getNamedAttr("args", builder.getArrayAttr(args)),
       builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
-      builder.getNamedAttr("tail_policy", builder.getStringAttr("exact_multiple")),
+      builder.getNamedAttr("tail_policy",
+                           builder.getStringAttr("exact_multiple")),
   });
 }
 
@@ -264,8 +266,7 @@ static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
   const bool usesBarrier = getBoolAttr(kernel, "uses_barrier");
   const int64_t warpsPerBlock =
       getI32Attr(kernel, "warps_per_block_max").value_or(cooperative ? 12 : 1);
-  const int64_t vpmRows =
-      getI32Attr(kernel, "vpm_rows_per_block").value_or(0);
+  const int64_t vpmRows = getI32Attr(kernel, "vpm_rows_per_block").value_or(0);
   const int64_t vpmBytes =
       getI32Attr(kernel, "vpm_bytes_per_block").value_or(0);
   const int64_t semaphores =
@@ -274,8 +275,8 @@ static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
       getBoolAttr(kernel, "require_full_block_residency", usesBarrier);
 
   return builder.getDictionaryAttr({
-      builder.getNamedAttr("schedule_mode",
-                           builder.getStringAttr(getScheduleModeString(kernel))),
+      builder.getNamedAttr("schedule_mode", builder.getStringAttr(
+                                                getScheduleModeString(kernel))),
       builder.getNamedAttr("warps_per_block_max",
                            builder.getI32IntegerAttr(warpsPerBlock)),
       builder.getNamedAttr("uses_shared_vpm", builder.getBoolAttr(usesShared)),
@@ -304,6 +305,20 @@ static LogicalResult verifySupportedKernelShape(Operation *kernel) {
   if (kernel->getNumRegions() != 1 || kernel->getRegion(0).empty())
     return kernel->emitOpError("requires one non-empty body region");
 
+  if (auto typeAttr =
+          llvm::dyn_cast_or_null<TypeAttr>(kernel->getAttr("function_type"))) {
+    if (auto functionType = llvm::dyn_cast<FunctionType>(typeAttr.getValue())) {
+      if (functionType.getNumInputs() != 0) {
+        return kernel->emitOpError("formal vc4tile.kernel arguments require "
+                                   "ABI formal-argument lowering");
+      }
+    }
+  }
+  if (kernel->getRegion(0).front().getNumArguments() != 0) {
+    return kernel->emitOpError(
+        "formal vc4tile.kernel arguments require ABI formal-argument lowering");
+  }
+
   bool sawReturn = false;
   for (Block &block : kernel->getRegion(0)) {
     if (block.empty())
@@ -312,7 +327,8 @@ static LogicalResult verifySupportedKernelShape(Operation *kernel) {
     Operation *terminator = block.getTerminator();
     if (!terminator || !isSupportedKernelTerminator(terminator)) {
       return kernel->emitOpError(
-          "supports only vc4tile.return, cf.br, or cf.cond_br block terminators in this M4 lowering slice");
+          "supports only vc4tile.return, cf.br, or cf.cond_br block "
+          "terminators in this M4 lowering slice");
     }
     if (hasName(terminator, kVC4TileReturnOpName))
       sawReturn = true;
@@ -352,7 +368,7 @@ static Operation *createSSAVC4Func(Operation *kernel, Operation *ssavc4Module,
                      TypeAttr::get(FunctionType::get(ctx, {}, {})));
   state.addAttribute("kernel", moduleBuilder.getUnitAttr());
   state.addAttribute("threading", mlir::vc4::ThreadingModeAttr::get(
-                                    ctx, mlir::vc4::ThreadingMode::single));
+                                      ctx, mlir::vc4::ThreadingMode::single));
   state.addAttribute("vc4.launch_abi", buildLaunchABI(kernel, moduleBuilder));
   state.addAttribute("vc4.resource", buildResource(kernel, moduleBuilder));
 
@@ -378,7 +394,8 @@ static bool isVector16I32(Type type) {
 static bool isVector16I1(Type type) {
   auto vectorType = llvm::dyn_cast<VectorType>(type);
   return vectorType && vectorType.getRank() == 1 &&
-         vectorType.getDimSize(0) == 16 && vectorType.getElementType().isInteger(1);
+         vectorType.getDimSize(0) == 16 &&
+         vectorType.getElementType().isInteger(1);
 }
 
 static bool isVector16F32(Type type) {
@@ -410,8 +427,7 @@ static Value createSSAVC4OpWithResult(OpBuilder &builder, Location loc,
 }
 
 static Operation *createSSAVC4Op(OpBuilder &builder, Location loc,
-                                 llvm::StringRef name,
-                                 ArrayRef<Value> operands,
+                                 llvm::StringRef name, ArrayRef<Value> operands,
                                  ArrayRef<NamedAttribute> attrs) {
   OperationState state(loc, name);
   state.addOperands(operands);
@@ -424,11 +440,10 @@ static Value createLoadImm(OpBuilder &builder, Location loc, Type resultType,
                            Attribute value) {
   Attribute mode = mlir::vc4::LoadImmModeAttr::get(
       builder.getContext(), mlir::vc4::LoadImmMode::splat32);
-  return createSSAVC4OpWithResult(
-      builder, loc, kSSAVC4LoadImmOpName, {},
-      {builder.getNamedAttr("mode", mode),
-       builder.getNamedAttr("value", value)},
-      resultType);
+  return createSSAVC4OpWithResult(builder, loc, kSSAVC4LoadImmOpName, {},
+                                  {builder.getNamedAttr("mode", mode),
+                                   builder.getNamedAttr("value", value)},
+                                  resultType);
 }
 
 static Value createLoadImmI32(OpBuilder &builder, Location loc, Type resultType,
@@ -444,8 +459,8 @@ static Value createElementNumber(OpBuilder &builder, Location loc) {
   return created->getResult(0);
 }
 
-static Value createUniformRead(OpBuilder &builder, Location loc, Type resultType,
-                               int64_t index) {
+static Value createUniformRead(OpBuilder &builder, Location loc,
+                               Type resultType, int64_t index) {
   return createSSAVC4OpWithResult(
       builder, loc, kSSAVC4UniformReadOpName, {},
       {builder.getNamedAttr("index", builder.getI32IntegerAttr(index))},
@@ -459,23 +474,23 @@ static Value createSplat(OpBuilder &builder, Location loc, Value input,
 }
 
 static Value createALUAdd(OpBuilder &builder, Location loc,
-                          ArrayRef<Value> operands,
-                          mlir::vc4::AddOpcode opcode, Type resultType) {
+                          ArrayRef<Value> operands, mlir::vc4::AddOpcode opcode,
+                          Type resultType) {
   Attribute opcodeAttr =
       mlir::vc4::AddOpcodeAttr::get(builder.getContext(), opcode);
-  return createSSAVC4OpWithResult(
-      builder, loc, kSSAVC4ALUAddOpName, operands,
-      {builder.getNamedAttr("opcode", opcodeAttr)}, resultType);
+  return createSSAVC4OpWithResult(builder, loc, kSSAVC4ALUAddOpName, operands,
+                                  {builder.getNamedAttr("opcode", opcodeAttr)},
+                                  resultType);
 }
 
 static Value createALUMul(OpBuilder &builder, Location loc,
-                          ArrayRef<Value> operands,
-                          mlir::vc4::MulOpcode opcode, Type resultType) {
+                          ArrayRef<Value> operands, mlir::vc4::MulOpcode opcode,
+                          Type resultType) {
   Attribute opcodeAttr =
       mlir::vc4::MulOpcodeAttr::get(builder.getContext(), opcode);
-  return createSSAVC4OpWithResult(
-      builder, loc, kSSAVC4ALUMulOpName, operands,
-      {builder.getNamedAttr("opcode", opcodeAttr)}, resultType);
+  return createSSAVC4OpWithResult(builder, loc, kSSAVC4ALUMulOpName, operands,
+                                  {builder.getNamedAttr("opcode", opcodeAttr)},
+                                  resultType);
 }
 
 static Value createMakeFlags(OpBuilder &builder, Location loc,
@@ -527,8 +542,7 @@ static Value lookupMappedValue(Operation *user, Value source,
   return Value();
 }
 
-static std::optional<mlir::vc4::AddOpcode>
-getIntegerAddOpcode(Operation *op) {
+static std::optional<mlir::vc4::AddOpcode> getIntegerAddOpcode(Operation *op) {
   if (hasName(op, kArithAddIOpName))
     return mlir::vc4::AddOpcode::add;
   if (hasName(op, kArithSubIOpName))
@@ -603,9 +617,8 @@ static LogicalResult lowerIntegerALU(Operation *op, OpBuilder &builder,
   if (!lhs || !rhs)
     return failure();
   SmallVector<Value, 2> operands{lhs, rhs};
-  valueMap[op->getResult(0)] =
-      createALUAdd(builder, op->getLoc(), operands, *opcode,
-                   op->getResult(0).getType());
+  valueMap[op->getResult(0)] = createALUAdd(
+      builder, op->getLoc(), operands, *opcode, op->getResult(0).getType());
   return success();
 }
 
@@ -619,8 +632,7 @@ static LogicalResult lowerIntegerMul(Operation *op, OpBuilder &builder,
     return failure();
   SmallVector<Value, 2> operands{lhs, rhs};
   valueMap[op->getResult(0)] =
-      createALUMul(builder, op->getLoc(), operands,
-                   mlir::vc4::MulOpcode::mul24,
+      createALUMul(builder, op->getLoc(), operands, mlir::vc4::MulOpcode::mul24,
                    op->getResult(0).getType());
   return success();
 }
@@ -634,9 +646,8 @@ static LogicalResult lowerCmpI(Operation *op, OpBuilder &builder,
   if (!lhs || !rhs)
     return failure();
   SmallVector<Value, 2> operands{lhs, rhs};
-  valueMap[op->getResult(0)] =
-      createMakeFlags(builder, op->getLoc(), operands,
-                      mlir::ssavc4::FlagKind::compare);
+  valueMap[op->getResult(0)] = createMakeFlags(builder, op->getLoc(), operands,
+                                               mlir::ssavc4::FlagKind::compare);
   return success();
 }
 
@@ -664,7 +675,8 @@ static LogicalResult lowerLaneRange(Operation *op, OpBuilder &builder,
   if (op->getNumResults() != 1)
     return op->emitOpError("expected one result");
   if (!isVector16I32(op->getResult(0).getType()))
-    return op->emitOpError("currently lowers only vector<16xi32> lane_range results");
+    return op->emitOpError(
+        "currently lowers only vector<16xi32> lane_range results");
   valueMap[op->getResult(0)] = createElementNumber(builder, op->getLoc());
   return success();
 }
@@ -675,7 +687,8 @@ static LogicalResult lowerLaneId(Operation *op, OpBuilder &builder,
     return op->emitOpError("expected one result");
   if (!op->getResult(0).getType().isSignlessInteger(32) &&
       !isVector16I32(op->getResult(0).getType()))
-    return op->emitOpError("currently lowers only i32 or vector<16xi32> lane_id results");
+    return op->emitOpError(
+        "currently lowers only i32 or vector<16xi32> lane_id results");
   // VC4's lane identity is represented by ELEMENT_NUMBER.  This is a 16-lane
   // vector value; scalar lane_id uses are accepted only when the value is not
   // subsequently consumed by a scalar-only op in this early lowering slice.
@@ -689,7 +702,8 @@ static LogicalResult lowerThreadId(Operation *op, OpBuilder &builder,
     return op->emitOpError("expected one result");
   Type resultType = op->getResult(0).getType();
   if (!isVector16I32(resultType))
-    return op->emitOpError("currently lowers only vector<16xi32> thread_id results");
+    return op->emitOpError(
+        "currently lowers only vector<16xi32> thread_id results");
   Type i32Type = builder.getI32Type();
   Value logicalRequest = createUniformRead(builder, op->getLoc(), i32Type,
                                            /*index=*/0);
@@ -700,9 +714,9 @@ static LogicalResult lowerThreadId(Operation *op, OpBuilder &builder,
   Value baseVec = createSplat(builder, op->getLoc(), base, resultType);
   Value lane = createElementNumber(builder, op->getLoc());
   SmallVector<Value, 2> addOperands{baseVec, lane};
-  valueMap[op->getResult(0)] = createALUAdd(
-      builder, op->getLoc(), addOperands, mlir::vc4::AddOpcode::add,
-      resultType);
+  valueMap[op->getResult(0)] =
+      createALUAdd(builder, op->getLoc(), addOperands,
+                   mlir::vc4::AddOpcode::add, resultType);
   return success();
 }
 
@@ -710,14 +724,13 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
                                   llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumResults() != 1)
     return op->emitOpError("expected one result");
-  Value one = createLoadImmI32(builder, op->getLoc(), getVector16I32Type(builder),
-                               1);
-  Value zero = createLoadImmI32(builder, op->getLoc(), getVector16I32Type(builder),
-                                0);
+  Value one =
+      createLoadImmI32(builder, op->getLoc(), getVector16I32Type(builder), 1);
+  Value zero =
+      createLoadImmI32(builder, op->getLoc(), getVector16I32Type(builder), 0);
   SmallVector<Value, 2> operands{one, zero};
-  valueMap[op->getResult(0)] =
-      createMakeFlags(builder, op->getLoc(), operands,
-                      mlir::ssavc4::FlagKind::compare);
+  valueMap[op->getResult(0)] = createMakeFlags(builder, op->getLoc(), operands,
+                                               mlir::ssavc4::FlagKind::compare);
   return success();
 }
 
@@ -739,9 +752,8 @@ static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
                                      mlir::vc4::AddOpcode::add, vecType);
   Value limitVec = createSplat(builder, op->getLoc(), limit, vecType);
   SmallVector<Value, 2> compareOperands{absoluteIndex, limitVec};
-  valueMap[op->getResult(0)] =
-      createMakeFlags(builder, op->getLoc(), compareOperands,
-                      mlir::ssavc4::FlagKind::compare);
+  valueMap[op->getResult(0)] = createMakeFlags(
+      builder, op->getLoc(), compareOperands, mlir::ssavc4::FlagKind::compare);
   return success();
 }
 
@@ -773,8 +785,9 @@ static std::optional<int64_t> getI32ConstantValue(Value value) {
   return attr.getInt();
 }
 
-static void eraseLoweredFlagMaskIfMemoryOnly(
-    Value sourceMask, llvm::DenseMap<Value, Value> &valueMap) {
+static void
+eraseLoweredFlagMaskIfMemoryOnly(Value sourceMask,
+                                 llvm::DenseMap<Value, Value> &valueMap) {
   if (!valueHasOnlyMaskedGlobalMemoryUsers(sourceMask))
     return;
   auto it = valueMap.find(sourceMask);
@@ -787,12 +800,9 @@ static void eraseLoweredFlagMaskIfMemoryOnly(
   }
 }
 
-
-static LogicalResult appendStoreActiveLaneOperand(Operation *op,
-                                                  OpBuilder &builder,
-                                                  llvm::DenseMap<Value, Value> &valueMap,
-                                                  SmallVectorImpl<Value> &operands,
-                                                  int64_t &activeLanesAttr) {
+static LogicalResult appendStoreActiveLaneOperand(
+    Operation *op, OpBuilder &builder, llvm::DenseMap<Value, Value> &valueMap,
+    SmallVectorImpl<Value> &operands, int64_t &activeLanesAttr) {
   Value sourceMask = op->getOperand(3);
   Operation *maskDef = sourceMask.getDefiningOp();
 
@@ -811,9 +821,9 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
     if (!base || !limit)
       return failure();
     SmallVector<Value, 2> activeLaneOperands{limit, base};
-    Value activeLanes = createALUAdd(builder, op->getLoc(), activeLaneOperands,
-                                     mlir::vc4::AddOpcode::sub,
-                                     builder.getI32Type());
+    Value activeLanes =
+        createALUAdd(builder, op->getLoc(), activeLaneOperands,
+                     mlir::vc4::AddOpcode::sub, builder.getI32Type());
     operands.push_back(activeLanes);
     activeLanesAttr = 16;
     std::optional<int64_t> sourceBase =
@@ -829,8 +839,8 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
     return success();
   }
 
-  return op->emitOpError(
-      "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for coalesced VDW stores");
+  return op->emitOpError("currently supports only vc4tile.mask_all or "
+                         "vc4tile.tail_mask masks for coalesced VDW stores");
 }
 
 static LogicalResult verifyMaskedLoadShape(Operation *op) {
@@ -843,44 +853,53 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
   if (!isVector16I1(op->getOperand(2).getType()))
     return op->emitOpError("requires a vector<16xi1> mask");
   if (!isVector16Data(op->getResult(0).getType()))
-    return op->emitOpError("requires a vector<16xi32> or vector<16xf32> result");
+    return op->emitOpError(
+        "requires a vector<16xi32> or vector<16xf32> result");
 
   auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
   if (!elemBytes || elemBytes.getInt() != 4)
     return op->emitOpError("supports only elem_bytes = 4 for TMU loads");
 
-  auto offsetUnit = op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
+  auto offsetUnit =
+      op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
   if (!offsetUnit)
     return op->emitOpError("requires an offset_unit attribute");
   if (offsetUnit.getValue() != mlir::vc4tile::OffsetUnit::element)
-    return op->emitOpError("supports only element offsets for coalesced TMU loads");
+    return op->emitOpError(
+        "supports only element offsets for coalesced TMU loads");
 
   Operation *offsetDef = op->getOperand(1).getDefiningOp();
   if (!hasName(offsetDef, kVC4TileLaneRangeOpName)) {
     return op->emitOpError(
-        "requires offsets to be the direct vc4tile.lane_range value for the M4 coalesced TMU subset");
+        "requires offsets to be the direct vc4tile.lane_range value for the M4 "
+        "coalesced TMU subset");
   }
 
   auto access = op->getAttrOfType<mlir::vc4tile::MemoryAccessAttr>("access");
   if (access && access.getValue() != mlir::vc4tile::MemoryAccess::coalesced)
-    return op->emitOpError("supports only access = #vc4tile.memory_access<coalesced> for TMU loads");
+    return op->emitOpError("supports only access = "
+                           "#vc4tile.memory_access<coalesced> for TMU loads");
 
-  auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
-  if (memorySpace && memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
-    return op->emitOpError("requires memory_space = #vc4tile.memory_space<global>");
+  auto memorySpace =
+      op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+  if (memorySpace &&
+      memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
+    return op->emitOpError(
+        "requires memory_space = #vc4tile.memory_space<global>");
 
   Operation *maskDef = op->getOperand(2).getDefiningOp();
   if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
       !hasName(maskDef, kVC4TileTailMaskOpName)) {
-    return op->emitOpError(
-        "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for TMU loads");
+    return op->emitOpError("currently supports only vc4tile.mask_all or "
+                           "vc4tile.tail_mask masks for TMU loads");
   }
 
   return success();
 }
 
-static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
-                                           llvm::DenseMap<Value, Value> &valueMap) {
+static LogicalResult
+lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
+                      llvm::DenseMap<Value, Value> &valueMap) {
   if (failed(verifyMaskedLoadShape(op)))
     return failure();
 
@@ -926,20 +945,25 @@ static LogicalResult verifyCoalescedStoreShape(Operation *op) {
   if (!elemBytes || elemBytes.getInt() != 4)
     return op->emitOpError("supports only elem_bytes = 4 for VDW stores");
 
-  auto offsetUnit = op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
-  if (!offsetUnit || offsetUnit.getValue() != mlir::vc4tile::OffsetUnit::element) {
+  auto offsetUnit =
+      op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
+  if (!offsetUnit ||
+      offsetUnit.getValue() != mlir::vc4tile::OffsetUnit::element) {
     return op->emitOpError(
         "currently supports only element offsets for coalesced VDW stores");
   }
 
-  auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
-  if (memorySpace && memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
-    return op->emitOpError("requires memory_space = #vc4tile.memory_space<global>");
+  auto memorySpace =
+      op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+  if (memorySpace &&
+      memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
+    return op->emitOpError(
+        "requires memory_space = #vc4tile.memory_space<global>");
 
   auto access = op->getAttrOfType<mlir::vc4tile::MemoryAccessAttr>("access");
   if (access && access.getValue() == mlir::vc4tile::MemoryAccess::generic) {
-    return op->emitOpError(
-        "generic per-lane store access is outside the M4 hardware-lowered contract");
+    return op->emitOpError("generic per-lane store access is outside the M4 "
+                           "hardware-lowered contract");
   }
   if (access && access.getValue() != mlir::vc4tile::MemoryAccess::coalesced &&
       access.getValue() != mlir::vc4tile::MemoryAccess::affine_contiguous) {
@@ -949,14 +973,16 @@ static LogicalResult verifyCoalescedStoreShape(Operation *op) {
 
   if (!isDirectLaneRangeValue(op->getOperand(1))) {
     return op->emitOpError(
-        "requires offsets to be the direct vc4tile.lane_range value for the M4 coalesced VDW subset");
+        "requires offsets to be the direct vc4tile.lane_range value for the M4 "
+        "coalesced VDW subset");
   }
 
   return success();
 }
 
-static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
-                                            llvm::DenseMap<Value, Value> &valueMap) {
+static LogicalResult
+lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
+                       llvm::DenseMap<Value, Value> &valueMap) {
   if (failed(verifyCoalescedStoreShape(op)))
     return failure();
 
@@ -973,15 +999,15 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
 
   SmallVector<int32_t, 4> operandSegmentSizes{
       1, 1, static_cast<int32_t>(operands.size() == 3), 0};
-  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
-                 {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-                  builder.getNamedAttr("active_lanes",
-                                       builder.getI32IntegerAttr(activeLanesAttr)),
-                  builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
-                  builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
-                  builder.getNamedAttr(
-                      "operandSegmentSizes",
-                      builder.getDenseI32ArrayAttr(operandSegmentSizes))});
+  createSSAVC4Op(
+      builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
+      {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+       builder.getNamedAttr("active_lanes",
+                            builder.getI32IntegerAttr(activeLanesAttr)),
+       builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
+       builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+       builder.getNamedAttr("operandSegmentSizes", builder.getDenseI32ArrayAttr(
+                                                       operandSegmentSizes))});
   return success();
 }
 
@@ -993,8 +1019,8 @@ static LogicalResult lowerRotate(Operation *op, OpBuilder &builder,
   Type inputType = op->getOperand(0).getType();
   Type resultType = op->getResult(0).getType();
   if (!isVector16Data(inputType) || inputType != resultType)
-    return op->emitOpError(
-        "requires matching vector<16xi32> or vector<16xf32> input/result types");
+    return op->emitOpError("requires matching vector<16xi32> or vector<16xf32> "
+                           "input/result types");
 
   auto amountAttr = op->getAttrOfType<IntegerAttr>("amount");
   if (!amountAttr)
@@ -1037,8 +1063,8 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
   Type inputType = op->getOperand(0).getType();
   Type resultType = op->getResult(0).getType();
   if (!isVector16Data(inputType) || inputType != resultType)
-    return op->emitOpError(
-        "requires matching vector<16xi32> or vector<16xf32> input/result types");
+    return op->emitOpError("requires matching vector<16xi32> or vector<16xf32> "
+                           "input/result types");
   if (!isVector16I1(op->getOperand(1).getType()))
     return op->emitOpError("requires a vector<16xi1> mask");
   if (!maskIsAllLanes(op, 1))
@@ -1068,10 +1094,11 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
     return failure();
 
   mlir::vc4::AddOpcode addOpcode = isVector16F32(inputType)
-                                      ? mlir::vc4::AddOpcode::fadd
-                                      : mlir::vc4::AddOpcode::add;
+                                       ? mlir::vc4::AddOpcode::fadd
+                                       : mlir::vc4::AddOpcode::add;
   for (int64_t amount : {8, 4, 2, 1}) {
-    Value rotated = createRotate(builder, op->getLoc(), acc, amount, resultType);
+    Value rotated =
+        createRotate(builder, op->getLoc(), acc, amount, resultType);
     SmallVector<Value, 2> operands{acc, rotated};
     acc = createALUAdd(builder, op->getLoc(), operands, addOpcode, resultType);
   }
@@ -1118,8 +1145,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
 }
 
 static Operation *createSSAVC4Branch(OpBuilder &builder, Location loc,
-                                          Block *target,
-                                          ArrayRef<Value> targetOperands) {
+                                     Block *target,
+                                     ArrayRef<Value> targetOperands) {
   OperationState state(loc, kSSAVC4BranchOpName);
   state.addOperands(targetOperands);
   state.addSuccessors(target);
@@ -1127,10 +1154,10 @@ static Operation *createSSAVC4Branch(OpBuilder &builder, Location loc,
 }
 
 static Operation *createSSAVC4CondBranch(OpBuilder &builder, Location loc,
-                                              Value flags, Block *trueDest,
-                                              ArrayRef<Value> trueDestOperands,
-                                              Block *falseDest,
-                                              ArrayRef<Value> falseDestOperands) {
+                                         Value flags, Block *trueDest,
+                                         ArrayRef<Value> trueDestOperands,
+                                         Block *falseDest,
+                                         ArrayRef<Value> falseDestOperands) {
   OperationState state(loc, kSSAVC4CondBranchOpName);
   SmallVector<Value, 1> flagOperands{flags};
   state.addOperands(flagOperands);
@@ -1141,17 +1168,17 @@ static Operation *createSSAVC4CondBranch(OpBuilder &builder, Location loc,
   state.addAttribute(
       "cond", mlir::vc4::BranchCondAttr::get(builder.getContext(),
                                              mlir::vc4::BranchCond::any_z_set));
-  state.addAttribute(
-      "operandSegmentSizes",
-      builder.getDenseI32ArrayAttr(
-          {1, static_cast<int32_t>(trueDestOperands.size()),
-           static_cast<int32_t>(falseDestOperands.size())}));
+  state.addAttribute("operandSegmentSizes",
+                     builder.getDenseI32ArrayAttr(
+                         {1, static_cast<int32_t>(trueDestOperands.size()),
+                          static_cast<int32_t>(falseDestOperands.size())}));
   return builder.create(state);
 }
 
-static Block *createSSAVC4FalseFallthroughBlock(
-    OpBuilder &builder, Location loc, Block *falseDest,
-    ArrayRef<Value> falseDestOperands) {
+static Block *
+createSSAVC4FalseFallthroughBlock(OpBuilder &builder, Location loc,
+                                  Block *falseDest,
+                                  ArrayRef<Value> falseDestOperands) {
   Block *currentBlock = builder.getInsertionBlock();
   if (!currentBlock || !currentBlock->getParent())
     return nullptr;
@@ -1179,11 +1206,9 @@ static Block *createSSAVC4FalseFallthroughBlock(
   return fallthrough;
 }
 
-static LogicalResult
-lowerBranchTerminator(Operation *op, OpBuilder &builder,
-                      llvm::DenseMap<Value, Value> &valueMap,
-                      llvm::DenseMap<Block *, Block *> &blockMap,
-                      Block *unifiedExitBlock) {
+static LogicalResult lowerBranchTerminator(
+    Operation *op, OpBuilder &builder, llvm::DenseMap<Value, Value> &valueMap,
+    llvm::DenseMap<Block *, Block *> &blockMap, Block *unifiedExitBlock) {
   if (hasName(op, kVC4TileReturnOpName)) {
     if (unifiedExitBlock) {
       createSSAVC4Branch(builder, op->getLoc(), unifiedExitBlock, {});
@@ -1220,8 +1245,8 @@ lowerBranchTerminator(Operation *op, OpBuilder &builder,
     if (!flags)
       return failure();
     if (!llvm::isa<mlir::ssavc4::FlagsType>(flags.getType())) {
-      return op->emitOpError(
-          "condition must be produced by a lowerable uniform comparison and lower to !ssavc4.flags");
+      return op->emitOpError("condition must be produced by a lowerable "
+                             "uniform comparison and lower to !ssavc4.flags");
     }
 
     SmallVector<Value, 4> trueOperands;
@@ -1249,7 +1274,8 @@ lowerBranchTerminator(Operation *op, OpBuilder &builder,
     Block *falseFallthrough = createSSAVC4FalseFallthroughBlock(
         builder, op->getLoc(), falseIt->second, falseOperands);
     if (!falseFallthrough)
-      return op->emitOpError("internal error: unable to create false fallthrough block");
+      return op->emitOpError(
+          "internal error: unable to create false fallthrough block");
     createSSAVC4CondBranch(builder, op->getLoc(), flags, trueIt->second,
                            trueOperands, falseFallthrough, falseOperands);
     return success();
@@ -1281,8 +1307,8 @@ static void appendSourceBlockInFalseFallthroughOrder(
   alreadyOrdered[sourceBlock] = true;
   orderedBlocks.push_back(sourceBlock);
 
-  auto condBranch =
-      llvm::dyn_cast_or_null<mlir::cf::CondBranchOp>(sourceBlock->getTerminator());
+  auto condBranch = llvm::dyn_cast_or_null<mlir::cf::CondBranchOp>(
+      sourceBlock->getTerminator());
   if (!condBranch || !condBranchHasNoSuccessorOperands(condBranch))
     return;
 
@@ -1298,8 +1324,8 @@ static SmallVector<Block *, 8> computeSSAVC4BlockOrder(Operation *kernel) {
   Region &sourceRegion = kernel->getRegion(0);
 
   if (!sourceRegion.empty())
-    appendSourceBlockInFalseFallthroughOrder(&sourceRegion.front(), orderedBlocks,
-                                             alreadyOrdered);
+    appendSourceBlockInFalseFallthroughOrder(&sourceRegion.front(),
+                                             orderedBlocks, alreadyOrdered);
 
   for (Block &sourceBlock : sourceRegion)
     appendSourceBlockInFalseFallthroughOrder(&sourceBlock, orderedBlocks,
@@ -1307,9 +1333,10 @@ static SmallVector<Block *, 8> computeSSAVC4BlockOrder(Operation *kernel) {
   return orderedBlocks;
 }
 
-static LogicalResult createSSAVC4Blocks(Operation *kernel, Operation *func,
-                                        llvm::DenseMap<Value, Value> &valueMap,
-                                        llvm::DenseMap<Block *, Block *> &blockMap) {
+static LogicalResult
+createSSAVC4Blocks(Operation *kernel, Operation *func,
+                   llvm::DenseMap<Value, Value> &valueMap,
+                   llvm::DenseMap<Block *, Block *> &blockMap) {
   Region &destRegion = func->getRegion(0);
 
   for (Block *sourceBlock : computeSSAVC4BlockOrder(kernel)) {
@@ -1318,7 +1345,8 @@ static LogicalResult createSSAVC4Blocks(Operation *kernel, Operation *func,
     blockMap[sourceBlock] = destBlock;
 
     for (BlockArgument arg : sourceBlock->getArguments()) {
-      BlockArgument loweredArg = destBlock->addArgument(arg.getType(), arg.getLoc());
+      BlockArgument loweredArg =
+          destBlock->addArgument(arg.getType(), arg.getLoc());
       valueMap[arg] = loweredArg;
     }
   }
@@ -1377,14 +1405,16 @@ struct ConvertVC4TileToSSAVC4Pass
 
   StringRef getArgument() const override { return "convert-vc4tile-to-ssavc4"; }
   StringRef getDescription() const override {
-    return "Lower supported VC4Tile kernels, IDs, masks, global loads/stores, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
+    return "Lower supported VC4Tile kernels, IDs, masks, global loads/stores, "
+           "rotate/reduce, uniform control flow, block arguments, and metadata "
+           "to SSAVC4";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
-                    mlir::vector::VectorDialect, mlir::vc4::VC4Dialect,
-                    mlir::ssavc4::SSAVC4Dialect,
-                    mlir::vc4tile::VC4TileDialect>();
+    registry
+        .insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
+                mlir::vector::VectorDialect, mlir::vc4::VC4Dialect,
+                mlir::ssavc4::SSAVC4Dialect, mlir::vc4tile::VC4TileDialect>();
   }
 
   void runOnOperation() override {
@@ -1447,5 +1477,4 @@ void mlir::vc4::registerConvertVC4TileToSSAVC4Pass() {
   // PassRegistration below installs --convert-vc4tile-to-ssavc4.
 }
 
-static PassRegistration<ConvertVC4TileToSSAVC4Pass>
-    registerVC4TileToSSAVC4Pass;
+static PassRegistration<ConvertVC4TileToSSAVC4Pass> registerVC4TileToSSAVC4Pass;

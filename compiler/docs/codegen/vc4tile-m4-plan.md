@@ -78,8 +78,8 @@ Staged ABI refactor sequence:
 1. `ABI-1 docs/spec/verifier lock`
 2. `ABI-2 lower vc4 launch builtin enum/schema modernization`
 3. `ABI-3 artifact emitter + SSAVC4 spill/runtime builtin modernization`
-4. `ABI-4 VC4/SSAVC4 test modernization`
-5. `ABI-5 vc4tile.kernel formal arguments`
+4. `ABI-4 VC4Tile formal kernel argument dialect surface`
+5. `ABI-5 formal-argument lowering preparation`
 6. `ABI-6 VC4TileToSSAVC4 formal-arg and builtin lowering`
 7. `ABI-7 M4 fixture rewrite plus program_id hardware proof`
 8. `ABI-8 hardware regression and cumulative check-vc4`
