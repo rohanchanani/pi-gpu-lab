@@ -178,3 +178,64 @@ still contains stale lower ABI syntax.
 `ssavc4.element_number` stays as the first-class lane/register identity op. It
 is not a `vc4.launch_abi.builtins[]` entry and must not be packed into the
 uniform stream.
+
+## 2026-05-23: Failed-candidate cleanup discarded useful Codex mechanical repairs
+
+**Symptom:** A Codex mechanical attempt repaired a compile/link/API issue, such
+as missing linked `KernelOp::parse` / `KernelOp::print` definitions for custom
+ODS parser/printer declarations, but a later semantic gate failed. Cleanup then
+discarded the whole failed candidate, so the same mechanical link failure
+recurred in the next GPT attempt.
+
+**Root cause:** Failure prompts treated the next GPT attempt as a fresh bundle
+request and did not carry forward concise mechanical repairs from the failed
+candidate history.
+
+**Permanent rule:** Failure prompts must surface a short "Prior Codex mechanical
+repair to preserve" section whenever the packet indicates Codex fixed
+compile/API/link/path mechanics. Do not replay old diffs automatically, but do
+require the next GPT bundle to preserve the same mechanical constraint.
+
+**Verification implication:** Prompt smoke checks should render a synthetic
+Codex failure packet and assert that carry-forward constraints, including
+`KernelOp::parse` and `KernelOp::print` when present, appear in the failure
+prompt.
+
+## 2026-05-23: GPT failure attempts rewrote already-passing surfaces
+
+**Symptom:** Some failure attempts rewrote broad surfaces that had already
+passed, including earlier-slice formal-args, program-id, global-store, SAXPY,
+vector-store, warp-reduce, minimal ABI, or cooperative matrix files, instead of
+fixing the current failing gate.
+
+**Root cause:** Failure prompts included large context packs but did not state
+late and explicitly that a failure attempt is a focused repair attempt, not a
+new implementation pass.
+
+**Permanent rule:** Failure prompts must include high-salience repair discipline:
+fix the current failure packet, preserve already-passing checks, avoid
+unrelated rewrites, and justify any out-of-scope path changes in
+`manifest.json risk_notes`.
+
+**Verification implication:** Rendered failure-prompt checks must assert that
+focused repair language, `source_product_missing`, `check-vc4`, and
+`manifest.json risk_notes` appear in M4 failure prompts.
+
+## 2026-05-23: Resume auto-committed before cumulative prefix validation
+
+**Symptom:** An active slice passed and was auto-committed, but the subsequent
+resume-level cumulative prefix recheck failed. HEAD was left at a bad
+bad-but-salvageable commit.
+
+**Root cause:** `vc4_milestone_resume.py` delegated to autorun with normal
+auto-commit behavior, then ran the cumulative prefix check after the commit had
+already landed.
+
+**Permanent rule:** Resume must run autorun slices with `--no-commit`, verify
+the active slice and cumulative prefix against the dirty candidate, and only
+then perform the same allowlist/forbidden-path guarded commit with the worklist
+commit message. If prefix fails, leave the candidate dirty and uncommitted.
+
+**Verification implication:** Static/dry workflow checks should confirm that
+resume passes `--no-commit` to autorun and has a deferred guarded commit path
+after cumulative prefix success.

@@ -368,6 +368,92 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     return fenced(json.dumps(summary, indent=2, sort_keys=True), "json")
 
 
+def failure_packet_summary(repo: Path, failure_packet: Path | None) -> Mapping[str, Any]:
+    data = load_failure_packet_data(repo, failure_packet)
+    if not isinstance(data, Mapping):
+        return {}
+    return data
+
+
+def render_failure_repair_discipline_markdown(
+    repo: Path,
+    slice_id: str,
+    failure_packet: Path | None,
+) -> str:
+    packet = failure_packet_summary(repo, failure_packet)
+    gate = str(packet.get("gate") or "")
+    stage = str(packet.get("stage") or "")
+    log_tail = str(packet.get("log_tail") or "")
+    first_failure = ""
+    extra = packet.get("extra")
+    if isinstance(extra, Mapping):
+        typed = extra.get("typed_verifier")
+        if isinstance(typed, Mapping):
+            first_failure = str(typed.get("first_failure") or "")
+
+    lines = [
+        "A failure attempt is a repair attempt, not a fresh implementation pass.",
+        "",
+        "- Fix the current failure packet.",
+        "- Preserve checks that already passed in the previous attempt; preserve already-passing behavior unless the current failure log explicitly names it.",
+        "- Do not rewrite, restyle, or regenerate unrelated files merely because they appear in the context pack.",
+        "- If the failure is `source_product_missing`, regenerate the active slice candidate and include every exact source product, but do not rewrite unrelated earlier-slice surfaces.",
+        "- If the failure is build or `check-vc4`, inspect the failed test list/log and target only files needed by those failures.",
+        "- If a previous Codex mechanical repair fixed compile/API/link/path issues, the next GPT bundle must carry it forward because failed candidate changes are cleaned.",
+        "- If the candidate changes files outside active source products or failed-test/log scope, explain why in `manifest.json risk_notes`.",
+    ]
+
+    if slice_id.startswith("m4-"):
+        lines.extend(
+            [
+                "- VC4Tile M4 rule: preserve custom `vc4tile.kernel` parser/printer definitions when ODS declares custom parse/print.",
+                "- VC4Tile M4 rule: do not set or keep ODS custom parser/printer declarations unless matching C++ definitions are present and linked.",
+                "- Do not touch earlier-passed formal-args, program-id, global-store, SAXPY, vector-store, warp-reduce, m4-03 minimal ABI, or m4-09 cooperative matrix surfaces unless the current failure log explicitly names them.",
+            ]
+        )
+
+    if any(token in (gate + "\n" + stage + "\n" + log_tail + "\n" + first_failure) for token in ("source_product_missing", "check-vc4", "build")):
+        lines.append("- Keep the patch boundary aligned with the named gate and its direct logs.")
+
+    return "\n".join(lines).rstrip()
+
+
+def render_prior_codex_mechanical_repair_markdown(
+    repo: Path,
+    failure_packet: Path | None,
+) -> str:
+    packet = failure_packet_summary(repo, failure_packet)
+    if not packet:
+        return "No prior Codex mechanical repair was detected in the failure packet."
+
+    packet_path = str(
+        packet.get("failure_packet_path")
+        or (relpath(repo, failure_packet if failure_packet and failure_packet.is_absolute() else repo / failure_packet) if failure_packet else "")
+    )
+    stage = str(packet.get("stage") or "")
+    log_tail = str(packet.get("log_tail") or "")
+    message = str(packet.get("message") or "")
+    text = "\n".join([stage, message, log_tail])
+    lower = text.lower()
+    has_codex = stage == "codex" or "codex" in lower or "candidate diff" in lower
+    mentions_kernel_parse = "kernelop::parse" in lower
+    mentions_kernel_print = "kernelop::print" in lower
+    if not (has_codex or mentions_kernel_parse or mentions_kernel_print):
+        return "No prior Codex mechanical repair was detected in the failure packet."
+
+    lines = [
+        f"Failure packet: `{packet_path or '<current failure packet>'}`",
+        "",
+        "A previous Codex mechanical repair appears in this failure history. Preserve the mechanical compile/API/link/path fix in the next GPT bundle; do not rely on failed-candidate cleanup to keep it.",
+    ]
+    if mentions_kernel_parse or mentions_kernel_print:
+        lines.append(
+            "Carry-forward constraint: if ODS declares custom `KernelOp` parse/print hooks, keep matching linked C++ definitions for `KernelOp::parse` and `KernelOp::print`; do not leave undefined symbols and do not remove only one side of the declaration/definition pair."
+        )
+    lines.append("Do not auto-replay old diffs; reimplement the necessary mechanical repair deliberately in the active candidate.")
+    return "\n".join(lines).rstrip()
+
+
 def candidate_verification_spec_paths(repo: Path, config: MilestoneConfig) -> list[Path]:
     """Return plausible verification-spec paths for the active milestone.
 
@@ -1002,6 +1088,8 @@ def render_prompt(
         "DOWNLOAD_CONTRACT_MARKDOWN": render_download_contract_markdown(download_contract).rstrip(),
         "RESPONSE_JSON_SCHEMA": response_schema(mode),
         "FAILURE_PACKET_JSON": failure_packet_json(repo, failure_packet),
+        "FAILURE_REPAIR_DISCIPLINE": render_failure_repair_discipline_markdown(repo, slice_id, failure_packet),
+        "PRIOR_CODEX_MECHANICAL_REPAIR": render_prior_codex_mechanical_repair_markdown(repo, failure_packet),
         "REPO_CAPABILITY_SNAPSHOT": repo_capabilities_json,
         "REPO_CAPABILITIES": repo_capabilities_md,
         "REPO_CAPABILITIES_MARKDOWN": repo_capabilities_md,

@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Any
 
 try:
-    from vc4_codegen_state import MilestoneConfig, StateStore, git_head
+    from vc4_codegen_patch_gate import guard_worktree
+    from vc4_codegen_state import MilestoneConfig, StateStore, git_head, stage_and_commit
 except ModuleNotFoundError:  # pragma: no cover
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from vc4_codegen_state import MilestoneConfig, StateStore, git_head  # type: ignore
+    from vc4_codegen_patch_gate import guard_worktree  # type: ignore
+    from vc4_codegen_state import MilestoneConfig, StateStore, git_head, stage_and_commit  # type: ignore
 
 
 DEFAULT_WORKLIST = "pro_scripts/vc4_codegen_m2_worklist.json"
@@ -386,6 +388,7 @@ def run_slice(
     slice_id: str,
     gpt_mode: str,
     allow_dirty: bool,
+    no_commit: bool,
     verbose: bool,
     env: dict[str, str],
 ) -> int:
@@ -413,8 +416,60 @@ def run_slice(
         cmd.append("--verbose")
     if allow_dirty:
         cmd.append("--allow-dirty")
+    if no_commit:
+        cmd.append("--no-commit")
 
     return run_cmd(cmd, cwd=repo, env=env).returncode
+
+
+def commit_slice_after_prefix_if_needed(
+    *,
+    config: MilestoneConfig,
+    slice_entry: dict[str, Any],
+    prefix: str,
+) -> bool:
+    """Commit a verified slice only after resume cumulative prefix passes.
+
+    This deliberately mirrors autorun's final auto-commit guard: only paths
+    allowed for the active slice may be committed, forbidden paths remain
+    forbidden, and the worklist commit message stays authoritative.
+    """
+    if not config.auto_commit_on_pass():
+        print(f"{prefix} auto-commit disabled by milestone config; leaving verified candidate dirty", flush=True)
+        return False
+
+    guard = guard_worktree(
+        repo=config.repo,
+        config=config,
+        slice_entry=slice_entry,
+        restore_disallowed=False,
+    )
+    changed = [str(p) for p in guard.get("changed_paths", [])]
+    if not changed:
+        print(f"{prefix} deferred auto-commit: no repo changes to commit", flush=True)
+        return False
+
+    if not guard.get("ok"):
+        report = {
+            "slice_id": slice_entry.get("id"),
+            "changed_paths": changed,
+            "disallowed_paths": guard.get("disallowed_paths", []),
+            "forbidden_paths": guard.get("forbidden_paths", []),
+        }
+        raise SystemExit(
+            "error: refusing deferred auto-commit after cumulative prefix pass; "
+            "worktree contains paths outside the current slice policy.\n"
+            + json.dumps(report, indent=2, sort_keys=True)
+        )
+
+    message = str(slice_entry.get("commit_message") or f"vc4 milestone: {slice_entry.get('id')}")
+    committed = stage_and_commit(config.repo, paths=changed, message=message, allow_empty=False)
+    if committed:
+        print(
+            f"{prefix} deferred auto-commit: committed {len(changed)} allowlisted changed path(s) with message: {message}",
+            flush=True,
+        )
+    return committed
 
 
 def main() -> int:
@@ -549,14 +604,13 @@ def main() -> int:
             slice_id=slice_id,
             gpt_mode=args.gpt_mode,
             allow_dirty=args.allow_dirty,
+            no_commit=True,
             verbose=args.verbose,
             env=env,
         )
         if rc != 0:
             print(f"{prefix} STOP: {slice_id} failed with exit code {rc}", file=sys.stderr)
             return rc
-
-        ensure_clean(repo, env, allow_dirty=args.allow_dirty)
 
         if not verifier_probe(
             repo=repo,
@@ -585,7 +639,7 @@ def main() -> int:
         print(f"{prefix} PASS {slice_id}")
 
         prefix_ids = [str(item["id"]) for item in slices[: slice_index + 1]]
-        print(f"{prefix} cumulative prefix recheck after commit: " + ", ".join(prefix_ids), flush=True)
+        print(f"{prefix} cumulative prefix recheck before commit: " + ", ".join(prefix_ids), flush=True)
         if not cumulative_prefix_probe(
             repo=repo,
             python=python,
@@ -600,8 +654,17 @@ def main() -> int:
             verbose=args.verbose,
             prefix=prefix,
         ):
-            print(f"{prefix} STOP: cumulative prefix did not verify after {slice_id}", file=sys.stderr)
+            print(
+                f"{prefix} STOP: cumulative prefix did not verify after {slice_id}; candidate left dirty and uncommitted",
+                file=sys.stderr,
+            )
             return 1
+
+        commit_slice_after_prefix_if_needed(
+            config=resume_state_config,
+            slice_entry=s,
+            prefix=prefix,
+        )
 
     print(f"\n{prefix} all selected slices passed or were already satisfied")
     return 0
