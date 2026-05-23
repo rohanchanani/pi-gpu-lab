@@ -3,7 +3,7 @@
 // CHECK-LABEL: vc4.func @block_args_spill_merge_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_stride_bytes = {{[1-9][0-9]*}} : i32
-// CHECK-SAME: __vc4_spill_frame_base
+// CHECK-SAME: spill_frame_base
 // CHECK-NOT: ssavc4.phi
 // CHECK-DAG: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<any_c_clear>
 // CHECK-DAG: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<always>
@@ -22,7 +22,7 @@ ssavc4.module @block_args_spill_merge {
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     }
   } {

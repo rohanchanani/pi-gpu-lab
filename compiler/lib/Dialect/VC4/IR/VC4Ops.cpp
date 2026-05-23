@@ -40,6 +40,32 @@ static bool isStringOneOf(StringRef value, ArrayRef<StringRef> allowed) {
   return false;
 }
 
+static bool isRuntimeLaunchABIName(StringRef value) {
+  return isStringOneOf(value,
+                       {"logical_request",
+                        "total_requests",
+                        "logical_block_id",
+                        "logical_warp_id",
+                        "warps_per_block",
+                        "vpm_base_row",
+                        "vpm_rows",
+                        "semaphore_base",
+                        "barrier_arrive_sem",
+                        "barrier_go_sem",
+                        "barrier_depart_sem",
+                        "barrier_reset_sem",
+                        "resident_request_id",
+                        "spill_frame_base",
+                        "spill_frame_bytes",
+                        "spill_frame_stride_bytes",
+                        "spill_vpm_row"});
+}
+
+static bool isLaneIdentityLaunchABIName(StringRef value) {
+  return isStringOneOf(value, {"ELEMENT_NUMBER", "element_number", "elem_num",
+                              "lane_id", "lane_range"});
+}
+
 static bool isNonEmptyStringAttr(Attribute attr) {
   auto stringAttr = dyn_cast_or_null<StringAttr>(attr);
   return stringAttr && !stringAttr.getValue().empty();
@@ -85,6 +111,17 @@ static LogicalResult verifyLaunchAbiArg(mlir::vc4::FuncOp op,
   if (!isNonEmptyStringAttr(arg.get("name")))
     return emitLaunchAbiError(op,
                               "argument entry requires a non-empty string 'name'");
+  auto nameAttr = cast<StringAttr>(arg.get("name"));
+  if (isRuntimeLaunchABIName(nameAttr.getValue())) {
+    return emitLaunchAbiError(
+        op, Twine("argument entry '") + nameAttr.getValue() +
+                Twine("' is runtime metadata and must be a builtin"));
+  }
+  if (isLaneIdentityLaunchABIName(nameAttr.getValue())) {
+    return emitLaunchAbiError(
+        op, Twine("argument entry '") + nameAttr.getValue() +
+                Twine("' is lane identity and must not be launch ABI metadata"));
+  }
 
   auto kindAttr = dyn_cast_or_null<StringAttr>(arg.get("kind"));
   if (!kindAttr ||
@@ -141,69 +178,34 @@ static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
   if (!isNonEmptyStringAttr(builtin.get("name")))
     return emitLaunchAbiError(op,
                               "builtin entry requires a non-empty string 'name'");
+  auto nameAttr = cast<StringAttr>(builtin.get("name"));
+  if (isLaneIdentityLaunchABIName(nameAttr.getValue())) {
+    return emitLaunchAbiError(
+        op, Twine("builtin entry '") + nameAttr.getValue() +
+                Twine("' is lane identity and must not be launch ABI metadata"));
+  }
 
   auto kindAttr =
       dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(builtin.get("kind"));
-  auto stringKindAttr = dyn_cast_or_null<StringAttr>(builtin.get("kind"));
-  if (!kindAttr && !stringKindAttr)
-    return emitLaunchAbiError(op, "builtin entry requires VC4 BuiltinKindAttr "
-                                  "or string 'kind'");
+  if (!kindAttr)
+    return emitLaunchAbiError(op,
+                              "builtin entry requires VC4 BuiltinKindAttr");
 
   auto materializationAttr =
       dyn_cast_or_null<StringAttr>(builtin.get("materialization"));
   if (!materializationAttr ||
-      !isStringOneOf(materializationAttr.getValue(),
-                     {"uniform_suffix", "register"})) {
+      materializationAttr.getValue() != "uniform_suffix") {
     return emitLaunchAbiError(
-        op, "builtin entry requires materialization = \"uniform_suffix\" or "
-            "\"register\"");
+        op, "builtin entry requires materialization = \"uniform_suffix\"");
   }
 
-  if (stringKindAttr) {
-    if (stringKindAttr.getValue() != "hidden_runtime") {
-      return emitLaunchAbiError(
-          op, "string builtin kind must be \"hidden_runtime\"");
-    }
-    auto nameAttr = cast<StringAttr>(builtin.get("name"));
-    if (!isStringOneOf(nameAttr.getValue(),
-                       {"__vc4_spill_frame_base",
-                        "__vc4_spill_frame_bytes",
-                        "__vc4_spill_frame_stride_bytes",
-                        "__vc4_spill_vpm_row",
-                        "__vc4_resident_request_id"})) {
-      return emitLaunchAbiError(
-          op, "hidden_runtime builtin has unsupported reserved name");
-    }
-    if (materializationAttr.getValue() != "uniform_suffix") {
-      return emitLaunchAbiError(
-          op, "hidden_runtime builtin must use materialization = "
-              "\"uniform_suffix\"");
-    }
-    return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
+  if (isLaneIdentityLaunchABIName(
+          stringifyBuiltinKind(kindAttr.getValue()))) {
+    return emitLaunchAbiError(
+        op, "lane identity must not appear as a launch ABI builtin");
   }
 
-  mlir::vc4::BuiltinKind kind = kindAttr.getValue();
-  StringRef materialization = materializationAttr.getValue();
-  if (kind == mlir::vc4::BuiltinKind::elem_num) {
-    return emitLaunchAbiError(
-        op, "builtin kind #vc4.builtin_kind<elem_num> must not appear");
-  }
-  if (kind == mlir::vc4::BuiltinKind::num_qpus &&
-      materialization != "uniform_suffix") {
-    return emitLaunchAbiError(
-        op, "builtin kind #vc4.builtin_kind<num_qpus> must use "
-            "materialization = \"uniform_suffix\"");
-  }
-
-  if (materialization == "uniform_suffix")
-    return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
-
-  if (builtin.get("uniform_index")) {
-    return emitLaunchAbiError(
-        op, "register-materialized builtin entry must not specify "
-            "'uniform_index'");
-  }
-  return success();
+  return verifyLaunchAbiUniformIndex(op, builtin, "builtin", indices);
 }
 
 static LogicalResult verifyLaunchAbiUniformLayout(
@@ -269,9 +271,9 @@ static LogicalResult verifyLaunchAbi(mlir::vc4::FuncOp op) {
 
   std::optional<int64_t> uniformWordsPerQPU =
       getSignlessI32AttrValue(launchAbi, "uniform_words_per_qpu");
-  if (!uniformWordsPerQPU || *uniformWordsPerQPU <= 0) {
+  if (!uniformWordsPerQPU || *uniformWordsPerQPU < 0) {
     return emitLaunchAbiError(
-        op, "requires a positive signless i32 'uniform_words_per_qpu'");
+        op, "requires a non-negative signless i32 'uniform_words_per_qpu'");
   }
 
   auto argsAttr = dyn_cast_or_null<ArrayAttr>(launchAbi.get("args"));

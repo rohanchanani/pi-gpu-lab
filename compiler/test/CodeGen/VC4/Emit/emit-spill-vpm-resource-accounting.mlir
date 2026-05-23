@@ -10,8 +10,8 @@
 // SOURCE: spill_frame_base=spill_arena_base+resident_request_id*spill_frame_stride_bytes
 // SOURCE-NOT: logical_request*spill_frame_stride
 // SOURCE-LABEL: static int spill_vpm_resource_accounting_pack_uniforms
-// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* hidden_runtime __vc4_spill_frame_base */
-// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* hidden_runtime __vc4_spill_vpm_row */
+// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
 // SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, spill_vpm_resource_accounting_pack_uniforms, &ctx);
 // MANIFEST: "shared_vpm_bytes": 1024
 // MANIFEST: "user_shared_vpm_rows_per_block": 16
@@ -32,8 +32,8 @@ vc4.module @spill_vpm_resource_accounting {
       uniform_words_per_qpu = 2 : i32,
       args = [],
       builtins = [
-        {name = "__vc4_spill_frame_base", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 0 : i32},
-        {name = "__vc4_spill_vpm_row", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "spill_frame_base", kind = #vc4.builtin_kind<spill_frame_base>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "spill_vpm_row", kind = #vc4.builtin_kind<spill_vpm_row>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {schedule_mode = "cooperative_block", uses_barrier = true, uses_shared_vpm = true, shared_vpm_bytes = 1024 : i32, require_full_block_residency = true, warps_per_block_max = 4 : i32, semaphores_per_block = 4 : i32}

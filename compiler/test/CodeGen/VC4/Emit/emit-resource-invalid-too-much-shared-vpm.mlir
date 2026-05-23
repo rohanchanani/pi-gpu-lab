@@ -19,8 +19,8 @@ vc4.module @resource_invalid_too_much_shared_vpm {
 
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32},
-        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "warps_per_block", kind = #vc4.builtin_kind<warps_per_block>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {schedule_mode = "cooperative_block", uses_barrier = true, uses_shared_vpm = true, shared_vpm_bytes = 4097 : i32, require_full_block_residency = true, warps_per_block_max = 12 : i32, semaphores_per_block = 4 : i32}

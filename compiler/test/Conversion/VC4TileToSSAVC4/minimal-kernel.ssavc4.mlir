@@ -14,7 +14,7 @@ module {
       vc4.launch_abi = {
         args = [],
         builtins = [
-          {kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", name = "num_qpus", uniform_index = 0 : i32}
+          {kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", name = "total_requests", uniform_index = 0 : i32}
         ],
         code_symbol = "minimal_vc4tile_shader",
         public_name = "minimal_vc4tile",

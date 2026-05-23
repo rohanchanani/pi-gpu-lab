@@ -9,13 +9,13 @@
 
 // LOWERED-LABEL: vc4.func @spill_pressure_independent_kernel
 // LOWERED-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
-// LOWERED-SAME: __vc4_spill_frame_base
+// LOWERED-SAME: spill_frame_base
 // LOWERED: vc4.qpu.vpmvcd_addr
 // LOWERED: sig = #vc4.qpu_signal<ldtmu0>
-// SOURCE: uniformWords[2] = requestInfo->spill_frame_base; /* hidden_runtime __vc4_spill_frame_base */
+// SOURCE: uniformWords[2] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
 // SOURCE-LABEL: int spill_pressure_independent_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out)
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}
-// MANIFEST: "__vc4_spill_frame_base"
+// MANIFEST: "spill_frame_base"
 ssavc4.module @spill_pressure_independent {
   ssavc4.func @spill_pressure_independent_kernel() attributes {
     kernel,
@@ -29,7 +29,7 @@ ssavc4.module @spill_pressure_independent {
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {

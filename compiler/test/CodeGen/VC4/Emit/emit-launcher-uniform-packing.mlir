@@ -37,14 +37,14 @@
 // SOURCE: *   [1] arg input
 // SOURCE: *   [2] arg n
 // SOURCE: *   [3] arg scale
-// SOURCE: *   [4] builtin qpu_id (qpu_num)
-// SOURCE: *   [5] builtin num_qpus (num_qpus)
+// SOURCE: *   [4] builtin logical_request (logical_request)
+// SOURCE: *   [5] builtin total_requests (total_requests)
 // SOURCE: uniformWords[0] = (uint32_t)ctx->out; /* arg out */
 // SOURCE: uniformWords[1] = (uint32_t)ctx->input; /* arg input */
 // SOURCE: uniformWords[2] = (uint32_t)ctx->n; /* arg n */
 // SOURCE: uniformWords[3] = vc4_codegen_pack_f32(ctx->scale); /* arg scale */
-// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin qpu_id */
-// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin num_qpus */
+// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin logical_request */
+// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin total_requests */
 // SOURCE-LABEL: int uniform_packing_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, float scale, vc4_deviceptr_t out, uint32_t n, vc4_deviceptr_t input) {
 // SOURCE: vc4DeviceRangeIsAllocated(program, out,
 // SOURCE: vc4DeviceRangeIsAllocated(program, input,
@@ -80,8 +80,8 @@ vc4.module @uniform_packing {
         {name = "input", kind = "buffer", direction = "in", elem_type = "f32", uniform_index = 1 : i32}
       ],
       builtins = [
-        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 5 : i32},
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32}
+        {name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", uniform_index = 5 : i32},
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 4 : i32}
       ]
     }
   } {

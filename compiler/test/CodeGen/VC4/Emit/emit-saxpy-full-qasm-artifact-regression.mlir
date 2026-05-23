@@ -67,8 +67,8 @@
 // SOURCE: uniformWords[1] = (uint32_t)ctx->y; /* arg y */
 // SOURCE: uniformWords[2] = vc4_codegen_pack_f32(ctx->alpha); /* arg alpha */
 // SOURCE: uniformWords[3] = (uint32_t)ctx->n; /* arg n */
-// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin qpu_id */
-// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin num_qpus */
+// SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin logical_request */
+// SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin total_requests */
 // SOURCE-LABEL: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n) {
 // SOURCE: vc4DeviceRangeIsAllocated(program, x,
 // SOURCE: vc4DeviceRangeIsAllocated(program, y,

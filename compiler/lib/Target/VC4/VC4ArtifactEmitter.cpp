@@ -255,7 +255,22 @@ static bool hasLaunchABIArgumentName(const LaunchABIModel &launchABI,
   return false;
 }
 
-static bool isHiddenRuntimeBuiltinName(llvm::StringRef name);
+static bool isRuntimeLaunchABIName(llvm::StringRef name) {
+  return name == "logical_request" || name == "total_requests" ||
+         name == "logical_block_id" || name == "logical_warp_id" ||
+         name == "warps_per_block" || name == "vpm_base_row" ||
+         name == "vpm_rows" || name == "semaphore_base" ||
+         name == "barrier_arrive_sem" || name == "barrier_go_sem" ||
+         name == "barrier_depart_sem" || name == "barrier_reset_sem" ||
+         name == "resident_request_id" || name == "spill_frame_base" ||
+         name == "spill_frame_bytes" ||
+         name == "spill_frame_stride_bytes" || name == "spill_vpm_row";
+}
+
+static bool isLaneIdentityLaunchABIName(llvm::StringRef name) {
+  return name == "ELEMENT_NUMBER" || name == "element_number" ||
+         name == "elem_num" || name == "lane_id" || name == "lane_range";
+}
 
 static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
                                             mlir::DictionaryAttr argDict,
@@ -272,6 +287,7 @@ static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
                   "' requires a C identifier name for generated launcher API");
   }
   if (name == "rt" || name == "qpu_id" || name == "num_qpus" ||
+      isRuntimeLaunchABIName(name) || isLaneIdentityLaunchABIName(name) ||
       name.starts_with("__vc4_")) {
     return emitLaunchABIModelError(
         func, llvm::Twine("argument '") + name +
@@ -359,12 +375,40 @@ static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
 
 static const char *getBuiltinKindName(mlir::vc4::BuiltinKind kind) {
   switch (kind) {
-  case mlir::vc4::BuiltinKind::qpu_num:
-    return "qpu_num";
-  case mlir::vc4::BuiltinKind::num_qpus:
-    return "num_qpus";
-  case mlir::vc4::BuiltinKind::elem_num:
-    return "elem_num";
+  case mlir::vc4::BuiltinKind::logical_request:
+    return "logical_request";
+  case mlir::vc4::BuiltinKind::total_requests:
+    return "total_requests";
+  case mlir::vc4::BuiltinKind::logical_block_id:
+    return "logical_block_id";
+  case mlir::vc4::BuiltinKind::logical_warp_id:
+    return "logical_warp_id";
+  case mlir::vc4::BuiltinKind::warps_per_block:
+    return "warps_per_block";
+  case mlir::vc4::BuiltinKind::vpm_base_row:
+    return "vpm_base_row";
+  case mlir::vc4::BuiltinKind::vpm_rows:
+    return "vpm_rows";
+  case mlir::vc4::BuiltinKind::semaphore_base:
+    return "semaphore_base";
+  case mlir::vc4::BuiltinKind::barrier_arrive_sem:
+    return "barrier_arrive_sem";
+  case mlir::vc4::BuiltinKind::barrier_go_sem:
+    return "barrier_go_sem";
+  case mlir::vc4::BuiltinKind::barrier_depart_sem:
+    return "barrier_depart_sem";
+  case mlir::vc4::BuiltinKind::barrier_reset_sem:
+    return "barrier_reset_sem";
+  case mlir::vc4::BuiltinKind::resident_request_id:
+    return "resident_request_id";
+  case mlir::vc4::BuiltinKind::spill_frame_base:
+    return "spill_frame_base";
+  case mlir::vc4::BuiltinKind::spill_frame_bytes:
+    return "spill_frame_bytes";
+  case mlir::vc4::BuiltinKind::spill_frame_stride_bytes:
+    return "spill_frame_stride_bytes";
+  case mlir::vc4::BuiltinKind::spill_vpm_row:
+    return "spill_vpm_row";
   }
   return "unknown";
 }
@@ -377,35 +421,20 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
       getDictionaryStringAttr(builtinDict, "materialization");
   auto kindAttr = llvm::dyn_cast_or_null<mlir::vc4::BuiltinKindAttr>(
       builtinDict.get("kind"));
-  auto stringKindAttr =
-      llvm::dyn_cast_or_null<mlir::StringAttr>(builtinDict.get("kind"));
   if (!nameAttr || nameAttr.getValue().empty() || !materializationAttr ||
-      (!kindAttr && !stringKindAttr)) {
+      !kindAttr) {
     return emitLaunchABIModelError(
         func, "builtin entry requires name, kind, and materialization metadata");
   }
 
   LaunchABIBuiltinModel parsed;
   parsed.name = nameAttr.getValue().str();
-  parsed.kind = kindAttr ? getBuiltinKindName(kindAttr.getValue())
-                         : stringKindAttr.getValue().str();
+  parsed.kind = getBuiltinKindName(kindAttr.getValue());
   parsed.materialization = materializationAttr.getValue().str();
-  if (parsed.kind == "hidden_runtime") {
-    if (!isHiddenRuntimeBuiltinName(parsed.name)) {
-      return emitLaunchABIModelError(
-          func, llvm::Twine("hidden_runtime builtin '") + parsed.name +
-                    "' has unsupported reserved name");
-    }
-    if (parsed.materialization != "uniform_suffix") {
-      return emitLaunchABIModelError(
-          func,
-          llvm::Twine("hidden_runtime builtin '") + parsed.name +
-              "' requires materialization = \"uniform_suffix\"");
-    }
-  } else if (!kindAttr) {
+  if (parsed.materialization != "uniform_suffix") {
     return emitLaunchABIModelError(
-        func, llvm::Twine("string builtin kind '") + parsed.kind +
-                  "' is unsupported");
+        func, llvm::Twine("builtin '") + parsed.name +
+                  "' requires materialization = \"uniform_suffix\"");
   }
   parsed.uniformIndex = getDictionaryIntegerAttrValue(builtinDict,
                                                       "uniform_index");
@@ -463,9 +492,9 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
 
   std::optional<int64_t> uniformWords =
       getDictionaryIntegerAttrValue(launchABIDict, "uniform_words_per_qpu");
-  if (!uniformWords || *uniformWords <= 0) {
+  if (!uniformWords || *uniformWords < 0) {
     return emitLaunchABIModelError(
-        func, "requires positive signless i32 'uniform_words_per_qpu'");
+        func, "requires non-negative signless i32 'uniform_words_per_qpu'");
   }
 
   auto args = llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("args"));
@@ -2891,26 +2920,40 @@ static std::string getBufferElementCTypeForCodegen(
   return "uint32_t";
 }
 
-static bool isHiddenRuntimeBuiltinName(llvm::StringRef name) {
-  return name == "__vc4_spill_frame_base" ||
-         name == "__vc4_spill_frame_bytes" ||
-         name == "__vc4_spill_frame_stride_bytes" ||
-         name == "__vc4_spill_vpm_row" ||
-         name == "__vc4_resident_request_id";
-}
-
 static std::optional<llvm::StringRef>
-getHiddenRuntimeRequestInfoField(llvm::StringRef name) {
-  if (name == "__vc4_spill_frame_base")
-    return llvm::StringRef("spill_frame_base");
-  if (name == "__vc4_spill_frame_bytes")
-    return llvm::StringRef("spill_frame_bytes");
-  if (name == "__vc4_spill_frame_stride_bytes")
-    return llvm::StringRef("spill_frame_stride_bytes");
-  if (name == "__vc4_resident_request_id")
+getRuntimeBuiltinRequestInfoField(llvm::StringRef kind) {
+  if (kind == "logical_request")
+    return llvm::StringRef("logical_request");
+  if (kind == "total_requests")
+    return llvm::StringRef("total_requests");
+  if (kind == "logical_block_id")
+    return llvm::StringRef("logical_block_id");
+  if (kind == "logical_warp_id")
+    return llvm::StringRef("logical_warp_id");
+  if (kind == "warps_per_block")
+    return llvm::StringRef("warps_per_block");
+  if (kind == "vpm_base_row")
+    return llvm::StringRef("vpm_base_row");
+  if (kind == "vpm_rows")
+    return llvm::StringRef("vpm_rows");
+  if (kind == "semaphore_base")
+    return llvm::StringRef("semaphore_base");
+  if (kind == "barrier_arrive_sem")
+    return llvm::StringRef("barrier_arrive_sem");
+  if (kind == "barrier_go_sem")
+    return llvm::StringRef("barrier_go_sem");
+  if (kind == "barrier_depart_sem")
+    return llvm::StringRef("barrier_depart_sem");
+  if (kind == "barrier_reset_sem")
+    return llvm::StringRef("barrier_reset_sem");
+  if (kind == "resident_request_id")
     return llvm::StringRef("resident_request_id");
-  if (name == "__vc4_spill_vpm_row")
-    return llvm::StringRef("spill_vpm_row");
+  if (kind == "spill_frame_base")
+    return llvm::StringRef("spill_frame_base");
+  if (kind == "spill_frame_bytes")
+    return llvm::StringRef("spill_frame_bytes");
+  if (kind == "spill_frame_stride_bytes")
+    return llvm::StringRef("spill_frame_stride_bytes");
   return std::nullopt;
 }
 
@@ -3267,60 +3310,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     for (int64_t index = 0; index != kernelABI.uniformWordsPerQPU; ++index) {
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
-        if (launchKernel.resources.scheduleMode == "cooperative_block" &&
-            arg->kind == LaunchABIArgumentKind::Scalar) {
-          if (arg->name == "logical_warp_id") {
-            os << "  uniformWords[" << index << "] = requestInfo->logical_warp_id; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "warps_per_block") {
-            os << "  uniformWords[" << index
-               << "] = requestInfo->warps_per_block; /* arg " << arg->name
-               << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "logical_block_id") {
-            os << "  uniformWords[" << index << "] = requestInfo->logical_block_id; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "vpm_base_row") {
-            os << "  uniformWords[" << index << "] = requestInfo->vpm_base_row; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "vpm_rows") {
-            os << "  uniformWords[" << index << "] = requestInfo->vpm_rows; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "semaphore_base") {
-            os << "  uniformWords[" << index << "] = requestInfo->semaphore_base; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "barrier_arrive_sem") {
-            os << "  uniformWords[" << index << "] = requestInfo->barrier_arrive_sem; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "barrier_go_sem") {
-            os << "  uniformWords[" << index << "] = requestInfo->barrier_go_sem; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "barrier_depart_sem") {
-            os << "  uniformWords[" << index << "] = requestInfo->barrier_depart_sem; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-          if (arg->name == "barrier_reset_sem") {
-            os << "  uniformWords[" << index << "] = requestInfo->barrier_reset_sem; /* arg "
-               << arg->name << " supplied by cooperative scheduler */\n";
-            continue;
-          }
-        }
         if (arg->kind == LaunchABIArgumentKind::Buffer) {
           os << "  uniformWords[" << index << "] = (uint32_t)ctx->"
              << arg->name << "; /* arg " << arg->name << " */\n";
@@ -3336,52 +3325,29 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
 
       if (const LaunchABIBuiltinModel *builtin =
               findLaunchABIBuiltinForUniformIndex(kernelABI, index)) {
-        if (builtin->kind == "qpu_num") {
+        if (builtin->kind == "spill_vpm_row") {
           if (launchKernel.resources.scheduleMode == "cooperative_block") {
-            os << "  uniformWords[" << index << "] = requestInfo->logical_warp_id; /* builtin "
-               << builtin->name << " logical_warp_id for cooperative_block */\n";
+            os << "  uniformWords[" << index
+               << "] = requestInfo->vpm_base_row + KERNEL_"
+               << launchKernel.kernelId
+               << "_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin "
+               << builtin->name << " */\n";
           } else {
-            os << "  uniformWords[" << index << "] = requestInfo->logical_request; /* builtin "
+            os << "  uniformWords[" << index
+               << "] = requestInfo->resident_request_id; /* builtin "
                << builtin->name << " */\n";
           }
-        } else if (builtin->kind == "num_qpus") {
-          if (launchKernel.resources.scheduleMode == "cooperative_block") {
-            os << "  uniformWords[" << index << "] = requestInfo->warps_per_block; /* builtin "
-               << builtin->name << " warps_per_block for cooperative_block */\n";
-          } else {
-            os << "  uniformWords[" << index << "] = requestInfo->total_requests; /* builtin "
-               << builtin->name << " */\n";
-          }
-        } else if (builtin->kind == "hidden_runtime") {
-          if (builtin->name == "__vc4_spill_vpm_row") {
-            if (launchKernel.resources.scheduleMode == "cooperative_block") {
-              os << "  uniformWords[" << index
-                 << "] = requestInfo->vpm_base_row + KERNEL_"
-                 << launchKernel.kernelId
-                 << "_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* hidden_runtime "
-                 << builtin->name << " */\n";
-            } else {
-              os << "  uniformWords[" << index
-                 << "] = requestInfo->resident_request_id; /* hidden_runtime "
-                 << builtin->name << " */\n";
-            }
-            continue;
-          }
-          std::optional<llvm::StringRef> field =
-              getHiddenRuntimeRequestInfoField(builtin->name);
-          if (!field) {
-            return emitLaunchABIModelError(
-                launchKernel.func,
-                llvm::Twine("hidden_runtime builtin '") + builtin->name +
-                    "' has unsupported reserved name");
-          }
-          os << "  uniformWords[" << index << "] = requestInfo->" << *field
-             << "; /* hidden_runtime " << builtin->name << " */\n";
-        } else {
+          continue;
+        }
+        std::optional<llvm::StringRef> field =
+            getRuntimeBuiltinRequestInfoField(builtin->kind);
+        if (!field) {
           return emitLaunchABIModelError(
               launchKernel.func, llvm::Twine("builtin '") + builtin->name +
                                     "' has unsupported kind for launcher uniform packing");
         }
+        os << "  uniformWords[" << index << "] = requestInfo->" << *field
+           << "; /* builtin " << builtin->name << " */\n";
         continue;
       }
 

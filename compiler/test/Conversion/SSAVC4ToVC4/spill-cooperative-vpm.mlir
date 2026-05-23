@@ -3,8 +3,8 @@
 // CHECK-LABEL: vc4.func @spill_cooperative_vpm_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_stride_bytes = {{[1-9][0-9]*}} : i32
-// CHECK-SAME: __vc4_spill_frame_base
-// CHECK-SAME: __vc4_spill_vpm_row
+// CHECK-SAME: spill_frame_base
+// CHECK-SAME: spill_vpm_row
 // CHECK-SAME: public_name = "spill_cooperative_vpm"
 // CHECK-SAME: schedule_mode = "cooperative_block"
 // CHECK-SAME: spill_vpm_rows_per_block = 4 : i32
@@ -24,14 +24,14 @@ ssavc4.module @spill_cooperative_vpm {
       code_symbol = "spill_cooperative_vpm_shader",
       tail_policy = "tail_safe",
       uniform_words_per_qpu = 5 : i32,
-      args = [
-        {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32},
-        {name = "logical_warp_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 1 : i32},
-        {name = "warps_per_block", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 2 : i32},
-        {name = "vpm_base_row", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32}
+args = [
+        {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 4 : i32}
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 4 : i32},
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 1 : i32},
+        {name = "warps_per_block", kind = #vc4.builtin_kind<warps_per_block>, materialization = "uniform_suffix", uniform_index = 2 : i32},
+        {name = "vpm_base_row", kind = #vc4.builtin_kind<vpm_base_row>, materialization = "uniform_suffix", uniform_index = 3 : i32}
       ]
     },
     "vc4.resource" = {

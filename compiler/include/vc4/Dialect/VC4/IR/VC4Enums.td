@@ -41,9 +41,23 @@ def VC4_ExecutionDomain : VC4_DialectI32Enum<"ExecutionDomain",
 
 def VC4_BuiltinKind : VC4_DialectI32Enum<"BuiltinKind",
     "VC4 builtin kind", [
-      I32EnumAttrCase<"elem_num", 0>,
-      I32EnumAttrCase<"qpu_num", 1>,
-      I32EnumAttrCase<"num_qpus", 2>
+      I32EnumAttrCase<"logical_request", 0>,
+      I32EnumAttrCase<"total_requests", 1>,
+      I32EnumAttrCase<"logical_block_id", 2>,
+      I32EnumAttrCase<"logical_warp_id", 3>,
+      I32EnumAttrCase<"warps_per_block", 4>,
+      I32EnumAttrCase<"vpm_base_row", 5>,
+      I32EnumAttrCase<"vpm_rows", 6>,
+      I32EnumAttrCase<"semaphore_base", 7>,
+      I32EnumAttrCase<"barrier_arrive_sem", 8>,
+      I32EnumAttrCase<"barrier_go_sem", 9>,
+      I32EnumAttrCase<"barrier_depart_sem", 10>,
+      I32EnumAttrCase<"barrier_reset_sem", 11>,
+      I32EnumAttrCase<"resident_request_id", 12>,
+      I32EnumAttrCase<"spill_frame_base", 13>,
+      I32EnumAttrCase<"spill_frame_bytes", 14>,
+      I32EnumAttrCase<"spill_frame_stride_bytes", 15>,
+      I32EnumAttrCase<"spill_vpm_row", 16>
     ]>;
 
 // Encodings match the VideoCore IV 3D Architecture Reference Guide QPU

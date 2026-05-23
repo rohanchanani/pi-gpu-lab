@@ -31,16 +31,16 @@ ssavc4.module @shared_transpose_16x16_ssavc4 {
       code_symbol = "shared_transpose_16x16_ssavc4_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 7 : i32,
-      args = [
+args = [
         {name = "input", kind = "buffer", direction = "in", elem_type = "u32", uniform_index = 0 : i32},
-        {name = "output", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 1 : i32},
-        {name = "logical_warp_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 2 : i32},
-        {name = "warps_per_block", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32},
-        {name = "vpm_base_row", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 4 : i32}
+        {name = "output", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 1 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 5 : i32},
-        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 6 : i32}
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 5 : i32},
+        {name = "warps_per_block", kind = #vc4.builtin_kind<warps_per_block>, materialization = "uniform_suffix", uniform_index = 6 : i32},
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 2 : i32},
+        {name = "warps_per_block", kind = #vc4.builtin_kind<warps_per_block>, materialization = "uniform_suffix", uniform_index = 3 : i32},
+        {name = "vpm_base_row", kind = #vc4.builtin_kind<vpm_base_row>, materialization = "uniform_suffix", uniform_index = 4 : i32}
       ]
     },
     "vc4.resource" = {

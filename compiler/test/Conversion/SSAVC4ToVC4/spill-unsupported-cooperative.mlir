@@ -12,7 +12,7 @@ ssavc4.module @spill_unsupported_cooperative {
       uniform_words_per_qpu = 1 : i32,
       args = [],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32}
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 0 : i32}
       ]
     },
     "vc4.resource" = {

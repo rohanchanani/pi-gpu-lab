@@ -3,17 +3,17 @@
 
 // SSAVC4-LABEL: ssavc4.func @minimal_thrend_vc4tile
 // SSAVC4-SAME: vc4.launch_abi =
-// SSAVC4-SAME: builtins = [{{.*}}name = "num_qpus"{{.*}}uniform_index = 0 : i32{{.*}}]
+// SSAVC4-SAME: builtins = []
 // SSAVC4-SAME: tail_policy = "exact_multiple"
-// SSAVC4-SAME: uniform_words_per_qpu = 1 : i32
+// SSAVC4-SAME: uniform_words_per_qpu = 0 : i32
 // SSAVC4-SAME: vc4.resource
 // SSAVC4: ssavc4.thread_end
 
 // VC4-LABEL: vc4.func @minimal_thrend_vc4tile
 // VC4-SAME: vc4.launch_abi =
-// VC4-SAME: builtins = [{{.*}}name = "num_qpus"{{.*}}uniform_index = 0 : i32{{.*}}]
+// VC4-SAME: builtins = []
 // VC4-SAME: tail_policy = "exact_multiple"
-// VC4-SAME: uniform_words_per_qpu = 1 : i32
+// VC4-SAME: uniform_words_per_qpu = 0 : i32
 // VC4-SAME: vc4.resource
 // VC4: vc4.qpu.bundle
 vc4tile.kernel @minimal_thrend_vc4tile attributes {

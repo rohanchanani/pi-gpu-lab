@@ -11,7 +11,7 @@ ssavc4.module @spill_pressure_smoke_ssavc4 {
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {

@@ -11,23 +11,22 @@ public_name = "qpu_barrier_syncthreads",
 tail_policy = "tail_safe",
 uniform_words_per_qpu = 14 : i32,
 args = [
-{name = "mode", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32},
-{name = "run_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 1 : i32},
-{name = "logical_block_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 2 : i32},
-{name = "logical_warp_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 3 : i32},
-{name = "warps_per_block", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 4 : i32},
-{name = "iterations", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 5 : i32},
-{name = "vpm_base_row", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 6 : i32},
-{name = "vpm_rows", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 7 : i32},
-{name = "barrier_arrive_sem", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 8 : i32},
-{name = "barrier_go_sem", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 9 : i32},
-{name = "barrier_depart_sem", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 10 : i32},
-{name = "barrier_reset_sem", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 11 : i32},
-{name = "result_warp_base", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 12 : i32},
-{name = "run_result_ptr", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 13 : i32}
+  {name = "mode", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32},
+  {name = "run_id", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 1 : i32},
+  {name = "iterations", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 5 : i32},
+  {name = "result_warp_base", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 12 : i32},
+  {name = "run_result_ptr", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 13 : i32}
 ],
 builtins = [
-{name = "physical_qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "register"}
+  {name = "logical_block_id", kind = #vc4.builtin_kind<logical_block_id>, materialization = "uniform_suffix", uniform_index = 2 : i32},
+  {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 3 : i32},
+  {name = "warps_per_block", kind = #vc4.builtin_kind<warps_per_block>, materialization = "uniform_suffix", uniform_index = 4 : i32},
+  {name = "vpm_base_row", kind = #vc4.builtin_kind<vpm_base_row>, materialization = "uniform_suffix", uniform_index = 6 : i32},
+  {name = "vpm_rows", kind = #vc4.builtin_kind<vpm_rows>, materialization = "uniform_suffix", uniform_index = 7 : i32},
+  {name = "barrier_arrive_sem", kind = #vc4.builtin_kind<barrier_arrive_sem>, materialization = "uniform_suffix", uniform_index = 8 : i32},
+  {name = "barrier_go_sem", kind = #vc4.builtin_kind<barrier_go_sem>, materialization = "uniform_suffix", uniform_index = 9 : i32},
+  {name = "barrier_depart_sem", kind = #vc4.builtin_kind<barrier_depart_sem>, materialization = "uniform_suffix", uniform_index = 10 : i32},
+  {name = "barrier_reset_sem", kind = #vc4.builtin_kind<barrier_reset_sem>, materialization = "uniform_suffix", uniform_index = 11 : i32}
 ]
 },
 "vc4.resource" = {

@@ -231,24 +231,11 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
       kernelContains(kernel, kVC4TileThreadIdOpName);
 
   if (needsLogicalRequest) {
-    args.push_back(builder.getDictionaryAttr({
-        builder.getNamedAttr("name", builder.getStringAttr("logical_request")),
-        builder.getNamedAttr("kind", builder.getStringAttr("scalar")),
-        builder.getNamedAttr("direction", builder.getStringAttr("by_value")),
-        builder.getNamedAttr("type", builder.getStringAttr("u32")),
-        builder.getNamedAttr("uniform_index", builder.getI32IntegerAttr(0)),
-    }));
-  } else {
-    // The existing scheduled-VC4 verifier requires launch ABI uniform slots to
-    // be described by dense arg/builtin indices.  Return-only kernels do not
-    // consume launch uniforms, so use a harmless runtime launch-geometry
-    // builtin rather than inventing a user-visible argument or weakening the
-    // lower-half verifier contract.
-    Attribute numQPUsKind = mlir::vc4::BuiltinKindAttr::get(
-        ctx, mlir::vc4::BuiltinKind::num_qpus);
+    Attribute logicalRequestKind = mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::logical_request);
     builtins.push_back(builder.getDictionaryAttr({
-        builder.getNamedAttr("name", builder.getStringAttr("num_qpus")),
-        builder.getNamedAttr("kind", numQPUsKind),
+        builder.getNamedAttr("name", builder.getStringAttr("logical_request")),
+        builder.getNamedAttr("kind", logicalRequestKind),
         builder.getNamedAttr("materialization",
                              builder.getStringAttr("uniform_suffix")),
         builder.getNamedAttr("uniform_index", builder.getI32IntegerAttr(0)),
@@ -261,7 +248,7 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
                            symName ? symName : builder.getStringAttr(publicName)),
       builder.getNamedAttr("code_symbol", builder.getStringAttr(codeSymbol)),
       builder.getNamedAttr("uniform_words_per_qpu",
-                           builder.getI32IntegerAttr(1)),
+                           builder.getI32IntegerAttr(needsLogicalRequest ? 1 : 0)),
       builder.getNamedAttr("args", builder.getArrayAttr(args)),
       builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
       builder.getNamedAttr("tail_policy", builder.getStringAttr("exact_multiple")),

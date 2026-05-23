@@ -61,9 +61,7 @@ args = [
 {name = "qpu_a_report", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 7 : i32},
 {name = "qpu_b_report", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 8 : i32}
 ],
-builtins = [
-{name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "register"}
-]
+builtins = []
 }
 } {
 // ra0 = uniform[0] (qpu_a)

@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: vc4.func @spill_noop_low_pressure_kernel
 // CHECK-NOT: spill_frame_bytes
-// CHECK-NOT: __vc4_spill_frame_base
+// CHECK-NOT: spill_frame_base
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @spill_noop_low_pressure {
   ssavc4.func @spill_noop_low_pressure_kernel() attributes {
@@ -15,7 +15,7 @@ ssavc4.module @spill_noop_low_pressure {
       uniform_words_per_qpu = 1 : i32,
       args = [],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 0 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 0 : i32}
       ]
     },
     "vc4.resource" = {

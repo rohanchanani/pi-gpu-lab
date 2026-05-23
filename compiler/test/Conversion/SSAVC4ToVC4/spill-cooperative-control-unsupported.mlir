@@ -14,7 +14,7 @@ ssavc4.module @spill_cooperative_control_unsupported {
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_warp_id", kind = #vc4.builtin_kind<logical_warp_id>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {

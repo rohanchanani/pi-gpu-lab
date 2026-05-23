@@ -5,8 +5,8 @@
 // CHECK-DAG: public_name = "generated_public"
 // CHECK-DAG: symbol_name = "metadata_generation"
 // CHECK-DAG: code_symbol = "generated_public_shader"
-// CHECK-DAG: builtins = [{{.*}}name = "num_qpus"{{.*}}uniform_index = 0 : i32{{.*}}]
-// CHECK-DAG: uniform_words_per_qpu = 1 : i32
+// CHECK-DAG: builtins = []
+// CHECK-DAG: uniform_words_per_qpu = 0 : i32
 // CHECK-DAG: tail_policy = "exact_multiple"
 // CHECK-DAG: vc4.resource
 // CHECK-DAG: schedule_mode = "cooperative_block"

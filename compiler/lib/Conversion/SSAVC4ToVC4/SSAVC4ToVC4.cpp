@@ -3637,6 +3637,7 @@ static Operation *createVC4FuncShell(Operation *sourceFunc, OpBuilder &builder) 
 
 static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
                                                   DictionaryAttr launchABI) {
+  MLIRContext *ctx = builder.getContext();
   int64_t oldUniformWords = 0;
   if (auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
           launchABI.get("uniform_words_per_qpu")))
@@ -3648,18 +3649,20 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
     builtins.append(existing.begin(), existing.end());
   }
   builtins.push_back(builder.getDictionaryAttr({
-      builder.getNamedAttr("name",
-                           builder.getStringAttr("__vc4_spill_frame_base")),
-      builder.getNamedAttr("kind", builder.getStringAttr("hidden_runtime")),
+      builder.getNamedAttr("name", builder.getStringAttr("spill_frame_base")),
+      builder.getNamedAttr("kind",
+                           mlir::vc4::BuiltinKindAttr::get(
+                               ctx, mlir::vc4::BuiltinKind::spill_frame_base)),
       builder.getNamedAttr("materialization",
                            builder.getStringAttr("uniform_suffix")),
       builder.getNamedAttr("uniform_index",
                            builder.getI32IntegerAttr(oldUniformWords)),
   }));
   builtins.push_back(builder.getDictionaryAttr({
-      builder.getNamedAttr("name",
-                           builder.getStringAttr("__vc4_spill_vpm_row")),
-      builder.getNamedAttr("kind", builder.getStringAttr("hidden_runtime")),
+      builder.getNamedAttr("name", builder.getStringAttr("spill_vpm_row")),
+      builder.getNamedAttr("kind",
+                           mlir::vc4::BuiltinKindAttr::get(
+                               ctx, mlir::vc4::BuiltinKind::spill_vpm_row)),
       builder.getNamedAttr("materialization",
                            builder.getStringAttr("uniform_suffix")),
       builder.getNamedAttr("uniform_index",

@@ -3,7 +3,7 @@
 // CHECK-LABEL: vc4.func @spill_pressure_independent_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_stride_bytes = {{[1-9][0-9]*}} : i32
-// CHECK-SAME: __vc4_spill_frame_base
+// CHECK-SAME: spill_frame_base
 // CHECK-SAME: public_name = "spill_pressure_independent"
 // CHECK: vc4.qpu.vpmvcd_addr
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
@@ -21,7 +21,7 @@ ssavc4.module @spill_pressure_independent {
         {name = "out", kind = "buffer", direction = "out", elem_type = "u32", uniform_index = 0 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {

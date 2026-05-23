@@ -12,8 +12,8 @@ ssavc4.module @spill_branch_tail_smoke_ssavc4 {
         {name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 1 : i32}
       ],
       builtins = [
-        {name = "qpu_id", kind = #vc4.builtin_kind<qpu_num>, materialization = "uniform_suffix", uniform_index = 2 : i32},
-        {name = "num_qpus", kind = #vc4.builtin_kind<num_qpus>, materialization = "uniform_suffix", uniform_index = 3 : i32}
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 2 : i32},
+        {name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", uniform_index = 3 : i32}
       ]
     },
     "vc4.resource" = {

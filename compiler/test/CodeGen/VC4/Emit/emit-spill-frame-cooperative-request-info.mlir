@@ -6,8 +6,8 @@
 // SOURCE: spill_frame_base=spill_arena_base+resident_request_id*spill_frame_stride_bytes
 // SOURCE-NOT: logical_request*spill_frame_stride
 // SOURCE-LABEL: static int spill_cooperative_request_info_pack_uniforms
-// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* hidden_runtime __vc4_spill_frame_base */
-// SOURCE: uniformWords[1] = requestInfo->resident_request_id; /* hidden_runtime __vc4_resident_request_id */
+// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// SOURCE: uniformWords[1] = requestInfo->resident_request_id; /* builtin resident_request_id */
 // SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, spill_cooperative_request_info_pack_uniforms, &ctx);
 
 vc4.module @spill_cooperative_request_info {
@@ -23,8 +23,8 @@ vc4.module @spill_cooperative_request_info {
       uniform_words_per_qpu = 2 : i32,
       args = [],
       builtins = [
-        {name = "__vc4_spill_frame_base", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 0 : i32},
-        {name = "__vc4_resident_request_id", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 1 : i32}
+        {name = "spill_frame_base", kind = #vc4.builtin_kind<spill_frame_base>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "resident_request_id", kind = #vc4.builtin_kind<resident_request_id>, materialization = "uniform_suffix", uniform_index = 1 : i32}
       ]
     },
     "vc4.resource" = {schedule_mode = "cooperative_block", uses_barrier = true, uses_shared_vpm = true, shared_vpm_bytes = 1024 : i32, require_full_block_residency = true, warps_per_block_max = 12 : i32, semaphores_per_block = 4 : i32}

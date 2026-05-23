@@ -5,10 +5,10 @@
 // SOURCE: resident_request_id=wave_local_request_index
 // SOURCE: spill_frame_base=spill_arena_base+resident_request_id*spill_frame_stride_bytes
 // SOURCE-LABEL: static int spill_request_info_pack_uniforms
-// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* hidden_runtime __vc4_spill_frame_base */
-// SOURCE: uniformWords[1] = requestInfo->resident_request_id; /* hidden_runtime __vc4_resident_request_id */
-// SOURCE: uniformWords[2] = requestInfo->spill_frame_bytes; /* hidden_runtime __vc4_spill_frame_bytes */
-// SOURCE: uniformWords[3] = requestInfo->spill_frame_stride_bytes; /* hidden_runtime __vc4_spill_frame_stride_bytes */
+// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// SOURCE: uniformWords[1] = requestInfo->resident_request_id; /* builtin resident_request_id */
+// SOURCE: uniformWords[2] = requestInfo->spill_frame_bytes; /* builtin spill_frame_bytes */
+// SOURCE: uniformWords[3] = requestInfo->spill_frame_stride_bytes; /* builtin spill_frame_stride_bytes */
 
 vc4.module @spill_request_info {
   vc4.func @kernel() attributes {
@@ -23,10 +23,10 @@ vc4.module @spill_request_info {
       uniform_words_per_qpu = 4 : i32,
       args = [],
       builtins = [
-        {name = "__vc4_spill_frame_base", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 0 : i32},
-        {name = "__vc4_resident_request_id", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 1 : i32},
-        {name = "__vc4_spill_frame_bytes", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 2 : i32},
-        {name = "__vc4_spill_frame_stride_bytes", kind = "hidden_runtime", materialization = "uniform_suffix", uniform_index = 3 : i32}
+        {name = "spill_frame_base", kind = #vc4.builtin_kind<spill_frame_base>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "resident_request_id", kind = #vc4.builtin_kind<resident_request_id>, materialization = "uniform_suffix", uniform_index = 1 : i32},
+        {name = "spill_frame_bytes", kind = #vc4.builtin_kind<spill_frame_bytes>, materialization = "uniform_suffix", uniform_index = 2 : i32},
+        {name = "spill_frame_stride_bytes", kind = #vc4.builtin_kind<spill_frame_stride_bytes>, materialization = "uniform_suffix", uniform_index = 3 : i32}
       ]
     }
   } {
