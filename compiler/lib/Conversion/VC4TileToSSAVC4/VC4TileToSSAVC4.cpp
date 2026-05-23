@@ -1123,8 +1123,14 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
     if (!base || !limit)
       return failure();
     SmallVector<Value, 2> activeLaneOperands{limit, base};
-    Value activeLanes = createALUAdd(builder, op->getLoc(), activeLaneOperands,
-                                     mlir::vc4::AddOpcode::sub,
+    Value tailSpan = createALUAdd(builder, op->getLoc(), activeLaneOperands,
+                                  mlir::vc4::AddOpcode::sub,
+                                  builder.getI32Type());
+    Value laneWidth =
+        createLoadImmI32(builder, op->getLoc(), builder.getI32Type(), 16);
+    SmallVector<Value, 2> clampOperands{tailSpan, laneWidth};
+    Value activeLanes = createALUAdd(builder, op->getLoc(), clampOperands,
+                                     mlir::vc4::AddOpcode::min,
                                      builder.getI32Type());
     operands.push_back(activeLanes);
     activeLanesAttr = 16;

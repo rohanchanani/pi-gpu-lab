@@ -3389,9 +3389,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       } else {
         os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
       }
-      if (kernelABI.tailPolicy == "exact_multiple")
-        os << "  uint32_t totalRequests = logicalN == 0u ? 0u : VC4_RUNTIME_MAX_QPUS;\n";
-      else
       os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
       os << "  uint32_t warpsPerBlock = 1u;\n";
       os << "  (void)grid;\n";
