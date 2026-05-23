@@ -54,6 +54,8 @@ namespace {
 constexpr llvm::StringLiteral kVC4TileKernelOpName("vc4tile.kernel");
 constexpr llvm::StringLiteral kVC4TileReturnOpName("vc4tile.return");
 constexpr llvm::StringLiteral kVC4TileProgramIdOpName("vc4tile.program_id");
+constexpr llvm::StringLiteral kVC4TileBlockIdOpName("vc4tile.block_id");
+constexpr llvm::StringLiteral kVC4TileWarpIdOpName("vc4tile.warp_id");
 constexpr llvm::StringLiteral kVC4TileLaneIdOpName("vc4tile.lane_id");
 constexpr llvm::StringLiteral kVC4TileLaneRangeOpName("vc4tile.lane_range");
 constexpr llvm::StringLiteral kVC4TileThreadIdOpName("vc4tile.thread_id");
@@ -166,6 +168,19 @@ static bool isCooperativeKernel(Operation *kernel) {
   return getScheduleModeString(kernel) == "cooperative_block";
 }
 
+static FunctionType getKernelFunctionType(Operation *kernel) {
+  if (auto typeAttr =
+          llvm::dyn_cast_or_null<TypeAttr>(kernel->getAttr("function_type"))) {
+    if (auto functionType = llvm::dyn_cast<FunctionType>(typeAttr.getValue()))
+      return functionType;
+  }
+  return FunctionType::get(kernel->getContext(), {}, {});
+}
+
+static unsigned getFormalArgumentCount(Operation *kernel) {
+  return getKernelFunctionType(kernel).getNumInputs();
+}
+
 static DictionaryAttr getDictionaryAttr(Operation *op, StringRef name) {
   return op->getAttrOfType<DictionaryAttr>(name);
 }
@@ -194,6 +209,12 @@ static bool kernelContains(Operation *kernel, llvm::StringRef opName) {
   return found;
 }
 
+static StringRef getStringField(DictionaryAttr dict, StringRef name) {
+  if (auto attr = llvm::dyn_cast_or_null<StringAttr>(dict.get(name)))
+    return attr.getValue();
+  return {};
+}
+
 static DictionaryAttr normalizeLaunchABIForSSAVC4(DictionaryAttr launchABI,
                                                   OpBuilder &builder) {
   SmallVector<NamedAttribute, 8> attrs;
@@ -215,41 +236,98 @@ static DictionaryAttr normalizeLaunchABIForSSAVC4(DictionaryAttr launchABI,
   return builder.getDictionaryAttr(attrs);
 }
 
+static DictionaryAttr buildLaunchABIArg(DictionaryAttr argAttr,
+                                        int64_t uniformIndex,
+                                        OpBuilder &builder) {
+  SmallVector<NamedAttribute, 8> attrs;
+  StringRef abiName = getStringField(argAttr, "abi_name");
+  StringRef kind = getStringField(argAttr, "kind");
+
+  attrs.push_back(builder.getNamedAttr("name", builder.getStringAttr(abiName)));
+  attrs.push_back(
+      builder.getNamedAttr("abi_name", builder.getStringAttr(abiName)));
+  attrs.push_back(builder.getNamedAttr("kind", builder.getStringAttr(kind)));
+  attrs.push_back(builder.getNamedAttr(
+      "direction",
+      builder.getStringAttr(getStringField(argAttr, "direction"))));
+  attrs.push_back(builder.getNamedAttr(
+      "uniform_index", builder.getI32IntegerAttr(uniformIndex)));
+
+  if (kind == "scalar") {
+    attrs.push_back(builder.getNamedAttr(
+        "type", builder.getStringAttr(getStringField(argAttr, "type"))));
+  } else if (kind == "buffer") {
+    StringRef elemType = getStringField(argAttr, "elem_type");
+    if (elemType.empty())
+      elemType = "u32";
+    attrs.push_back(
+        builder.getNamedAttr("elem_type", builder.getStringAttr(elemType)));
+  }
+
+  return builder.getDictionaryAttr(attrs);
+}
+
+static unsigned
+appendBuiltinIfNeeded(Operation *kernel, SmallVectorImpl<Attribute> &builtins,
+                      OpBuilder &builder, bool needed, StringRef name,
+                      mlir::vc4::BuiltinKind kind, unsigned nextUniformIndex) {
+  if (!needed)
+    return nextUniformIndex;
+
+  builtins.push_back(builder.getDictionaryAttr({
+      builder.getNamedAttr("name", builder.getStringAttr(name)),
+      builder.getNamedAttr(
+          "kind", mlir::vc4::BuiltinKindAttr::get(kernel->getContext(), kind)),
+      builder.getNamedAttr("materialization",
+                           builder.getStringAttr("uniform_suffix")),
+      builder.getNamedAttr("uniform_index",
+                           builder.getI32IntegerAttr(nextUniformIndex)),
+  }));
+  return nextUniformIndex + 1;
+}
+
 static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
   if (DictionaryAttr carried = getCarriedLaunchABI(kernel))
     return normalizeLaunchABIForSSAVC4(carried, builder);
 
-  MLIRContext *ctx = builder.getContext();
   llvm::StringRef publicName = getPublicName(kernel);
   std::string codeSymbol = makeCIdentifier(publicName) + "_shader";
   StringAttr symName = getSymbolNameAttr(kernel);
 
   SmallVector<Attribute> args;
   SmallVector<Attribute> builtins;
+  unsigned nextUniformIndex = 0;
+  unsigned formalArgCount = getFormalArgumentCount(kernel);
+  ArrayAttr argAttrs = kernel->getAttrOfType<ArrayAttr>("arg_attrs");
+  for (unsigned i = 0; i < formalArgCount; ++i) {
+    auto dict = llvm::cast<DictionaryAttr>(argAttrs[i]);
+    args.push_back(buildLaunchABIArg(dict, nextUniformIndex++, builder));
+  }
+
   const bool needsLogicalRequest =
       kernelContains(kernel, kVC4TileProgramIdOpName) ||
       kernelContains(kernel, kVC4TileThreadIdOpName);
+  const bool needsLogicalBlockId =
+      kernelContains(kernel, kVC4TileBlockIdOpName);
+  const bool needsLogicalWarpId = kernelContains(kernel, kVC4TileWarpIdOpName);
 
-  if (needsLogicalRequest) {
-    Attribute logicalRequestKind = mlir::vc4::BuiltinKindAttr::get(
-        ctx, mlir::vc4::BuiltinKind::logical_request);
-    builtins.push_back(builder.getDictionaryAttr({
-        builder.getNamedAttr("name", builder.getStringAttr("logical_request")),
-        builder.getNamedAttr("kind", logicalRequestKind),
-        builder.getNamedAttr("materialization",
-                             builder.getStringAttr("uniform_suffix")),
-        builder.getNamedAttr("uniform_index", builder.getI32IntegerAttr(0)),
-    }));
-  }
+  nextUniformIndex = appendBuiltinIfNeeded(
+      kernel, builtins, builder, needsLogicalRequest, "logical_request",
+      mlir::vc4::BuiltinKind::logical_request, nextUniformIndex);
+  nextUniformIndex = appendBuiltinIfNeeded(
+      kernel, builtins, builder, needsLogicalBlockId, "logical_block_id",
+      mlir::vc4::BuiltinKind::logical_block_id, nextUniformIndex);
+  nextUniformIndex = appendBuiltinIfNeeded(
+      kernel, builtins, builder, needsLogicalWarpId, "logical_warp_id",
+      mlir::vc4::BuiltinKind::logical_warp_id, nextUniformIndex);
 
   return builder.getDictionaryAttr({
       builder.getNamedAttr("public_name", builder.getStringAttr(publicName)),
       builder.getNamedAttr(
           "symbol_name", symName ? symName : builder.getStringAttr(publicName)),
       builder.getNamedAttr("code_symbol", builder.getStringAttr(codeSymbol)),
-      builder.getNamedAttr(
-          "uniform_words_per_qpu",
-          builder.getI32IntegerAttr(needsLogicalRequest ? 1 : 0)),
+      builder.getNamedAttr("uniform_words_per_qpu",
+                           builder.getI32IntegerAttr(nextUniformIndex)),
       builder.getNamedAttr("args", builder.getArrayAttr(args)),
       builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
       builder.getNamedAttr("tail_policy",
@@ -305,20 +383,6 @@ static LogicalResult verifySupportedKernelShape(Operation *kernel) {
   if (kernel->getNumRegions() != 1 || kernel->getRegion(0).empty())
     return kernel->emitOpError("requires one non-empty body region");
 
-  if (auto typeAttr =
-          llvm::dyn_cast_or_null<TypeAttr>(kernel->getAttr("function_type"))) {
-    if (auto functionType = llvm::dyn_cast<FunctionType>(typeAttr.getValue())) {
-      if (functionType.getNumInputs() != 0) {
-        return kernel->emitOpError("formal vc4tile.kernel arguments require "
-                                   "ABI formal-argument lowering");
-      }
-    }
-  }
-  if (kernel->getRegion(0).front().getNumArguments() != 0) {
-    return kernel->emitOpError(
-        "formal vc4tile.kernel arguments require ABI formal-argument lowering");
-  }
-
   bool sawReturn = false;
   for (Block &block : kernel->getRegion(0)) {
     if (block.empty())
@@ -372,7 +436,8 @@ static Operation *createSSAVC4Func(Operation *kernel, Operation *ssavc4Module,
   state.addAttribute("vc4.launch_abi", buildLaunchABI(kernel, moduleBuilder));
   state.addAttribute("vc4.resource", buildResource(kernel, moduleBuilder));
 
-  addAttrIfPresent(kernel, state, "arg_attrs");
+  if (getFormalArgumentCount(kernel) == 0)
+    addAttrIfPresent(kernel, state, "arg_attrs");
   addAttrIfPresent(kernel, state, "res_attrs");
 
   state.addRegion();
@@ -460,11 +525,17 @@ static Value createElementNumber(OpBuilder &builder, Location loc) {
 }
 
 static Value createUniformRead(OpBuilder &builder, Location loc,
-                               Type resultType, int64_t index) {
-  return createSSAVC4OpWithResult(
-      builder, loc, kSSAVC4UniformReadOpName, {},
-      {builder.getNamedAttr("index", builder.getI32IntegerAttr(index))},
-      resultType);
+                               Type resultType, int64_t index,
+                               StringRef name = {}) {
+  SmallVector<NamedAttribute, 4> attrs{
+      builder.getNamedAttr("index", builder.getI32IntegerAttr(index))};
+  if (!name.empty()) {
+    attrs.push_back(builder.getNamedAttr("name", builder.getStringAttr(name)));
+    attrs.push_back(
+        builder.getNamedAttr("abi_name", builder.getStringAttr(name)));
+  }
+  return createSSAVC4OpWithResult(builder, loc, kSSAVC4UniformReadOpName, {},
+                                  attrs, resultType);
 }
 
 static Value createSplat(OpBuilder &builder, Location loc, Value input,
@@ -651,6 +722,61 @@ static LogicalResult lowerCmpI(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static std::optional<int64_t> getGeneratedBuiltinUniformIndex(Operation *kernel,
+                                                              StringRef name) {
+  int64_t index = getFormalArgumentCount(kernel);
+  const bool needsLogicalRequest =
+      kernelContains(kernel, kVC4TileProgramIdOpName) ||
+      kernelContains(kernel, kVC4TileThreadIdOpName);
+  const bool needsLogicalBlockId =
+      kernelContains(kernel, kVC4TileBlockIdOpName);
+  const bool needsLogicalWarpId = kernelContains(kernel, kVC4TileWarpIdOpName);
+
+  if (needsLogicalRequest) {
+    if (name == "logical_request")
+      return index;
+    ++index;
+  }
+  if (needsLogicalBlockId) {
+    if (name == "logical_block_id")
+      return index;
+    ++index;
+  }
+  if (needsLogicalWarpId) {
+    if (name == "logical_warp_id")
+      return index;
+    ++index;
+  }
+  return std::nullopt;
+}
+
+static LogicalResult getRuntimeBuiltinUniformIndex(Operation *op,
+                                                   StringRef builtinName,
+                                                   int64_t &uniformIndex) {
+  if (auto indexAttr = op->getAttrOfType<IntegerAttr>("uniform_index")) {
+    uniformIndex = indexAttr.getInt();
+    if (uniformIndex < 0)
+      return op->emitOpError("uniform_index must be non-negative");
+    return success();
+  }
+
+  Operation *kernel = op->getParentOp();
+  while (kernel && !hasName(kernel, kVC4TileKernelOpName))
+    kernel = kernel->getParentOp();
+  if (!kernel)
+    return op->emitOpError("requires parent vc4tile.kernel");
+
+  std::optional<int64_t> generated =
+      getGeneratedBuiltinUniformIndex(kernel, builtinName);
+  if (!generated) {
+    return op->emitOpError()
+           << "could not assign launch ABI builtin uniform index for "
+           << builtinName;
+  }
+  uniformIndex = *generated;
+  return success();
+}
+
 static LogicalResult lowerProgramId(Operation *op, OpBuilder &builder,
                                     llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumResults() != 1)
@@ -660,13 +786,48 @@ static LogicalResult lowerProgramId(Operation *op, OpBuilder &builder,
     return op->emitOpError("currently lowers only i32 program_id results");
 
   int64_t uniformIndex = 0;
-  if (auto indexAttr = op->getAttrOfType<IntegerAttr>("uniform_index"))
-    uniformIndex = indexAttr.getInt();
-  if (uniformIndex < 0)
-    return op->emitOpError("uniform_index must be non-negative");
+  if (failed(
+          getRuntimeBuiltinUniformIndex(op, "logical_request", uniformIndex)))
+    return failure();
 
-  valueMap[op->getResult(0)] =
-      createUniformRead(builder, op->getLoc(), resultType, uniformIndex);
+  valueMap[op->getResult(0)] = createUniformRead(
+      builder, op->getLoc(), resultType, uniformIndex, "logical_request");
+  return success();
+}
+
+static LogicalResult lowerBlockId(Operation *op, OpBuilder &builder,
+                                  llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumResults() != 1)
+    return op->emitOpError("expected one result");
+  Type resultType = op->getResult(0).getType();
+  if (!resultType.isSignlessInteger(32))
+    return op->emitOpError("currently lowers only i32 block_id results");
+
+  int64_t uniformIndex = 0;
+  if (failed(
+          getRuntimeBuiltinUniformIndex(op, "logical_block_id", uniformIndex)))
+    return failure();
+
+  valueMap[op->getResult(0)] = createUniformRead(
+      builder, op->getLoc(), resultType, uniformIndex, "logical_block_id");
+  return success();
+}
+
+static LogicalResult lowerWarpId(Operation *op, OpBuilder &builder,
+                                 llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumResults() != 1)
+    return op->emitOpError("expected one result");
+  Type resultType = op->getResult(0).getType();
+  if (!resultType.isSignlessInteger(32))
+    return op->emitOpError("currently lowers only i32 warp_id results");
+
+  int64_t uniformIndex = 0;
+  if (failed(
+          getRuntimeBuiltinUniformIndex(op, "logical_warp_id", uniformIndex)))
+    return failure();
+
+  valueMap[op->getResult(0)] = createUniformRead(
+      builder, op->getLoc(), resultType, uniformIndex, "logical_warp_id");
   return success();
 }
 
@@ -705,8 +866,12 @@ static LogicalResult lowerThreadId(Operation *op, OpBuilder &builder,
     return op->emitOpError(
         "currently lowers only vector<16xi32> thread_id results");
   Type i32Type = builder.getI32Type();
+  int64_t uniformIndex = 0;
+  if (failed(
+          getRuntimeBuiltinUniformIndex(op, "logical_request", uniformIndex)))
+    return failure();
   Value logicalRequest = createUniformRead(builder, op->getLoc(), i32Type,
-                                           /*index=*/0);
+                                           uniformIndex, "logical_request");
   Value shiftFour = createLoadImmI32(builder, op->getLoc(), i32Type, 4);
   SmallVector<Value, 2> shiftOperands{logicalRequest, shiftFour};
   Value base = createALUAdd(builder, op->getLoc(), shiftOperands,
@@ -1121,6 +1286,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerCmpI(op, builder, valueMap);
   if (hasName(op, kVC4TileProgramIdOpName))
     return lowerProgramId(op, builder, valueMap);
+  if (hasName(op, kVC4TileBlockIdOpName))
+    return lowerBlockId(op, builder, valueMap);
+  if (hasName(op, kVC4TileWarpIdOpName))
+    return lowerWarpId(op, builder, valueMap);
   if (hasName(op, kVC4TileLaneRangeOpName))
     return lowerLaneRange(op, builder, valueMap);
   if (hasName(op, kVC4TileLaneIdOpName))
@@ -1344,11 +1513,41 @@ createSSAVC4Blocks(Operation *kernel, Operation *func,
     destRegion.push_back(destBlock);
     blockMap[sourceBlock] = destBlock;
 
+    bool isEntryBlock = sourceBlock == &kernel->getRegion(0).front();
+    if (isEntryBlock && getFormalArgumentCount(kernel) != 0)
+      continue;
+
     for (BlockArgument arg : sourceBlock->getArguments()) {
       BlockArgument loweredArg =
           destBlock->addArgument(arg.getType(), arg.getLoc());
       valueMap[arg] = loweredArg;
     }
+  }
+  return success();
+}
+
+static LogicalResult
+seedFormalArgumentReads(Operation *kernel, OpBuilder &builder,
+                        llvm::DenseMap<Value, Value> &valueMap,
+                        llvm::DenseMap<Block *, Block *> &blockMap) {
+  unsigned formalArgCount = getFormalArgumentCount(kernel);
+  if (formalArgCount == 0)
+    return success();
+
+  Block &sourceEntry = kernel->getRegion(0).front();
+  Block *destEntry = blockMap.lookup(&sourceEntry);
+  if (!destEntry)
+    return kernel->emitOpError("internal error: missing lowered entry block");
+
+  ArrayAttr argAttrs = kernel->getAttrOfType<ArrayAttr>("arg_attrs");
+  builder.setInsertionPointToStart(destEntry);
+  for (unsigned index = 0; index < formalArgCount; ++index) {
+    BlockArgument sourceArg = sourceEntry.getArgument(index);
+    auto dict = llvm::cast<DictionaryAttr>(argAttrs[index]);
+    StringRef abiName = getStringField(dict, "abi_name");
+    Value read = createUniformRead(builder, sourceArg.getLoc(),
+                                   sourceArg.getType(), index, abiName);
+    valueMap[sourceArg] = read;
   }
   return success();
 }
@@ -1359,6 +1558,8 @@ static LogicalResult lowerKernelBody(Operation *kernel, Operation *func) {
   llvm::DenseMap<Block *, Block *> blockMap;
 
   if (failed(createSSAVC4Blocks(kernel, func, valueMap, blockMap)))
+    return failure();
+  if (failed(seedFormalArgumentReads(kernel, bodyBuilder, valueMap, blockMap)))
     return failure();
 
   Block *unifiedExitBlock = nullptr;
