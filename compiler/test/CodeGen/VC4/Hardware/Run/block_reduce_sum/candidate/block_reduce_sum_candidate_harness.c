@@ -117,7 +117,7 @@ static int launch_case(struct vc4_program *program,
         vc4_deviceptr_t block_out = out_dev + block * BLOCK_REDUCE_SUM_RESULT_LANES * sizeof(float);
 
         if (block_reduce_sum_launch(program, grid, block_dim, block_input, block_out,
-                                    values_per_block, 0u, warps_per_block, 0u) < 0)
+                                    values_per_block) < 0)
             return -1;
     }
 

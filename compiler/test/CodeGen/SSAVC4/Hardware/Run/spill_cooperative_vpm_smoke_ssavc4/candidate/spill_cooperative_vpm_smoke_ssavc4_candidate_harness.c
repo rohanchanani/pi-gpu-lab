@@ -78,7 +78,7 @@ void notmain(void) {
     printk("Running VC4 spill_cooperative_vpm_smoke_ssavc4 candidate bundle...\n");
     fill_host_buffer();
     if (vc4_m2_copy_htod(program, out_dev, out_values, bytes) < 0 ||
-        spill_cooperative_vpm_smoke_ssavc4_launch(program, grid, block, out_dev, 0u, warpsPerBlock, 0u) < 0 ||
+        spill_cooperative_vpm_smoke_ssavc4_launch(program, grid, block, out_dev) < 0 ||
         vc4_m2_copy_dtoh(program, out_values, out_dev, bytes) < 0) {
         printk("ERROR: spill_cooperative_vpm_smoke_ssavc4 launch/copy failed\n");
         launch_failures++;

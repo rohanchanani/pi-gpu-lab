@@ -198,18 +198,21 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen lowered_dir lowered_ssavc4 scheduled_vc4
+  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir lowered_ssavc4 scheduled_vc4 stable_ssavc4 stable_vc4
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   rm -rf "$GENERATED_DIR"
   mkdir -p "$GENERATED_DIR"
   lowered_dir="$AUTO_ROOT/lowered"
   mkdir -p "$lowered_dir"
-  lowered_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
-  scheduled_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
-  rm -f "$lowered_ssavc4" "$scheduled_vc4"
+  lowered_tmp_dir="$(mktemp -d "$lowered_dir/${TEST_NAME}.tmp.XXXXXX")"
+  lowered_ssavc4="$lowered_tmp_dir/${TEST_NAME}.ssavc4.mlir"
+  scheduled_vc4="$lowered_tmp_dir/${TEST_NAME}.vc4.mlir"
+  stable_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
+  stable_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
   log "lowering $(relpath "$INPUT_MLIR") to SSAVC4 at $(relpath "$lowered_ssavc4")"
   "$vc4_opt" "$INPUT_MLIR" --convert-vc4tile-to-ssavc4 -o "$lowered_ssavc4"
+  require_file "$lowered_ssavc4"
   log "lowering $(relpath "$lowered_ssavc4") to scheduled VC4 at $(relpath "$scheduled_vc4")"
   "$vc4_opt" "$lowered_ssavc4" \
     --convert-ssavc4-to-vc4 \
@@ -222,9 +225,12 @@ run_vc4_codegen() {
   validate_scheduled_vc4_file "$scheduled_vc4"
   log "generating $(relpath "$GENERATED_DIR") from $(relpath "$scheduled_vc4")"
   "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
+  cp "$lowered_ssavc4" "$stable_ssavc4"
+  cp "$scheduled_vc4" "$stable_vc4"
   cp "$INPUT_MLIR" "$GENERATED_DIR/input.vc4tile.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"
+  rm -rf "$lowered_tmp_dir"
   check_generated_bundle
 }
 

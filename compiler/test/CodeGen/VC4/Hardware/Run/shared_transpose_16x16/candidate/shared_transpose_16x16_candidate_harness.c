@@ -128,8 +128,7 @@ void notmain(void) {
 
         if (vc4MemcpyHtoD(program, input_dev, input_values, input_bytes) < 0 ||
             vc4MemcpyHtoD(program, output_dev, output_values, output_bytes) < 0 ||
-            shared_transpose_16x16_launch(program, grid, block, input_dev, output_dev,
-                                          0u, SHARED_TRANSPOSE_16X16_WARPS_PER_BLOCK, 0u) < 0 ||
+            shared_transpose_16x16_launch(program, grid, block, input_dev, output_dev) < 0 ||
             vc4MemcpyDtoH(program, output_values, output_dev, output_bytes) < 0) {
             printk("ERROR: shared_transpose_16x16 launch/copy failed case=%d\n",
                    (int)case_id);
