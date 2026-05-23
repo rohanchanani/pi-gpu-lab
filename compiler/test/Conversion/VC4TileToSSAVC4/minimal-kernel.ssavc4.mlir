@@ -13,14 +13,12 @@ module {
       threading = #vc4.threading_mode<single>,
       vc4.launch_abi = {
         args = [],
-        builtins = [
-          {kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", name = "total_requests", uniform_index = 0 : i32}
-        ],
+        builtins = [],
         code_symbol = "minimal_vc4tile_shader",
         public_name = "minimal_vc4tile",
         symbol_name = "minimal",
         tail_policy = "exact_multiple",
-        uniform_words_per_qpu = 1 : i32
+        uniform_words_per_qpu = 0 : i32
       },
       vc4.resource = {
         require_full_block_residency = false,

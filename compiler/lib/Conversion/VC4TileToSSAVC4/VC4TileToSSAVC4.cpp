@@ -470,13 +470,11 @@ static DictionaryAttr normalizeAndCompleteLaunchABI(Operation *kernel,
     appendBuiltinIfMissing("logical_warp_id");
   if (isCooperativeKernel(kernel))
     appendBuiltinIfMissing("warps_per_block");
-  if (args.empty() && builtinEntries.empty())
-    appendBuiltinIfMissing("total_requests");
 
   ArrayAttr completedBuiltins = builder.getArrayAttr(builtinEntries);
   int64_t maxUniformIndex = std::max(getMaxUniformIndex(args),
                                      getMaxUniformIndex(completedBuiltins));
-  int64_t uniformWords = std::max<int64_t>(1, maxUniformIndex + 1);
+  int64_t uniformWords = maxUniformIndex + 1;
 
   attrs.push_back(builder.getNamedAttr("uniform_words_per_qpu",
                                        builder.getI32IntegerAttr(uniformWords)));

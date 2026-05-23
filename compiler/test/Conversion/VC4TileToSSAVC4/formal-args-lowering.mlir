@@ -38,8 +38,9 @@ vc4tile.kernel @formal_args_with_program_id attributes {
 
 // CHECK-LABEL: ssavc4.func @zero_formal_still_lowers
 // CHECK-SAME: args = []
-// CHECK-SAME: #vc4.builtin_kind<total_requests>
-// CHECK-SAME: uniform_words_per_qpu = 1 : i32
+// CHECK-SAME: builtins = []
+// CHECK-SAME: uniform_words_per_qpu = 0 : i32
+// CHECK-NOT: ssavc4.uniform.read
 // CHECK: ssavc4.thread_end
 vc4tile.kernel @zero_formal_still_lowers attributes {
   public_name = "zero_formal_still_lowers"
