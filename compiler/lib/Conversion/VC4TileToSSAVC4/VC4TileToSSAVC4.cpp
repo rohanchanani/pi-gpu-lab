@@ -215,6 +215,17 @@ static StringRef getStringField(DictionaryAttr dict, StringRef name) {
   return {};
 }
 
+static StringRef getKernelTailPolicy(Operation *kernel) {
+  auto attr = kernel->getAttrOfType<StringAttr>("tail_policy");
+  if (!attr)
+    return "exact_multiple";
+  if (attr.getValue() == "tail")
+    return "tail_safe";
+  if (attr.getValue() == "tail_safe" || attr.getValue() == "exact_multiple")
+    return attr.getValue();
+  return "exact_multiple";
+}
+
 static DictionaryAttr normalizeLaunchABIForSSAVC4(DictionaryAttr launchABI,
                                                   OpBuilder &builder) {
   SmallVector<NamedAttribute, 8> attrs;
@@ -331,7 +342,7 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
       builder.getNamedAttr("args", builder.getArrayAttr(args)),
       builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
       builder.getNamedAttr("tail_policy",
-                           builder.getStringAttr("exact_multiple")),
+                           builder.getStringAttr(getKernelTailPolicy(kernel))),
   });
 }
 
