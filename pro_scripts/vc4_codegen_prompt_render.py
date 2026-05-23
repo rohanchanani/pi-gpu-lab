@@ -368,6 +368,226 @@ def failure_packet_json(repo: Path, failure_packet: Path | None) -> str:
     return fenced(json.dumps(summary, indent=2, sort_keys=True), "json")
 
 
+def candidate_verification_spec_paths(repo: Path, config: MilestoneConfig) -> list[Path]:
+    """Return plausible verification-spec paths for the active milestone.
+
+    Prompt rendering only receives the worklist/context-profile paths, so infer
+    the sibling verification spec from the worklist path.  Keep this helper
+    defensive so older milestones without source-product prompts still render.
+    """
+    candidates: list[Path] = []
+    for raw in (
+        config.defaults.get("verifications") if isinstance(config.defaults, dict) else None,
+        config.worklist.get("verifications") if isinstance(config.worklist, dict) else None,
+        config.worklist.get("verification_spec") if isinstance(config.worklist, dict) else None,
+    ):
+        if isinstance(raw, str) and raw:
+            path = Path(raw)
+            candidates.append(path if path.is_absolute() else repo / path)
+
+    worklist_path = config.worklist_path
+    name = worklist_path.name
+    if name.endswith("_worklist.json"):
+        candidates.append(worklist_path.with_name(name[: -len("_worklist.json")] + "_verifications.json"))
+    if "worklist" in name:
+        candidates.append(worklist_path.with_name(name.replace("worklist", "verifications")))
+
+    milestone = safe_artifact_component(config.milestone)
+    candidates.append(repo / "pro_scripts" / f"{milestone}_verifications.json")
+
+    out: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        key = str(path.resolve())
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(path)
+    return out
+
+
+def load_verification_spec_for_prompt(repo: Path, config: MilestoneConfig) -> tuple[Path | None, Mapping[str, Any] | None]:
+    for path in candidate_verification_spec_paths(repo, config):
+        if not path.exists():
+            continue
+        try:
+            data = read_json_file(path)
+        except Exception:
+            continue
+        if isinstance(data, Mapping) and isinstance(data.get("slices"), Mapping):
+            return path, data
+    return None, None
+
+
+def collect_source_product_entries(spec: Mapping[str, Any], slice_id: str) -> tuple[list[str], list[str]]:
+    slices = spec.get("slices")
+    if not isinstance(slices, Mapping):
+        return [], []
+    slice_spec = slices.get(slice_id)
+    if not isinstance(slice_spec, Mapping):
+        return [], []
+    verifications = slice_spec.get("verifications")
+    if not isinstance(verifications, list):
+        return [], []
+
+    files: list[str] = []
+    globs: list[str] = []
+    for verification in verifications:
+        if not isinstance(verification, Mapping):
+            continue
+        if verification.get("mechanism") != "source_products":
+            continue
+        raw_files = verification.get("files", [])
+        if isinstance(raw_files, list):
+            files.extend(str(x) for x in raw_files)
+        for key in ("globs", "required_globs"):
+            raw_globs = verification.get(key, [])
+            if isinstance(raw_globs, list):
+                globs.extend(str(x) for x in raw_globs)
+
+    def dedupe(items: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in items:
+            if item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    return dedupe(files), dedupe(globs)
+
+
+def collect_failure_missing_source_products(value: Any) -> tuple[list[str], list[str]]:
+    """Extract missing source-product paths from failure packets/log tails.
+
+    This intentionally collects only repo-looking compiler/pro_scripts paths so
+    scheduled-artifact missing intermediates under .vc4_auto do not pollute the
+    final source deliverables checklist.
+    """
+    files: list[str] = []
+    globs: list[str] = []
+
+    def keep_path(raw: Any) -> str | None:
+        text = str(raw)
+        for prefix in ("compiler/", "pro_scripts/"):
+            idx = text.find(prefix)
+            if idx >= 0:
+                return text[idx:]
+        return None
+
+    def visit(obj: Any) -> None:
+        if isinstance(obj, Mapping):
+            for key, child in obj.items():
+                if key in {"missing_files", "missing_source_files"} and isinstance(child, list):
+                    for item in child:
+                        kept = keep_path(item)
+                        if kept:
+                            files.append(kept)
+                    continue
+                if key in {"missing_globs", "missing_source_globs"} and isinstance(child, list):
+                    for item in child:
+                        kept = keep_path(item)
+                        if kept:
+                            globs.append(kept)
+                    continue
+                visit(child)
+            return
+        if isinstance(obj, list):
+            for child in obj:
+                visit(child)
+            return
+        if isinstance(obj, str):
+            for match in re.finditer(r"missing_files=\[(.*?)\]", obj, flags=re.S):
+                for item in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1)):
+                    kept = keep_path(item)
+                    if kept:
+                        files.append(kept)
+            for match in re.finditer(r"missing_globs=\[(.*?)\]", obj, flags=re.S):
+                for item in re.findall(r"['\"]([^'\"]+)['\"]", match.group(1)):
+                    kept = keep_path(item)
+                    if kept:
+                        globs.append(kept)
+
+    visit(value)
+
+    def dedupe(items: list[str]) -> list[str]:
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in items:
+            if item in seen:
+                continue
+            seen.add(item)
+            out.append(item)
+        return out
+
+    return dedupe(files), dedupe(globs)
+
+
+def render_source_product_deliverables(
+    repo: Path,
+    config: MilestoneConfig,
+    slice_id: str,
+    failure_packet: Path | None,
+) -> str:
+    spec_path, spec = load_verification_spec_for_prompt(repo, config)
+    if spec is None:
+        return ""
+    files, globs = collect_source_product_entries(spec, slice_id)
+    if not files and not globs:
+        return ""
+
+    failure_data = load_failure_packet_data(repo, failure_packet)
+    missing_files, missing_globs = collect_failure_missing_source_products(failure_data)
+
+    lines: list[str] = [
+        "## Exact source-product deliverables for this slice",
+        "",
+        "These exact repo-relative source products are part of the active typed verifier contract. If any required path is missing after your patch, the source-products pre-gate will fail before semantic verification starts.",
+        "",
+        "Do not rename, approximate, or substitute these paths. If this is a failure attempt and the previous candidate was cleaned, regenerate the full slice candidate; do not only add the paths that were missing in the prior attempt.",
+        "",
+    ]
+    if spec_path is not None:
+        lines.append(f"Verification spec source: `{relpath(repo, spec_path)}`")
+        lines.append("")
+    if missing_files or missing_globs:
+        lines.append("Previously reported missing source products in the current failure packet:")
+        if missing_files:
+            lines.append("\nMissing files:")
+            lines.extend(f"- `{item}`" for item in missing_files)
+        if missing_globs:
+            lines.append("\nMissing globs:")
+            lines.extend(f"- `{item}`" for item in missing_globs)
+        lines.append("")
+    if files:
+        lines.append("Required files:")
+        lines.extend(f"- `{item}`" for item in files)
+        lines.append("")
+    if globs:
+        lines.append("Required globs:")
+        lines.extend(f"- `{item}`" for item in globs)
+        lines.append("")
+    lines.append("Before producing the downloadable bundle, verify that these exact source products either already exist in the repo or are created by your patch. The bundle must still include only real intended source changes; do not create empty placeholder files just to satisfy this checklist.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def append_source_product_deliverables_to_prompt(
+    rendered: str,
+    repo: Path,
+    config: MilestoneConfig,
+    slice_id: str,
+    failure_packet: Path | None,
+    mode: str,
+) -> str:
+    if mode == "diagnosis" or "## Exact source-product deliverables for this slice" in rendered:
+        return rendered
+    section = render_source_product_deliverables(repo, config, slice_id, failure_packet)
+    if not section.strip():
+        return rendered
+    return rendered.rstrip() + "\n\n" + section.rstrip() + "\n"
+
+
 TEXT_CONTEXT_SUFFIXES = {
     ".c",
     ".cc",
@@ -794,6 +1014,9 @@ def render_prompt(
         "CONTEXT_METADATA_JSON": fenced(json.dumps(context_meta, indent=2, sort_keys=True), "json"),
     }
     rendered = simple_render(template, values)
+    rendered = append_source_product_deliverables_to_prompt(
+        rendered, repo, config, slice_id, failure_packet, mode
+    )
     return append_download_contract_to_prompt(rendered, download_contract, mode)
 
 
