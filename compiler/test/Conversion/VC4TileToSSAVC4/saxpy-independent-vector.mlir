@@ -15,15 +15,14 @@
 // CHECK: ssavc4.vdw.store
 // CHECK: ssavc4.thread_end
 // CHECK-NOT: vc4tile.
-vc4tile.kernel @saxpy_independent_vector(%buffer : i32) attributes {
+vc4tile.kernel @saxpy_independent_vector attributes {
   public_name = "saxpy_independent_vector",
-  arg_attrs = [
-    {abi_name = "buffer", kind = "buffer", direction = "inout", type = "u32", elem_type = "u32"}
-  ]
+  arg_attrs = [{name = "buffer", kind = "scalar", direction = "by_value", type = "u32"}]
 } {
+^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
   %mask = vc4tile.mask_all : vector<16xi1>
-  %loaded = vc4tile.masked_load_global %buffer, %lanes, %mask {
+  %loaded = vc4tile.masked_load_global %base, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,
     memory_space = #vc4tile.memory_space<global>,
@@ -33,7 +32,7 @@ vc4tile.kernel @saxpy_independent_vector(%buffer : i32) attributes {
   %two_vec = vector.broadcast %two : i32 to vector<16xi32>
   %scaled = arith.muli %loaded, %two_vec : vector<16xi32>
   %result = arith.addi %scaled, %lanes : vector<16xi32>
-  vc4tile.masked_store_global %buffer, %lanes, %result, %mask {
+  vc4tile.masked_store_global %base, %lanes, %result, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,
     memory_space = #vc4tile.memory_space<global>,

@@ -8,12 +8,11 @@
 // SSAVC4: ssavc4.thread_end
 // VC4: vc4.qpu.branch
 // VC4: vc4.qpu.bundle
-vc4tile.kernel @control_flow_tail_block_args_vc4tile(%out : i32) attributes {
+vc4tile.kernel @control_flow_tail_block_args_vc4tile attributes {
   public_name = "control_flow_tail_block_args_vc4tile",
-  arg_attrs = [
-    {abi_name = "out", kind = "buffer", direction = "out", type = "u32", elem_type = "u32"}
-  ]
+  arg_attrs = [{name = "out", kind = "scalar", direction = "by_value", type = "u32"}]
 } {
+^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %one = arith.constant 1 : i32
@@ -23,8 +22,8 @@ vc4tile.kernel @control_flow_tail_block_args_vc4tile(%out : i32) attributes {
   %value = arith.addi %lanes, %bias_vec : vector<16xi32>
   %go = arith.cmpi ult, %zero, %one : i32
   cf.cond_br %go,
-      ^then(%out, %zero, %limit, %value : i32, i32, i32, vector<16xi32>),
-      ^else(%out, %zero, %limit, %value : i32, i32, i32, vector<16xi32>)
+      ^then(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>),
+      ^else(%base, %zero, %limit, %value : i32, i32, i32, vector<16xi32>)
 ^then(%tbase: i32, %tlo: i32, %tlimit: i32, %tvalue: vector<16xi32>):
   cf.br ^merge(%tbase, %tlo, %tlimit, %tvalue : i32, i32, i32, vector<16xi32>)
 ^else(%fbase: i32, %flo: i32, %flimit: i32, %fvalue: vector<16xi32>):

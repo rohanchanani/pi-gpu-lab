@@ -5,17 +5,16 @@
 // CHECK: ssavc4.cond_br
 // CHECK: ssavc4.vdw.store
 // CHECK: ssavc4.thread_end
-vc4tile.kernel @control_flow_loop_tail_block_args(%out : i32) attributes {
+vc4tile.kernel @control_flow_loop_tail_block_args attributes {
   public_name = "control_flow_loop_tail_block_args",
-  arg_attrs = [
-    {abi_name = "out", kind = "buffer", direction = "out", type = "u32", elem_type = "u32"}
-  ]
+  arg_attrs = [{name = "out", kind = "scalar", direction = "by_value", type = "u32"}]
 } {
+^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %one = arith.constant 1 : i32
   %limit = arith.constant 4 : i32
-  cf.br ^loop(%zero, %out : i32, i32)
+  cf.br ^loop(%zero, %base : i32, i32)
 ^loop(%i: i32, %carried_base: i32):
   %next = arith.addi %i, %one : i32
   %keep_going = arith.cmpi ult, %next, %one : i32
