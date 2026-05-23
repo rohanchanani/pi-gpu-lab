@@ -7,8 +7,8 @@
     "sentinel_mismatches": 0,
     "launch_failures": 0,
     "blocks": 2,
-    "warps_per_block": 2,
     "lanes": 16,
-    "total_words": 64
+    "layout_words": 384,
+    "physical_warp_slots": 12
   }
 }

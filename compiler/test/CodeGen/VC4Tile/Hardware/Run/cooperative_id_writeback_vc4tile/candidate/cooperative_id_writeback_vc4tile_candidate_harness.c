@@ -1,20 +1,25 @@
 #include "vc4_m2_candidate_test_helpers.h"
+#include "vc4_case_config.h"
 #include "kernel_launch.h"
 
 #include <stdint.h>
 
 #define COOP_ID_WRITEBACK_BLOCKS 2u
-#define COOP_ID_WRITEBACK_WARPS_PER_BLOCK 2u
+#ifndef VC4_CASE_WARPS_PER_BLOCK
+#define VC4_CASE_WARPS_PER_BLOCK 2
+#endif
+#define COOP_ID_WRITEBACK_WARPS_PER_BLOCK ((unsigned)VC4_CASE_WARPS_PER_BLOCK)
+#define COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK 12u
 #define COOP_ID_WRITEBACK_LANES 16u
-#define COOP_ID_WRITEBACK_TOTAL_WORDS \
-  (COOP_ID_WRITEBACK_BLOCKS * COOP_ID_WRITEBACK_WARPS_PER_BLOCK * \
+#define COOP_ID_WRITEBACK_LAYOUT_WORDS \
+  (COOP_ID_WRITEBACK_BLOCKS * COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK * \
    COOP_ID_WRITEBACK_LANES)
 #define COOP_ID_WRITEBACK_SENTINEL 0xc0091d5u
 
-static uint32_t out_values[COOP_ID_WRITEBACK_TOTAL_WORDS + 16u];
+static uint32_t out_values[COOP_ID_WRITEBACK_LAYOUT_WORDS + 16u];
 
 static void fill_host_buffer(void) {
-  for (unsigned i = 0; i < COOP_ID_WRITEBACK_TOTAL_WORDS + 16u; ++i)
+  for (unsigned i = 0; i < COOP_ID_WRITEBACK_LAYOUT_WORDS + 16u; ++i)
     out_values[i] = COOP_ID_WRITEBACK_SENTINEL;
 }
 
@@ -22,7 +27,33 @@ static uint32_t expected_word(unsigned block, unsigned warp, unsigned lane) {
   return block * 1000u + warp * COOP_ID_WRITEBACK_LANES + lane;
 }
 
+static int is_active_word(unsigned index) {
+  for (unsigned b = 0; b < COOP_ID_WRITEBACK_BLOCKS; ++b) {
+    unsigned block_base =
+        b * COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK * COOP_ID_WRITEBACK_LANES;
+    unsigned active_begin = block_base;
+    unsigned active_end =
+        block_base + COOP_ID_WRITEBACK_WARPS_PER_BLOCK * COOP_ID_WRITEBACK_LANES;
+    if (index >= active_begin && index < active_end)
+      return 1;
+  }
+  return 0;
+}
+
 void notmain(void) {
+  if (COOP_ID_WRITEBACK_WARPS_PER_BLOCK == 0u ||
+      COOP_ID_WRITEBACK_WARPS_PER_BLOCK > COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK) {
+    printk("VC4_TEST_RESULT name=cooperative_id_writeback_vc4tile status=FAIL cases=1 total_mismatches=0 sentinel_mismatches=0 launch_failures=1 blocks=%d warps_per_block=%d lanes=%d active_words=%d layout_words=%d physical_warp_slots=%d reason=invalid_warps_per_block\n",
+           (int)COOP_ID_WRITEBACK_BLOCKS,
+           (int)COOP_ID_WRITEBACK_WARPS_PER_BLOCK,
+           (int)COOP_ID_WRITEBACK_LANES,
+           (int)(COOP_ID_WRITEBACK_BLOCKS * COOP_ID_WRITEBACK_WARPS_PER_BLOCK *
+                 COOP_ID_WRITEBACK_LANES),
+           (int)COOP_ID_WRITEBACK_LAYOUT_WORDS,
+           (int)COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK);
+    return;
+  }
+
   struct vc4_program *program = 0;
   if (vc4_program_create(&program, 0) < 0 || !program)
     panic("cooperative_id_writeback_vc4tile vc4_program_create failed");
@@ -54,7 +85,7 @@ void notmain(void) {
       for (unsigned w = 0; w < COOP_ID_WRITEBACK_WARPS_PER_BLOCK; ++w) {
         for (unsigned lane = 0; lane < COOP_ID_WRITEBACK_LANES; ++lane) {
           unsigned idx =
-              ((b * COOP_ID_WRITEBACK_WARPS_PER_BLOCK) + w) *
+              ((b * COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK) + w) *
                   COOP_ID_WRITEBACK_LANES +
               lane;
           uint32_t expected = expected_word(b, w, lane);
@@ -69,8 +100,9 @@ void notmain(void) {
         }
       }
     }
-    for (unsigned i = COOP_ID_WRITEBACK_TOTAL_WORDS;
-         i < COOP_ID_WRITEBACK_TOTAL_WORDS + 16u; ++i) {
+    for (unsigned i = 0; i < COOP_ID_WRITEBACK_LAYOUT_WORDS + 16u; ++i) {
+      if (i < COOP_ID_WRITEBACK_LAYOUT_WORDS && is_active_word(i))
+        continue;
       if (out_values[i] != COOP_ID_WRITEBACK_SENTINEL)
         sentinel_mismatches++;
     }
@@ -81,10 +113,15 @@ void notmain(void) {
       (total_mismatches == 0 && sentinel_mismatches == 0 && launch_failures == 0)
           ? "PASS"
           : "FAIL";
-  printk("VC4_TEST_RESULT name=cooperative_id_writeback_vc4tile status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d blocks=%d warps_per_block=%d lanes=%d total_words=%d checksum_accum=%u runtime_allocations=%u runtime_launches=%u elapsed_usec=%d\n",
+  printk("VC4_TEST_RESULT name=cooperative_id_writeback_vc4tile status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d blocks=%d warps_per_block=%d lanes=%d active_words=%d layout_words=%d physical_warp_slots=%d total_requests=%d checksum_accum=%u runtime_allocations=%u runtime_launches=%u elapsed_usec=%d\n",
          status, 1, total_mismatches, sentinel_mismatches, launch_failures,
          (int)COOP_ID_WRITEBACK_BLOCKS, (int)COOP_ID_WRITEBACK_WARPS_PER_BLOCK,
-         (int)COOP_ID_WRITEBACK_LANES, (int)COOP_ID_WRITEBACK_TOTAL_WORDS,
+         (int)COOP_ID_WRITEBACK_LANES,
+         (int)(COOP_ID_WRITEBACK_BLOCKS * COOP_ID_WRITEBACK_WARPS_PER_BLOCK *
+               COOP_ID_WRITEBACK_LANES),
+         (int)COOP_ID_WRITEBACK_LAYOUT_WORDS,
+         (int)COOP_ID_WRITEBACK_MAX_WARPS_PER_BLOCK,
+         (int)(COOP_ID_WRITEBACK_BLOCKS * COOP_ID_WRITEBACK_WARPS_PER_BLOCK),
          checksum_accum, cooperative_id_writeback_vc4tile_runtime_allocations(),
          cooperative_id_writeback_vc4tile_runtime_launches(), elapsed);
 

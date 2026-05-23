@@ -3,7 +3,7 @@
 vc4tile.kernel @cooperative_id_writeback_vc4tile attributes {
   public_name = "cooperative_id_writeback_vc4tile",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,
-  warps_per_block_max = 2 : i32,
+  warps_per_block_max = 12 : i32,
   uses_shared_vpm = false,
   uses_barrier = false,
   require_full_block_residency = false,
@@ -18,9 +18,9 @@ vc4tile.kernel @cooperative_id_writeback_vc4tile attributes {
   %thread = vc4tile.thread_id : vector<16xi32>
   %lanes = vc4tile.lane_range : vector<16xi32>
   %six = arith.constant 6 : i32
-  %seven = arith.constant 7 : i32
   %thousand = arith.constant 1000 : i32
-  %block_bytes = arith.shli %block, %seven : i32
+  %block_stride_bytes = arith.constant 768 : i32
+  %block_bytes = arith.muli %block, %block_stride_bytes : i32
   %warp_bytes = arith.shli %warp, %six : i32
   %block_scaled = arith.muli %block, %thousand : i32
   %tmp_base = arith.addi %out, %block_bytes : i32
