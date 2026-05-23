@@ -47,7 +47,9 @@
     "Hardware matrix case values are exposed to runners through VC4_MATRIX_* and VC4_CASE_* environment variables.",
     "Implementation slices run an early build-check_vc4 and a final build-check_vc4-post so fresh scheduled/artifact/hardware side effects cannot pass locally and fail only during cumulative prefix recheck.",
     "Scheduled artifact contracts validate fresh scheduled VC4 intermediates: exactly one vc4.module, no remaining vc4tile/ssavc4 ops, and vc4.qpu.* scheduled ops before vc4-codegen.",
-    "Hardware CPU-reference contracts clean candidate/hardware state by default before running fixture phases, so stale bundles cannot satisfy fresh hardware checks."
+    "Hardware CPU-reference contracts clean candidate/hardware state by default before running fixture phases, so stale bundles cannot satisfy fresh hardware checks.",
+    "ABI refactor gate: user/caller values are vc4tile.kernel formal args and vc4.launch_abi.args[]; program_id/block_id/warp_id are zero-operand runtime builtins and vc4.launch_abi.builtins[]; lane_id/lane_range/ssavc4.element_number are lane/register identity values outside the launch ABI.",
+    "Future ABI static-forbidden checks are intentionally required=false during ABI-1 so slices m4-00 through m4-08 do not fail solely because old source still contains stale lower ABI syntax. ABI implementation stages must turn the gate on."
   ],
   "fixture_matrices": {
     "m4_independent_vector": [
@@ -4176,6 +4178,162 @@
           "target": "check-vc4",
           "route_hint": "codex_mechanical",
           "required": true
+        }
+      ]
+    },
+    "m4-abi-refactor-contract": {
+      "title": "ABI refactor specification contract",
+      "expected_end_state": "ABI categories are documented and future implementation gates can reject stale uniform/builtin encodings without breaking already-passed M4 slices during ABI-1.",
+      "verifications": [
+        {
+          "id": "m4-abi-refactor-doc-scope",
+          "mechanism": "milestone_scope_contract",
+          "description": "Docs and prompts lock the VC4Tile ABI value categories before m4-09 resumes.",
+          "files": [
+            "compiler/docs/codegen/vc4tile-ir-design-m4.md",
+            "compiler/docs/codegen/vc4tile-m4-plan.md",
+            "compiler/docs/codegen/ssavc4-ir-design-m3-post-cleanup.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/slice_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/m4_handoff.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/codex_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m4/codex_mechanical_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m4/implementation_integrity_audit_prompt.md",
+            "pro_scripts/MISTAKES.md"
+          ],
+          "required_literals": [
+            "VC4Tile ABI value categories",
+            "vc4.launch_abi.args[]",
+            "vc4.launch_abi.builtins[]",
+            "ssavc4.element_number",
+            "uniform_index"
+          ],
+          "required_regex": [
+            "program_id[\\s\\S]{0,240}(zero-operand|runtime builtin|runtime identity)",
+            "lane_id[\\s\\S]{0,240}(element_number|not uniforms|not a uniform)",
+            "kernel[\\s\\S]{0,240}formal arguments"
+          ]
+        },
+        {
+          "id": "m4-abi-refactor-future-static-forbidden",
+          "mechanism": "implementation_integrity_contract",
+          "description": "Future-facing ABI modernization checks. Required=false in ABI-1; implementation stages must activate this gate after updating stale source/tests.",
+          "required": false,
+          "activation": "Set required=true once ABI-2..ABI-7 update lower ABI enums/schema, artifact emitter/runtime packing, VC4/SSAVC4 tests, VC4Tile formal args, lowering, and fixtures.",
+          "static_forbidden": [
+            {
+              "description": "VC4Tile program_id must not carry uniform_index.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Dialect/VC4Tile/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "vc4tile\\.program_id\\b[\\s\\S]{0,200}\\buniform_index\\b"
+            },
+            {
+              "description": "VC4Tile block_id must not carry uniform_index.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Dialect/VC4Tile/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "vc4tile\\.block_id\\b[\\s\\S]{0,200}\\buniform_index\\b"
+            },
+            {
+              "description": "VC4Tile warp_id must not carry uniform_index.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Dialect/VC4Tile/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "vc4tile\\.warp_id\\b[\\s\\S]{0,200}\\buniform_index\\b"
+            },
+            {
+              "description": "Remove stale launch ABI builtin kind qpu_num in ABI-refactor target files.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4/IR/**",
+                "compiler/lib/Dialect/VC4/**",
+                "compiler/lib/Conversion/SSAVC4ToVC4/**",
+                "compiler/lib/Target/VC4/**",
+                "compiler/test/Conversion/SSAVC4ToVC4/**",
+                "compiler/test/CodeGen/VC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "#vc4\\.builtin_kind<qpu_num>"
+            },
+            {
+              "description": "Remove stale launch ABI builtin kind num_qpus in ABI-refactor target files.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4/IR/**",
+                "compiler/lib/Dialect/VC4/**",
+                "compiler/lib/Conversion/SSAVC4ToVC4/**",
+                "compiler/lib/Target/VC4/**",
+                "compiler/test/Conversion/SSAVC4ToVC4/**",
+                "compiler/test/CodeGen/VC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "#vc4\\.builtin_kind<num_qpus>"
+            },
+            {
+              "description": "Remove stale launch ABI builtin kind elem_num in ABI-refactor target files.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4/IR/**",
+                "compiler/lib/Dialect/VC4/**",
+                "compiler/lib/Conversion/SSAVC4ToVC4/**",
+                "compiler/lib/Target/VC4/**",
+                "compiler/test/Conversion/SSAVC4ToVC4/**",
+                "compiler/test/CodeGen/VC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "#vc4\\.builtin_kind<elem_num>"
+            },
+            {
+              "description": "Remove stale hidden_runtime string kind in ABI-refactor target files.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4/IR/**",
+                "compiler/lib/Dialect/VC4/**",
+                "compiler/lib/Conversion/SSAVC4ToVC4/**",
+                "compiler/lib/Target/VC4/**",
+                "compiler/test/Conversion/SSAVC4ToVC4/**",
+                "compiler/test/CodeGen/VC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "kind\\s*=\\s*\\\"hidden_runtime\\\""
+            },
+            {
+              "description": "Runtime metadata names must not appear as launch ABI args[] entries.",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4/IR/**",
+                "compiler/lib/Dialect/VC4/**",
+                "compiler/lib/Conversion/SSAVC4ToVC4/**",
+                "compiler/lib/Target/VC4/**",
+                "compiler/test/Conversion/SSAVC4ToVC4/**",
+                "compiler/test/CodeGen/VC4/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**",
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/Dialect/VC4Tile/**",
+                "compiler/test/Conversion/VC4TileToSSAVC4/**",
+                "compiler/test/CodeGen/VC4Tile/**"
+              ],
+              "pattern": "args\\s*=\\s*\\[[\\s\\S]{0,2000}\\b(logical_request|total_requests|logical_block_id|logical_warp_id|warps_per_block|vpm_base_row|vpm_rows|semaphore_base|barrier_arrive_sem|barrier_go_sem|barrier_depart_sem|barrier_reset_sem|resident_request_id|spill_frame_base|spill_frame_bytes|spill_frame_stride_bytes|spill_vpm_row)\\b"
+            }
+          ]
         }
       ]
     }

@@ -37,6 +37,8 @@ Rules:
 - Do not bypass the required M4 path: `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.
 - Do not add comments or string literals solely to satisfy verifier scans.
 - Do not change logical identity semantics such as `vc4tile.program_id`; if a fix needs that semantic decision, print `VC4_CODEX_NEEDS_GPT`.
+- Preserve ABI categories: user/caller values are `vc4tile.kernel` formal arguments; `program_id`, `block_id`, and `warp_id` are zero-operand runtime builtin identity ops; `lane_id` and `lane_range` are `ssavc4.element_number`-derived and are not uniforms.
+- Do not add `uniform_index` to VC4Tile identity ops, do not use `program_id` as an output/input pointer or scalar launch argument, and do not mechanically modernize launch ABI builtin schema names.
 - If this requires semantic design or guessing, leave the worktree unchanged and print exactly: VC4_CODEX_NEEDS_GPT
 
 Milestone-specific Codex contract:

@@ -17,3 +17,11 @@ Important existing facts:
 - Shared VPM uses one global 4 KiB user-visible VPM window.
 - The block barrier uses a validated four-semaphore reusable protocol.
 - Existing hardware fixtures prove SSAVC4 paths for vector store, SAXPY/TMU, block args, spills, reductions, shared VPM, and barrier.
+
+ABI correction required before m4-09:
+
+- User/caller inputs are `vc4tile.kernel` formal arguments, lowering to `vc4.launch_abi.args[]` and generated launch wrapper parameters.
+- `vc4tile.program_id`, `vc4tile.block_id`, and `vc4tile.warp_id` are zero-operand runtime builtin identity ops, lowering to `vc4.launch_abi.builtins[]` entries populated from runtime/scheduler metadata.
+- `vc4tile.lane_id` and `vc4tile.lane_range` lower through `ssavc4.element_number`; lane identity is hardware/register-derived and is not a uniform or launch ABI builtin.
+- Do not carry stale `uniform_index` attributes on VC4Tile identity ops, and do not use `program_id` to represent output/input pointers, `n`, `alpha`, or other user arguments.
+- Codex mechanical repair must not make ABI semantic changes.

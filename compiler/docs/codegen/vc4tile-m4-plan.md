@@ -69,6 +69,28 @@ Lowers uniform branches, simple loops/merges, and tail masks using SSAVC4 succes
 
 Lowers warp-local rotate/reduce forms through SSAVC4 rotate/reduction support and proves a warp reduction fixture.
 
+### ABI refactor pause before m4-09
+
+M4 slices 4-8 exposed an ABI category bug: some VC4Tile fixtures/lowering treated `vc4tile.program_id` as if it were a generic uniform or user-argument read. Before cooperative resources, shared VPM, and barrier slices continue, the ABI categories must be corrected and locked.
+
+Staged ABI refactor sequence:
+
+1. `ABI-1 docs/spec/verifier lock`
+2. `ABI-2 lower vc4 launch builtin enum/schema modernization`
+3. `ABI-3 artifact emitter + SSAVC4 spill/runtime builtin modernization`
+4. `ABI-4 VC4/SSAVC4 test modernization`
+5. `ABI-5 vc4tile.kernel formal arguments`
+6. `ABI-6 VC4TileToSSAVC4 formal-arg and builtin lowering`
+7. `ABI-7 M4 fixture rewrite plus program_id hardware proof`
+8. `ABI-8 hardware regression and cumulative check-vc4`
+
+M4 must not resume at m4-09 until ABI-8 passes. The ABI lock is:
+
+- user/caller values are `vc4tile.kernel` formal arguments and lower to `vc4.launch_abi.args[]`;
+- `vc4tile.program_id`, `vc4tile.block_id`, and `vc4tile.warp_id` are zero-operand runtime builtin identity ops and lower to `vc4.launch_abi.builtins[]`;
+- `vc4tile.lane_id` / `vc4tile.lane_range` lower through `ssavc4.element_number` and are not launch ABI builtins or uniforms;
+- physical uniform slots are the transport mechanism, not the semantic category.
+
 ### m4-09: cooperative block resources
 
 Adds cooperative schedule mode, logical block/warp/thread identity, resource metadata, and hardware proof that logical identity is runtime-supplied, not physical QPU-derived.
@@ -95,6 +117,8 @@ Runs cumulative M4 contracts, all active VC4Tile hardware fixtures, full `check-
 - Treating VDW as arbitrary scalar scatter store support.
 - Permitting divergent barrier participation.
 - Using physical `QPU_NUMBER` for logical identity.
+- Treating `vc4tile.program_id`, `vc4tile.block_id`, or `vc4tile.warp_id` as generic uniform/user-argument reads.
+- Encoding lane identity as a launch ABI builtin instead of using `ssavc4.element_number`.
 - Passing fixtures with hard-coded names, fake logs, reference QASM, or expected-result injection.
 - Assuming the old no-spill M3 plan is still current; the current lower half has spill and block-argument support.
 

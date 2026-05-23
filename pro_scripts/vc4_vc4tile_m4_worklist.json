@@ -753,14 +753,17 @@
         "m4-08-rotate-reduce"
       ],
       "context_profile": "cooperative_block_resources",
-      "intent": "Add cooperative-block schedule metadata and logical block/warp/thread identity without yet requiring shared VPM or barrier, and prove logical ID/resource behavior on hardware.",
+      "intent": "Paused until ABI-8 passes. Then add cooperative-block schedule metadata and logical block/warp/thread identity without yet requiring shared VPM or barrier, and prove logical ID/resource behavior on hardware.",
       "non_goals": [
         "Do not implement Triton, IREE, StableHLO, JAX, PyTorch, or MLIR `gpu` producer lowering in M4; those future producer adapters must target `vc4tile` after M4.",
         "Do not lower `vc4tile` directly to scheduled `vc4`; the required path is `vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime`.",
         "Do not resurrect removed structured `vc4` operations or function_form<structured>. Scheduled `vc4` remains QASM-near only.",
         "Do not special-case fixture names, public names, expected JSON, QASM, shader arrays, runtime logs, or `VC4_TEST_RESULT` text.",
         "Do not use physical `QPU_NUMBER` for logical request, warp, lane, block, or program identity.",
-        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks."
+        "Do not weaken M2/M3 artifact, runtime, scheduled-verifier, spill, or hardware regression checks.",
+        "Do not treat vc4tile.program_id, vc4tile.block_id, or vc4tile.warp_id as generic uniform/user-argument reads; they are zero-operand runtime builtin identity ops.",
+        "Do not represent user/caller values through program_id; use vc4tile.kernel formal arguments that lower to vc4.launch_abi.args[].",
+        "Do not model lane_id/lane_range/ssavc4.element_number as launch ABI builtins or uniform stream values."
       ],
       "allowed_paths": [
         "compiler/CMakeLists.txt",
@@ -811,6 +814,9 @@
       },
       "success_probes": [
         "typed-verifier:m4-09-cooperative-block-resources"
+      ],
+      "blocked_by": [
+        "ABI-8 hardware regression and cumulative check-vc4"
       ]
     },
     {
@@ -1035,5 +1041,25 @@
         "typed-verifier:m4-12-final-acceptance"
       ]
     }
-  ]
+  ],
+  "abi_refactor_pause": {
+    "status": "paused-before-m4-09",
+    "reason": "M4 slices 4-8 exposed an ABI category bug: program_id was treated as a generic uniform/user argument instead of a runtime builtin identity op.",
+    "resume_condition": "Do not resume m4-09 until ABI-8 hardware regression and cumulative check-vc4 pass.",
+    "stages": [
+      "ABI-1 docs/spec/verifier lock",
+      "ABI-2 lower vc4 launch builtin enum/schema modernization",
+      "ABI-3 artifact emitter + SSAVC4 spill/runtime builtin modernization",
+      "ABI-4 VC4/SSAVC4 test modernization",
+      "ABI-5 vc4tile.kernel formal arguments",
+      "ABI-6 VC4TileToSSAVC4 formal-arg and builtin lowering",
+      "ABI-7 M4 fixture rewrite plus program_id hardware proof",
+      "ABI-8 hardware regression and cumulative check-vc4"
+    ],
+    "abi_categories": {
+      "kernel_arguments": "vc4tile.kernel formal arguments -> vc4.launch_abi.args[] -> generated launch wrapper parameters -> uniform stream transport",
+      "runtime_builtins": "zero-operand vc4tile identity ops/lower-half metadata -> vc4.launch_abi.builtins[] -> vc4_launch_request_info uniform packing",
+      "lane_register_builtins": "vc4tile.lane_id/vc4tile.lane_range/ssavc4.element_number -> hardware lane identity, not launch ABI and not uniforms"
+    }
+  }
 }

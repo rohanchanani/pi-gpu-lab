@@ -28,4 +28,12 @@ Hard rules:
 - Do not weaken M2/M3 scheduled-verifier, artifact, runtime, spill, or hardware regression contracts.
 - Prefer correctness over optimization. Optimization can follow after verified correctness.
 
+ABI value categories are hard rules:
+
+- User/caller values such as output pointers, input pointers, `n`, `alpha`, strides, and scalar parameters must be formal `vc4tile.kernel` arguments. They lower to `vc4.launch_abi.args[]` and generated launch wrapper parameters.
+- `vc4tile.program_id`, `vc4tile.block_id`, and `vc4tile.warp_id` are zero-operand runtime builtin identity ops. They lower to `vc4.launch_abi.builtins[]` entries populated by runtime/scheduler metadata. They must never carry `uniform_index` and must never stand in for user launch arguments.
+- `vc4tile.lane_id` and `vc4tile.lane_range` are `ssavc4.element_number`-derived lane/register identity values. They are not uniforms and are not `vc4.launch_abi.builtins[]`.
+- Physical uniform stream slots are a transport mechanism after lowering, not the semantic category of the VC4Tile value.
+- Codex mechanical repair must not "fix" ABI issues mechanically. ABI category, launch ABI schema, runtime packing, and identity semantics require GPT-led design.
+
 `vc4tile` is a tile/kernel IR: target-specific and VC4-aware, but above SSAVC4 machine details. It should expose 16-lane tile intent, masks, global memory intent, cooperative block resources, shared VPM tile intent, and barriers. It should hide TMU token sequencing, VDW setup words, raw semaphore protocol details, physical register allocation, scheduling hazards, branch delay slots, and QASM.

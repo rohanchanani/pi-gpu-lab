@@ -300,6 +300,10 @@ The conversion pass copies these dictionaries unchanged onto the lowered schedul
 
 Reason: M2 already established the launch ABI and resource metadata contract. SSAVC4 should feed that path, not fork it.
 
+`vc4.launch_abi` is also the source of meaning for physical uniform slots. `ssavc4.uniform.read` reads the uniform stream; it does not by itself decide whether a slot is a user kernel argument or runtime/scheduler metadata. Kernel arguments are described by `vc4.launch_abi.args[]`. Runtime builtins such as logical request, logical block, logical warp, cooperative VPM/semaphore allocation, resident request, and spill-frame metadata are described by `vc4.launch_abi.builtins[]`.
+
+`ssavc4.element_number` remains outside `vc4.launch_abi`: it is a pure hardware lane identity value derived from the QPU register state, not runtime-packed uniform metadata. Runtime logical identity builtins must describe software launch metadata and must not be aliases for the physical QPU number.
+
 ### 6.4 Shared side-effect resources
 
 `VC4SideEffects.h` intentionally remains as shared VC4 hardware-resource infrastructure. SSAVC4 may use those resource classes if they still exist and fit the desired semantics.
@@ -550,6 +554,8 @@ semaphore_base = runtime-supplied per-resident-block semaphore allocation
 
 These values are represented as uniform reads / launch ABI builtins in SSAVC4. They are not physical-QPU reads.
 
+The phrase "uniform reads / launch ABI builtins" means that the physical read is `ssavc4.uniform.read`, while the semantic category comes from the `vc4.launch_abi` builtin entry. These logical identity values are runtime/scheduler metadata and are not user kernel arguments.
+
 ### 10.3 Physical QPU dependency ban
 
 Normal lowering must not use physical QPU identity for program semantics. Physical-QPU fixtures such as `vpm_setup_clobber` are hardware characterization only. They are not M3 acceptance fixtures.
@@ -722,6 +728,8 @@ Rules:
 6. ABI uniform indices must be dense and match `uniform_words_per_qpu`.
 7. Uniform reads for ABI values must appear in entry block before non-uniform effectful ops in M3 v1.
 8. `ELEMENT_NUMBER` is not read through this op. Use `ssavc4.element_number`.
+
+`ssavc4.uniform.read` is the physical uniform-stream read operation. The meaning of the slot is defined by `vc4.launch_abi`: entries in `args[]` are user/caller-supplied kernel arguments, and entries in `builtins[]` are runtime/scheduler-supplied metadata. Do not model `ssavc4.element_number` as a uniform read or as a launch ABI builtin.
 
 Lowering:
 

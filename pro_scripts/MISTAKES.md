@@ -150,3 +150,31 @@ runners should validate that scheduled intermediates contain exactly one
 `vc4.module` and no remaining `vc4tile`/`ssavc4` operations before calling
 `vc4-codegen`.
 
+## 2026-05-23: program_id was misused as a generic uniform argument
+
+**Symptom:** Some VC4Tile fixtures and lowering paths treated
+`vc4tile.program_id` like a generic uniform/user-argument read, including forms
+with `uniform_index` or uses where `program_id` stood in for output pointers,
+input pointers, `n`, `alpha`, or other caller-supplied values.
+
+**Root cause:** The milestone spec blurred semantic ABI categories with the
+physical uniform stream transport. Runtime identity metadata and user kernel
+arguments both eventually travel through uniforms, but they are different ABI
+categories and have different ownership.
+
+**Permanent rule:** User/caller values are formal `vc4tile.kernel` arguments and
+lower to `vc4.launch_abi.args[]`. `vc4tile.program_id`, `vc4tile.block_id`, and
+`vc4tile.warp_id` are zero-operand runtime builtin identity ops and lower to
+`vc4.launch_abi.builtins[]`. They must never carry `uniform_index` and must not
+be used as pointer/scalar launch arguments.
+
+**Verification implication:** Future ABI-refactor verifiers should forbid
+`uniform_index` on VC4Tile identity ops, stale lower ABI builtin kinds
+(`qpu_num`, `num_qpus`, `elem_num`, `hidden_runtime`), and launch ABI `args[]`
+entries named like runtime metadata. These checks must be introduced as an
+ABI-refactor gate so already-passed slices do not fail solely because old source
+still contains stale lower ABI syntax.
+
+`ssavc4.element_number` stays as the first-class lane/register identity op. It
+is not a `vc4.launch_abi.builtins[]` entry and must not be packed into the
+uniform stream.

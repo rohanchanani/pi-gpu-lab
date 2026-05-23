@@ -22,6 +22,12 @@ Classify whether the implementation appears legitimate. Look specifically for:
 - barriers accepted without cooperative full-residency requirements;
 - shared VPM treated as arbitrary unbounded scalar SRAM;
 - arbitrary scatter stores silently lowered through the coalesced VDW path.
+- `vc4tile.program_id`, `vc4tile.block_id`, or `vc4tile.warp_id` modeled as generic uniform/user-argument reads or carrying `uniform_index`;
+- output/input pointers, `n`, `alpha`, strides, or scalar launch arguments represented through `program_id` instead of `vc4tile.kernel` formal arguments;
+- `vc4tile.lane_id`, `vc4tile.lane_range`, or `ssavc4.element_number` represented as launch ABI builtins or uniform stream values;
+- stale lower ABI builtin categories kept alive after the ABI refactor (`qpu_num`, `num_qpus`, `elem_num`, or `hidden_runtime`).
+
+ABI audit rule: `program_id`, `block_id`, and `warp_id` are runtime builtin identity ops; `lane_id`/`lane_range` are element-number-derived and not uniforms; user/caller values must be kernel formal args. Do not classify a mechanical "fix" to these categories as legitimate without explicit ABI-refactor evidence.
 
 Return exactly one JSON object and no markdown:
 

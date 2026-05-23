@@ -35,3 +35,10 @@ Candidate runners must treat generated intermediates as disposable. A `generate`
 Scheduled-artifact checks must validate the fresh scheduled VC4 intermediate before invoking `vc4-codegen`: exactly one top-level `vc4.module`, no remaining `vc4tile` or `ssavc4` operations, and at least one scheduled `vc4.qpu.*` operation for executable kernels.
 
 Hardware matrix parameters must be real inputs to the runner/harness, not decorative JSON. The verifier exports matrix values as `VC4_MATRIX_*` / `VC4_CASE_*`; runners and harnesses must consume them or the feature should not claim matrix coverage.
+
+ABI category contract:
+
+- User/caller values must be `vc4tile.kernel` formal arguments and lower to `vc4.launch_abi.args[]`.
+- `program_id`, `block_id`, and `warp_id` are runtime builtin identity ops that lower to `vc4.launch_abi.builtins[]`; they are not generic uniform readers and must not carry `uniform_index`.
+- `lane_id` and `lane_range` are derived from `ssavc4.element_number`; lane identity is not a uniform slot and must not appear in `vc4.launch_abi.builtins[]`.
+- Codex must not repair ABI category failures mechanically. If a gate exposes an ABI semantic issue, route it back to GPT Pro.

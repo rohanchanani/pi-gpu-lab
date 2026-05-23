@@ -51,6 +51,8 @@ cooperative-block schedule mode  = 1..12 logical QPU warps per block
 
 Physical `QPU_NUMBER` is never a logical identity source. Logical request, block, and warp IDs come from runtime-provided launch metadata/uniforms. Lane ID comes from QPU `ELEMENT_NUMBER` after lowering to SSAVC4.
 
+The physical limits remain binding on every logical model in this dialect: there are 12 physical QPU warp slots, each QPU warp has 16 lanes, independent-vector launches run in waves of at most the active QPUs, and cooperative blocks are constrained by active QPUs, `warps_per_block`, VPM rows/bytes, semaphores, and full-residency requirements. Logical request, warp, and block IDs are software/runtime metadata defined under that residency model; they do not imply unlimited resident workers.
+
 ## 4. Dialect design principles
 
 1. **Tile-first.** The central unit is a 16-lane QPU tile, not a scalar CUDA thread and not a high-level tensor.
@@ -134,6 +136,22 @@ block_id             -> launch ABI uniform / logical_block_id
 warp_id              -> launch ABI uniform / logical_warp_id
 thread_id            -> warp_id * 16 + lane_id, with masks for inactive lanes
 ```
+
+## VC4Tile ABI value categories
+
+VC4Tile has three distinct ABI value categories. They may share the same physical uniform transport after lowering, but their semantic ownership is different and must not be collapsed.
+
+**Kernel arguments.** User/caller-supplied kernel inputs are formal arguments of `vc4tile.kernel`. Examples include output pointers, input pointers, `n`, `alpha`, strides, and scalar parameters. These values lower to `vc4.launch_abi.args[]`, appear in generated launch wrapper signatures, and occupy physical uniform stream slots only because the VC4 uniform stream is the transport mechanism.
+
+**Runtime builtins.** Runtime/scheduler-provided execution metadata is represented in VC4Tile by zero-operand identity ops such as `vc4tile.program_id`, `vc4tile.block_id`, and `vc4tile.warp_id`, plus lower-half runtime metadata needs. These values lower to `vc4.launch_abi.builtins[]`, are populated from `vc4_launch_request_info`, and occupy physical uniform stream slots after lowering. They are not user launch arguments. Runtime builtin examples include `logical_request`, `total_requests`, `logical_block_id`, `logical_warp_id`, `warps_per_block`, `vpm_base_row`, `vpm_rows`, `semaphore_base`, `barrier_arrive_sem`, `barrier_go_sem`, `barrier_depart_sem`, `barrier_reset_sem`, `resident_request_id`, `spill_frame_base`, `spill_frame_bytes`, `spill_frame_stride_bytes`, and `spill_vpm_row`.
+
+**Lane/register builtins.** `vc4tile.lane_id` and `vc4tile.lane_range` lower to `ssavc4.element_number`-derived values. `ssavc4.element_number` remains a first-class SSAVC4 hardware lane identity op. These values are hardware/register-derived, are not entries in `vc4.launch_abi.builtins[]`, and are not carried in the uniform stream.
+
+`vc4tile.program_id`, `vc4tile.block_id`, and `vc4tile.warp_id` must remain zero-operand runtime identity ops. They must never carry `uniform_index`; forms such as `vc4tile.program_id {uniform_index = ...}` are invalid. They must never be used to represent user arguments such as output pointer, input pointer, `n`, `alpha`, strides, or any other caller-supplied scalar. Such values must be modeled as `vc4tile.kernel` formal arguments.
+
+Future lower-ABI cleanup must remove the stale builtin categories `#vc4.builtin_kind<qpu_num>`, `#vc4.builtin_kind<num_qpus>`, `#vc4.builtin_kind<elem_num>`, and string kind `"hidden_runtime"`. Do not keep aliases for those names. Tests and fixtures that still use them must be modernized during the ABI refactor rather than preserved for compatibility.
+
+Multi-kernel programs continue to use exactly one top-level `vc4.module` containing one or more scheduled kernels. `vc4-codegen` requiring exactly one top-level `vc4.module` is compatible with multi-kernel programs and must not be weakened into multiple top-level modules.
 
 ### 7.3 Global memory operations
 
