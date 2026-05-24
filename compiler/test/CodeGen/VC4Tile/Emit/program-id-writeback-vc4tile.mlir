@@ -11,6 +11,9 @@
 // SSAVC4: ssavc4.uniform.read 1 : i32
 // SSAVC4: ssavc4.uniform.read 2 : i32
 // SSAVC4: ssavc4.element_number
+// SSAVC4: ssavc4.alu.add {{.*}} {opcode = #vc4.add_opcode<sub>}
+// SSAVC4: ssavc4.load_imm {{.*}} {value = 16 : i32}
+// SSAVC4: ssavc4.alu.add {{.*}} {opcode = #vc4.add_opcode<min>}
 // SSAVC4: ssavc4.vdw.store
 // SSAVC4: ssavc4.thread_end
 // VC4-LABEL: vc4.func @program_id_writeback_vc4tile

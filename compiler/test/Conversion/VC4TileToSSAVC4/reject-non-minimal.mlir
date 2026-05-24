@@ -3,11 +3,11 @@
 vc4tile.kernel @not_yet attributes {
   public_name = "not_yet",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,
-  uses_barrier = true,
+  uses_barrier = false,
   require_full_block_residency = true,
-  semaphores_per_block = 4 : i32
+  semaphores_per_block = 0 : i32
 } {
-  // CHECK: is not supported yet by --convert-vc4tile-to-ssavc4 in this M4 slice
+  // CHECK: contains vc4tile.barrier but uses_barrier is not true
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   vc4tile.return
 }

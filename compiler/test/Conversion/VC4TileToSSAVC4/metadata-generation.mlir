@@ -5,8 +5,13 @@
 // CHECK-DAG: public_name = "generated_public"
 // CHECK-DAG: symbol_name = "metadata_generation"
 // CHECK-DAG: code_symbol = "generated_public_shader"
-// CHECK-DAG: builtins = [{{.*}}name = "warps_per_block"{{.*}}uniform_index = 0 : i32{{.*}}]
-// CHECK-DAG: uniform_words_per_qpu = 1 : i32
+// CHECK-DAG: #vc4.builtin_kind<logical_warp_id>
+// CHECK-DAG: name = "logical_warp_id"
+// CHECK-DAG: uniform_index = 0 : i32
+// CHECK-DAG: #vc4.builtin_kind<warps_per_block>
+// CHECK-DAG: name = "warps_per_block"
+// CHECK-DAG: uniform_index = 1 : i32
+// CHECK-DAG: uniform_words_per_qpu = 2 : i32
 // CHECK-DAG: tail_policy = "exact_multiple"
 // CHECK-DAG: vc4.resource
 // CHECK-DAG: schedule_mode = "cooperative_block"

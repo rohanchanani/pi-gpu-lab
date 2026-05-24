@@ -72,6 +72,7 @@ constexpr llvm::StringLiteral kVC4TileReduceOpName("vc4tile.reduce");
 constexpr llvm::StringLiteral kVC4TileSharedAllocOpName("vc4tile.shared_alloc");
 constexpr llvm::StringLiteral kVC4TileSharedLoadOpName("vc4tile.shared_load");
 constexpr llvm::StringLiteral kVC4TileSharedStoreOpName("vc4tile.shared_store");
+constexpr llvm::StringLiteral kVC4TileBarrierOpName("vc4tile.barrier");
 
 constexpr llvm::StringLiteral kArithConstantOpName("arith.constant");
 constexpr llvm::StringLiteral kArithAddIOpName("arith.addi");
@@ -106,6 +107,7 @@ constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
+constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
 
 static bool hasName(Operation *op, llvm::StringRef name) {
@@ -464,6 +466,8 @@ static DictionaryAttr normalizeAndCompleteLaunchABI(Operation *kernel,
                                                   nextUniformIndex++));
   };
 
+  const bool needsBarrier = getBoolAttr(kernel, "uses_barrier") ||
+                            kernelContains(kernel, kVC4TileBarrierOpName);
   const bool needsLogicalRequest =
       kernelContains(kernel, kVC4TileProgramIdOpName) ||
       (!isCooperativeKernel(kernel) && kernelContains(kernel, kVC4TileThreadIdOpName));
@@ -474,7 +478,8 @@ static DictionaryAttr normalizeAndCompleteLaunchABI(Operation *kernel,
   if (kernelContains(kernel, kVC4TileBlockIdOpName))
     appendBuiltinIfMissing("logical_block_id");
   if (kernelContains(kernel, kVC4TileWarpIdOpName) ||
-      (isCooperativeKernel(kernel) && kernelContains(kernel, kVC4TileThreadIdOpName)))
+      (isCooperativeKernel(kernel) && kernelContains(kernel, kVC4TileThreadIdOpName)) ||
+      needsBarrier)
     appendBuiltinIfMissing("logical_warp_id");
   if (isCooperativeKernel(kernel))
     appendBuiltinIfMissing("warps_per_block");
@@ -486,7 +491,7 @@ static DictionaryAttr normalizeAndCompleteLaunchABI(Operation *kernel,
   ArrayAttr completedBuiltins = builder.getArrayAttr(builtinEntries);
   int64_t maxUniformIndex = std::max(getMaxUniformIndex(args),
                                      getMaxUniformIndex(completedBuiltins));
-  int64_t uniformWords = maxUniformIndex + 1;
+  int64_t uniformWords = std::max<int64_t>(0, maxUniformIndex + 1);
 
   attrs.push_back(builder.getNamedAttr("uniform_words_per_qpu",
                                        builder.getI32IntegerAttr(uniformWords)));
@@ -726,6 +731,26 @@ static Value createUniformRead(OpBuilder &builder, Location loc, Type resultType
       resultType);
 }
 
+static Value createEntryUniformRead(OpBuilder &builder, Location loc,
+                                    Type resultType, int64_t index) {
+  OpBuilder::InsertionGuard guard(builder);
+  Region *region = builder.getInsertionBlock()->getParent();
+  Block &entry = region->front();
+  Operation *insertBefore = nullptr;
+  for (Operation &op : entry) {
+    if (hasName(&op, kSSAVC4UniformReadOpName))
+      continue;
+    insertBefore = &op;
+    break;
+  }
+
+  if (insertBefore)
+    builder.setInsertionPoint(insertBefore);
+  else
+    builder.setInsertionPointToEnd(&entry);
+  return createUniformRead(builder, loc, resultType, index);
+}
+
 static Value createSplat(OpBuilder &builder, Location loc, Value input,
                          Type resultType) {
   return createSSAVC4OpWithResult(builder, loc, kSSAVC4SplatOpName, {input}, {},
@@ -946,6 +971,7 @@ static LogicalResult lowerCmpI(Operation *op, OpBuilder &builder,
 static Value getOrCreateRuntimeBuiltinUniformRead(
     Operation *op, OpBuilder &builder, llvm::StringMap<Value> &builtinValueMap,
     StringRef builtinName, Type resultType) {
+  (void)resultType;
   auto cached = builtinValueMap.find(builtinName);
   if (cached != builtinValueMap.end())
     return cached->second;
@@ -955,17 +981,60 @@ static Value getOrCreateRuntimeBuiltinUniformRead(
     op->emitOpError("must be nested in vc4tile.kernel");
     return Value();
   }
-  std::optional<int64_t> uniformIndex =
-      lookupLaunchBuiltinUniformIndex(kernel, builder, builtinName);
-  if (!uniformIndex) {
+
+  DictionaryAttr abi = buildLaunchABI(kernel, builder);
+  auto builtins = abi.getAs<ArrayAttr>("builtins");
+  if (!builtins) {
     op->emitOpError() << "could not find launch ABI builtin '" << builtinName
                       << "'";
     return Value();
   }
 
-  Value read = createUniformRead(builder, op->getLoc(), resultType, *uniformIndex);
-  builtinValueMap[builtinName] = read;
-  return read;
+  std::optional<int64_t> targetIndex;
+  for (Attribute attr : builtins) {
+    auto dict = llvm::dyn_cast<DictionaryAttr>(attr);
+    if (!dictionaryHasStringName(dict, builtinName))
+      continue;
+    targetIndex = getUniformIndex(dict);
+    break;
+  }
+  if (!targetIndex) {
+    op->emitOpError() << "could not find launch ABI builtin '" << builtinName
+                      << "'";
+    return Value();
+  }
+
+  Value requested;
+  for (int64_t index = 0; index <= *targetIndex; ++index) {
+    for (Attribute attr : builtins) {
+      auto dict = llvm::dyn_cast<DictionaryAttr>(attr);
+      if (!dict)
+        continue;
+      std::optional<int64_t> uniformIndex = getUniformIndex(dict);
+      if (!uniformIndex || *uniformIndex != index)
+        continue;
+      StringAttr nameAttr = getABINameAttr(dict);
+      if (!nameAttr || nameAttr.getValue().empty())
+        continue;
+
+      auto alreadyRead = builtinValueMap.find(nameAttr.getValue());
+      Value read = alreadyRead == builtinValueMap.end()
+                       ? createEntryUniformRead(builder, op->getLoc(),
+                                                builder.getI32Type(), index)
+                       : alreadyRead->second;
+      if (alreadyRead == builtinValueMap.end())
+        builtinValueMap[nameAttr.getValue()] = read;
+      if (nameAttr.getValue() == builtinName)
+        requested = read;
+    }
+  }
+
+  if (!requested) {
+    op->emitOpError() << "could not materialize launch ABI builtin '"
+                      << builtinName << "'";
+    return Value();
+  }
+  return requested;
 }
 
 static LogicalResult lowerRuntimeBuiltinId(Operation *op, OpBuilder &builder,
@@ -1528,6 +1597,37 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static LogicalResult lowerBarrier(Operation *op, OpBuilder &builder) {
+  Operation *kernel = getParentVC4TileKernel(op);
+  if (!kernel)
+    return op->emitOpError("must be nested in vc4tile.kernel");
+  if (!isCooperativeKernel(kernel)) {
+    return op->emitOpError(
+        "requires parent vc4tile.kernel schedule_mode = #vc4tile.schedule_mode<cooperative_block>");
+  }
+  if (!getBoolAttr(kernel, "uses_barrier")) {
+    return op->emitOpError(
+        "requires parent vc4tile.kernel to set uses_barrier = true");
+  }
+  if (!getBoolAttr(kernel, "require_full_block_residency")) {
+    return op->emitOpError(
+        "requires parent vc4tile.kernel to set require_full_block_residency = true");
+  }
+  if (getI32Attr(kernel, "semaphores_per_block").value_or(0) != 4)
+    return op->emitOpError("requires parent semaphores_per_block = 4");
+
+  createSSAVC4Op(builder, op->getLoc(), kSSAVC4BarrierOpName, {},
+                 {builder.getNamedAttr("arrive_offset",
+                                       builder.getI32IntegerAttr(0)),
+                  builder.getNamedAttr("go_offset",
+                                       builder.getI32IntegerAttr(1)),
+                  builder.getNamedAttr("depart_offset",
+                                       builder.getI32IntegerAttr(2)),
+                  builder.getNamedAttr("reset_offset",
+                                       builder.getI32IntegerAttr(3))});
+  return success();
+}
+
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  llvm::DenseMap<Value, Value> &valueMap,
                                  llvm::StringMap<Value> &builtinValueMap,
@@ -1572,6 +1672,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerSharedStore(op, builder, valueMap);
   if (hasName(op, kVC4TileSharedLoadOpName))
     return lowerSharedLoad(op, builder, valueMap);
+  if (hasName(op, kVC4TileBarrierOpName))
+    return lowerBarrier(op, builder);
 
   return op->emitOpError(
       "is not supported yet by --convert-vc4tile-to-ssavc4 in this M4 slice");
@@ -1832,11 +1934,18 @@ static LogicalResult mapKernelFormalArguments(Operation *kernel,
 
 static LogicalResult mapLaunchBuiltins(Operation *kernel, OpBuilder &builder,
                                              llvm::StringMap<Value> &builtinValueMap) {
+  (void)builtinValueMap;
   DictionaryAttr abi = buildLaunchABI(kernel, builder);
   auto builtins = abi.getAs<ArrayAttr>("builtins");
   if (!builtins)
     return success();
 
+  // Runtime builtins are launch ABI metadata.  Only VC4Tile operations that
+  // actually need a builtin SSA value should materialize an ssavc4.uniform.read
+  // through getOrCreateRuntimeBuiltinUniformRead().  Eagerly reading all
+  // metadata builtins would consume uniform stream entries for metadata-only
+  // users such as barriers and would also violate the no-argument minimal ABI
+  // canary.
   for (Attribute attr : builtins) {
     auto dict = llvm::dyn_cast<DictionaryAttr>(attr);
     if (!dict)
@@ -1850,12 +1959,6 @@ static LogicalResult mapLaunchBuiltins(Operation *kernel, OpBuilder &builder,
       return kernel->emitOpError() << "vc4.launch_abi builtin '"
                                    << nameAttr.getValue()
                                    << "' requires uniform_index";
-
-    if (builtinValueMap.find(nameAttr.getValue()) != builtinValueMap.end())
-      continue;
-    builtinValueMap[nameAttr.getValue()] =
-        createUniformRead(builder, kernel->getLoc(), builder.getI32Type(),
-                          *uniformIndex);
   }
   return success();
 }
@@ -1914,7 +2017,7 @@ struct ConvertVC4TileToSSAVC4Pass
 
   StringRef getArgument() const override { return "convert-vc4tile-to-ssavc4"; }
   StringRef getDescription() const override {
-    return "Lower supported VC4Tile kernels, formal ABI args, runtime IDs, masks, global loads/stores, shared VPM loads/stores, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
+    return "Lower supported VC4Tile kernels, formal ABI args, runtime IDs, masks, global loads/stores, shared VPM loads/stores, barriers, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
