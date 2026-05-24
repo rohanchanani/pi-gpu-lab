@@ -69,6 +69,9 @@ constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
     "vc4tile.masked_store_global");
 constexpr llvm::StringLiteral kVC4TileRotateOpName("vc4tile.rotate");
 constexpr llvm::StringLiteral kVC4TileReduceOpName("vc4tile.reduce");
+constexpr llvm::StringLiteral kVC4TileSharedAllocOpName("vc4tile.shared_alloc");
+constexpr llvm::StringLiteral kVC4TileSharedLoadOpName("vc4tile.shared_load");
+constexpr llvm::StringLiteral kVC4TileSharedStoreOpName("vc4tile.shared_store");
 
 constexpr llvm::StringLiteral kArithConstantOpName("arith.constant");
 constexpr llvm::StringLiteral kArithAddIOpName("arith.addi");
@@ -99,6 +102,8 @@ constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
 constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
+constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
+constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
@@ -273,6 +278,9 @@ static Attribute getBuiltinKindAttr(OpBuilder &builder, StringRef name) {
   if (name == "warps_per_block")
     return mlir::vc4::BuiltinKindAttr::get(
         ctx, mlir::vc4::BuiltinKind::warps_per_block);
+  if (name == "vpm_base_row")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::vpm_base_row);
   llvm_unreachable("unhandled VC4 launch builtin name");
 }
 
@@ -470,6 +478,10 @@ static DictionaryAttr normalizeAndCompleteLaunchABI(Operation *kernel,
     appendBuiltinIfMissing("logical_warp_id");
   if (isCooperativeKernel(kernel))
     appendBuiltinIfMissing("warps_per_block");
+  if (kernelContains(kernel, kVC4TileSharedAllocOpName) ||
+      kernelContains(kernel, kVC4TileSharedLoadOpName) ||
+      kernelContains(kernel, kVC4TileSharedStoreOpName))
+    appendBuiltinIfMissing("vpm_base_row");
 
   ArrayAttr completedBuiltins = builder.getArrayAttr(builtinEntries);
   int64_t maxUniformIndex = std::max(getMaxUniformIndex(args),
@@ -779,6 +791,35 @@ static Value createTMURead(OpBuilder &builder, Location loc, Value token,
        builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
       resultType);
 }
+
+static StringRef getVPMOrientation(Operation *op, StringRef fallback) {
+  auto layout = op->getAttrOfType<mlir::vc4tile::VPMLayoutAttr>("layout");
+  if (!layout)
+    return fallback;
+  switch (layout.getValue()) {
+  case mlir::vc4tile::VPMLayout::row_major:
+    return "horizontal";
+  case mlir::vc4tile::VPMLayout::column_major:
+    return "vertical";
+  }
+  return fallback;
+}
+
+static bool isAllLanesMask(Value value) {
+  return hasName(value.getDefiningOp(), kVC4TileMaskAllOpName);
+}
+
+struct SharedVPMAllocationState {
+  int64_t nextRowOffset = 0;
+};
+
+static Value createVPMRowAddress(OpBuilder &builder, Location loc,
+                                 Value baseRow, Value localRow) {
+  SmallVector<Value, 2> operands{baseRow, localRow};
+  return createALUAdd(builder, loc, operands, mlir::vc4::AddOpcode::add,
+                      builder.getI32Type());
+}
+
 
 static Value lookupMappedValue(Operation *user, Value source,
                                llvm::DenseMap<Value, Value> &valueMap) {
@@ -1280,13 +1321,29 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
                                           activeLanesAttr)))
     return failure();
 
+  // VDW global-store lowering stages the outgoing vector through one VPM row
+  // before kicking the VDW DMA path.  In ordinary global-store kernels row 0 is
+  // harmless and matches the earlier M4 fixtures.  In shared-VPM kernels,
+  // however, row 0 can hold user shared tile data; clobbering it between
+  // column reads turns a transpose back into an untransposed row copy.  Use the
+  // top user-visible VPM row as scratch when shared VPM is active, matching the
+  // existing SSAVC4 shared-transpose fixture convention.
+  Operation *kernel = getParentVC4TileKernel(op);
+  int64_t stagingRow = 0;
+  if (kernel && (getBoolAttr(kernel, "uses_shared_vpm") ||
+                 kernelContains(kernel, kVC4TileSharedAllocOpName) ||
+                 kernelContains(kernel, kVC4TileSharedLoadOpName) ||
+                 kernelContains(kernel, kVC4TileSharedStoreOpName)))
+    stagingRow = 63;
+
   SmallVector<int32_t, 4> operandSegmentSizes{
       1, 1, static_cast<int32_t>(operands.size() == 3), 0};
   createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
                  {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
                   builder.getNamedAttr("active_lanes",
                                        builder.getI32IntegerAttr(activeLanesAttr)),
-                  builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
+                  builder.getNamedAttr("vpm_row",
+                                       builder.getI32IntegerAttr(stagingRow)),
                   builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
                   builder.getNamedAttr(
                       "operandSegmentSizes",
@@ -1367,9 +1424,114 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static LogicalResult lowerSharedAlloc(Operation *op, OpBuilder &builder,
+                                      llvm::DenseMap<Value, Value> &valueMap,
+                                      llvm::StringMap<Value> &builtinValueMap,
+                                      SharedVPMAllocationState &sharedState) {
+  if (op->getNumResults() != 1)
+    return op->emitOpError("expected one shared tile result");
+
+  auto rowsAttr = op->getAttrOfType<IntegerAttr>("rows");
+  if (!rowsAttr || rowsAttr.getInt() <= 0)
+    return op->emitOpError("requires a positive rows attribute");
+
+  Operation *kernel = getParentVC4TileKernel(op);
+  if (!kernel)
+    return op->emitOpError("must be nested in vc4tile.kernel");
+  int64_t declaredRows = getI32Attr(kernel, "vpm_rows_per_block").value_or(0);
+  int64_t rowOffset = sharedState.nextRowOffset;
+  int64_t newEnd = rowOffset + rowsAttr.getInt();
+  if (declaredRows > 0 && newEnd > declaredRows) {
+    return op->emitOpError()
+           << "shared_alloc rows exceed parent kernel vpm_rows_per_block";
+  }
+  sharedState.nextRowOffset = newEnd;
+
+  Value baseRow = getOrCreateRuntimeBuiltinUniformRead(
+      op, builder, builtinValueMap, "vpm_base_row", builder.getI32Type());
+  if (!baseRow)
+    return failure();
+
+  if (rowOffset == 0) {
+    valueMap[op->getResult(0)] = baseRow;
+    return success();
+  }
+
+  Value offset = createLoadImmI32(builder, op->getLoc(), builder.getI32Type(),
+                                 rowOffset);
+  SmallVector<Value, 2> operands{baseRow, offset};
+  valueMap[op->getResult(0)] = createALUAdd(
+      builder, op->getLoc(), operands, mlir::vc4::AddOpcode::add,
+      builder.getI32Type());
+  return success();
+}
+
+static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
+                                      llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 4)
+    return op->emitOpError("expected handle, row, value, and mask operands");
+  if (!isAllLanesMask(op->getOperand(3)))
+    return op->emitOpError(
+        "currently lowers only vc4tile.mask_all masks for shared VPM stores");
+
+  auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
+  if (!elemBytes || elemBytes.getInt() != 4)
+    return op->emitOpError("supports only elem_bytes = 4 for shared VPM stores");
+  if (!isVector16Data(op->getOperand(2).getType()))
+    return op->emitOpError("requires a vector<16xi32> or vector<16xf32> value");
+
+  Value baseRow = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value localRow = lookupMappedValue(op, op->getOperand(1), valueMap);
+  Value value = lookupMappedValue(op, op->getOperand(2), valueMap);
+  if (!baseRow || !localRow || !value)
+    return failure();
+
+  Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
+  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
+                 {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+                  builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+                  builder.getNamedAttr("orientation", builder.getStringAttr(
+                      getVPMOrientation(op, "horizontal"))),
+                  builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+  return success();
+}
+
+static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
+                                     llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return op->emitOpError("expected handle, row, mask, and one result");
+  if (!isAllLanesMask(op->getOperand(2)))
+    return op->emitOpError(
+        "currently lowers only vc4tile.mask_all masks for shared VPM loads");
+
+  auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
+  if (!elemBytes || elemBytes.getInt() != 4)
+    return op->emitOpError("supports only elem_bytes = 4 for shared VPM loads");
+  if (!isVector16Data(op->getResult(0).getType()))
+    return op->emitOpError(
+        "requires a vector<16xi32> or vector<16xf32> result");
+
+  Value baseRow = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value localRow = lookupMappedValue(op, op->getOperand(1), valueMap);
+  if (!baseRow || !localRow)
+    return failure();
+
+  Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
+  valueMap[op->getResult(0)] = createSSAVC4OpWithResult(
+      builder, op->getLoc(), kSSAVC4VPMReadOpName, {row},
+      {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+       builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+       builder.getNamedAttr("orientation", builder.getStringAttr(
+           getVPMOrientation(op, "horizontal"))),
+       builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
+      op->getResult(0).getType());
+  return success();
+}
+
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  llvm::DenseMap<Value, Value> &valueMap,
-                                 llvm::StringMap<Value> &builtinValueMap) {
+                                 llvm::StringMap<Value> &builtinValueMap,
+                                 SharedVPMAllocationState &sharedState) {
   if (hasName(op, kArithConstantOpName))
     return lowerConstant(op, builder, valueMap);
   if (hasName(op, kVectorSplatOpName))
@@ -1404,6 +1566,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerRotate(op, builder, valueMap);
   if (hasName(op, kVC4TileReduceOpName))
     return lowerReduce(op, builder, valueMap);
+  if (hasName(op, kVC4TileSharedAllocOpName))
+    return lowerSharedAlloc(op, builder, valueMap, builtinValueMap, sharedState);
+  if (hasName(op, kVC4TileSharedStoreOpName))
+    return lowerSharedStore(op, builder, valueMap);
+  if (hasName(op, kVC4TileSharedLoadOpName))
+    return lowerSharedLoad(op, builder, valueMap);
 
   return op->emitOpError(
       "is not supported yet by --convert-vc4tile-to-ssavc4 in this M4 slice");
@@ -1697,6 +1865,7 @@ static LogicalResult lowerKernelBody(Operation *kernel, Operation *func) {
   llvm::DenseMap<Value, Value> valueMap;
   llvm::StringMap<Value> builtinValueMap;
   llvm::DenseMap<Block *, Block *> blockMap;
+  SharedVPMAllocationState sharedState;
 
   if (failed(createSSAVC4Blocks(kernel, func, valueMap, blockMap)))
     return failure();
@@ -1728,7 +1897,8 @@ static LogicalResult lowerKernelBody(Operation *kernel, Operation *func) {
         continue;
       }
 
-      if (failed(lowerBodyOp(&nested, bodyBuilder, valueMap, builtinValueMap)))
+      if (failed(lowerBodyOp(&nested, bodyBuilder, valueMap, builtinValueMap,
+                               sharedState)))
         return failure();
     }
   }
@@ -1744,7 +1914,7 @@ struct ConvertVC4TileToSSAVC4Pass
 
   StringRef getArgument() const override { return "convert-vc4tile-to-ssavc4"; }
   StringRef getDescription() const override {
-    return "Lower supported VC4Tile kernels, formal ABI args, runtime IDs, masks, global loads/stores, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
+    return "Lower supported VC4Tile kernels, formal ABI args, runtime IDs, masks, global loads/stores, shared VPM loads/stores, rotate/reduce, uniform control flow, block arguments, and metadata to SSAVC4";
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
