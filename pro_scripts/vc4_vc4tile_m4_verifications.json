@@ -3746,7 +3746,7 @@
           "expected_resource": {
             "public_name": "qpu_barrier_syncthreads_vc4tile",
             "schedule_mode": "cooperative_block",
-            "uses_shared_vpm": true,
+            "uses_shared_vpm": false,
             "uses_barrier": true,
             "semaphores_per_block": 4
           },
