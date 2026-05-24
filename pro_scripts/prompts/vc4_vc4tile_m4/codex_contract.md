@@ -31,3 +31,9 @@ If a failure asks Codex to add/remove `uniform_index` on VC4Tile identity ops, r
 ## Milestone-package requirement
 
 This contract is milestone-specific. The generic autorun driver must render Codex mechanical prompts from the active milestone's `prompt_template_dir` (`codex_mechanical_prompt.md.j2` plus this `codex_contract.md`) rather than using hard-coded language from an older milestone. Future milestone packages must provide their own Codex prompt template and contract, and their package-source verification should require both files.
+
+<!-- M4_MINIMAL_ABI_PREFIX_CANARY_20260524: codex_contract -->
+
+## M4 prefix canary boundary
+
+Codex must not repair a later-slice build/check failure by changing m4-03 minimal ABI behavior, by adding synthetic `total_requests`/`logical_request` builtins to empty kernels, or by editing the minimal ABI tests to match broken output. If a failure appears to require changing generic launch ABI completion or the minimal canary files, print `VC4_CODEX_NEEDS_GPT` unless the exact mechanical error is already isolated and the repair preserves `args=[]`, `builtins=[]`, `uniform_words_per_qpu=0`, and no `ssavc4.uniform.read` for the minimal kernel.

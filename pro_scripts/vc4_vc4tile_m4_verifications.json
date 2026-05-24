@@ -51,7 +51,8 @@
     "Scheduled artifact contracts validate fresh scheduled VC4 intermediates: exactly one vc4.module, no remaining vc4tile/ssavc4 ops, and vc4.qpu.* scheduled ops before vc4-codegen.",
     "Hardware CPU-reference contracts clean candidate/hardware state by default before running fixture phases, so stale bundles cannot satisfy fresh hardware checks.",
     "ABI refactor gate: user/caller values are vc4tile.kernel formal args and vc4.launch_abi.args[]; program_id/block_id/warp_id are zero-operand runtime builtins and vc4.launch_abi.builtins[]; lane_id/lane_range/ssavc4.element_number are lane/register identity values outside the launch ABI.",
-    "Future ABI static-forbidden checks are intentionally required=false during ABI-1 so slices m4-00 through m4-08 do not fail solely because old source still contains stale lower ABI syntax. ABI implementation stages must turn the gate on."
+    "Future ABI static-forbidden checks are intentionally required=false during ABI-1 so slices m4-00 through m4-08 do not fail solely because old source still contains stale lower ABI syntax. ABI implementation stages must turn the gate on.",
+    "M4 prefix canary: slices m4-10 and later must preserve the m4-03 minimal ABI invariant: empty/no-formal kernels lower with args=[], builtins=[], uniform_words_per_qpu=0, no synthetic total_requests/logical_request builtins, and no ssavc4.uniform.read."
   ],
   "fixture_matrices": {
     "m4_independent_vector": [
@@ -3086,6 +3087,98 @@
           "required": true
         },
         {
+          "id": "m4-10-minimal-abi-prefix-canary",
+          "mechanism": "scheduled_artifact_contract",
+          "description": "Prefix canary: minimal VC4Tile kernel preserves empty launch ABI and still lowers/emits through scheduled VC4",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-10-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.thread_end",
+            "args = []",
+            "builtins = []",
+            "uniform_words_per_qpu = 0",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "ssavc4.uniform.read",
+            "total_requests",
+            "logical_request",
+            "logical_block_id",
+            "logical_warp_id",
+            "vpm_base_row",
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "minimal_thrend_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true,
+          "route_hint": "gpt_pro",
+          "required": true
+        },
+        {
           "id": "m4-10-dialect-contract-shared-vpm",
           "mechanism": "dialect_contract",
           "feature": "shared_vpm",
@@ -3401,6 +3494,98 @@
           "description": "Build check-vc4",
           "target": "check-vc4",
           "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-11-minimal-abi-prefix-canary",
+          "mechanism": "scheduled_artifact_contract",
+          "description": "Prefix canary: minimal VC4Tile kernel preserves empty launch ABI and still lowers/emits through scheduled VC4",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-11-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.thread_end",
+            "args = []",
+            "builtins = []",
+            "uniform_words_per_qpu = 0",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "ssavc4.uniform.read",
+            "total_requests",
+            "logical_request",
+            "logical_block_id",
+            "logical_warp_id",
+            "vpm_base_row",
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "minimal_thrend_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true,
+          "route_hint": "gpt_pro",
           "required": true
         },
         {
@@ -3850,6 +4035,98 @@
           "description": "Build check-vc4",
           "target": "check-vc4",
           "route_hint": "codex_mechanical",
+          "required": true
+        },
+        {
+          "id": "m4-12-minimal-abi-prefix-canary",
+          "mechanism": "scheduled_artifact_contract",
+          "description": "Prefix canary: minimal VC4Tile kernel preserves empty launch ABI and still lowers/emits through scheduled VC4",
+          "steps": [
+            {
+              "name": "mkdir",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path; Path('.vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary').mkdir(parents=True, exist_ok=True)"
+              ]
+            },
+            {
+              "name": "lower-vc4tile-to-ssavc4",
+              "argv": [
+                "vc4-opt",
+                "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir",
+                "--convert-vc4tile-to-ssavc4",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir"
+              ]
+            },
+            {
+              "name": "lower-ssavc4-to-scheduled-vc4",
+              "argv": [
+                "vc4-opt",
+                ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+                "--convert-ssavc4-to-vc4",
+                "--vc4-verify-emit-contract",
+                "--vc4-verify-scheduled-hardware-rules",
+                "--vc4-verify-scheduled-adjacent-hazards",
+                "--vc4-verify-scheduled-io-spacing",
+                "--vc4-verify-scheduled-peripheral-accesses",
+                "-o",
+                ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+              ]
+            },
+            {
+              "name": "emit-bundle",
+              "argv": [
+                "vc4-codegen",
+                ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir",
+                "--emit-bundle",
+                ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary"
+              ]
+            }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m4/verifier/m4-12-minimal-abi-prefix-canary/minimal_thrend_vc4tile.scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.thread_end",
+            "args = []",
+            "builtins = []",
+            "uniform_words_per_qpu = 0",
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "ssavc4.uniform.read",
+            "total_requests",
+            "logical_request",
+            "logical_block_id",
+            "logical_warp_id",
+            "vpm_base_row",
+            "vc4tile."
+          ],
+          "bundle": ".vc4_auto/vc4tile_m4/candidates/minimal_thrend_vc4tile_prefix_canary",
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
+          ],
+          "forbidden_artifacts": [
+            "kernel.qasm"
+          ],
+          "expected_resource": {
+            "public_name": "minimal_thrend_vc4tile",
+            "schedule_mode": "independent_vector",
+            "uses_barrier": false,
+            "uses_shared_vpm": false
+          },
+          "clean_bundle_before_steps": true,
+          "require_scheduled_vc4_module": true,
+          "clean": true,
+          "clean_intermediates": true,
+          "validate_scheduled_vc4": true,
+          "route_hint": "gpt_pro",
           "required": true
         },
         {

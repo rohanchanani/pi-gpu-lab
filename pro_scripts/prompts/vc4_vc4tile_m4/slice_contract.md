@@ -42,3 +42,18 @@ ABI category contract:
 - `program_id`, `block_id`, and `warp_id` are runtime builtin identity ops that lower to `vc4.launch_abi.builtins[]`; they are not generic uniform readers and must not carry `uniform_index`.
 - `lane_id` and `lane_range` are derived from `ssavc4.element_number`; lane identity is not a uniform slot and must not appear in `vc4.launch_abi.builtins[]`.
 - Codex must not repair ABI category failures mechanically. If a gate exposes an ABI semantic issue, route it back to GPT Pro.
+
+<!-- M4_MINIMAL_ABI_PREFIX_CANARY_20260524: slice_contract -->
+## Prefix preservation canary
+
+Every later M4 implementation slice must preserve earlier prefix invariants. In particular, the m4-03 minimal VC4Tile kernel is a canary for launch ABI correctness:
+
+```text
+no formal args + no used runtime builtins
+  => vc4.launch_abi.args = []
+  => vc4.launch_abi.builtins = []
+  => uniform_words_per_qpu = 0
+  => no ssavc4.uniform.read
+```
+
+Do not satisfy a later slice by editing m4-03 minimal ABI tests or by adding synthetic launch builtins such as `total_requests` / `logical_request` to empty kernels. If a later feature needs runtime metadata, add that builtin only when the corresponding vc4tile op/resource actually uses it, and prove the minimal ABI canary still lowers through scheduled VC4 and emits artifacts.

@@ -239,3 +239,15 @@ commit message. If prefix fails, leave the candidate dirty and uncommitted.
 **Verification implication:** Static/dry workflow checks should confirm that
 resume passes `--no-commit` to autorun and has a deferred guarded commit path
 after cumulative prefix success.
+
+<!-- M4_MINIMAL_ABI_PREFIX_CANARY_20260524: mistakes -->
+
+## 2026-05-24: Later M4 slices regressed the m4-03 minimal launch ABI
+
+**Symptom:** Slices m4-09 and m4-10 could pass their active verifier locally but fail cumulative prefix recheck at `m4-03-scheduled-artifact-minimal`. The dirty candidates changed generic VC4Tile launch ABI completion so an empty/minimal kernel acquired a synthetic `total_requests` builtin, `uniform_words_per_qpu = 1`, and an `ssavc4.uniform.read`, which then introduced scheduled hazards in the minimal thread-end pipeline.
+
+**Root cause:** Later-slice implementation attempts repaired local FileCheck/build failures by modifying generic launch ABI normalization and earlier minimal ABI tests instead of preserving the m4-03 prefix invariant.
+
+**Permanent rule:** Empty/no-formal kernels with no used runtime builtins must lower with `args=[]`, `builtins=[]`, `uniform_words_per_qpu=0`, and no `ssavc4.uniform.read`. Runtime builtins belong in `vc4.launch_abi.builtins[]` only when a corresponding vc4tile op/resource uses them. Later slices must not edit m4-03 minimal ABI tests or generic launch ABI completion to satisfy unrelated local failures.
+
+**Verification implication:** m4-10 and later M4 slices must include a minimal ABI prefix canary in their active typed verifier, not only in resume-level cumulative prefix recheck. The canary lowers `minimal-thrend-vc4tile.mlir` through `vc4tile -> ssavc4 -> scheduled vc4 -> vc4-codegen` and asserts the empty ABI invariant above.
