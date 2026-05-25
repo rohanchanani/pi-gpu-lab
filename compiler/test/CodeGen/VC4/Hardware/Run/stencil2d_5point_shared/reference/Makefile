@@ -1,20 +1,17 @@
-CC ?= cc
-CFLAGS ?= -O2 -Wall -Wextra -std=c99
+LIBS += $(CS240LX_2025_PATH)/lib/libgcc.a $(CS240LX_2025_PATH)/libpi/libpi.a
 
-OBJS = stencil2d_5point_shared_harness.o stencil2d_5point_shared_launch.o mailbox.o
+export OPT_LEVEL := -O3
 
-all: stencil2d_5point_shared_harness
+COMMON_SRC := mailbox.c stencil2d_5point_shared_launch.c shader.c
 
-stencil2d_5point_shared_harness: $(OBJS)
-$(CC) $(CFLAGS) $(OBJS) -o $@
+PROGS := stencil2d_5point_shared_harness.c
 
-%.o: %.c
-$(CC) $(CFLAGS) -c $< -o $@
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/staff-hw-spi.o
+STAFF_OBJS += $(CS240LX_2025_PATH)/libpi/staff-objs/kmalloc.o
 
-run: stencil2d_5point_shared_harness
-./stencil2d_5point_shared_harness
+RUN ?= 1
 
-clean:
-rm -f $(OBJS) stencil2d_5point_shared_harness
-
-.PHONY: all run clean
+BOOTLOADER = pi-install
+EXCLUDE ?= grep -v simple_boot
+GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|NRF:'
+include $(CS240LX_2025_PATH)/libpi/mk/Makefile.robust

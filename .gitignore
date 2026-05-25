@@ -39,3 +39,5 @@ pro_scripts/.DS_Store
 .vc4*
 vc4*.txt
 *zip
+staff*qasm
+staff*c

@@ -31,24 +31,30 @@
         "saxpy_tmu_overlap",
         "tmu_read_nop_write",
         "tmu_strided_load",
-        "sfu_recip",
-        "vpm_slice_visibility"
+        "sfu_recip"
       ],
       "hardware_characterization_post_m2": [
-        "vpm_setup_clobber"
+        "vpm_setup_clobber",
+        "vpm_slice_visibility"
       ],
       "cooperative_shared_reduction": [
         "qpu_barrier_syncthreads",
-        "vpm_slice_visibility",
         "warp_reduce_sum",
         "warp_prefix_sum",
         "block_reduce_sum",
         "shared_transpose_16x16"
       ],
       "m2_required": [
+        "attention_naive_tiny",
+        "attention_qk_naive",
         "block_reduce_sum",
+        "flash_attention_tiny",
         "gemv_naive_tail",
         "global_store_coalesced_multi",
+        "image_boxblur_shared",
+        "image_sobel_3x3",
+        "layernorm_row",
+        "mandelbrot_masked_loop",
         "memory_output",
         "minimal_thrend",
         "multi_kernel_chain",
@@ -61,11 +67,24 @@
         "saxpy_tmu_overlap",
         "sfu_recip",
         "shared_transpose_16x16",
+        "softmax_row",
+        "stencil2d_5point_shared",
         "tmu_read_nop_write",
         "tmu_strided_load",
-        "vpm_slice_visibility",
         "warp_prefix_sum",
         "warp_reduce_sum"
+      ],
+      "lower_half_algorithmic_required": [
+        "gemv_naive_tail",
+        "stencil2d_5point_shared",
+        "image_sobel_3x3",
+        "image_boxblur_shared",
+        "mandelbrot_masked_loop",
+        "layernorm_row",
+        "softmax_row",
+        "attention_qk_naive",
+        "attention_naive_tiny",
+        "flash_attention_tiny"
       ]
     }
   },
@@ -82,7 +101,8 @@
     "M2 static runtime/layout contracts are stop_on_failure gates: generated launch code must call vc4LaunchKernel while invariant libpi runtime owns raw V3D enqueue and bounded wait behavior.",
     "M2 slice 6 keeps heap_size_bytes at the established M2 persistent-heap scale (at least 65536 bytes); shrinking back to a tiny/default heap is treated as a regression before hardware.",
     "Post-slice-6 anti-shortcut checks keep QASM emission scheduled-stream based and prevent support-script VC4_TEST_RESULT/runtime-event injection in later hardware slices.",
-    "vpm_setup_clobber is a physical-QPU/VPM setup hardware-characterization litmus, not a required M2 codegen fixture; it remains useful post-M2 for validating whether conservative VPM setup serialization can be relaxed."
+    "vpm_setup_clobber is a physical-QPU/VPM setup hardware-characterization litmus, not a required M2 codegen fixture; it remains useful post-M2 for validating whether conservative VPM setup serialization can be relaxed.",
+    "vpm_slice_visibility is a VC4 topology/VPM visibility characterization litmus, not a required M2 codegen correctness fixture; it remains runnable manually under hardware_characterization_post_m2."
   ],
   "fixture_matrices": {
     "smoke_runtime": [
@@ -104,24 +124,30 @@
       "saxpy_tmu_overlap",
       "tmu_read_nop_write",
       "tmu_strided_load",
-      "sfu_recip",
-      "vpm_slice_visibility"
+      "sfu_recip"
     ],
     "hardware_characterization_post_m2": [
-      "vpm_setup_clobber"
+      "vpm_setup_clobber",
+      "vpm_slice_visibility"
     ],
     "cooperative_shared_reduction": [
       "qpu_barrier_syncthreads",
-      "vpm_slice_visibility",
       "warp_reduce_sum",
       "warp_prefix_sum",
       "block_reduce_sum",
       "shared_transpose_16x16"
     ],
     "m2_required": [
+      "attention_naive_tiny",
+      "attention_qk_naive",
       "block_reduce_sum",
+      "flash_attention_tiny",
       "gemv_naive_tail",
       "global_store_coalesced_multi",
+      "image_boxblur_shared",
+      "image_sobel_3x3",
+      "layernorm_row",
+      "mandelbrot_masked_loop",
       "memory_output",
       "minimal_thrend",
       "multi_kernel_chain",
@@ -134,11 +160,24 @@
       "saxpy_tmu_overlap",
       "sfu_recip",
       "shared_transpose_16x16",
+      "softmax_row",
+      "stencil2d_5point_shared",
       "tmu_read_nop_write",
       "tmu_strided_load",
-      "vpm_slice_visibility",
       "warp_prefix_sum",
       "warp_reduce_sum"
+    ],
+    "lower_half_algorithmic_required": [
+      "gemv_naive_tail",
+      "stencil2d_5point_shared",
+      "image_sobel_3x3",
+      "image_boxblur_shared",
+      "mandelbrot_masked_loop",
+      "layernorm_row",
+      "softmax_row",
+      "attention_qk_naive",
+      "attention_naive_tiny",
+      "flash_attention_tiny"
     ]
   },
   "slices": {
@@ -1501,7 +1540,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n    'flash_attention_tiny',\n    'attention_naive_tiny',\n    'attention_qk_naive',\n    'softmax_row',\n    'layernorm_row',\n    'mandelbrot_masked_loop',\n    'image_boxblur_shared',\n    'image_sobel_3x3',\n    'stencil2d_5point_shared',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1515,6 +1554,19 @@
             "{python}",
             "-c",
             "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "lower-half-promoted-candidate-first-scan",
+          "mechanism": "command",
+          "description": "All promoted lower-half algorithmic fixtures are required M2 candidate hardware fixtures with generated candidate harnesses, copyback, mismatch checks, fresh-generation default, and no reference/run.sh acceptance path.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json\nimport re\nimport sys\nfrom pathlib import Path\n\npromoted = [\n    'gemv_naive_tail',\n    'stencil2d_5point_shared',\n    'image_sobel_3x3',\n    'image_boxblur_shared',\n    'mandelbrot_masked_loop',\n    'layernorm_row',\n    'softmax_row',\n    'attention_qk_naive',\n    'attention_naive_tiny',\n    'flash_attention_tiny',\n]\nroot = Path('compiler/test/CodeGen/VC4/Hardware/Run')\nspec = json.loads(Path('pro_scripts/vc4_codegen_m2_verifications.json').read_text(encoding='utf-8'))\nmatrices = spec.get('fixture_matrices', {})\ndefault_matrices = spec.get('defaults', {}).get('fixture_matrices', {})\nerrors = []\nfor label, source in [('fixture_matrices', matrices), ('defaults.fixture_matrices', default_matrices)]:\n    if source.get('lower_half_algorithmic_required') != promoted:\n        errors.append(f'{label}.lower_half_algorithmic_required must equal promoted fixture list')\n    required = source.get('m2_required', [])\n    for fixture in promoted:\n        if fixture not in required:\n            errors.append(f'{fixture} missing from {label}.m2_required')\n    if 'vpm_slice_visibility' in required:\n        errors.append(f'vpm_slice_visibility must not be in {label}.m2_required')\n    char = source.get('hardware_characterization_post_m2', [])\n    if 'vpm_slice_visibility' not in char:\n        errors.append(f'vpm_slice_visibility missing from {label}.hardware_characterization_post_m2')\n\nfixed_pass = re.compile(r'VC4_TEST_RESULT[^\\n;]*status=PASS')\nfor fixture in promoted:\n    fixture_root = root / fixture\n    for rel in ['input.mlir', 'expected.json']:\n        if not (fixture_root / rel).is_file():\n            errors.append(f'{fixture}: missing {rel}')\n    harness = fixture_root / 'candidate' / f'{fixture}_candidate_harness.c'\n    if not harness.is_file():\n        errors.append(f'{fixture}: missing candidate harness {harness.as_posix()}')\n        continue\n    text = harness.read_text(encoding='utf-8', errors='replace')\n    if '../reference' in text or '/reference/' in text:\n        errors.append(f'{fixture}: candidate harness includes reference path')\n    if '#include \"kernel_launch.h\"' not in text:\n        errors.append(f'{fixture}: candidate harness must include generated kernel_launch.h')\n    if not re.search(r'\\b' + re.escape(fixture) + r'_launch\\s*\\(', text):\n        errors.append(f'{fixture}: candidate harness lacks generated launch wrapper call')\n    if not re.search(r'(vc4MemcpyDtoH\\s*\\(|vc4_m2_copy_dtoh\\s*\\()', text):\n        errors.append(f'{fixture}: candidate harness lacks device-to-host copyback')\n    if 'mismatch' not in text:\n        errors.append(f'{fixture}: candidate harness lacks mismatch counter')\n    if fixed_pass.search(text) and not re.search(r'status\\s*=\\s*\\([^;]*\\?\\s*\"PASS\"\\s*:\\s*\"FAIL\"', text, re.S):\n        errors.append(f'{fixture}: candidate harness appears to contain fixed PASS')\n\nrunner = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh').read_text(encoding='utf-8', errors='replace')\nensure = re.search(r'ensure_generated\\s*\\(\\)\\s*\\{(?P<body>.*?)\\n\\}', runner, re.S)\nif not ensure:\n    errors.append('run_candidate_codegen_test.sh lacks ensure_generated')\nelse:\n    body = ensure.group('body')\n    if 'VC4_REUSE_GENERATED_CANDIDATE' not in body:\n        errors.append('ensure_generated lacks VC4_REUSE_GENERATED_CANDIDATE opt-in')\n    reuse_pos = body.find('VC4_REUSE_GENERATED_CANDIDATE')\n    manifest_pos = body.find('-f \"$GENERATED_DIR/manifest.json\"')\n    if manifest_pos != -1 and (reuse_pos == -1 or reuse_pos > manifest_pos):\n        errors.append('ensure_generated checks stale generated artifacts before reuse opt-in')\n    if 'run_vc4_codegen' not in body:\n        errors.append('ensure_generated does not regenerate by default')\n\nfor verification in spec.get('slices', {}).get('m2-10-final-acceptance', {}).get('verifications', []):\n    if verification.get('id') == 'lower-half-promoted-candidate-first-scan':\n        continue\n    text = json.dumps(verification, sort_keys=True)\n    if 'reference/run.sh' in text:\n        errors.append(f\"M2 final verification {verification.get('id', '<unknown>')} mentions reference/run.sh\")\n\nif errors:\n    print('lower-half promoted candidate scan failed:')\n    for error in errors:\n        print('  ' + error)\n    sys.exit(1)\nprint('lower-half-promoted-candidate-scan-ok')"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1618,7 +1670,7 @@
           "argv": [
             "{python}",
             "-c",
-            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
+            "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp')\ntext = p.read_text(encoding='utf-8', errors='replace')\nfixtures = [\n    'minimal_thrend', 'memory_output', 'read_nop_write', 'saxpy_full',\n    'multi_kernel_chain', 'saxpy_16', 'saxpy_basic',\n    'global_store_coalesced_multi', 'gemv_naive_tail', 'saxpy_tmu',\n    'saxpy_tmu_overlap', 'tmu_read_nop_write', 'tmu_strided_load',\n    'sfu_recip', 'vpm_setup_clobber', 'vpm_slice_visibility',\n    'qpu_barrier_syncthreads', 'warp_reduce_sum', 'warp_prefix_sum',\n    'block_reduce_sum', 'shared_transpose_16x16',\n    'flash_attention_tiny',\n    'attention_naive_tiny',\n    'attention_qk_naive',\n    'softmax_row',\n    'layernorm_row',\n    'mandelbrot_masked_loop',\n    'image_boxblur_shared',\n    'image_sobel_3x3',\n    'stencil2d_5point_shared',\n]\nfound = []\nfor name in fixtures:\n    camel = ''.join(part.capitalize() for part in name.split('_'))\n    checks = [\n        rf'\\b(?:launchABI\\.)?publicName\\s*==\\s*\"{re.escape(name)}\"',\n        rf'\"{re.escape(name)}\"\\s*==\\s*(?:launchABI\\.)?publicName',\n        rf'\\b(?:append|emit|write){camel}(?:QASM|Runtime|Kernel|Launch)\\b',\n        rf'\\b(?:append|emit|write).*{re.escape(name)}.*(?:QASM|Runtime|Kernel|Launch)\\b',\n    ]\n    for pattern in checks:\n        if re.search(pattern, text):\n            found.append(f'{name}: /{pattern}/')\nrequired = [\n    'scheduledStream',\n    'emitQPUBundleQASM',\n    'emitQPULDIQASM',\n    'emitQPUSemaQASM',\n    'emitQPUBranchQASM',\n]\nmissing = [item for item in required if item not in text]\nif found or missing:\n    if found:\n        print('forbidden fixture/public-name codegen special cases found:')\n        for item in found:\n            print('  ' + item)\n    if missing:\n        print('generic scheduled-stream QASM emitter pieces missing: ' + ', '.join(missing))\n    sys.exit(1)\n"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1632,6 +1684,19 @@
             "{python}",
             "-c",
             "from pathlib import Path\nimport re\nimport sys\n\np = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh')\nif not p.exists():\n    sys.exit(0)\ntext = p.read_text(encoding='utf-8', errors='replace')\nchecks = {\n    'synthetic marker': r'(?i)\\bsynthetic\\b',\n    'runtime event injection helper': r'\\bemit_[A-Za-z0-9_]*runtime_events\\b',\n    'hard-coded VC4_TEST_RESULT payload': r'VC4_TEST_RESULT\\s+(?:name=|\\{)',\n    'hard-coded VC4_KERNEL_LAUNCH payload': r'VC4_KERNEL_LAUNCH\\s+name=',\n    'hard-coded VC4_RUNTIME_LAYOUT payload': r'VC4_RUNTIME_LAYOUT\\s+',\n}\nfound = [name for name, pattern in checks.items() if re.search(pattern, text)]\nif found:\n    print('support runner must stay fixture-generic; forbidden synthetic/result-injection patterns found: ' + ', '.join(found))\n    sys.exit(1)\n"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "lower-half-promoted-candidate-first-scan",
+          "mechanism": "command",
+          "description": "All promoted lower-half algorithmic fixtures are required M2 candidate hardware fixtures with generated candidate harnesses, copyback, mismatch checks, fresh-generation default, and no reference/run.sh acceptance path.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json\nimport re\nimport sys\nfrom pathlib import Path\n\npromoted = [\n    'gemv_naive_tail',\n    'stencil2d_5point_shared',\n    'image_sobel_3x3',\n    'image_boxblur_shared',\n    'mandelbrot_masked_loop',\n    'layernorm_row',\n    'softmax_row',\n    'attention_qk_naive',\n    'attention_naive_tiny',\n    'flash_attention_tiny',\n]\nroot = Path('compiler/test/CodeGen/VC4/Hardware/Run')\nspec = json.loads(Path('pro_scripts/vc4_codegen_m2_verifications.json').read_text(encoding='utf-8'))\nmatrices = spec.get('fixture_matrices', {})\ndefault_matrices = spec.get('defaults', {}).get('fixture_matrices', {})\nerrors = []\nfor label, source in [('fixture_matrices', matrices), ('defaults.fixture_matrices', default_matrices)]:\n    if source.get('lower_half_algorithmic_required') != promoted:\n        errors.append(f'{label}.lower_half_algorithmic_required must equal promoted fixture list')\n    required = source.get('m2_required', [])\n    for fixture in promoted:\n        if fixture not in required:\n            errors.append(f'{fixture} missing from {label}.m2_required')\n    if 'vpm_slice_visibility' in required:\n        errors.append(f'vpm_slice_visibility must not be in {label}.m2_required')\n    char = source.get('hardware_characterization_post_m2', [])\n    if 'vpm_slice_visibility' not in char:\n        errors.append(f'vpm_slice_visibility missing from {label}.hardware_characterization_post_m2')\n\nfixed_pass = re.compile(r'VC4_TEST_RESULT[^\\n;]*status=PASS')\nfor fixture in promoted:\n    fixture_root = root / fixture\n    for rel in ['input.mlir', 'expected.json']:\n        if not (fixture_root / rel).is_file():\n            errors.append(f'{fixture}: missing {rel}')\n    harness = fixture_root / 'candidate' / f'{fixture}_candidate_harness.c'\n    if not harness.is_file():\n        errors.append(f'{fixture}: missing candidate harness {harness.as_posix()}')\n        continue\n    text = harness.read_text(encoding='utf-8', errors='replace')\n    if '../reference' in text or '/reference/' in text:\n        errors.append(f'{fixture}: candidate harness includes reference path')\n    if '#include \"kernel_launch.h\"' not in text:\n        errors.append(f'{fixture}: candidate harness must include generated kernel_launch.h')\n    if not re.search(r'\\b' + re.escape(fixture) + r'_launch\\s*\\(', text):\n        errors.append(f'{fixture}: candidate harness lacks generated launch wrapper call')\n    if not re.search(r'(vc4MemcpyDtoH\\s*\\(|vc4_m2_copy_dtoh\\s*\\()', text):\n        errors.append(f'{fixture}: candidate harness lacks device-to-host copyback')\n    if 'mismatch' not in text:\n        errors.append(f'{fixture}: candidate harness lacks mismatch counter')\n    if fixed_pass.search(text) and not re.search(r'status\\s*=\\s*\\([^;]*\\?\\s*\"PASS\"\\s*:\\s*\"FAIL\"', text, re.S):\n        errors.append(f'{fixture}: candidate harness appears to contain fixed PASS')\n\nrunner = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh').read_text(encoding='utf-8', errors='replace')\nensure = re.search(r'ensure_generated\\s*\\(\\)\\s*\\{(?P<body>.*?)\\n\\}', runner, re.S)\nif not ensure:\n    errors.append('run_candidate_codegen_test.sh lacks ensure_generated')\nelse:\n    body = ensure.group('body')\n    if 'VC4_REUSE_GENERATED_CANDIDATE' not in body:\n        errors.append('ensure_generated lacks VC4_REUSE_GENERATED_CANDIDATE opt-in')\n    reuse_pos = body.find('VC4_REUSE_GENERATED_CANDIDATE')\n    manifest_pos = body.find('-f \"$GENERATED_DIR/manifest.json\"')\n    if manifest_pos != -1 and (reuse_pos == -1 or reuse_pos > manifest_pos):\n        errors.append('ensure_generated checks stale generated artifacts before reuse opt-in')\n    if 'run_vc4_codegen' not in body:\n        errors.append('ensure_generated does not regenerate by default')\n\nfor verification in spec.get('slices', {}).get('m2-10-final-acceptance', {}).get('verifications', []):\n    if verification.get('id') == 'lower-half-promoted-candidate-first-scan':\n        continue\n    text = json.dumps(verification, sort_keys=True)\n    if 'reference/run.sh' in text:\n        errors.append(f\"M2 final verification {verification.get('id', '<unknown>')} mentions reference/run.sh\")\n\nif errors:\n    print('lower-half promoted candidate scan failed:')\n    for error in errors:\n        print('  ' + error)\n    sys.exit(1)\nprint('lower-half-promoted-candidate-scan-ok')"
           ],
           "expect_exit_code": 0,
           "route_hint": "gpt_pro",
@@ -1717,6 +1782,45 @@
           "forbid_root_kernel_qasm": true,
           "route_hint": "gpt_pro",
           "stop_on_failure": true
+        }
+      ]
+    },
+    "m2-09-lower-half-algorithmic-required": {
+      "title": "Lower-half algorithmic required candidate hardware promotion",
+      "expected_end_state": "The ten promoted lower-half algorithmic fixtures generate fresh candidate bundles, build candidate harnesses, run on hardware, and pass expected-json checks without reference/run.sh evidence.",
+      "verifications": [
+        {
+          "id": "build-vc4-codegen",
+          "mechanism": "build",
+          "description": "Build vc4-codegen target",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "lower-half-promoted-candidate-first-scan",
+          "mechanism": "command",
+          "description": "All promoted lower-half algorithmic fixtures are required M2 candidate hardware fixtures with generated candidate harnesses, copyback, mismatch checks, fresh-generation default, and no reference/run.sh acceptance path.",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json\nimport re\nimport sys\nfrom pathlib import Path\n\npromoted = [\n    'gemv_naive_tail',\n    'stencil2d_5point_shared',\n    'image_sobel_3x3',\n    'image_boxblur_shared',\n    'mandelbrot_masked_loop',\n    'layernorm_row',\n    'softmax_row',\n    'attention_qk_naive',\n    'attention_naive_tiny',\n    'flash_attention_tiny',\n]\nroot = Path('compiler/test/CodeGen/VC4/Hardware/Run')\nspec = json.loads(Path('pro_scripts/vc4_codegen_m2_verifications.json').read_text(encoding='utf-8'))\nmatrices = spec.get('fixture_matrices', {})\ndefault_matrices = spec.get('defaults', {}).get('fixture_matrices', {})\nerrors = []\nfor label, source in [('fixture_matrices', matrices), ('defaults.fixture_matrices', default_matrices)]:\n    if source.get('lower_half_algorithmic_required') != promoted:\n        errors.append(f'{label}.lower_half_algorithmic_required must equal promoted fixture list')\n    required = source.get('m2_required', [])\n    for fixture in promoted:\n        if fixture not in required:\n            errors.append(f'{fixture} missing from {label}.m2_required')\n    if 'vpm_slice_visibility' in required:\n        errors.append(f'vpm_slice_visibility must not be in {label}.m2_required')\n    char = source.get('hardware_characterization_post_m2', [])\n    if 'vpm_slice_visibility' not in char:\n        errors.append(f'vpm_slice_visibility missing from {label}.hardware_characterization_post_m2')\n\nfixed_pass = re.compile(r'VC4_TEST_RESULT[^\\n;]*status=PASS')\nfor fixture in promoted:\n    fixture_root = root / fixture\n    for rel in ['input.mlir', 'expected.json']:\n        if not (fixture_root / rel).is_file():\n            errors.append(f'{fixture}: missing {rel}')\n    harness = fixture_root / 'candidate' / f'{fixture}_candidate_harness.c'\n    if not harness.is_file():\n        errors.append(f'{fixture}: missing candidate harness {harness.as_posix()}')\n        continue\n    text = harness.read_text(encoding='utf-8', errors='replace')\n    if '../reference' in text or '/reference/' in text:\n        errors.append(f'{fixture}: candidate harness includes reference path')\n    if '#include \"kernel_launch.h\"' not in text:\n        errors.append(f'{fixture}: candidate harness must include generated kernel_launch.h')\n    if not re.search(r'\\b' + re.escape(fixture) + r'_launch\\s*\\(', text):\n        errors.append(f'{fixture}: candidate harness lacks generated launch wrapper call')\n    if not re.search(r'(vc4MemcpyDtoH\\s*\\(|vc4_m2_copy_dtoh\\s*\\()', text):\n        errors.append(f'{fixture}: candidate harness lacks device-to-host copyback')\n    if 'mismatch' not in text:\n        errors.append(f'{fixture}: candidate harness lacks mismatch counter')\n    if fixed_pass.search(text) and not re.search(r'status\\s*=\\s*\\([^;]*\\?\\s*\"PASS\"\\s*:\\s*\"FAIL\"', text, re.S):\n        errors.append(f'{fixture}: candidate harness appears to contain fixed PASS')\n\nrunner = Path('compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh').read_text(encoding='utf-8', errors='replace')\nensure = re.search(r'ensure_generated\\s*\\(\\)\\s*\\{(?P<body>.*?)\\n\\}', runner, re.S)\nif not ensure:\n    errors.append('run_candidate_codegen_test.sh lacks ensure_generated')\nelse:\n    body = ensure.group('body')\n    if 'VC4_REUSE_GENERATED_CANDIDATE' not in body:\n        errors.append('ensure_generated lacks VC4_REUSE_GENERATED_CANDIDATE opt-in')\n    reuse_pos = body.find('VC4_REUSE_GENERATED_CANDIDATE')\n    manifest_pos = body.find('-f \"$GENERATED_DIR/manifest.json\"')\n    if manifest_pos != -1 and (reuse_pos == -1 or reuse_pos > manifest_pos):\n        errors.append('ensure_generated checks stale generated artifacts before reuse opt-in')\n    if 'run_vc4_codegen' not in body:\n        errors.append('ensure_generated does not regenerate by default')\n\nfor verification in spec.get('slices', {}).get('m2-10-final-acceptance', {}).get('verifications', []):\n    if verification.get('id') == 'lower-half-promoted-candidate-first-scan':\n        continue\n    text = json.dumps(verification, sort_keys=True)\n    if 'reference/run.sh' in text:\n        errors.append(f\"M2 final verification {verification.get('id', '<unknown>')} mentions reference/run.sh\")\n\nif errors:\n    print('lower-half promoted candidate scan failed:')\n    for error in errors:\n        print('  ' + error)\n    sys.exit(1)\nprint('lower-half-promoted-candidate-scan-ok')"
+          ],
+          "expect_exit_code": 0,
+          "route_hint": "gpt_pro",
+          "stop_on_failure": true
+        },
+        {
+          "id": "lower-half-algorithmic-required-fixtures",
+          "mechanism": "fixture_matrix",
+          "matrix": "lower_half_algorithmic_required",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "candidate_hardware",
+            "expected_json"
+          ],
+          "requires_hardware": true
         }
       ]
     }

@@ -251,3 +251,23 @@ after cumulative prefix success.
 **Permanent rule:** Empty/no-formal kernels with no used runtime builtins must lower with `args=[]`, `builtins=[]`, `uniform_words_per_qpu=0`, and no `ssavc4.uniform.read`. Runtime builtins belong in `vc4.launch_abi.builtins[]` only when a corresponding vc4tile op/resource uses them. Later slices must not edit m4-03 minimal ABI tests or generic launch ABI completion to satisfy unrelated local failures.
 
 **Verification implication:** m4-10 and later M4 slices must include a minimal ABI prefix canary in their active typed verifier, not only in resume-level cumulative prefix recheck. The canary lowers `minimal-thrend-vc4tile.mlir` through `vc4tile -> ssavc4 -> scheduled vc4 -> vc4-codegen` and asserts the empty ABI invariant above.
+
+## 2026-05-24: Lower-half hardware checks accepted stale or fixed PASS evidence
+
+**Symptom:** Final integrity audit found lower-half hardware-test surfaces where a candidate harness could print `VC4_TEST_RESULT status=PASS` after a failed launch, VC4Tile candidate `run/all` could reuse old generated bundles, and some hardware-labeled reference `run.sh` scripts emitted fixed PASS results without running hardware.
+
+**Permanent rule:** Hardware result lines must be derived from real execution and semantic checks. Candidate runners must generate fresh bundles by default before hardware execution, with any reuse path explicit and opt-in. Fixed PASS reference scripts must be rejected by integrity scans until converted to real hardware-backed reference runs.
+
+## 2026-05-24: Characterization litmus tests were treated as compiler blockers
+
+**Symptom:** `vpm_slice_visibility` was created to characterize VC4 hardware topology and VPM visibility/collision behavior, but milestone acceptance treated it like a required compiler correctness hardware fixture.
+
+**Permanent rule:** Hardware characterization litmus tests such as `vpm_slice_visibility` must stay runnable as manual/post-milestone evidence, but must not be included in required compiler correctness fixture matrices or final acceptance blocker sets. Required compiler matrices should cover generated artifact/runtime correctness, not exploratory topology classification.
+
+## 2026-05-24: M4 final acceptance used historical reference debt as blocker evidence
+
+**Symptom:** M4 final acceptance failed on old lower-half reference bundles that emitted fixed `VC4_TEST_RESULT status=PASS`, even when those reference bundles were not the required M4 hardware evidence path.
+
+**Permanent rule:** M4 final acceptance must use candidate-generated evidence for required hardware fixtures. Historical reference bundles may be audited as technical debt, but they must not become blockers unless a required verification uses them as evidence. Required hardware proof means generated artifacts plus candidate harness plus device copyback plus host oracle comparison.
+
+**Verification implication:** Required M4 hardware verifications must force fresh candidate generation by default. Stale generated candidate reuse is not valid acceptance evidence unless an explicit opt-in environment variable such as `VC4_REUSE_GENERATED_CANDIDATE=1` is used for local debugging outside the required acceptance path.

@@ -4,6 +4,11 @@
 vc4tile.kernel @independent attributes {
   schedule_mode = #vc4tile.schedule_mode<independent_vector>,
   public_name = "independent",
+  arg_attrs = [
+    {abi_name = "out", direction = "out", elem_type = "u32", kind = "buffer", type = "u32"},
+    {abi_name = "in", direction = "in", elem_type = "u32", kind = "buffer", type = "u32"},
+    {abi_name = "n", direction = "by_value", kind = "scalar", type = "u32"}
+  ],
   warps_per_block_max = 1 : i32,
   uses_shared_vpm = false,
   uses_barrier = false,
@@ -11,6 +16,8 @@ vc4tile.kernel @independent attributes {
   vpm_rows_per_block = 0 : i32,
   vpm_bytes_per_block = 0 : i32
 } {
+^entry(%out : i32, %in : i32, %n : i32):
+  %zero = arith.constant 0 : i32
   // CHECK: vc4tile.program_id
   %pid = vc4tile.program_id : i32
   // CHECK: vc4tile.lane_id
@@ -22,15 +29,15 @@ vc4tile.kernel @independent attributes {
   // CHECK: vc4tile.mask_all
   %all = vc4tile.mask_all : vector<16xi1>
   // CHECK: vc4tile.tail_mask
-  %tail = vc4tile.tail_mask %pid, %lane_scalar : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   // CHECK: vc4tile.rotate
   %rot = vc4tile.rotate %lanes {amount = 1 : i32} : vector<16xi32> -> vector<16xi32>
   // CHECK: vc4tile.reduce
   %red = vc4tile.reduce %rot, %all {kind = #vc4tile.reduce_kind<add>} : vector<16xi32>, vector<16xi1> -> vector<16xi32>
   // CHECK: vc4tile.masked_load_global
-  %ld = vc4tile.masked_load_global %pid, %lanes, %tail {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<coalesced>} : i32, vector<16xi32>, vector<16xi1> -> vector<16xi32>
+  %ld = vc4tile.masked_load_global %in, %lanes, %tail {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<coalesced>} : i32, vector<16xi32>, vector<16xi1> -> vector<16xi32>
   // CHECK: vc4tile.masked_store_global
-  vc4tile.masked_store_global %pid, %lanes, %red, %tail {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<affine_contiguous>} : i32, vector<16xi32>, vector<16xi32>, vector<16xi1>
+  vc4tile.masked_store_global %out, %lanes, %red, %tail {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<affine_contiguous>} : i32, vector<16xi32>, vector<16xi32>, vector<16xi1>
   // CHECK: vc4tile.return
   vc4tile.return
 }

@@ -3,14 +3,16 @@
 
 #include <inttypes.h>
 
+struct unspecified__;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-extern uint32_t ___SYMBOLNAME___[___INSTCOUNT2___];
-
-___SYMBOLDEFS___
+___SYMBOLIMPORTS___
 #ifdef __cplusplus
 }
 #endif
+
+___SYMBOLPROXIES___
 #endif

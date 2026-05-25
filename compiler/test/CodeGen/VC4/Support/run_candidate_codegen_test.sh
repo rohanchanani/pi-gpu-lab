@@ -201,10 +201,13 @@ run_vc4_codegen() {
 
 ensure_generated() {
   check_fixture
-  if [[ -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
+  if [[ "${VC4_REUSE_GENERATED_CANDIDATE:-0}" == "1" && -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
     log "using existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
     check_generated_bundle
     return 0
+  fi
+  if [[ -d "$GENERATED_DIR" && "${VC4_REUSE_GENERATED_CANDIDATE:-0}" != "1" ]]; then
+    log "discarding stale generated candidate artifacts: $(relpath "$GENERATED_DIR")"
   fi
   run_vc4_codegen
 }
