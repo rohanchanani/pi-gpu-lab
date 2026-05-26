@@ -21,7 +21,8 @@ Global mutex protection around VPM/VDW setup and store sequences.
 
 This test does not prove optimized convolution, shared-memory convolution, 2D image stencils, barriers, or VPM reuse.
 
-Do not add this test to compiler/test/CodeGen/VC4/catalog.json until the reference hardware run passes and the run log validates against expected.json.
+The candidate path launches the generated VC4 kernel on hardware and compares
+the full output sweep against a host clamp-to-edge 3-tap oracle.
 
 Files
 
@@ -32,6 +33,7 @@ compiler/test/CodeGen/VC4/Hardware/Run/conv1d_3tap/
   input.mlir
   expected.json
   candidate/README.md
+  candidate/conv1d_3tap_candidate_harness.c
   reference/.gitignore
   reference/conv1d_3tap_harness.c
   reference/conv1d_3tap.qasm
@@ -44,3 +46,5 @@ conv1d_3tap_codex_mechanical_prompt.md
 
 It copies/adapts Makefile, run.sh, mailbox.c, mailbox.h, and the share/ tree from the saxpy_full donor test.
 
+The stable oracle checks zero mismatches, zero sentinel overwrites,
+checked_elements=1234, and max_abs_diff=0.0.

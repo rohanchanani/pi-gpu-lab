@@ -10,10 +10,10 @@
 "lanes": 16,
 "max_n": 511,
 "runtime_allocations": 1,
-"runtime_launches": 13
+"runtime_launches": 13,
+"checked_elements": 1234
 },
 "float_max": {
-"max_abs_diff": 0.0003
+"max_abs_diff": 0.0
 }
 }
-

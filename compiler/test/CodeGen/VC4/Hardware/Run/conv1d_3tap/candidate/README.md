@@ -1,9 +1,11 @@
 
-Candidate side disabled
+Candidate side enabled
 
-Candidate/codegen execution is intentionally disabled for conv1d_3tap.
+Candidate/codegen execution is enabled for conv1d_3tap.
 
-The reference side is the trusted hardware ground truth. After VC4 codegen can emit the qasm, launcher .c, and launcher .h bundle for this final-stage input, add a candidate runner that uses the same expected.json oracle.
+The candidate harness launches the generated kernel on hardware and verifies it
+against the same clamp-to-edge 3-tap host oracle used by the reference side.
 
-Do not claim candidate coverage or update catalog.json for this test until the generated candidate side runs successfully on hardware.
-
+Do not weaken the exact output comparison. The coefficients and input pattern
+are binary-rational values chosen so the expected results are exactly
+representable for this arithmetic order.
