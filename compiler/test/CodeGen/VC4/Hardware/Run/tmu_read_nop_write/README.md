@@ -59,8 +59,6 @@ thread-switching test.
 - It does not prove multiple outstanding TMU requests.
 - It does not prove TMU0/TMU1 load balancing.
 - It does not prove tail-safe handling.
-- It does not prove generated code yet; only the trusted reference side is
-  runnable until codegen exists.
 
 ## Expected result
 
@@ -72,8 +70,11 @@ expected checksum is:
 1 + 2 + ... + 192 = 18528
 ```
 
-The final successful result line is:
+The candidate side builds the generated bundle from `input.mlir`, launches it on
+hardware, compares all 192 copied words with an exact host oracle, verifies an
+output guard region, and checks the runtime launch counters. The final
+successful result line is:
 
 ```text
-VC4_TEST_RESULT name=tmu_read_nop_write status=PASS mismatches=0 active_qpus=12 words=192 checksum=18528 elapsed_usec=<informational>
+VC4_TEST_RESULT name=tmu_read_nop_write status=PASS checked_elements=192 mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 words=192 checksum=18528 runtime_allocations=1 runtime_launches=1 elapsed_usec=<informational>
 ```

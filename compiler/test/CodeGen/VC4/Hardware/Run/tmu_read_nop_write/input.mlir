@@ -12,8 +12,8 @@
 //   [0] input base address
 //   [1] result base address
 //   [2] word count
-//   [3] qpu_id
-//   [4] num_qpus
+//   [3] logical_request
+//   [4] total_requests
 //
 // This differs from read_nop_write only in the input path: data comes from a
 // TMU0 direct memory lookup instead of a VDR DMA load. The output path remains
