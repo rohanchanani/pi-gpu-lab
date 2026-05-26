@@ -46,22 +46,6 @@ REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
 BUNDLE_ONLY_FIXTURE=0
 
-# The M2 verifier uses multi_kernel_minimal as a program-bundle smoke fixture.
-# A later runtime/heap slice may provide a full CUDA-like candidate harness for
-# the same name, but this slice only needs manifest-driven generation, all-QASM
-# assembly, and a link smoke check.  Keep that smoke path active even when a
-# Hardware/Run skeleton exists so we do not compile future ABI helpers here.
-if [[ "$TEST_NAME" == "multi_kernel_minimal" ]]; then
-  BUNDLE_ONLY_FIXTURE=1
-  EXPECTED_JSON=""
-  emit_input="$REPO_ROOT/compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
-  if [[ ! -f "$INPUT_MLIR" && -f "$emit_input" ]]; then
-    INPUT_MLIR="$emit_input"
-  fi
-  REFERENCE_DIR="$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference"
-  CANDIDATE_DIR="$TEST_ROOT/candidate"
-fi
-
 AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/codegen_m1}"
 case "$AUTO_ROOT_RAW" in
   /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
