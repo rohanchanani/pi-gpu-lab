@@ -26,7 +26,7 @@ thread switching.
 
 - V3D/QPU user-program launch still works.
 - Per-QPU uniform packing works for a buffer input, buffer output, scalar `n`,
-  `qpu_id`, and `num_qpus`.
+  `logical_request`, and `total_requests`.
 - VDR can DMA one 16-lane `u32` vector per active QPU from memory into VPM.
 - A QPU can read the vector back from VPM.
 - A QPU can write an unchanged vector into VPM.
@@ -40,10 +40,8 @@ thread switching.
 - It does not verify tail-safe handling.
 - It does not verify TMU asynchronous loads.
 - It does not verify threadable kernels.
-- It does not verify generated code yet; only the trusted reference side is
-  runnable until VC4 codegen exists.
 
-## Public reference API
+## Public candidate API
 
 ```c
 int read_nop_write_launch(
@@ -57,25 +55,25 @@ The public API exposes semantic arguments only. It does not expose `qpu_id`,
 `num_qpus`, raw uniform arrays, VPM rows, V3D scheduler registers, or GPU bus
 addresses.
 
-## Reference physical uniform stream
+## Candidate physical uniform stream
 
-For each active QPU, the reference launcher packs:
+For each active QPU, the generated launcher packs:
 
 ```text
 [0] input base address
 [1] result/output base address
 [2] n word count
-[3] qpu_id
-[4] num_qpus
+[3] logical_request
+[4] total_requests
 ```
 
 The kernel uses:
 
 ```text
-byte_offset = qpu_id * 16 * sizeof(uint32_t)
+byte_offset = logical_request * 16 * sizeof(uint32_t)
 input_addr  = input_base  + byte_offset
 result_addr = result_base + byte_offset
-vpm_row     = qpu_id
+vpm_row     = logical_request
 ```
 
 This test's launcher requires `n == active_qpus * 16`. That is a test-specific
@@ -94,7 +92,7 @@ expected checksum is:
 The final successful line is:
 
 ```text
-VC4_TEST_RESULT name=read_nop_write status=PASS mismatches=0 active_qpus=12 words=192 checksum=18528 elapsed_usec=<informational>
+VC4_TEST_RESULT name=read_nop_write status=PASS checked_elements=192 mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 words=192 checksum=18528 runtime_allocations=1 runtime_launches=1 elapsed_usec=<informational>
 ```
 
 `elapsed_usec` is informational and is not checked by `expected.json`.

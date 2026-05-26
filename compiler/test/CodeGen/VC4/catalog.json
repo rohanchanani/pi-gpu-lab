@@ -8,10 +8,10 @@
       "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/input.mlir",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/minimal_thrend reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh minimal_thrend run",
       "requires_hardware": true,
-      "candidate_enabled": false,
-      "notes": "Minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output."
+      "candidate_enabled": true,
+      "notes": "Generated-candidate minimal QPU user-program launch/completion test: thread end plus delay slots, no memory output. Requires completed_qpus=12, zero launch failures, and one generated runtime launch."
     },
     {
       "id": "hardware-run-memory-output",
@@ -21,11 +21,11 @@
       "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/input.mlir",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/memory_output/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/memory_output reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh memory_output run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "QPU memory-output test: each active QPU writes one 16-lane u32 vector through VPM/VDW to host-visible memory."
+      "candidate_enabled": true,
+      "notes": "Generated-candidate QPU memory-output test: each active QPU writes one 16-lane u32 vector through VPM/VDW to host-visible memory, with exact host oracle, guard checks, and runtime launch counters."
     },
     {
       "id": "hardware-run-read-nop-write",
@@ -35,11 +35,11 @@
       "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/input.mlir",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/read_nop_write reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh read_nop_write run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "QPU read-nop-write test: copies one 16-lane u32 vector per active QPU from host input to host output through VDR DMA load, VPM read/write, and VDW DMA store."
+      "candidate_enabled": true,
+      "notes": "Generated-candidate QPU read-nop-write test: copies one 16-lane u32 vector per active QPU from host input to host output through VDR DMA load, VPM read/write, and VDW DMA store, with exact host oracle and guard checks."
     },
     {
       "id": "hardware-run-tmu-read-nop-write",
@@ -49,11 +49,11 @@
       "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/tmu_read_nop_write reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh tmu_read_nop_write run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "TMU0 direct-memory read counterpart to read_nop_write; copies one 16-lane u32 vector per active QPU from input to result via TMU read and VPM/VDW store. Reference hardware run passed with mismatches=0, active_qpus=12, words=192, checksum=18528."
+      "candidate_enabled": true,
+      "notes": "Generated-candidate TMU0 direct-memory read counterpart to read_nop_write; copies one 16-lane u32 vector per active QPU from input to result via TMU read and VPM/VDW store, with exact host oracle and guard checks."
     },
     {
       "id": "hardware-run-saxpy-tmu",
@@ -91,10 +91,10 @@
       "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/input.mlir",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/sfu_recip reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh sfu_recip run",
       "requires_hardware": true,
-      "candidate_enabled": false,
-      "notes": "SFU reciprocal reference test. Exercises SFU_RECIP write/readback through r4 with the required two-instruction r4 dead window before the N+3 read; oracle accepts VC4 SFU approximation with mismatches=0, checksum=195672, and max_abs_diff<=0.0003."
+      "candidate_enabled": true,
+      "notes": "Generated-candidate SFU reciprocal test. Exercises SFU_RECIP write/readback through r4 with the required two-instruction r4 dead window before the N+3 read; oracle compares against host reciprocal with a tight VC4 SFU approximation bound."
     },
     {
       "id": "hardware-run-qpu-num-register",
