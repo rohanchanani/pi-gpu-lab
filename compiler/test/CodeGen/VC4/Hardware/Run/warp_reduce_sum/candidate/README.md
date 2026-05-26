@@ -1,9 +1,10 @@
 
 warp_reduce_sum candidate side
 
-Candidate-side codegen is disabled for this hardware-run test.
+This candidate harness builds and launches the generated VC4 kernel from
+`input.mlir` on hardware.
 
-The reference side is the hardware source of truth for a single-QPU 16-lane f32 reduction primitive. Candidate generation should remain disabled until the backend can emit the qasm/launcher bundle and run it against the same expected.json oracle.
-
-Do not claim candidate/codegen coverage for this test until a generated bundle has passed on hardware.
-
+The host oracle computes the canonical per-vector f32 sum over active lanes and
+requires exact output equality for every active element. It also checks guard
+sentinels, matching checksums, real runtime launch/allocation/code-upload
+counters, and recorded launch failures.

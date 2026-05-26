@@ -2,7 +2,6 @@
 #include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
-#define WARP_REDUCE_SUM_EPSILON 0.0002f
 #define CHECKSUM_SCALE 4096.0f
 #define WARP_REDUCE_SUM_LANE_WIDTH 16u
 #define WARP_REDUCE_SUM_MAX_QPUS 12u
@@ -70,7 +69,7 @@ static void verify_results(uint32_t n, int *mismatches, float *max_abs_diff) {
         float abs_diff = absf_local(diff);
         if (abs_diff > *max_abs_diff)
             *max_abs_diff = abs_diff;
-        if (abs_diff > WARP_REDUCE_SUM_EPSILON) {
+        if (out_values[i] != expected_values[i]) {
             if (*mismatches < 8) {
                 uint32_t vector = i / WARP_REDUCE_SUM_LANE_WIDTH;
                 uint32_t lane = i % WARP_REDUCE_SUM_LANE_WIDTH;
@@ -122,13 +121,17 @@ void notmain(void) {
     vc4_dim3 block = vc4_m2_dim3(active_qpus * lane_width, 1u, 1u);
     const uint32_t case_count = sizeof(test_sizes) / sizeof(test_sizes[0]);
 
-    printk("WARP_REDUCE_SUM_RUNTIME_SETUP max_n=%d allocations=%d\n",
-           WARP_REDUCE_SUM_MAX_N, 1);
+    printk("WARP_REDUCE_SUM_RUNTIME_SETUP max_n=%d allocations=%d code_uploads=%d capacity=%d\n",
+           WARP_REDUCE_SUM_MAX_N,
+           (int)warp_reduce_sum_runtime_allocations(),
+           (int)warp_reduce_sum_runtime_code_uploads(),
+           (int)warp_reduce_sum_runtime_capacity());
 
     int total_mismatches = 0;
     int sentinel_mismatches = 0;
     int launch_failures = 0;
     int checksum_accum = 0;
+    int expected_checksum_accum = 0;
     float max_abs_diff_overall = 0.0f;
     int start = timer_get_usec();
 
@@ -166,25 +169,39 @@ void notmain(void) {
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinel_mismatches;
         checksum_accum += checksum;
+        expected_checksum_accum += expected_checksum;
 
         printk("WARP_REDUCE_SUM_CASE case=%d n=%d vectors=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
                (int)case_index, (int)n, (int)vectors, mismatches,
                case_sentinel_mismatches, checksum, max_abs_diff,
-               (int)(case_index + 1u), 1);
+               (int)warp_reduce_sum_runtime_launches(),
+               (int)warp_reduce_sum_runtime_allocations());
     }
 
     int elapsed = timer_get_usec() - start;
+    uint32_t runtime_allocations = warp_reduce_sum_runtime_allocations();
+    uint32_t runtime_launches = warp_reduce_sum_runtime_launches();
+    uint32_t runtime_capacity = warp_reduce_sum_runtime_capacity();
+    uint32_t code_uploads = warp_reduce_sum_runtime_code_uploads();
+    uint32_t recorded_launch_failures = warp_reduce_sum_runtime_launch_failures();
     const char *status =
         (total_mismatches == 0 &&
          sentinel_mismatches == 0 &&
          launch_failures == 0 &&
-         max_abs_diff_overall <= WARP_REDUCE_SUM_EPSILON) ? "PASS" : "FAIL";
+         recorded_launch_failures == 0 &&
+         checksum_accum == expected_checksum_accum &&
+         max_abs_diff_overall == 0.0f &&
+         runtime_allocations == 1u &&
+         runtime_launches == case_count &&
+         code_uploads == 1u) ? "PASS" : "FAIL";
 
-    printk("VC4_TEST_RESULT name=warp_reduce_sum status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=warp_reduce_sum status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d expected_checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
            status, (int)case_count, total_mismatches, sentinel_mismatches,
-           launch_failures, (int)active_qpus, (int)lane_width,
-           WARP_REDUCE_SUM_MAX_N, checksum_accum, max_abs_diff_overall,
-           1, (int)case_count, elapsed);
+           launch_failures, (int)recorded_launch_failures,
+           (int)active_qpus, (int)lane_width, WARP_REDUCE_SUM_MAX_N,
+           checksum_accum, expected_checksum_accum, max_abs_diff_overall,
+           (int)runtime_allocations, (int)runtime_launches,
+           (int)runtime_capacity, (int)code_uploads, elapsed);
 
     vc4Free(program, input_dev);
     vc4Free(program, out_dev);
