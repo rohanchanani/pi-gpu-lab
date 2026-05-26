@@ -10,10 +10,9 @@
 #define STENCIL2D_5POINT_SHARED_MAX_WORDS (STENCIL2D_5POINT_SHARED_MAX_WIDTH * STENCIL2D_5POINT_SHARED_MAX_HEIGHT)
 #define STENCIL2D_5POINT_SHARED_SCRATCH_WORDS (STENCIL2D_5POINT_SHARED_ROW_STRIDE * STENCIL2D_5POINT_SHARED_MAX_HEIGHT)
 #define STENCIL2D_5POINT_SHARED_TILE_OUT_W 14u
-#define STENCIL2D_5POINT_SHARED_TILE_OUT_H 10u
+#define STENCIL2D_5POINT_SHARED_TILE_OUT_H 1u
 #define STENCIL2D_5POINT_SHARED_CASES 3u
 #define STENCIL2D_5POINT_SHARED_SENTINEL (-123456.0f)
-#define STENCIL2D_5POINT_SHARED_EPSILON 0.001f
 #define STENCIL2D_5POINT_SHARED_ACTIVE_QPUS 12u
 #define STENCIL2D_5POINT_SHARED_LANES 16u
 #define STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK 12u
@@ -77,22 +76,22 @@ static void fill_case(uint32_t width, uint32_t height, uint32_t origin_x, uint32
             uint32_t x = origin_x + col;
             if (x >= width)
                 break;
-            float center = sample_clamped(input_values, width, height, x, y);
             float north = sample_clamped(input_values, width, height, x, y == 0u ? 0u : y - 1u);
             float south = sample_clamped(input_values, width, height, x, y + 1u);
             float west = sample_clamped(input_values, width, height, x == 0u ? 0u : x - 1u, y);
             float east = sample_clamped(input_values, width, height, x + 1u, y);
+            float center = sample_clamped(input_values, width, height, x, y);
             expected_values[y * width + x] = center_weight * center + neighbor_weight * (north + south + west + east);
         }
     }
 }
 
-static int checksum_scaled(uint32_t width, uint32_t height, uint32_t origin_x, uint32_t origin_y) {
+static int checksum_scaled_values(const float *values, uint32_t width, uint32_t height, uint32_t origin_x, uint32_t origin_y) {
     int checksum = 0;
     for (uint32_t y = 0; y < height; y++)
         for (uint32_t x = 0; x < width; x++)
             if (in_output_tile(x, y, origin_x, origin_y))
-                checksum += (int)(output_values[y * width + x] * 4096.0f);
+                checksum += (int)(values[y * width + x] * 4096.0f);
     return checksum;
 }
 
@@ -128,6 +127,7 @@ void notmain(void) {
     uint32_t total_mismatches = 0, sentinel_mismatches = 0, launch_failures = 0, checked_elements = 0;
     float global_max_abs_diff = 0.0f;
     int checksum_accum = 0;
+    int expected_checksum_accum = 0;
     int start = timer_get_usec();
 
     if (vc4_program_create(&program, 0) < 0 || !program)
@@ -137,9 +137,14 @@ void notmain(void) {
 
     vc4_dim3 grid = vc4_m2_dim3(1u, 1u, 1u);
     vc4_dim3 block = vc4_m2_dim3(STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK * STENCIL2D_5POINT_SHARED_LANES, 1u, 1u);
-    printk("STENCIL2D_5POINT_SHARED_RUNTIME_SETUP max_width=%d max_height=%d allocations=1 warps_per_block=%d\n",
-           STENCIL2D_5POINT_SHARED_MAX_WIDTH, STENCIL2D_5POINT_SHARED_MAX_HEIGHT, STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK);
-    PUT32(V3D_VPMBASE, 16u);
+    printk("STENCIL2D_5POINT_SHARED_RUNTIME_SETUP max_width=%d max_height=%d allocations=%d warps_per_block=%d capacity=%d code_uploads=%d\n",
+           STENCIL2D_5POINT_SHARED_MAX_WIDTH,
+           STENCIL2D_5POINT_SHARED_MAX_HEIGHT,
+           (int)stencil2d_5point_shared_runtime_allocations(),
+           STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK,
+           (int)stencil2d_5point_shared_runtime_capacity(),
+           (int)stencil2d_5point_shared_runtime_code_uploads());
+    PUT32(V3D_VPMBASE, 0u);
 
     for (uint32_t case_id = 0; case_id < STENCIL2D_5POINT_SHARED_CASES; case_id++) {
         const struct stencil_case *tc = &cases[case_id];
@@ -154,8 +159,12 @@ void notmain(void) {
                                            tc->origin_x, tc->origin_y, center_weight, neighbor_weight) < 0 ||
             vc4_m2_copy_dtoh(program, output_scratch, output_dev, bytes) < 0) {
             launch_failures++;
-            printk("STENCIL2D_5POINT_SHARED_CASE case=%d width=%d height=%d launch=FAIL launches=%d allocations=1\n",
-                   (int)case_id, (int)tc->width, (int)tc->height, (int)(case_id + 1u));
+            printk("STENCIL2D_5POINT_SHARED_CASE case=%d width=%d height=%d launch=FAIL launches=%d allocations=%d\n",
+                   (int)case_id,
+                   (int)tc->width,
+                   (int)tc->height,
+                   (int)stencil2d_5point_shared_runtime_launches(),
+                   (int)stencil2d_5point_shared_runtime_allocations());
             continue;
         }
         unpack_output(tc->width, tc->height);
@@ -169,7 +178,7 @@ void notmain(void) {
                     case_checked++;
                     if (adiff > max_abs_diff)
                         max_abs_diff = adiff;
-                    if (invalid_f32(output_values[i]) || adiff > STENCIL2D_5POINT_SHARED_EPSILON) {
+                    if (invalid_f32(output_values[i]) || output_values[i] != expected_values[i]) {
                         if (mismatches < 8u)
                             printk("ERROR: case=%d x=%d y=%d gpu=%f cpu=%f diff=%f\n",
                                    (int)case_id, (int)x, (int)y, output_values[i], expected_values[i], diff);
@@ -181,26 +190,63 @@ void notmain(void) {
             }
         }
 
-        int checksum = checksum_scaled(tc->width, tc->height, tc->origin_x, tc->origin_y);
+        int checksum = checksum_scaled_values(output_values, tc->width, tc->height, tc->origin_x, tc->origin_y);
+        int expected_checksum = checksum_scaled_values(expected_values, tc->width, tc->height, tc->origin_x, tc->origin_y);
         if (max_abs_diff > global_max_abs_diff)
             global_max_abs_diff = max_abs_diff;
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinel;
         checked_elements += case_checked;
         checksum_accum += checksum;
-        printk("STENCIL2D_5POINT_SHARED_CASE case=%d width=%d height=%d origin_x=%d origin_y=%d checked=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=1\n",
+        expected_checksum_accum += expected_checksum;
+        if (checksum != expected_checksum) {
+            printk("ERROR: checksum mismatch case=%d gpu=%d expected=%d\n",
+                   (int)case_id, checksum, expected_checksum);
+            total_mismatches++;
+        }
+        printk("STENCIL2D_5POINT_SHARED_CASE case=%d width=%d height=%d origin_x=%d origin_y=%d checked=%d mismatches=%d sentinel_mismatches=%d checksum=%d expected_checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
                (int)case_id, (int)tc->width, (int)tc->height, (int)tc->origin_x, (int)tc->origin_y,
-               (int)case_checked, (int)mismatches, (int)case_sentinel, checksum, max_abs_diff, (int)(case_id + 1u));
+               (int)case_checked,
+               (int)mismatches,
+               (int)case_sentinel,
+               checksum,
+               expected_checksum,
+               max_abs_diff,
+               (int)stencil2d_5point_shared_runtime_launches(),
+               (int)stencil2d_5point_shared_runtime_allocations());
     }
 
     int elapsed = timer_get_usec() - start;
+    uint32_t runtime_allocations = stencil2d_5point_shared_runtime_allocations();
+    uint32_t runtime_launches = stencil2d_5point_shared_runtime_launches();
+    uint32_t runtime_capacity = stencil2d_5point_shared_runtime_capacity();
+    uint32_t code_uploads = stencil2d_5point_shared_runtime_code_uploads();
+    uint32_t recorded_launch_failures = stencil2d_5point_shared_runtime_launch_failures();
     const char *status = (total_mismatches == 0u && sentinel_mismatches == 0u && launch_failures == 0u &&
-                          checked_elements > 0u && global_max_abs_diff <= STENCIL2D_5POINT_SHARED_EPSILON) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=stencil2d_5point_shared status=%s cases=%d checked_elements=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d warps_per_block=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d timeouts=%d errstat_relevant_changed=%d elapsed_usec=%d\n",
+                          recorded_launch_failures == 0u &&
+                          checked_elements > 0u &&
+                          checksum_accum == expected_checksum_accum &&
+                          global_max_abs_diff == 0.0f &&
+                          runtime_allocations == 1u &&
+                          runtime_launches == STENCIL2D_5POINT_SHARED_CASES &&
+                          code_uploads == 1u) ? "PASS" : "FAIL";
+    printk("VC4_TEST_RESULT name=stencil2d_5point_shared status=%s cases=%d checked_elements=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d warps_per_block=%d checksum_accum=%d expected_checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d timeouts=%d errstat_relevant_changed=%d elapsed_usec=%d\n",
            status, STENCIL2D_5POINT_SHARED_CASES, (int)checked_elements, (int)total_mismatches, (int)sentinel_mismatches,
-           (int)launch_failures, STENCIL2D_5POINT_SHARED_ACTIVE_QPUS, STENCIL2D_5POINT_SHARED_LANES,
-           STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK, checksum_accum, global_max_abs_diff, 1,
-           STENCIL2D_5POINT_SHARED_CASES, 0, 0, elapsed);
+           (int)launch_failures,
+           (int)recorded_launch_failures,
+           STENCIL2D_5POINT_SHARED_ACTIVE_QPUS,
+           STENCIL2D_5POINT_SHARED_LANES,
+           STENCIL2D_5POINT_SHARED_WARPS_PER_BLOCK,
+           checksum_accum,
+           expected_checksum_accum,
+           global_max_abs_diff,
+           (int)runtime_allocations,
+           (int)runtime_launches,
+           (int)runtime_capacity,
+           (int)code_uploads,
+           0,
+           0,
+           elapsed);
 
     vc4Free(program, input_dev);
     vc4Free(program, output_dev);

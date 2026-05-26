@@ -54,6 +54,13 @@ static int checksum_u32(const uint32_t *values, uint32_t n) {
     return checksum;
 }
 
+static int expected_checksum_u32(uint32_t case_id, uint32_t n) {
+    int checksum = 0;
+    for (uint32_t i = 0; i < n; i++)
+        checksum += (int)(expected_value(case_id, i) & 0xffffu);
+    return checksum;
+}
+
 void notmain(void) {
     struct vc4_program *program = 0;
     const uint32_t activeQpus = GLOBAL_STORE_ACTIVE_QPUS;
@@ -67,14 +74,20 @@ void notmain(void) {
     if (vc4_m2_malloc(program, &out_dev, bytes) < 0)
         panic("global_store_coalesced_multi device allocation failed");
 
-    printk("GLOBAL_STORE_COHERENT_RUNTIME_SETUP max_n=%d allocations=%d active_qpus=%d lanes=%d\n",
-           GLOBAL_STORE_COHERENT_MAX_N, 1, (int)activeQpus, (int)laneWidth);
+    printk("GLOBAL_STORE_COHERENT_RUNTIME_SETUP max_n=%d allocations=%d active_qpus=%d lanes=%d capacity=%d code_uploads=%d\n",
+           GLOBAL_STORE_COHERENT_MAX_N,
+           (int)global_store_coalesced_multi_runtime_allocations(),
+           (int)activeQpus,
+           (int)laneWidth,
+           (int)global_store_coalesced_multi_runtime_capacity(),
+           (int)global_store_coalesced_multi_runtime_code_uploads());
 
     const uint32_t case_count = sizeof(test_sizes) / sizeof(test_sizes[0]);
     int total_mismatches = 0;
     int sentinel_mismatches = 0;
     int launch_failures = 0;
     int checksum_accum = 0;
+    int expected_checksum_accum = 0;
     int start = timer_get_usec();
     vc4_dim3 grid = vc4_m2_dim3(1, 1, 1);
     vc4_dim3 block = vc4_m2_dim3(activeQpus * laneWidth, 1, 1);
@@ -93,17 +106,60 @@ void notmain(void) {
         int mismatches = verify_results(case_id, n);
         int case_sentinel_mismatches = verify_sentinel_tail(n);
         int checksum = checksum_u32(out_values, n);
+        int expected_checksum = expected_checksum_u32(case_id, n);
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinel_mismatches;
         checksum_accum += checksum;
-        printk("GLOBAL_STORE_COHERENT_CASE case=%d n=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d launches=%d allocations=%d\n",
-               (int)case_id, (int)n, (int)activeQpus, (int)laneWidth, mismatches, case_sentinel_mismatches, checksum, (int)(case_index + 1), 1);
+        expected_checksum_accum += expected_checksum;
+        if (checksum != expected_checksum) {
+            printk("ERROR: checksum mismatch case=%d gpu=%d expected=%d\n",
+                   (int)case_id, checksum, expected_checksum);
+            total_mismatches++;
+        }
+        printk("GLOBAL_STORE_COHERENT_CASE case=%d n=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d expected_checksum=%d launches=%d allocations=%d\n",
+               (int)case_id,
+               (int)n,
+               (int)activeQpus,
+               (int)laneWidth,
+               mismatches,
+               case_sentinel_mismatches,
+               checksum,
+               expected_checksum,
+               (int)global_store_coalesced_multi_runtime_launches(),
+               (int)global_store_coalesced_multi_runtime_allocations());
     }
 
     int elapsed = timer_get_usec() - start;
-    const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 && launch_failures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=global_store_coalesced_multi status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
-           status, (int)case_count, total_mismatches, sentinel_mismatches, launch_failures, (int)activeQpus, (int)laneWidth, GLOBAL_STORE_COHERENT_MAX_N, checksum_accum, 1, (int)case_count, elapsed);
+    uint32_t runtime_allocations = global_store_coalesced_multi_runtime_allocations();
+    uint32_t runtime_launches = global_store_coalesced_multi_runtime_launches();
+    uint32_t runtime_capacity = global_store_coalesced_multi_runtime_capacity();
+    uint32_t code_uploads = global_store_coalesced_multi_runtime_code_uploads();
+    uint32_t recorded_launch_failures = global_store_coalesced_multi_runtime_launch_failures();
+    const char *status = (total_mismatches == 0 &&
+                          sentinel_mismatches == 0 &&
+                          launch_failures == 0 &&
+                          recorded_launch_failures == 0 &&
+                          checksum_accum == expected_checksum_accum &&
+                          runtime_allocations == 1 &&
+                          runtime_launches == case_count &&
+                          code_uploads == 1) ? "PASS" : "FAIL";
+    printk("VC4_TEST_RESULT name=global_store_coalesced_multi status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d expected_checksum_accum=%d runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
+           status,
+           (int)case_count,
+           total_mismatches,
+           sentinel_mismatches,
+           launch_failures,
+           (int)recorded_launch_failures,
+           (int)activeQpus,
+           (int)laneWidth,
+           GLOBAL_STORE_COHERENT_MAX_N,
+           checksum_accum,
+           expected_checksum_accum,
+           (int)runtime_allocations,
+           (int)runtime_launches,
+           (int)runtime_capacity,
+           (int)code_uploads,
+           elapsed);
 
     vc4Free(program, out_dev);
     vc4_program_destroy(program);
