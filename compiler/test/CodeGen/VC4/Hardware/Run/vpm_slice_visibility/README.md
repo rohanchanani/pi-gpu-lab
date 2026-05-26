@@ -1,5 +1,15 @@
 # vpm_slice_visibility
 
+## Quarantine status
+
+This fixture is quarantined. It was a hardware hypothesis test for VPM
+slice/storage visibility, not a stable generated-kernel correctness test. Its
+observations must not be treated as a required hardware-run oracle for the VC4
+candidate corpus.
+
+The top-level and candidate run scripts refuse to execute unless
+`VC4_RUN_QUARANTINED=1` is set for a supervised manual investigation.
+
 ## Purpose
 
 `vpm_slice_visibility` is an exploratory VC4 QPU hardware-run test for the VPM

@@ -1,5 +1,7 @@
 {
   "name": "vpm_slice_visibility",
+  "quarantined": true,
+  "quarantine_reason": "Exploratory VPM slice/storage visibility hardware hypothesis test; not a stable generated VC4 correctness oracle.",
   "status": "PASS",
   "required": {
     "sanity_mismatches": 0,

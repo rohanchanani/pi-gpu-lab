@@ -8,6 +8,16 @@ fi
 SUPPORT_DIR="$REPO_ROOT/compiler/test/CodeGen/VC4/Support"
 PHASE="${1:-reference}"
 shift || true
+if [[ "${VC4_RUN_QUARANTINED:-0}" != "1" ]]; then
+  cat >&2 <<'EOF'
+vpm_slice_visibility is quarantined.
+
+It was a hardware hypothesis test for VPM slice/storage visibility, and its
+observations are not a stable correctness oracle for the generated VC4 hardware
+fixture corpus. Set VC4_RUN_QUARANTINED=1 to run it manually.
+EOF
+  exit 2
+fi
 case "$PHASE" in
   reference|candidate)
     exec bash "$SUPPORT_DIR/run_hardware_test.sh" "$SCRIPT_DIR" "$PHASE" "$SCRIPT_DIR/expected.json" "$@" ;;
