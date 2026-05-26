@@ -3,6 +3,8 @@
   "status": "PASS",
   "required": {
     "runs": 5,
+    "checked_warp_records": 26,
+    "checked_lane_records": 416,
     "same_slice_pass": 1,
     "cross_slice_0_1_pass": 1,
     "cross_slice_0_2_pass": 1,
@@ -10,8 +12,11 @@
     "multi_block_pass": 1,
     "qpu_mismatches": 0,
     "data_mismatches": 0,
+    "guard_mismatches": 0,
     "timeouts": 0,
     "invalid_topology": 0,
-    "errstat_relevant_changed": 0
+    "errstat_relevant_changed": 0,
+    "launch_failures": 0,
+    "manual_launches": 5
   }
 }

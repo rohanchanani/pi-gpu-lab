@@ -40,11 +40,11 @@ and VDW result stores remain protected by the global QPU mutex.
 
 ## Hardware path exercised
 
-The reference bundle runs general-purpose QPU user programs through the V3D user
-program scheduler.  The host reads `V3D_IDENT1`, writes `V3D_VPMBASE = 16` to
-reserve the 4 KiB user-visible VPM window, clears scheduler/cache state for each
-mode, and uses `V3D_SQRSV0/1` to reserve all QPUs except the selected physical
-coverage set for the mode.
+The reference bundle and generated-kernel candidate run general-purpose QPU user
+programs through the V3D user program scheduler.  The host reads `V3D_IDENT1`,
+writes `V3D_VPMBASE = 16` to reserve the 4 KiB user-visible VPM window, clears
+scheduler/cache state for each mode, and uses `V3D_SQRSV0/1` to reserve all QPUs
+except the selected physical coverage set for the mode.
 
 The QPU program reads `QPU_NUMBER` and `ELEMENT_NUMBER`, writes and reads
 horizontal 32-bit VPM rows, uses the global QPU mutex around VPM/VDW setup and
@@ -132,7 +132,7 @@ BARRIER_WARP ...
 The final semantic oracle line is:
 
 ```text
-VC4_TEST_RESULT name=qpu_barrier_syncthreads status=PASS runs=5 same_slice_pass=1 cross_slice_0_1_pass=1 cross_slice_0_2_pass=1 full_block_pass=1 multi_block_pass=1 qpu_mismatches=0 data_mismatches=0 timeouts=0 invalid_topology=0 errstat_relevant_changed=0 ...
+VC4_TEST_RESULT name=qpu_barrier_syncthreads status=PASS runs=5 checked_warp_records=26 checked_lane_records=416 same_slice_pass=1 cross_slice_0_1_pass=1 cross_slice_0_2_pass=1 full_block_pass=1 multi_block_pass=1 qpu_mismatches=0 data_mismatches=0 guard_mismatches=0 timeouts=0 invalid_topology=0 errstat_relevant_changed=0 manual_launches=5 ...
 ```
 
 `expected.json` intentionally ignores elapsed time and requires only stable
