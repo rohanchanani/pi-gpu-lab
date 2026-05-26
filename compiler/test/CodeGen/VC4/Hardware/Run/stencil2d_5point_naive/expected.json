@@ -3,6 +3,7 @@
 "status": "PASS",
 "required": {
 "cases": 9,
+"checked_elements": 1913,
 "total_mismatches": 0,
 "sentinel_mismatches": 0,
 "launch_failures": 0,
@@ -14,7 +15,6 @@
 "runtime_launches": 9
 },
 "float_max": {
-"max_abs_diff": 0.0005
+"max_abs_diff": 0.0
 }
 }
-

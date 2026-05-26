@@ -1488,7 +1488,7 @@ static std::string formatReadAddress(char regFile, int64_t address) {
   case 32:
     return "unif";
   case 38:
-    return "elem_num";
+    return regFile == 'a' ? "elem_num" : "qpu_num";
   case 48:
     return "vpm";
   case 51:
