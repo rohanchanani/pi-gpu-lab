@@ -43,7 +43,7 @@ vc4.module @spill_frame_reservation_smoke {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // mov ra1, unif      ; qpu_id
+    // mov ra1, unif      ; logical_request
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       pm = false,
@@ -61,7 +61,7 @@ vc4.module @spill_frame_reservation_smoke {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // mov ra2, unif      ; num_qpus, carried for ABI coverage
+    // mov ra2, unif      ; total_requests, carried for ABI coverage
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       pm = false,
@@ -79,7 +79,7 @@ vc4.module @spill_frame_reservation_smoke {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // shl r0, ra1, 6     ; qpu byte offset = qpu_id * 16 lanes * 4 bytes
+    // shl r0, ra1, 6     ; byte offset = logical_request * 16 lanes * 4 bytes
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<small_imm>,
       pm = false,
@@ -115,7 +115,7 @@ vc4.module @spill_frame_reservation_smoke {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // mov r0, ra1        ; output data vector, all lanes = qpu_id
+    // mov r0, ra1        ; output data vector, all lanes = logical_request
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       pm = false,

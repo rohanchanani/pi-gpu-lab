@@ -2,9 +2,21 @@
   "name": "spill_frame_reservation_smoke",
   "status": "PASS",
   "required": {
+    "checked_elements": 192,
     "mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "recorded_launch_failures": 0,
     "active_qpus": 12,
+    "lanes": 16,
     "words": 192,
-    "checksum": 1056
+    "checksum": 1056,
+    "spill_frame_bytes": 20,
+    "spill_frame_stride_bytes": 64,
+    "spill_frame_count": 12,
+    "hidden_spill_arena_bytes": 768,
+    "runtime_allocations": 1,
+    "runtime_launches": 1,
+    "code_uploads": 1
   }
 }
