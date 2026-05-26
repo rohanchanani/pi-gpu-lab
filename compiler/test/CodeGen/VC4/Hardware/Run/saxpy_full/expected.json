@@ -3,14 +3,19 @@
   "status": "PASS",
   "required": {
     "cases": 19,
+    "checked_elements": 4795,
     "total_mismatches": 0,
     "sentinel_mismatches": 0,
     "launch_failures": 0,
+    "recorded_launch_failures": 0,
     "active_qpus": 12,
     "lanes": 16,
-    "max_n": 1000
+    "max_n": 1000,
+    "runtime_allocations": 1,
+    "runtime_launches": 19,
+    "code_uploads": 1
   },
   "float_max": {
-    "max_abs_diff": 0.0001
+    "max_abs_diff": 0.0
   }
 }

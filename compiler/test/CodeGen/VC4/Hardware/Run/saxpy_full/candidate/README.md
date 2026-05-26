@@ -1,5 +1,6 @@
-# candidate side disabled
+# candidate side
 
-Candidate-side generation is intentionally disabled for `saxpy_full` until VC4 codegen emits launchable qasm/C/H bundles from `input.mlir`.
-
-The trusted source of truth for now is the hand-authored `reference/` bundle and the shared `expected.json` semantic oracle.
+The candidate harness builds the `input.mlir` VC4 scheduled kernel into a
+launchable generated bundle, sweeps the same 19 tail cases as the reference, and
+checks every live output against an exact host oracle with guard-tail
+verification.

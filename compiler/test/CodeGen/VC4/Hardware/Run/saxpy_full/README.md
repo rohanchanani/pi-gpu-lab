@@ -41,7 +41,10 @@ store_count = min(16, n - base_element)
 
 and programs the VDW store `DEPTH` dynamically so that only `store_count` 32-bit words are written for that final chunk.
 
-The generated-style launcher pads only its private GPU scratch buffers up to a 16-element boundary.  This keeps inactive tail-lane TMU reads within allocated GPU memory.  The public semantic `n` remains unchanged, and only the first `n` output elements are copied back to the caller.
+The generated launcher pads only its private GPU scratch buffers up to a
+16-element boundary.  This keeps inactive tail-lane TMU reads within allocated
+GPU memory.  The public semantic `n` remains unchanged, and only the first `n`
+output elements are copied back to the caller.
 
 ## What this test proves
 
@@ -57,10 +60,9 @@ This test also does not measure performance.
 
 ## Expected result
 
-The reference hardware run prints one `SAXPY_FULL_CASE` line per tested `n` and a final line:
+The generated-kernel candidate hardware run prints one `SAXPY_FULL_CASE` line
+per tested `n` and a final line:
 
 ```text
-VC4_TEST_RESULT name=saxpy_full status=PASS cases=19 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 ...
+VC4_TEST_RESULT name=saxpy_full status=PASS cases=19 checked_elements=4795 total_mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 max_abs_diff=0.0 runtime_launches=19 ...
 ```
-
-Candidate/codegen side remains disabled until generated bundles exist.

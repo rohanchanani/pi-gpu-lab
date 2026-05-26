@@ -119,10 +119,12 @@
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/expected.json",
       "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full reference",
+      "candidate_run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh saxpy_full run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "Tail-safe SAXPY hardware-run reference. Computes y[i] = alpha * x[i] + y[i] for varied n values including zero, short tails, vector boundaries, QPU-round boundaries, and n=1000. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launches. Candidate/codegen side remains disabled."
+      "candidate_enabled": true,
+      "candidate_passed": true,
+      "notes": "Tail-safe SAXPY hardware-run candidate. Builds input.mlir into a generated VC4 bundle and computes y[i] = alpha * x[i] + y[i] for varied n values including zero, short tails, vector boundaries, QPU-round boundaries, and n=1000. The harness checks 4,795 live outputs exactly, verifies a guard tail, and requires runtime launch/code-upload counters."
     },
     {
       "id": "hardware-run-matmul-naive",

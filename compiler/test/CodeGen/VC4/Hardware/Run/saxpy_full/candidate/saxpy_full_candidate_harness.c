@@ -70,6 +70,7 @@ void notmain(void) {
 
     int start = timer_get_usec();
     int totalMismatches = 0, sentinelMismatches = 0, launchFailures = 0, checksumAccum = 0;
+    uint32_t checkedElements = 0;
     float maxAbsDiffOverall = 0.0f;
     const uint32_t caseCount = sizeof(test_sizes) / sizeof(test_sizes[0]);
 
@@ -102,10 +103,19 @@ void notmain(void) {
         totalMismatches += mismatches;
         sentinelMismatches += caseSentinelMismatches;
         checksumAccum += checksum;
+        checkedElements += n;
         printk("SAXPY_FULL_CASE n=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n", (int)n, (int)activeQpus, (int)laneWidth, mismatches, caseSentinelMismatches, checksum, maxAbsDiff, (int)(caseIndex + 1), 1);
     }
     int elapsed = timer_get_usec() - start;
+    uint32_t runtimeAllocations = saxpy_full_runtime_allocations();
+    uint32_t runtimeLaunches = saxpy_full_runtime_launches();
+    uint32_t runtimeCapacity = saxpy_full_runtime_capacity();
+    uint32_t codeUploads = saxpy_full_runtime_code_uploads();
+    uint32_t recordedLaunchFailures = saxpy_full_runtime_launch_failures();
     const char *status = (totalMismatches == 0 && sentinelMismatches == 0 && launchFailures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=saxpy_full status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n", status, (int)caseCount, totalMismatches, sentinelMismatches, launchFailures, (int)activeQpus, (int)laneWidth, SAXPY_FULL_MAX_N, checksumAccum, maxAbsDiffOverall, 1, (int)caseCount, elapsed);
+    if (runtimeAllocations != 1u || runtimeLaunches != caseCount || codeUploads != 1u ||
+        recordedLaunchFailures != 0u)
+        status = "FAIL";
+    printk("VC4_TEST_RESULT name=saxpy_full status=%s cases=%d checked_elements=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n", status, (int)caseCount, (int)checkedElements, totalMismatches, sentinelMismatches, launchFailures, (int)recordedLaunchFailures, (int)activeQpus, (int)laneWidth, SAXPY_FULL_MAX_N, checksumAccum, maxAbsDiffOverall, (int)runtimeAllocations, (int)runtimeLaunches, (int)runtimeCapacity, (int)codeUploads, elapsed);
     vc4_program_destroy(program);
 }
