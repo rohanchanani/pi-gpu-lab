@@ -2,6 +2,7 @@
   "name": "multi_kernel_chain",
   "status": "PASS",
   "required": {
+    "checked_elements": 384,
     "mismatches": 0,
     "sentinel_mismatches": 0,
     "launch_failures": 0,
@@ -9,6 +10,7 @@
     "lanes": 16,
     "words": 192,
     "checksum": 1056,
+    "runtime_allocations": 1,
     "program_allocations": 1,
     "code_uploads": 2,
     "runtime_launches": 2
