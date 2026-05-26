@@ -1,8 +1,6 @@
-# Candidate side disabled
+# saxpy_basic candidate
 
-The candidate side for `saxpy_basic` is intentionally disabled until
-VC4 codegen can emit a runnable qasm/C/H bundle from `../input.mlir`.
-
-When candidate-side execution is enabled, it should generate a bundle from the
-MLIR input, build it with the same semantic harness contract, run it on real
-hardware, and compare its `VC4_TEST_RESULT` against `../expected.json`.
+This candidate side is enabled. The harness builds the generated `input.mlir`
+bundle, launches the VDR/VPM/f32 ALU/VDW SAXPY kernel on hardware, and compares
+all 192 output values against a strict scalar host `alpha * x + y` oracle while
+also checking an output guard region.

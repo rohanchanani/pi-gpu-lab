@@ -2,10 +2,16 @@
   "name": "saxpy_basic",
   "status": "PASS",
   "required": {
+    "checked_elements": 192,
     "mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
     "active_qpus": 12,
+    "lanes": 16,
     "n": 192,
-    "checksum": 2834240
+    "checksum": 2834240,
+    "runtime_allocations": 1,
+    "runtime_launches": 1
   },
   "float_max": {
     "max_abs_diff": 0.0001

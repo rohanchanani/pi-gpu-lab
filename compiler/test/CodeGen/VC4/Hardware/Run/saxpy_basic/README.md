@@ -1,8 +1,9 @@
 # VC4 hardware golden: saxpy_basic
 
-This test is the basic SAXPY hardware golden, built on the already-proven VDR/VPM/VDW read/write shape.
+This test is the basic generated VC4 SAXPY hardware golden, built on the
+already-proven VDR/VPM/VDW read/write shape.
 
-The reference kernel reads one 16-lane `f32` vector of `x` and one 16-lane
+The generated candidate kernel reads one 16-lane `f32` vector of `x` and one 16-lane
 `f32` vector of `y` per active QPU using the VDR DMA-to-VPM path, computes:
 
 ```text
@@ -14,7 +15,7 @@ read/write tests.
 
 ## What this test verifies
 
-- The reference bundle can run a QPU user program on real hardware.
+- The generated candidate bundle can run a QPU user program on real hardware.
 - The public launcher API remains semantic: runtime handle, `x`, `y`, `alpha`,
   and `n`; no public `qpu_id`, `num_qpus`, raw uniforms, or scheduler internals.
 - The launcher packs the physical uniform stream in this order per QPU:
@@ -24,8 +25,8 @@ read/write tests.
   [1] y base address
   [2] alpha as one f32/u32 word
   [3] n element count
-  [4] qpu_id
-  [5] num_qpus
+  [4] logical_request
+  [5] total_requests
   ```
 
 - The QPU body combines the previously proven VDR/VPM/VDW read/write path with the canonical
@@ -36,8 +37,6 @@ read/write tests.
 
 - It does not prove looped SAXPY over arbitrary-length buffers.
 - It does not prove tail-safe non-multiple-of-16 handling.
-- It does not prove candidate codegen yet; the candidate side is disabled until
-  bundle emission exists.
 - It does not prove TMU input reads; that is covered by `tmu_read_nop_write`.
 
 ## Work distribution
@@ -45,7 +44,7 @@ read/write tests.
 The test runs one vector per active QPU:
 
 ```text
-base_element = qpu_id * 16
+base_element = logical_request * 16
 n = active_qpus * 16
 ```
 
@@ -55,14 +54,15 @@ VC4 codegen.
 
 ## Expected result
 
-The reference harness initializes deterministic dyadic `f32` inputs, runs the
-GPU reference bundle, computes the same result on the ARM CPU, and verifies all
-lanes with `max_abs_diff <= 0.0001`.
+The candidate harness initializes deterministic dyadic `f32` inputs, runs the
+generated GPU bundle, computes the same result on the ARM CPU, verifies all
+lanes with `max_abs_diff <= 0.0001`, and checks an output guard region.
 
 The final successful log line must look like:
 
 ```text
-VC4_TEST_RESULT name=saxpy_basic status=PASS mismatches=0 active_qpus=12 n=192 checksum=2834240 max_abs_diff=0.0 ...
+VC4_TEST_RESULT name=saxpy_basic status=PASS checked_elements=192 mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 n=192 checksum=2834240 max_abs_diff=0.0 runtime_allocations=1 runtime_launches=1 ...
 ```
 
-Only stable semantic fields are checked by `expected.json`.
+Only stable semantic fields are checked by `expected.json`; timing is
+informational.
