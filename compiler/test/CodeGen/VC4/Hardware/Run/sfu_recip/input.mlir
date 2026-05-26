@@ -10,8 +10,8 @@
 //   [0] x base address
 //   [1] out base address
 //   [2] n element count, carried for ABI coverage
-//   [3] qpu_id
-//   [4] num_qpus
+//   [3] logical_request
+//   [4] total_requests
 //
 // This test advances exactly one new datapath beyond the existing TMU/VPM/VDW
 // copy and SAXPY tests: it writes an input vector to the SFU reciprocal register

@@ -1,5 +1,6 @@
-# candidate side placeholder
+# sfu_recip candidate
 
-Candidate-side generation is intentionally disabled until VC4 codegen can emit a runnable qasm + launcher bundle from `input.mlir`.
-
-Do not add generated files or a candidate `run.sh` here until codegen exists and the candidate hardware path is ready to be checked against the same `expected.json` oracle.
+This candidate side is enabled. The harness builds the generated `input.mlir`
+bundle, launches the VC4 SFU reciprocal kernel on hardware, and checks every
+lane against the host `1.0f / x` oracle with a tight bound for the SFU
+approximation.
