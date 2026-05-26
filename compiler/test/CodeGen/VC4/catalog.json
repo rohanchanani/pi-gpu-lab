@@ -136,11 +136,12 @@
       "input_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/input.mlir",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/matmul_naive reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh matmul_naive run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "Naive CUDA-shaped matrix multiplication hardware-run reference for C[M,N] = A[M,K] * B[K,N]. Exercises TMU direct loads, QPU floating-point accumulation, tail-safe column stores through VPM/VDW, and logical work distribution across active QPUs. The reference launcher uses one GPU allocation/code copy during runtime setup and updates already allocated uniforms/payloads for repeated launch cases. Candidate/codegen side remains disabled."
+      "candidate_enabled": true,
+      "candidate_passed": true,
+      "notes": "Generated-candidate bounded dynamic naive matrix multiplication for C[M,N] = A[M,K] * B[K,N], with runtime 1 <= M <= 12, 1 <= N <= 16, and 0 <= K <= 4. Exercises TMU direct loads, runtime-K predicated f32 accumulation, runtime-N VDW row stores, and runtime-M scratch routing for inactive launched rows. The harness sweeps eight shape/input cases, checks 504 live outputs by exact f32 bits against an unweakened CPU oracle, verifies the compact output tail and final guard region, and requires runtime launch/code-upload counters."
     }
   ]
 }
