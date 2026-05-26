@@ -63,11 +63,12 @@
       "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh saxpy_tmu run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "TMU-backed basic SAXPY golden: direct TMU0 reads for x/y, fmul/fadd arithmetic, VPM/VDW result store. Current scheduled input intentionally serializes each TMU request/read pair; overlapping TMU requests should be covered by a later scheduled-overlap test."
+      "candidate_enabled": true,
+      "candidate_passed": true,
+      "notes": "Generated-candidate TMU-backed SAXPY test: direct TMU0 reads for x/y, fmul/fadd arithmetic, and VPM/VDW result store. The harness sweeps four alpha cases, checks 768 live outputs by exact f32 bits against a CPU oracle, verifies a guard tail, and requires runtime launch/code-upload counters. The scheduled input intentionally serializes each TMU request/read pair; overlapping TMU requests are covered by saxpy_tmu_overlap."
     },
     {
       "id": "hardware-run-saxpy-tmu-overlap",

@@ -2,8 +2,9 @@
 
 This test is the TMU-backed counterpart to `saxpy_basic`.
 
-The reference kernel reads one 16-lane `f32` vector of `x` and one 16-lane
-`f32` vector of `y` per active QPU using TMU0 direct memory lookups, computes:
+The generated candidate kernel reads one 16-lane `f32` vector of `x` and one
+16-lane `f32` vector of `y` per active QPU using TMU0 direct memory lookups,
+computes:
 
 ```text
 y[i] = alpha * x[i] + y[i]
@@ -14,7 +15,8 @@ and stores the result back to `y` using the same VPM/VDW output mechanism as
 
 ## What this test verifies
 
-- The reference bundle can run a QPU user program on real hardware.
+- The generated `input.mlir` bundle can run a QPU user program on real
+  hardware.
 - The public launcher API remains semantic: runtime handle, `x`, `y`, `alpha`,
   and `n`; no public `qpu_id`, `num_qpus`, raw uniforms, bus addresses, VPM
   rows, or scheduler internals.
@@ -41,8 +43,8 @@ and stores the result back to `y` using the same VPM/VDW output mechanism as
 - It does not prove tail-safe non-multiple-of-16 handling.
 - It does not prove multiple outstanding TMU requests or TMU FIFO depth.
 - It does not prove TMU1 use, TMU swap/no-swap policy, or TMU load balancing.
-- It does not prove candidate codegen yet; the candidate side is disabled until
-  bundle emission exists.
+- It does not prove overlapped/multiple-outstanding TMU requests; that is
+  covered by `saxpy_tmu_overlap`.
 
 ## Work distribution
 
@@ -59,14 +61,15 @@ VC4 codegen.
 
 ## Expected result
 
-The reference harness initializes deterministic dyadic `f32` inputs, runs the
-GPU reference bundle, computes the same result on the ARM CPU, and verifies all
-lanes with `max_abs_diff <= 0.0001`.
+The candidate harness initializes deterministic dyadic `f32` inputs for four
+alpha cases, runs the generated GPU bundle, computes the same result on the ARM
+CPU, and verifies every live lane with exact `f32` bit comparisons.  It also
+checks a guard tail after the `y` buffer and generated-runtime counters.
 
 The final successful log line must look like:
 
 ```text
-VC4_TEST_RESULT name=saxpy_tmu status=PASS mismatches=0 active_qpus=12 n=192 checksum=2834240 max_abs_diff=0.0 ...
+VC4_TEST_RESULT name=saxpy_tmu status=PASS cases=4 checked_elements=768 total_mismatches=0 guard_mismatches=0 active_qpus=12 n=192 checksum_accum=7648000 max_abs_diff=0.0 ...
 ```
 
 Only stable semantic fields are checked by `expected.json`.

@@ -1,8 +1,9 @@
-# Candidate side disabled
+# Candidate side
 
-The candidate side for `saxpy_tmu` is intentionally disabled until VC4 codegen
-can emit a runnable qasm/C/H bundle from `../input.mlir`.
+The candidate side generates a runnable qasm/C/H bundle from `../input.mlir`
+and runs it on real hardware.
 
-When candidate-side execution is enabled, it should generate a bundle from the
-MLIR input, build it with the same semantic harness contract, run it on real
-hardware, and compare its `VC4_TEST_RESULT` against `../expected.json`.
+The harness sweeps four deterministic `alpha` cases, checks all 768 live
+outputs with exact `f32` bit comparisons against the ARM CPU oracle, verifies a
+guard tail after the `y` buffer, and requires generated-runtime launch and code
+upload counters to match the sweep.
