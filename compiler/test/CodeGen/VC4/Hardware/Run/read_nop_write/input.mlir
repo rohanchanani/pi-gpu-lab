@@ -10,8 +10,8 @@
 //   [0] input base address
 //   [1] result/output base address
 //   [2] n word count
-//   [3] qpu_id
-//   [4] num_qpus
+//   [3] logical_request
+//   [4] total_requests
 //
 // The scheduled body mirrors the reference qasm at the level needed by the v1
 // qasm emitter: only vc4.qpu.* sink ops are accepted. The VPM/VDR/VDW setup
