@@ -12,7 +12,7 @@
 #define FLASH_ATTENTION_TINY_MAX_OUT_WORDS (FLASH_ATTENTION_TINY_MAX_Q_LEN * FLASH_ATTENTION_TINY_MAX_D)
 #define FLASH_ATTENTION_TINY_GUARD_WORDS 64u
 #define FLASH_ATTENTION_TINY_SENTINEL (-23456.25f)
-#define FLASH_ATTENTION_TINY_TOLERANCE 0.08f
+#define FLASH_ATTENTION_TINY_TOLERANCE 0.05f
 #define FLASH_ATTENTION_TINY_ACTIVE_QPUS 12u
 #define FLASH_ATTENTION_TINY_LANES 16u
 
@@ -36,17 +36,15 @@ static float make_q_value(uint32_t q, uint32_t t, uint32_t case_id) { int raw = 
 static float make_k_value(uint32_t k, uint32_t t, uint32_t case_id) { int raw = (int)((k * 13u + t * 3u + case_id * 9u + 1u) % 19u) - 9; return (float)raw * 0.125f; }
 static float make_v_value(uint32_t k, uint32_t t, uint32_t case_id) { int raw = (int)((k * 5u + t * 11u + case_id * 7u + 4u) % 23u) - 11; return (float)raw * 0.0625f; }
 
-static float exp_approx(float x) {
-    if (x < -16.0f) return 0.0f;
-    if (x > 8.0f) x = 8.0f;
-    float y = x * 0.125f, term = 1.0f, sum = 1.0f;
-    for (uint32_t i = 1u; i <= 8u; i++) {
-        term *= y / (float)i;
+static float host_expf(float value) {
+    double x = (double)value;
+    double term = 1.0;
+    double sum = 1.0;
+    for (uint32_t i = 1u; i <= 36u; i++) {
+        term *= x / (double)i;
         sum += term;
     }
-    float e = sum;
-    for (uint32_t i = 0; i < 3u; i++) e *= e;
-    return e < 0.0f ? 0.0f : e;
+    return (float)sum;
 }
 
 static void fill_case(uint32_t case_id, const struct flash_attention_tiny_case *tc) {
@@ -77,7 +75,7 @@ static void fill_case(uint32_t case_id, const struct flash_attention_tiny_case *
             if (scores[ki] > max_score) max_score = scores[ki];
         }
         for (uint32_t ki = 0; ki < tc->k_len; ki++) {
-            scores[ki] = exp_approx(scores[ki] - max_score);
+            scores[ki] = host_expf(scores[ki] - max_score);
             sum_exp += scores[ki];
         }
         for (uint32_t t = 0; t < tc->d; t++) {

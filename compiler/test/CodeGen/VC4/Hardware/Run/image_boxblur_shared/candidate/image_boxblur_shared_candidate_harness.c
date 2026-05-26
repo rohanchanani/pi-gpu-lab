@@ -28,17 +28,30 @@ static uint32_t input_values[IMAGE_BOXBLUR_SHARED_MAX_PIXELS];
 static uint32_t output_values[IMAGE_BOXBLUR_SHARED_MAX_PIXELS + IMAGE_BOXBLUR_SHARED_GUARD_WORDS];
 static uint32_t expected_values[IMAGE_BOXBLUR_SHARED_MAX_PIXELS];
 
+static uint32_t add_high_bits(uint32_t low, uint32_t pattern, uint32_t x, uint32_t y) {
+    uint32_t high = ((pattern + 1u) * 0x00112300u) ^ (x * 0x00010100u) ^ (y * 0x00001000u);
+    return (low & 255u) | (high & 0xffffff00u);
+}
+
 static uint32_t pattern_value(uint32_t pattern, uint32_t x, uint32_t y, uint32_t width, uint32_t height) {
+    uint32_t low;
     switch (pattern) {
-    case 0u: return (x * 9u + y * 13u + 5u) & 255u;
-    case 1u: return (((x / 3u) + (y / 2u)) & 1u) ? 220u : ((x * 7u + y * 11u + 17u) & 127u);
+    case 0u:
+        low = (x * 9u + y * 13u + 5u) & 255u;
+        break;
+    case 1u:
+        low = (((x / 3u) + (y / 2u)) & 1u) ? 220u : ((x * 7u + y * 11u + 17u) & 127u);
+        break;
     default:
         if ((x == width - 2u && y == height - 2u) || (x + 3u == width && y + 4u == height))
-            return 255u;
-        if ((x + y) % 7u == 0u)
-            return 180u;
-        return (x * 19u + y * 23u + x * y + 31u) & 255u;
+            low = 255u;
+        else if ((x + y) % 7u == 0u)
+            low = 180u;
+        else
+            low = (x * 19u + y * 23u + x * y + 31u) & 255u;
+        break;
     }
+    return add_high_bits(low, pattern, x, y);
 }
 
 static uint32_t clamp_coord_u32(int value, uint32_t limit) {

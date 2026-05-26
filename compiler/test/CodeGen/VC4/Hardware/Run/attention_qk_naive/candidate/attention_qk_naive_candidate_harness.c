@@ -83,7 +83,7 @@ void notmain(void) {
         float max_abs_diff = 0.0f;
         int checksum = 0;
         fill_case(case_id, tc);
-        vc4_dim3 grid = vc4_m2_dim3((logical_scores + ATTENTION_QK_NAIVE_LANES - 1u) / ATTENTION_QK_NAIVE_LANES, 1u, 1u);
+        vc4_dim3 grid = vc4_m2_dim3((tc->q_len == 0u || tc->k_len == 0u) ? 0u : tc->q_len, 1u, 1u);
 
         if (vc4_m2_copy_htod(program, q_dev, q_values, q_bytes) < 0 ||
             vc4_m2_copy_htod(program, k_dev, k_values, k_bytes) < 0 ||

@@ -611,6 +611,7 @@ private:
   static constexpr int64_t kSpillOffsetReg = 29;
   static constexpr int64_t kSpillAddrReg = 30;
   static constexpr int64_t kSpillLaneReg = 31;
+  static constexpr int64_t kFixedScratchReg = 31;
   static constexpr int64_t kSpillRowReg = 27;
   static constexpr int64_t kEdgeCopyScratchReg = 26;
 
@@ -621,7 +622,7 @@ private:
     int64_t nextRegister = 0;
     SmallVector<int64_t, 8> freeRegisters;
     auto isReservedOrForbidden = [&](int64_t reg) {
-      return reg == kForbiddenThreadEndHazardReg;
+      return reg == kForbiddenThreadEndHazardReg || reg == kFixedScratchReg;
     };
     auto allocateRegister = [&]() -> std::optional<int64_t> {
       if (!freeRegisters.empty()) {
