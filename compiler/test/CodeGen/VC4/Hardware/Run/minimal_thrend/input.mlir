@@ -2,15 +2,14 @@
 
 // Final-stage VC4 input for the minimal thread-end hardware contract test.
 //
-// This is the program that future VC4 codegen must lower to a generated
-// qasm/launcher bundle.  The checked-in reference bundle in reference/ is the
-// hardware ground truth: it launches a tiny QPU user program that terminates
-// cleanly on every active QPU.
+// This is the program VC4 codegen lowers to a generated qasm/launcher bundle.
+// It launches a tiny QPU user program that terminates cleanly on every active
+// logical request.
 //
-// The launch ABI intentionally carries qpu_id and num_qpus in the physical
-// uniform suffix even though this minimal kernel does not consume them.  This
-// keeps the first test aligned with the public/physical ABI split used by the
-// richer kernels.
+// The launch ABI intentionally carries logical_request and total_requests in
+// the physical uniform suffix even though this minimal kernel does not consume
+// them. This keeps the first test aligned with the public/physical ABI split
+// used by the richer kernels.
 
 vc4.module @minimal_thrend {
   vc4.func @minimal_thrend_kernel() attributes {

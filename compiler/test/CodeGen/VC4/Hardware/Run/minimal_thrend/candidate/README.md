@@ -1,15 +1,5 @@
-# minimal_thrend candidate output
+# minimal_thrend candidate
 
-Milestone 1 automation does not commit generated candidate bundles here.
-Candidate source artifacts and hardware work directories are generated under:
-
-```text
-.vc4_auto/codegen_m1/candidates/minimal_thrend/
-.vc4_auto/codegen_m1/hardware/minimal_thrend/candidate_work/
-```
-
-Use the fixture dispatcher from this directory's parent:
-
-```bash
-bash run.sh candidate
-```
+This candidate side is enabled. The harness builds the generated `input.mlir`
+bundle, launches the minimal `thrend` kernel on hardware, and requires all
+active QPU requests to complete with zero launch failures.

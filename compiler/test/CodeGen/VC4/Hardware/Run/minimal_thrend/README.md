@@ -2,10 +2,9 @@
 
 This is the first runnable VC4 hardware contract test.
 
-It pairs a final-stage `vc4` MLIR input with a trusted reference bundle.  Future
-codegen should generate a candidate qasm/launcher bundle from `input.mlir`; the
-candidate will pass only if it produces the same semantic hardware result as the
-reference bundle.
+It pairs a final-stage `vc4` MLIR input with a generated candidate
+qasm/launcher bundle. The candidate passes only if the real hardware launch
+completes for every active QPU request.
 
 ## What this test verifies
 
@@ -24,8 +23,9 @@ semaphores, mutexes, thread switching, or structured lowering.
 ## Contract files
 
 ```text
-input.mlir                 final-stage VC4 program for future codegen
+input.mlir                 final-stage VC4 program used for codegen
 expected.json              semantic result oracle
+candidate/                 generated-bundle harness
 reference/minimal_thrend.qasm
 reference/minimal_thrend_launch.c
 reference/minimal_thrend_launch.h
@@ -53,8 +53,8 @@ int minimal_thrend_launch(struct vc4_runtime *rt);
 The physical per-QPU uniform stream is still two words:
 
 ```text
-[0] qpu_id
-[1] num_qpus
+[0] logical_request
+[1] total_requests
 ```
 
 The minimal kernel does not read these uniforms.  They are present to keep the
@@ -66,7 +66,8 @@ contract.
 The harness prints a final line like:
 
 ```text
-VC4_TEST_RESULT name=minimal_thrend status=PASS completed_qpus=12 active_qpus=12 elapsed_usec=<time>
+VC4_TEST_RESULT name=minimal_thrend status=PASS completed_qpus=12 launch_failures=0 active_qpus=12 runtime_allocations=1 runtime_launches=1 elapsed_usec=<time>
 ```
 
-`expected.json` requires only stable semantic fields.  Timing is informational.
+`expected.json` requires the stable semantic fields plus zero launch failures
+and the generated runtime counters. Timing is informational.
