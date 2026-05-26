@@ -104,7 +104,7 @@ void notmain(void) {
 
     if (vc4_program_create(&program, 0) < 0 || !program)
         panic("vc4_program_create failed");
-    if (vc4Malloc(program, &input_dev, bytes) < 0 || vc4Malloc(program, &out_dev, bytes) < 0)
+    if (vc4_m2_malloc(program, &input_dev, bytes) < 0 || vc4_m2_malloc(program, &out_dev, bytes) < 0)
         panic("warp_prefix_sum device allocation failed");
 
     uint32_t active_qpus = WARP_PREFIX_SUM_MAX_QPUS;
@@ -112,13 +112,18 @@ void notmain(void) {
     vc4_dim3 grid = vc4_m2_dim3(1u, 1u, 1u);
     vc4_dim3 block = vc4_m2_dim3(active_qpus * lane_width, 1u, 1u);
 
-    printk("WARP_PREFIX_SUM_RUNTIME_SETUP max_n=%d allocations=%d\n",
-           WARP_PREFIX_SUM_MAX_N, 1);
+    printk("WARP_PREFIX_SUM_RUNTIME_SETUP max_n=%d allocations=%d capacity=%d code_uploads=%d\n",
+           WARP_PREFIX_SUM_MAX_N,
+           (int)warp_prefix_sum_runtime_allocations(),
+           (int)warp_prefix_sum_runtime_capacity(),
+           (int)warp_prefix_sum_runtime_code_uploads());
 
     int total_mismatches = 0;
     int sentinel_mismatches = 0;
     int launch_failures = 0;
+    uint32_t checked_elements = 0u;
     uint32_t checksum_accum = 0u;
+    uint32_t expected_checksum_accum = 0u;
     int start = timer_get_usec();
 
     for (uint32_t case_index = 0; case_index < WPS_CASES; case_index++) {
@@ -128,10 +133,10 @@ void notmain(void) {
         fill_buffers(n);
         run_cpu_reference(n);
 
-        if (vc4MemcpyHtoD(program, input_dev, input_values, bytes) < 0 ||
-            vc4MemcpyHtoD(program, out_dev, out_values, bytes) < 0 ||
+        if (vc4_m2_copy_htod(program, input_dev, input_values, bytes) < 0 ||
+            vc4_m2_copy_htod(program, out_dev, out_values, bytes) < 0 ||
             warp_prefix_sum_launch(program, grid, block, input_dev, out_dev, n) < 0 ||
-            vc4MemcpyDtoH(program, out_values, out_dev, bytes) < 0) {
+            vc4_m2_copy_dtoh(program, out_values, out_dev, bytes) < 0) {
             printk("ERROR: warp_prefix_sum launch/copy failed case=%d n=%d\n",
                    (int)case_index, (int)n);
             launch_failures++;
@@ -151,23 +156,39 @@ void notmain(void) {
 
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinel_mismatches;
+        checked_elements += n;
         checksum_accum += checksum;
+        expected_checksum_accum += expected_checksum;
 
-        printk("WARP_PREFIX_SUM_CASE case=%d n=%d vectors=%d mismatches=%d sentinel_mismatches=%d checksum=%d launches=%d allocations=%d\n",
+        printk("WARP_PREFIX_SUM_CASE case=%d n=%d vectors=%d mismatches=%d sentinel_mismatches=%d checksum=%d expected_checksum=%d launches=%d allocations=%d\n",
                (int)case_index, (int)n, (int)vectors, mismatches,
-               case_sentinel_mismatches, (int)checksum, (int)(case_index + 1u), 1);
+               case_sentinel_mismatches, (int)checksum, (int)expected_checksum,
+               (int)warp_prefix_sum_runtime_launches(), (int)warp_prefix_sum_runtime_allocations());
     }
 
     int elapsed = timer_get_usec() - start;
+    uint32_t runtime_allocations = warp_prefix_sum_runtime_allocations();
+    uint32_t runtime_launches = warp_prefix_sum_runtime_launches();
+    uint32_t runtime_capacity = warp_prefix_sum_runtime_capacity();
+    uint32_t code_uploads = warp_prefix_sum_runtime_code_uploads();
+    uint32_t recorded_launch_failures = warp_prefix_sum_runtime_launch_failures();
     const char *status =
         (total_mismatches == 0 &&
          sentinel_mismatches == 0 &&
-         launch_failures == 0) ? "PASS" : "FAIL";
+         launch_failures == 0 &&
+         recorded_launch_failures == 0u &&
+         checked_elements == 1237u &&
+         checksum_accum == expected_checksum_accum &&
+         runtime_allocations == 1u &&
+         runtime_launches == WPS_CASES &&
+         runtime_capacity == 65536u &&
+         code_uploads == 1u) ? "PASS" : "FAIL";
 
-    printk("VC4_TEST_RESULT name=warp_prefix_sum status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
-           status, WPS_CASES, total_mismatches, sentinel_mismatches,
-           launch_failures, (int)active_qpus, (int)lane_width,
-           WARP_PREFIX_SUM_MAX_N, (int)checksum_accum, 1, WPS_CASES, elapsed);
+    printk("VC4_TEST_RESULT name=warp_prefix_sum status=%s cases=%d checked_elements=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_n=%d checksum_accum=%d expected_checksum_accum=%d runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
+           status, WPS_CASES, (int)checked_elements, total_mismatches, sentinel_mismatches,
+           launch_failures, (int)recorded_launch_failures, (int)active_qpus, (int)lane_width,
+           WARP_PREFIX_SUM_MAX_N, (int)checksum_accum, (int)expected_checksum_accum,
+           (int)runtime_allocations, (int)runtime_launches, (int)runtime_capacity, (int)code_uploads, elapsed);
 
     vc4Free(program, input_dev);
     vc4Free(program, out_dev);
