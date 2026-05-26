@@ -2,7 +2,6 @@
 #include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
-#define TMU_STRIDED_LOAD_EPSILON 0.0001f
 #define CHECKSUM_SCALE 4096.0f
 #define TMU_STRIDED_LOAD_CASES 11u
 #define TMU_STRIDED_LOAD_MAX_N 257u
@@ -31,6 +30,7 @@ static float out_values[TMU_STRIDED_LOAD_BUFFER_N];
 static float expected_values[TMU_STRIDED_LOAD_BUFFER_N];
 
 static float absf_local(float value) { return value < 0.0f ? -value : value; }
+static int invalid_f32(float value) { return !(value == value) || value > 3.4e38f || value < -3.4e38f; }
 
 static float make_input_value(uint32_t j) {
     return ((float)((j * 17u + 5u) % 113u) * 0.125f) - 6.0f;
@@ -61,7 +61,7 @@ static void verify_results(uint32_t case_id, uint32_t n, int *mismatches, float 
         float abs_diff = absf_local(diff);
         if (abs_diff > *max_abs_diff)
             *max_abs_diff = abs_diff;
-        if (abs_diff > TMU_STRIDED_LOAD_EPSILON) {
+        if (invalid_f32(out_values[i]) || out_values[i] != expected_values[i]) {
             if (*mismatches < 8)
                 printk("ERROR: case=%d i=%d gpu=%f cpu=%f diff=%f\n",
                        (int)case_id, (int)i, out_values[i], expected_values[i], diff);
@@ -106,13 +106,19 @@ void notmain(void) {
         vc4_m2_copy_htod(program, input_dev, input_values, input_bytes) < 0)
         panic("tmu_strided_load device setup failed");
 
-    printk("TMU_STRIDED_LOAD_RUNTIME_SETUP max_n=%d max_input_words=%d allocations=%d\n",
-           TMU_STRIDED_LOAD_MAX_N, TMU_STRIDED_LOAD_MAX_INPUT_WORDS, (int)tmu_strided_load_runtime_allocations());
+    printk("TMU_STRIDED_LOAD_RUNTIME_SETUP max_n=%d max_input_words=%d allocations=%d capacity=%d code_uploads=%d\n",
+           TMU_STRIDED_LOAD_MAX_N,
+           TMU_STRIDED_LOAD_MAX_INPUT_WORDS,
+           (int)tmu_strided_load_runtime_allocations(),
+           (int)tmu_strided_load_runtime_capacity(),
+           (int)tmu_strided_load_runtime_code_uploads());
 
     int total_mismatches = 0;
     int sentinel_mismatches = 0;
     int launch_failures = 0;
+    uint32_t checked_elements = 0;
     int checksum_accum = 0;
+    int expected_checksum_accum = 0;
     float max_abs_diff_overall = 0.0f;
     int start = timer_get_usec();
     vc4_dim3 block = vc4_m2_dim3(TMU_STRIDED_LOAD_LANES, 1, 1);
@@ -148,27 +154,38 @@ void notmain(void) {
             max_abs_diff_overall = max_abs_diff;
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinel_mismatches;
+        checked_elements += n;
         checksum_accum += checksum;
+        expected_checksum_accum += expected_checksum;
 
-        printk("TMU_STRIDED_LOAD_CASE case=%d n=%d offset=%d stride=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
+        printk("TMU_STRIDED_LOAD_CASE case=%d n=%d offset=%d stride=%d mismatches=%d sentinel_mismatches=%d checksum=%d expected_checksum=%d max_abs_diff=%f launches=%d allocations=%d\n",
                (int)case_index, (int)n, (int)offset, (int)stride, mismatches,
-               case_sentinel_mismatches, checksum, max_abs_diff,
+               case_sentinel_mismatches, checksum, expected_checksum, max_abs_diff,
                (int)tmu_strided_load_runtime_launches(), (int)tmu_strided_load_runtime_allocations());
     }
 
     int elapsed = timer_get_usec() - start;
     uint32_t runtime_allocations = tmu_strided_load_runtime_allocations();
     uint32_t runtime_launches = tmu_strided_load_runtime_launches();
+    uint32_t runtime_capacity = tmu_strided_load_runtime_capacity();
+    uint32_t code_uploads = tmu_strided_load_runtime_code_uploads();
+    uint32_t recorded_launch_failures = tmu_strided_load_runtime_launch_failures();
     const char *status =
         (total_mismatches == 0 && sentinel_mismatches == 0 && launch_failures == 0 &&
+         recorded_launch_failures == 0u &&
+         checked_elements == 658u &&
+         checksum_accum == expected_checksum_accum &&
          runtime_allocations == 1u && runtime_launches == TMU_STRIDED_LOAD_CASES &&
-         max_abs_diff_overall <= TMU_STRIDED_LOAD_EPSILON) ? "PASS" : "FAIL";
+         runtime_capacity == 65536u &&
+         code_uploads == 1u &&
+         max_abs_diff_overall == 0.0f) ? "PASS" : "FAIL";
 
-    printk("VC4_TEST_RESULT name=tmu_strided_load status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_stride=%d max_abs_diff=%f checksum_accum=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
-           status, TMU_STRIDED_LOAD_CASES, total_mismatches, sentinel_mismatches,
-           launch_failures, TMU_STRIDED_LOAD_ACTIVE_QPUS, TMU_STRIDED_LOAD_LANES,
+    printk("VC4_TEST_RESULT name=tmu_strided_load status=%s cases=%d checked_elements=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_stride=%d max_abs_diff=%f checksum_accum=%d expected_checksum_accum=%d runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
+           status, TMU_STRIDED_LOAD_CASES, (int)checked_elements, total_mismatches, sentinel_mismatches,
+           launch_failures, (int)recorded_launch_failures, TMU_STRIDED_LOAD_ACTIVE_QPUS, TMU_STRIDED_LOAD_LANES,
            TMU_STRIDED_LOAD_MAX_N, TMU_STRIDED_LOAD_MAX_STRIDE, max_abs_diff_overall,
-           checksum_accum, (int)runtime_allocations, (int)runtime_launches, elapsed);
+           checksum_accum, expected_checksum_accum, (int)runtime_allocations, (int)runtime_launches,
+           (int)runtime_capacity, (int)code_uploads, elapsed);
 
     vc4Free(program, input_dev);
     vc4Free(program, out_dev);
