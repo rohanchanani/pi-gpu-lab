@@ -22,12 +22,14 @@ void notmain(void) {
         launch_failures++;
     }
 
+    uint32_t runtime_launches = qpu_barrier_syncthreads_vc4tile_runtime_launches();
     int elapsed = timer_get_usec() - start;
-    const char *status = (launch_failures == 0) ? "PASS" : "FAIL";
+    const char *status = (launch_failures == 0 && runtime_launches == 1u) ? "PASS" : "FAIL";
     printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads_vc4tile status=%s runs=%d launch_failures=%d active_qpus=%d lanes=%d runtime_launches=%d elapsed_usec=%d\n",
            status, 1, launch_failures,
            (int)QPU_BARRIER_SYNCTHREADS_VC4TILE_ACTIVE_QPUS,
-           (int)QPU_BARRIER_SYNCTHREADS_VC4TILE_LANE_WIDTH, 1, elapsed);
+           (int)QPU_BARRIER_SYNCTHREADS_VC4TILE_LANE_WIDTH,
+           (int)runtime_launches, elapsed);
 
     vc4_program_destroy(program);
 }
