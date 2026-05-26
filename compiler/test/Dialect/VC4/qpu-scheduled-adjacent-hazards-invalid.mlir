@@ -39,7 +39,7 @@ vc4.module @regfile_b_next_read_hazard {
       value = 1 : i32,
       pm = false,
       cond_add = #vc4.cond<always>,
-      cond_mul = #vc4.cond<never>,
+      cond_mul = #vc4.cond<always>,
       waddr_add = 32 : i32,
       waddr_mul = 6 : i32
     }
@@ -56,6 +56,74 @@ vc4.module @regfile_b_next_read_hazard {
       op_mul = #vc4.mul_opcode<nop>,
       raddr_a = 7 : i32,
       raddr_b = 6 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+  }
+}
+
+// -----
+
+vc4.module @write_swap_add_pipe_regfile_b_next_read_hazard {
+  vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    vc4.qpu.ldi <splat32> {
+      value = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      write_swap,
+      waddr_add = 5 : i32,
+      waddr_mul = 32 : i32
+    }
+
+    // expected-error@+1 {{reads physical regfile-B address 5 written by the immediately previous scheduled instruction}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 7 : i32,
+      raddr_b = 5 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+  }
+}
+
+// -----
+
+vc4.module @write_swap_mul_pipe_regfile_a_next_read_hazard {
+  vc4.func @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, threading = #vc4.threading_mode<single>} {
+    vc4.qpu.ldi <splat32> {
+      value = 1 : i32,
+      pm = false,
+      cond_add = #vc4.cond<never>,
+      cond_mul = #vc4.cond<always>,
+      write_swap,
+      waddr_add = 32 : i32,
+      waddr_mul = 6 : i32
+    }
+
+    // expected-error@+1 {{reads physical regfile-A address 6 written by the immediately previous scheduled instruction}}
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<always>,
+      waddr_add = 33 : i32,
+      waddr_mul = 34 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 6 : i32,
+      raddr_b = 7 : i32,
       add_a = #vc4.qpu_mux<a>,
       add_b = #vc4.qpu_mux<b>,
       mul_a = #vc4.qpu_mux<r0>,

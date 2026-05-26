@@ -11,9 +11,10 @@
 "max_width": 31,
 "max_height": 19,
 "runtime_allocations": 1,
-"runtime_launches": 8
+"runtime_launches": 8,
+"checked_elements": 287
 },
 "float_max": {
-"max_abs_diff": 0.0001
+"max_abs_diff": 0.0
 }
 }

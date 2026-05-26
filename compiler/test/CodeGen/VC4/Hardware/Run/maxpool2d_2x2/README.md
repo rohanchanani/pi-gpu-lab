@@ -45,4 +45,6 @@ runtime_allocations=1
 
 runtime_launches=8
 
-max_abs_diff <= 0.0001
+checked_elements=287
+
+max_abs_diff=0.0

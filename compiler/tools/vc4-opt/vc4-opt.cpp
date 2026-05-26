@@ -155,32 +155,58 @@ static bool scheduledInstructionWritesPhysicalRegfile(mlir::Operation *op) {
 }
 
 static std::optional<int64_t>
+selectScheduledPhysicalRegfileWrite(bool wantA, bool writeSwap, bool addActive,
+                                    int64_t addAddress, bool mulActive,
+                                    int64_t mulAddress) {
+  if (wantA) {
+    if (!writeSwap && addActive &&
+        mlir::vc4::isVC4QPUPhysicalRegfileAddress(addAddress))
+      return addAddress;
+    if (writeSwap && mulActive &&
+        mlir::vc4::isVC4QPUPhysicalRegfileAddress(mulAddress))
+      return mulAddress;
+    return std::nullopt;
+  }
+
+  if (writeSwap && addActive &&
+      mlir::vc4::isVC4QPUPhysicalRegfileAddress(addAddress))
+    return addAddress;
+  if (!writeSwap && mulActive &&
+      mlir::vc4::isVC4QPUPhysicalRegfileAddress(mulAddress))
+    return mulAddress;
+  return std::nullopt;
+}
+
+static std::optional<int64_t>
 scheduledInstructionPhysicalRegfileAWrite(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
-    int64_t value = bundle.getWaddrAddAttr().getInt();
-    if (isVC4BundleAddPipeWriteActive(bundle) &&
-        mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
-      return value;
-    }
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/true, op->hasAttr("write_swap"),
+        isVC4BundleAddPipeWriteActive(bundle),
+        bundle.getWaddrAddAttr().getInt(), isVC4BundleMulPipeWriteActive(bundle),
+        bundle.getWaddrMulAttr().getInt());
   }
   if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-    int64_t value = ldi.getWaddrAddAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/true, op->hasAttr("write_swap"),
+        ldi.getCondAdd() != mlir::vc4::Cond::never,
+        ldi.getWaddrAddAttr().getInt(),
+        ldi.getCondMul() != mlir::vc4::Cond::never,
+        ldi.getWaddrMulAttr().getInt());
   }
   if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
-    int64_t value = sema.getWaddrAddAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/true, op->hasAttr("write_swap"),
+        sema.getCondAdd() != mlir::vc4::Cond::never,
+        sema.getWaddrAddAttr().getInt(),
+        sema.getCondMul() != mlir::vc4::Cond::never,
+        sema.getWaddrMulAttr().getInt());
   }
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    int64_t value = branch.getWaddrAddAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/true, op->hasAttr("write_swap"), /*addActive=*/true,
+        branch.getWaddrAddAttr().getInt(), /*mulActive=*/true,
+        branch.getWaddrMulAttr().getInt());
   }
   return std::nullopt;
 }
@@ -188,30 +214,33 @@ scheduledInstructionPhysicalRegfileAWrite(mlir::Operation *op) {
 static std::optional<int64_t>
 scheduledInstructionPhysicalRegfileBWrite(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
-    int64_t value = bundle.getWaddrMulAttr().getInt();
-    if (isVC4BundleMulPipeWriteActive(bundle) &&
-        mlir::vc4::isVC4QPUPhysicalRegfileAddress(value)) {
-      return value;
-    }
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/false, op->hasAttr("write_swap"),
+        isVC4BundleAddPipeWriteActive(bundle),
+        bundle.getWaddrAddAttr().getInt(), isVC4BundleMulPipeWriteActive(bundle),
+        bundle.getWaddrMulAttr().getInt());
   }
   if (auto ldi = llvm::dyn_cast<mlir::vc4::QPULDIOp>(op)) {
-    int64_t value = ldi.getWaddrMulAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/false, op->hasAttr("write_swap"),
+        ldi.getCondAdd() != mlir::vc4::Cond::never,
+        ldi.getWaddrAddAttr().getInt(),
+        ldi.getCondMul() != mlir::vc4::Cond::never,
+        ldi.getWaddrMulAttr().getInt());
   }
   if (auto sema = llvm::dyn_cast<mlir::vc4::QPUSemaOp>(op)) {
-    int64_t value = sema.getWaddrMulAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/false, op->hasAttr("write_swap"),
+        sema.getCondAdd() != mlir::vc4::Cond::never,
+        sema.getWaddrAddAttr().getInt(),
+        sema.getCondMul() != mlir::vc4::Cond::never,
+        sema.getWaddrMulAttr().getInt());
   }
   if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-    int64_t value = branch.getWaddrMulAttr().getInt();
-    if (mlir::vc4::isVC4QPUPhysicalRegfileAddress(value))
-      return value;
-    return std::nullopt;
+    return selectScheduledPhysicalRegfileWrite(
+        /*wantA=*/false, op->hasAttr("write_swap"), /*addActive=*/true,
+        branch.getWaddrAddAttr().getInt(), /*mulActive=*/true,
+        branch.getWaddrMulAttr().getInt());
   }
   return std::nullopt;
 }
