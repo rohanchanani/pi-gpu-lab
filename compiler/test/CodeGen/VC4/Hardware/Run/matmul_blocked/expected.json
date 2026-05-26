@@ -2,22 +2,31 @@
   "name": "matmul_blocked",
   "status": "PASS",
   "required": {
-    "cases": 8,
+    "cases": 10,
+    "checked_elements": 63608,
     "total_mismatches": 0,
     "sentinel_mismatches": 0,
     "launch_failures": 0,
+    "recorded_launch_failures": 0,
     "active_qpus": 12,
     "lanes": 16,
-    "max_m": 25,
-    "max_n": 31,
-    "max_k": 25,
+    "sweep_max_m": 193,
+    "sweep_max_n": 217,
+    "sweep_max_k": 97,
+    "padded_m": 204,
+    "padded_n": 224,
+    "padded_k": 108,
+    "backing_a_floats": 22032,
+    "backing_b_floats": 24192,
+    "backing_c_floats": 45696,
+    "checksum_accum": -8448,
+    "expected_checksum_accum": -8448,
     "runtime_allocations": 1,
-    "runtime_launches": 8,
-    "runtime_tile_waves": 14,
-    "timeouts": 0,
-    "errstat_relevant_changed": 0
+    "runtime_launches": 362,
+    "runtime_tile_waves": 362,
+    "code_uploads": 1
   },
   "float_max": {
-    "max_abs_diff": 0.001
+    "max_abs_diff": 0.0
   }
 }

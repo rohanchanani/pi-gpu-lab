@@ -2,16 +2,13 @@
 #include "kernel_launch.h"
 #include "vc4_m2_candidate_test_helpers.h"
 
-#define MATMUL_NAIVE_MAX_M 12u
-#define MATMUL_NAIVE_MAX_N 16u
-#define MATMUL_NAIVE_MAX_K 4u
+#define MATMUL_NAIVE_ACTIVE_QPUS 12u
+#define MATMUL_NAIVE_LANES 16u
 #define MATMUL_NAIVE_CASES 8u
-#define MATMUL_NAIVE_A_COUNT (MATMUL_NAIVE_MAX_M * MATMUL_NAIVE_MAX_K)
-#define MATMUL_NAIVE_B_COUNT (MATMUL_NAIVE_MAX_K * MATMUL_NAIVE_MAX_N)
-#define MATMUL_NAIVE_C_CAPACITY (MATMUL_NAIVE_MAX_M * MATMUL_NAIVE_MAX_N)
-#define MATMUL_NAIVE_SCRATCH_WORDS MATMUL_NAIVE_C_CAPACITY
+#define MATMUL_NAIVE_B_GUARD_WORDS 16u
+#define MATMUL_NAIVE_SCRATCH_WORDS 0u
 #define MATMUL_NAIVE_GUARD_WORDS 16u
-#define MATMUL_NAIVE_C_TOTAL (MATMUL_NAIVE_C_CAPACITY + MATMUL_NAIVE_SCRATCH_WORDS + MATMUL_NAIVE_GUARD_WORDS)
+#define MATMUL_NAIVE_PROGRAM_HEAP_SLOP_BYTES (64u * 1024u)
 #define MATMUL_NAIVE_GUARD_BASE 0x6d6d0000u
 #define CHECKSUM_SCALE 4096.0f
 
@@ -23,19 +20,22 @@ struct matmul_case {
 
 static const struct matmul_case cases[MATMUL_NAIVE_CASES] = {
     {12u, 16u, 4u},
-    {7u, 13u, 3u},
-    {5u, 5u, 1u},
-    {3u, 16u, 0u},
-    {1u, 1u, 4u},
-    {11u, 9u, 2u},
-    {2u, 15u, 3u},
-    {9u, 2u, 4u},
+    {128u, 224u, 128u},
+    {137u, 197u, 96u},
+    {192u, 65u, 192u},
+    {144u, 223u, 0u},
+    {101u, 1u, 160u},
+    {180u, 129u, 64u},
+    {17u, 215u, 191u},
 };
 
-static float a_values[MATMUL_NAIVE_A_COUNT];
-static float b_values[MATMUL_NAIVE_B_COUNT];
-static float c_values[MATMUL_NAIVE_C_TOTAL];
-static float expected_values[MATMUL_NAIVE_C_CAPACITY];
+static float *a_values;
+static float *b_values;
+static float *c_values;
+static float *expected_values;
+static uint32_t a_capacity;
+static uint32_t b_capacity;
+static uint32_t c_capacity;
 
 static float absf_local(float value) { return value < 0.0f ? -value : value; }
 
@@ -55,6 +55,97 @@ static uint32_t guard_word(uint32_t case_index, uint32_t word) {
     return MATMUL_NAIVE_GUARD_BASE ^ (case_index << 8) ^ word;
 }
 
+static int checked_product(uint32_t lhs, uint32_t rhs, uint32_t *out) {
+    uint64_t product = (uint64_t)lhs * (uint64_t)rhs;
+    if (product > (uint64_t)(0xffffffffu / sizeof(float)))
+        return -1;
+    *out = (uint32_t)product;
+    return 0;
+}
+
+static int bytes_for_floats(uint32_t count, uint32_t extra, uint32_t *out) {
+    if (count > 0xffffffffu - extra)
+        return -1;
+    uint32_t total = count + extra;
+    if (total > 0xffffffffu / sizeof(float))
+        return -1;
+    *out = total * sizeof(float);
+    return 0;
+}
+
+static int case_counts(const struct matmul_case *tc,
+                       uint32_t *a_count,
+                       uint32_t *b_count,
+                       uint32_t *c_count) {
+    if (tc->m == 0u || tc->n == 0u)
+        return -1;
+    if (checked_product(tc->m, tc->k, a_count) < 0)
+        return -1;
+    if (checked_product(tc->k, tc->n, b_count) < 0)
+        return -1;
+    if (checked_product(tc->m, tc->n, c_count) < 0)
+        return -1;
+    return 0;
+}
+
+static void compute_sweep_caps(uint32_t *sweep_max_m,
+                               uint32_t *sweep_max_n,
+                               uint32_t *sweep_max_k) {
+    a_capacity = 1u;
+    b_capacity = 1u;
+    c_capacity = 1u;
+    *sweep_max_m = 0u;
+    *sweep_max_n = 0u;
+    *sweep_max_k = 0u;
+
+    for (uint32_t i = 0; i < MATMUL_NAIVE_CASES; i++) {
+        uint32_t a_count = 0;
+        uint32_t b_count = 0;
+        uint32_t c_count = 0;
+        const struct matmul_case *tc = &cases[i];
+        if (case_counts(tc, &a_count, &b_count, &c_count) < 0)
+            panic("matmul_naive case shape overflows addressable bytes");
+        if (a_count > a_capacity)
+            a_capacity = a_count;
+        if (b_count > b_capacity)
+            b_capacity = b_count;
+        if (c_count > c_capacity)
+            c_capacity = c_count;
+        if (tc->m > *sweep_max_m)
+            *sweep_max_m = tc->m;
+        if (tc->n > *sweep_max_n)
+            *sweep_max_n = tc->n;
+        if (tc->k > *sweep_max_k)
+            *sweep_max_k = tc->k;
+    }
+}
+
+static void allocate_host_buffers(void) {
+    uint32_t a_bytes = 0;
+    uint32_t b_bytes = 0;
+    uint32_t c_bytes = 0;
+    uint32_t expected_bytes = 0;
+    if (bytes_for_floats(a_capacity, 0u, &a_bytes) < 0 ||
+        bytes_for_floats(b_capacity, MATMUL_NAIVE_B_GUARD_WORDS, &b_bytes) < 0 ||
+        bytes_for_floats(c_capacity, MATMUL_NAIVE_GUARD_WORDS, &c_bytes) < 0 ||
+        bytes_for_floats(c_capacity, 0u, &expected_bytes) < 0)
+        panic("matmul_naive host buffer byte size overflow");
+    if (a_bytes > 0xffffffffu - b_bytes ||
+        a_bytes + b_bytes > 0xffffffffu - c_bytes ||
+        a_bytes + b_bytes + c_bytes > 0xffffffffu - expected_bytes ||
+        a_bytes + b_bytes + c_bytes + expected_bytes > 0xffffffffu - 4096u)
+        panic("matmul_naive host heap byte size overflow");
+
+    kmalloc_init_set_start((void *)(1024u * 1024u),
+                           a_bytes + b_bytes + c_bytes + expected_bytes + 4096u);
+    a_values = (float *)kmalloc(a_bytes);
+    b_values = (float *)kmalloc(b_bytes);
+    c_values = (float *)kmalloc(c_bytes);
+    expected_values = (float *)kmalloc(expected_bytes);
+    if (!a_values || !b_values || !c_values || !expected_values)
+        panic("matmul_naive host buffer allocation failed");
+}
+
 static float make_a_value(uint32_t case_index, uint32_t row, uint32_t kk) {
     int centered = (int)((row * 7u + kk * 3u + case_index * 5u) % 17u) - 8;
     return ((float)centered) * 0.125f;
@@ -66,9 +157,9 @@ static float make_b_value(uint32_t case_index, uint32_t kk, uint32_t col) {
 }
 
 static void fill_inputs(uint32_t case_index, const struct matmul_case *tc) {
-    for (uint32_t i = 0; i < MATMUL_NAIVE_A_COUNT; i++)
+    for (uint32_t i = 0; i < a_capacity; i++)
         a_values[i] = 0.0f;
-    for (uint32_t i = 0; i < MATMUL_NAIVE_B_COUNT; i++)
+    for (uint32_t i = 0; i < b_capacity + MATMUL_NAIVE_B_GUARD_WORDS; i++)
         b_values[i] = 0.0f;
 
     for (uint32_t row = 0; row < tc->m; row++)
@@ -79,9 +170,9 @@ static void fill_inputs(uint32_t case_index, const struct matmul_case *tc) {
         for (uint32_t col = 0; col < tc->n; col++)
             b_values[kk * tc->n + col] = make_b_value(case_index, kk, col);
 
-    for (uint32_t i = 0; i < MATMUL_NAIVE_C_TOTAL; i++)
+    for (uint32_t i = 0; i < c_capacity + MATMUL_NAIVE_GUARD_WORDS; i++)
         c_values[i] = float_from_bits(guard_word(case_index, i));
-    for (uint32_t i = 0; i < MATMUL_NAIVE_C_CAPACITY; i++)
+    for (uint32_t i = 0; i < c_capacity; i++)
         expected_values[i] = float_from_bits(guard_word(case_index, i));
 }
 
@@ -131,7 +222,7 @@ static void verify_results(uint32_t case_index,
         }
     }
 
-    for (uint32_t i = live_count; i < MATMUL_NAIVE_C_CAPACITY; i++) {
+    for (uint32_t i = live_count; i < c_capacity; i++) {
         uint32_t actual = float_bits(c_values[i]);
         uint32_t expected = guard_word(case_index, i);
         if (actual != expected) {
@@ -142,8 +233,8 @@ static void verify_results(uint32_t case_index,
         }
     }
 
-    for (uint32_t i = MATMUL_NAIVE_C_CAPACITY + MATMUL_NAIVE_SCRATCH_WORDS;
-         i < MATMUL_NAIVE_C_TOTAL; i++) {
+    for (uint32_t i = c_capacity + MATMUL_NAIVE_SCRATCH_WORDS;
+         i < c_capacity + MATMUL_NAIVE_GUARD_WORDS; i++) {
         uint32_t actual = float_bits(c_values[i]);
         uint32_t expected = guard_word(case_index, i);
         if (actual != expected) {
@@ -156,21 +247,39 @@ static void verify_results(uint32_t case_index,
 }
 
 void notmain(void) {
+    uint32_t sweep_max_m = 0;
+    uint32_t sweep_max_n = 0;
+    uint32_t sweep_max_k = 0;
+    compute_sweep_caps(&sweep_max_m, &sweep_max_n, &sweep_max_k);
+    allocate_host_buffers();
+
+    uint32_t a_capacity_bytes = 0;
+    uint32_t b_capacity_bytes = 0;
+    uint32_t c_bytes = 0;
+    if (bytes_for_floats(a_capacity, 0u, &a_capacity_bytes) < 0 ||
+        bytes_for_floats(b_capacity, MATMUL_NAIVE_B_GUARD_WORDS, &b_capacity_bytes) < 0 ||
+        bytes_for_floats(c_capacity, MATMUL_NAIVE_GUARD_WORDS, &c_bytes) < 0)
+        panic("matmul_naive device buffer byte size overflow");
+    if (a_capacity_bytes > 0xffffffffu - b_capacity_bytes ||
+        a_capacity_bytes + b_capacity_bytes > 0xffffffffu - c_bytes ||
+        a_capacity_bytes + b_capacity_bytes + c_bytes >
+            0xffffffffu - MATMUL_NAIVE_PROGRAM_HEAP_SLOP_BYTES)
+        panic("matmul_naive program heap byte size overflow");
+    uint32_t program_heap_bytes = a_capacity_bytes + b_capacity_bytes + c_bytes +
+                                  MATMUL_NAIVE_PROGRAM_HEAP_SLOP_BYTES;
+
     struct vc4_program *program = 0;
-    if (vc4_program_create(&program, 0) < 0 || !program)
+    if (vc4_program_create(&program, program_heap_bytes) < 0 || !program)
         panic("vc4_program_create failed");
 
     vc4_deviceptr_t a_dev = 0, b_dev = 0, c_dev = 0;
-    uint32_t a_bytes = MATMUL_NAIVE_A_COUNT * sizeof(float);
-    uint32_t b_bytes = MATMUL_NAIVE_B_COUNT * sizeof(float);
-    uint32_t c_bytes = MATMUL_NAIVE_C_TOTAL * sizeof(float);
-    if (vc4_m2_malloc(program, &a_dev, a_bytes) < 0 ||
-        vc4_m2_malloc(program, &b_dev, b_bytes) < 0 ||
+    if (vc4_m2_malloc(program, &a_dev, a_capacity_bytes) < 0 ||
+        vc4_m2_malloc(program, &b_dev, b_capacity_bytes) < 0 ||
         vc4_m2_malloc(program, &c_dev, c_bytes) < 0)
         panic("matmul_naive device setup failed");
 
     vc4_dim3 grid = vc4_m2_dim3(1, 1, 1);
-    vc4_dim3 block = vc4_m2_dim3(MATMUL_NAIVE_C_CAPACITY, 1, 1);
+    vc4_dim3 block = vc4_m2_dim3(MATMUL_NAIVE_ACTIVE_QPUS * MATMUL_NAIVE_LANES, 1, 1);
 
     printk("Running VC4 matmul_naive M2 candidate bundle...\n");
     int start = timer_get_usec();
@@ -184,7 +293,13 @@ void notmain(void) {
 
     for (uint32_t case_index = 0; case_index < MATMUL_NAIVE_CASES; case_index++) {
         const struct matmul_case *tc = &cases[case_index];
-        uint32_t live_count = tc->m * tc->n;
+        uint32_t a_count = 0;
+        uint32_t b_count = 0;
+        uint32_t live_count = 0;
+        if (case_counts(tc, &a_count, &b_count, &live_count) < 0)
+            panic("matmul_naive case exceeds backing buffer capacity");
+        uint32_t a_bytes = a_count * sizeof(float);
+        uint32_t b_bytes = (b_count + MATMUL_NAIVE_B_GUARD_WORDS) * sizeof(float);
         fill_inputs(case_index, tc);
         run_cpu_reference(tc);
 
@@ -238,7 +353,7 @@ void notmain(void) {
                           runtime_launches == MATMUL_NAIVE_CASES &&
                           code_uploads == 1u) ? "PASS" : "FAIL";
 
-    printk("VC4_TEST_RESULT name=matmul_naive status=%s cases=%d checked_elements=%d total_mismatches=%d guard_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d max_m=%d max_n=%d max_k=%d scratch_words=%d checksum_accum=%d expected_checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=matmul_naive status=%s cases=%d checked_elements=%d total_mismatches=%d guard_mismatches=%d launch_failures=%d recorded_launch_failures=%d active_qpus=%d lanes=%d sweep_max_m=%d sweep_max_n=%d sweep_max_k=%d backing_a_floats=%d backing_b_floats=%d backing_c_floats=%d b_guard_words=%d scratch_words=%d checksum_accum=%d expected_checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d runtime_capacity=%d code_uploads=%d elapsed_usec=%d\n",
            status,
            (int)MATMUL_NAIVE_CASES,
            (int)checked_elements,
@@ -246,11 +361,15 @@ void notmain(void) {
            total_guard_mismatches,
            launch_failures,
            (int)recorded_launch_failures,
-           (int)MATMUL_NAIVE_MAX_M,
-           (int)MATMUL_NAIVE_MAX_N,
-           (int)MATMUL_NAIVE_MAX_M,
-           (int)MATMUL_NAIVE_MAX_N,
-           (int)MATMUL_NAIVE_MAX_K,
+           (int)MATMUL_NAIVE_ACTIVE_QPUS,
+           (int)MATMUL_NAIVE_LANES,
+           (int)sweep_max_m,
+           (int)sweep_max_n,
+           (int)sweep_max_k,
+           (int)a_capacity,
+           (int)b_capacity,
+           (int)c_capacity,
+           (int)MATMUL_NAIVE_B_GUARD_WORDS,
            (int)MATMUL_NAIVE_SCRATCH_WORDS,
            checksum_accum,
            expected_checksum_accum,
