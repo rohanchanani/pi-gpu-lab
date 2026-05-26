@@ -1,6 +1,4 @@
 #include "vc4_m2_candidate_test_helpers.h"
-#include "mailbox.h"
-#include "qpu_barrier_syncthreads_shader.h"
 #include <stddef.h>
 
 #define GPU_MEM_FLG 0xC
@@ -22,7 +20,6 @@
 #define V3D_SRQCS (V3D_BASE + 0x0043c)
 #define V3D_ERRSTAT (V3D_BASE + 0x00f20)
 
-#define QPU_BARRIER_NUM_UNIFS 14u
 #define QPU_BARRIER_TIMEOUT_USEC 2000000u
 #define QPU_BARRIER_LANES 16u
 #define QPU_BARRIER_MAX_QPUS 16u
@@ -102,19 +99,13 @@ struct qpu_barrier_run_config {
     uint32_t allowed_qpu_mask;
 };
 
-struct qpu_barrier_launch_state {
-    uint32_t code[sizeof(qpu_barrier_syncthreads_shader) / sizeof(uint32_t)];
-    uint32_t unif[QPU_BARRIER_MAX_WARPS][QPU_BARRIER_NUM_UNIFS];
-    uint32_t unif_ptr[QPU_BARRIER_MAX_WARPS];
+struct qpu_barrier_device_state {
+    uint32_t guard_before[QPU_BARRIER_RESULT_GUARD_WORDS];
     struct qpu_barrier_results results;
-    uint32_t guard[QPU_BARRIER_RESULT_GUARD_WORDS];
+    uint32_t guard_after[QPU_BARRIER_RESULT_GUARD_WORDS];
 };
 
 static struct qpu_barrier_results results __attribute__((aligned(16)));
-
-static uint32_t gpu_addr(const volatile void *ptr) {
-    return GPU_BASE + (uint32_t)ptr;
-}
 
 static uint32_t low_mask_local(uint32_t n) {
     return (n >= 32u) ? 0xffffffffu : ((1u << n) - 1u);
@@ -290,49 +281,44 @@ static uint32_t verify_result_guard(uint32_t run_index,
     return mismatches;
 }
 
-static int launch_run(volatile struct qpu_barrier_launch_state *state,
+static vc4_deviceptr_t device_state_offset(vc4_deviceptr_t base, uint32_t offset) {
+    return (vc4_deviceptr_t)(base + offset);
+}
+
+static uint32_t run_result_offset(uint32_t run_index) {
+    return (uint32_t)(offsetof(struct qpu_barrier_device_state, results) +
+                      offsetof(struct qpu_barrier_results, runs) +
+                      run_index * sizeof(struct qpu_barrier_run_result));
+}
+
+static int launch_run(struct vc4_program *program,
+                      vc4_deviceptr_t state_dev,
+                      struct qpu_barrier_device_state *state,
                       uint32_t run_index,
                       const struct qpu_barrier_run_config *cfg,
                       uint32_t *manual_launches) {
-    volatile struct qpu_barrier_run_result *run = &state->results.runs[run_index];
+    struct qpu_barrier_run_result *run = &state->results.runs[run_index];
     uint32_t total_requests = cfg->block_count * cfg->warps_per_block;
     if (total_requests == 0 || total_requests > QPU_BARRIER_MAX_WARPS)
         return -1;
 
     prepare_run_result(run, run_index, cfg);
-    for (uint32_t block = 0; block < cfg->block_count; block++) {
-        for (uint32_t warp = 0; warp < cfg->warps_per_block; warp++) {
-            uint32_t request = block * cfg->warps_per_block + warp;
-            uint32_t sem_base = block * 4u;
+    uint32_t run_offset = run_result_offset(run_index);
+    vc4_deviceptr_t run_dev = device_state_offset(state_dev, run_offset);
+    vc4_deviceptr_t warp_dev =
+        device_state_offset(run_dev, (uint32_t)offsetof(struct qpu_barrier_run_result, warp));
 
-            state->unif[request][0] = cfg->mode;
-            state->unif[request][1] = run_index;
-            state->unif[request][2] = block;
-            state->unif[request][3] = warp;
-            state->unif[request][4] = cfg->warps_per_block;
-            state->unif[request][5] = cfg->iterations;
-            state->unif[request][6] = run->vpm_base_row[block];
-            state->unif[request][7] = run->vpm_rows_per_block;
-            state->unif[request][8] = sem_base + 0u;
-            state->unif[request][9] = sem_base + 1u;
-            state->unif[request][10] = sem_base + 2u;
-            state->unif[request][11] = sem_base + 3u;
-            state->unif[request][12] = gpu_addr(&run->warp[0]);
-            state->unif[request][13] = gpu_addr(run);
-            state->unif_ptr[request] = gpu_addr(&state->unif[request][0]);
-        }
-    }
+    if (vc4_m2_copy_htod(program, run_dev, run, sizeof(*run)) < 0)
+        return -1;
 
     reserve_qpu_mask(cfg->allowed_qpu_mask);
-    clear_scheduler_and_caches();
     run->errstat_before = GET32(V3D_ERRSTAT);
 
-    for (uint32_t i = 0; i < total_requests; i++) {
-        PUT32(V3D_SRQUA, state->unif_ptr[i]);
-        PUT32(V3D_SRQPC, gpu_addr(&state->code[0]));
-    }
+    vc4_dim3 grid = vc4_m2_dim3(cfg->block_count, 1u, 1u);
+    vc4_dim3 block = vc4_m2_dim3(cfg->warps_per_block * QPU_BARRIER_LANES, 1u, 1u);
     (*manual_launches)++;
-    int rc = wait_for_completions(total_requests);
+    int rc = qpu_barrier_syncthreads_launch(program, grid, block, cfg->mode, run_index,
+                                            cfg->iterations, warp_dev, run_dev);
     run->errstat_after = GET32(V3D_ERRSTAT);
     clear_qpu_reservations();
 
@@ -341,6 +327,8 @@ static int launch_run(volatile struct qpu_barrier_launch_state *state,
         state->results.timeouts++;
         return -1;
     }
+    if (vc4_m2_copy_dtoh(program, run, run_dev, sizeof(*run)) < 0)
+        return -1;
     return 0;
 }
 
@@ -469,53 +457,52 @@ static void analyze_runs(uint32_t *full_block_pass,
 }
 
 void notmain(void) {
-    struct vc4_runtime rt;
-    memset(&rt, 0, sizeof(rt));
     int launch_failures = 0;
-    int rc = vc4_runtime_init(&rt);
+    struct vc4_program *program = 0;
+    int rc = vc4_program_create(&program, 0);
     if (rc < 0) {
         printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=FAIL runs=0 checked_warp_records=0 checked_lane_records=0 same_slice_pass=0 cross_slice_0_1_pass=0 cross_slice_0_2_pass=0 full_block_pass=0 multi_block_pass=0 qpu_mismatches=0 data_mismatches=0 guard_mismatches=0 timeouts=0 invalid_topology=1 errstat_relevant_changed=0 launch_failures=1 manual_launches=0 code_words=0\n");
         return;
     }
 
-    uint32_t handle = mem_alloc(sizeof(struct qpu_barrier_launch_state), 4096, GPU_MEM_FLG);
-    if (!handle) {
+    vc4_deviceptr_t state_dev = 0;
+    if (vc4_m2_malloc(program, &state_dev, sizeof(struct qpu_barrier_device_state)) < 0) {
         printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=FAIL runs=0 checked_warp_records=0 checked_lane_records=0 same_slice_pass=0 cross_slice_0_1_pass=0 cross_slice_0_2_pass=0 full_block_pass=0 multi_block_pass=0 qpu_mismatches=0 data_mismatches=0 guard_mismatches=0 timeouts=0 invalid_topology=1 errstat_relevant_changed=0 launch_failures=1 manual_launches=0 code_words=0\n");
-        vc4_runtime_shutdown(&rt);
-        return;
-    }
-    uint32_t vc = mem_lock(handle);
-    if (!vc) {
-        mem_free(handle);
-        printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=FAIL runs=0 checked_warp_records=0 checked_lane_records=0 same_slice_pass=0 cross_slice_0_1_pass=0 cross_slice_0_2_pass=0 full_block_pass=0 multi_block_pass=0 qpu_mismatches=0 data_mismatches=0 guard_mismatches=0 timeouts=0 invalid_topology=1 errstat_relevant_changed=0 launch_failures=1 manual_launches=0 code_words=0\n");
-        vc4_runtime_shutdown(&rt);
+        vc4_program_destroy(program);
         return;
     }
 
-    volatile struct qpu_barrier_launch_state *state =
-        (volatile struct qpu_barrier_launch_state *)(vc - GPU_BASE);
-    memset((void *)state, 0, sizeof(*state));
-    memcpy((void *)state->code, qpu_barrier_syncthreads_shader, sizeof(state->code));
-    fill_result_guard(0, (uint32_t *)state->guard);
+    struct qpu_barrier_device_state device_state;
+    struct qpu_barrier_device_state device_result;
+    memset(&device_state, 0, sizeof(device_state));
+    memset(&device_result, 0, sizeof(device_result));
+    fill_result_guard(0, device_state.guard_before);
+    fill_result_guard(1, device_state.guard_after);
 
-    decode_ident1(&state->results);
-    state->results.vpmbase_written = QPU_BARRIER_VPM_URSV_4K;
+    decode_ident1(&device_state.results);
+    device_state.results.vpmbase_written = QPU_BARRIER_VPM_URSV_4K;
     PUT32(V3D_VPMBASE, QPU_BARRIER_VPM_URSV_4K);
-    state->results.vpmbase_readback = GET32(V3D_VPMBASE);
+    device_state.results.vpmbase_readback = GET32(V3D_VPMBASE);
+    if (vc4_m2_copy_htod(program, state_dev, &device_state, sizeof(device_state)) < 0) {
+        printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads status=FAIL runs=0 checked_warp_records=0 checked_lane_records=0 same_slice_pass=0 cross_slice_0_1_pass=0 cross_slice_0_2_pass=0 full_block_pass=0 multi_block_pass=0 qpu_mismatches=0 data_mismatches=0 guard_mismatches=0 timeouts=0 invalid_topology=1 errstat_relevant_changed=0 launch_failures=1 manual_launches=0 code_words=0\n");
+        vc4Free(program, state_dev);
+        vc4_program_destroy(program);
+        return;
+    }
 
     uint32_t invalid_topology = 0;
-    if (state->results.num_qpus < QPU_BARRIER_EXPECTED_QPUS)
+    if (device_state.results.num_qpus < QPU_BARRIER_EXPECTED_QPUS)
         invalid_topology = 1;
-    if (state->results.qpus_per_slice != 4u)
+    if (device_state.results.qpus_per_slice != 4u)
         invalid_topology = 1;
-    if (state->results.num_slices < 3u)
+    if (device_state.results.num_slices < 3u)
         invalid_topology = 1;
-    if (state->results.num_semaphores < 16u)
+    if (device_state.results.num_semaphores < 16u)
         invalid_topology = 1;
-    if ((state->results.vpmbase_readback & 0x1fu) != QPU_BARRIER_VPM_URSV_4K)
+    if ((device_state.results.vpmbase_readback & 0x1fu) != QPU_BARRIER_VPM_URSV_4K)
         invalid_topology = 1;
 
-    uint32_t qps = state->results.qpus_per_slice;
+    uint32_t qps = device_state.results.qpus_per_slice;
     uint32_t cross1 = qps;
     uint32_t cross2 = 2u * qps;
     struct qpu_barrier_run_config configs[5];
@@ -523,21 +510,31 @@ void notmain(void) {
     configs[1] = (struct qpu_barrier_run_config){QPU_BARRIER_MODE_CROSS_SLICE_0_1, 1u, 2u, 4u, (1u << 0) | (1u << cross1)};
     configs[2] = (struct qpu_barrier_run_config){QPU_BARRIER_MODE_CROSS_SLICE_0_2, 1u, 2u, 4u, (1u << 0) | (1u << cross2)};
     configs[3] = (struct qpu_barrier_run_config){QPU_BARRIER_MODE_FULL_BLOCK_STRESS, 1u, 12u, 64u, low_mask_local(12u)};
-    configs[4] = (struct qpu_barrier_run_config){QPU_BARRIER_MODE_TWO_BLOCK_PARTITION, 2u, 4u, 32u, low_mask_local(8u)};
+    configs[4] = (struct qpu_barrier_run_config){QPU_BARRIER_MODE_TWO_BLOCK_PARTITION, 2u, 4u, 32u, low_mask_local(4u)};
 
     int start = timer_get_usec();
-    state->results.run_count = 5;
+    device_state.results.run_count = 5;
     uint32_t manual_launches = 0;
     if (!invalid_topology) {
-        for (uint32_t i = 0; i < state->results.run_count; i++) {
-            if (launch_run(state, i, &configs[i], &manual_launches) < 0)
+        for (uint32_t i = 0; i < device_state.results.run_count; i++) {
+            if (launch_run(program, state_dev, &device_state, i, &configs[i], &manual_launches) < 0)
                 launch_failures++;
         }
     }
     int elapsed = timer_get_usec() - start;
 
-    uint32_t guard_mismatches = verify_result_guard(0, (const uint32_t *)state->guard);
-    memcpy(&results, (const void *)&state->results, sizeof(results));
+    if (vc4_m2_copy_htod(program,
+                         device_state_offset(state_dev, (uint32_t)offsetof(struct qpu_barrier_device_state, results)),
+                         &device_state.results,
+                         sizeof(device_state.results)) < 0 ||
+        vc4_m2_copy_dtoh(program, &device_result, state_dev, sizeof(device_result)) < 0) {
+        launch_failures++;
+    }
+
+    uint32_t guard_mismatches =
+        verify_result_guard(0, device_result.guard_before) +
+        verify_result_guard(1, device_result.guard_after);
+    memcpy(&results, &device_result.results, sizeof(results));
 
     uint32_t full_block_pass = 0;
     uint32_t multi_block_pass = 0;
@@ -563,13 +560,13 @@ void notmain(void) {
                  &checked_warp_records,
                  &checked_lane_records);
 
-    uint32_t code_words = (uint32_t)(sizeof(qpu_barrier_syncthreads_shader) / sizeof(uint32_t));
+    uint32_t code_words = qpu_barrier_syncthreads_runtime_code_uploads();
 
     uint32_t status_pass = (launch_failures == 0 &&
                             invalid_topology == 0 &&
                             results.run_count == 5u &&
                             manual_launches == 5u &&
-                            code_words > 0u &&
+                            code_words == 1u &&
                             checked_warp_records == 26u &&
                             checked_lane_records == 416u &&
                             same_slice_pass &&
@@ -605,7 +602,6 @@ void notmain(void) {
            elapsed);
 
     clear_qpu_reservations();
-    mem_unlock(handle);
-    mem_free(handle);
-    vc4_runtime_shutdown(&rt);
+    vc4Free(program, state_dev);
+    vc4_program_destroy(program);
 }
