@@ -1,6 +1,6 @@
 # saxpy_tmu_overlap
 
-`saxpy_tmu_overlap` is the latency-hiding TMU SAXPY hardware golden.
+`saxpy_tmu_overlap` is the latency-hiding generated TMU SAXPY hardware test.
 
 It computes the same semantic result as `saxpy_tmu`:
 
@@ -12,8 +12,8 @@ for i in 0..n:
 The difference is the final-stage schedule.  `saxpy_tmu` serializes each direct
 TMU request/read pair.  This test issues the independent `x` and `y` direct
 TMU0 requests before synchronizing on either result, then receives them in FIFO
-order.  That makes the overlap visible in both the qasm reference and the
-`input.mlir` scheduled sink.
+order.  That makes the overlap visible in the generated qasm emitted from
+`input.mlir`.
 
 ## What this verifies
 
@@ -41,16 +41,26 @@ order.  That makes the overlap visible in both the qasm reference and the
 ## Layout
 
 ```text
-input.mlir             future compiler input
+input.mlir             final-stage VC4 compiler input
 expected.json          stable semantic oracle
 reference/             trusted qasm/C/H reference bundle
-candidate/README.md    placeholder until codegen exists
+candidate/             generated-candidate hardware harness
 ```
 
-Run the reference side with:
+Run the generated candidate side with:
 
 ```bash
-compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
-  compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap \
-  reference
+compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh \
+  saxpy_tmu_overlap run
+```
+
+The candidate harness initializes deterministic dyadic `f32` inputs for four
+alpha cases, computes the same result on the ARM CPU, checks all 768 live
+outputs by exact `f32` bits, verifies a guard tail after the `y` buffer, and
+requires generated-runtime counters.
+
+The final successful log line must look like:
+
+```text
+VC4_TEST_RESULT name=saxpy_tmu_overlap status=PASS cases=4 checked_elements=768 total_mismatches=0 guard_mismatches=0 active_qpus=12 n=192 checksum_accum=7648000 max_abs_diff=0.0 ...
 ```

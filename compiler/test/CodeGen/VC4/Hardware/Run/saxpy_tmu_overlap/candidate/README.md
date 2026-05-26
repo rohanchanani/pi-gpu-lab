@@ -1,7 +1,9 @@
-# Candidate side disabled
+# Candidate side
 
-This directory is intentionally a placeholder until VC4 code generation exists.
+The candidate side generates a runnable qasm/C/H bundle from `../input.mlir`
+and runs it on real hardware.
 
-The future candidate side will be generated from `../input.mlir` and must
-produce a qasm/C/H bundle that computes the same semantic result as the
-trusted reference side when run through the same hardware harness.
+The harness sweeps four deterministic `alpha` cases, checks all 768 live
+outputs with exact `f32` bit comparisons against the ARM CPU oracle, verifies a
+guard tail after the `y` buffer, and requires generated-runtime launch and code
+upload counters to match the sweep.

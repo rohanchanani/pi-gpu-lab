@@ -78,11 +78,12 @@
       "test_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap",
       "reference_dir": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/reference",
       "expected_path": "compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap/expected.json",
-      "run_command": "compiler/test/CodeGen/VC4/Support/run_hardware_test.sh compiler/test/CodeGen/VC4/Hardware/Run/saxpy_tmu_overlap reference",
+      "run_command": "compiler/test/CodeGen/VC4/Support/run_candidate_codegen_test.sh saxpy_tmu_overlap run",
       "requires_hardware": true,
       "reference_passed": true,
-      "candidate_enabled": false,
-      "notes": "Overlapped-TMU SAXPY reference: issues independent TMU0 direct-memory requests for x and y before consuming both results, computes y = alpha * x + y, and stores through VPM/VDW. Candidate side disabled until codegen exists."
+      "candidate_enabled": true,
+      "candidate_passed": true,
+      "notes": "Generated-candidate overlapped-TMU SAXPY test: issues independent TMU0 direct-memory requests for x and y before consuming both results, computes y = alpha * x + y, and stores through VPM/VDW. The harness sweeps four alpha cases, checks 768 live outputs by exact f32 bits against a CPU oracle, verifies a guard tail, and requires runtime launch/code-upload counters."
     },
     {
       "id": "hardware-run-sfu-recip",
