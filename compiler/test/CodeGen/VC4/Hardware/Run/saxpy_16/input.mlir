@@ -1,7 +1,7 @@
 // RUN: vc4-opt %s --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
 
 // Final-stage scheduled-sink input for the saxpy_16 hardware ground-truth
-// test. The trusted reference bundle computes:
+// test. The generated candidate bundle computes:
 //
 //   y[i] = alpha * x[i] + y[i] for i in [0, n)
 //
@@ -12,9 +12,7 @@
 // TMU reads remain in allocated memory, while the kernel programs VDW DEPTH
 // dynamically for the final partial vector.
 //
-// Hardware-run metadata is kept on the builtin module so support tooling can
-// discover the immutable reference qasm without touching reference/ or
-// expected.json.
+// Hardware-run metadata is kept on the builtin module for support tooling.
 
 module attributes {
   "vc4.hardware_run_test.name" = "saxpy_16",
@@ -35,8 +33,8 @@ module attributes {
       {name = "total_requests", kind = "total_requests", materialization = "uniform_suffix", uniform_index = 5 : i32}
     ],
     work_distribution = {
-      base_element = "qpu_id * 16",
-      stride_elements = "num_qpus * 16",
+      base_element = "logical_request * 16",
+      stride_elements = "total_requests * 16",
       tail_store = "dynamic_vdw_depth"
     }
   }

@@ -3,7 +3,7 @@
 `saxpy_16` is the first SAXPY golden that is not limited to exactly one
 16-lane vector per active QPU.
 
-The reference kernel computes:
+The generated candidate kernel computes:
 
 ```text
 y[i] = alpha * x[i] + y[i]
@@ -20,7 +20,7 @@ and to the kernel semantics, not to the generated launcher.
 This test proves one incremental codegen concept beyond `saxpy_tmu_overlap`:
 
 - a QPU can process more than one 16-lane chunk by using
-  `base = qpu_id * 16` and `stride = num_qpus * 16`;
+  `base = logical_request * 16` and runtime-scheduled vector requests;
 - the checked harness uses exact-multiple `N`, so there is no tail masking yet;
 - scalar and buffer ABI packing remains the same as earlier SAXPY tests;
 - loads use direct TMU0 memory lookups, following the current project default
@@ -28,8 +28,7 @@ This test proves one incremental codegen concept beyond `saxpy_tmu_overlap`:
 - stores still use the VPM/VDW output path.
 
 It does **not** prove non-multiple-of-16 tail behavior, reuse-oriented VPM DMA
-loads, thread switching, semaphore coordination, or generated-code candidate
-execution.
+loads, thread switching, or semaphore coordination.
 
 ## Files
 
@@ -48,10 +47,10 @@ Codex should mechanically add `reference/Makefile`, `reference/run.sh`,
 
 ## Stable result contract
 
-The successful reference run prints a final line like:
+The successful candidate run prints a final line like:
 
 ```text
-VC4_TEST_RESULT name=saxpy_16 status=PASS mismatches=0 active_qpus=12 n=768 chunks_per_qpu=4 checksum=11592704 max_abs_diff=0.0 ...
+VC4_TEST_RESULT name=saxpy_16 status=PASS checked_elements=768 mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 n=768 chunks_per_qpu=4 checksum=11592704 max_abs_diff=0.0 runtime_allocations=1 runtime_launches=1 ...
 ```
 
 `elapsed_usec` is informational only and is not checked by `expected.json`.
