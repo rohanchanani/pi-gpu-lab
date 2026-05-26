@@ -2,9 +2,15 @@
   "name": "memory_output",
   "status": "PASS",
   "required": {
+    "checked_elements": 192,
     "mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
     "active_qpus": 12,
+    "lanes": 16,
     "words": 192,
-    "checksum": 1056
+    "checksum": 1056,
+    "runtime_allocations": 1,
+    "runtime_launches": 1
   }
 }

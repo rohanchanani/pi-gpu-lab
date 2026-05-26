@@ -1,7 +1,5 @@
-# Candidate side placeholder
+# memory_output candidate
 
-This side is intentionally empty until VC4 codegen can emit a candidate
-qasm/C/H bundle from `../input.mlir`.
-
-The implemented catalog entry for this test must keep `candidate_enabled`
-set to `false` until candidate generation and hardware execution exist.
+This candidate side is enabled. The harness builds the generated `input.mlir`
+bundle, launches the VPM/VDW output kernel on hardware, and checks every output
+word plus an output guard region against a strict host oracle.

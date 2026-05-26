@@ -2,7 +2,7 @@
 
 // Final-stage vc4 input corresponding to the trusted reference bundle in
 // reference/.  The reference qasm writes one 16-lane u32 vector per active
-// QPU to the output buffer.  Each lane in QPU q's row contains q.
+// QPU to the output buffer.  Each lane in logical request q's row contains q.
 vc4.module @memory_output {
   vc4.func @memory_output_kernel() attributes {
     domain = #vc4.execution_domain<qpu>,
@@ -40,7 +40,7 @@ vc4.module @memory_output {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // mov ra1, unif      ; qpu_id
+    // mov ra1, unif      ; logical_request
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       pm = false,
@@ -58,7 +58,7 @@ vc4.module @memory_output {
       mul_b = #vc4.qpu_mux<r1>
     }
 
-    // mov ra2, unif      ; num_qpus, carried for ABI coverage
+    // mov ra2, unif      ; total_requests, carried for ABI coverage
     vc4.qpu.bundle {
       sig = #vc4.qpu_signal<none>,
       pm = false,

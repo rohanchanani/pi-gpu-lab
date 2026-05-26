@@ -1,14 +1,14 @@
 # VC4 hardware contract test: memory_output
 
-This is the second runnable hardware contract test in the VC4 codegen corpus.
-It proves that a trusted reference bundle can launch a QPU user program that
-writes observable data back to host-visible memory.
+This is a runnable hardware contract test in the VC4 codegen corpus. It proves
+that a generated VC4 candidate bundle can launch a QPU user program that writes
+observable data back to host-visible memory.
 
 ## What this test verifies
 
 - The bare-metal VC4 runtime can enable QPUs and submit general-purpose QPU
   user-program requests.
-- The reference qasm can write one 16-lane vector per active QPU through
+- The generated candidate qasm can write one 16-lane vector per active QPU through
   VPM/VDW into a host-visible output buffer.
 - Per-QPU uniform packing is hidden inside the launcher.
 - The public launcher API exposes only semantic arguments plus the runtime
@@ -36,12 +36,11 @@ sum(q * 16 for q in 0..11) = 1056
 
 ## Contract files
 
-- `input.mlir` is the final-stage `vc4` MLIR input intended for future
-  candidate codegen.
+- `input.mlir` is the final-stage `vc4` MLIR input used for candidate codegen.
 - `expected.json` is the machine-readable semantic oracle.
 - `reference/` contains the trusted hand-authored qasm/C/H bundle and
   bare-metal harness.
-- `candidate/` is a placeholder for future generated-code runs.
+- `candidate/` contains the generated-bundle harness.
 
 ## Running
 
@@ -50,13 +49,13 @@ From repo root:
 ```bash
 compiler/test/CodeGen/VC4/Support/run_hardware_test.sh \
   compiler/test/CodeGen/VC4/Hardware/Run/memory_output \
-  reference
+  candidate
 ```
 
 The expected result line is:
 
 ```text
-VC4_TEST_RESULT name=memory_output status=PASS mismatches=0 active_qpus=12 words=192 checksum=1056 ...
+VC4_TEST_RESULT name=memory_output status=PASS checked_elements=192 mismatches=0 sentinel_mismatches=0 launch_failures=0 active_qpus=12 lanes=16 words=192 checksum=1056 runtime_allocations=1 runtime_launches=1 ...
 ```
 
 ## Notes
