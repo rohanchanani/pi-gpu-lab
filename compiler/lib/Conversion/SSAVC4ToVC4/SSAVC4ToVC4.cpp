@@ -666,6 +666,12 @@ private:
           return failure();
         }
         registers.try_emplace(*templ.result, *reg);
+        if (!liveness.pinnedValues.count(*templ.result) &&
+            liveness.lastUseIndex.find(*templ.result) ==
+                liveness.lastUseIndex.end()) {
+          freeRegisters.push_back(*reg);
+          releasedValues[*templ.result] = true;
+        }
       }
       for (Value operand : templ.operands)
         releaseIfLastUse(operand, index);

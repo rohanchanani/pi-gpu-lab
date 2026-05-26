@@ -1,13 +1,16 @@
-// RUN: not vc4-opt %s --convert-ssavc4-to-vc4 2>&1 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not=spill_frame_bytes --implicit-check-not=spill_frame_base %s
 
-// CHECK: ssavc4-to-vc4 allocator exhausted available QPU registers but did not produce a spill plan
-ssavc4.module @spill_unsupported_cooperative {
-  ssavc4.func @spill_unsupported_cooperative_kernel() attributes {
+// CHECK-LABEL: vc4.func @dead_defs_release_cooperative_kernel
+// CHECK-SAME: public_name = "dead_defs_release_cooperative"
+// CHECK: value = 32 : i32
+// CHECK: sig = #vc4.qpu_signal<thrend>
+ssavc4.module @dead_defs_release_cooperative {
+  ssavc4.func @dead_defs_release_cooperative_kernel() attributes {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.launch_abi" = {
-      public_name = "spill_unsupported_cooperative",
-      code_symbol = "spill_unsupported_cooperative_shader",
+      public_name = "dead_defs_release_cooperative",
+      code_symbol = "dead_defs_release_cooperative_shader",
       tail_policy = "exact_multiple",
       uniform_words_per_qpu = 1 : i32,
       args = [],

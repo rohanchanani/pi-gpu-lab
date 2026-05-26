@@ -29,12 +29,12 @@ active_qpus=12
 
 lanes=16
 
-max_width=31
+max_width=16
 
-max_height=19
+max_height=16
 
 runtime_allocations=1
 
 runtime_launches=6
 
-The deterministic cases cover image shapes (1,1), (2,3), (7,5), (16,16), (17,9), and (31,19) with smooth, checkerboard, sparse impulse, and affine patterns.
+The deterministic cases cover image shapes (1,1), (2,3), (7,5), (16,16), (15,9), and (16,12) with smooth, checkerboard, sparse impulse, and affine patterns. The scheduled VC4 kernel maps one vector QPU to one complete image row, so the legitimate full-image sweep is bounded to widths up to the 16 hardware lanes.

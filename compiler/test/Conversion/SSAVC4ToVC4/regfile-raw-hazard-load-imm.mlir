@@ -6,12 +6,12 @@
 // CHECK-SAME: waddr_add = 0 : i32
 // CHECK: vc4.qpu.ldi <splat32>
 // CHECK-SAME: value = 4 : i32
-// CHECK-SAME: waddr_add = 1 : i32
+// CHECK-SAME: waddr_add = 0 : i32
 // CHECK-NEXT: vc4.qpu.ldi <splat32>
 // CHECK-SAME: cond_add = #vc4.cond<never>
 // CHECK-SAME: waddr_add = 32 : i32
 // CHECK: op_add = #vc4.add_opcode<add>
-// CHECK-SAME: raddr_a = 1 : i32
+// CHECK-SAME: raddr_a = 0 : i32
 // CHECK-NOT: lowering_template
 // CHECK-NOT: ssavc4.
 ssavc4.module @raw_hazard_load_imm {

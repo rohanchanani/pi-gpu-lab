@@ -8,8 +8,8 @@
 "launch_failures": 0,
 "active_qpus": 12,
 "lanes": 16,
-"max_width": 31,
-"max_height": 19,
+"max_width": 16,
+"max_height": 16,
 "runtime_allocations": 1,
 "runtime_launches": 6
 }

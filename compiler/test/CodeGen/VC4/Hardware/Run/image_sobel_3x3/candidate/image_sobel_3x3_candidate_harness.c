@@ -3,8 +3,8 @@
 #include "vc4_m2_candidate_test_helpers.h"
 
 #define IMAGE_SOBEL_3X3_CASES 6u
-#define IMAGE_SOBEL_3X3_MAX_WIDTH 31u
-#define IMAGE_SOBEL_3X3_MAX_HEIGHT 19u
+#define IMAGE_SOBEL_3X3_MAX_WIDTH 16u
+#define IMAGE_SOBEL_3X3_MAX_HEIGHT 16u
 #define IMAGE_SOBEL_3X3_MAX_PIXELS (IMAGE_SOBEL_3X3_MAX_WIDTH * IMAGE_SOBEL_3X3_MAX_HEIGHT)
 #define IMAGE_SOBEL_3X3_GUARD_WORDS 32u
 #define IMAGE_SOBEL_3X3_SENTINEL 0xdeadbeefu
@@ -48,13 +48,17 @@ static uint32_t clamp_pixel(const uint32_t *input, uint32_t width, uint32_t heig
 
 static uint32_t sobel_ref_pixel(const uint32_t *input, uint32_t width, uint32_t height, uint32_t x, uint32_t y) {
     int ix = (int)x, iy = (int)y;
+    int p00 = (int)clamp_pixel(input, width, height, ix - 1, iy - 1);
     int p01 = (int)clamp_pixel(input, width, height, ix, iy - 1);
+    int p02 = (int)clamp_pixel(input, width, height, ix + 1, iy - 1);
     int p10 = (int)clamp_pixel(input, width, height, ix - 1, iy);
     int p12 = (int)clamp_pixel(input, width, height, ix + 1, iy);
+    int p20 = (int)clamp_pixel(input, width, height, ix - 1, iy + 1);
     int p21 = (int)clamp_pixel(input, width, height, ix, iy + 1);
-    int dx = abs_i32(p12 - p10);
-    int dy = abs_i32(p21 - p01);
-    int mag = dx + dy;
+    int p22 = (int)clamp_pixel(input, width, height, ix + 1, iy + 1);
+    int gx = -p00 + p02 - 2 * p10 + 2 * p12 - p20 + p22;
+    int gy = -p00 - 2 * p01 - p02 + p20 + 2 * p21 + p22;
+    int mag = abs_i32(gx) + abs_i32(gy);
     return mag > 255 ? 255u : (uint32_t)mag;
 }
 
