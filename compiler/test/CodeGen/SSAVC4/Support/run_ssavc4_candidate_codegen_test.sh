@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Generate, assemble, build, or run an SSAVC4 codegen candidate program bundle for
+# Generate, assemble, build, or run a SSAVC4 codegen candidate program bundle for
 # a hardware ground-truth test without mutating the checked-in reference side.
 #
 # M2 program-bundle behavior:
-#   * VC4_CODEGEN_STATE_ROOT selects .vc4_auto/codegen_m2 cleanly.
+#   * VC4_CODEGEN_STATE_ROOT selects the M5 .vc4_auto/vc4tile_m5 state root cleanly.
 #   * manifest-v2 kernels[] are treated as the general case, including the
 #     single-kernel case.
 #   * every manifest-listed qasm_path is assembled to its code_symbol .c/.h.
@@ -15,8 +15,8 @@ set -euo pipefail
 usage() {
   cat >&2 <<'USAGE'
 usage:
-  run_candidate_codegen_test.sh --self-test
-  run_ssavc4_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|clean]
+  run_ssavc4_candidate_codegen_test.sh --self-test
+  run_ssavc4_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|generated-dir|clean]
 USAGE
 }
 
@@ -41,28 +41,15 @@ fi
 
 TEST_ROOT="$REPO_ROOT/compiler/test/CodeGen/SSAVC4/Hardware/Run/$TEST_NAME"
 INPUT_MLIR="$TEST_ROOT/input.mlir"
+if [[ ! -f "$INPUT_MLIR" && -f "$TEST_ROOT/input.ssavc4.mlir" ]]; then
+  INPUT_MLIR="$TEST_ROOT/input.ssavc4.mlir"
+fi
 EXPECTED_JSON="$TEST_ROOT/expected.json"
 REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
 BUNDLE_ONLY_FIXTURE=0
 
-# The M2 verifier uses multi_kernel_minimal as a program-bundle smoke fixture.
-# A later runtime/heap slice may provide a full CUDA-like candidate harness for
-# the same name, but this slice only needs manifest-driven generation, all-QASM
-# assembly, and a link smoke check.  Keep that smoke path active even when a
-# Hardware/Run skeleton exists so we do not compile future ABI helpers here.
-if [[ "$TEST_NAME" == "multi_kernel_minimal" ]]; then
-  BUNDLE_ONLY_FIXTURE=1
-  EXPECTED_JSON=""
-  emit_input="$REPO_ROOT/compiler/test/CodeGen/VC4/Emit/emit-multi-kernel-manifest-v2.mlir"
-  if [[ ! -f "$INPUT_MLIR" && -f "$emit_input" ]]; then
-    INPUT_MLIR="$emit_input"
-  fi
-  REFERENCE_DIR="$REPO_ROOT/compiler/test/CodeGen/VC4/Hardware/Run/saxpy_full/reference"
-  CANDIDATE_DIR="$TEST_ROOT/candidate"
-fi
-
-AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/ssavc4_m3}"
+AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/vc4tile_m5}"
 case "$AUTO_ROOT_RAW" in
   /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
   *) AUTO_ROOT="$REPO_ROOT/$AUTO_ROOT_RAW" ;;
@@ -71,8 +58,8 @@ GENERATED_DIR="$AUTO_ROOT/candidates/$TEST_NAME"
 HARDWARE_ROOT="$AUTO_ROOT/hardware/$TEST_NAME"
 WORK_DIR="$HARDWARE_ROOT/candidate_work"
 
-log() { printf '[vc4-candidate] %s\n' "$*"; }
-fail() { printf '[vc4-candidate] ERROR: %s\n' "$*" >&2; exit 1; }
+log() { printf '[ssavc4-candidate] %s\n' "$*"; }
+fail() { printf '[ssavc4-candidate] ERROR: %s\n' "$*" >&2; exit 1; }
 relpath() { case "$1" in "$REPO_ROOT"/*) printf '%s\n' "${1#$REPO_ROOT/}" ;; *) printf '%s\n' "$1" ;; esac; }
 require_file() { [[ -f "$1" ]] || fail "required file not found: $(relpath "$1")"; }
 require_dir() { [[ -d "$1" ]] || fail "required directory not found: $(relpath "$1")"; }
@@ -143,11 +130,11 @@ bundle = Path(sys.argv[1])
 data = json.loads((bundle / 'manifest.json').read_text())
 
 if data.get('schema_version') != 2:
-    raise SystemExit('manifest schema_version 2 is required for M2 candidate assembly')
+    raise SystemExit('manifest schema_version 2 is required for SSAVC4 candidate assembly')
 
 kernels = data.get('kernels')
 if not isinstance(kernels, list) or not kernels:
-    raise SystemExit('manifest must contain non-empty kernels[] for M2 candidate assembly')
+    raise SystemExit('manifest must contain non-empty kernels[] for SSAVC4 candidate assembly')
 
 seen_qasm = set()
 seen_code = set()
@@ -160,7 +147,7 @@ for i, k in enumerate(kernels):
     if not isinstance(qasm, str) or not qasm:
         raise SystemExit(f'manifest kernels[{i}] missing qasm_path')
     if qasm == 'kernel.qasm':
-        raise SystemExit('M2 bundles must use kernels[].qasm_path, not a root-level singleton QASM artifact')
+        raise SystemExit('SSAVC4 bundles must use kernels[].qasm_path, not a root-level singleton QASM artifact')
     qasm_path = PurePosixPath(qasm)
     if qasm_path.is_absolute() or any(part in ('', '.', '..') for part in qasm_path.parts):
         raise SystemExit(f'manifest kernels[{i}] has unsafe qasm_path {qasm!r}')
@@ -182,6 +169,52 @@ for i, k in enumerate(kernels):
 PY_RECORDS
 }
 
+validate_scheduled_vc4_file() {
+  local path="$1"
+  require_file "$path"
+  python3 - "$path" <<'PY_VALIDATE_VC4'
+from pathlib import Path
+import re
+import sys
+path = Path(sys.argv[1])
+text = path.read_text(encoding='utf-8', errors='replace')
+count = len(re.findall(r'(?<![A-Za-z0-9_.])(?:"vc4\.module"|vc4\.module)(?![A-Za-z0-9_.])', text))
+if count != 1:
+    raise SystemExit(f'{path}: expected exactly one scheduled vc4.module, found {count}')
+if 'ssavc4.' in text:
+    raise SystemExit(f'{path}: still contains ssavc4 operations after --convert-ssavc4-to-vc4')
+if 'vc4tile.' in text:
+    raise SystemExit(f'{path}: still contains vc4tile operations after lowering')
+if 'vc4.qpu.' not in text:
+    raise SystemExit(f'{path}: scheduled VC4 output contains no vc4.qpu.* operations')
+PY_VALIDATE_VC4
+}
+
+validate_core_ssavc4_file() {
+  local path="$1"
+  require_file "$path"
+  python3 - "$path" <<'PY_VALIDATE_CORE'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+if "scf." in text:
+    raise SystemExit(f"{path}: generated SSAVC4 core still contains scf.*")
+if re.search(r"(?<![A-Za-z0-9_!])index(?![A-Za-z0-9_])", text):
+    raise SystemExit(f"{path}: generated SSAVC4 core still contains index type")
+for dialect in (
+    "affine", "gpu", "triton", "tt", "ttg", "nvgpu", "iree", "stablehlo",
+    "tosa", "linalg", "tensor", "memref", "spirv", "nvvm", "rocdl",
+):
+    if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):
+        raise SystemExit(f"{path}: generated SSAVC4 core contains producer dialect op {dialect}.*")
+if "ssavc4.kernel" not in text:
+    raise SystemExit(f"{path}: generated SSAVC4 core contains no ssavc4.kernel")
+PY_VALIDATE_CORE
+}
+
 check_generated_bundle() {
   require_file "$GENERATED_DIR/manifest.json"
   require_file "$GENERATED_DIR/kernel_launch.c"
@@ -190,25 +223,53 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen lowered_dir lowered_mlir
+  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir lowered_ssavc4 scheduled_vc4 stable_ssavc4 stable_vc4
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   rm -rf "$GENERATED_DIR"
   mkdir -p "$GENERATED_DIR"
   lowered_dir="$AUTO_ROOT/lowered"
   mkdir -p "$lowered_dir"
-  lowered_mlir="$lowered_dir/$TEST_NAME.mlir"
-  log "lowering $(relpath "$INPUT_MLIR") to scheduled VC4 at $(relpath "$lowered_mlir")"
-  "$vc4_opt" "$INPUT_MLIR" --convert-ssavc4-to-vc4 -o "$lowered_mlir"
-  log "generating $(relpath "$GENERATED_DIR") from $(relpath "$lowered_mlir")"
-  "$vc4_codegen" "$lowered_mlir" --emit-bundle "$GENERATED_DIR"
+  lowered_tmp_dir="$(mktemp -d "$lowered_dir/${TEST_NAME}.tmp.XXXXXX")"
+  lowered_ssavc4="$lowered_tmp_dir/${TEST_NAME}.ssavc4.mlir"
+  scheduled_vc4="$lowered_tmp_dir/${TEST_NAME}.vc4.mlir"
+  stable_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
+  stable_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
+
+  log "round-tripping SSAVC4 input $(relpath "$INPUT_MLIR") at $(relpath "$lowered_ssavc4")"
+  "$vc4_opt" "$INPUT_MLIR" -o "$lowered_ssavc4"
+  require_file "$lowered_ssavc4"
+
+  log "lowering $(relpath "$lowered_ssavc4") to scheduled VC4 at $(relpath "$scheduled_vc4")"
+  "$vc4_opt" "$lowered_ssavc4" \
+    --convert-ssavc4-to-vc4 \
+    --vc4-verify-emit-contract \
+    --vc4-verify-scheduled-hardware-rules \
+    --vc4-verify-scheduled-adjacent-hazards \
+    --vc4-verify-scheduled-io-spacing \
+    --vc4-verify-scheduled-peripheral-accesses \
+    -o "$scheduled_vc4"
+  validate_scheduled_vc4_file "$scheduled_vc4"
+
+  log "generating $(relpath "$GENERATED_DIR") from $(relpath "$scheduled_vc4")"
+  "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
+
+  cp "$lowered_ssavc4" "$stable_ssavc4"
+  cp "$scheduled_vc4" "$stable_vc4"
+  cp "$INPUT_MLIR" "$GENERATED_DIR/input.ssavc4.mlir"
+  cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
+  cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"
+  rm -rf "$lowered_tmp_dir"
   check_generated_bundle
 }
 
 ensure_generated() {
   check_fixture
-  if [[ -f "$GENERATED_DIR/manifest.json" && -f "$GENERATED_DIR/kernel_launch.c" && -f "$GENERATED_DIR/kernel_launch.h" ]]; then
-    log "using existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
+  if [[ "${VC4_REUSE_GENERATED_CANDIDATE:-0}" == "1" &&
+        -f "$GENERATED_DIR/manifest.json" &&
+        -f "$GENERATED_DIR/kernel_launch.c" &&
+        -f "$GENERATED_DIR/kernel_launch.h" ]]; then
+    log "VC4_REUSE_GENERATED_CANDIDATE=1; reusing existing generated candidate artifacts: $(relpath "$GENERATED_DIR")"
     check_generated_bundle
     return 0
   fi
@@ -273,10 +334,10 @@ select_harness_path() {
   if [[ -f "$candidate" ]]; then printf '%s\n' "$candidate"; return 0; fi
 
   if [[ "${VC4_ALLOW_REFERENCE_HARNESS_FALLBACK:-0}" != "1" ]]; then
-    fail "M2 candidate fixture $TEST_NAME needs $(relpath "$candidate") using kernel_launch.h and vc4Malloc/vc4Memcpy APIs; reference harness fallback is disabled"
+    fail "SSAVC4 candidate fixture $TEST_NAME needs $(relpath "$candidate") using kernel_launch.h and vc4Malloc/vc4Memcpy APIs; reference harness fallback is disabled"
   fi
 
-  log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and forbidden for normal M2 candidate verification."
+  log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and forbidden for normal SSAVC4 candidate verification."
 
   local named="$CANDIDATE_DIR/${TEST_NAME}_harness.c"
   if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
@@ -313,6 +374,43 @@ EXCLUDE ?= grep -v simple_boot
 GREP_STR := 'HASH:\|ERROR:\|PANIC:\|SUCCESS:\|VC4_TEST_RESULT\|VC4_RUNTIME_LAYOUT\|VC4_KERNEL_LAUNCH\|NRF:'
 include \$(CS240LX_2025_PATH)/libpi/mk/Makefile.robust
 EOF_MAKE
+}
+
+write_case_config_header() {
+  python3 - "$WORK_DIR/vc4_case_config.h" <<'PY_CASE_CONFIG'
+import json
+import os
+import re
+import sys
+from pathlib import Path
+
+out = Path(sys.argv[1])
+integer = re.compile(r"^[+-]?(?:0[xX][0-9A-Fa-f]+|[0-9]+)$")
+name = re.compile(r"^(?:VC4_CASE|VC4_MATRIX)_[A-Z0-9_]+$")
+
+lines = [
+    "/* Generated by run_ssavc4_candidate_codegen_test.sh; do not commit. */",
+    "#ifndef VC4_CASE_CONFIG_H",
+    "#define VC4_CASE_CONFIG_H",
+    "",
+]
+
+for key, value in sorted(os.environ.items()):
+    if not name.match(key):
+        continue
+    if integer.match(value):
+        literal = value
+    else:
+        literal = json.dumps(value)
+    lines.append(f"#define {key} {literal}")
+
+lines.extend([
+    "",
+    "#endif /* VC4_CASE_CONFIG_H */",
+    "",
+])
+out.write_text("\n".join(lines), encoding="utf-8")
+PY_CASE_CONFIG
 }
 
 write_bundle_smoke_makefile() {
@@ -455,6 +553,7 @@ prepare_bundle_only_workdir() {
   cp "$GENERATED_DIR/manifest.json" "$WORK_DIR/manifest.json"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
+  write_case_config_header
 
   shader_sources=()
   while IFS= read -r src; do
@@ -466,7 +565,7 @@ prepare_bundle_only_workdir() {
   write_workdir_run_sh "$bin_name"
 
   cat > "$WORK_DIR/README.generated.md" <<EOF_README
-# Generated M2 program-bundle smoke workdir
+# Generated SSAVC4 program-bundle smoke workdir
 
 Generated by compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh.
 This directory is under .vc4_auto and must not be committed.
@@ -479,11 +578,6 @@ EOF_README
 }
 
 prepare_workdir() {
-  if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
-    prepare_bundle_only_workdir
-    return 0
-  fi
-
   assemble_candidate
   local harness_path harness_name bin_name shader_sources
   harness_path="$(select_harness_path)"
@@ -504,6 +598,7 @@ prepare_workdir() {
   cp "$GENERATED_DIR/manifest.json" "$WORK_DIR/manifest.json"
   cp "$GENERATED_DIR/kernel_launch.c" "$WORK_DIR/kernel_launch.c"
   cp "$GENERATED_DIR/kernel_launch.h" "$WORK_DIR/kernel_launch.h"
+  write_case_config_header
 
   shader_sources=()
   while IFS=$'\t' read -r qasm_rel code_symbol public; do
@@ -546,12 +641,59 @@ vc4_candidate_power_cycle_if_needed() {
     log "skipping Pi power cycle: ${message}"
     return 0
   fi
+
   local cmd="${VC4_PI_POWER_CYCLE_CMD:-uhubctl -l 0-1 -a cycle}"
   local sleep_sec="${VC4_PI_POWER_CYCLE_SLEEP_SEC:-1}"
+  local timeout_sec="${VC4_PI_POWER_CYCLE_TIMEOUT_SEC:-10}"
+  local rc=0
+
   log "${message}: ${cmd}"
   if [[ -n "$cmd" ]]; then
-    bash -lc "$cmd"
+    set +e
+    if [[ "$timeout_sec" =~ ^[0-9]+$ ]] && [[ "$timeout_sec" -gt 0 ]]; then
+      python3 - "$timeout_sec" "$cmd" <<'PY_POWER_CYCLE'
+import os
+import signal
+import subprocess
+import sys
+
+timeout = int(sys.argv[1])
+cmd = sys.argv[2]
+process = subprocess.Popen(cmd, shell=True, start_new_session=True)
+try:
+    rc = process.wait(timeout=timeout)
+except subprocess.TimeoutExpired:
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+    print(f"[ssavc4-candidate] WARNING: Pi power cycle command timed out after {timeout}s", file=sys.stderr)
+    sys.exit(124)
+sys.exit(rc)
+PY_POWER_CYCLE
+      rc=$?
+    else
+      bash -lc "$cmd"
+      rc=$?
+    fi
+    set -e
+
+    if [[ "$rc" -ne 0 ]]; then
+      if [[ "${VC4_REQUIRE_POWER_CYCLE:-0}" == "1" ]]; then
+        fail "Pi power cycle command failed with exit code ${rc}: ${cmd}"
+      fi
+      log "continuing after non-fatal Pi power cycle command failure (exit=${rc})"
+    fi
   fi
+
   if [[ "$sleep_sec" =~ ^[0-9]+$ ]] && [[ "$sleep_sec" -gt 0 ]]; then
     sleep "$sleep_sec"
   fi
@@ -589,7 +731,7 @@ run_candidate() {
 
     if [[ "$run_rc" -ne 0 ]] && retry_reason="$(vc4_candidate_transient_preboot_failure_reason "$attempt_log")" && [[ "$attempt" -lt "$max_attempts" ]]; then
       log "transient pre-boot failure matched in attempt log: ${retry_reason}"
-      printf '[vc4-candidate] transient pre-boot failure matched: %s\n' "$retry_reason" >> "$attempt_log"
+      printf '[ssavc4-candidate] transient pre-boot failure matched: %s\n' "$retry_reason" >> "$attempt_log"
       attempt=$((attempt + 1))
       continue
     fi
@@ -648,7 +790,7 @@ vc4_candidate_self_test() {
   } > "$tmp/runtime-layout-crash.log"
   vc4_candidate_self_test_assert_false "runtime layout then crash log" "$tmp/runtime-layout-crash.log"
 
-  echo "run_candidate_codegen_test.sh self-test PASS"
+  echo "run_ssavc4_candidate_codegen_test.sh self-test PASS"
 }
 
 case "$PHASE" in
@@ -658,6 +800,7 @@ case "$PHASE" in
   build) build_candidate ;;
   run|all) run_candidate ;;
   workdir) prepare_workdir; printf '%s\n' "$WORK_DIR" ;;
+  generated-dir) printf '%s\n' "$GENERATED_DIR" ;;
   self-test) vc4_candidate_self_test ;;
   *) usage; exit 2 ;;
 esac

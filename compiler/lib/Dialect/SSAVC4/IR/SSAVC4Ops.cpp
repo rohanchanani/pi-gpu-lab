@@ -102,6 +102,68 @@ static LogicalResult verifyIntegerAttr32(Operation *op, Attribute attr,
   return success();
 }
 
+
+
+static DictionaryAttr getEnclosingResourceMetadata(Operation *op) {
+  for (Operation *parent = op->getParentOp(); parent;
+       parent = parent->getParentOp()) {
+    if (parent->getName().getStringRef() != "ssavc4.func")
+      continue;
+    return dyn_cast_or_null<DictionaryAttr>(parent->getAttr("vc4.resource"));
+  }
+  return nullptr;
+}
+
+static LogicalResult verifyVDRResourceMetadata(Operation *op) {
+  DictionaryAttr resource = getEnclosingResourceMetadata(op);
+  if (!resource)
+    return op->emitOpError()
+           << "requires vc4.resource schedule_mode = cooperative_block";
+
+  auto scheduleMode = dyn_cast_or_null<StringAttr>(resource.get("schedule_mode"));
+  if (!scheduleMode || scheduleMode.getValue() != "cooperative_block")
+    return op->emitOpError()
+           << "requires vc4.resource schedule_mode = cooperative_block";
+
+  auto usesSharedVPM = dyn_cast_or_null<BoolAttr>(resource.get("uses_shared_vpm"));
+  if (!usesSharedVPM || !usesSharedVPM.getValue())
+    return op->emitOpError() << "requires vc4.resource uses_shared_vpm = true";
+
+  auto fullResidency = dyn_cast_or_null<BoolAttr>(
+      resource.get("require_full_block_residency"));
+  if (!fullResidency || !fullResidency.getValue())
+    return op->emitOpError()
+           << "requires vc4.resource require_full_block_residency = true";
+
+  auto sharedBytes = dyn_cast_or_null<IntegerAttr>(
+      resource.get("shared_vpm_bytes"));
+  if (!sharedBytes || sharedBytes.getInt() <= 0)
+    return op->emitOpError() << "requires positive vc4.resource shared_vpm_bytes";
+
+  auto semaphores = dyn_cast_or_null<IntegerAttr>(
+      resource.get("semaphores_per_block"));
+  if (!semaphores || semaphores.getInt() < 4)
+    return op->emitOpError()
+           << "requires vc4.resource semaphores_per_block >= 4";
+
+  return success();
+}
+
+static LogicalResult verifyOptionalStringAttrChoice(Operation *op,
+                                                    StringRef attrName,
+                                                    StringRef firstChoice,
+                                                    StringRef secondChoice,
+                                                    StringRef diagnosticRole) {
+  auto attr = dyn_cast_or_null<StringAttr>(op->getAttr(attrName));
+  if (!attr)
+    return success();
+  if (attr.getValue() == firstChoice || attr.getValue() == secondChoice)
+    return success();
+  return op->emitOpError() << diagnosticRole << " must be one of \""
+                           << firstChoice << "\", \"" << secondChoice
+                           << "\"; got \"" << attr.getValue() << "\"";
+}
+
 static LogicalResult verifySuccessorOperands(Operation *op, Block *successor,
                                              OperandRange operands,
                                              StringRef edgeName = "") {
@@ -447,6 +509,51 @@ LogicalResult SemaReleaseOp::verify() {
   if (getSemaphore().getType().isSignlessInteger(32))
     return success();
   return emitOpError("requires an i32 semaphore id operand");
+}
+
+
+LogicalResult VDRLoadOp::verify() {
+  Operation *op = getOperation();
+  if (!getAddress().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 global base address operand");
+
+  int64_t elemBytes = getElemBytesAttr().getInt();
+  if (elemBytes != 4)
+    return emitOpError("supports only 32-bit executable VDR loads; elem_bytes must be 4");
+
+  int64_t rowLen = getRowLenAttr().getInt();
+  if (rowLen <= 0 || rowLen > 16)
+    return emitOpError("requires row_len in range [1, 16]");
+
+  int64_t nrows = getNrowsAttr().getInt();
+  if (nrows <= 0 || nrows > 16)
+    return emitOpError("requires nrows in range [1, 16]");
+
+  int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
+    return emitOpError("requires memory_pitch_bytes to be a positive multiple of elem_bytes");
+  if (memoryPitchBytes < rowLen * elemBytes)
+    return emitOpError("requires memory_pitch_bytes to cover row_len elements");
+
+  int64_t vpmBaseRow = getVpmBaseRowAttr().getInt();
+  if (vpmBaseRow < 0 || vpmBaseRow > 63)
+    return emitOpError("requires vpm_base_row in range [0, 63]");
+
+  int64_t vpmBaseCol = getVpmBaseColAttr().getInt();
+  if (vpmBaseCol != 0)
+    return emitOpError("M5 VDR loads support only vpm_base_col = 0");
+
+  int64_t vpitch = getVpitchAttr().getInt();
+  if (vpitch <= 0 || vpitch > 16)
+    return emitOpError("requires vpitch in range [1, 16]");
+
+  if (failed(verifyOptionalStringAttrChoice(op, "orientation", "horizontal",
+                                            "vertical", "orientation")))
+    return failure();
+  if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
+                                           "serialize")))
+    return failure();
+  return verifyVDRResourceMetadata(op);
 }
 
 #define GET_OP_CLASSES

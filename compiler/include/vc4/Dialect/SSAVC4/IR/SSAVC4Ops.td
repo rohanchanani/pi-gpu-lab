@@ -297,6 +297,35 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
 }
 
+
+
+def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
+  let summary = "SSAVC4 effectful global-to-VPM load through VDR/VCD";
+  let description = [{
+    Starts and waits for a lower-half VideoCore IV VDR/VCD DMA load from a
+    global-memory base address into the shared VPM window.  This is the
+    hardware-natural global-to-shared path that later M5 VC4Tile copy planning
+    can target for regular 32-bit tile loads.  The operation is intentionally
+    not Pure: lowering owns the concrete VPMVCD_RD_SETUP, VPM_LD_ADDR, wait,
+    and optional mutex serialization sequence.  M5 executable semantics are
+    32-bit-only, so elem_bytes must be 4 and no packed/sub-32 mode is accepted.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    I32Attr:$elem_bytes,
+    I32Attr:$row_len,
+    I32Attr:$nrows,
+    I32Attr:$memory_pitch_bytes,
+    I32Attr:$vpm_base_row,
+    I32Attr:$vpm_base_col,
+    OptionalAttr<StrAttr>:$orientation,
+    I32Attr:$vpitch,
+    OptionalAttr<StrAttr>:$serialize
+  );
+  let assemblyFormat = "$address attr-dict `:` type($address)";
+  let hasVerifier = 1;
+}
+
 def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
   let summary = "SSAVC4 effectful global vector store through VPM/VDW";
   let description = [{
