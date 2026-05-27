@@ -158,6 +158,22 @@ def VC4Tile_MaskedStoreGlobalOp : VC4Tile_Op<"masked_store_global", [
   let hasVerifier = 1;
 }
 
+// Temporary M5 surface/core boundary sentinel.  This operation is deliberately
+// non-executable: surface canonicalization erases it, core verification rejects
+// it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.
+def VC4Tile_SurfacePlaceholderOp : VC4Tile_Op<"surface_placeholder"> {
+  let summary = "temporary non-executable VC4Tile surface sentinel";
+  let description = [{
+    Boundary-only surface operation used by M5 slice 01 to prove that the
+    ergonomic surface pipeline is ordered before VC4Tile core verification and
+    SSAVC4 lowering.  Later M5 slices add real surface movement operations; this
+    placeholder must not lower to SSAVC4, scheduled VC4, QASM, or runtime
+    artifacts.
+  }];
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_RotateOp : VC4Tile_PureOp<"rotate"> {
   let summary = "warp-local vector lane rotate";
   let arguments = (ins AnyType:$input, I32Attr:$amount);

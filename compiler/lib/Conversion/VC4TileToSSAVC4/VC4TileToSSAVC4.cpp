@@ -75,6 +75,8 @@ constexpr llvm::StringLiteral kVC4TileSharedAllocOpName("vc4tile.shared_alloc");
 constexpr llvm::StringLiteral kVC4TileSharedLoadOpName("vc4tile.shared_load");
 constexpr llvm::StringLiteral kVC4TileSharedStoreOpName("vc4tile.shared_store");
 constexpr llvm::StringLiteral kVC4TileBarrierOpName("vc4tile.barrier");
+constexpr llvm::StringLiteral kVC4TileSurfacePlaceholderOpName(
+    "vc4tile.surface_placeholder");
 
 constexpr llvm::StringLiteral kArithConstantOpName("arith.constant");
 constexpr llvm::StringLiteral kArithAddIOpName("arith.addi");
@@ -125,6 +127,18 @@ static StringAttr getSymbolNameAttr(Operation *op) {
 
 static bool isVC4TileOp(Operation *op) {
   return op->getName().getStringRef().starts_with("vc4tile.");
+}
+
+static bool isVC4TileSurfaceOp(Operation *op) {
+  return hasName(op, kVC4TileSurfacePlaceholderOpName);
+}
+
+static LogicalResult emitSurfaceOpOrderingError(Operation *op,
+                                                StringRef beforePass) {
+  return op->emitOpError()
+         << "is a surface operation; run --canonicalize-vc4tile-surface and "
+            "--plan-vc4tile-copies before "
+         << beforePass;
 }
 
 static Operation *getParentVC4TileKernel(Operation *op) {
@@ -346,6 +360,11 @@ static LogicalResult verifyVC4TileCoreKernel(Operation *kernel) {
         !isAllowedCoreTerminator(op)) {
       op->emitOpError("is not an allowed vc4tile core terminator; expected "
                       "vc4tile.return, cf.br, or cf.cond_br");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+    if (isVC4TileSurfaceOp(op)) {
+      (void)emitSurfaceOpOrderingError(op, "--verify-vc4tile-core");
       sawError = true;
       return WalkResult::interrupt();
     }
@@ -2665,6 +2684,26 @@ static LogicalResult legalizeVC4TileKernelSCF(Operation *kernel) {
   return success();
 }
 
+static LogicalResult rejectSurfaceOpsInKernels(ModuleOp module,
+                                               StringRef beforePass) {
+  for (Operation &op : module.getBody()->getOperations()) {
+    if (!isVC4TileKernel(&op))
+      continue;
+    Operation *surfaceOp = nullptr;
+    op.walk([&](Operation *nested) {
+      if (nested == &op)
+        return WalkResult::advance();
+      if (!isVC4TileSurfaceOp(nested))
+        return WalkResult::advance();
+      surfaceOp = nested;
+      return WalkResult::interrupt();
+    });
+    if (surfaceOp)
+      return emitSurfaceOpOrderingError(surfaceOp, beforePass);
+  }
+  return success();
+}
+
 static LogicalResult rejectRawSCFInKernels(ModuleOp module,
                                            StringRef diagnosticSuffix) {
   for (Operation &op : module.getBody()->getOperations()) {
@@ -2678,6 +2717,58 @@ static LogicalResult rejectRawSCFInKernels(ModuleOp module,
   }
   return success();
 }
+
+struct CanonicalizeVC4TileSurfacePass
+    : public PassWrapper<CanonicalizeVC4TileSurfacePass,
+                         OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(CanonicalizeVC4TileSurfacePass)
+
+  StringRef getArgument() const override { return "canonicalize-vc4tile-surface"; }
+  StringRef getDescription() const override {
+    return "Erase temporary VC4Tile surface sentinels and prepare ergonomic surface IR for copy planning";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect,
+                    mlir::vc4tile::VC4TileDialect>();
+  }
+
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
+    SmallVector<Operation *, 8> placeholders;
+    module.walk([&](Operation *op) {
+      if (isVC4TileSurfaceOp(op))
+        placeholders.push_back(op);
+    });
+    for (Operation *op : placeholders)
+      op->erase();
+  }
+};
+
+struct PlanVC4TileCopiesPass
+    : public PassWrapper<PlanVC4TileCopiesPass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlanVC4TileCopiesPass)
+
+  StringRef getArgument() const override { return "plan-vc4tile-copies"; }
+  StringRef getDescription() const override {
+    return "Plan ergonomic VC4Tile copy operations into lowering-ready VC4Tile core operations";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect,
+                    mlir::vc4tile::VC4TileDialect>();
+  }
+
+  void runOnOperation() override {
+    // M5 slice 01 registers the copy-planning boundary before real ergonomic
+    // copy ops exist.  Later slices replace this semantic no-op with hardware-
+    // aware planning for tile_load/tile_store/copy_tile.  Deliberately do not
+    // erase unknown surface ops here; canonicalization/planning ownership stays
+    // explicit and conversion remains the final ordering guard.
+  }
+};
 
 struct VerifyVC4TileCorePass
     : public PassWrapper<VerifyVC4TileCorePass, OperationPass<ModuleOp>> {
@@ -2750,6 +2841,11 @@ struct ConvertVC4TileToSSAVC4Pass
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (failed(rejectSurfaceOpsInKernels(module,
+                                         "--convert-vc4tile-to-ssavc4"))) {
+      signalPassFailure();
+      return;
+    }
     if (failed(rejectRawSCFInKernels(
             module,
             " must be legalized with --legalize-vc4tile-core-cfg before "
@@ -2808,6 +2904,14 @@ struct ConvertVC4TileToSSAVC4Pass
 
 } // namespace
 
+std::unique_ptr<Pass> mlir::vc4::createCanonicalizeVC4TileSurfacePass() {
+  return std::make_unique<CanonicalizeVC4TileSurfacePass>();
+}
+
+std::unique_ptr<Pass> mlir::vc4::createPlanVC4TileCopiesPass() {
+  return std::make_unique<PlanVC4TileCopiesPass>();
+}
+
 std::unique_ptr<Pass> mlir::vc4::createVerifyVC4TileCorePass() {
   return std::make_unique<VerifyVC4TileCorePass>();
 }
@@ -2825,6 +2929,9 @@ void mlir::vc4::registerConvertVC4TileToSSAVC4Pass() {
   // file-scope PassRegistration objects below install the pass flags.
 }
 
+static PassRegistration<CanonicalizeVC4TileSurfacePass>
+    registerCanonicalizeVC4TileSurfacePass;
+static PassRegistration<PlanVC4TileCopiesPass> registerPlanVC4TileCopiesPass;
 static PassRegistration<VerifyVC4TileCorePass> registerVerifyVC4TileCorePass;
 static PassRegistration<LegalizeVC4TileCoreCFGPass>
     registerLegalizeVC4TileCoreCFGPass;

@@ -474,6 +474,10 @@ LogicalResult TailMaskOp::verify() {
   return verifyVector16I1(op, getResult().getType(), "result");
 }
 
+LogicalResult SurfacePlaceholderOp::verify() {
+  return verifyInsideKernel(getOperation());
+}
+
 LogicalResult MaskedLoadGlobalOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||

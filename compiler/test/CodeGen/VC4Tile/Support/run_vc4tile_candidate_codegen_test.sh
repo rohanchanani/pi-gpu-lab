@@ -49,7 +49,7 @@ REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
 BUNDLE_ONLY_FIXTURE=0
 
-AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/vc4tile_m4}"
+AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/vc4tile_m5}"
 case "$AUTO_ROOT_RAW" in
   /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
   *) AUTO_ROOT="$REPO_ROOT/$AUTO_ROOT_RAW" ;;
@@ -223,7 +223,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir core_vc4tile lowered_ssavc4 scheduled_vc4 stable_core stable_ssavc4 stable_vc4
+  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir surface_vc4tile planned_vc4tile core_vc4tile lowered_ssavc4 scheduled_vc4 stable_surface stable_planned stable_core stable_ssavc4 stable_vc4
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   rm -rf "$GENERATED_DIR"
@@ -231,21 +231,40 @@ run_vc4_codegen() {
   lowered_dir="$AUTO_ROOT/lowered"
   mkdir -p "$lowered_dir"
   lowered_tmp_dir="$(mktemp -d "$lowered_dir/${TEST_NAME}.tmp.XXXXXX")"
+  surface_vc4tile="$lowered_tmp_dir/${TEST_NAME}.surface-normalized.vc4tile.mlir"
+  planned_vc4tile="$lowered_tmp_dir/${TEST_NAME}.planned.vc4tile.mlir"
   core_vc4tile="$lowered_tmp_dir/${TEST_NAME}.core.vc4tile.mlir"
   lowered_ssavc4="$lowered_tmp_dir/${TEST_NAME}.ssavc4.mlir"
   scheduled_vc4="$lowered_tmp_dir/${TEST_NAME}.vc4.mlir"
+  stable_surface="$lowered_dir/${TEST_NAME}.surface-normalized.vc4tile.mlir"
+  stable_planned="$lowered_dir/${TEST_NAME}.planned.vc4tile.mlir"
   stable_core="$lowered_dir/${TEST_NAME}.core.vc4tile.mlir"
   stable_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
   stable_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
-  log "canonicalizing $(relpath "$INPUT_MLIR") to VC4Tile core at $(relpath "$core_vc4tile")"
+
+  log "canonicalizing VC4Tile surface $(relpath "$INPUT_MLIR") at $(relpath "$surface_vc4tile")"
   "$vc4_opt" "$INPUT_MLIR" \
+    --canonicalize-vc4tile-surface \
+    -o "$surface_vc4tile"
+  require_file "$surface_vc4tile"
+
+  log "planning VC4Tile copies at $(relpath "$planned_vc4tile")"
+  "$vc4_opt" "$surface_vc4tile" \
+    --plan-vc4tile-copies \
+    -o "$planned_vc4tile"
+  require_file "$planned_vc4tile"
+
+  log "legalizing planned VC4Tile to core at $(relpath "$core_vc4tile")"
+  "$vc4_opt" "$planned_vc4tile" \
     --legalize-vc4tile-core-cfg \
     --verify-vc4tile-core \
     -o "$core_vc4tile"
   validate_core_vc4tile_file "$core_vc4tile"
+
   log "lowering $(relpath "$core_vc4tile") to SSAVC4 at $(relpath "$lowered_ssavc4")"
   "$vc4_opt" "$core_vc4tile" --convert-vc4tile-to-ssavc4 -o "$lowered_ssavc4"
   require_file "$lowered_ssavc4"
+
   log "lowering $(relpath "$lowered_ssavc4") to scheduled VC4 at $(relpath "$scheduled_vc4")"
   "$vc4_opt" "$lowered_ssavc4" \
     --convert-ssavc4-to-vc4 \
@@ -256,19 +275,24 @@ run_vc4_codegen() {
     --vc4-verify-scheduled-peripheral-accesses \
     -o "$scheduled_vc4"
   validate_scheduled_vc4_file "$scheduled_vc4"
+
   log "generating $(relpath "$GENERATED_DIR") from $(relpath "$scheduled_vc4")"
   "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
+
+  cp "$surface_vc4tile" "$stable_surface"
+  cp "$planned_vc4tile" "$stable_planned"
   cp "$core_vc4tile" "$stable_core"
   cp "$lowered_ssavc4" "$stable_ssavc4"
   cp "$scheduled_vc4" "$stable_vc4"
   cp "$INPUT_MLIR" "$GENERATED_DIR/input.vc4tile.mlir"
+  cp "$surface_vc4tile" "$GENERATED_DIR/surface-normalized.vc4tile.mlir"
+  cp "$planned_vc4tile" "$GENERATED_DIR/planned.vc4tile.mlir"
   cp "$core_vc4tile" "$GENERATED_DIR/core.vc4tile.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"
   rm -rf "$lowered_tmp_dir"
   check_generated_bundle
 }
-
 ensure_generated() {
   check_fixture
   if [[ "${VC4_REUSE_GENERATED_CANDIDATE:-0}" == "1" &&
