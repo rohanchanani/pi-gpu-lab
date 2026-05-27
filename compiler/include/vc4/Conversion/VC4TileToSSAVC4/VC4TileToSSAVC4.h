@@ -16,6 +16,8 @@ class Pass;
 
 namespace vc4 {
 
+std::unique_ptr<Pass> createVerifyVC4TileCorePass();
+std::unique_ptr<Pass> createLegalizeVC4TileCoreCFGPass();
 std::unique_ptr<Pass> createConvertVC4TileToSSAVC4Pass();
 void registerConvertVC4TileToSSAVC4Pass();
 

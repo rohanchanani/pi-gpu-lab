@@ -2071,6 +2071,359 @@ def mechanism_negative_diagnostic(ctx: VerifierContext, slice_id: str, v: Mappin
     return make_success(ctx, slice_id, v, message="negative diagnostic passed", duration=result.duration_sec, details={"log_path": str(log_path)})
 
 
+
+# ---------------------------------------------------------------------------
+# M5-style VC4Tile ergonomic verifier mechanisms
+# ---------------------------------------------------------------------------
+
+VC4TILE_DEFAULT_SURFACE_OPS = [
+    "vc4tile.tile_load",
+    "vc4tile.tile_store",
+    "vc4tile.copy_tile",
+    "vc4tile.tile_view",
+    "vc4tile.tile_transpose",
+    "vc4tile.tile_reduce",
+    "vc4tile.block_reduce",
+    "vc4tile.tile_contract",
+    "vc4tile.tile_dot",
+    "vc4tile.tile_matmul",
+]
+
+VC4TILE_DEFAULT_PRODUCER_OP_PREFIXES = [
+    "tt.",
+    "ttir.",
+    "triton.",
+    "gpu.",
+    "stablehlo.",
+    "mhlo.",
+    "linalg.",
+    "torch.",
+    "tosa.",
+]
+
+
+def _work_dir_path(ctx: VerifierContext, v: Mapping[str, Any]) -> Optional[Path]:
+    raw = v.get("work_dir")
+    if not raw:
+        return None
+    return resolve_repo_or_auto_path(ctx, str(raw))
+
+
+def _resolve_work_path(ctx: VerifierContext, v: Mapping[str, Any], raw: Any) -> Path:
+    s = str(raw)
+    if Path(s).is_absolute() or s.startswith(".vc4_auto/"):
+        return resolve_repo_or_auto_path(ctx, s)
+    work_dir = _work_dir_path(ctx, v)
+    if work_dir is not None:
+        return work_dir / s
+    return resolve_repo_or_auto_path(ctx, s)
+
+
+def _m5_output_paths(ctx: VerifierContext, v: Mapping[str, Any], keys: Sequence[str]) -> List[Path]:
+    paths: List[Path] = []
+    for key in keys:
+        value = v.get(key)
+        if value is None:
+            continue
+        for item in as_list(value):
+            paths.append(_resolve_work_path(ctx, v, item))
+    out: List[Path] = []
+    seen: set[str] = set()
+    for path in paths:
+        key = str(path)
+        if key not in seen:
+            out.append(path)
+            seen.add(key)
+    return out
+
+
+def _read_contract_texts(paths: Sequence[Path]) -> Tuple[Dict[str, str], List[str]]:
+    texts: Dict[str, str] = {}
+    missing: List[str] = []
+    for path in paths:
+        if not path.exists():
+            missing.append(str(path))
+            continue
+        if path.is_file():
+            texts[str(path)] = read_text(path)
+    return texts, missing
+
+
+def _check_m5_text_expectations(
+    ctx: VerifierContext,
+    v: Mapping[str, Any],
+    paths: Sequence[Path],
+) -> Dict[str, Any]:
+    texts, missing = _read_contract_texts(paths)
+    combined = "\n".join(texts.values())
+    must_contain = [str(x) for x in as_list(v.get("must_contain"))]
+    must_not_contain = [str(x) for x in as_list(v.get("must_not_contain"))]
+    regex_must_contain = [str(x) for x in as_list(v.get("regex_must_contain"))]
+    regex_must_not_contain = [str(x) for x in as_list(v.get("regex_must_not_contain"))]
+    return {
+        "files_checked": list(texts),
+        "missing_files": missing,
+        "missing_literals": [s for s in must_contain if s not in combined],
+        "forbidden_literals": [s for s in must_not_contain if s in combined],
+        "missing_regex": [s for s in regex_must_contain if not re.search(s, combined, flags=re.S)],
+        "forbidden_regex": [s for s in regex_must_not_contain if re.search(s, combined, flags=re.S)],
+        "combined_text": combined,
+    }
+
+
+def _run_vc4tile_pipeline_if_requested(
+    ctx: VerifierContext,
+    slice_id: str,
+    v: Mapping[str, Any],
+    default_name: str,
+    output_key: str,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    if isinstance(v.get("steps"), list):
+        return _run_contract_steps(ctx, slice_id, v, default_name)
+
+    input_value = v.get("input")
+    pipeline = [str(x) for x in as_list(v.get("pipeline"))]
+    output_value = v.get(output_key)
+    if not input_value and not pipeline and not output_value:
+        return [], []
+    if not input_value or not pipeline or not output_value:
+        return [], [{"error": f"{default_name} requires input, pipeline, and {output_key} when steps are not provided"}]
+
+    input_path = _resolve_work_path(ctx, v, input_value)
+    output_path = _resolve_work_path(ctx, v, output_value)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    cmd = ["vc4-opt", str(input_path), *pipeline, "-o", str(output_path)]
+    log_path = ctx.command_log_path(slice_id, str(v.get("id", default_name)) + "_" + default_name)
+    result = ctx.run_command(cmd, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
+    record = {
+        "step": 0,
+        "name": default_name,
+        "exit_code": result.exit_code,
+        "log_path": str(log_path),
+        "missing_stdout": [],
+        "missing_stderr": [],
+    }
+    if result.exit_code != int(v.get("expect_exit_code", 0)) or result.timed_out:
+        record.update({"stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr), "timed_out": result.timed_out})
+        return [record], [record]
+    return [record], []
+
+
+def _m5_contract_failed(checks: Mapping[str, Any]) -> bool:
+    return any(
+        checks.get(key)
+        for key in (
+            "missing_files",
+            "missing_literals",
+            "forbidden_literals",
+            "missing_regex",
+            "forbidden_regex",
+        )
+    )
+
+
+def mechanism_vc4tile_surface_core_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_vc4tile_pipeline_if_requested(ctx, slice_id, v, "surface_core", "core_output")
+    paths = _m5_output_paths(ctx, v, ["core_output", "inspect_files", "files"])
+    checks = _check_m5_text_expectations(ctx, v, paths)
+    combined = str(checks.pop("combined_text"))
+    failures: List[Dict[str, Any]] = step_failures[:]
+
+    if bool(v.get("forbid_surface_ops", False)):
+        surface_ops = [str(x) for x in as_list(v.get("surface_ops"))] or VC4TILE_DEFAULT_SURFACE_OPS
+        present = [op for op in surface_ops if op in combined]
+        if present:
+            failures.append({"surface_ops_survived": present})
+    if bool(v.get("forbid_scf", False)) and "scf." in combined:
+        failures.append({"raw_scf_survived": True})
+    if bool(v.get("forbid_index", False)):
+        index_patterns = [r"(?<![A-Za-z0-9_])index(?![A-Za-z0-9_])", r":\s*index\b"]
+        present_index = [pat for pat in index_patterns if re.search(pat, combined)]
+        if present_index:
+            failures.append({"index_type_or_literal_survived": present_index})
+    if bool(v.get("forbid_producer_ops", False)):
+        prefixes = [str(x) for x in as_list(v.get("producer_prefixes"))] or VC4TILE_DEFAULT_PRODUCER_OP_PREFIXES
+        present = [prefix for prefix in prefixes if prefix in combined]
+        if present:
+            failures.append({"producer_ops_survived": present})
+    if _m5_contract_failed(checks):
+        failures.append({"text_expectations": checks})
+    if failures:
+        return make_failure(ctx, slice_id, v, "VC4Tile surface-to-core contract failed", actual={"step_results": step_results, "checks": checks, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="VC4Tile surface-to-core contract passed", details={"step_results": step_results, "checks": checks}, duration=time.time() - started)
+
+
+def _load_copy_plan(ctx: VerifierContext, v: Mapping[str, Any]) -> Tuple[Optional[Path], List[Mapping[str, Any]], Optional[Dict[str, Any]]]:
+    plan_value = v.get("plan_output") or v.get("copy_plan_output")
+    if not plan_value:
+        return None, [], None
+    path = _resolve_work_path(ctx, v, plan_value)
+    if not path.exists():
+        return path, [], {"missing_plan": str(path)}
+    data = read_json_file_checked(path)
+    if isinstance(data, Mapping):
+        copies = data.get("copies", [])
+        if not isinstance(copies, list):
+            return path, [], {"invalid_plan": "copies must be a list", "path": str(path)}
+        return path, [c for c in copies if isinstance(c, Mapping)], None
+    if isinstance(data, list):
+        return path, [c for c in data if isinstance(c, Mapping)], None
+    return path, [], {"invalid_plan": "plan must be an object or list", "path": str(path)}
+
+
+def _copy_plan_entry_matches(actual: Mapping[str, Any], expected: Mapping[str, Any]) -> bool:
+    ignored = {"required_core_ops", "forbidden_core_ops", "required_literals", "forbidden_literals"}
+    for key, value in expected.items():
+        if key in ignored:
+            continue
+        if actual.get(key) != value:
+            return False
+    return True
+
+
+def mechanism_vc4tile_copy_plan_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_vc4tile_pipeline_if_requested(ctx, slice_id, v, "copy_plan", "core_output")
+    paths = _m5_output_paths(ctx, v, ["core_output", "inspect_files", "files"])
+    checks = _check_m5_text_expectations(ctx, v, paths)
+    combined = str(checks.pop("combined_text"))
+    failures: List[Dict[str, Any]] = step_failures[:]
+
+    plan_path, plan_copies, plan_error = _load_copy_plan(ctx, v)
+    if plan_error:
+        failures.append({"copy_plan": plan_error})
+
+    expected_copies = [x for x in as_list(v.get("expected_copies")) if isinstance(x, Mapping)]
+    unmatched: List[Mapping[str, Any]] = []
+    copy_op_failures: List[Dict[str, Any]] = []
+    for expected in expected_copies:
+        if plan_path is not None and not any(_copy_plan_entry_matches(actual, expected) for actual in plan_copies):
+            unmatched.append(expected)
+        for literal in [str(x) for x in as_list(expected.get("required_core_ops")) + as_list(expected.get("required_literals"))]:
+            if literal not in combined:
+                copy_op_failures.append({"copy": expected, "missing_core_literal": literal})
+        for literal in [str(x) for x in as_list(expected.get("forbidden_core_ops")) + as_list(expected.get("forbidden_literals"))]:
+            if literal in combined:
+                copy_op_failures.append({"copy": expected, "forbidden_core_literal": literal})
+    if unmatched:
+        failures.append({"unmatched_expected_copies": unmatched, "actual_copies": plan_copies})
+    if copy_op_failures:
+        failures.append({"copy_core_op_failures": copy_op_failures})
+
+    required_methods = [str(x) for x in as_list(v.get("required_methods"))]
+    forbidden_methods = [str(x) for x in as_list(v.get("forbidden_methods"))]
+    actual_methods = [str(c.get("method")) for c in plan_copies if "method" in c]
+    missing_methods = [m for m in required_methods if m not in actual_methods]
+    present_forbidden_methods = [m for m in forbidden_methods if m in actual_methods]
+    if missing_methods or present_forbidden_methods:
+        failures.append({"method_checks": {"actual_methods": actual_methods, "missing_methods": missing_methods, "present_forbidden_methods": present_forbidden_methods}})
+
+    if _m5_contract_failed(checks):
+        failures.append({"text_expectations": checks})
+    if failures:
+        return make_failure(ctx, slice_id, v, "VC4Tile copy-plan contract failed", actual={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="VC4Tile copy-plan contract passed", details={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies}, duration=time.time() - started)
+
+
+def mechanism_precision_policy_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "precision_policy")
+    paths = _m5_output_paths(ctx, v, ["scan_files", "inspect_files", "files"])
+    checks = _check_m5_text_expectations(ctx, v, paths)
+    combined = str(checks.pop("combined_text"))
+    failures: List[Dict[str, Any]] = step_failures[:]
+
+    required_markers = [str(x) for x in as_list(v.get("required_markers"))]
+    missing_markers = [marker for marker in required_markers if marker not in combined]
+    if missing_markers:
+        failures.append({"missing_precision_markers": missing_markers})
+
+    forbidden_regex = [str(x) for x in as_list(v.get("forbidden_executable_regex"))]
+    forbidden_matches = []
+    for pattern in forbidden_regex:
+        if re.search(pattern, combined, flags=re.S):
+            forbidden_matches.append(pattern)
+    if forbidden_matches:
+        failures.append({"forbidden_executable_precision_patterns": forbidden_matches})
+
+    invalid_results: List[Dict[str, Any]] = []
+    for i, case in enumerate([x for x in as_list(v.get("invalid_cases")) if isinstance(x, Mapping)]):
+        argv = case.get("argv") or case.get("command")
+        if not isinstance(argv, list) or not argv:
+            failures.append({"invalid_case": i, "error": "invalid case requires argv array"})
+            continue
+        case_id = str(case.get("name", f"invalid_case_{i}"))
+        log_path = ctx.command_log_path(slice_id, f"{v.get('id', 'precision_policy')}_{case_id}")
+        result = ctx.run_command(expand_command(ctx, argv, v), cwd=ctx.repo_path(str(case.get("cwd", v.get("cwd", ".")))) if (case.get("cwd") or v.get("cwd")) else ctx.repo, timeout_sec=verification_timeout_sec(ctx, case), log_path=log_path)
+        expected_exit = int(case.get("expect_exit_code", 1))
+        stdout_contains = [str(x) for x in as_list(case.get("stdout_contains"))]
+        stderr_contains = [str(x) for x in as_list(case.get("stderr_contains"))]
+        combined_contains = [str(x) for x in as_list(case.get("contains"))]
+        combined_output = result.stdout + "\n" + result.stderr
+        missing_stdout = [s for s in stdout_contains if s not in result.stdout]
+        missing_stderr = [s for s in stderr_contains if s not in result.stderr]
+        missing_combined = [s for s in combined_contains if s not in combined_output]
+        record = {"case": i, "name": case_id, "exit_code": result.exit_code, "log_path": str(log_path), "missing_stdout": missing_stdout, "missing_stderr": missing_stderr, "missing_combined": missing_combined}
+        invalid_results.append(record)
+        if result.exit_code != expected_exit or missing_stdout or missing_stderr or missing_combined or result.timed_out:
+            record.update({"stdout_tail": tail(result.stdout), "stderr_tail": tail(result.stderr), "timed_out": result.timed_out})
+            failures.append({"invalid_case_failure": record})
+
+    if _m5_contract_failed(checks):
+        failures.append({"text_expectations": checks})
+    if failures:
+        return make_failure(ctx, slice_id, v, "precision policy contract failed", actual={"step_results": step_results, "checks": checks, "invalid_results": invalid_results, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="precision policy contract passed", details={"step_results": step_results, "checks": checks, "invalid_results": invalid_results, "allowed_executable_precisions": as_list(v.get("allowed_executable_precisions"))}, duration=time.time() - started)
+
+
+def mechanism_vc4tile_pipeline_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+    started = time.time()
+    step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "pipeline")
+    failures: List[Dict[str, Any]] = step_failures[:]
+
+    script_value = v.get("script")
+    script_path = _resolve_work_path(ctx, v, script_value) if script_value else None
+    script_text = ""
+    if not script_path or not script_path.exists():
+        failures.append({"missing_script": str(script_path) if script_path else None})
+    else:
+        script_text = read_text(script_path)
+
+    required_order = [str(x) for x in as_list(v.get("required_order"))]
+    order_positions: List[Dict[str, Any]] = []
+    cursor = -1
+    for token in required_order:
+        pos = script_text.find(token, cursor + 1)
+        order_positions.append({"token": token, "position": pos})
+        if pos < 0:
+            failures.append({"required_order_missing": token})
+        elif pos < cursor:
+            failures.append({"required_order_violation": token, "position": pos, "previous_position": cursor})
+        else:
+            cursor = pos
+
+    forbidden_patterns = [str(x) for x in as_list(v.get("forbidden_patterns"))]
+    present_forbidden = [pattern for pattern in forbidden_patterns if re.search(pattern, script_text, flags=re.S)]
+    if present_forbidden:
+        failures.append({"forbidden_script_patterns": present_forbidden})
+
+    required_intermediates = [_resolve_work_path(ctx, v, raw) for raw in as_list(v.get("required_intermediates"))]
+    missing_intermediates = [str(path) for path in required_intermediates if not path.exists()]
+    if missing_intermediates:
+        failures.append({"missing_intermediates": missing_intermediates})
+
+    paths = list(required_intermediates)
+    paths.extend(_m5_output_paths(ctx, v, ["inspect_files", "files"]))
+    checks = _check_m5_text_expectations(ctx, v, paths)
+    checks.pop("combined_text")
+    if _m5_contract_failed(checks):
+        failures.append({"text_expectations": checks})
+
+    if failures:
+        return make_failure(ctx, slice_id, v, "VC4Tile pipeline contract failed", actual={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "checks": checks, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="VC4Tile pipeline contract passed", details={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "intermediates": [str(p) for p in required_intermediates], "checks": checks}, duration=time.time() - started)
+
 # ---------------------------------------------------------------------------
 # M4-style feature contract verifier mechanisms
 # ---------------------------------------------------------------------------
@@ -2081,7 +2434,19 @@ FEATURE_REQUIREMENT_TO_MECHANISM = {
     "lowered_ir": "lowered_ir_contract",
     "scheduled_artifact": "scheduled_artifact_contract",
     "hardware_cpu_reference": "hardware_cpu_reference_contract",
+    "surface_core": "vc4tile_surface_core_contract",
+    "copy_plan": "vc4tile_copy_plan_contract",
+    "precision_policy": "precision_policy_contract",
+    "pipeline": "vc4tile_pipeline_contract",
 }
+
+FEATURE_GATE_DEFAULT_REQUIREMENTS = (
+    "dialect",
+    "invalid_diagnostics",
+    "lowered_ir",
+    "scheduled_artifact",
+    "hardware_cpu_reference",
+)
 
 
 def _verification_feature_names(v: Mapping[str, Any]) -> set[str]:
@@ -2163,7 +2528,7 @@ def mechanism_feature_gate_contract(ctx: VerifierContext, slice_id: str, v: Mapp
             continue
         requires = entry.get("requires") if isinstance(entry.get("requires"), Mapping) else {}
         if not requires:
-            requires = {k: True for k in FEATURE_REQUIREMENT_TO_MECHANISM}
+            requires = {k: True for k in FEATURE_GATE_DEFAULT_REQUIREMENTS}
         for req_name, raw_required in requires.items():
             if isinstance(raw_required, Mapping):
                 required = bool(raw_required.get("required", True))
@@ -3000,6 +3365,10 @@ MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], Verifi
     "milestone_scope_contract": mechanism_milestone_scope_contract,
     "implementation_integrity_contract": mechanism_implementation_integrity_contract,
     "regression_contract": mechanism_regression_contract,
+    "vc4tile_surface_core_contract": mechanism_vc4tile_surface_core_contract,
+    "vc4tile_copy_plan_contract": mechanism_vc4tile_copy_plan_contract,
+    "precision_policy_contract": mechanism_precision_policy_contract,
+    "vc4tile_pipeline_contract": mechanism_vc4tile_pipeline_contract,
 }
 
 MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
@@ -3041,6 +3410,10 @@ MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
     "milestone_scope_contract": [],
     "implementation_integrity_contract": [],
     "regression_contract": [],
+    "vc4tile_surface_core_contract": [],
+    "vc4tile_copy_plan_contract": [],
+    "precision_policy_contract": [],
+    "vc4tile_pipeline_contract": [],
 }
 
 MECHANISM_DOCS: Dict[str, str] = {
@@ -3082,6 +3455,10 @@ MECHANISM_DOCS: Dict[str, str] = {
     "milestone_scope_contract": "Verify milestone docs/specs/prompts use the intended scope and avoid stale/forbidden scope language.",
     "implementation_integrity_contract": "Audit implementation integrity with static scans and optional read-only Codex exec YES/NO classifier.",
     "regression_contract": "Run cumulative regression commands and assert required lower-stack mechanisms/files still exist.",
+    "vc4tile_surface_core_contract": "Run or inspect ergonomic VC4Tile surface-to-core canonicalization and require no surface/scf/index/producer ops survive in core IR.",
+    "vc4tile_copy_plan_contract": "Run or inspect VC4Tile copy planning, optional JSON plan output, and required/forbidden concrete core copy paths.",
+    "precision_policy_contract": "Enforce the M5 32-bit executable precision policy while allowing forward-looking precision metadata and deterministic unsupported-precision diagnostics.",
+    "vc4tile_pipeline_contract": "Inspect the VC4Tile candidate runner/generation pipeline for required pass ordering, forbidden shortcuts, and preserved intermediates.",
 }
 
 

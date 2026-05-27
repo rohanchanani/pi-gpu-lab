@@ -1,0 +1,216 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m5-mechanism-smoke",
+  "title": "VC4Tile M5 verifier mechanism smoke specification",
+  "defaults": {
+    "state_root": ".vc4_auto/vc4tile_m5/mechanism_smoke/verifier",
+    "candidate_state_root": ".vc4_auto/vc4tile_m5",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 120,
+    "hardware_timeout_sec": 60
+  },
+  "slices": {
+    "m5-mechanism-smoke": {
+      "title": "M5 verifier mechanism smoke",
+      "verifications": [
+        {
+          "id": "m5-smoke-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "description": "M5 feature-gate aliases resolve to the new verifier mechanisms.",
+          "features": [
+            {
+              "name": "m5_mechanism_smoke",
+              "status": "implemented",
+              "requires": {
+                "surface_core": true,
+                "copy_plan": true,
+                "precision_policy": true,
+                "pipeline": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-smoke-surface-core",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "m5_mechanism_smoke",
+          "description": "Surface/core contract accepts a core file with no surface, producer, scf, or index residue.",
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/surface_core",
+          "core_output": "core.vc4tile.mlir",
+          "steps": [
+            {
+              "name": "write-core",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/surface_core')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'core.vc4tile.mlir').write_text('module {\\n  vc4tile.kernel @k() {\\n    %c0 = arith.constant 0 : i32\\n    vc4tile.return\\n  }\\n}\\n', encoding='utf-8')\nprint('surface-core-ok')"
+              ],
+              "stdout_contains": [
+                "surface-core-ok"
+              ]
+            }
+          ],
+          "must_contain": [
+            "vc4tile.kernel",
+            "vc4tile.return"
+          ],
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.copy_tile",
+            "tt.",
+            "stablehlo."
+          ],
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true
+        },
+        {
+          "id": "m5-smoke-copy-plan",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "m5_mechanism_smoke",
+          "description": "Copy-plan contract accepts a concrete TMU-backed global-to-register plan and matching core op evidence.",
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/copy_plan",
+          "core_output": "core.vc4tile.mlir",
+          "plan_output": "copy-plan.json",
+          "steps": [
+            {
+              "name": "write-plan",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path\nimport json\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/copy_plan')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'core.vc4tile.mlir').write_text('module {\\n  vc4tile.kernel @copy() {\\n    %ld = vc4tile.masked_load_global %base, %offs, %mask {elem_bytes = 4 : i32} : i32, vector<16xi32>, vector<16xi1> -> vector<16xi32>\\n    vc4tile.return\\n  }\\n}\\n', encoding='utf-8')\n(root / 'copy-plan.json').write_text(json.dumps({'copies': [{'name': 'load_x', 'src': 'global', 'dst': 'register', 'method': 'tmu'}]}, indent=2) + '\\n', encoding='utf-8')\nprint('copy-plan-ok')"
+              ],
+              "stdout_contains": [
+                "copy-plan-ok"
+              ]
+            }
+          ],
+          "expected_copies": [
+            {
+              "name": "load_x",
+              "src": "global",
+              "dst": "register",
+              "method": "tmu",
+              "required_core_ops": [
+                "vc4tile.masked_load_global"
+              ],
+              "forbidden_core_ops": [
+                "vc4tile.tile_load",
+                "vc4tile.copy_tile"
+              ]
+            }
+          ],
+          "required_methods": [
+            "tmu"
+          ],
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-smoke-precision-policy",
+          "mechanism": "precision_policy_contract",
+          "feature": "m5_mechanism_smoke",
+          "description": "Precision policy contract enforces 32-bit markers and deterministic unsupported sub-32 diagnostics.",
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/precision",
+          "scan_files": [
+            "precision-policy.txt"
+          ],
+          "steps": [
+            {
+              "name": "write-policy",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/precision')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'precision-policy.txt').write_text('storage_type expressed_type accumulator_type precision exact_32 i32 u32 f32 vector<16xi32> vector<16xf32>\\n', encoding='utf-8')\nprint('precision-policy-ok')"
+              ],
+              "stdout_contains": [
+                "precision-policy-ok"
+              ]
+            }
+          ],
+          "required_markers": [
+            "storage_type",
+            "expressed_type",
+            "accumulator_type",
+            "precision",
+            "exact_32"
+          ],
+          "allowed_executable_precisions": [
+            "i32",
+            "u32",
+            "f32",
+            "vector<16xi32>",
+            "vector<16xf32>"
+          ],
+          "forbidden_executable_regex": [
+            "lower.*f16",
+            "lower.*bf16",
+            "lower.*fp8",
+            "lower.*int8"
+          ],
+          "invalid_cases": [
+            {
+              "name": "unsupported-sub32-diagnostic",
+              "argv": [
+                "{python}",
+                "-c",
+                "import sys\nsys.stderr.write('unsupported sub32 precision\\n')\nraise SystemExit(7)"
+              ],
+              "expect_exit_code": 7,
+              "stderr_contains": [
+                "unsupported sub32 precision"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-smoke-pipeline",
+          "mechanism": "vc4tile_pipeline_contract",
+          "feature": "m5_mechanism_smoke",
+          "description": "Pipeline contract verifies M5 runner pass ordering and preserved intermediate files.",
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/pipeline",
+          "script": "run_vc4tile_candidate_codegen_test.sh",
+          "required_order": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core",
+            "--convert-vc4tile-to-ssavc4",
+            "--convert-ssavc4-to-vc4",
+            "--emit-bundle"
+          ],
+          "required_intermediates": [
+            "input.vc4tile.mlir",
+            "surface.vc4tile.mlir",
+            "planned.vc4tile.mlir",
+            "core.vc4tile.mlir",
+            "lowered.ssavc4.mlir",
+            "scheduled.vc4.mlir"
+          ],
+          "forbidden_patterns": [
+            "convert-vc4tile-to-vc4",
+            "VC4_TEST_RESULT.*status=PASS"
+          ],
+          "steps": [
+            {
+              "name": "write-runner-and-intermediates",
+              "argv": [
+                "{python}",
+                "-c",
+                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/pipeline')\nroot.mkdir(parents=True, exist_ok=True)\nscript = '\\n'.join(['vc4-opt input.vc4tile.mlir --canonicalize-vc4tile-surface -o surface.vc4tile.mlir','vc4-opt surface.vc4tile.mlir --plan-vc4tile-copies -o planned.vc4tile.mlir','vc4-opt planned.vc4tile.mlir --legalize-vc4tile-core-cfg -o core.vc4tile.mlir','vc4-opt core.vc4tile.mlir --verify-vc4tile-core -o core.vc4tile.mlir','vc4-opt core.vc4tile.mlir --convert-vc4tile-to-ssavc4 -o lowered.ssavc4.mlir','vc4-opt lowered.ssavc4.mlir --convert-ssavc4-to-vc4 -o scheduled.vc4.mlir','vc4-codegen scheduled.vc4.mlir --emit-bundle bundle']) + '\\n'\n(root / 'run_vc4tile_candidate_codegen_test.sh').write_text(script, encoding='utf-8')\nfor name in ['input.vc4tile.mlir','surface.vc4tile.mlir','planned.vc4tile.mlir','core.vc4tile.mlir','lowered.ssavc4.mlir','scheduled.vc4.mlir']:\n    (root / name).write_text('module {}\\n', encoding='utf-8')\nprint('pipeline-ok')"
+              ],
+              "stdout_contains": [
+                "pipeline-ok"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "name": "scf_for_dynamic_bounds_vc4tile",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_lanes": 16,
+    "semantic_total": 24,
+    "checksum_accum": 504,
+    "runtime_launches": 1
+  }
+}

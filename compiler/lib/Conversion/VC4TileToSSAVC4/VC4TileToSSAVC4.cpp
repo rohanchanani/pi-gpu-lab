@@ -13,9 +13,11 @@
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileAttrs.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileDialect.h"
+#include "vc4/Dialect/VC4Tile/IR/VC4TileTypes.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Block.h"
@@ -85,6 +87,9 @@ constexpr llvm::StringLiteral kArithAndIOpName("arith.andi");
 constexpr llvm::StringLiteral kArithOrIOpName("arith.ori");
 constexpr llvm::StringLiteral kArithXOrIOpName("arith.xori");
 constexpr llvm::StringLiteral kArithCmpIOpName("arith.cmpi");
+constexpr llvm::StringLiteral kArithIndexCastOpName("arith.index_cast");
+constexpr llvm::StringLiteral kArithIndexCastUIOpName("arith.index_castui");
+constexpr llvm::StringLiteral kArithIndexCastSIOpName("arith.index_castsi");
 constexpr llvm::StringLiteral kVectorSplatOpName("vector.broadcast");
 constexpr llvm::StringLiteral kCFBranchOpName("cf.br");
 constexpr llvm::StringLiteral kCFCondBranchOpName("cf.cond_br");
@@ -128,6 +133,275 @@ static Operation *getParentVC4TileKernel(Operation *op) {
       return cur;
   }
   return nullptr;
+}
+
+static bool isVC4TileKernel(Operation *op) {
+  return hasName(op, kVC4TileKernelOpName);
+}
+
+static bool containsIndexType(Type type) {
+  if (!type)
+    return false;
+  if (type.isIndex())
+    return true;
+  if (auto shaped = llvm::dyn_cast<ShapedType>(type))
+    return containsIndexType(shaped.getElementType());
+  if (auto tuple = llvm::dyn_cast<TupleType>(type)) {
+    for (Type element : tuple.getTypes()) {
+      if (containsIndexType(element))
+        return true;
+    }
+    return false;
+  }
+  if (auto function = llvm::dyn_cast<FunctionType>(type)) {
+    for (Type input : function.getInputs()) {
+      if (containsIndexType(input))
+        return true;
+    }
+    for (Type result : function.getResults()) {
+      if (containsIndexType(result))
+        return true;
+    }
+  }
+  return false;
+}
+
+static bool isSupportedCoreType(Type type) {
+  if (!type || containsIndexType(type))
+    return false;
+  if (type.isInteger(1) || type.isSignlessInteger(32) || type.isF32())
+    return true;
+  if (mlir::vc4tile::isVC4TileSharedTileType(type))
+    return true;
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  if (!vectorType || vectorType.getRank() != 1 ||
+      vectorType.getDimSize(0) != 16)
+    return false;
+  Type element = vectorType.getElementType();
+  return element.isInteger(1) || element.isSignlessInteger(32) ||
+         element.isF32();
+}
+
+static bool isSupportedCoreFunctionType(FunctionType type) {
+  for (Type input : type.getInputs()) {
+    if (!isSupportedCoreType(input))
+      return false;
+  }
+  for (Type result : type.getResults()) {
+    if (!isSupportedCoreType(result))
+      return false;
+  }
+  return true;
+}
+
+static bool attrContainsIndexType(Attribute attr) {
+  if (!attr)
+    return false;
+  if (auto typeAttr = llvm::dyn_cast<TypeAttr>(attr))
+    return containsIndexType(typeAttr.getValue());
+  if (auto arrayAttr = llvm::dyn_cast<ArrayAttr>(attr)) {
+    for (Attribute element : arrayAttr) {
+      if (attrContainsIndexType(element))
+        return true;
+    }
+    return false;
+  }
+  if (auto dictAttr = llvm::dyn_cast<DictionaryAttr>(attr)) {
+    for (NamedAttribute named : dictAttr) {
+      if (attrContainsIndexType(named.getValue()))
+        return true;
+    }
+  }
+  return false;
+}
+
+static bool isProducerDialectNamespace(StringRef dialectNamespace) {
+  return dialectNamespace == "affine" || dialectNamespace == "gpu" ||
+         dialectNamespace == "triton" || dialectNamespace == "tt" ||
+         dialectNamespace == "ttg" || dialectNamespace == "nvgpu" ||
+         dialectNamespace == "iree" || dialectNamespace == "stablehlo" ||
+         dialectNamespace == "tosa" || dialectNamespace == "linalg" ||
+         dialectNamespace == "tensor" || dialectNamespace == "memref" ||
+         dialectNamespace == "spirv" || dialectNamespace == "nvvm" ||
+         dialectNamespace == "rocdl";
+}
+
+static StringRef getDialectNamespace(Operation *op) {
+  return op->getName().getDialectNamespace();
+}
+
+static bool isAllowedCoreTerminator(Operation *op) {
+  return hasName(op, kVC4TileReturnOpName) || hasName(op, kCFBranchOpName) ||
+         hasName(op, kCFCondBranchOpName);
+}
+
+static bool isAllowedCoreVC4TileOp(Operation *op) {
+  return hasName(op, kVC4TileProgramIdOpName) ||
+         hasName(op, kVC4TileBlockIdOpName) ||
+         hasName(op, kVC4TileWarpIdOpName) ||
+         hasName(op, kVC4TileLaneIdOpName) ||
+         hasName(op, kVC4TileLaneRangeOpName) ||
+         hasName(op, kVC4TileThreadIdOpName) ||
+         hasName(op, kVC4TileMaskAllOpName) ||
+         hasName(op, kVC4TileTailMaskOpName) ||
+         hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
+         hasName(op, kVC4TileMaskedStoreGlobalOpName) ||
+         hasName(op, kVC4TileRotateOpName) ||
+         hasName(op, kVC4TileReduceOpName) ||
+         hasName(op, kVC4TileSharedAllocOpName) ||
+         hasName(op, kVC4TileSharedLoadOpName) ||
+         hasName(op, kVC4TileSharedStoreOpName) ||
+         hasName(op, kVC4TileBarrierOpName);
+}
+
+static bool isAllowedCoreArithOp(Operation *op) {
+  return hasName(op, kArithConstantOpName) ||
+         hasName(op, kArithAddIOpName) || hasName(op, kArithSubIOpName) ||
+         hasName(op, kArithMulIOpName) || hasName(op, kArithShLIOpName) ||
+         hasName(op, kArithShRUIOpName) || hasName(op, kArithShRSIOpName) ||
+         hasName(op, kArithAndIOpName) || hasName(op, kArithOrIOpName) ||
+         hasName(op, kArithXOrIOpName) || hasName(op, kArithCmpIOpName);
+}
+
+static bool isAllowedCoreOp(Operation *op) {
+  if (isVC4TileKernel(op))
+    return true;
+  if (op->hasTrait<OpTrait::IsTerminator>())
+    return isAllowedCoreTerminator(op);
+  if (getDialectNamespace(op) == "vc4tile")
+    return isAllowedCoreVC4TileOp(op);
+  if (getDialectNamespace(op) == "arith")
+    return isAllowedCoreArithOp(op);
+  if (getDialectNamespace(op) == "vector")
+    return hasName(op, kVectorSplatOpName);
+  return false;
+}
+
+static LogicalResult emitUnsupportedCoreType(Location loc, Type type) {
+  if (containsIndexType(type))
+    return emitError(loc) << "vc4tile core type must not contain index: "
+                          << type;
+  if (auto vectorType = llvm::dyn_cast<VectorType>(type)) {
+    return emitError(loc)
+           << "unsupported vector type in vc4tile core; expected vector width "
+              "16 with i1/i32/f32 element, got "
+           << vectorType;
+  }
+  return emitError(loc) << "unsupported scalar type in vc4tile core: " << type;
+}
+
+static LogicalResult verifyCoreValueType(Value value, Operation *anchor) {
+  Location loc = value.getLoc();
+  if (auto blockArg = llvm::dyn_cast<BlockArgument>(value))
+    loc = blockArg.getLoc();
+  if (isSupportedCoreType(value.getType()))
+    return success();
+  (void)anchor;
+  return emitUnsupportedCoreType(loc, value.getType());
+}
+
+static LogicalResult verifyKernelFunctionTypeAttr(Operation *kernel) {
+  auto typeAttr = kernel->getAttrOfType<TypeAttr>("function_type");
+  if (!typeAttr)
+    return success();
+  auto functionType = llvm::dyn_cast<FunctionType>(typeAttr.getValue());
+  if (!functionType)
+    return kernel->emitOpError("function_type must be a function type");
+  if (containsIndexType(functionType))
+    return kernel->emitOpError(
+        "vc4tile core function_type must not contain index");
+  if (!isSupportedCoreFunctionType(functionType))
+    return kernel->emitOpError(
+        "vc4tile core function_type contains unsupported scalar or vector type; "
+        "vectors must have width 16");
+  return success();
+}
+
+static LogicalResult verifyVC4TileCoreKernel(Operation *kernel) {
+  if (!isVC4TileKernel(kernel))
+    return success();
+  if (failed(verifyKernelFunctionTypeAttr(kernel)))
+    return failure();
+
+  bool sawError = false;
+  kernel->walk([&](Operation *op) {
+    if (op == kernel)
+      return WalkResult::advance();
+
+    StringRef dialect = getDialectNamespace(op);
+    if (dialect == "scf") {
+      op->emitOpError("is not allowed in vc4tile core; raw scf must be "
+                      "legalized before lowering");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+    if (isProducerDialectNamespace(dialect)) {
+      op->emitOpError()
+          << "is a producer dialect operation and is not allowed in vc4tile "
+             "core";
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+    if (op->hasTrait<OpTrait::IsTerminator>() &&
+        !isAllowedCoreTerminator(op)) {
+      op->emitOpError("is not an allowed vc4tile core terminator; expected "
+                      "vc4tile.return, cf.br, or cf.cond_br");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+    if (!isAllowedCoreOp(op)) {
+      op->emitOpError("is not explicitly allowed in lowering-ready vc4tile "
+                      "core");
+      sawError = true;
+      return WalkResult::interrupt();
+    }
+    if (auto condBranch = llvm::dyn_cast<mlir::cf::CondBranchOp>(op)) {
+      if (!condBranch.getCondition().getType().isInteger(1)) {
+        op->emitOpError("cf.cond_br condition in vc4tile core must be scalar "
+                        "i1");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+    }
+    for (Value operand : op->getOperands()) {
+      if (failed(verifyCoreValueType(operand, op))) {
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+    }
+    for (Value result : op->getResults()) {
+      if (failed(verifyCoreValueType(result, op))) {
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+    }
+    for (NamedAttribute attr : op->getAttrs()) {
+      if (attrContainsIndexType(attr.getValue())) {
+        op->emitOpError("vc4tile core attribute must not contain index");
+        sawError = true;
+        return WalkResult::interrupt();
+      }
+    }
+    return WalkResult::advance();
+  });
+  if (sawError)
+    return failure();
+
+  for (Block &block : kernel->getRegion(0)) {
+    for (BlockArgument arg : block.getArguments()) {
+      if (failed(verifyCoreValueType(arg, kernel)))
+        return failure();
+    }
+  }
+  return success();
+}
+
+static LogicalResult verifyVC4TileCore(ModuleOp module) {
+  for (Operation &op : module.getBody()->getOperations()) {
+    if (isVC4TileKernel(&op) && failed(verifyVC4TileCoreKernel(&op)))
+      return failure();
+  }
+  return success();
 }
 
 static std::string makeCIdentifier(llvm::StringRef value) {
@@ -957,6 +1231,18 @@ static LogicalResult lowerCmpI(Operation *op, OpBuilder &builder,
                                llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 2 || op->getNumResults() != 1)
     return op->emitOpError("expected two operands and one result");
+  auto cmp = llvm::cast<arith::CmpIOp>(op);
+  switch (cmp.getPredicate()) {
+  case arith::CmpIPredicate::eq:
+  case arith::CmpIPredicate::ne:
+  case arith::CmpIPredicate::ult:
+  case arith::CmpIPredicate::uge:
+    break;
+  default:
+    return op->emitOpError(
+        "unsupported arith.cmpi predicate for VC4Tile-to-SSAVC4 lowering; "
+        "supported predicates are eq, ne, ult, and uge");
+  }
   Value lhs = lookupMappedValue(op, op->getOperand(0), valueMap);
   Value rhs = lookupMappedValue(op, op->getOperand(1), valueMap);
   if (!lhs || !rhs)
@@ -1689,10 +1975,12 @@ static Operation *createSSAVC4Branch(OpBuilder &builder, Location loc,
 }
 
 static Operation *createSSAVC4CondBranch(OpBuilder &builder, Location loc,
-                                              Value flags, Block *trueDest,
-                                              ArrayRef<Value> trueDestOperands,
-                                              Block *falseDest,
-                                              ArrayRef<Value> falseDestOperands) {
+                                         Value flags,
+                                         mlir::vc4::BranchCond cond,
+                                         Block *trueDest,
+                                         ArrayRef<Value> trueDestOperands,
+                                         Block *falseDest,
+                                         ArrayRef<Value> falseDestOperands) {
   OperationState state(loc, kSSAVC4CondBranchOpName);
   SmallVector<Value, 1> flagOperands{flags};
   state.addOperands(flagOperands);
@@ -1701,14 +1989,33 @@ static Operation *createSSAVC4CondBranch(OpBuilder &builder, Location loc,
   state.addSuccessors(trueDest);
   state.addSuccessors(falseDest);
   state.addAttribute(
-      "cond", mlir::vc4::BranchCondAttr::get(builder.getContext(),
-                                             mlir::vc4::BranchCond::any_z_set));
+      "cond", mlir::vc4::BranchCondAttr::get(builder.getContext(), cond));
   state.addAttribute(
       "operandSegmentSizes",
       builder.getDenseI32ArrayAttr(
           {1, static_cast<int32_t>(trueDestOperands.size()),
            static_cast<int32_t>(falseDestOperands.size())}));
   return builder.create(state);
+}
+
+static FailureOr<mlir::vc4::BranchCond>
+getBranchCondForArithCmpI(Value condition) {
+  auto cmp = condition.getDefiningOp<arith::CmpIOp>();
+  if (!cmp)
+    return failure();
+
+  switch (cmp.getPredicate()) {
+  case arith::CmpIPredicate::eq:
+    return mlir::vc4::BranchCond::any_z_set;
+  case arith::CmpIPredicate::ne:
+    return mlir::vc4::BranchCond::any_z_clear;
+  case arith::CmpIPredicate::ult:
+    return mlir::vc4::BranchCond::any_c_set;
+  case arith::CmpIPredicate::uge:
+    return mlir::vc4::BranchCond::any_c_clear;
+  default:
+    return failure();
+  }
 }
 
 static Block *createSSAVC4FalseFallthroughBlock(
@@ -1799,6 +2106,14 @@ static LogicalResult lowerBranchTerminator(Operation *op, OpBuilder &builder,
           "requires a uniform i1 condition; vector masks must stay as masks");
     }
 
+    FailureOr<mlir::vc4::BranchCond> branchCond =
+        getBranchCondForArithCmpI(condBranch.getCondition());
+    if (failed(branchCond)) {
+      return op->emitOpError(
+          "condition must be produced by arith.cmpi with a supported "
+          "predicate for VC4Tile-to-SSAVC4 lowering");
+    }
+
     Value flags = lookupMappedValue(op, condBranch.getCondition(), valueMap);
     if (!flags)
       return failure();
@@ -1833,8 +2148,9 @@ static LogicalResult lowerBranchTerminator(Operation *op, OpBuilder &builder,
         builder, op->getLoc(), falseIt->second, falseOperands);
     if (!falseFallthrough)
       return op->emitOpError("internal error: unable to create false fallthrough block");
-    createSSAVC4CondBranch(builder, op->getLoc(), flags, trueIt->second,
-                           trueOperands, falseFallthrough, falseOperands);
+    createSSAVC4CondBranch(builder, op->getLoc(), flags, *branchCond,
+                           trueIt->second, trueOperands, falseFallthrough,
+                           falseOperands);
     return success();
   }
 
@@ -2011,6 +2327,410 @@ static LogicalResult lowerKernelBody(Operation *kernel, Operation *func) {
   return success();
 }
 
+static bool isIndexCastOp(Operation *op) {
+  return hasName(op, kArithIndexCastOpName) ||
+         hasName(op, kArithIndexCastUIOpName) ||
+         hasName(op, kArithIndexCastSIOpName);
+}
+
+static Operation *createCFBranch(OpBuilder &builder, Location loc,
+                                 Block *target,
+                                 ArrayRef<Value> targetOperands) {
+  OperationState state(loc, kCFBranchOpName);
+  state.addOperands(targetOperands);
+  state.addSuccessors(target);
+  return builder.create(state);
+}
+
+static Operation *createCFCondBranch(OpBuilder &builder, Location loc,
+                                     Value condition, Block *trueDest,
+                                     ArrayRef<Value> trueOperands,
+                                     Block *falseDest,
+                                     ArrayRef<Value> falseOperands) {
+  OperationState state(loc, kCFCondBranchOpName);
+  state.addOperands(condition);
+  state.addOperands(trueOperands);
+  state.addOperands(falseOperands);
+  state.addSuccessors(trueDest);
+  state.addSuccessors(falseDest);
+  state.addAttribute(
+      "operandSegmentSizes",
+      builder.getDenseI32ArrayAttr(
+          {1, static_cast<int32_t>(trueOperands.size()),
+           static_cast<int32_t>(falseOperands.size())}));
+  return builder.create(state);
+}
+
+static LogicalResult moveSCFYieldRegionToBlock(OpBuilder &builder,
+                                                Region &sourceRegion,
+                                                Block *destBlock,
+                                                Block *mergeBlock) {
+  if (sourceRegion.empty())
+    return failure();
+  Block &sourceBlock = sourceRegion.front();
+  Operation *terminator = sourceBlock.getTerminator();
+  if (!terminator || !hasName(terminator, "scf.yield"))
+    return emitError(sourceRegion.getLoc(),
+                     "unsupported scf: expected scf.yield terminator");
+
+  while (!sourceBlock.empty() && &sourceBlock.front() != terminator)
+    sourceBlock.front().moveBefore(destBlock, destBlock->end());
+
+  SmallVector<Value, 4> yieldedOperands(terminator->getOperands());
+  builder.setInsertionPointToEnd(destBlock);
+  createCFBranch(builder, terminator->getLoc(), mergeBlock, yieldedOperands);
+  return success();
+}
+
+static LogicalResult legalizeSCFIfOp(mlir::scf::IfOp ifOp) {
+  Operation *op = ifOp.getOperation();
+  if (!getParentVC4TileKernel(op))
+    return success();
+  if (!ifOp.getCondition().getType().isInteger(1))
+    return op->emitOpError("unsupported scf.if condition for vc4tile core; "
+                           "expected scalar i1");
+  for (Type resultType : op->getResultTypes()) {
+    if (!isSupportedCoreType(resultType))
+      return emitUnsupportedCoreType(op->getLoc(), resultType);
+  }
+  if (op->getNumResults() != 0 && ifOp.getElseRegion().empty())
+    return op->emitOpError(
+        "unsupported scf.if with results: else region is required");
+
+  Block *headerBlock = op->getBlock();
+  Region *parentRegion = headerBlock->getParent();
+  Block *mergeBlock = headerBlock->splitBlock(op->getIterator());
+
+  SmallVector<Location, 4> resultLocs;
+  for (Value result : op->getResults())
+    resultLocs.push_back(result.getLoc());
+  SmallVector<BlockArgument, 4> mergeArgs;
+  mergeArgs.reserve(op->getNumResults());
+  for (auto [type, loc] : llvm::zip(op->getResultTypes(), resultLocs))
+    mergeArgs.push_back(mergeBlock->addArgument(type, loc));
+  for (auto [result, arg] : llvm::zip(op->getResults(), mergeArgs))
+    result.replaceAllUsesWith(arg);
+
+  Block *thenBlock = new Block();
+  parentRegion->getBlocks().insert(mergeBlock->getIterator(), thenBlock);
+  Block *elseBlock = new Block();
+  parentRegion->getBlocks().insert(mergeBlock->getIterator(), elseBlock);
+
+  OpBuilder builder(op->getContext());
+  builder.setInsertionPointToEnd(headerBlock);
+  createCFCondBranch(builder, op->getLoc(), ifOp.getCondition(), thenBlock, {},
+                     elseBlock, {});
+
+  if (failed(moveSCFYieldRegionToBlock(builder, ifOp.getThenRegion(),
+                                       thenBlock, mergeBlock)))
+    return failure();
+  if (!ifOp.getElseRegion().empty()) {
+    if (failed(moveSCFYieldRegionToBlock(builder, ifOp.getElseRegion(),
+                                         elseBlock, mergeBlock)))
+      return failure();
+  } else {
+    builder.setInsertionPointToEnd(elseBlock);
+    createCFBranch(builder, op->getLoc(), mergeBlock, {});
+  }
+
+  op->erase();
+  return success();
+}
+
+static std::optional<int64_t> getIndexConstant(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kArithConstantOpName))
+    return std::nullopt;
+  if (!value.getType().isIndex())
+    return std::nullopt;
+  auto attr = def->getAttrOfType<IntegerAttr>("value");
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static FailureOr<Value> materializeIndexBoundAsI32(Value bound,
+                                                   OpBuilder &builder,
+                                                   Location loc) {
+  if (bound.getType().isSignlessInteger(32))
+    return bound;
+  if (!bound.getType().isIndex())
+    return emitError(loc) << "unsupported scf.for bound type for vc4tile core; "
+                          << "expected index or i32";
+
+  if (std::optional<int64_t> constant = getIndexConstant(bound))
+    if (*constant < 0)
+      return emitError(loc)
+             << "unsupported scf.for negative constant bound for vc4tile core";
+
+  if (std::optional<int64_t> constant = getIndexConstant(bound))
+    return arith::ConstantIntOp::create(builder, loc, *constant, 32)
+        .getResult();
+
+  Operation *def = bound.getDefiningOp();
+  if (isIndexCastOp(def) && def->getNumOperands() == 1 &&
+      def->getOperand(0).getType().isSignlessInteger(32))
+    return def->getOperand(0);
+
+  return emitError(loc) << "unsupported scf.for index bound for vc4tile core; "
+                        << "bounds must be index constants or i32 index_cast "
+                           "values";
+}
+
+static void eraseDefIfUnused(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (def && def->use_empty())
+    def->erase();
+}
+
+static LogicalResult replaceForInductionUses(mlir::scf::ForOp forOp,
+                                             Value replacementIV) {
+  BlockArgument oldIV = llvm::cast<BlockArgument>(forOp.getInductionVar());
+  SmallVector<Operation *, 4> deadCasts;
+  for (Operation *user : llvm::make_early_inc_range(oldIV.getUsers())) {
+    if (!isIndexCastOp(user) || user->getNumResults() != 1 ||
+        !user->getResult(0).getType().isSignlessInteger(32)) {
+      return user->emitOpError(
+          "unsupported scf.for induction variable use for vc4tile core; "
+          "index uses must go through arith.index_cast to i32");
+    }
+    user->getResult(0).replaceAllUsesWith(replacementIV);
+    deadCasts.push_back(user);
+  }
+  for (Operation *cast : deadCasts)
+    cast->erase();
+  if (!oldIV.use_empty()) {
+    Operation *owner = (*oldIV.getUsers().begin());
+    return owner->emitOpError(
+        "unsupported scf.for induction variable index use for vc4tile core");
+  }
+  return success();
+}
+
+static LogicalResult legalizeSCFForOp(mlir::scf::ForOp forOp) {
+  Operation *op = forOp.getOperation();
+  if (!getParentVC4TileKernel(op))
+    return success();
+
+  std::optional<int64_t> step = getIndexConstant(forOp.getStep());
+  if (!step || *step <= 0)
+    return op->emitOpError(
+        "unsupported scf.for for vc4tile core: step must be a positive static "
+        "integer constant");
+
+  for (Type resultType : op->getResultTypes()) {
+    if (!isSupportedCoreType(resultType))
+      return emitUnsupportedCoreType(op->getLoc(), resultType);
+  }
+  for (Value initArg : forOp.getInitArgs()) {
+    if (!isSupportedCoreType(initArg.getType()))
+      return emitUnsupportedCoreType(initArg.getLoc(), initArg.getType());
+  }
+
+  Block *preheaderBlock = op->getBlock();
+  Region *parentRegion = preheaderBlock->getParent();
+  Block *afterBlock = preheaderBlock->splitBlock(op->getIterator());
+
+  OpBuilder builder(op->getContext());
+  builder.setInsertionPointToEnd(preheaderBlock);
+  FailureOr<Value> maybeLower =
+      materializeIndexBoundAsI32(forOp.getLowerBound(), builder, op->getLoc());
+  if (failed(maybeLower))
+    return failure();
+  FailureOr<Value> maybeUpper =
+      materializeIndexBoundAsI32(forOp.getUpperBound(), builder, op->getLoc());
+  if (failed(maybeUpper))
+    return failure();
+  Value lowerI32 = *maybeLower;
+  Value upperI32 = *maybeUpper;
+
+  SmallVector<Value, 4> initialOperands;
+  initialOperands.push_back(lowerI32);
+  initialOperands.append(forOp.getInitArgs().begin(), forOp.getInitArgs().end());
+
+  SmallVector<Type, 4> loopArgTypes;
+  SmallVector<Location, 4> loopArgLocs;
+  loopArgTypes.push_back(builder.getI32Type());
+  loopArgLocs.push_back(forOp.getInductionVar().getLoc());
+  for (Value initArg : forOp.getInitArgs()) {
+    loopArgTypes.push_back(initArg.getType());
+    loopArgLocs.push_back(initArg.getLoc());
+  }
+
+  Block *condBlock = new Block();
+  parentRegion->getBlocks().insert(afterBlock->getIterator(), condBlock);
+  condBlock->addArguments(loopArgTypes, loopArgLocs);
+  Block *bodyBlock = new Block();
+  parentRegion->getBlocks().insert(afterBlock->getIterator(), bodyBlock);
+  bodyBlock->addArguments(loopArgTypes, loopArgLocs);
+
+  SmallVector<BlockArgument, 4> afterArgs;
+  afterArgs.reserve(op->getNumResults());
+  for (Value result : op->getResults())
+    afterArgs.push_back(afterBlock->addArgument(result.getType(), result.getLoc()));
+  for (auto [result, arg] : llvm::zip(op->getResults(), afterArgs))
+    result.replaceAllUsesWith(arg);
+
+  createCFBranch(builder, op->getLoc(), condBlock, initialOperands);
+
+  builder.setInsertionPointToEnd(condBlock);
+  Value condIV = condBlock->getArgument(0);
+  Value done = arith::CmpIOp::create(builder, op->getLoc(),
+                                     arith::CmpIPredicate::ult, condIV,
+                                     upperI32);
+  SmallVector<Value, 4> condLoopOperands(condBlock->args_begin(),
+                                         condBlock->args_end());
+  SmallVector<Value, 4> exitOperands;
+  for (BlockArgument arg : llvm::drop_begin(condBlock->getArguments()))
+    exitOperands.push_back(arg);
+  createCFCondBranch(builder, op->getLoc(), done, bodyBlock, condLoopOperands,
+                     afterBlock, exitOperands);
+
+  Block &sourceBody = forOp.getRegion().front();
+  Operation *yield = sourceBody.getTerminator();
+  if (!yield || !hasName(yield, "scf.yield"))
+    return op->emitOpError("unsupported scf.for: expected scf.yield terminator");
+  if (yield->getNumOperands() != forOp.getInitArgs().size())
+    return yield->emitOpError("unsupported scf.for yield operand count");
+
+  Value bodyIV = bodyBlock->getArgument(0);
+  if (failed(replaceForInductionUses(forOp, bodyIV)))
+    return failure();
+  for (auto [oldArg, newArg] :
+       llvm::zip(llvm::drop_begin(sourceBody.getArguments()),
+                 llvm::drop_begin(bodyBlock->getArguments())))
+    oldArg.replaceAllUsesWith(newArg);
+
+  while (!sourceBody.empty() && &sourceBody.front() != yield)
+    sourceBody.front().moveBefore(bodyBlock, bodyBlock->end());
+
+  SmallVector<Value, 4> yieldedOperands(yield->getOperands());
+  builder.setInsertionPointToEnd(bodyBlock);
+  Value stepI32 =
+      arith::ConstantIntOp::create(builder, op->getLoc(), *step, 32);
+  Value nextIV = arith::AddIOp::create(builder, op->getLoc(), bodyIV, stepI32);
+  SmallVector<Value, 4> backedgeOperands;
+  backedgeOperands.push_back(nextIV);
+  backedgeOperands.append(yieldedOperands.begin(), yieldedOperands.end());
+  createCFBranch(builder, yield->getLoc(), condBlock, backedgeOperands);
+
+  Value lowerBound = forOp.getLowerBound();
+  Value upperBound = forOp.getUpperBound();
+  Value stepValue = forOp.getStep();
+  op->erase();
+  eraseDefIfUnused(stepValue);
+  eraseDefIfUnused(upperBound);
+  eraseDefIfUnused(lowerBound);
+  return success();
+}
+
+static Operation *findFirstSCFOpInKernel(Operation *kernel) {
+  auto findInRegion = [&](Region &region, auto &&findInRegionRef)
+      -> Operation * {
+    for (Block &block : region) {
+      for (Operation &op : block) {
+        if (getDialectNamespace(&op) == "scf")
+          return &op;
+        for (Region &nested : op.getRegions()) {
+          if (Operation *found = findInRegionRef(nested, findInRegionRef))
+            return found;
+        }
+      }
+    }
+    return nullptr;
+  };
+  for (Region &region : kernel->getRegions()) {
+    if (Operation *found = findInRegion(region, findInRegion))
+      return found;
+  }
+  return nullptr;
+}
+
+static LogicalResult legalizeVC4TileKernelSCF(Operation *kernel) {
+  while (Operation *scfOp = findFirstSCFOpInKernel(kernel)) {
+    if (auto ifOp = llvm::dyn_cast<mlir::scf::IfOp>(scfOp)) {
+      if (failed(legalizeSCFIfOp(ifOp)))
+        return failure();
+      continue;
+    }
+    if (auto forOp = llvm::dyn_cast<mlir::scf::ForOp>(scfOp)) {
+      if (failed(legalizeSCFForOp(forOp)))
+        return failure();
+      continue;
+    }
+    return scfOp->emitOpError(
+        "unsupported scf operation in vc4tile surface; only scf.if and "
+        "scf.for are legalizable by --legalize-vc4tile-core-cfg");
+  }
+  return success();
+}
+
+static LogicalResult rejectRawSCFInKernels(ModuleOp module,
+                                           StringRef diagnosticSuffix) {
+  for (Operation &op : module.getBody()->getOperations()) {
+    if (!isVC4TileKernel(&op))
+      continue;
+    Operation *scfOp = findFirstSCFOpInKernel(&op);
+    if (!scfOp)
+      continue;
+    scfOp->emitOpError() << diagnosticSuffix;
+    return failure();
+  }
+  return success();
+}
+
+struct VerifyVC4TileCorePass
+    : public PassWrapper<VerifyVC4TileCorePass, OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(VerifyVC4TileCorePass)
+
+  StringRef getArgument() const override { return "verify-vc4tile-core"; }
+  StringRef getDescription() const override {
+    return "Verify lowering-ready VC4Tile CFG core with no raw SCF or index leakage";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
+                    mlir::vector::VectorDialect,
+                    mlir::vc4tile::VC4TileDialect>();
+  }
+
+  void runOnOperation() override {
+    if (failed(verifyVC4TileCore(getOperation())))
+      signalPassFailure();
+  }
+};
+
+struct LegalizeVC4TileCoreCFGPass
+    : public PassWrapper<LegalizeVC4TileCoreCFGPass,
+                         OperationPass<ModuleOp>> {
+  MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(LegalizeVC4TileCoreCFGPass)
+
+  StringRef getArgument() const override { return "legalize-vc4tile-core-cfg"; }
+  StringRef getDescription() const override {
+    return "Canonicalize constrained VC4Tile surface SCF into lowering-ready VC4Tile CFG core";
+  }
+
+  void getDependentDialects(DialectRegistry &registry) const override {
+    registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect,
+                    mlir::vc4tile::VC4TileDialect>();
+  }
+
+  void runOnOperation() override {
+    ModuleOp module = getOperation();
+    for (Operation &op : module.getBody()->getOperations()) {
+      if (!isVC4TileKernel(&op))
+        continue;
+      if (failed(legalizeVC4TileKernelSCF(&op))) {
+        signalPassFailure();
+        return;
+      }
+    }
+    if (failed(verifyVC4TileCore(module)))
+      signalPassFailure();
+  }
+};
+
 struct ConvertVC4TileToSSAVC4Pass
     : public PassWrapper<ConvertVC4TileToSSAVC4Pass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ConvertVC4TileToSSAVC4Pass)
@@ -2022,13 +2742,23 @@ struct ConvertVC4TileToSSAVC4Pass
 
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
-                    mlir::vector::VectorDialect, mlir::vc4::VC4Dialect,
+                    mlir::scf::SCFDialect, mlir::vector::VectorDialect,
+                    mlir::vc4::VC4Dialect,
                     mlir::ssavc4::SSAVC4Dialect,
                     mlir::vc4tile::VC4TileDialect>();
   }
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    if (failed(rejectRawSCFInKernels(
+            module,
+            " must be legalized with --legalize-vc4tile-core-cfg before "
+            "--convert-vc4tile-to-ssavc4; expected lowering-ready VC4Tile "
+            "core"))) {
+      signalPassFailure();
+      return;
+    }
+
     SmallVector<Operation *, 4> kernels;
     for (Operation &op : module.getBody()->getOperations()) {
       if (hasName(&op, kVC4TileKernelOpName))
@@ -2078,14 +2808,25 @@ struct ConvertVC4TileToSSAVC4Pass
 
 } // namespace
 
+std::unique_ptr<Pass> mlir::vc4::createVerifyVC4TileCorePass() {
+  return std::make_unique<VerifyVC4TileCorePass>();
+}
+
+std::unique_ptr<Pass> mlir::vc4::createLegalizeVC4TileCoreCFGPass() {
+  return std::make_unique<LegalizeVC4TileCoreCFGPass>();
+}
+
 std::unique_ptr<Pass> mlir::vc4::createConvertVC4TileToSSAVC4Pass() {
   return std::make_unique<ConvertVC4TileToSSAVC4Pass>();
 }
 
 void mlir::vc4::registerConvertVC4TileToSSAVC4Pass() {
-  // This translation unit is linked into vc4-opt for M4, and the file-scope
-  // PassRegistration below installs --convert-vc4tile-to-ssavc4.
+  // This translation unit is linked into vc4-opt for M4/M5 staging, and the
+  // file-scope PassRegistration objects below install the pass flags.
 }
 
+static PassRegistration<VerifyVC4TileCorePass> registerVerifyVC4TileCorePass;
+static PassRegistration<LegalizeVC4TileCoreCFGPass>
+    registerLegalizeVC4TileCoreCFGPass;
 static PassRegistration<ConvertVC4TileToSSAVC4Pass>
     registerVC4TileToSSAVC4Pass;

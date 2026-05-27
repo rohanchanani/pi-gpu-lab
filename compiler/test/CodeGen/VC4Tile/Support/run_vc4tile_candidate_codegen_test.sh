@@ -16,7 +16,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage:
   run_vc4tile_candidate_codegen_test.sh --self-test
-  run_vc4tile_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|clean]
+  run_vc4tile_candidate_codegen_test.sh TEST_NAME [generate|assemble|build|run|all|workdir|generated-dir|clean]
 USAGE
 }
 
@@ -190,6 +190,31 @@ if 'vc4.qpu.' not in text:
 PY_VALIDATE_VC4
 }
 
+validate_core_vc4tile_file() {
+  local path="$1"
+  require_file "$path"
+  python3 - "$path" <<'PY_VALIDATE_CORE'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+if "scf." in text:
+    raise SystemExit(f"{path}: generated VC4Tile core still contains scf.*")
+if re.search(r"(?<![A-Za-z0-9_!])index(?![A-Za-z0-9_])", text):
+    raise SystemExit(f"{path}: generated VC4Tile core still contains index type")
+for dialect in (
+    "affine", "gpu", "triton", "tt", "ttg", "nvgpu", "iree", "stablehlo",
+    "tosa", "linalg", "tensor", "memref", "spirv", "nvvm", "rocdl",
+):
+    if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):
+        raise SystemExit(f"{path}: generated VC4Tile core contains producer dialect op {dialect}.*")
+if "vc4tile.kernel" not in text:
+    raise SystemExit(f"{path}: generated VC4Tile core contains no vc4tile.kernel")
+PY_VALIDATE_CORE
+}
+
 check_generated_bundle() {
   require_file "$GENERATED_DIR/manifest.json"
   require_file "$GENERATED_DIR/kernel_launch.c"
@@ -198,7 +223,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir lowered_ssavc4 scheduled_vc4 stable_ssavc4 stable_vc4
+  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir core_vc4tile lowered_ssavc4 scheduled_vc4 stable_core stable_ssavc4 stable_vc4
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   rm -rf "$GENERATED_DIR"
@@ -206,12 +231,20 @@ run_vc4_codegen() {
   lowered_dir="$AUTO_ROOT/lowered"
   mkdir -p "$lowered_dir"
   lowered_tmp_dir="$(mktemp -d "$lowered_dir/${TEST_NAME}.tmp.XXXXXX")"
+  core_vc4tile="$lowered_tmp_dir/${TEST_NAME}.core.vc4tile.mlir"
   lowered_ssavc4="$lowered_tmp_dir/${TEST_NAME}.ssavc4.mlir"
   scheduled_vc4="$lowered_tmp_dir/${TEST_NAME}.vc4.mlir"
+  stable_core="$lowered_dir/${TEST_NAME}.core.vc4tile.mlir"
   stable_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
   stable_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
-  log "lowering $(relpath "$INPUT_MLIR") to SSAVC4 at $(relpath "$lowered_ssavc4")"
-  "$vc4_opt" "$INPUT_MLIR" --convert-vc4tile-to-ssavc4 -o "$lowered_ssavc4"
+  log "canonicalizing $(relpath "$INPUT_MLIR") to VC4Tile core at $(relpath "$core_vc4tile")"
+  "$vc4_opt" "$INPUT_MLIR" \
+    --legalize-vc4tile-core-cfg \
+    --verify-vc4tile-core \
+    -o "$core_vc4tile"
+  validate_core_vc4tile_file "$core_vc4tile"
+  log "lowering $(relpath "$core_vc4tile") to SSAVC4 at $(relpath "$lowered_ssavc4")"
+  "$vc4_opt" "$core_vc4tile" --convert-vc4tile-to-ssavc4 -o "$lowered_ssavc4"
   require_file "$lowered_ssavc4"
   log "lowering $(relpath "$lowered_ssavc4") to scheduled VC4 at $(relpath "$scheduled_vc4")"
   "$vc4_opt" "$lowered_ssavc4" \
@@ -225,9 +258,11 @@ run_vc4_codegen() {
   validate_scheduled_vc4_file "$scheduled_vc4"
   log "generating $(relpath "$GENERATED_DIR") from $(relpath "$scheduled_vc4")"
   "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
+  cp "$core_vc4tile" "$stable_core"
   cp "$lowered_ssavc4" "$stable_ssavc4"
   cp "$scheduled_vc4" "$stable_vc4"
   cp "$INPUT_MLIR" "$GENERATED_DIR/input.vc4tile.mlir"
+  cp "$core_vc4tile" "$GENERATED_DIR/core.vc4tile.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"
   rm -rf "$lowered_tmp_dir"
@@ -771,6 +806,7 @@ case "$PHASE" in
   build) build_candidate ;;
   run|all) run_candidate ;;
   workdir) prepare_workdir; printf '%s\n' "$WORK_DIR" ;;
+  generated-dir) printf '%s\n' "$GENERATED_DIR" ;;
   self-test) vc4_candidate_self_test ;;
   *) usage; exit 2 ;;
 esac

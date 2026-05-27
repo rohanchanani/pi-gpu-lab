@@ -9,6 +9,7 @@
 #include "vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileDialect.h"
@@ -1286,7 +1287,8 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
-                  mlir::vector::VectorDialect, mlir::vc4::VC4Dialect,
+                  mlir::scf::SCFDialect, mlir::vector::VectorDialect,
+                  mlir::vc4::VC4Dialect,
                   mlir::ssavc4::SSAVC4Dialect,
                   mlir::vc4tile::VC4TileDialect>();
 
