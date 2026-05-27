@@ -420,6 +420,35 @@ def VC4Tile_SharedStoreOp : VC4Tile_Op<"shared_store", [
   let hasVerifier = 1;
 }
 
+
+
+def VC4Tile_VDRLoadTileOp : VC4Tile_Op<"vdr_load_tile", [
+    MemoryEffects<[MemRead, MemWrite]>
+  ]> {
+  let summary = "lowering-ready VC4Tile global-to-shared VDR tile load";
+  let description = [{
+    Core VC4Tile copy-planner atom for a regular 32-bit global-to-shared VPM
+    tile load.  It is produced by --plan-vc4tile-copies from ergonomic
+    global-to-shared copy forms and lowers through the existing SSAVC4 VDR path;
+    it is not a surface operation and must remain on the VC4Tile-to-SSAVC4 path.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    AnyType:$handle,
+    I32Attr:$elem_bytes,
+    I32Attr:$row_len,
+    I32Attr:$nrows,
+    I32Attr:$memory_pitch_bytes,
+    I32Attr:$vpm_base_row,
+    I32Attr:$vpm_base_col,
+    OptionalAttr<VC4Tile_LayoutAttr>:$layout,
+    I32Attr:$vpitch,
+    OptionalAttr<StrAttr>:$serialize
+  );
+  let assemblyFormat = "$address `,` $handle attr-dict `:` type($address) `,` type($handle)";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_BarrierOp : VC4Tile_Op<"barrier", [
     MemoryEffects<[MemRead, MemWrite]>
   ]> {

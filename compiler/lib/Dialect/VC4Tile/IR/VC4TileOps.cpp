@@ -617,7 +617,7 @@ LogicalResult KernelOp::verify() {
   getBody().walk([&](Operation *nested) {
     if (isa<BarrierOp>(nested))
       sawBarrier = true;
-    if (isa<SharedAllocOp, SharedLoadOp, SharedStoreOp>(nested))
+    if (isa<SharedAllocOp, SharedLoadOp, SharedStoreOp, VDRLoadTileOp>(nested))
       sawSharedOp = true;
   });
   if (sawBarrier && !usesBarrier)
@@ -758,7 +758,6 @@ LogicalResult TileDescriptorOp::verify() {
 LogicalResult TileLoadOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
-      failed(verifyScalarId(op, getBase().getType(), "base")) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
@@ -769,17 +768,19 @@ LogicalResult TileLoadOp::verify() {
     return emitOpError(
         "raw affine lane_stride shorthand must be canonicalized by "
         "--canonicalize-vc4tile-surface before tile copy planning");
-  if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
-      getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
-    return emitOpError("tile_load source memory_space must be global or shared_vpm");
-  return success();
+
+  MemorySpace space = getMemorySpaceAttr().getValue();
+  if (space == MemorySpace::global)
+    return verifyScalarId(op, getBase().getType(), "base");
+  if (space == MemorySpace::shared_vpm)
+    return verifySharedTile(op, getBase().getType(), "base");
+  return emitOpError("tile_load source memory_space must be global or shared_vpm");
 }
 
 LogicalResult TileStoreOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "tile")) ||
-      failed(verifyScalarId(op, getBase().getType(), "base")) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifyM5Exact32Metadata(op)) ||
@@ -789,10 +790,13 @@ LogicalResult TileStoreOp::verify() {
     return emitOpError(
         "raw affine lane_stride shorthand must be canonicalized by "
         "--canonicalize-vc4tile-surface before tile copy planning");
-  if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
-      getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
-    return emitOpError("tile_store destination memory_space must be global or shared_vpm");
-  return success();
+
+  MemorySpace space = getMemorySpaceAttr().getValue();
+  if (space == MemorySpace::global)
+    return verifyScalarId(op, getBase().getType(), "base");
+  if (space == MemorySpace::shared_vpm)
+    return verifySharedTile(op, getBase().getType(), "base");
+  return emitOpError("tile_store destination memory_space must be global or shared_vpm");
 }
 
 LogicalResult CopyTileOp::verify() {
@@ -1008,6 +1012,47 @@ LogicalResult SharedStoreOp::verify() {
       failed(verifyMemorySpace(op, getMemorySpaceAttr(),
                                MemorySpace::shared_vpm, "shared_vpm")))
     return failure();
+  return success();
+}
+
+LogicalResult VDRLoadTileOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifySharedKernelContract(op)) ||
+      failed(verifyScalarId(op, getAddress().getType(), "address")) ||
+      failed(verifySharedTile(op, getHandle().getType(), "handle")) ||
+      failed(verifyElemBytes4(op, getElemBytesAttr())))
+    return failure();
+
+  int64_t rowLen = getRowLenAttr().getInt();
+  if (rowLen < 1 || rowLen > 16)
+    return emitOpError("row_len must be in range [1, 16]");
+  int64_t nrows = getNrowsAttr().getInt();
+  if (nrows < 1 || nrows > 16)
+    return emitOpError("nrows must be in range [1, 16]");
+  int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return emitOpError("memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < rowLen * 4)
+    return emitOpError("memory_pitch_bytes must cover row_len elements");
+  int64_t vpmBaseRow = getVpmBaseRowAttr().getInt();
+  if (vpmBaseRow < 0 || vpmBaseRow > 63)
+    return emitOpError("vpm_base_row must be in range [0, 63]");
+  if (getVpmBaseColAttr().getInt() != 0)
+    return emitOpError("M5 VDR tile loads support only vpm_base_col = 0");
+  int64_t vpitch = getVpitchAttr().getInt();
+  if (vpitch < 1 || vpitch > 16)
+    return emitOpError("vpitch must be in range [1, 16]");
+  if (auto layout = getLayoutAttr()) {
+    if (layout.getValue() != Layout::row_major &&
+        layout.getValue() != Layout::vpm_row &&
+        layout.getValue() != Layout::vpm_col &&
+        layout.getValue() != Layout::col_major)
+      return emitOpError("VDR tile load layout must be row/column VPM compatible");
+  }
+  if (auto serialize = getSerializeAttr()) {
+    if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
+      return emitOpError("serialize must be \"mutex\" or \"none\"");
+  }
   return success();
 }
 
