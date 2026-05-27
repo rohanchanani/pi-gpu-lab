@@ -300,7 +300,7 @@ Add/register:
 --plan-vc4tile-copies
 ```
 
-At this slice, these passes may be mostly no-op except for ordering checks and diagnostics.
+At this slice, these passes may be mostly no-op except for ordering checks and diagnostics. The slice may introduce `vc4tile.surface_placeholder` as a temporary non-executable surface sentinel. That sentinel exists only to verify the boundary: surface canonicalization erases it, core verification rejects it if it survives, and direct `--convert-vc4tile-to-ssavc4` rejects it with an ordering diagnostic.
 
 Existing/staged passes must be present:
 
@@ -328,7 +328,7 @@ The runner must keep M4 core fixtures working. A fixture may opt into `VC4TILE_I
 
 ### 8.4 Diagnostics
 
-`--convert-vc4tile-to-ssavc4` must reject unplanned surface ops:
+`--convert-vc4tile-to-ssavc4` must reject unplanned surface ops. The m5-01 direct-rejection test must actually invoke `--convert-vc4tile-to-ssavc4`; a parser-only `vc4-opt file.mlir` command is not a valid rejection test.
 
 ```text
 error: vc4tile.tile_load is a surface operation; run --canonicalize-vc4tile-surface and --plan-vc4tile-copies before --convert-vc4tile-to-ssavc4

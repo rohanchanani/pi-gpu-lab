@@ -15,6 +15,26 @@ Read `pro_scripts/MISTAKES.md`, `compiler/docs/codegen/vc4tile-m5-full-design.md
 - Use real hardware verification for executable behavior.
 - Do not satisfy verifier scans using comments or dummy strings.
 
+
+## Required implementation details for this slice
+
+This slice is intentionally a surface/core boundary slice before real ergonomic tile-load/tile-store/copy ops exist. To make the boundary testable without implementing later M5 features, add exactly one temporary non-executable surface sentinel op:
+
+```text
+vc4tile.surface_placeholder
+```
+
+Rules for this sentinel:
+
+- It is a surface op, not a core op.
+- `--canonicalize-vc4tile-surface` must erase `vc4tile.surface_placeholder` and leave valid VC4Tile core.
+- `--plan-vc4tile-copies` may be a semantic no-op in this slice, but it must be registered and ordered in the runner.
+- `--verify-vc4tile-core` must reject `vc4tile.surface_placeholder` if it reaches the core verifier.
+- `--convert-vc4tile-to-ssavc4` must reject `vc4tile.surface_placeholder` if it is run directly on raw surface input. The diagnostic must mention `surface operation` and `--canonicalize-vc4tile-surface`.
+- Do not make `surface_placeholder` lower to SSAVC4, scheduled VC4, QASM, or runtime artifacts. It exists only to verify the surface/core ordering boundary until later slices add real surface operations.
+
+The direct rejection test must invoke the conversion pass, not merely parse the MLIR. A bare `vc4-opt file.mlir` is not a valid rejection test.
+
 ## Exact expected GPT output / source products
 
 The implementation bundle for this slice must include exactly the repo-relative files needed to satisfy these source-product expectations. Do not rename these files without updating the worklist, verifier spec, and this prompt in the same bundle.

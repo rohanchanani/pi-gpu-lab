@@ -271,3 +271,28 @@ after cumulative prefix success.
 **Permanent rule:** M4 final acceptance must use candidate-generated evidence for required hardware fixtures. Historical reference bundles may be audited as technical debt, but they must not become blockers unless a required verification uses them as evidence. Required hardware proof means generated artifacts plus candidate harness plus device copyback plus host oracle comparison.
 
 **Verification implication:** Required M4 hardware verifications must force fresh candidate generation by default. Stale generated candidate reuse is not valid acceptance evidence unless an explicit opt-in environment variable such as `VC4_REUSE_GENERATED_CANDIDATE=1` is used for local debugging outside the required acceptance path.
+
+
+## 2026-05-27: M5 surface/core contract resolved checked-in inputs under work_dir
+
+**Symptom:** M5 slice 1 failed the `vc4tile_surface_core_contract` because the verifier tried to open a checked-in source input under `.vc4_auto/vc4tile_m5/.../compiler/test/...` instead of under the repository root.
+
+**Root cause:** The new M5 contract resolver used one helper for both generated outputs and checked-in inputs. When `work_dir` was present, all relative paths were treated as work-dir relative.
+
+**Permanent rule:** In M5-style contract mechanisms, `input` paths should prefer existing repo-relative source files; generated outputs such as `core_output`, `plan_output`, and inspection artifacts may remain work-dir relative. Do not ask GPT to patch implementation code around a verifier path-resolution bug.
+
+## 2026-05-27: Parser-only invalid diagnostics do not test conversion rejection
+
+**Symptom:** M5 slice 1 expected `reject-surface-before-canonicalize.mlir` to fail, but the verifier command was only `vc4-opt file.mlir`, so the file parsed and printed successfully.
+
+**Root cause:** The invalid diagnostic spec forgot to invoke `--convert-vc4tile-to-ssavc4`, the pass that owns the surface-before-core rejection.
+
+**Permanent rule:** Invalid diagnostics must invoke the pass that owns the diagnostic. Parser-only commands are valid only for parser/verifier diagnostics, not lowering-order diagnostics.
+
+## 2026-05-27: Exact downloadable artifact contract was buried after huge context
+
+**Symptom:** After M5 slice 1 failed, subsequent GPT attempts emitted custom apply scripts with Python heredocs/unzip/copy logic instead of the tiny trusted-applier launcher, causing patch-guard failures before verification.
+
+**Root cause:** The exact downloadable artifact contract was rendered after the context pack, tens of thousands of tokens into the prompt. The short output contract near the top did not contain the exact filename and trusted-launcher rules.
+
+**Permanent rule:** Render the exact downloadable artifact contract near the top of every implementation/failure prompt, before the failure packet/context pack. The apply script is not a patch transport; it is only a tiny trusted-applier launcher. All repo edits belong in the zip manifest and `repo/` payload.

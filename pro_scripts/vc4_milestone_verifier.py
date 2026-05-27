@@ -2077,6 +2077,7 @@ def mechanism_negative_diagnostic(ctx: VerifierContext, slice_id: str, v: Mappin
 # ---------------------------------------------------------------------------
 
 VC4TILE_DEFAULT_SURFACE_OPS = [
+    "vc4tile.surface_placeholder",
     "vc4tile.tile_load",
     "vc4tile.tile_store",
     "vc4tile.copy_tile",
@@ -2117,6 +2118,29 @@ def _resolve_work_path(ctx: VerifierContext, v: Mapping[str, Any], raw: Any) -> 
     if work_dir is not None:
         return work_dir / s
     return resolve_repo_or_auto_path(ctx, s)
+
+
+def _resolve_m5_input_path(ctx: VerifierContext, v: Mapping[str, Any], raw: Any) -> Path:
+    """Resolve an M5 contract input without hiding repo source paths.
+
+    M5 surface/copy-plan contracts often write outputs under ``work_dir`` but
+    read checked-in source inputs such as ``compiler/test/...``.  The generic
+    work-path resolver intentionally treats relative paths as work-dir relative
+    when a work_dir is present, which is correct for outputs like
+    ``core.vc4tile.mlir`` but wrong for checked-in inputs.  Prefer an existing
+    repo-relative source path for inputs, and fall back to work_dir only for
+    generated inputs explicitly staged by a previous step.
+    """
+    s = str(raw)
+    if Path(s).is_absolute() or s.startswith(".vc4_auto/"):
+        return resolve_repo_or_auto_path(ctx, s)
+    repo_candidate = resolve_repo_or_auto_path(ctx, s)
+    if repo_candidate.exists():
+        return repo_candidate
+    work_dir = _work_dir_path(ctx, v)
+    if work_dir is not None:
+        return work_dir / s
+    return repo_candidate
 
 
 def _m5_output_paths(ctx: VerifierContext, v: Mapping[str, Any], keys: Sequence[str]) -> List[Path]:
@@ -2189,7 +2213,7 @@ def _run_vc4tile_pipeline_if_requested(
     if not input_value or not pipeline or not output_value:
         return [], [{"error": f"{default_name} requires input, pipeline, and {output_key} when steps are not provided"}]
 
-    input_path = _resolve_work_path(ctx, v, input_value)
+    input_path = _resolve_m5_input_path(ctx, v, input_value)
     output_path = _resolve_work_path(ctx, v, output_value)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["vc4-opt", str(input_path), *pipeline, "-o", str(output_path)]

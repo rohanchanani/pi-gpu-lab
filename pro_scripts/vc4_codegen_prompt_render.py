@@ -132,7 +132,7 @@ def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
         "set -euo pipefail\n"
         "REPO_ROOT=\"${1:-${VC4_REPO:-$PWD}}\"\n"
         "SCRIPT_DIR=\"$(cd \"$(dirname \"${BASH_SOURCE[0]}\")\" && pwd)\"\n"
-        f"python3 \"$REPO_ROOT/pro_scripts/vc4_codegen_download_bundle_apply.py\" validate-apply --repo \"$REPO_ROOT\" --slice \"{slice_id}\" --bundle \"$SCRIPT_DIR/{contract['bundle_zip']}\" --apply-script \"$SCRIPT_DIR/{contract['apply_script']}\" --expect-attempt {attempt}\n"
+        f"exec python3 \"$REPO_ROOT/pro_scripts/vc4_codegen_download_bundle_apply.py\" validate-apply --repo \"$REPO_ROOT\" --slice \"{slice_id}\" --bundle \"$SCRIPT_DIR/{contract['bundle_zip']}\" --apply-script \"$SCRIPT_DIR/{contract['apply_script']}\" --expect-attempt {attempt}\n"
     )
     return "\n".join(
         [
@@ -165,7 +165,9 @@ def render_download_contract_markdown(contract: Mapping[str, Any]) -> str:
             "",
             fenced(json.dumps(manifest_shape, indent=2, sort_keys=True), "json"),
             "",
-            "The shell script must be a tiny trusted-applier launcher only. Do not put Python patching logic, heredocs, file writes, unzip/copy logic, or `rm -rf` in it. It should be equivalent to:",
+            "The shell script must be a tiny trusted-applier launcher only. It must contain exactly the trusted-applier launcher below except for normal final newline handling. Do not put Python patching logic, heredocs, file writes, unzip/copy logic, chmod/chown logic, backup logic, or `rm -rf` in it. The patch gate rejects oversized or non-launcher apply scripts before any implementation verification runs.",
+            "",
+            "Exact apply-script content:",
             "",
             fenced(applier_example, "bash"),
             "",
@@ -183,14 +185,17 @@ def append_download_contract_to_prompt(rendered: str, contract: Mapping[str, Any
         return rendered
     bundle = str(contract["bundle_zip"])
     apply = str(contract["apply_script"])
+    contract_block = "## Downloadable artifact contract\n\n" + render_download_contract_markdown(contract).rstrip() + "\n"
     if DOWNLOAD_TRANSPORT in rendered and bundle in rendered and apply in rendered:
-        return rendered
-    return (
-        rendered.rstrip()
-        + "\n\n## Downloadable artifact contract\n\n"
-        + render_download_contract_markdown(contract).rstrip()
-        + "\n"
-    )
+        # The M5 templates now place this section near the top.  For older
+        # templates that still render it only after a large context pack, prefix
+        # a duplicate copy so exact filenames and trusted launcher rules are not
+        # buried beneath tens of thousands of tokens.
+        head = rendered[:4000]
+        if DOWNLOAD_TRANSPORT in head and bundle in head and apply in head:
+            return rendered
+        return contract_block + "\n" + rendered.rstrip() + "\n"
+    return contract_block + "\n" + rendered.rstrip() + "\n"
 
 
 def markdown_list(items: Any, *, code: bool = True) -> str:

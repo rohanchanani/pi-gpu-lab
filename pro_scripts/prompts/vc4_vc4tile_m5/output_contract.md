@@ -16,3 +16,8 @@ repo/<repo-relative changed files>
 ```
 
 `manifest.json` must include `changed_paths`, `diagnosis`, `risk_notes`, and `tests_to_run` as arrays. The bundle must not contain `.vc4_auto/**`, lit output, hardware logs, binary files, symlinks, or unlisted repo files.
+
+
+## Trusted apply-script rule
+
+The downloadable shell script is not an implementation patch. It must be only the tiny trusted-applier launcher emitted in the current prompt's downloadable artifact contract. It must not contain Python heredocs, unzip/copy logic, chmod/chown logic, backups, file writes, or `rm -rf`. All repo edits must live in `manifest.json` plus `repo/<repo-relative changed files>` inside the zip.

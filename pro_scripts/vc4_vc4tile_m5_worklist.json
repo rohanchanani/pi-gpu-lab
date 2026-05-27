@@ -245,7 +245,11 @@
           "compiler/test/CodeGen/VC4Tile/Emit/pipeline-minimal-surface-vc4tile.mlir",
           "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
         ]
-      }
+      },
+      "implementation_notes": [
+        "Use vc4tile.surface_placeholder only as a temporary non-executable surface sentinel: canonicalize erases it, verify-core and direct convert reject it, and it never lowers to SSAVC4.",
+        "The reject-surface-before-canonicalize test must invoke --convert-vc4tile-to-ssavc4; a parser-only vc4-opt command is not a rejection test."
+      ]
     },
     {
       "id": "m5-02-tile-layout-types-and-precision-markers",

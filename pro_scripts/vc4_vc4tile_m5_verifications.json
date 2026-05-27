@@ -405,7 +405,25 @@
           "forbid_scf": true,
           "forbid_index": true,
           "forbid_producer_ops": true,
-          "must_not_contain": []
+          "must_not_contain": [
+            "vc4tile.surface_placeholder"
+          ],
+          "must_contain": [
+            "vc4tile.kernel"
+          ],
+          "surface_ops": [
+            "vc4tile.block_reduce",
+            "vc4tile.copy_tile",
+            "vc4tile.surface_placeholder",
+            "vc4tile.tile_contract",
+            "vc4tile.tile_dot",
+            "vc4tile.tile_load",
+            "vc4tile.tile_matmul",
+            "vc4tile.tile_reduce",
+            "vc4tile.tile_store",
+            "vc4tile.tile_transpose",
+            "vc4tile.tile_view"
+          ]
         },
         {
           "id": "m5-01-reject-surface-direct",
@@ -415,11 +433,16 @@
             {
               "argv": [
                 "vc4-opt",
+                "--convert-vc4tile-to-ssavc4",
                 "compiler/test/Conversion/VC4TileToSSAVC4/reject-surface-before-canonicalize.mlir"
               ],
               "expect_exit_code": 1,
               "stderr_contains": [
-                "error"
+                "surface operation",
+                "--canonicalize-vc4tile-surface"
+              ],
+              "contains": [
+                "vc4tile.surface_placeholder"
               ]
             }
           ]

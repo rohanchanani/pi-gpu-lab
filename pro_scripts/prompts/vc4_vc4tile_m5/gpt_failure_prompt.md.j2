@@ -5,6 +5,8 @@ Slice: `{{SLICE_ID}}` — {{SLICE_TITLE}}
 Attempt: {{ATTEMPT}}
 Mode: {{MODE}}
 
+{{DOWNLOAD_CONTRACT_MARKDOWN}}
+
 ## Intent
 {{SLICE_INTENT}}
 
@@ -41,4 +43,3 @@ Mode: {{MODE}}
 ## Required repair behavior
 This is a focused repair attempt, not a new implementation pass. Fix the current failure packet, preserve already-passing checks, avoid unrelated rewrites, and justify out-of-scope path changes in `manifest.json.risk_notes`. Add/strengthen tests if the failure exposes an uncovered bug. Do not weaken verification.
 
-{{DOWNLOAD_CONTRACT_MARKDOWN}}
