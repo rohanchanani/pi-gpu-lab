@@ -189,6 +189,152 @@ def VC4Tile_TileDescriptorOp : VC4Tile_PureOp<"tile_descriptor"> {
   let hasVerifier = 1;
 }
 
+
+// M5 ergonomic tile movement surface operations.  They are consumed by
+// --plan-vc4tile-copies and must not survive into verified VC4Tile core.
+def VC4Tile_TileLoadOp : VC4Tile_Op<"tile_load", [
+    MemoryEffects<[MemRead]>
+  ]> {
+  let summary = "ergonomic tile load surface operation";
+  let description = [{
+    Loads a 32-bit tile fragment from a declared memory space into a register
+    carrier.  M5 v1 supports the global->register 1x16 case in the copy planner;
+    other parsed forms are accepted only when they are planned or rejected
+    deterministically before SSAVC4 lowering.
+  }];
+  let arguments = (ins
+    AnyType:$base,
+    AnyType:$offset,
+    AnyType:$mask,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit
+  );
+  let results = (outs AnyType:$tile);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileStoreOp : VC4Tile_Op<"tile_store", [
+    MemoryEffects<[MemWrite]>
+  ]> {
+  let summary = "ergonomic tile store surface operation";
+  let description = [{
+    Stores a 32-bit tile fragment to a declared memory space.  M5 v1 plans the
+    register->global 1x16 case through the existing masked global-store core
+    contract, which later lowers through VPM/VDW rather than a direct hardware
+    register-to-global store.
+  }];
+  let arguments = (ins
+    AnyType:$tile,
+    AnyType:$base,
+    AnyType:$offset,
+    AnyType:$mask,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit
+  );
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CopyTileOp : VC4Tile_Op<"copy_tile", [
+    MemoryEffects<[MemRead, MemWrite]>
+  ]> {
+  let summary = "ergonomic copy-tile surface operation";
+  let description = [{
+    Surface copy-planning operation.  The single variadic operand/result group
+    keeps the first implementation flexible enough for register->shared and
+    shared->register forms while requiring the planner to erase the operation
+    before verified VC4Tile core.
+  }];
+  let arguments = (ins
+    Variadic<AnyType>:$inputs,
+    ArrayAttr:$shape,
+    VC4Tile_MemorySpaceAttr:$src_space,
+    VC4Tile_MemorySpaceAttr:$dst_space,
+    VC4Tile_LayoutAttr:$src_layout,
+    VC4Tile_LayoutAttr:$dst_layout,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<I32Attr>:$elem_bytes
+  );
+  let results = (outs Variadic<AnyType>:$outputs);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileViewOp : VC4Tile_PureOp<"tile_view"> {
+  let summary = "symbolic tile view surface operation";
+  let arguments = (ins
+    AnyType:$source,
+    OptionalAttr<ArrayAttr>:$offsets,
+    OptionalAttr<ArrayAttr>:$sizes,
+    OptionalAttr<ArrayAttr>:$strides,
+    OptionalAttr<VC4Tile_LayoutAttr>:$layout
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileSubviewOp : VC4Tile_PureOp<"tile_subview"> {
+  let summary = "symbolic tile subview surface operation";
+  let arguments = (ins
+    AnyType:$source,
+    ArrayAttr:$offsets,
+    ArrayAttr:$sizes,
+    OptionalAttr<ArrayAttr>:$strides,
+    OptionalAttr<VC4Tile_LayoutAttr>:$layout
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TransposeViewOp : VC4Tile_PureOp<"transpose_view"> {
+  let summary = "symbolic transposed tile view surface operation";
+  let arguments = (ins AnyType:$source, ArrayAttr:$permutation);
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_SharedTileAllocOp : VC4Tile_Op<"shared_tile_alloc", [
+    MemoryEffects<[MemAlloc]>
+  ]> {
+  let summary = "ergonomic shared VPM tile allocation surface operation";
+  let arguments = (ins
+    I32Attr:$rows,
+    I32Attr:$elem_bytes,
+    ArrayAttr:$shape,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_LayoutAttr:$layout,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_PrecisionAttr>:$precision,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<VC4Tile_MemorySpaceAttr>:$memory_space
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
 // Temporary M5 surface/core boundary sentinel.  This operation is deliberately
 // non-executable: surface canonicalization erases it, core verification rejects
 // it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.

@@ -1,0 +1,1 @@
+{"name":"shared_register_roundtrip_vc4tile","status":"PASS","required":{"total_mismatches":0,"sentinel_mismatches":0,"launch_failures":0,"runtime_launches":1}}

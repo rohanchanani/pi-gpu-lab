@@ -155,6 +155,169 @@ static LogicalResult verifyTileDescriptorLayout(Operation *op,
   return success();
 }
 
+static LogicalResult verifyOptionalPositiveI64Array(Operation *op,
+                                                     StringRef name) {
+  auto attr = op->getAttrOfType<ArrayAttr>(name);
+  if (!attr)
+    return success();
+  SmallVector<int64_t, 4> values;
+  return collectPositiveI64Array(op, attr, name, values);
+}
+
+static LogicalResult verifyOptionalNonNegativeI64Array(Operation *op,
+                                                       StringRef name) {
+  auto attr = op->getAttrOfType<ArrayAttr>(name);
+  if (!attr)
+    return success();
+  for (Attribute element : attr) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(element);
+    if (!intAttr)
+      return op->emitOpError() << name << " entries must be integers";
+    if (intAttr.getInt() < 0)
+      return op->emitOpError() << name << " entries must be non-negative";
+  }
+  return success();
+}
+
+static LogicalResult verifyRequiredNonNegativeI64Array(Operation *op,
+                                                       StringRef name) {
+  auto attr = op->getAttrOfType<ArrayAttr>(name);
+  if (!attr)
+    return op->emitOpError() << name << " attribute is required";
+  if (attr.empty())
+    return op->emitOpError() << name << " must not be empty";
+  for (Attribute element : attr) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(element);
+    if (!intAttr)
+      return op->emitOpError() << name << " entries must be integers";
+    if (intAttr.getInt() < 0)
+      return op->emitOpError() << name << " entries must be non-negative";
+  }
+  return success();
+}
+
+static LogicalResult verifyTileSurfaceShape(Operation *op,
+                                            SmallVectorImpl<int64_t> &shape) {
+  auto shapeAttr = op->getAttrOfType<ArrayAttr>("shape");
+  if (failed(collectPositiveI64Array(op, shapeAttr, "shape", shape)))
+    return failure();
+  if (shape.size() > 2)
+    return op->emitOpError("M5 copy planner v1 supports only rank <= 2 tile shapes");
+  return success();
+}
+
+static bool isVC4TileSurfaceCarrierType(Type type) {
+  return isVC4TileVector16DataType(type) || isVC4TileTileType(type) ||
+         isVC4TileSharedTileType(type);
+}
+
+static LogicalResult verifySurfaceCarrier(Operation *op, Type type,
+                                          StringRef role) {
+  if (isVC4TileSurfaceCarrierType(type))
+    return success();
+  return emitTypeError(op, type, role,
+                       "vector<16xi32>, vector<16xf32>, !vc4tile.tile, or !vc4tile.shared_tile");
+}
+
+static bool isVC4TileCopyOperandType(Type type) {
+  return isVC4TileSurfaceCarrierType(type) || isVC4TileScalarIdType(type) ||
+         isVC4TileVector16I1Type(type);
+}
+
+static LogicalResult verifyM5Exact32Metadata(Operation *op) {
+  SmallVector<int64_t, 4> shape;
+  if (failed(verifyTileSurfaceShape(op, shape)))
+    return failure();
+
+  Type elementType;
+  Type storageType;
+  if (failed(verifyM532BitTypeAttr(op, "element_type", "element types",
+                                   elementType)) ||
+      failed(verifyM532BitTypeAttr(op, "storage_type", "storage",
+                                   storageType)))
+    return failure();
+
+  if (auto expressed = op->getAttrOfType<TypeAttr>("expressed_type")) {
+    Type expressedType = expressed.getValue();
+    if (!isVC4TileSupportedM532BitElementType(expressedType)) {
+      return op->emitOpError()
+             << "M5 supports only 32-bit executable tile expressed types; got "
+             << "expressed_type = " << expressedType;
+    }
+  }
+  if (auto accumulator = op->getAttrOfType<TypeAttr>("accumulator_type")) {
+    Type accumulatorType = accumulator.getValue();
+    if (!isVC4TileSupportedM532BitElementType(accumulatorType)) {
+      return op->emitOpError()
+             << "M5 supports only 32-bit executable tile accumulator types; got "
+             << "accumulator_type = " << accumulatorType;
+    }
+  }
+
+  auto precision = op->getAttrOfType<PrecisionAttr>("precision");
+  if (!precision)
+    return op->emitOpError("precision attribute is required");
+  if (precision.getValue() != Precision::exact_32)
+    return op->emitOpError("M5 executable precision_policy must be exact_32");
+
+  if (auto packing = op->getAttrOfType<PackingAttr>("packing")) {
+    if (packing.getValue() != Packing::none)
+      return op->emitOpError("M5 supports only packing = none");
+  }
+
+  if (auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary")) {
+    if (boundary.getValue() == BoundaryPolicy::zero ||
+        boundary.getValue() == BoundaryPolicy::clamp)
+      return op->emitOpError("boundary policy zero/clamp is not implemented in M5");
+  }
+
+  for (StringRef forbidden : {"quantization", "scale", "zero_point",
+                             "scale_granularity", "zero_point_policy"}) {
+    if (op->getAttr(forbidden))
+      return op->emitOpError(
+          "quantization scales and zero points are not executable in M5");
+  }
+  return success();
+}
+
+static LogicalResult verifyTileMovementLayout(Operation *op, StringRef name) {
+  auto layout = op->getAttrOfType<LayoutAttr>(name);
+  if (!layout)
+    return op->emitOpError() << name << " attribute is required";
+  return success();
+}
+
+static LogicalResult verifyStaticIndexArray(Operation *op, StringRef name,
+                                            unsigned expectedSize) {
+  auto attr = op->getAttrOfType<ArrayAttr>(name);
+  if (!attr)
+    return op->emitOpError() << name << " attribute is required";
+  SmallVector<int64_t, 4> values;
+  if (failed(collectPositiveI64Array(op, attr, name, values)))
+    return failure();
+  if (expectedSize && values.size() != expectedSize)
+    return op->emitOpError() << name << " length must be " << expectedSize;
+  return success();
+}
+
+static LogicalResult verifyTransposePermutation(Operation *op,
+                                                ArrayAttr permutation) {
+  if (!permutation)
+    return op->emitOpError("permutation attribute is required");
+  if (permutation.size() != 2)
+    return op->emitOpError("transpose_view supports only rank-2 permutations in M5");
+  SmallVector<int64_t, 2> values;
+  for (Attribute attr : permutation) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(attr);
+    if (!intAttr)
+      return op->emitOpError("permutation entries must be integers");
+    values.push_back(intAttr.getInt());
+  }
+  if (values[0] != 1 || values[1] != 0)
+    return op->emitOpError("M5 transpose_view supports only permutation [1, 0]");
+  return success();
+}
+
 
 static std::optional<int64_t> getI32Attr(Operation *op, StringRef name) {
   auto attr = op->getAttrOfType<IntegerAttr>(name);
@@ -589,6 +752,132 @@ LogicalResult TileDescriptorOp::verify() {
 
   if (!isVC4TileTileType(getTile().getType()))
     return emitOpError("result type must be !vc4tile.tile");
+  return success();
+}
+
+LogicalResult TileLoadOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyScalarId(op, getBase().getType(), "base")) ||
+      failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
+      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
+      failed(verifyM5Exact32Metadata(op)) ||
+      failed(verifyTileMovementLayout(op, "layout")))
+    return failure();
+  if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
+      getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
+    return emitOpError("tile_load source memory_space must be global or shared_vpm");
+  return success();
+}
+
+LogicalResult TileStoreOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySurfaceCarrier(op, getTile().getType(), "tile")) ||
+      failed(verifyScalarId(op, getBase().getType(), "base")) ||
+      failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
+      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifyM5Exact32Metadata(op)) ||
+      failed(verifyTileMovementLayout(op, "layout")))
+    return failure();
+  if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
+      getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
+    return emitOpError("tile_store destination memory_space must be global or shared_vpm");
+  return success();
+}
+
+LogicalResult CopyTileOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyM5Exact32Metadata(op)) ||
+      failed(verifyTileMovementLayout(op, "src_layout")) ||
+      failed(verifyTileMovementLayout(op, "dst_layout")))
+    return failure();
+  if (getNumOperands() == 0)
+    return emitOpError("requires at least one operand");
+  for (Value operand : getOperands()) {
+    if (!isVC4TileCopyOperandType(operand.getType()))
+      return emitTypeError(op, operand.getType(), "operand",
+                           "tile carrier, i32/index row, or vector<16xi1> mask");
+  }
+  for (Value result : getResults()) {
+    if (failed(verifySurfaceCarrier(op, result.getType(), "result")))
+      return failure();
+  }
+  if (auto elemBytes = getElemBytesAttr()) {
+    if (elemBytes.getInt() != 4)
+      return emitOpError("elem_bytes must be 4 for M5 copy planner v1");
+  }
+  return success();
+}
+
+LogicalResult TileViewOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySurfaceCarrier(op, getSource().getType(), "source")) ||
+      failed(verifySurfaceCarrier(op, getResult().getType(), "result")) ||
+      failed(verifyOptionalNonNegativeI64Array(op, "offsets")) ||
+      failed(verifyOptionalPositiveI64Array(op, "sizes")) ||
+      failed(verifyOptionalPositiveI64Array(op, "strides")))
+    return failure();
+  if (getSource().getType() != getResult().getType())
+    return emitOpError("tile_view result type must match source type in M5");
+  return success();
+}
+
+LogicalResult TileSubviewOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySurfaceCarrier(op, getSource().getType(), "source")) ||
+      failed(verifySurfaceCarrier(op, getResult().getType(), "result")) ||
+      failed(verifyRequiredNonNegativeI64Array(op, "offsets")) ||
+      failed(verifyStaticIndexArray(op, "sizes", 0)) ||
+      failed(verifyOptionalPositiveI64Array(op, "strides")))
+    return failure();
+  if (getSource().getType() != getResult().getType())
+    return emitOpError("tile_subview result type must match source type in M5");
+  return success();
+}
+
+LogicalResult TransposeViewOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySurfaceCarrier(op, getSource().getType(), "source")) ||
+      failed(verifySurfaceCarrier(op, getResult().getType(), "result")) ||
+      failed(verifyTransposePermutation(op, getPermutationAttr())))
+    return failure();
+  if (getSource().getType() != getResult().getType())
+    return emitOpError("transpose_view result type must match source type in M5");
+  return success();
+}
+
+LogicalResult SharedTileAllocOp::verify() {
+  Operation *op = getOperation();
+  Type elementType;
+  Type storageType;
+  if (failed(verifyInsideKernel(op)) || failed(verifySharedKernelContract(op)) ||
+      failed(verifyRowsAttr(op, getRowsAttr(), "rows")) ||
+      failed(verifyElemBytes4(op, getElemBytesAttr())) ||
+      failed(verifyM532BitTypeAttr(op, "element_type", "element types", elementType)) ||
+      failed(verifyM532BitTypeAttr(op, "storage_type", "storage", storageType)) ||
+      failed(verifySurfaceCarrier(op, getResult().getType(), "result")))
+    return failure();
+  if (getMemorySpaceAttr() &&
+      getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
+    return emitOpError("memory_space must be #vc4tile.memory_space<shared_vpm>");
+  if (auto precision = getPrecisionAttr()) {
+    if (precision.getValue() != Precision::exact_32)
+      return emitOpError("M5 executable precision_policy must be exact_32");
+  }
+  if (auto packing = getPackingAttr()) {
+    if (packing.getValue() != Packing::none)
+      return emitOpError("M5 supports only packing = none");
+  }
+  SmallVector<int64_t, 4> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "shape", shape)))
+    return failure();
+  if (shape.size() > 2)
+    return emitOpError("shared_tile_alloc supports only rank <= 2 in M5");
   return success();
 }
 

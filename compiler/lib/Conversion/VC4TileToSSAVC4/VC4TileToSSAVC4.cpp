@@ -75,6 +75,16 @@ constexpr llvm::StringLiteral kVC4TileSharedAllocOpName("vc4tile.shared_alloc");
 constexpr llvm::StringLiteral kVC4TileSharedLoadOpName("vc4tile.shared_load");
 constexpr llvm::StringLiteral kVC4TileSharedStoreOpName("vc4tile.shared_store");
 constexpr llvm::StringLiteral kVC4TileBarrierOpName("vc4tile.barrier");
+constexpr llvm::StringLiteral kVC4TileTileDescriptorOpName(
+    "vc4tile.tile_descriptor");
+constexpr llvm::StringLiteral kVC4TileTileLoadOpName("vc4tile.tile_load");
+constexpr llvm::StringLiteral kVC4TileTileStoreOpName("vc4tile.tile_store");
+constexpr llvm::StringLiteral kVC4TileCopyTileOpName("vc4tile.copy_tile");
+constexpr llvm::StringLiteral kVC4TileTileViewOpName("vc4tile.tile_view");
+constexpr llvm::StringLiteral kVC4TileTileSubviewOpName("vc4tile.tile_subview");
+constexpr llvm::StringLiteral kVC4TileTransposeViewOpName("vc4tile.transpose_view");
+constexpr llvm::StringLiteral kVC4TileSharedTileAllocOpName(
+    "vc4tile.shared_tile_alloc");
 constexpr llvm::StringLiteral kVC4TileSurfacePlaceholderOpName(
     "vc4tile.surface_placeholder");
 
@@ -130,7 +140,15 @@ static bool isVC4TileOp(Operation *op) {
 }
 
 static bool isVC4TileSurfaceOp(Operation *op) {
-  return hasName(op, kVC4TileSurfacePlaceholderOpName);
+  return hasName(op, kVC4TileSurfacePlaceholderOpName) ||
+         hasName(op, kVC4TileTileDescriptorOpName) ||
+         hasName(op, kVC4TileTileLoadOpName) ||
+         hasName(op, kVC4TileTileStoreOpName) ||
+         hasName(op, kVC4TileCopyTileOpName) ||
+         hasName(op, kVC4TileTileViewOpName) ||
+         hasName(op, kVC4TileTileSubviewOpName) ||
+         hasName(op, kVC4TileTransposeViewOpName) ||
+         hasName(op, kVC4TileSharedTileAllocOpName);
 }
 
 static LogicalResult emitSurfaceOpOrderingError(Operation *op,
@@ -2738,13 +2756,298 @@ struct CanonicalizeVC4TileSurfacePass
     ModuleOp module = getOperation();
     SmallVector<Operation *, 8> placeholders;
     module.walk([&](Operation *op) {
-      if (isVC4TileSurfaceOp(op))
+      if (hasName(op, kVC4TileSurfacePlaceholderOpName))
         placeholders.push_back(op);
     });
     for (Operation *op : placeholders)
       op->erase();
   }
 };
+
+
+static Value createVC4TileLaneRangeCore(OpBuilder &builder, Location loc) {
+  OperationState state(loc, kVC4TileLaneRangeOpName);
+  state.addTypes(getVector16I32Type(builder));
+  return builder.create(state)->getResult(0);
+}
+
+static bool isI32Scalar(Value value) {
+  return value && value.getType().isSignlessInteger(32);
+}
+
+static FailureOr<Value> createAdjustedGlobalBaseForTileCopy(OpBuilder &builder,
+                                                            Operation *op,
+                                                            Value base,
+                                                            Value offset) {
+  if (!isI32Scalar(base) || !isI32Scalar(offset))
+    return op->emitOpError("M5 copy planner v1 requires i32 base and offset operands");
+
+  if (auto constOp = offset.getDefiningOp<arith::ConstantIntOp>()) {
+    if (constOp.value() == 0)
+      return base;
+  }
+
+  Value four = arith::ConstantIntOp::create(builder, op->getLoc(), 4, 32);
+  Value byteOffset = arith::MulIOp::create(builder, op->getLoc(), offset, four);
+  return arith::AddIOp::create(builder, op->getLoc(), base, byteOffset)
+      .getResult();
+}
+
+static NamedAttribute namedAttr(OpBuilder &builder, StringRef name,
+                                Attribute attr) {
+  return builder.getNamedAttr(name, attr);
+}
+
+static Attribute getVC4TileMemorySpaceAttr(OpBuilder &builder,
+                                           mlir::vc4tile::MemorySpace space) {
+  return mlir::vc4tile::MemorySpaceAttr::get(builder.getContext(), space);
+}
+
+static Attribute getVC4TileOffsetUnitAttr(OpBuilder &builder,
+                                          mlir::vc4tile::OffsetUnit unit) {
+  return mlir::vc4tile::OffsetUnitAttr::get(builder.getContext(), unit);
+}
+
+static Attribute getVC4TileMemoryAccessAttr(OpBuilder &builder,
+                                            mlir::vc4tile::MemoryAccess access) {
+  return mlir::vc4tile::MemoryAccessAttr::get(builder.getContext(), access);
+}
+
+static Operation *createVC4TileCoreOp(OpBuilder &builder, Location loc,
+                                      StringRef name, ArrayRef<Value> operands,
+                                      ArrayRef<NamedAttribute> attrs,
+                                      TypeRange resultTypes = TypeRange{}) {
+  OperationState state(loc, name);
+  state.addOperands(operands);
+  for (NamedAttribute attr : attrs)
+    state.addAttribute(attr.getName(), attr.getValue());
+  state.addTypes(resultTypes);
+  return builder.create(state);
+}
+
+static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
+                                                   OpBuilder &builder) {
+  auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+  if (!memorySpace || memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
+    return op->emitOpError("copy planner v1 supports tile_load only for global->register; use copy_tile for shared paths");
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return op->emitOpError("expected base, offset, mask and one result");
+  if (!isVector16Data(op->getResult(0).getType()))
+    return op->emitOpError("copy planner v1 requires tile_load result to be vector<16xi32> or vector<16xf32>");
+
+  FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
+      builder, op, op->getOperand(0), op->getOperand(1));
+  if (failed(adjustedBase))
+    return failure();
+  Value lanes = createVC4TileLaneRangeCore(builder, op->getLoc());
+  Operation *load = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileMaskedLoadGlobalOpName,
+      {*adjustedBase, lanes, op->getOperand(2)},
+      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+       namedAttr(builder, "offset_unit",
+                 getVC4TileOffsetUnitAttr(builder,
+                                          mlir::vc4tile::OffsetUnit::element)),
+       namedAttr(builder, "memory_space",
+                 getVC4TileMemorySpaceAttr(builder,
+                                           mlir::vc4tile::MemorySpace::global)),
+       namedAttr(builder, "access",
+                 getVC4TileMemoryAccessAttr(builder,
+                                            mlir::vc4tile::MemoryAccess::coalesced))},
+      op->getResultTypes());
+  return load->getResult(0);
+}
+
+static LogicalResult planRegisterGlobalTileStore(Operation *op,
+                                                 OpBuilder &builder) {
+  auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+  if (!memorySpace || memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
+    return op->emitOpError("copy planner v1 supports tile_store only for register->global; use copy_tile for shared paths");
+  if (op->getNumOperands() != 4)
+    return op->emitOpError("expected tile, base, offset, and mask operands");
+  if (!isVector16Data(op->getOperand(0).getType()))
+    return op->emitOpError("copy planner v1 requires tile_store input to be vector<16xi32> or vector<16xf32>");
+
+  FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
+      builder, op, op->getOperand(1), op->getOperand(2));
+  if (failed(adjustedBase))
+    return failure();
+  Value lanes = createVC4TileLaneRangeCore(builder, op->getLoc());
+  createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
+      {*adjustedBase, lanes, op->getOperand(0), op->getOperand(3)},
+      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+       namedAttr(builder, "offset_unit",
+                 getVC4TileOffsetUnitAttr(builder,
+                                          mlir::vc4tile::OffsetUnit::element)),
+       namedAttr(builder, "memory_space",
+                 getVC4TileMemorySpaceAttr(builder,
+                                           mlir::vc4tile::MemorySpace::global)),
+       namedAttr(builder, "access",
+                 getVC4TileMemoryAccessAttr(
+                     builder, mlir::vc4tile::MemoryAccess::affine_contiguous))});
+  return success();
+}
+
+static Attribute getVPMLayoutFromTileLayout(OpBuilder &builder,
+                                            mlir::vc4tile::LayoutAttr layout,
+                                            bool defaultColumn = false) {
+  mlir::vc4tile::VPMLayout vpmLayout = defaultColumn
+                                          ? mlir::vc4tile::VPMLayout::column_major
+                                          : mlir::vc4tile::VPMLayout::row_major;
+  if (layout) {
+    switch (layout.getValue()) {
+    case mlir::vc4tile::Layout::vpm_col:
+    case mlir::vc4tile::Layout::col_major:
+    case mlir::vc4tile::Layout::transposed_view:
+      vpmLayout = mlir::vc4tile::VPMLayout::column_major;
+      break;
+    case mlir::vc4tile::Layout::row_major:
+    case mlir::vc4tile::Layout::affine_2d:
+    case mlir::vc4tile::Layout::vpm_row:
+      vpmLayout = mlir::vc4tile::VPMLayout::row_major;
+      break;
+    }
+  }
+  return mlir::vc4tile::VPMLayoutAttr::get(builder.getContext(), vpmLayout);
+}
+
+static LogicalResult planSharedTileAlloc(Operation *op, OpBuilder &builder) {
+  if (op->getNumResults() != 1)
+    return op->emitOpError("expected one result");
+  if (!mlir::vc4tile::isVC4TileSharedTileType(op->getResult(0).getType())) {
+    return op->emitOpError(
+        "copy planner v1 requires shared_tile_alloc result type !vc4tile.shared_tile");
+  }
+  auto rows = op->getAttrOfType<IntegerAttr>("rows");
+  auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
+  if (!rows || !elemBytes)
+    return op->emitOpError("requires rows and elem_bytes attributes");
+  Operation *alloc = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileSharedAllocOpName, {},
+      {namedAttr(builder, "rows", rows),
+       namedAttr(builder, "elem_bytes", elemBytes),
+       namedAttr(builder, "memory_space",
+                 getVC4TileMemorySpaceAttr(builder,
+                                           mlir::vc4tile::MemorySpace::shared_vpm)),
+       namedAttr(builder, "layout",
+                 getVPMLayoutFromTileLayout(
+                     builder,
+                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout")))},
+      op->getResultTypes());
+  op->getResult(0).replaceAllUsesWith(alloc->getResult(0));
+  return success();
+}
+
+static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
+  if (op->getNumOperands() != 4 || op->getNumResults() != 0) {
+    return op->emitOpError(
+        "register->shared_vpm copy_tile expects operands (value, shared_tile, row, mask) and no results");
+  }
+  Value value = op->getOperand(0);
+  Value handle = op->getOperand(1);
+  Value row = op->getOperand(2);
+  Value mask = op->getOperand(3);
+  if (!isVector16Data(value.getType()) ||
+      !mlir::vc4tile::isVC4TileSharedTileType(handle.getType()) ||
+      !isI32Scalar(row) || !isVector16I1(mask.getType())) {
+    return op->emitOpError(
+        "register->shared_vpm copy_tile requires vector value, !vc4tile.shared_tile handle, i32 row, and vector<16xi1> mask");
+  }
+  createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileSharedStoreOpName,
+      {handle, row, value, mask},
+      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+       namedAttr(builder, "memory_space",
+                 getVC4TileMemorySpaceAttr(builder,
+                                           mlir::vc4tile::MemorySpace::shared_vpm)),
+       namedAttr(builder, "layout",
+                 getVPMLayoutFromTileLayout(
+                     builder,
+                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout")))});
+  return success();
+}
+
+static LogicalResult planSharedRegisterCopy(Operation *op, OpBuilder &builder) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1) {
+    return op->emitOpError(
+        "shared_vpm->register copy_tile expects operands (shared_tile, row, mask) and one result");
+  }
+  Value handle = op->getOperand(0);
+  Value row = op->getOperand(1);
+  Value mask = op->getOperand(2);
+  if (!mlir::vc4tile::isVC4TileSharedTileType(handle.getType()) ||
+      !isI32Scalar(row) || !isVector16I1(mask.getType()) ||
+      !isVector16Data(op->getResult(0).getType())) {
+    return op->emitOpError(
+        "shared_vpm->register copy_tile requires !vc4tile.shared_tile handle, i32 row, vector<16xi1> mask, and vector result");
+  }
+  Operation *load = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileSharedLoadOpName, {handle, row, mask},
+      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+       namedAttr(builder, "memory_space",
+                 getVC4TileMemorySpaceAttr(builder,
+                                           mlir::vc4tile::MemorySpace::shared_vpm)),
+       namedAttr(builder, "layout",
+                 getVPMLayoutFromTileLayout(
+                     builder,
+                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout")))},
+      op->getResultTypes());
+  op->getResult(0).replaceAllUsesWith(load->getResult(0));
+  return success();
+}
+
+static LogicalResult planCopyTile(Operation *op, OpBuilder &builder) {
+  auto src = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("src_space");
+  auto dst = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("dst_space");
+  if (!src || !dst)
+    return op->emitOpError("copy_tile requires src_space and dst_space attributes");
+
+  if (src.getValue() == mlir::vc4tile::MemorySpace::register_space &&
+      dst.getValue() == mlir::vc4tile::MemorySpace::shared_vpm)
+    return planRegisterSharedCopy(op, builder);
+  if (src.getValue() == mlir::vc4tile::MemorySpace::shared_vpm &&
+      dst.getValue() == mlir::vc4tile::MemorySpace::register_space)
+    return planSharedRegisterCopy(op, builder);
+
+  return op->emitOpError()
+         << "copy planner v1 cannot plan requested copy path; supported paths are register->shared_vpm and shared_vpm->register in copy_tile, plus tile_load/tile_store for global/register";
+}
+
+static LogicalResult foldViewOp(Operation *op) {
+  if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return op->emitOpError("view folding expects one source and one result");
+  if (op->getOperand(0).getType() != op->getResult(0).getType())
+    return op->emitOpError("view folding requires source and result types to match");
+  op->getResult(0).replaceAllUsesWith(op->getOperand(0));
+  return success();
+}
+
+static LogicalResult planOneVC4TileSurfaceOp(Operation *op) {
+  if (hasName(op, kVC4TileSurfacePlaceholderOpName) ||
+      hasName(op, kVC4TileTileDescriptorOpName))
+    return success();
+
+  OpBuilder builder(op);
+  if (hasName(op, kVC4TileTileLoadOpName)) {
+    FailureOr<Value> result = planGlobalRegisterTileLoad(op, builder);
+    if (failed(result))
+      return failure();
+    op->getResult(0).replaceAllUsesWith(*result);
+    return success();
+  }
+  if (hasName(op, kVC4TileTileStoreOpName))
+    return planRegisterGlobalTileStore(op, builder);
+  if (hasName(op, kVC4TileSharedTileAllocOpName))
+    return planSharedTileAlloc(op, builder);
+  if (hasName(op, kVC4TileCopyTileOpName))
+    return planCopyTile(op, builder);
+  if (hasName(op, kVC4TileTileViewOpName) ||
+      hasName(op, kVC4TileTileSubviewOpName) ||
+      hasName(op, kVC4TileTransposeViewOpName))
+    return foldViewOp(op);
+
+  return op->emitOpError("unrecognized VC4Tile surface operation");
+}
 
 struct PlanVC4TileCopiesPass
     : public PassWrapper<PlanVC4TileCopiesPass, OperationPass<ModuleOp>> {
@@ -2762,11 +3065,28 @@ struct PlanVC4TileCopiesPass
   }
 
   void runOnOperation() override {
-    // M5 slice 01 registers the copy-planning boundary before real ergonomic
-    // copy ops exist.  Later slices replace this semantic no-op with hardware-
-    // aware planning for tile_load/tile_store/copy_tile.  Deliberately do not
-    // erase unknown surface ops here; canonicalization/planning ownership stays
-    // explicit and conversion remains the final ordering guard.
+    ModuleOp module = getOperation();
+    SmallVector<Operation *, 16> surfaceOps;
+    module.walk([&](Operation *op) {
+      if (op != module.getOperation() && isVC4TileSurfaceOp(op))
+        surfaceOps.push_back(op);
+    });
+
+    for (Operation *op : surfaceOps) {
+      if (!op->getBlock())
+        continue;
+      if (failed(planOneVC4TileSurfaceOp(op))) {
+        signalPassFailure();
+        return;
+      }
+      if (op->use_empty())
+        op->erase();
+      else if (isVC4TileSurfaceOp(op)) {
+        op->emitOpError("copy planner v1 could not erase all uses of surface operation");
+        signalPassFailure();
+        return;
+      }
+    }
   }
 };
 
