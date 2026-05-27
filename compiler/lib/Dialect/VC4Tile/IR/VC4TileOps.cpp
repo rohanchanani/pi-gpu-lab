@@ -27,6 +27,10 @@ using namespace mlir::vc4tile;
 
 namespace {
 
+static bool getBoolAttr(Operation *op, StringRef name);
+static std::optional<int64_t> getI32Attr(Operation *op, StringRef name);
+static LogicalResult verifySharedKernelContract(Operation *op);
+
 static LogicalResult emitTypeError(Operation *op, Type type, StringRef role,
                                    StringRef expected) {
   return op->emitOpError() << role << " type must be " << expected << "; got "
@@ -369,6 +373,63 @@ static LogicalResult verifyTileBinaryComputeOperands(Operation *op,
   if (!isVC4TileVector16DataType(result.getType()))
     return emitTypeError(op, result.getType(), "result",
                          "vector<16xi32> or vector<16xf32>");
+  return success();
+}
+
+static LogicalResult verifyReductionAxis(Operation *op, bool requireAxis) {
+  auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
+  if (!axisAttr)
+    return requireAxis ? op->emitOpError("tile_reduce requires an axis attribute")
+                       : success();
+
+  SmallVector<int64_t, 4> shape;
+  if (failed(verifyTileSurfaceShape(op, shape)))
+    return failure();
+  int64_t axis = axisAttr.getInt();
+  if (axis < 0 || axis >= static_cast<int64_t>(shape.size()))
+    return op->emitOpError("reduction axis must name a dimension of shape");
+  return success();
+}
+
+static LogicalResult verifyTileReductionCommon(Operation *op, Value input,
+                                               Value mask, Value result,
+                                               bool requireAxis) {
+  if (failed(verifyTileComputeMetadata(op)) ||
+      failed(verifySurfaceCarrier(op, input.getType(), "input")) ||
+      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySurfaceCarrier(op, result.getType(), "result")))
+    return failure();
+  if (input.getType() != result.getType())
+    return op->emitOpError(
+        "reduction input and result must have identical types in M5");
+  if (!isVC4TileVector16DataType(result.getType()))
+    return emitTypeError(op, result.getType(), "result",
+                         "vector<16xi32> or vector<16xf32>");
+  auto kind = op->getAttrOfType<ReduceKindAttr>("kind");
+  if (!kind)
+    return op->emitOpError("reduction kind attribute is required");
+  if (kind.getValue() != ReduceKind::add)
+    return op->emitOpError(
+        "tile reductions currently support only kind = #vc4tile.reduce_kind<add> in M5");
+  return verifyReductionAxis(op, requireAxis);
+}
+
+static LogicalResult verifyBlockReductionKernelContract(Operation *op) {
+  if (failed(verifySharedKernelContract(op)))
+    return failure();
+  auto kernel = op->getParentOfType<KernelOp>();
+  if (!getBoolAttr(kernel.getOperation(), "uses_barrier"))
+    return op->emitOpError(
+        "block_reduce requires parent vc4tile.kernel to set uses_barrier = true");
+  if (!getBoolAttr(kernel.getOperation(), "require_full_block_residency"))
+    return op->emitOpError(
+        "block_reduce requires parent vc4tile.kernel to set require_full_block_residency = true");
+  if (getI32Attr(kernel.getOperation(), "semaphores_per_block").value_or(0) != 4)
+    return op->emitOpError(
+        "block_reduce requires parent semaphores_per_block = 4");
+  if (getI32Attr(kernel.getOperation(), "vpm_rows_per_block").value_or(0) < 1)
+    return op->emitOpError(
+        "block_reduce requires at least one parent VPM row");
   return success();
 }
 
@@ -1240,6 +1301,40 @@ LogicalResult TileSelectOp::verify() {
   if (!isVC4TileVector16DataType(getResult().getType()))
     return emitTypeError(op, getResult().getType(), "result",
                          "vector<16xi32> or vector<16xf32>");
+  return success();
+}
+
+LogicalResult TileReduceOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)))
+    return failure();
+  return verifyTileReductionCommon(op, getInput(), getMask(), getResult(),
+                                   /*requireAxis=*/true);
+}
+
+LogicalResult RowReduceOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)))
+    return failure();
+  return verifyTileReductionCommon(op, getInput(), getMask(), getResult(),
+                                   /*requireAxis=*/false);
+}
+
+LogicalResult WarpReduceOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)))
+    return failure();
+  return verifyTileReductionCommon(op, getInput(), getMask(), getResult(),
+                                   /*requireAxis=*/false);
+}
+
+LogicalResult BlockReduceOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyTileReductionCommon(op, getInput(), getMask(), getResult(),
+                                       /*requireAxis=*/false)) ||
+      failed(verifyBlockReductionKernelContract(op)))
+    return failure();
   return success();
 }
 

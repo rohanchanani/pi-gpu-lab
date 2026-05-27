@@ -94,6 +94,10 @@ constexpr llvm::StringLiteral kVC4TileTileAddOpName("vc4tile.tile_add");
 constexpr llvm::StringLiteral kVC4TileTileSubOpName("vc4tile.tile_sub");
 constexpr llvm::StringLiteral kVC4TileTileMulOpName("vc4tile.tile_mul");
 constexpr llvm::StringLiteral kVC4TileTileSelectOpName("vc4tile.tile_select");
+constexpr llvm::StringLiteral kVC4TileTileReduceOpName("vc4tile.tile_reduce");
+constexpr llvm::StringLiteral kVC4TileRowReduceOpName("vc4tile.row_reduce");
+constexpr llvm::StringLiteral kVC4TileWarpReduceOpName("vc4tile.warp_reduce");
+constexpr llvm::StringLiteral kVC4TileBlockReduceOpName("vc4tile.block_reduce");
 constexpr llvm::StringLiteral kVC4TileSurfacePlaceholderOpName(
     "vc4tile.surface_placeholder");
 
@@ -167,7 +171,11 @@ static bool isVC4TileSurfaceOp(Operation *op) {
          hasName(op, kVC4TileTileAddOpName) ||
          hasName(op, kVC4TileTileSubOpName) ||
          hasName(op, kVC4TileTileMulOpName) ||
-         hasName(op, kVC4TileTileSelectOpName);
+         hasName(op, kVC4TileTileSelectOpName) ||
+         hasName(op, kVC4TileTileReduceOpName) ||
+         hasName(op, kVC4TileRowReduceOpName) ||
+         hasName(op, kVC4TileWarpReduceOpName) ||
+         hasName(op, kVC4TileBlockReduceOpName);
 }
 
 static LogicalResult emitSurfaceOpOrderingError(Operation *op,
@@ -2954,7 +2962,11 @@ static bool isVC4TileTileComputeOp(Operation *op) {
          hasName(op, kVC4TileTileAddOpName) ||
          hasName(op, kVC4TileTileSubOpName) ||
          hasName(op, kVC4TileTileMulOpName) ||
-         hasName(op, kVC4TileTileSelectOpName);
+         hasName(op, kVC4TileTileSelectOpName) ||
+         hasName(op, kVC4TileTileReduceOpName) ||
+         hasName(op, kVC4TileRowReduceOpName) ||
+         hasName(op, kVC4TileWarpReduceOpName) ||
+         hasName(op, kVC4TileBlockReduceOpName);
 }
 
 static std::optional<Type> getVector16DataElementType(Type type) {
@@ -3147,6 +3159,134 @@ static LogicalResult canonicalizeTileSelectOp(Operation *op,
       "vc4tile.tail_mask masks in M5");
 }
 
+static bool isMaskAllValue(Value mask) {
+  return hasName(mask.getDefiningOp(), kVC4TileMaskAllOpName);
+}
+
+static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
+                                                               bool requireAxis) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("tile reduction expects input, mask, and one result");
+  Type inputType = op->getOperand(0).getType();
+  Type resultType = op->getResult(0).getType();
+  if (!getVector16DataElementType(inputType) || inputType != resultType)
+    return op->emitOpError(
+        "tile reduction requires matching vector<16xi32> or vector<16xf32> input/result types");
+  if (!isVector16I1(op->getOperand(1).getType()))
+    return op->emitOpError("tile reduction mask must be vector<16xi1>");
+  if (!isMaskAllValue(op->getOperand(1)))
+    return op->emitOpError(
+        "tile reductions currently support only vc4tile.mask_all masks in M5");
+  auto kind = op->getAttrOfType<mlir::vc4tile::ReduceKindAttr>("kind");
+  if (!kind)
+    return op->emitOpError("tile reduction requires a kind attribute");
+  if (kind.getValue() != mlir::vc4tile::ReduceKind::add)
+    return op->emitOpError(
+        "tile reductions currently support only kind = #vc4tile.reduce_kind<add> in M5");
+  if (requireAxis && !op->getAttrOfType<IntegerAttr>("axis"))
+    return op->emitOpError("tile_reduce requires an axis attribute");
+  return success();
+}
+
+static Operation *createCoreReduceFromSurface(OpBuilder &builder,
+                                              Operation *op, Value input,
+                                              Value mask) {
+  OperationState state(op->getLoc(), kVC4TileReduceOpName);
+  state.addOperands({input, mask});
+  state.addAttribute("kind", op->getAttr("kind"));
+  state.addTypes(op->getResultTypes());
+  return builder.create(state);
+}
+
+static Operation *createCoreBarrier(OpBuilder &builder, Location loc) {
+  OperationState state(loc, kVC4TileBarrierOpName);
+  state.addAttribute(
+      "scope", mlir::vc4tile::BarrierScopeAttr::get(
+                   builder.getContext(), mlir::vc4tile::BarrierScope::block));
+  return builder.create(state);
+}
+
+static Operation *createCoreSharedAlloc(OpBuilder &builder, Operation *op) {
+  OperationState state(op->getLoc(), kVC4TileSharedAllocOpName);
+  state.addAttribute("rows", builder.getI32IntegerAttr(1));
+  state.addAttribute("elem_bytes", builder.getI32IntegerAttr(4));
+  state.addAttribute(
+      "memory_space", mlir::vc4tile::MemorySpaceAttr::get(
+                          builder.getContext(),
+                          mlir::vc4tile::MemorySpace::shared_vpm));
+  state.addAttribute(
+      "layout", mlir::vc4tile::VPMLayoutAttr::get(
+                    builder.getContext(), mlir::vc4tile::VPMLayout::row_major));
+  state.addTypes(mlir::vc4tile::SharedTileType::get(builder.getContext()));
+  return builder.create(state);
+}
+
+static Operation *createCoreSharedStore(OpBuilder &builder, Operation *op,
+                                        Value shared, Value row, Value value,
+                                        Value mask) {
+  OperationState state(op->getLoc(), kVC4TileSharedStoreOpName);
+  state.addOperands({shared, row, value, mask});
+  state.addAttribute("elem_bytes", builder.getI32IntegerAttr(4));
+  state.addAttribute(
+      "memory_space", mlir::vc4tile::MemorySpaceAttr::get(
+                          builder.getContext(),
+                          mlir::vc4tile::MemorySpace::shared_vpm));
+  state.addAttribute(
+      "layout", mlir::vc4tile::VPMLayoutAttr::get(
+                    builder.getContext(), mlir::vc4tile::VPMLayout::row_major));
+  return builder.create(state);
+}
+
+static Operation *createCoreSharedLoad(OpBuilder &builder, Operation *op,
+                                       Value shared, Value row, Value mask,
+                                       TypeRange resultTypes) {
+  OperationState state(op->getLoc(), kVC4TileSharedLoadOpName);
+  state.addOperands({shared, row, mask});
+  state.addAttribute("elem_bytes", builder.getI32IntegerAttr(4));
+  state.addAttribute(
+      "memory_space", mlir::vc4tile::MemorySpaceAttr::get(
+                          builder.getContext(),
+                          mlir::vc4tile::MemorySpace::shared_vpm));
+  state.addAttribute(
+      "layout", mlir::vc4tile::VPMLayoutAttr::get(
+                    builder.getContext(), mlir::vc4tile::VPMLayout::row_major));
+  state.addTypes(resultTypes);
+  return builder.create(state);
+}
+
+static LogicalResult canonicalizeTileOrWarpReduceOp(Operation *op,
+                                                    OpBuilder &builder) {
+  if (failed(verifySurfaceReductionForCanonicalization(
+          op, /*requireAxis=*/hasName(op, kVC4TileTileReduceOpName))))
+    return failure();
+  Operation *reduce = createCoreReduceFromSurface(builder, op, op->getOperand(0),
+                                                 op->getOperand(1));
+  op->getResult(0).replaceAllUsesWith(reduce->getResult(0));
+  op->erase();
+  return success();
+}
+
+static LogicalResult canonicalizeBlockReduceOp(Operation *op,
+                                               OpBuilder &builder) {
+  if (failed(verifySurfaceReductionForCanonicalization(op,
+                                                       /*requireAxis=*/false)))
+    return failure();
+  Value mask = op->getOperand(1);
+  Value zero = arith::ConstantIntOp::create(builder, op->getLoc(), 0, 32);
+  Operation *shared = createCoreSharedAlloc(builder, op);
+  createCoreSharedStore(builder, op, shared->getResult(0), zero, op->getOperand(0),
+                        mask);
+  createCoreBarrier(builder, op->getLoc());
+  Operation *loaded = createCoreSharedLoad(builder, op, shared->getResult(0), zero,
+                                          mask, op->getResultTypes());
+  Operation *reduce = createCoreReduceFromSurface(builder, op,
+                                                 loaded->getResult(0), mask);
+  createCoreBarrier(builder, op->getLoc());
+  op->getResult(0).replaceAllUsesWith(reduce->getResult(0));
+  op->erase();
+  return success();
+}
+
 static LogicalResult canonicalizeOneTileComputeOp(Operation *op) {
   OpBuilder builder(op);
   if (hasName(op, kVC4TileTileFillOpName))
@@ -3159,6 +3299,12 @@ static LogicalResult canonicalizeOneTileComputeOp(Operation *op) {
     return canonicalizeTileBinaryComputeOp(op, builder);
   if (hasName(op, kVC4TileTileSelectOpName))
     return canonicalizeTileSelectOp(op, builder);
+  if (hasName(op, kVC4TileTileReduceOpName) ||
+      hasName(op, kVC4TileRowReduceOpName) ||
+      hasName(op, kVC4TileWarpReduceOpName))
+    return canonicalizeTileOrWarpReduceOp(op, builder);
+  if (hasName(op, kVC4TileBlockReduceOpName))
+    return canonicalizeBlockReduceOp(op, builder);
   return op->emitOpError("unrecognized VC4Tile tile compute operation");
 }
 

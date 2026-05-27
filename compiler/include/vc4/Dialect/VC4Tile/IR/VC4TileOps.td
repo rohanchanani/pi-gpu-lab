@@ -450,6 +450,52 @@ def VC4Tile_TileSelectOp : VC4Tile_PureOp<"tile_select"> {
   let hasVerifier = 1;
 }
 
+
+class VC4Tile_TileReductionSurfaceOp<string mnemonic, string summaryText,
+                                     list<Trait> traits = [Pure]>
+    : VC4Tile_Op<mnemonic, traits> {
+  let summary = summaryText;
+  let arguments = (ins
+    AnyType:$input,
+    AnyType:$mask,
+    VC4Tile_ReduceKindAttr:$kind,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<I32Attr>:$axis,
+    OptionalAttr<StrAttr>:$algorithm_hint,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileReduceOp
+    : VC4Tile_TileReductionSurfaceOp<"tile_reduce",
+        "ergonomic tile-local reduction surface operation">;
+
+def VC4Tile_RowReduceOp
+    : VC4Tile_TileReductionSurfaceOp<"row_reduce",
+        "ergonomic row/tile reduction surface operation">;
+
+def VC4Tile_WarpReduceOp
+    : VC4Tile_TileReductionSurfaceOp<"warp_reduce",
+        "ergonomic warp-local reduction surface operation">;
+
+def VC4Tile_BlockReduceOp
+    : VC4Tile_TileReductionSurfaceOp<"block_reduce",
+        "ergonomic cooperative-block reduction surface operation",
+        [MemoryEffects<[MemRead, MemWrite]>]>;
+
 // Temporary M5 surface/core boundary sentinel.  This operation is deliberately
 // non-executable: surface canonicalization erases it, core verification rejects
 // it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.
