@@ -614,12 +614,29 @@ LogicalResult KernelOp::verify() {
 
   bool sawBarrier = false;
   bool sawSharedOp = false;
+  Operation *markedRawSCFOp = nullptr;
   getBody().walk([&](Operation *nested) {
+    if (nested == op)
+      return WalkResult::advance();
     if (isa<BarrierOp>(nested))
       sawBarrier = true;
     if (isa<SharedAllocOp, SharedLoadOp, SharedStoreOp, VDRLoadTileOp>(nested))
       sawSharedOp = true;
+    if (!markedRawSCFOp && getBoolAttr(op, "requires_core_legalize") &&
+        nested->getName().getDialectNamespace() == "scf") {
+      markedRawSCFOp = nested;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
   });
+  if (markedRawSCFOp) {
+    markedRawSCFOp->emitOpError(
+        "contains raw scf surface operation in a vc4tile.kernel marked "
+        "requires_core_legalize; run --legalize-vc4tile-core-cfg before "
+        "verifying or lowering "
+        "VC4Tile core");
+    return failure();
+  }
   if (sawBarrier && !usesBarrier)
     return emitOpError("contains vc4tile.barrier but uses_barrier is not true");
   if (sawSharedOp && !usesShared)

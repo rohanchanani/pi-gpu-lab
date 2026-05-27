@@ -2821,16 +2821,23 @@ struct CanonicalizeVC4TileSurfacePass
     ModuleOp module = getOperation();
     SmallVector<Operation *, 8> placeholders;
     SmallVector<Operation *, 8> laneStrideSurfaceOps;
+    SmallVector<Operation *, 4> coreLegalizeMarkers;
     module.walk([&](Operation *op) {
       if (hasName(op, kVC4TileSurfacePlaceholderOpName)) {
         placeholders.push_back(op);
         return;
       }
+      if (hasName(op, kVC4TileKernelOpName) &&
+          op->getAttr("requires_core_legalize"))
+        coreLegalizeMarkers.push_back(op);
       if ((hasName(op, kVC4TileTileLoadOpName) ||
            hasName(op, kVC4TileTileStoreOpName)) &&
           (op->getAttr("lane_stride") || op->getAttr("stride")))
         laneStrideSurfaceOps.push_back(op);
     });
+
+    for (Operation *op : coreLegalizeMarkers)
+      op->removeAttr("requires_core_legalize");
 
     Builder builder(module.getContext());
     for (Operation *op : laneStrideSurfaceOps) {
