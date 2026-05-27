@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Dialect/VC4Tile/IR/VC4TileOps.h"
+#include "vc4/Dialect/VC4Tile/IR/VC4TileTypes.h"
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -92,6 +93,68 @@ static LogicalResult verifyRowsAttr(Operation *op, IntegerAttr attr,
     return op->emitOpError() << name << " must be in range [1, 64]";
   return success();
 }
+
+static LogicalResult collectPositiveI64Array(Operation *op, ArrayAttr attr,
+                                             StringRef name,
+                                             SmallVectorImpl<int64_t> &values) {
+  if (!attr)
+    return op->emitOpError() << name << " attribute is required";
+  if (attr.empty())
+    return op->emitOpError() << name << " must not be empty";
+  for (Attribute element : attr) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(element);
+    if (!intAttr)
+      return op->emitOpError() << name << " entries must be integers";
+    int64_t value = intAttr.getInt();
+    if (value <= 0)
+      return op->emitOpError() << name << " entries must be positive";
+    values.push_back(value);
+  }
+  return success();
+}
+
+static LogicalResult verifyM532BitTypeAttr(Operation *op, StringRef name,
+                                           StringRef diagnosticRole,
+                                           Type &type) {
+  auto attr = op->getAttrOfType<TypeAttr>(name);
+  if (!attr)
+    return op->emitOpError() << name << " attribute is required";
+  type = attr.getValue();
+  if (isVC4TileSupportedM532BitElementType(type))
+    return success();
+  if (name == "storage_type") {
+    return op->emitOpError()
+           << "M5 supports only 32-bit executable tile storage; got "
+           << "storage_type = " << type;
+  }
+  return op->emitOpError() << "M5 supports only 32-bit executable tile "
+                           << diagnosticRole << "; got " << name << " = "
+                           << type;
+}
+
+static LogicalResult verifyTileDescriptorLayout(Operation *op,
+                                                LayoutAttr layout,
+                                                ArrayAttr stridesAttr,
+                                                unsigned rank) {
+  if (!layout)
+    return op->emitOpError("layout attribute is required");
+  if (layout.getValue() != Layout::affine_2d) {
+    if (stridesAttr)
+      return op->emitOpError(
+          "strides are only supported for affine_2d layout");
+    return success();
+  }
+
+  SmallVector<int64_t, 2> strides;
+  if (failed(collectPositiveI64Array(op, stridesAttr, "strides", strides)))
+    return failure();
+  if (strides.size() != rank)
+    return op->emitOpError("affine_2d strides length must match rank");
+  if (!op->getAttrOfType<OffsetUnitAttr>("offset_unit"))
+    return op->emitOpError("affine_2d layout requires offset_unit");
+  return success();
+}
+
 
 static std::optional<int64_t> getI32Attr(Operation *op, StringRef name) {
   auto attr = op->getAttrOfType<IntegerAttr>(name);
@@ -472,6 +535,61 @@ LogicalResult TailMaskOp::verify() {
       failed(verifyScalarId(op, getLimit().getType(), "limit")))
     return failure();
   return verifyVector16I1(op, getResult().getType(), "result");
+}
+
+LogicalResult TileDescriptorOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)))
+    return failure();
+
+  SmallVector<int64_t, 4> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "logical shape",
+                                     shape)))
+    return failure();
+  if (shape.size() > 4)
+    return emitOpError("logical shape rank greater than 4 is unsupported in M5");
+  if (getRankAttr().getInt() != static_cast<int64_t>(shape.size()))
+    return emitOpError("rank attribute must match logical shape rank");
+
+  Type elementType;
+  Type storageType;
+  Type expressedType;
+  Type accumulatorType;
+  if (failed(verifyM532BitTypeAttr(op, "element_type", "element types",
+                                   elementType)) ||
+      failed(verifyM532BitTypeAttr(op, "storage_type", "storage",
+                                   storageType)) ||
+      failed(verifyM532BitTypeAttr(op, "expressed_type", "expressed types",
+                                   expressedType)) ||
+      failed(verifyM532BitTypeAttr(op, "accumulator_type", "accumulator types",
+                                   accumulatorType)))
+    return failure();
+
+  if (failed(verifyTileDescriptorLayout(op, getLayoutAttr(), getStridesAttr(),
+                                        shape.size())))
+    return failure();
+
+  if (getPrecisionAttr().getValue() != Precision::exact_32)
+    return emitOpError("M5 executable precision_policy must be exact_32");
+  if (getPackingAttr().getValue() != Packing::none)
+    return emitOpError("M5 supports only packing = none");
+
+  if (auto boundary = getBoundaryAttr()) {
+    if (boundary.getValue() == BoundaryPolicy::zero ||
+        boundary.getValue() == BoundaryPolicy::clamp)
+      return emitOpError("boundary policy zero/clamp is not implemented in M5");
+  }
+
+  for (StringRef forbidden : {"quantization", "scale", "zero_point",
+                             "scale_granularity", "zero_point_policy"}) {
+    if (op->getAttr(forbidden))
+      return emitOpError(
+          "quantization scales and zero points are not executable in M5");
+  }
+
+  if (!isVC4TileTileType(getTile().getType()))
+    return emitOpError("result type must be !vc4tile.tile");
+  return success();
 }
 
 LogicalResult SurfacePlaceholderOp::verify() {

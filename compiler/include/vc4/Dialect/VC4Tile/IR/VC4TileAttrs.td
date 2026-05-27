@@ -29,14 +29,13 @@ def VC4Tile_OffsetUnit : VC4Tile_DialectI32Enum<"OffsetUnit",
       I32EnumAttrCase<"element", 1>
     ]>;
 
-// Memory-space tags are part of the M4 semantic contract even though concrete
-// address-space lowering is deferred to later VC4Tile-to-SSAVC4 slices.  The
-// tags keep global-memory intent and shared-VPM intent explicit at the tile
-// boundary without exposing TMU, VDW, or raw VPM setup details.
+// Memory-space tags are part of the M5 semantic contract.  The C++ enum symbol
+// for the textual `register` case intentionally avoids the C++ keyword.
 def VC4Tile_MemorySpace : VC4Tile_DialectI32Enum<"MemorySpace",
     "VC4Tile memory-space domain", [
       I32EnumAttrCase<"global", 0>,
-      I32EnumAttrCase<"shared_vpm", 1>
+      I32EnumAttrCase<"shared_vpm", 1>,
+      I32EnumAttrCase<"register_space", 2, "register">
     ]>;
 
 def VC4Tile_MemoryAccess : VC4Tile_DialectI32Enum<"MemoryAccess",
@@ -44,6 +43,43 @@ def VC4Tile_MemoryAccess : VC4Tile_DialectI32Enum<"MemoryAccess",
       I32EnumAttrCase<"coalesced", 0>,
       I32EnumAttrCase<"affine_contiguous", 1>,
       I32EnumAttrCase<"generic", 2>
+    ]>;
+
+def VC4Tile_Layout : VC4Tile_DialectI32Enum<"Layout",
+    "VC4Tile ergonomic tile layout", [
+      I32EnumAttrCase<"row_major", 0>,
+      I32EnumAttrCase<"col_major", 1>,
+      I32EnumAttrCase<"affine_2d", 2>,
+      I32EnumAttrCase<"vpm_row", 3>,
+      I32EnumAttrCase<"vpm_col", 4>,
+      I32EnumAttrCase<"transposed_view", 5>
+    ]>;
+
+def VC4Tile_BoundaryPolicy : VC4Tile_DialectI32Enum<"BoundaryPolicy",
+    "VC4Tile tile boundary policy", [
+      I32EnumAttrCase<"exact", 0>,
+      I32EnumAttrCase<"tail_predicated", 1>,
+      I32EnumAttrCase<"zero", 2>,
+      I32EnumAttrCase<"clamp", 3>
+    ]>;
+
+def VC4Tile_Role : VC4Tile_DialectI32Enum<"Role",
+    "VC4Tile tile role metadata", [
+      I32EnumAttrCase<"input", 0>,
+      I32EnumAttrCase<"output", 1>,
+      I32EnumAttrCase<"accumulator", 2>,
+      I32EnumAttrCase<"scratch", 3>,
+      I32EnumAttrCase<"metadata", 4>
+    ]>;
+
+def VC4Tile_Precision : VC4Tile_DialectI32Enum<"Precision",
+    "VC4Tile precision policy marker", [
+      I32EnumAttrCase<"exact_32", 0>
+    ]>;
+
+def VC4Tile_Packing : VC4Tile_DialectI32Enum<"Packing",
+    "VC4Tile physical storage marker", [
+      I32EnumAttrCase<"none", 0>
     ]>;
 
 def VC4Tile_ReduceKind : VC4Tile_DialectI32Enum<"ReduceKind",
@@ -75,6 +111,16 @@ def VC4Tile_MemorySpaceAttr
     : VC4Tile_EnumAttr<VC4Tile_MemorySpace, "memory_space">;
 def VC4Tile_MemoryAccessAttr
     : VC4Tile_EnumAttr<VC4Tile_MemoryAccess, "memory_access">;
+def VC4Tile_LayoutAttr
+    : VC4Tile_EnumAttr<VC4Tile_Layout, "layout">;
+def VC4Tile_BoundaryPolicyAttr
+    : VC4Tile_EnumAttr<VC4Tile_BoundaryPolicy, "boundary_policy">;
+def VC4Tile_RoleAttr
+    : VC4Tile_EnumAttr<VC4Tile_Role, "role">;
+def VC4Tile_PrecisionAttr
+    : VC4Tile_EnumAttr<VC4Tile_Precision, "precision">;
+def VC4Tile_PackingAttr
+    : VC4Tile_EnumAttr<VC4Tile_Packing, "packing">;
 def VC4Tile_ReduceKindAttr
     : VC4Tile_EnumAttr<VC4Tile_ReduceKind, "reduce_kind">;
 def VC4Tile_VPMLayoutAttr

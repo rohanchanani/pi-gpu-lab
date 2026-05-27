@@ -158,6 +158,37 @@ def VC4Tile_MaskedStoreGlobalOp : VC4Tile_Op<"masked_store_global", [
   let hasVerifier = 1;
 }
 
+
+def VC4Tile_TileDescriptorOp : VC4Tile_PureOp<"tile_descriptor"> {
+  let summary = "metadata-only ergonomic VC4Tile tile descriptor";
+  let description = [{
+    Defines the M5 tile/layout/role/precision vocabulary without adding an
+    executable tile movement path.  The op is legal only as metadata in the
+    ergonomic surface; later copy-planning slices will consume the same fields
+    on tile movement and compute operations.  M5 executable semantics remain
+    32-bit only.
+  }];
+  let arguments = (ins
+    ArrayAttr:$shape,
+    I32Attr:$rank,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    TypeAttr:$expressed_type,
+    TypeAttr:$accumulator_type,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_RoleAttr:$role,
+    VC4Tile_PrecisionAttr:$precision,
+    VC4Tile_PackingAttr:$packing,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit,
+    OptionalAttr<ArrayAttr>:$strides
+  );
+  let results = (outs AnyType:$tile);
+  let assemblyFormat = "attr-dict `:` type($tile)";
+  let hasVerifier = 1;
+}
+
 // Temporary M5 surface/core boundary sentinel.  This operation is deliberately
 // non-executable: surface canonicalization erases it, core verification rejects
 // it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.

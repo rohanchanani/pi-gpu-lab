@@ -556,7 +556,6 @@
         {
           "id": "m5-02-dialect-contract",
           "mechanism": "dialect_contract",
-          "feature": "tile_layout_type_model",
           "dialect": "vc4tile",
           "files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
@@ -577,12 +576,15 @@
             "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir",
             "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir",
             "compiler/test/Dialect/VC4Tile/tile-layout-affine-invalid.mlir"
+          ],
+          "features": [
+            "tile_layout_type_model",
+            "precision_marker_model"
           ]
         },
         {
           "id": "m5-02-invalid-diagnostics",
           "mechanism": "invalid_diagnostic_contract",
-          "feature": "tile_layout_type_model",
           "cases": [
             {
               "argv": [
@@ -604,12 +606,15 @@
                 "error"
               ]
             }
+          ],
+          "features": [
+            "tile_layout_type_model",
+            "precision_marker_model"
           ]
         },
         {
           "id": "m5-02-precision-policy",
           "mechanism": "precision_policy_contract",
-          "feature": "precision_marker_model",
           "scan_files": [
             "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
             "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir"
@@ -648,6 +653,10 @@
                 "32-bit"
               ]
             }
+          ],
+          "features": [
+            "tile_layout_type_model",
+            "precision_marker_model"
           ]
         },
         {
@@ -825,6 +834,122 @@
           "required_debug_artifacts": [
             ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/lowered.ssavc4.mlir",
             ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-03-vdr-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "vdr_vcd_load_support",
+          "dialect": "ssavc4",
+          "files": [
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+            "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp",
+            "compiler/test/Dialect/SSAVC4/vdr-load-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/vdr-load-invalid.mlir"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/SSAVC4/vdr-load-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/SSAVC4/vdr-load-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-03-vdr-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "vdr_vcd_load_support",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/SSAVC4/vdr-load-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/SSAVC4ToVC4/vdr-load-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-03-vdr-lowered-ir-contract",
+          "mechanism": "lowered_ir_contract",
+          "feature": "vdr_vcd_load_support",
+          "steps": [
+            {
+              "name": "generate",
+              "argv": [
+                "bash",
+                "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+                "vdr_load_roundtrip_ssavc4",
+                "generate"
+              ]
+            }
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/lowered.ssavc4.mlir"
+          ],
+          "must_contain": [
+            "ssavc4.",
+            "vdr"
+          ],
+          "must_not_contain": [
+            "vc4tile."
+          ]
+        },
+        {
+          "id": "m5-03-vdr-scheduled-artifact-contract",
+          "mechanism": "scheduled_artifact_contract",
+          "feature": "vdr_vcd_load_support",
+          "steps": [
+            {
+              "name": "generate",
+              "argv": [
+                "bash",
+                "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+                "vdr_load_roundtrip_ssavc4",
+                "generate"
+              ]
+            },
+            {
+              "name": "assemble",
+              "argv": [
+                "bash",
+                "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+                "vdr_load_roundtrip_ssavc4",
+                "assemble"
+              ]
+            }
+          ],
+          "bundle": ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4",
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/scheduled.vc4.mlir"
+          ],
+          "scheduled_vc4_files": [
+            ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/scheduled.vc4.mlir"
+          ],
+          "must_contain": [
+            "vc4.qpu."
+          ],
+          "must_not_contain": [
+            "ssavc4.",
+            "vc4tile."
+          ],
+          "expected_artifacts": [
+            "manifest.json",
+            "layout.json",
+            "kernel_launch.c",
+            "kernel_launch.h"
           ]
         },
         {
