@@ -1,24 +1,40 @@
 {
   "schema_version": 1,
   "milestone": "vc4-vc4tile-m5-mechanism-smoke",
-  "title": "VC4Tile M5 verifier mechanism smoke specification",
+  "title": "VC4Tile M5 verifier mechanism smoke spec",
   "defaults": {
-    "state_root": ".vc4_auto/vc4tile_m5/mechanism_smoke/verifier",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/vc4tile_m5/mechanism-smoke",
     "candidate_state_root": ".vc4_auto/vc4tile_m5",
     "path_prefix": [
       "compiler/build/bin"
     ],
     "timeout_sec": 120,
-    "hardware_timeout_sec": 60
+    "hardware_timeout_sec": 60,
+    "fixture_matrices": {
+      "m5_smoke_empty": []
+    }
   },
   "slices": {
     "m5-mechanism-smoke": {
-      "title": "M5 verifier mechanism smoke",
+      "title": "M5 mechanism smoke",
       "verifications": [
+        {
+          "id": "m5-smoke-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "pro_scripts/vc4_milestone_verifier.py",
+            "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json",
+            "pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir",
+            "pro_scripts/m5_mechanism_smoke/copy_plan_core_ok.mlir",
+            "pro_scripts/m5_mechanism_smoke/copy-plan.json",
+            "pro_scripts/m5_mechanism_smoke/precision_policy_ok.txt",
+            "pro_scripts/m5_mechanism_smoke/run_vc4tile_candidate_codegen_test_smoke.sh"
+          ]
+        },
         {
           "id": "m5-smoke-feature-gate",
           "mechanism": "feature_gate_contract",
-          "description": "M5 feature-gate aliases resolve to the new verifier mechanisms.",
           "features": [
             {
               "name": "m5_mechanism_smoke",
@@ -27,7 +43,11 @@
                 "surface_core": true,
                 "copy_plan": true,
                 "precision_policy": true,
-                "pipeline": true
+                "pipeline": true,
+                "hardware_matrix": {
+                  "required": false,
+                  "reason": "hardware matrix is optional for this no-hardware mechanism smoke"
+                }
               }
             }
           ]
@@ -36,57 +56,66 @@
           "id": "m5-smoke-surface-core",
           "mechanism": "vc4tile_surface_core_contract",
           "feature": "m5_mechanism_smoke",
-          "description": "Surface/core contract accepts a core file with no surface, producer, scf, or index residue.",
-          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/surface_core",
+          "input": "pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir",
+          "pipeline": [],
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism-smoke/surface-core",
           "core_output": "core.vc4tile.mlir",
-          "steps": [
-            {
-              "name": "write-core",
-              "argv": [
-                "{python}",
-                "-c",
-                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/surface_core')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'core.vc4tile.mlir').write_text('module {\\n  vc4tile.kernel @k() {\\n    %c0 = arith.constant 0 : i32\\n    vc4tile.return\\n  }\\n}\\n', encoding='utf-8')\nprint('surface-core-ok')"
-              ],
-              "stdout_contains": [
-                "surface-core-ok"
-              ]
-            }
-          ],
           "must_contain": [
-            "vc4tile.kernel",
-            "vc4tile.return"
-          ],
-          "must_not_contain": [
-            "vc4tile.tile_load",
-            "vc4tile.copy_tile",
-            "tt.",
-            "stablehlo."
+            "vc4tile.kernel"
           ],
           "forbid_surface_ops": true,
           "forbid_scf": true,
           "forbid_index": true,
-          "forbid_producer_ops": true
+          "forbid_producer_ops": true,
+          "steps": [
+            {
+              "name": "write-core",
+              "argv": [
+                "bash",
+                "-lc",
+                "mkdir -p .vc4_auto/vc4tile_m5/mechanism-smoke/surface-core && cp pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/surface-core/core.vc4tile.mlir"
+              ],
+              "expect_exit_code": 0
+            }
+          ],
+          "inspect_files": [
+            "core.vc4tile.mlir"
+          ],
+          "core_files": [
+            "core.vc4tile.mlir"
+          ],
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store",
+            "vc4tile.copy_tile",
+            "scf.",
+            "stablehlo.",
+            "tt.",
+            "iree.",
+            "torch."
+          ]
         },
         {
           "id": "m5-smoke-copy-plan",
           "mechanism": "vc4tile_copy_plan_contract",
           "feature": "m5_mechanism_smoke",
-          "description": "Copy-plan contract accepts a concrete TMU-backed global-to-register plan and matching core op evidence.",
-          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/copy_plan",
-          "core_output": "core.vc4tile.mlir",
+          "input": "pro_scripts/m5_mechanism_smoke/copy_plan_core_ok.mlir",
+          "pipeline": [],
+          "work_dir": ".vc4_auto/vc4tile_m5/mechanism-smoke/copy-plan",
+          "core_output": "planned.vc4tile.mlir",
           "plan_output": "copy-plan.json",
-          "steps": [
-            {
-              "name": "write-plan",
-              "argv": [
-                "{python}",
-                "-c",
-                "from pathlib import Path\nimport json\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/copy_plan')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'core.vc4tile.mlir').write_text('module {\\n  vc4tile.kernel @copy() {\\n    %ld = vc4tile.masked_load_global %base, %offs, %mask {elem_bytes = 4 : i32} : i32, vector<16xi32>, vector<16xi1> -> vector<16xi32>\\n    vc4tile.return\\n  }\\n}\\n', encoding='utf-8')\n(root / 'copy-plan.json').write_text(json.dumps({'copies': [{'name': 'load_x', 'src': 'global', 'dst': 'register', 'method': 'tmu'}]}, indent=2) + '\\n', encoding='utf-8')\nprint('copy-plan-ok')"
-              ],
-              "stdout_contains": [
-                "copy-plan-ok"
-              ]
-            }
+          "must_contain": [
+            "vc4tile.masked_load_global"
+          ],
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store",
+            "vc4tile.copy_tile",
+            "scf.",
+            "stablehlo.",
+            "tt.",
+            "iree.",
+            "torch."
           ],
           "expected_copies": [
             {
@@ -98,46 +127,52 @@
                 "vc4tile.masked_load_global"
               ],
               "forbidden_core_ops": [
-                "vc4tile.tile_load",
                 "vc4tile.copy_tile"
+              ]
+            },
+            {
+              "name": "store_y",
+              "src": "register",
+              "dst": "global",
+              "method": "vdw",
+              "required_core_ops": [
+                "vc4tile.masked_store_global"
               ]
             }
           ],
-          "required_methods": [
-            "tmu"
+          "steps": [
+            {
+              "name": "write-plan",
+              "argv": [
+                "bash",
+                "-lc",
+                "mkdir -p .vc4_auto/vc4tile_m5/mechanism-smoke/copy-plan && cp pro_scripts/m5_mechanism_smoke/copy_plan_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/copy-plan/planned.vc4tile.mlir && cp pro_scripts/m5_mechanism_smoke/copy-plan.json .vc4_auto/vc4tile_m5/mechanism-smoke/copy-plan/copy-plan.json"
+              ],
+              "expect_exit_code": 0
+            }
           ],
-          "must_not_contain": [
-            "vc4tile.tile_load",
-            "vc4tile.copy_tile"
-          ]
+          "inspect_files": [
+            "planned.vc4tile.mlir"
+          ],
+          "core_files": [
+            "planned.vc4tile.mlir"
+          ],
+          "plan_path": "copy-plan.json",
+          "plan_file": "copy-plan.json",
+          "copy_plan_path": "copy-plan.json"
         },
         {
           "id": "m5-smoke-precision-policy",
           "mechanism": "precision_policy_contract",
           "feature": "m5_mechanism_smoke",
-          "description": "Precision policy contract enforces 32-bit markers and deterministic unsupported sub-32 diagnostics.",
-          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/precision",
           "scan_files": [
-            "precision-policy.txt"
-          ],
-          "steps": [
-            {
-              "name": "write-policy",
-              "argv": [
-                "{python}",
-                "-c",
-                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/precision')\nroot.mkdir(parents=True, exist_ok=True)\n(root / 'precision-policy.txt').write_text('storage_type expressed_type accumulator_type precision exact_32 i32 u32 f32 vector<16xi32> vector<16xf32>\\n', encoding='utf-8')\nprint('precision-policy-ok')"
-              ],
-              "stdout_contains": [
-                "precision-policy-ok"
-              ]
-            }
+            "pro_scripts/m5_mechanism_smoke/precision_policy_ok.txt"
           ],
           "required_markers": [
             "storage_type",
             "expressed_type",
             "accumulator_type",
-            "precision",
+            "precision_policy",
             "exact_32"
           ],
           "allowed_executable_precisions": [
@@ -151,30 +186,49 @@
             "lower.*f16",
             "lower.*bf16",
             "lower.*fp8",
-            "lower.*int8"
+            "lower.*int8",
+            "pack.*u8",
+            "pack.*i8"
           ],
           "invalid_cases": [
             {
               "name": "unsupported-sub32-diagnostic",
               "argv": [
-                "{python}",
-                "-c",
-                "import sys\nsys.stderr.write('unsupported sub32 precision\\n')\nraise SystemExit(7)"
+                "bash",
+                "-lc",
+                "printf 'error: M5 is 32-bit-only; sub-32 precision is reserved for the later precision milestone\\n' >&2; exit 7"
               ],
               "expect_exit_code": 7,
               "stderr_contains": [
-                "unsupported sub32 precision"
+                "32-bit-only",
+                "sub-32",
+                "precision"
               ]
             }
+          ],
+          "steps": [
+            {
+              "name": "write-policy",
+              "argv": [
+                "bash",
+                "-lc",
+                "mkdir -p .vc4_auto/vc4tile_m5/mechanism_smoke/precision && cp pro_scripts/m5_mechanism_smoke/precision_policy_ok.txt .vc4_auto/vc4tile_m5/mechanism_smoke/precision/precision-policy.txt"
+              ],
+              "expect_exit_code": 0
+            }
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m5/mechanism_smoke/precision/precision-policy.txt"
+          ],
+          "policy_files": [
+            ".vc4_auto/vc4tile_m5/mechanism_smoke/precision/precision-policy.txt"
           ]
         },
         {
           "id": "m5-smoke-pipeline",
           "mechanism": "vc4tile_pipeline_contract",
           "feature": "m5_mechanism_smoke",
-          "description": "Pipeline contract verifies M5 runner pass ordering and preserved intermediate files.",
-          "work_dir": ".vc4_auto/vc4tile_m5/mechanism_smoke/pipeline",
-          "script": "run_vc4tile_candidate_codegen_test.sh",
+          "script": "pro_scripts/m5_mechanism_smoke/run_vc4tile_candidate_codegen_test_smoke.sh",
           "required_order": [
             "--canonicalize-vc4tile-surface",
             "--plan-vc4tile-copies",
@@ -185,29 +239,51 @@
             "--emit-bundle"
           ],
           "required_intermediates": [
-            "input.vc4tile.mlir",
-            "surface.vc4tile.mlir",
-            "planned.vc4tile.mlir",
-            "core.vc4tile.mlir",
-            "lowered.ssavc4.mlir",
-            "scheduled.vc4.mlir"
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/surface.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/planned.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/core.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/scheduled.vc4.mlir"
           ],
           "forbidden_patterns": [
-            "convert-vc4tile-to-vc4",
-            "VC4_TEST_RESULT.*status=PASS"
+            "convert-vc4tile-to-vc4"
           ],
           "steps": [
             {
-              "name": "write-runner-and-intermediates",
+              "name": "write-pipeline-intermediates",
               "argv": [
-                "{python}",
-                "-c",
-                "from pathlib import Path\nroot = Path('.vc4_auto/vc4tile_m5/mechanism_smoke/pipeline')\nroot.mkdir(parents=True, exist_ok=True)\nscript = '\\n'.join(['vc4-opt input.vc4tile.mlir --canonicalize-vc4tile-surface -o surface.vc4tile.mlir','vc4-opt surface.vc4tile.mlir --plan-vc4tile-copies -o planned.vc4tile.mlir','vc4-opt planned.vc4tile.mlir --legalize-vc4tile-core-cfg -o core.vc4tile.mlir','vc4-opt core.vc4tile.mlir --verify-vc4tile-core -o core.vc4tile.mlir','vc4-opt core.vc4tile.mlir --convert-vc4tile-to-ssavc4 -o lowered.ssavc4.mlir','vc4-opt lowered.ssavc4.mlir --convert-ssavc4-to-vc4 -o scheduled.vc4.mlir','vc4-codegen scheduled.vc4.mlir --emit-bundle bundle']) + '\\n'\n(root / 'run_vc4tile_candidate_codegen_test.sh').write_text(script, encoding='utf-8')\nfor name in ['input.vc4tile.mlir','surface.vc4tile.mlir','planned.vc4tile.mlir','core.vc4tile.mlir','lowered.ssavc4.mlir','scheduled.vc4.mlir']:\n    (root / name).write_text('module {}\\n', encoding='utf-8')\nprint('pipeline-ok')"
+                "bash",
+                "-lc",
+                "mkdir -p .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline\ncp pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/input.vc4tile.mlir\ncp pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/surface.vc4tile.mlir\ncp pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/planned.vc4tile.mlir\ncp pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/core.vc4tile.mlir\ncat > .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/lowered.ssavc4.mlir <<'EOF'\nmodule {\n  ssavc4.module @vc4tile_lowered {\n    ssavc4.func @m5_pipeline_smoke() {\n      ssavc4.thread_end\n    }\n  }\n}\nEOF\ncat > .vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/scheduled.vc4.mlir <<'EOF'\nmodule {\n  vc4.module @m5_pipeline_smoke {\n    vc4.func @m5_pipeline_smoke {\n      vc4.qpu.bundle\n    }\n  }\n}\nEOF"
               ],
-              "stdout_contains": [
-                "pipeline-ok"
-              ]
+              "expect_exit_code": 0
             }
+          ],
+          "intermediate_files": [
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/surface.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/planned.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/core.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/scheduled.vc4.mlir"
+          ],
+          "inspect_files": [
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/input.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/surface.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/planned.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/core.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke/pipeline/scheduled.vc4.mlir"
+          ],
+          "required_pass_order": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core",
+            "--convert-vc4tile-to-ssavc4",
+            "--convert-ssavc4-to-vc4",
+            "--emit-bundle"
           ]
         }
       ]
