@@ -1,0 +1,1690 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m5",
+  "defaults": {
+    "max_chars": 260000,
+    "always_include": [
+      {
+        "kind": "file",
+        "path": "pro_scripts/MISTAKES.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_vc4tile_m5/constitution.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_vc4tile_m5/output_contract.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice_contract.md"
+      },
+      {
+        "kind": "file",
+        "path": "pro_scripts/prompts/vc4_vc4tile_m5/m5_handoff.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4tile-m5-full-design.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4tile-m5-plan.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4tile-m5-copy-planner-design.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md"
+      },
+      {
+        "kind": "file",
+        "path": "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md"
+      }
+    ],
+    "failure_includes": [
+      {
+        "kind": "failure_packet"
+      },
+      {
+        "kind": "git_diff_summary"
+      },
+      {
+        "kind": "changed_files_excerpt"
+      }
+    ]
+  },
+  "profiles": {
+    "m5_package": {
+      "purpose": "Install and validate the M5 descriptor, worklist, verification spec, context profiles, prompt package, design documents, and mechanism smoke. No compiler implementation source is allowed in this slice.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice00_milestone_package.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "surface_core_pipeline": {
+      "purpose": "Add/register canonical M5 surface/core passes and integrate the VC4Tile candidate runner so ergonomic inputs flow through surface canonicalization, copy planning, core CFG legalization, core verification, VC4Tile-to-SSAVC4, SSAVC4-to-VC4, and bundle emission.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice01_surface_core_pipeline_runner.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "tile_layout_precision": {
+      "purpose": "Define tile/layout/role/precision vocabulary for ergonomic VC4Tile, with 32-bit-only executable semantics and strict diagnostics for sub-32 forms.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice02_tile_layout_precision.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "vdr_vcd_lower_half": {
+      "purpose": "Add lower-half SSAVC4 VDR/VCD global-to-VPM load support so the M5 copy planner can choose hardware-natural global-to-shared paths.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice03_vdr_vcd_global_to_vpm.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vpm-read-write.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/spill-cooperative-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "copy_planner": {
+      "purpose": "Implement the first VC4Tile copy planner and ergonomic movement ops for global/register/shared movement, views, subviews, transpose views, and shared tile allocation.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice04_copy_planner_v1.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vpm-read-write.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/spill-cooperative-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "global_register_movement": {
+      "purpose": "Prove ergonomic global/register tile load/store patterns with tail masks, 2D row-major indexing, and supported affine stride behavior on real hardware.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice05_global_register_tile_load_store.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "shared_vpm_transpose": {
+      "purpose": "Make shared VPM copy and shared transpose ergonomic while lowering to concrete VPM/VDR/VDW/barrier paths.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice06_shared_vpm_copy_transpose.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vpm-read-write.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/spill-cooperative-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "scf_surface_composition": {
+      "purpose": "Prove supported scf.for/scf.if composition with ergonomic tile ops; surface ops must plan first and SCF/index must disappear before SSAVC4 lowering.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice07_scf_composition.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "metadata_roles": {
+      "purpose": "Add semantic metadata for roles, boundary policies, resource intent, copy stages, and reuse hints; consume, preserve, or reject every accepted field deterministically.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice08_boundary_resource_role_metadata.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "elementwise_compute": {
+      "purpose": "Add ergonomic tile_fill/broadcast/add/sub/mul/select and optional fma, lower to concrete vector/scalar core arithmetic, and prove on hardware.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice09_elementwise_tile_compute.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "tile_reductions": {
+      "purpose": "Add ergonomic tile/warp/block reductions that lower to existing rotate/reduce/shared/barrier mechanisms with input-dependent hardware proofs.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice10_tile_block_reductions.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Attrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4/IR/VC4Ops.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Target/VC4/VC4ArtifactEmitter.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vpm-read-write.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/shared-vpm-cooperative.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/spill-cooperative-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/SSAVC4ToVC4/vdw-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "tile_contracts": {
+      "purpose": "Add tile_contract, tile_dot, and tile_matmul as future producer-facing ergonomic surface contracts and lower small 32-bit forms to movement, elementwise, and reduction operations.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice11_tile_contract_dot_matmul.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    },
+    "m5_final_acceptance": {
+      "purpose": "Prove the M5 ergonomic VC4Tile milestone is complete, scoped, candidate-first, hardware-backed, and regression-clean.",
+      "include": [
+        {
+          "kind": "file",
+          "path": "pro_scripts/prompts/vc4_vc4tile_m5/slice12_final_acceptance.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/docs/codegen/vc4_cuda_mapping_guide.md"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/roundtrip-contract.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/kernel-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/masked-global-memory-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/shared-vpm-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/rotate-reduce-roundtrip.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-memory.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Dialect/VC4Tile/invalid-kernel-resource.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/minimal-kernel.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/metadata-generation.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-load.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/masked-global-store.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/rotate-reduction.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/Conversion/VC4TileToSSAVC4/barrier.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/minimal-thrend-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/vector-store-smoke-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/saxpy-full-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-16x16-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/warp-reduce-sum-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "compiler/test/CodeGen/VC4Tile/Emit/qpu-barrier-syncthreads-vc4tile.mlir"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_codegen_m2_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_ssavc4_m3_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/vc4_vc4tile_m4_verifications.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-codegen-m2.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-ssavc4-m3.json"
+        },
+        {
+          "kind": "file",
+          "path": "pro_scripts/milestones/vc4-vc4tile-m4.json"
+        }
+      ],
+      "extractors": [
+        "git_diff_summary"
+      ],
+      "max_chars_ignored_by_no_truncation_patch": 240000
+    }
+  },
+  "notes": [
+    "M5 context profiles intentionally avoid unsupported include kind \"glob\"; every context include is a file or failure artifact so the context packer does not drop slice-relevant material."
+  ]
+}

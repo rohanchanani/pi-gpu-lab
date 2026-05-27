@@ -1,0 +1,1174 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m5",
+  "title": "Milestone 5: ergonomic VC4Tile surface, copy planner, and 32-bit tile compute",
+  "locked_goal": "Make VC4Tile a real ergonomic tile-kernel layer above SSAVC4 while preserving vc4tile -> ssavc4 -> scheduled vc4 -> artifacts/runtime. M5 has no producer lowering and no executable sub-32 precision.",
+  "defaults": {
+    "repo_script_dir": "pro_scripts",
+    "gpt_web_driver": "pro_scripts/gpt_web_driver.js",
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/vc4tile_m5",
+    "candidate_state_root": ".vc4_auto/vc4tile_m5",
+    "typed_verifier_script": "pro_scripts/vc4_milestone_verifier.py",
+    "verification_spec": "pro_scripts/vc4_vc4tile_m5_verifications.json",
+    "prompt_template_dir": "pro_scripts/prompts/vc4_vc4tile_m5",
+    "auto_commit_on_pass": true,
+    "hardware_gates_required_by_default": true,
+    "max_codex_attempts": 3,
+    "mechanical_budgets": {
+      "mechanical_compile": 3,
+      "mechanical_build": 3,
+      "lit_tool_resolution": 3,
+      "test_invocation": 3,
+      "path_plumbing": 3,
+      "support_runner_plumbing": 3,
+      "c_api_mismatch": 3
+    },
+    "gpt_output_files": [
+      "artifact_transport.json",
+      "bundle.zip",
+      "apply_bundle.sh"
+    ],
+    "build_commands": {
+      "build_vc4_opt": "ninja -C compiler/build vc4-opt",
+      "build_vc4_codegen": "ninja -C compiler/build vc4-codegen",
+      "check_vc4": "ninja -C compiler/build check-vc4"
+    },
+    "forbidden_paths": [
+      ".vc4_auto/**",
+      "compiler/test/**/Output/**",
+      "compiler/test/**/.lit_test_times.txt",
+      "compiler/test/**/run.log",
+      "compiler/test/CodeGen/VC4/catalog.json",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+      "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+      "generated_examples/**",
+      "external/libpi/**",
+      "pro_scripts/gpt_web_driver.js",
+      "pro_scripts/current_tab.js",
+      "pro_scripts/new_tab.js"
+    ],
+    "path_policy": {
+      "paths_are_repo_relative": true,
+      "reject_absolute_paths": true,
+      "reject_parent_directory_components": true,
+      "reject_binary_patches": true,
+      "reject_existing_vc4_fixture_reference_mutation": true,
+      "reject_existing_vc4_expected_json_mutation": true,
+      "reject_generated_example_mutation": true,
+      "reject_generic_driver_mutation_by_default": true
+    },
+    "gpt_output_transport": "download_bundle",
+    "download_bundle_transport": {
+      "schema_version": 1,
+      "transport": "vc4_codegen_download_bundle_v1",
+      "staged_files": [
+        "artifact_transport.json",
+        "bundle.zip",
+        "apply_bundle.sh"
+      ],
+      "zip_layout": [
+        "manifest.json",
+        "repo/<repo-relative changed files>"
+      ]
+    },
+    "test_design_contract": {
+      "m5_is_ergonomic_vc4tile_only": true,
+      "no_producer_lowering_in_m5": true,
+      "no_direct_vc4tile_to_vc4": true,
+      "surface_core_boundary_required": true,
+      "copy_planner_required": true,
+      "hardware_cpu_reference_is_gold_standard_when_executable": true,
+      "m5_executable_precision_32bit_only": true
+    }
+  },
+  "slices": [
+    {
+      "id": "m5-00-milestone-package",
+      "title": "M5 milestone package",
+      "depends_on": [],
+      "context_profile": "m5_package",
+      "intent": "Install and validate the M5 descriptor, worklist, verification spec, context profiles, prompt package, design documents, and mechanism smoke. No compiler implementation source is allowed in this slice.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "pro_scripts/milestones/vc4-vc4tile-m5.json",
+        "pro_scripts/vc4_vc4tile_m5_worklist.json",
+        "pro_scripts/vc4_vc4tile_m5_verifications.json",
+        "pro_scripts/vc4_vc4tile_m5_context_profiles.json",
+        "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json",
+        "pro_scripts/m5_mechanism_smoke/**",
+        "pro_scripts/MISTAKES.md",
+        "pro_scripts/prompts/vc4_vc4tile_m5/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [],
+      "gates": [
+        "typed-verifier:m5-00-milestone-package"
+      ],
+      "hardware_required": false,
+      "codex_policy": "never",
+      "max_gpt_attempts": 0,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 00-milestone-package",
+      "products": {
+        "required_source_files": [
+          "pro_scripts/milestones/vc4-vc4tile-m5.json",
+          "pro_scripts/vc4_vc4tile_m5_worklist.json",
+          "pro_scripts/vc4_vc4tile_m5_verifications.json",
+          "pro_scripts/vc4_vc4tile_m5_context_profiles.json",
+          "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json",
+          "pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir",
+          "pro_scripts/m5_mechanism_smoke/copy_plan_core_ok.mlir",
+          "pro_scripts/m5_mechanism_smoke/copy-plan.json",
+          "pro_scripts/m5_mechanism_smoke/precision_policy_ok.txt",
+          "pro_scripts/m5_mechanism_smoke/run_vc4tile_candidate_codegen_test_smoke.sh",
+          "pro_scripts/MISTAKES.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/README.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/constitution.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/output_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/m5_handoff.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/codex_contract.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/implementation_integrity_audit_prompt.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/gpt_slice_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m5/gpt_failure_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m5/gpt_diagnosis_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m5/codex_mechanical_prompt.md.j2",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice00_milestone_package.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice01_surface_core_pipeline_runner.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice02_tile_layout_precision.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice03_vdr_vcd_global_to_vpm.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice04_copy_planner_v1.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice05_global_register_tile_load_store.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice06_shared_vpm_copy_transpose.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice07_scf_composition.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice08_boundary_resource_role_metadata.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice09_elementwise_tile_compute.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice10_tile_block_reductions.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice11_tile_contract_dot_matmul.md",
+          "pro_scripts/prompts/vc4_vc4tile_m5/slice12_final_acceptance.md",
+          "compiler/docs/codegen/vc4tile-m5-copy-planner-design.md",
+          "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md",
+          "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md",
+          "compiler/docs/codegen/vc4tile-m5-full-design.md",
+          "compiler/docs/codegen/vc4tile-m5-plan.md"
+        ]
+      }
+    },
+    {
+      "id": "m5-01-surface-core-pipeline-and-runner",
+      "title": "Surface/core pipeline and VC4Tile candidate runner integration",
+      "depends_on": [
+        "m5-00-milestone-package"
+      ],
+      "context_profile": "surface_core_pipeline",
+      "intent": "Add/register canonical M5 surface/core passes and integrate the VC4Tile candidate runner so ergonomic inputs flow through surface canonicalization, copy planning, core CFG legalization, core verification, VC4Tile-to-SSAVC4, SSAVC4-to-VC4, and bundle emission.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-01-surface-core-pipeline-and-runner"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 01-surface-core-pipeline-and-runner",
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h",
+          "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+          "compiler/tools/vc4-opt/vc4-opt.cpp",
+          "compiler/test/Conversion/VC4TileToSSAVC4/reject-surface-before-canonicalize.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/pass-pipeline-empty-surface.mlir",
+          "compiler/test/Dialect/VC4Tile/verify-core-reject-surface-placeholder.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/pipeline-minimal-surface-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+        ]
+      }
+    },
+    {
+      "id": "m5-02-tile-layout-types-and-precision-markers",
+      "title": "Tile/layout types and 32-bit precision markers",
+      "depends_on": [
+        "m5-01-surface-core-pipeline-and-runner"
+      ],
+      "context_profile": "tile_layout_precision",
+      "intent": "Define tile/layout/role/precision vocabulary for ergonomic VC4Tile, with 32-bit-only executable semantics and strict diagnostics for sub-32 forms.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-02-tile-layout-types-and-precision-markers"
+      ],
+      "hardware_required": false,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 02-tile-layout-types-and-precision-markers",
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.h",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileTypes.cpp",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+          "compiler/test/Dialect/VC4Tile/tile-types-layouts-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-layout-affine-invalid.mlir"
+        ]
+      }
+    },
+    {
+      "id": "m5-03-vdr-vcd-global-to-vpm-load-support",
+      "title": "SSAVC4 VDR/VCD global-to-VPM load support",
+      "depends_on": [
+        "m5-02-tile-layout-types-and-precision-markers"
+      ],
+      "context_profile": "vdr_vcd_lower_half",
+      "intent": "Add lower-half SSAVC4 VDR/VCD global-to-VPM load support so the M5 copy planner can choose hardware-natural global-to-shared paths.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md",
+        "compiler/include/vc4/Dialect/SSAVC4/**",
+        "compiler/lib/Dialect/SSAVC4/**",
+        "compiler/include/vc4/Conversion/SSAVC4ToVC4/**",
+        "compiler/lib/Conversion/SSAVC4ToVC4/**",
+        "compiler/include/vc4/Dialect/VC4/**",
+        "compiler/lib/Dialect/VC4/**",
+        "compiler/test/Dialect/SSAVC4/**",
+        "compiler/test/Conversion/SSAVC4ToVC4/**",
+        "compiler/test/CodeGen/SSAVC4/**",
+        "compiler/test/CodeGen/VC4/Emit/**",
+        "compiler/lib/Target/VC4/**"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-03-vdr-vcd-global-to-vpm-load-support"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 03-vdr-vcd-global-to-vpm-load-support",
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+          "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp",
+          "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp",
+          "compiler/test/Dialect/SSAVC4/vdr-load-roundtrip.mlir",
+          "compiler/test/Dialect/SSAVC4/vdr-load-invalid.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/vdr-load.mlir",
+          "compiler/test/Conversion/SSAVC4ToVC4/vdr-load-invalid.mlir",
+          "compiler/test/CodeGen/SSAVC4/Emit/vdr-load-ssavc4.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/input.mlir",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/expected.json",
+          "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/candidate/vdr_load_roundtrip_ssavc4_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-04-copy-planner-v1",
+      "title": "VC4Tile copy planner v1",
+      "depends_on": [
+        "m5-03-vdr-vcd-global-to-vpm-load-support"
+      ],
+      "context_profile": "copy_planner",
+      "intent": "Implement the first VC4Tile copy planner and ergonomic movement ops for global/register/shared movement, views, subviews, transpose views, and shared tile allocation.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-04-copy-planner-v1"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 04-copy-planner-v1",
+      "products": {
+        "required_source_files": [
+          "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+          "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+          "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+          "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/copy-tile-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-view-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/copy-planner-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-global-register.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-register-global.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-register-shared.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-shared-register.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-transpose-view.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/reject-unplanned-copy-before-core.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/candidate/tile_load_store_1d_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/candidate/register_shared_roundtrip_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/candidate/shared_register_roundtrip_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-05-global-register-tile-load-store",
+      "title": "Global/register tile load-store ergonomics",
+      "depends_on": [
+        "m5-04-copy-planner-v1"
+      ],
+      "context_profile": "global_register_movement",
+      "intent": "Prove ergonomic global/register tile load/store patterns with tail masks, 2D row-major indexing, and supported affine stride behavior on real hardware.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-05-global-register-tile-load-store"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 05-global-register-tile-load-store",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-2d-row-major.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/candidate/tile_load_1d_tail_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/candidate/tile_store_1d_tail_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/candidate/tile_load_store_2d_row_major_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/candidate/tile_load_store_affine_stride_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-06-shared-vpm-copy-and-transpose",
+      "title": "Shared VPM copy and ergonomic transpose",
+      "depends_on": [
+        "m5-05-global-register-tile-load-store"
+      ],
+      "context_profile": "shared_vpm_transpose",
+      "intent": "Make shared VPM copy and shared transpose ergonomic while lowering to concrete VPM/VDR/VDW/barrier paths.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-06-shared-vpm-copy-and-transpose"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 06-shared-vpm-copy-and-transpose",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-global-shared-vdr.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/plan-shared-transpose-view.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-ergonomic-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/candidate/shared_tile_roundtrip_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/candidate/global_to_shared_to_global_2d_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/candidate/shared_transpose_16x16_ergonomic_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/candidate/shared_transpose_store_global_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-07-scf-composition-with-ergonomic-ops",
+      "title": "SCF composition with ergonomic tile ops",
+      "depends_on": [
+        "m5-06-shared-vpm-copy-and-transpose"
+      ],
+      "context_profile": "scf_surface_composition",
+      "intent": "Prove supported scf.for/scf.if composition with ergonomic tile ops; surface ops must plan first and SCF/index must disappear before SSAVC4 lowering.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-07-scf-composition-with-ergonomic-ops"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 07-scf-composition-with-ergonomic-ops",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-transpose-loop.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/scf-tiled-copy-loop-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/candidate/scf_tiled_copy_loop_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/candidate/scf_tiled_copy_zero_trip_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/candidate/scf_tiled_copy_non_divisible_trip_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/candidate/scf_tiled_transpose_loop_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/candidate/scf_tiled_saxpy_loop_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-08-boundary-resource-role-metadata",
+      "title": "Boundary, resource, and role metadata",
+      "depends_on": [
+        "m5-07-scf-composition-with-ergonomic-ops"
+      ],
+      "context_profile": "metadata_roles",
+      "intent": "Add semantic metadata for roles, boundary policies, resource intent, copy stages, and reuse hints; consume, preserve, or reject every accepted field deterministically.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-08-boundary-resource-role-metadata"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 08-boundary-resource-role-metadata",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/role-metadata-invalid.mlir",
+          "compiler/test/Dialect/VC4Tile/boundary-policy-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/boundary-policy-invalid.mlir",
+          "compiler/test/Dialect/VC4Tile/resource-intent-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/role-boundary-metadata-preserve.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/candidate/boundary_tail_predicated_load_store_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-09-elementwise-tile-compute",
+      "title": "Elementwise tile compute",
+      "depends_on": [
+        "m5-08-boundary-resource-role-metadata"
+      ],
+      "context_profile": "elementwise_compute",
+      "intent": "Add ergonomic tile_fill/broadcast/add/sub/mul/select and optional fma, lower to concrete vector/scalar core arithmetic, and prove on hardware.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-09-elementwise-tile-compute"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 09-elementwise-tile-compute",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tile-elementwise-lowering.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/tile-elementwise-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/candidate/tile_elementwise_add_store_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/candidate/tile_mul_store_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/candidate/tile_masked_select_tail_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-10-tile-and-block-reductions",
+      "title": "Tile and block reductions",
+      "depends_on": [
+        "m5-09-elementwise-tile-compute"
+      ],
+      "context_profile": "tile_reductions",
+      "intent": "Add ergonomic tile/warp/block reductions that lower to existing rotate/reduce/shared/barrier mechanisms with input-dependent hardware proofs.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-10-tile-and-block-reductions"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 10-tile-and-block-reductions",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tile-reduce-lowering.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/block-reduce-lowering.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/tile-reduce-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/candidate/tile_reduce_sum_i32_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/candidate/warp_reduce_sum_ergonomic_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/candidate/block_reduce_sum_ergonomic_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/candidate/block_reduce_tail_sum_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-11-tile-contract-dot-matmul",
+      "title": "Tile contract, dot, and matmul",
+      "depends_on": [
+        "m5-10-tile-and-block-reductions"
+      ],
+      "context_profile": "tile_contracts",
+      "intent": "Add tile_contract, tile_dot, and tile_matmul as future producer-facing ergonomic surface contracts and lower small 32-bit forms to movement, elementwise, and reduction operations.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-11-tile-contract-dot-matmul"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 11-tile-contract-dot-matmul",
+      "products": {
+        "required_source_files": [
+          "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+          "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-lowering.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tile-matmul-lowering.mlir",
+          "compiler/test/Conversion/VC4TileToSSAVC4/tile-contract-lowering.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/tile-dot-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Emit/tile-matmul-vc4tile.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/candidate/tile_dot_1x16_i32_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/candidate/tile_matmul_4x4_i32_vc4tile_candidate_harness.c",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/input.mlir",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/expected.json",
+          "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/candidate/tile_contract_shared_rhs_vc4tile_candidate_harness.c"
+        ]
+      }
+    },
+    {
+      "id": "m5-12-final-acceptance",
+      "title": "M5 final acceptance",
+      "depends_on": [
+        "m5-11-tile-contract-dot-matmul"
+      ],
+      "context_profile": "m5_final_acceptance",
+      "intent": "Prove the M5 ergonomic VC4Tile milestone is complete, scoped, candidate-first, hardware-backed, and regression-clean.",
+      "non_goals": [
+        "Do not implement Triton/IREE/StableHLO/JAX/PyTorch/Torch-MLIR/MLIR-gpu producer lowering in M5.",
+        "Do not lower vc4tile directly to scheduled vc4.",
+        "Do not implement executable sub-32 precision in M5.",
+        "Do not special-case fixtures or fake hardware results.",
+        "Do not weaken M2/M3/M4 regressions."
+      ],
+      "allowed_paths": [
+        "compiler/CMakeLists.txt",
+        "compiler/include/CMakeLists.txt",
+        "compiler/include/vc4/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/CMakeLists.txt",
+        "compiler/include/vc4/Dialect/VC4Tile/**",
+        "compiler/lib/CMakeLists.txt",
+        "compiler/lib/Dialect/CMakeLists.txt",
+        "compiler/lib/Dialect/VC4Tile/**",
+        "compiler/include/vc4/Conversion/VC4TileToSSAVC4/**",
+        "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+        "compiler/tools/vc4-opt/**",
+        "compiler/test/CMakeLists.txt",
+        "compiler/test/Dialect/VC4Tile/**",
+        "compiler/test/Conversion/VC4TileToSSAVC4/**",
+        "compiler/test/CodeGen/VC4Tile/**",
+        "compiler/docs/codegen/vc4tile-m5-*.md"
+      ],
+      "forbidden_paths": [
+        ".vc4_auto/**",
+        "compiler/test/**/Output/**",
+        "compiler/test/**/.lit_test_times.txt",
+        "compiler/test/**/run.log",
+        "compiler/test/CodeGen/VC4/catalog.json",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/reference/**",
+        "compiler/test/CodeGen/VC4/Hardware/Run/**/expected.json",
+        "generated_examples/**",
+        "external/libpi/**",
+        "pro_scripts/gpt_web_driver.js",
+        "pro_scripts/current_tab.js",
+        "pro_scripts/new_tab.js"
+      ],
+      "gates": [
+        "typed-verifier:m5-12-final-acceptance"
+      ],
+      "hardware_required": true,
+      "codex_policy": "mechanical_by_category",
+      "max_gpt_attempts": 12,
+      "max_codex_attempts": 3,
+      "mechanical_budgets": {
+        "mechanical_compile": 3,
+        "mechanical_build": 3,
+        "lit_tool_resolution": 3,
+        "test_invocation": 3,
+        "path_plumbing": 3,
+        "support_runner_plumbing": 3,
+        "c_api_mismatch": 3
+      },
+      "commit_message": "vc4 vc4tile m5: 12-final-acceptance",
+      "products": {
+        "required_source_files": [
+          "compiler/docs/codegen/vc4tile-m5-plan.md"
+        ]
+      }
+    }
+  ]
+}

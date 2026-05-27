@@ -1,0 +1,16 @@
+{
+  "copies": [
+    {
+      "name": "load_x",
+      "src": "global",
+      "dst": "register",
+      "method": "tmu"
+    },
+    {
+      "name": "store_y",
+      "src": "register",
+      "dst": "global",
+      "method": "vdw"
+    }
+  ]
+}

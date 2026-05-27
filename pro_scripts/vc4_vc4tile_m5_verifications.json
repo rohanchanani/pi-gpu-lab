@@ -1,0 +1,3858 @@
+{
+  "schema_version": 1,
+  "milestone": "vc4-vc4tile-m5",
+  "title": "VC4Tile M5 typed verification specification",
+  "defaults": {
+    "build_dir": "compiler/build",
+    "state_root": ".vc4_auto/vc4tile_m5/verifier",
+    "candidate_state_root": ".vc4_auto/vc4tile_m5",
+    "path_prefix": [
+      "compiler/build/bin"
+    ],
+    "timeout_sec": 7200,
+    "hardware_timeout_sec": 60,
+    "fixture_matrices": {
+      "m5_surface_smoke": [
+        "vector_store_smoke_vc4tile"
+      ],
+      "m5_copy_planner": [
+        "tile_load_store_1d_vc4tile",
+        "register_shared_roundtrip_vc4tile",
+        "shared_register_roundtrip_vc4tile"
+      ],
+      "m5_copy_global_register": [
+        "tile_load_1d_tail_vc4tile",
+        "tile_store_1d_tail_vc4tile",
+        "tile_load_store_2d_row_major_vc4tile",
+        "tile_load_store_affine_stride_vc4tile"
+      ],
+      "m5_shared_vpm": [
+        "shared_tile_roundtrip_vc4tile",
+        "global_to_shared_to_global_2d_vc4tile",
+        "shared_transpose_16x16_ergonomic_vc4tile",
+        "shared_transpose_store_global_vc4tile"
+      ],
+      "m5_scf_surface": [
+        "scf_tiled_copy_loop_vc4tile",
+        "scf_tiled_copy_zero_trip_vc4tile",
+        "scf_tiled_copy_non_divisible_trip_vc4tile",
+        "scf_tiled_transpose_loop_vc4tile",
+        "scf_tiled_saxpy_loop_vc4tile"
+      ],
+      "m5_elementwise": [
+        "tile_elementwise_add_store_vc4tile",
+        "tile_mul_store_vc4tile",
+        "tile_masked_select_tail_vc4tile"
+      ],
+      "m5_reductions": [
+        "tile_reduce_sum_i32_vc4tile",
+        "warp_reduce_sum_ergonomic_vc4tile",
+        "block_reduce_sum_ergonomic_vc4tile",
+        "block_reduce_tail_sum_vc4tile"
+      ],
+      "m5_contracts": [
+        "tile_dot_1x16_i32_vc4tile",
+        "tile_matmul_4x4_i32_vc4tile",
+        "tile_contract_shared_rhs_vc4tile"
+      ],
+      "m5_required": [
+        "vector_store_smoke_vc4tile",
+        "tile_load_store_1d_vc4tile",
+        "register_shared_roundtrip_vc4tile",
+        "shared_register_roundtrip_vc4tile",
+        "tile_load_1d_tail_vc4tile",
+        "tile_store_1d_tail_vc4tile",
+        "tile_load_store_2d_row_major_vc4tile",
+        "tile_load_store_affine_stride_vc4tile",
+        "shared_tile_roundtrip_vc4tile",
+        "global_to_shared_to_global_2d_vc4tile",
+        "shared_transpose_16x16_ergonomic_vc4tile",
+        "shared_transpose_store_global_vc4tile",
+        "scf_tiled_copy_loop_vc4tile",
+        "scf_tiled_copy_zero_trip_vc4tile",
+        "scf_tiled_copy_non_divisible_trip_vc4tile",
+        "scf_tiled_transpose_loop_vc4tile",
+        "scf_tiled_saxpy_loop_vc4tile",
+        "tile_elementwise_add_store_vc4tile",
+        "tile_mul_store_vc4tile",
+        "tile_masked_select_tail_vc4tile",
+        "tile_reduce_sum_i32_vc4tile",
+        "warp_reduce_sum_ergonomic_vc4tile",
+        "block_reduce_sum_ergonomic_vc4tile",
+        "block_reduce_tail_sum_vc4tile",
+        "tile_dot_1x16_i32_vc4tile",
+        "tile_matmul_4x4_i32_vc4tile",
+        "tile_contract_shared_rhs_vc4tile"
+      ]
+    }
+  },
+  "notes": [
+    "M5 is ergonomic VC4Tile only; no producer lowering and no executable sub-32 precision.",
+    "Hardware fixtures are candidate-first and fresh by default."
+  ],
+  "fixture_matrices": {
+    "m5_surface_smoke": [
+      "vector_store_smoke_vc4tile"
+    ],
+    "m5_copy_planner": [
+      "tile_load_store_1d_vc4tile",
+      "register_shared_roundtrip_vc4tile",
+      "shared_register_roundtrip_vc4tile"
+    ],
+    "m5_copy_global_register": [
+      "tile_load_1d_tail_vc4tile",
+      "tile_store_1d_tail_vc4tile",
+      "tile_load_store_2d_row_major_vc4tile",
+      "tile_load_store_affine_stride_vc4tile"
+    ],
+    "m5_shared_vpm": [
+      "shared_tile_roundtrip_vc4tile",
+      "global_to_shared_to_global_2d_vc4tile",
+      "shared_transpose_16x16_ergonomic_vc4tile",
+      "shared_transpose_store_global_vc4tile"
+    ],
+    "m5_scf_surface": [
+      "scf_tiled_copy_loop_vc4tile",
+      "scf_tiled_copy_zero_trip_vc4tile",
+      "scf_tiled_copy_non_divisible_trip_vc4tile",
+      "scf_tiled_transpose_loop_vc4tile",
+      "scf_tiled_saxpy_loop_vc4tile"
+    ],
+    "m5_elementwise": [
+      "tile_elementwise_add_store_vc4tile",
+      "tile_mul_store_vc4tile",
+      "tile_masked_select_tail_vc4tile"
+    ],
+    "m5_reductions": [
+      "tile_reduce_sum_i32_vc4tile",
+      "warp_reduce_sum_ergonomic_vc4tile",
+      "block_reduce_sum_ergonomic_vc4tile",
+      "block_reduce_tail_sum_vc4tile"
+    ],
+    "m5_contracts": [
+      "tile_dot_1x16_i32_vc4tile",
+      "tile_matmul_4x4_i32_vc4tile",
+      "tile_contract_shared_rhs_vc4tile"
+    ],
+    "m5_required": [
+      "vector_store_smoke_vc4tile",
+      "tile_load_store_1d_vc4tile",
+      "register_shared_roundtrip_vc4tile",
+      "shared_register_roundtrip_vc4tile",
+      "tile_load_1d_tail_vc4tile",
+      "tile_store_1d_tail_vc4tile",
+      "tile_load_store_2d_row_major_vc4tile",
+      "tile_load_store_affine_stride_vc4tile",
+      "shared_tile_roundtrip_vc4tile",
+      "global_to_shared_to_global_2d_vc4tile",
+      "shared_transpose_16x16_ergonomic_vc4tile",
+      "shared_transpose_store_global_vc4tile",
+      "scf_tiled_copy_loop_vc4tile",
+      "scf_tiled_copy_zero_trip_vc4tile",
+      "scf_tiled_copy_non_divisible_trip_vc4tile",
+      "scf_tiled_transpose_loop_vc4tile",
+      "scf_tiled_saxpy_loop_vc4tile",
+      "tile_elementwise_add_store_vc4tile",
+      "tile_mul_store_vc4tile",
+      "tile_masked_select_tail_vc4tile",
+      "tile_reduce_sum_i32_vc4tile",
+      "warp_reduce_sum_ergonomic_vc4tile",
+      "block_reduce_sum_ergonomic_vc4tile",
+      "block_reduce_tail_sum_vc4tile",
+      "tile_dot_1x16_i32_vc4tile",
+      "tile_matmul_4x4_i32_vc4tile",
+      "tile_contract_shared_rhs_vc4tile"
+    ]
+  },
+  "slices": {
+    "m5-00-milestone-package": {
+      "title": "M5 milestone package",
+      "expected_end_state": "M5 package files exist and parse; M5 mechanisms are registered; scope is locked.",
+      "verifications": [
+        {
+          "id": "m5-00-milestone-package-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "pro_scripts/milestones/vc4-vc4tile-m5.json",
+            "pro_scripts/vc4_vc4tile_m5_worklist.json",
+            "pro_scripts/vc4_vc4tile_m5_verifications.json",
+            "pro_scripts/vc4_vc4tile_m5_context_profiles.json",
+            "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json",
+            "pro_scripts/m5_mechanism_smoke/surface_core_ok.mlir",
+            "pro_scripts/m5_mechanism_smoke/copy_plan_core_ok.mlir",
+            "pro_scripts/m5_mechanism_smoke/copy-plan.json",
+            "pro_scripts/m5_mechanism_smoke/precision_policy_ok.txt",
+            "pro_scripts/m5_mechanism_smoke/run_vc4tile_candidate_codegen_test_smoke.sh",
+            "pro_scripts/MISTAKES.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/README.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/output_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/m5_handoff.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/codex_contract.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/implementation_integrity_audit_prompt.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/gpt_slice_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m5/gpt_failure_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m5/gpt_diagnosis_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m5/codex_mechanical_prompt.md.j2",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice00_milestone_package.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice01_surface_core_pipeline_runner.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice02_tile_layout_precision.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice03_vdr_vcd_global_to_vpm.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice04_copy_planner_v1.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice05_global_register_tile_load_store.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice06_shared_vpm_copy_transpose.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice07_scf_composition.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice08_boundary_resource_role_metadata.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice09_elementwise_tile_compute.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice10_tile_block_reductions.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice11_tile_contract_dot_matmul.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/slice12_final_acceptance.md",
+            "compiler/docs/codegen/vc4tile-m5-copy-planner-design.md",
+            "compiler/docs/codegen/vc4tile-m5-compute-primitives-design.md",
+            "compiler/docs/codegen/vc4tile-m5-precision-roadmap.md",
+            "compiler/docs/codegen/vc4tile-m5-full-design.md",
+            "compiler/docs/codegen/vc4tile-m5-plan.md"
+          ]
+        },
+        {
+          "id": "m5-00-json-parse",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "-c",
+            "import json,sys\nfor p in sys.argv[1:]: json.load(open(p, encoding=\"utf-8\"))\nprint(\"json-ok\")",
+            "pro_scripts/milestones/vc4-vc4tile-m5.json",
+            "pro_scripts/vc4_vc4tile_m5_worklist.json",
+            "pro_scripts/vc4_vc4tile_m5_verifications.json",
+            "pro_scripts/vc4_vc4tile_m5_context_profiles.json",
+            "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "json-ok"
+          ]
+        },
+        {
+          "id": "m5-00-mechanisms-registered",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "mechanisms",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_vc4tile_m5_verifications.json"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "vc4tile_surface_core_contract",
+            "vc4tile_copy_plan_contract",
+            "precision_policy_contract",
+            "vc4tile_pipeline_contract"
+          ]
+        },
+        {
+          "id": "m5-00-mechanism-smoke",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "verify",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_vc4tile_m5_mechanism_smoke.json",
+            "--slice",
+            "all",
+            "--out",
+            ".vc4_auto/vc4tile_m5/mechanism-smoke-from-package.json",
+            "--timeout-sec",
+            "120",
+            "--no-hardware",
+            "--keep-going"
+          ],
+          "expect_exit_code": 0,
+          "stderr_contains": [
+            "VC4_VERIFY_RESULT=PASS"
+          ]
+        },
+        {
+          "id": "m5-00-scope-contract",
+          "mechanism": "milestone_scope_contract",
+          "files": [
+            "compiler/docs/codegen/vc4tile-m5-plan.md",
+            "compiler/docs/codegen/vc4tile-m5-full-design.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/constitution.md",
+            "pro_scripts/prompts/vc4_vc4tile_m5/m5_handoff.md"
+          ],
+          "required_literals": [
+            "M5 is ergonomic VC4Tile only",
+            "M5 does not implement executable sub-32 precision",
+            "vc4tile -> ssavc4 -> scheduled vc4",
+            "Do not implement Triton"
+          ],
+          "forbidden_literals": [
+            "M5 implements Triton",
+            "M5 implements IREE",
+            "gpu -> ssavc4"
+          ]
+        },
+        {
+          "id": "m5-00-audit-contract",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "pro_scripts/vc4_milestone_verifier.py",
+            "audit-contract",
+            "--repo",
+            "{repo}",
+            "--spec",
+            "pro_scripts/vc4_vc4tile_m5_verifications.json",
+            "--worklist",
+            "pro_scripts/vc4_vc4tile_m5_worklist.json"
+          ],
+          "expect_exit_code": 0
+        }
+      ]
+    },
+    "m5-01-surface-core-pipeline-and-runner": {
+      "title": "Surface/core pipeline and VC4Tile candidate runner integration",
+      "expected_end_state": "Add/register canonical M5 surface/core passes and integrate the VC4Tile candidate runner so ergonomic inputs flow through surface canonicalization, copy planning, core CFG legalization, core verification, VC4Tile-to-SSAVC4, SSAVC4-to-VC4, and bundle emission.",
+      "verifications": [
+        {
+          "id": "m5-01-surface-core-pipeline-and-runner-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/include/vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h",
+            "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+            "compiler/tools/vc4-opt/vc4-opt.cpp",
+            "compiler/test/Conversion/VC4TileToSSAVC4/reject-surface-before-canonicalize.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/pass-pipeline-empty-surface.mlir",
+            "compiler/test/Dialect/VC4Tile/verify-core-reject-surface-placeholder.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/pipeline-minimal-surface-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-01-pass-registration",
+          "mechanism": "command",
+          "argv": [
+            "vc4-opt",
+            "--help"
+          ],
+          "expect_exit_code": 0,
+          "stdout_contains": [
+            "canonicalize-vc4tile-surface",
+            "plan-vc4tile-copies",
+            "legalize-vc4tile-core-cfg",
+            "verify-vc4tile-core",
+            "convert-vc4tile-to-ssavc4"
+          ]
+        },
+        {
+          "id": "m5-01-runner-pipeline-contract",
+          "mechanism": "vc4tile_pipeline_contract",
+          "feature": "vc4tile_surface_core_pipeline",
+          "script": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "required_order": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core",
+            "--convert-vc4tile-to-ssavc4",
+            "--convert-ssavc4-to-vc4",
+            "--emit-bundle"
+          ],
+          "forbidden_patterns": [
+            "convert-vc4tile-to-vc4",
+            "VC4_TEST_RESULT.*status=PASS"
+          ]
+        },
+        {
+          "id": "m5-01-surface-core-empty",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "vc4tile_surface_core_pipeline",
+          "input": "compiler/test/Conversion/VC4TileToSSAVC4/pass-pipeline-empty-surface.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-01-surface-core-empty",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": []
+        },
+        {
+          "id": "m5-01-reject-surface-direct",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "vc4tile_surface_core_pipeline",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/reject-surface-before-canonicalize.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-01-hardware-vector-store",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "vc4tile_surface_core_pipeline",
+          "fixture": "vector_store_smoke_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/vector_store_smoke_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/vector_store_smoke_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-01-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "vc4tile_surface_core_pipeline",
+              "status": "implemented",
+              "requires": {
+                "surface_core": true,
+                "pipeline": true,
+                "invalid_diagnostics": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-01-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "surface/core pipeline",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-02-tile-layout-types-and-precision-markers": {
+      "title": "Tile/layout types and 32-bit precision markers",
+      "expected_end_state": "Define tile/layout/role/precision vocabulary for ergonomic VC4Tile, with 32-bit-only executable semantics and strict diagnostics for sub-32 forms.",
+      "verifications": [
+        {
+          "id": "m5-02-tile-layout-types-and-precision-markers-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileTypes.h",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileTypes.cpp",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-layout-affine-invalid.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-02-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "tile_layout_type_model",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-layout-affine-invalid.mlir"
+          ],
+          "op_defs": [],
+          "assembly_ops": [],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-layout-affine-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-02-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "tile_layout_type_model",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-types-layouts-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-02-precision-policy",
+          "mechanism": "precision_policy_contract",
+          "feature": "precision_marker_model",
+          "scan_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-precision-markers-roundtrip.mlir"
+          ],
+          "required_markers": [
+            "storage",
+            "expressed",
+            "accumulator",
+            "exact_32",
+            "packing"
+          ],
+          "allowed_executable_precisions": [
+            "i32",
+            "u32",
+            "f32",
+            "vector<16xi32>",
+            "vector<16xf32>"
+          ],
+          "forbidden_executable_regex": [
+            "lower.*f16",
+            "lower.*bf16",
+            "lower.*fp8",
+            "lower.*int8",
+            "pack.*u8",
+            "pack.*i8"
+          ],
+          "invalid_cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-precision-markers-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "M5",
+                "32-bit"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-02-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "tile_layout_type_model",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "precision_policy": true,
+                "hardware_cpu_reference": {
+                  "required": false,
+                  "reason": "type/attr only"
+                }
+              }
+            },
+            {
+              "name": "precision_marker_model",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "precision_policy": true,
+                "hardware_cpu_reference": {
+                  "required": false,
+                  "reason": "metadata only"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-02-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "tile layout and precision markers",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-03-vdr-vcd-global-to-vpm-load-support": {
+      "title": "SSAVC4 VDR/VCD global-to-VPM load support",
+      "expected_end_state": "Add lower-half SSAVC4 VDR/VCD global-to-VPM load support so the M5 copy planner can choose hardware-natural global-to-shared paths.",
+      "verifications": [
+        {
+          "id": "m5-03-vdr-vcd-global-to-vpm-load-support-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/include/vc4/Dialect/SSAVC4/IR/SSAVC4Ops.td",
+            "compiler/lib/Dialect/SSAVC4/IR/SSAVC4Ops.cpp",
+            "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp",
+            "compiler/test/Dialect/SSAVC4/vdr-load-roundtrip.mlir",
+            "compiler/test/Dialect/SSAVC4/vdr-load-invalid.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/vdr-load.mlir",
+            "compiler/test/Conversion/SSAVC4ToVC4/vdr-load-invalid.mlir",
+            "compiler/test/CodeGen/SSAVC4/Emit/vdr-load-ssavc4.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/candidate/vdr_load_roundtrip_ssavc4_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-03-ssavc4-vdr-lit",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Dialect/SSAVC4",
+            "--include",
+            "vdr-load-roundtrip.mlir",
+            "--include",
+            "vdr-load-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "m5-03-vdr-conversion-lit",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/Conversion/SSAVC4ToVC4",
+            "--include",
+            "vdr-load.mlir",
+            "--include",
+            "vdr-load-invalid.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "m5-03-vdr-emit-lit",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "compiler/test/CodeGen/VC4/Support/run_lit_subset.py",
+            "--repo",
+            "{repo}",
+            "--root",
+            "compiler/build/test/CodeGen/SSAVC4/Emit",
+            "--include",
+            "vdr-load-ssavc4.mlir"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "m5-03-hardware-vdr-load",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "vdr_vcd_load_support",
+          "fixture": "vdr_load_roundtrip_ssavc4",
+          "runner": "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdr_load_roundtrip_ssavc4/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/vdr_load_roundtrip_ssavc4/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/vdr_load_roundtrip_ssavc4/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-03-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "vdr_vcd_load_support",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-03-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "VDR/VCD support",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-04-copy-planner-v1": {
+      "title": "VC4Tile copy planner v1",
+      "expected_end_state": "Implement the first VC4Tile copy planner and ergonomic movement ops for global/register/shared movement, views, subviews, transpose views, and shared tile allocation.",
+      "verifications": [
+        {
+          "id": "m5-04-copy-planner-v1-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/lib/Dialect/VC4Tile/IR/VC4TileOps.cpp",
+            "compiler/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp",
+            "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/copy-tile-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-view-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/copy-planner-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-global-register.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-register-global.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-register-shared.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-shared-register.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-transpose-view.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/reject-unplanned-copy-before-core.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/candidate/tile_load_store_1d_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/candidate/register_shared_roundtrip_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/candidate/shared_register_roundtrip_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-04-copy-planner-v1-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "copy_planner_v1",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/copy-tile-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-view-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/copy-planner-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store",
+            "vc4tile.copy_tile",
+            "vc4tile.tile_view",
+            "vc4tile.transpose_view",
+            "vc4tile.shared_tile_alloc"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store",
+            "vc4tile.copy_tile",
+            "vc4tile.tile_view",
+            "vc4tile.transpose_view",
+            "vc4tile.shared_tile_alloc"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/copy-tile-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-view-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/copy-planner-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "copy_planner_v1",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/copy-planner-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "copy_planner_v1",
+          "input": "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-04-copy-planner-v1-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store",
+            "vc4tile.copy_tile",
+            "vc4tile.tile_view",
+            "vc4tile.transpose_view",
+            "vc4tile.shared_tile_alloc"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "copy_planner_v1",
+          "input": "compiler/test/Dialect/VC4Tile/tile-load-store-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-04-copy-planner-v1-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-precision-policy",
+          "mechanism": "precision_policy_contract",
+          "feature": "copy_planner_v1",
+          "scan_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_markers": [
+            "exact_32"
+          ],
+          "forbidden_executable_regex": [
+            "lower.*f16",
+            "lower.*fp8",
+            "lower.*int8",
+            "pack.*u8"
+          ],
+          "invalid_cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "M5",
+                "32-bit"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-hardware-tile_load_store_1d_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "copy_planner_v1",
+          "fixture": "tile_load_store_1d_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_1d_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_1d_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_1d_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-hardware-register_shared_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "copy_planner_v1",
+          "fixture": "register_shared_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/register_shared_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/register_shared_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/register_shared_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-hardware-shared_register_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "copy_planner_v1",
+          "fixture": "shared_register_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_register_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_register_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_register_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "copy_planner_v1",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-04-copy-planner-v1-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "copy_planner_v1",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-05-global-register-tile-load-store": {
+      "title": "Global/register tile load-store ergonomics",
+      "expected_end_state": "Prove ergonomic global/register tile load/store patterns with tail masks, 2D row-major indexing, and supported affine stride behavior on real hardware.",
+      "verifications": [
+        {
+          "id": "m5-05-global-register-tile-load-store-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-2d-row-major.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/candidate/tile_load_1d_tail_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/candidate/tile_store_1d_tail_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/candidate/tile_load_store_2d_row_major_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/candidate/tile_load_store_affine_stride_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "global_register_tile_movement",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-2d-row-major.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-2d-row-major.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "global_register_tile_movement",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "global_register_tile_movement",
+          "input": "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-05-global-register-tile-load-store-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "global_register_tile_movement",
+          "input": "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-1d-tail.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-05-global-register-tile-load-store-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-hardware-tile_load_1d_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "global_register_tile_movement",
+          "fixture": "tile_load_1d_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_1d_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_1d_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_1d_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-hardware-tile_store_1d_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "global_register_tile_movement",
+          "fixture": "tile_store_1d_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_store_1d_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_store_1d_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_store_1d_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-hardware-tile_load_store_2d_row_major_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "global_register_tile_movement",
+          "fixture": "tile_load_store_2d_row_major_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_2d_row_major_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_2d_row_major_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_2d_row_major_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-hardware-tile_load_store_affine_stride_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "global_register_tile_movement",
+          "fixture": "tile_load_store_affine_stride_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_affine_stride_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_affine_stride_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_affine_stride_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "global_register_tile_movement",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-05-global-register-tile-load-store-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "global_register_tile_movement",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-06-shared-vpm-copy-and-transpose": {
+      "title": "Shared VPM copy and ergonomic transpose",
+      "expected_end_state": "Make shared VPM copy and shared transpose ergonomic while lowering to concrete VPM/VDR/VDW/barrier paths.",
+      "verifications": [
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-global-shared-vdr.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-shared-transpose-view.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/shared-transpose-ergonomic-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/candidate/shared_tile_roundtrip_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/candidate/global_to_shared_to_global_2d_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/candidate/shared_transpose_16x16_ergonomic_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/candidate/shared_transpose_store_global_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "shared_vpm_tile_movement",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-shared-transpose-view.mlir",
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.copy_tile",
+            "vc4tile.shared_tile_alloc",
+            "vc4tile.transpose_view"
+          ],
+          "assembly_ops": [
+            "vc4tile.copy_tile",
+            "vc4tile.shared_tile_alloc",
+            "vc4tile.transpose_view"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-shared-transpose-view.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "shared_vpm_tile_movement",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "shared_vpm_tile_movement",
+          "input": "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-06-shared-vpm-copy-and-transpose-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.copy_tile",
+            "vc4tile.shared_tile_alloc",
+            "vc4tile.transpose_view"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "shared_vpm_tile_movement",
+          "input": "compiler/test/Dialect/VC4Tile/shared-tile-copy-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-06-shared-vpm-copy-and-transpose-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-hardware-shared_tile_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm_tile_movement",
+          "fixture": "shared_tile_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_tile_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_tile_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_tile_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-hardware-global_to_shared_to_global_2d_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm_tile_movement",
+          "fixture": "global_to_shared_to_global_2d_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/global_to_shared_to_global_2d_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/global_to_shared_to_global_2d_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/global_to_shared_to_global_2d_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-hardware-shared_transpose_16x16_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm_tile_movement",
+          "fixture": "shared_transpose_16x16_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_transpose_16x16_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_16x16_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_16x16_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-hardware-shared_transpose_store_global_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "shared_vpm_tile_movement",
+          "fixture": "shared_transpose_store_global_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_transpose_store_global_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_store_global_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_store_global_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "shared_vpm_tile_movement",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-06-shared-vpm-copy-and-transpose-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "shared_vpm_tile_movement",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-07-scf-composition-with-ergonomic-ops": {
+      "title": "SCF composition with ergonomic tile ops",
+      "expected_end_state": "Prove supported scf.for/scf.if composition with ergonomic tile ops; surface ops must plan first and SCF/index must disappear before SSAVC4 lowering.",
+      "verifications": [
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-transpose-loop.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/scf-tiled-copy-loop-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/candidate/scf_tiled_copy_loop_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/candidate/scf_tiled_copy_zero_trip_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/candidate/scf_tiled_copy_non_divisible_trip_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/candidate/scf_tiled_transpose_loop_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/candidate/scf_tiled_saxpy_loop_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "scf_ergonomic_composition",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-transpose-loop.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-transpose-loop.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "scf_ergonomic_composition",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "scf_ergonomic_composition",
+          "input": "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-07-scf-composition-with-ergonomic-ops-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_load",
+            "vc4tile.tile_store"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "scf_ergonomic_composition",
+          "input": "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-loop.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-07-scf-composition-with-ergonomic-ops-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-hardware-scf_tiled_copy_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "scf_ergonomic_composition",
+          "fixture": "scf_tiled_copy_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-hardware-scf_tiled_copy_zero_trip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "scf_ergonomic_composition",
+          "fixture": "scf_tiled_copy_zero_trip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_zero_trip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_zero_trip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_zero_trip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-hardware-scf_tiled_copy_non_divisible_trip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "scf_ergonomic_composition",
+          "fixture": "scf_tiled_copy_non_divisible_trip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_non_divisible_trip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_non_divisible_trip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_non_divisible_trip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-hardware-scf_tiled_transpose_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "scf_ergonomic_composition",
+          "fixture": "scf_tiled_transpose_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_transpose_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_transpose_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_transpose_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-hardware-scf_tiled_saxpy_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "scf_ergonomic_composition",
+          "fixture": "scf_tiled_saxpy_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_saxpy_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_saxpy_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_saxpy_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "scf_ergonomic_composition",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-07-scf-composition-with-ergonomic-ops-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "scf_ergonomic_composition",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-08-boundary-resource-role-metadata": {
+      "title": "Boundary, resource, and role metadata",
+      "expected_end_state": "Add semantic metadata for roles, boundary policies, resource intent, copy stages, and reuse hints; consume, preserve, or reject every accepted field deterministically.",
+      "verifications": [
+        {
+          "id": "m5-08-boundary-resource-role-metadata-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/role-metadata-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/role-boundary-metadata-preserve.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/candidate/boundary_tail_predicated_load_store_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "boundary_resource_role_metadata",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/role-metadata-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_load"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_load"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-roundtrip.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/role-metadata-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/boundary-policy-invalid.mlir",
+            "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "boundary_resource_role_metadata",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/role-metadata-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/boundary-policy-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            },
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "boundary_resource_role_metadata",
+          "input": "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-08-boundary-resource-role-metadata-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_load"
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "boundary_resource_role_metadata",
+          "input": "compiler/test/Dialect/VC4Tile/role-metadata-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-08-boundary-resource-role-metadata-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-hardware-boundary_tail_predicated_load_store_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "boundary_resource_role_metadata",
+          "fixture": "boundary_tail_predicated_load_store_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/boundary_tail_predicated_load_store_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/boundary_tail_predicated_load_store_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/boundary_tail_predicated_load_store_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/boundary_tail_predicated_load_store_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "boundary_resource_role_metadata",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-08-boundary-resource-role-metadata-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "boundary_resource_role_metadata",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-09-elementwise-tile-compute": {
+      "title": "Elementwise tile compute",
+      "expected_end_state": "Add ergonomic tile_fill/broadcast/add/sub/mul/select and optional fma, lower to concrete vector/scalar core arithmetic, and prove on hardware.",
+      "verifications": [
+        {
+          "id": "m5-09-elementwise-tile-compute-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-elementwise-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/tile-elementwise-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/candidate/tile_elementwise_add_store_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/candidate/tile_mul_store_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/candidate/tile_masked_select_tail_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "elementwise_tile_compute",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-elementwise-lowering.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_fill",
+            "vc4tile.tile_broadcast",
+            "vc4tile.tile_add",
+            "vc4tile.tile_sub",
+            "vc4tile.tile_mul",
+            "vc4tile.tile_select"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_fill",
+            "vc4tile.tile_broadcast",
+            "vc4tile.tile_add",
+            "vc4tile.tile_sub",
+            "vc4tile.tile_mul",
+            "vc4tile.tile_select"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-elementwise-lowering.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "elementwise_tile_compute",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "elementwise_tile_compute",
+          "input": "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-09-elementwise-tile-compute-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_fill",
+            "vc4tile.tile_broadcast",
+            "vc4tile.tile_add",
+            "vc4tile.tile_sub",
+            "vc4tile.tile_mul",
+            "vc4tile.tile_select"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "elementwise_tile_compute",
+          "input": "compiler/test/Dialect/VC4Tile/tile-elementwise-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-09-elementwise-tile-compute-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-hardware-tile_elementwise_add_store_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "elementwise_tile_compute",
+          "fixture": "tile_elementwise_add_store_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_elementwise_add_store_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_elementwise_add_store_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_elementwise_add_store_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-hardware-tile_mul_store_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "elementwise_tile_compute",
+          "fixture": "tile_mul_store_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_mul_store_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_mul_store_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_mul_store_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-hardware-tile_masked_select_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "elementwise_tile_compute",
+          "fixture": "tile_masked_select_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_masked_select_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_masked_select_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_masked_select_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "elementwise_tile_compute",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-09-elementwise-tile-compute-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "elementwise_tile_compute",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-10-tile-and-block-reductions": {
+      "title": "Tile and block reductions",
+      "expected_end_state": "Add ergonomic tile/warp/block reductions that lower to existing rotate/reduce/shared/barrier mechanisms with input-dependent hardware proofs.",
+      "verifications": [
+        {
+          "id": "m5-10-tile-and-block-reductions-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-reduce-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/block-reduce-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/tile-reduce-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/candidate/tile_reduce_sum_i32_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/candidate/warp_reduce_sum_ergonomic_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/candidate/block_reduce_sum_ergonomic_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/candidate/block_reduce_tail_sum_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "tile_reductions",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-reduce-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/block-reduce-lowering.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_reduce",
+            "vc4tile.row_reduce",
+            "vc4tile.warp_reduce",
+            "vc4tile.block_reduce"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_reduce",
+            "vc4tile.row_reduce",
+            "vc4tile.warp_reduce",
+            "vc4tile.block_reduce"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-reduce-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/block-reduce-lowering.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "tile_reductions",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "tile_reductions",
+          "input": "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-10-tile-and-block-reductions-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_reduce",
+            "vc4tile.row_reduce",
+            "vc4tile.warp_reduce",
+            "vc4tile.block_reduce"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "tile_reductions",
+          "input": "compiler/test/Dialect/VC4Tile/tile-reductions-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-10-tile-and-block-reductions-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-hardware-tile_reduce_sum_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_reductions",
+          "fixture": "tile_reduce_sum_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_reduce_sum_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_reduce_sum_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_reduce_sum_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-hardware-warp_reduce_sum_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_reductions",
+          "fixture": "warp_reduce_sum_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/warp_reduce_sum_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/warp_reduce_sum_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/warp_reduce_sum_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-hardware-block_reduce_sum_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_reductions",
+          "fixture": "block_reduce_sum_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/block_reduce_sum_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_sum_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_sum_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-hardware-block_reduce_tail_sum_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_reductions",
+          "fixture": "block_reduce_tail_sum_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/block_reduce_tail_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_tail_sum_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_tail_sum_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "tile_reductions",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-10-tile-and-block-reductions-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "tile_reductions",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-11-tile-contract-dot-matmul": {
+      "title": "Tile contract, dot, and matmul",
+      "expected_end_state": "Add tile_contract, tile_dot, and tile_matmul as future producer-facing ergonomic surface contracts and lower small 32-bit forms to movement, elementwise, and reduction operations.",
+      "verifications": [
+        {
+          "id": "m5-11-tile-contract-dot-matmul-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-matmul-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-contract-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/tile-dot-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/tile-matmul-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/candidate/tile_dot_1x16_i32_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/candidate/tile_matmul_4x4_i32_vc4tile_candidate_harness.c",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/candidate/tile_contract_shared_rhs_vc4tile_candidate_harness.c"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-dialect-contract",
+          "mechanism": "dialect_contract",
+          "feature": "tile_contracts",
+          "dialect": "vc4tile",
+          "files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-matmul-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-contract-lowering.mlir",
+            "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir"
+          ],
+          "op_defs": [
+            "vc4tile.tile_contract",
+            "vc4tile.tile_dot",
+            "vc4tile.tile_matmul"
+          ],
+          "assembly_ops": [
+            "vc4tile.tile_contract",
+            "vc4tile.tile_dot",
+            "vc4tile.tile_matmul"
+          ],
+          "roundtrip_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-matmul-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-contract-lowering.mlir"
+          ],
+          "invalid_tests": [
+            "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-invalid-diagnostics",
+          "mechanism": "invalid_diagnostic_contract",
+          "feature": "tile_contracts",
+          "cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "error"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-surface-core-contract",
+          "mechanism": "vc4tile_surface_core_contract",
+          "feature": "tile_contracts",
+          "input": "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-11-tile-contract-dot-matmul-surface-core-contract",
+          "core_output": "core.vc4tile.mlir",
+          "forbid_surface_ops": true,
+          "forbid_scf": true,
+          "forbid_index": true,
+          "forbid_producer_ops": true,
+          "must_not_contain": [
+            "vc4tile.tile_contract",
+            "vc4tile.tile_dot",
+            "vc4tile.tile_matmul"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-copy-plan-contract",
+          "mechanism": "vc4tile_copy_plan_contract",
+          "feature": "tile_contracts",
+          "input": "compiler/test/Dialect/VC4Tile/tile-contract-roundtrip.mlir",
+          "pipeline": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies"
+          ],
+          "work_dir": ".vc4_auto/vc4tile_m5/m5-11-tile-contract-dot-matmul-copy-plan-contract",
+          "core_output": "planned.vc4tile.mlir",
+          "must_not_contain": [
+            "vc4tile.copy_tile"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-precision-policy",
+          "mechanism": "precision_policy_contract",
+          "feature": "tile_contracts",
+          "scan_files": [
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileAttrs.td",
+            "compiler/include/vc4/Dialect/VC4Tile/IR/VC4TileOps.td"
+          ],
+          "required_markers": [
+            "exact_32"
+          ],
+          "forbidden_executable_regex": [
+            "lower.*f16",
+            "lower.*fp8",
+            "lower.*int8",
+            "pack.*u8"
+          ],
+          "invalid_cases": [
+            {
+              "argv": [
+                "vc4-opt",
+                "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
+              ],
+              "expect_exit_code": 1,
+              "stderr_contains": [
+                "M5",
+                "32-bit"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-hardware-tile_dot_1x16_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_contracts",
+          "fixture": "tile_dot_1x16_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_dot_1x16_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_dot_1x16_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_dot_1x16_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-hardware-tile_matmul_4x4_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_contracts",
+          "fixture": "tile_matmul_4x4_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_matmul_4x4_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_matmul_4x4_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_matmul_4x4_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-hardware-tile_contract_shared_rhs_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "tile_contracts",
+          "fixture": "tile_contract_shared_rhs_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_contract_shared_rhs_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_contract_shared_rhs_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_contract_shared_rhs_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-feature-gate",
+          "mechanism": "feature_gate_contract",
+          "scope": "slice",
+          "features": [
+            {
+              "name": "tile_contracts",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-11-tile-contract-dot-matmul-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "tile_contracts",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-12-final-acceptance": {
+      "title": "M5 final acceptance",
+      "expected_end_state": "M5 is complete, scoped, candidate-first, hardware-backed, and regression-clean.",
+      "verifications": [
+        {
+          "id": "m5-12-final-acceptance-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/docs/codegen/vc4tile-m5-plan.md"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-check_vc4",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-12-feature-gate-all",
+          "mechanism": "feature_gate_contract",
+          "scope": "all",
+          "features": [
+            {
+              "name": "vc4tile_surface_core_pipeline",
+              "status": "implemented",
+              "requires": {
+                "surface_core": true,
+                "pipeline": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "tile_layout_type_model",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "precision_policy": true,
+                "hardware_cpu_reference": {
+                  "required": false,
+                  "reason": "type/attr syntax"
+                }
+              }
+            },
+            {
+              "name": "precision_marker_model",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "precision_policy": true,
+                "hardware_cpu_reference": {
+                  "required": false,
+                  "reason": "metadata only"
+                }
+              }
+            },
+            {
+              "name": "vdr_vcd_load_support",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "lowered_ir": true,
+                "scheduled_artifact": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "copy_planner_v1",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "global_register_tile_movement",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "shared_vpm_tile_movement",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "scf_ergonomic_composition",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "copy_plan": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "boundary_resource_role_metadata",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "elementwise_tile_compute",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "tile_reductions",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "hardware_cpu_reference": true
+              }
+            },
+            {
+              "name": "tile_contracts",
+              "status": "implemented",
+              "requires": {
+                "dialect": true,
+                "invalid_diagnostics": true,
+                "surface_core": true,
+                "hardware_cpu_reference": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "m5-12-pipeline-contract",
+          "mechanism": "vc4tile_pipeline_contract",
+          "applies_to_all_features": true,
+          "script": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "required_order": [
+            "--canonicalize-vc4tile-surface",
+            "--plan-vc4tile-copies",
+            "--legalize-vc4tile-core-cfg",
+            "--verify-vc4tile-core",
+            "--convert-vc4tile-to-ssavc4",
+            "--convert-ssavc4-to-vc4",
+            "--emit-bundle"
+          ],
+          "forbidden_patterns": [
+            "convert-vc4tile-to-vc4",
+            "VC4_TEST_RESULT.*status=PASS"
+          ]
+        },
+        {
+          "id": "m5-12-static-implementation-integrity",
+          "mechanism": "implementation_integrity_contract",
+          "focus": "final M5 implementation",
+          "static_forbidden": [
+            {
+              "description": "No direct VC4TileToVC4 conversion pass",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "convert-vc4tile-to-vc4|VC4TileToVC4"
+            },
+            {
+              "description": "No producer lowering in M5",
+              "globs": [
+                "compiler/include/**",
+                "compiler/lib/**",
+                "compiler/tools/**"
+              ],
+              "pattern": "Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\."
+            },
+            {
+              "description": "No executable sub32 lowering",
+              "globs": [
+                "compiler/include/vc4/Dialect/VC4Tile/**",
+                "compiler/lib/Dialect/VC4Tile/**",
+                "compiler/lib/Conversion/VC4TileToSSAVC4/**"
+              ],
+              "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ],
+          "codex_exec": {
+            "enabled": true,
+            "prompt_file": "pro_scripts/prompts/vc4_vc4tile_m5/implementation_integrity_audit_prompt.md",
+            "classification_field": "integrity_pass",
+            "pass_value": "YES",
+            "timeout_sec": 1800,
+            "dangerously_bypass_approvals_and_sandbox": true
+          }
+        },
+        {
+          "id": "m5-12-anti-shortcut-scan",
+          "mechanism": "command",
+          "argv": [
+            "{python}",
+            "-c",
+            "from pathlib import Path\nimport re,sys\nroots=[Path(\"compiler/include\"),Path(\"compiler/lib\"),Path(\"compiler/tools\"),Path(\"compiler/test/CodeGen/VC4Tile/Support\")]\nchecks=[(\"direct\",r\"convert-vc4tile-to-vc4|VC4TileToVC4\"),(\"producer\",r\"Triton|IREE|StableHLO|Torch|PyTorch|JAX|tt\\.|ttir\\.|stablehlo\\.|linalg\\.\"),(\"sub32\",r\"lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)\")]\nbad=[]\nfor root in roots:\n  if not root.exists(): continue\n  for p in root.rglob(\"*\"):\n    if not p.is_file() or p.suffix not in {\".td\",\".h\",\".cpp\",\".cc\",\".c\",\".py\",\".sh\",\".mlir\"}: continue\n    text=p.read_text(encoding=\"utf-8\",errors=\"replace\")\n    for name,pat in checks:\n      if re.search(pat,text,re.S): bad.append(f\"{name}: {p}\")\nif bad:\n  print(\"M5 anti-shortcut scan failed:\")\n  print(\"\\n\".join(bad[:200]))\n  sys.exit(1)\nprint(\"m5-anti-shortcut-ok\")"
+          ],
+          "expect_exit_code": 0
+        },
+        {
+          "id": "m5-12-hardware-vector_store_smoke_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "vector_store_smoke_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/vector_store_smoke_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/vector_store_smoke_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/vector_store_smoke_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/vector_store_smoke_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_load_store_1d_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_load_store_1d_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_1d_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_1d_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_1d_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_1d_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-register_shared_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "register_shared_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/register_shared_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/register_shared_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/register_shared_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/register_shared_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-shared_register_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "shared_register_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_register_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_register_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_register_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_register_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_load_1d_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_load_1d_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_1d_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_1d_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_1d_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_1d_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_store_1d_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_store_1d_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_store_1d_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_store_1d_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_store_1d_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_store_1d_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_load_store_2d_row_major_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_load_store_2d_row_major_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_2d_row_major_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_2d_row_major_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_2d_row_major_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_2d_row_major_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_load_store_affine_stride_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_load_store_affine_stride_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_load_store_affine_stride_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_load_store_affine_stride_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_affine_stride_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_load_store_affine_stride_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-shared_tile_roundtrip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "shared_tile_roundtrip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_tile_roundtrip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_tile_roundtrip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_tile_roundtrip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_tile_roundtrip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-global_to_shared_to_global_2d_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "global_to_shared_to_global_2d_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/global_to_shared_to_global_2d_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/global_to_shared_to_global_2d_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/global_to_shared_to_global_2d_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/global_to_shared_to_global_2d_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-shared_transpose_16x16_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "shared_transpose_16x16_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_16x16_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_transpose_16x16_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_16x16_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_16x16_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-shared_transpose_store_global_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "shared_transpose_store_global_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/shared_transpose_store_global_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/shared_transpose_store_global_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_store_global_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/shared_transpose_store_global_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-scf_tiled_copy_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "scf_tiled_copy_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-scf_tiled_copy_zero_trip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "scf_tiled_copy_zero_trip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_zero_trip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_zero_trip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_zero_trip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_zero_trip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-scf_tiled_copy_non_divisible_trip_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "scf_tiled_copy_non_divisible_trip_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_copy_non_divisible_trip_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_copy_non_divisible_trip_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_non_divisible_trip_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_copy_non_divisible_trip_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-scf_tiled_transpose_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "scf_tiled_transpose_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_transpose_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_transpose_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_transpose_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_transpose_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-scf_tiled_saxpy_loop_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "scf_tiled_saxpy_loop_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/scf_tiled_saxpy_loop_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/scf_tiled_saxpy_loop_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_saxpy_loop_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/scf_tiled_saxpy_loop_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_elementwise_add_store_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_elementwise_add_store_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_elementwise_add_store_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_elementwise_add_store_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_elementwise_add_store_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_elementwise_add_store_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_mul_store_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_mul_store_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_mul_store_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_mul_store_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_mul_store_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_mul_store_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_masked_select_tail_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_masked_select_tail_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_masked_select_tail_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_masked_select_tail_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_masked_select_tail_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_masked_select_tail_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_reduce_sum_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_reduce_sum_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_sum_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_reduce_sum_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_reduce_sum_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_reduce_sum_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-warp_reduce_sum_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "warp_reduce_sum_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/warp_reduce_sum_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/warp_reduce_sum_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/warp_reduce_sum_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/warp_reduce_sum_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-block_reduce_sum_ergonomic_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "block_reduce_sum_ergonomic_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_sum_ergonomic_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/block_reduce_sum_ergonomic_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_sum_ergonomic_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_sum_ergonomic_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-block_reduce_tail_sum_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "block_reduce_tail_sum_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/block_reduce_tail_sum_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/block_reduce_tail_sum_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_tail_sum_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/block_reduce_tail_sum_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_dot_1x16_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_dot_1x16_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_1x16_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_dot_1x16_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_dot_1x16_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_dot_1x16_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_matmul_4x4_i32_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_matmul_4x4_i32_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_4x4_i32_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_matmul_4x4_i32_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_matmul_4x4_i32_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_matmul_4x4_i32_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-hardware-tile_contract_shared_rhs_vc4tile",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "*",
+          "fixture": "tile_contract_shared_rhs_vc4tile",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_contract_shared_rhs_vc4tile/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/tile_contract_shared_rhs_vc4tile/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/tile_contract_shared_rhs_vc4tile/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/tile_contract_shared_rhs_vc4tile/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-12-regression-contract",
+          "mechanism": "regression_contract",
+          "required_mechanisms": [
+            "vc4tile_surface_core_contract",
+            "vc4tile_copy_plan_contract",
+            "precision_policy_contract",
+            "vc4tile_pipeline_contract",
+            "feature_gate_contract",
+            "hardware_cpu_reference_contract",
+            "implementation_integrity_contract"
+          ],
+          "required_files": [
+            "pro_scripts/milestones/vc4-codegen-m2.json",
+            "pro_scripts/milestones/vc4-ssavc4-m3.json",
+            "pro_scripts/milestones/vc4-vc4tile-m4.json",
+            "pro_scripts/milestones/vc4-vc4tile-m5.json"
+          ],
+          "commands": [
+            {
+              "name": "check-vc4",
+              "argv": [
+                "ninja",
+                "-C",
+                "compiler/build",
+                "check-vc4"
+              ],
+              "timeout_sec": 7200
+            },
+            {
+              "name": "m2-final",
+              "argv": [
+                "{python}",
+                "pro_scripts/vc4_milestone_verifier.py",
+                "verify",
+                "--repo",
+                "{repo}",
+                "--milestone-config",
+                "pro_scripts/milestones/vc4-codegen-m2.json",
+                "--slice",
+                "m2-10-final-acceptance",
+                "--out",
+                ".vc4_auto/vc4tile_m5/regressions/m2-final.json",
+                "--timeout-sec",
+                "7200",
+                "--keep-going"
+              ],
+              "timeout_sec": 7200
+            },
+            {
+              "name": "m3-all",
+              "argv": [
+                "{python}",
+                "pro_scripts/vc4_milestone_verifier.py",
+                "verify",
+                "--repo",
+                "{repo}",
+                "--milestone-config",
+                "pro_scripts/milestones/vc4-ssavc4-m3.json",
+                "--slice",
+                "all",
+                "--out",
+                ".vc4_auto/vc4tile_m5/regressions/m3-all.json",
+                "--timeout-sec",
+                "7200",
+                "--keep-going"
+              ],
+              "timeout_sec": 7200
+            },
+            {
+              "name": "m4-final",
+              "argv": [
+                "{python}",
+                "pro_scripts/vc4_milestone_verifier.py",
+                "verify",
+                "--repo",
+                "{repo}",
+                "--milestone-config",
+                "pro_scripts/milestones/vc4-vc4tile-m4.json",
+                "--slice",
+                "m4-12-final-acceptance",
+                "--out",
+                ".vc4_auto/vc4tile_m5/regressions/m4-final.json",
+                "--timeout-sec",
+                "7200",
+                "--keep-going"
+              ],
+              "timeout_sec": 7200
+            }
+          ]
+        },
+        {
+          "id": "build-check_vc4-post",
+          "mechanism": "build",
+          "target": "check-vc4",
+          "route_hint": "codex_mechanical"
+        }
+      ]
+    }
+  }
+}
