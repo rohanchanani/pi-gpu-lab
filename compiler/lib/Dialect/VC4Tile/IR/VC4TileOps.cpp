@@ -282,6 +282,96 @@ static LogicalResult verifyM5Exact32Metadata(Operation *op) {
   return success();
 }
 
+
+static LogicalResult verifyTileComputeMetadata(Operation *op) {
+  if (failed(verifyM5Exact32Metadata(op)))
+    return failure();
+
+  SmallVector<int64_t, 4> shape;
+  if (failed(verifyTileSurfaceShape(op, shape)))
+    return failure();
+  int64_t elements = 1;
+  for (int64_t extent : shape)
+    elements *= extent;
+  if (elements != 16)
+    return op->emitOpError(
+        "elementwise tile compute supports exactly 16 lanes in M5");
+
+  auto memorySpace = op->getAttrOfType<MemorySpaceAttr>("memory_space");
+  if (!memorySpace)
+    return op->emitOpError("memory_space attribute is required");
+  if (memorySpace.getValue() != MemorySpace::register_space) {
+    return op->emitOpError(
+        "tile compute operations require memory_space = "
+        "#vc4tile.memory_space<register>");
+  }
+
+  Type resultType = op->getResult(0).getType();
+  if (!isVC4TileVector16DataType(resultType))
+    return emitTypeError(op, resultType, "result",
+                         "vector<16xi32> or vector<16xf32>");
+
+  auto vectorType = llvm::cast<VectorType>(resultType);
+  auto elementType = op->getAttrOfType<TypeAttr>("element_type");
+  if (!elementType)
+    return op->emitOpError("element_type attribute is required");
+  if (vectorType.getElementType() != elementType.getValue()) {
+    return op->emitOpError()
+           << "result element type must match element_type; got result "
+           << resultType << " and element_type = " << elementType.getValue();
+  }
+  return success();
+}
+
+static bool isVC4TileScalarComputeType(Type type) {
+  return type.isSignlessInteger(32) || type.isF32();
+}
+
+static LogicalResult verifyTileScalarComputeType(Operation *op, Type type,
+                                                 StringRef role) {
+  if (isVC4TileScalarComputeType(type))
+    return success();
+  return emitTypeError(op, type, role, "i32 or f32");
+}
+
+static LogicalResult verifyTileComputeValueMatchesElement(Operation *op,
+                                                          Attribute value,
+                                                          Type elementType) {
+  if (elementType.isSignlessInteger(32)) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(value);
+    if (!intAttr)
+      return op->emitOpError("tile_fill i32 value must be an integer attribute");
+    if (!intAttr.getType().isSignlessInteger(32))
+      return op->emitOpError("tile_fill integer value must be i32");
+    return success();
+  }
+  if (elementType.isF32()) {
+    auto floatAttr = llvm::dyn_cast<FloatAttr>(value);
+    if (!floatAttr)
+      return op->emitOpError("tile_fill f32 value must be a float attribute");
+    if (!floatAttr.getType().isF32())
+      return op->emitOpError("tile_fill float value must be f32");
+    return success();
+  }
+  return op->emitOpError("tile_fill supports only i32 or f32 element_type");
+}
+
+static LogicalResult verifyTileBinaryComputeOperands(Operation *op,
+                                                     Value lhs, Value rhs,
+                                                     Value result) {
+  if (failed(verifySurfaceCarrier(op, lhs.getType(), "lhs")) ||
+      failed(verifySurfaceCarrier(op, rhs.getType(), "rhs")) ||
+      failed(verifySurfaceCarrier(op, result.getType(), "result")))
+    return failure();
+  if (lhs.getType() != result.getType() || rhs.getType() != result.getType())
+    return op->emitOpError(
+        "tile binary operands and result must have identical types in M5");
+  if (!isVC4TileVector16DataType(result.getType()))
+    return emitTypeError(op, result.getType(), "result",
+                         "vector<16xi32> or vector<16xf32>");
+  return success();
+}
+
 static LogicalResult verifyTileMovementLayout(Operation *op, StringRef name) {
   auto layout = op->getAttrOfType<LayoutAttr>(name);
   if (!layout)
@@ -1086,6 +1176,70 @@ LogicalResult SharedTileAllocOp::verify() {
     return failure();
   if (shape.size() > 2)
     return emitOpError("shared_tile_alloc supports only rank <= 2 in M5");
+  return success();
+}
+
+
+LogicalResult TileFillOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)))
+    return failure();
+  auto elementType = op->getAttrOfType<TypeAttr>("element_type");
+  if (!elementType)
+    return emitOpError("element_type attribute is required");
+  return verifyTileComputeValueMatchesElement(op, getValueAttr(),
+                                              elementType.getValue());
+}
+
+LogicalResult TileBroadcastOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)) ||
+      failed(verifyTileScalarComputeType(op, getSource().getType(), "source")))
+    return failure();
+  auto elementType = op->getAttrOfType<TypeAttr>("element_type");
+  if (!elementType)
+    return emitOpError("element_type attribute is required");
+  if (getSource().getType() != elementType.getValue())
+    return emitOpError("tile_broadcast source type must match element_type");
+  return success();
+}
+
+LogicalResult TileAddOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)))
+    return failure();
+  return verifyTileBinaryComputeOperands(op, getLhs(), getRhs(), getResult());
+}
+
+LogicalResult TileSubOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)))
+    return failure();
+  return verifyTileBinaryComputeOperands(op, getLhs(), getRhs(), getResult());
+}
+
+LogicalResult TileMulOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)))
+    return failure();
+  return verifyTileBinaryComputeOperands(op, getLhs(), getRhs(), getResult());
+}
+
+LogicalResult TileSelectOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)) ||
+      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifySurfaceCarrier(op, getTrueValue().getType(), "true_value")) ||
+      failed(verifySurfaceCarrier(op, getFalseValue().getType(), "false_value")) ||
+      failed(verifySurfaceCarrier(op, getResult().getType(), "result")))
+    return failure();
+  if (getTrueValue().getType() != getResult().getType() ||
+      getFalseValue().getType() != getResult().getType())
+    return emitOpError(
+        "tile_select true_value, false_value, and result must have identical types in M5");
+  if (!isVC4TileVector16DataType(getResult().getType()))
+    return emitTypeError(op, getResult().getType(), "result",
+                         "vector<16xi32> or vector<16xf32>");
   return success();
 }
 

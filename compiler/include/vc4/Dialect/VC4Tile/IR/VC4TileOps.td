@@ -349,6 +349,107 @@ def VC4Tile_SharedTileAllocOp : VC4Tile_Op<"shared_tile_alloc", [
   let hasVerifier = 1;
 }
 
+
+// M5 ergonomic tile elementwise compute surface operations. They canonicalize
+// to VC4Tile core arith/vector operations during --canonicalize-vc4tile-surface
+// and must not survive into verified VC4Tile core or SSAVC4 lowering.
+def VC4Tile_TileFillOp : VC4Tile_PureOp<"tile_fill"> {
+  let summary = "ergonomic constant tile fill surface operation";
+  let arguments = (ins
+    AnyAttr:$value,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+// Broadcasts one scalar 32-bit value into a 16-lane register tile.
+def VC4Tile_TileBroadcastOp : VC4Tile_PureOp<"tile_broadcast"> {
+  let summary = "ergonomic scalar-to-tile broadcast surface operation";
+  let arguments = (ins
+    AnyType:$source,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+class VC4Tile_TileBinaryComputeOp<string mnemonic, string summaryText>
+    : VC4Tile_PureOp<mnemonic> {
+  let summary = summaryText;
+  let arguments = (ins
+    AnyType:$lhs,
+    AnyType:$rhs,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileAddOp : VC4Tile_TileBinaryComputeOp<"tile_add", "ergonomic elementwise tile add surface operation">;
+def VC4Tile_TileSubOp : VC4Tile_TileBinaryComputeOp<"tile_sub", "ergonomic elementwise tile subtract surface operation">;
+def VC4Tile_TileMulOp : VC4Tile_TileBinaryComputeOp<"tile_mul", "ergonomic elementwise tile multiply surface operation">;
+
+def VC4Tile_TileSelectOp : VC4Tile_PureOp<"tile_select"> {
+  let summary = "ergonomic masked tile select surface operation";
+  let arguments = (ins
+    AnyType:$mask,
+    AnyType:$true_value,
+    AnyType:$false_value,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<TypeAttr>:$expressed_type,
+    OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
 // Temporary M5 surface/core boundary sentinel.  This operation is deliberately
 // non-executable: surface canonicalization erases it, core verification rejects
 // it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.

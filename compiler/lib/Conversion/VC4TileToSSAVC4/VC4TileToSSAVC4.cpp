@@ -36,6 +36,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LogicalResult.h"
+#include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/APInt.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/STLExtras.h"
@@ -86,6 +87,13 @@ constexpr llvm::StringLiteral kVC4TileTileSubviewOpName("vc4tile.tile_subview");
 constexpr llvm::StringLiteral kVC4TileTransposeViewOpName("vc4tile.transpose_view");
 constexpr llvm::StringLiteral kVC4TileSharedTileAllocOpName(
     "vc4tile.shared_tile_alloc");
+constexpr llvm::StringLiteral kVC4TileTileFillOpName("vc4tile.tile_fill");
+constexpr llvm::StringLiteral kVC4TileTileBroadcastOpName(
+    "vc4tile.tile_broadcast");
+constexpr llvm::StringLiteral kVC4TileTileAddOpName("vc4tile.tile_add");
+constexpr llvm::StringLiteral kVC4TileTileSubOpName("vc4tile.tile_sub");
+constexpr llvm::StringLiteral kVC4TileTileMulOpName("vc4tile.tile_mul");
+constexpr llvm::StringLiteral kVC4TileTileSelectOpName("vc4tile.tile_select");
 constexpr llvm::StringLiteral kVC4TileSurfacePlaceholderOpName(
     "vc4tile.surface_placeholder");
 
@@ -93,6 +101,9 @@ constexpr llvm::StringLiteral kArithConstantOpName("arith.constant");
 constexpr llvm::StringLiteral kArithAddIOpName("arith.addi");
 constexpr llvm::StringLiteral kArithSubIOpName("arith.subi");
 constexpr llvm::StringLiteral kArithMulIOpName("arith.muli");
+constexpr llvm::StringLiteral kArithAddFOpName("arith.addf");
+constexpr llvm::StringLiteral kArithSubFOpName("arith.subf");
+constexpr llvm::StringLiteral kArithMulFOpName("arith.mulf");
 constexpr llvm::StringLiteral kArithShLIOpName("arith.shli");
 constexpr llvm::StringLiteral kArithShRUIOpName("arith.shrui");
 constexpr llvm::StringLiteral kArithShRSIOpName("arith.shrsi");
@@ -150,7 +161,13 @@ static bool isVC4TileSurfaceOp(Operation *op) {
          hasName(op, kVC4TileTileViewOpName) ||
          hasName(op, kVC4TileTileSubviewOpName) ||
          hasName(op, kVC4TileTransposeViewOpName) ||
-         hasName(op, kVC4TileSharedTileAllocOpName);
+         hasName(op, kVC4TileSharedTileAllocOpName) ||
+         hasName(op, kVC4TileTileFillOpName) ||
+         hasName(op, kVC4TileTileBroadcastOpName) ||
+         hasName(op, kVC4TileTileAddOpName) ||
+         hasName(op, kVC4TileTileSubOpName) ||
+         hasName(op, kVC4TileTileMulOpName) ||
+         hasName(op, kVC4TileTileSelectOpName);
 }
 
 static LogicalResult emitSurfaceOpOrderingError(Operation *op,
@@ -292,9 +309,11 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
 static bool isAllowedCoreArithOp(Operation *op) {
   return hasName(op, kArithConstantOpName) ||
          hasName(op, kArithAddIOpName) || hasName(op, kArithSubIOpName) ||
-         hasName(op, kArithMulIOpName) || hasName(op, kArithShLIOpName) ||
-         hasName(op, kArithShRUIOpName) || hasName(op, kArithShRSIOpName) ||
-         hasName(op, kArithAndIOpName) || hasName(op, kArithOrIOpName) ||
+         hasName(op, kArithMulIOpName) || hasName(op, kArithAddFOpName) ||
+         hasName(op, kArithSubFOpName) || hasName(op, kArithMulFOpName) ||
+         hasName(op, kArithShLIOpName) || hasName(op, kArithShRUIOpName) ||
+         hasName(op, kArithShRSIOpName) || hasName(op, kArithAndIOpName) ||
+         hasName(op, kArithOrIOpName) ||
          hasName(op, kArithXOrIOpName) || hasName(op, kArithCmpIOpName);
 }
 
@@ -1040,7 +1059,8 @@ static bool isVector16Data(Type type) {
 }
 
 static bool isSupportedI32Carrier(Type type) {
-  return type.isSignlessInteger(32) || isVector16I32(type);
+  return type.isSignlessInteger(32) || type.isF32() ||
+         isVector16I32(type) || isVector16F32(type);
 }
 
 static Value createSSAVC4OpWithResult(OpBuilder &builder, Location loc,
@@ -1251,6 +1271,48 @@ getIntegerAddOpcode(Operation *op) {
   return std::nullopt;
 }
 
+static std::optional<mlir::vc4::AddOpcode>
+getFloatAddOpcode(Operation *op) {
+  if (hasName(op, kArithAddFOpName))
+    return mlir::vc4::AddOpcode::fadd;
+  if (hasName(op, kArithSubFOpName))
+    return mlir::vc4::AddOpcode::fsub;
+  return std::nullopt;
+}
+
+static LogicalResult lowerFloatALU(Operation *op, OpBuilder &builder,
+                                   llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("expected two operands and one result");
+  std::optional<mlir::vc4::AddOpcode> opcode = getFloatAddOpcode(op);
+  if (!opcode)
+    return op->emitOpError("has no VC4 float ADD-pipe opcode mapping");
+  Value lhs = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value rhs = lookupMappedValue(op, op->getOperand(1), valueMap);
+  if (!lhs || !rhs)
+    return failure();
+  SmallVector<Value, 2> operands{lhs, rhs};
+  valueMap[op->getResult(0)] =
+      createALUAdd(builder, op->getLoc(), operands, *opcode,
+                   op->getResult(0).getType());
+  return success();
+}
+
+static LogicalResult lowerFloatMul(Operation *op, OpBuilder &builder,
+                                   llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("expected two operands and one result");
+  Value lhs = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value rhs = lookupMappedValue(op, op->getOperand(1), valueMap);
+  if (!lhs || !rhs)
+    return failure();
+  SmallVector<Value, 2> operands{lhs, rhs};
+  valueMap[op->getResult(0)] =
+      createALUMul(builder, op->getLoc(), operands, mlir::vc4::MulOpcode::fmul,
+                   op->getResult(0).getType());
+  return success();
+}
+
 static LogicalResult lowerConstant(Operation *op, OpBuilder &builder,
                                    llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumResults() != 1)
@@ -1266,12 +1328,27 @@ static LogicalResult lowerConstant(Operation *op, OpBuilder &builder,
 
   if (auto intAttr = llvm::dyn_cast<IntegerAttr>(value)) {
     value = builder.getI32IntegerAttr(intAttr.getInt());
+  } else if (auto floatAttr = llvm::dyn_cast<FloatAttr>(value)) {
+    if (!floatAttr.getType().isF32())
+      return op->emitOpError(
+          "unsupported arith.constant float width for VC4Tile lowering");
+    value = FloatAttr::get(builder.getF32Type(), floatAttr.getValue());
   } else if (auto denseAttr = llvm::dyn_cast<DenseIntElementsAttr>(value)) {
     if (!denseAttr.isSplat())
       return op->emitOpError(
           "currently lowers only splat dense integer vector constants");
     value = builder.getI32IntegerAttr(
         denseAttr.getSplatValue<llvm::APInt>().getSExtValue());
+  } else if (auto denseFloatAttr =
+                 llvm::dyn_cast<DenseFPElementsAttr>(value)) {
+    if (!denseFloatAttr.isSplat())
+      return op->emitOpError(
+          "currently lowers only splat dense float vector constants");
+    llvm::APFloat splat = denseFloatAttr.getSplatValue<llvm::APFloat>();
+    if (!denseFloatAttr.getElementType().isF32())
+      return op->emitOpError(
+          "unsupported arith.constant float vector width for VC4Tile lowering");
+    value = FloatAttr::get(builder.getF32Type(), splat);
   } else {
     return op->emitOpError(
         "unsupported arith.constant value for VC4Tile M4 independent lowering");
@@ -2087,6 +2164,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerConstant(op, builder, valueMap);
   if (hasName(op, kVectorSplatOpName))
     return lowerVectorSplat(op, builder, valueMap);
+  if (getFloatAddOpcode(op))
+    return lowerFloatALU(op, builder, valueMap);
+  if (hasName(op, kArithMulFOpName))
+    return lowerFloatMul(op, builder, valueMap);
   if (hasName(op, kArithMulIOpName))
     return lowerIntegerMul(op, builder, valueMap);
   if (getIntegerAddOpcode(op))
@@ -2866,6 +2947,221 @@ static LogicalResult rejectRawSCFInKernels(ModuleOp module,
   return success();
 }
 
+
+static bool isVC4TileTileComputeOp(Operation *op) {
+  return hasName(op, kVC4TileTileFillOpName) ||
+         hasName(op, kVC4TileTileBroadcastOpName) ||
+         hasName(op, kVC4TileTileAddOpName) ||
+         hasName(op, kVC4TileTileSubOpName) ||
+         hasName(op, kVC4TileTileMulOpName) ||
+         hasName(op, kVC4TileTileSelectOpName);
+}
+
+static std::optional<Type> getVector16DataElementType(Type type) {
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  if (!vectorType || vectorType.getRank() != 1 ||
+      vectorType.getDimSize(0) != 16)
+    return std::nullopt;
+  Type elementType = vectorType.getElementType();
+  if (!elementType.isSignlessInteger(32) && !elementType.isF32())
+    return std::nullopt;
+  return elementType;
+}
+
+static Value createArithConstantFromTileFillValue(OpBuilder &builder,
+                                                  Operation *op,
+                                                  Attribute value,
+                                                  Type elementType) {
+  if (elementType.isSignlessInteger(32)) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(value);
+    if (!intAttr) {
+      op->emitOpError("tile_fill i32 value must be an integer attribute");
+      return Value();
+    }
+    TypedAttr typed = builder.getIntegerAttr(elementType, intAttr.getInt());
+    return arith::ConstantOp::create(builder, op->getLoc(), elementType, typed)
+        .getResult();
+  }
+
+  if (elementType.isF32()) {
+    auto floatAttr = llvm::dyn_cast<FloatAttr>(value);
+    if (!floatAttr) {
+      op->emitOpError("tile_fill f32 value must be a float attribute");
+      return Value();
+    }
+    TypedAttr typed = FloatAttr::get(elementType, floatAttr.getValue());
+    return arith::ConstantOp::create(builder, op->getLoc(), elementType, typed)
+        .getResult();
+  }
+
+  op->emitOpError("tile_fill supports only i32 and f32 element types");
+  return Value();
+}
+
+static LogicalResult canonicalizeTileFillOp(Operation *op,
+                                            OpBuilder &builder) {
+  if (op->getNumOperands() != 0 || op->getNumResults() != 1)
+    return op->emitOpError("tile_fill expects no operands and one result");
+  std::optional<Type> elementType =
+      getVector16DataElementType(op->getResult(0).getType());
+  if (!elementType)
+    return op->emitOpError(
+        "tile_fill result must be vector<16xi32> or vector<16xf32>");
+  Attribute value = op->getAttr("value");
+  if (!value)
+    return op->emitOpError("tile_fill requires a value attribute");
+
+  Value scalar = createArithConstantFromTileFillValue(builder, op, value,
+                                                      *elementType);
+  if (!scalar)
+    return failure();
+  Value result = mlir::vector::BroadcastOp::create(
+                     builder, op->getLoc(), op->getResult(0).getType(), scalar)
+                     .getResult();
+  op->getResult(0).replaceAllUsesWith(result);
+  op->erase();
+  return success();
+}
+
+static LogicalResult canonicalizeTileBroadcastOp(Operation *op,
+                                                 OpBuilder &builder) {
+  if (op->getNumOperands() != 1 || op->getNumResults() != 1)
+    return op->emitOpError("tile_broadcast expects one operand and one result");
+  std::optional<Type> elementType =
+      getVector16DataElementType(op->getResult(0).getType());
+  if (!elementType)
+    return op->emitOpError(
+        "tile_broadcast result must be vector<16xi32> or vector<16xf32>");
+  if (op->getOperand(0).getType() != *elementType) {
+    return op->emitOpError(
+        "tile_broadcast operand type must match result element type");
+  }
+
+  Value result = mlir::vector::BroadcastOp::create(
+                     builder, op->getLoc(), op->getResult(0).getType(),
+                     op->getOperand(0))
+                     .getResult();
+  op->getResult(0).replaceAllUsesWith(result);
+  op->erase();
+  return success();
+}
+
+static LogicalResult canonicalizeTileBinaryComputeOp(Operation *op,
+                                                     OpBuilder &builder) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("tile binary compute expects two operands and one result");
+  Type resultType = op->getResult(0).getType();
+  if (op->getOperand(0).getType() != resultType ||
+      op->getOperand(1).getType() != resultType) {
+    return op->emitOpError(
+        "tile binary operands and result must have identical types");
+  }
+  std::optional<Type> elementType = getVector16DataElementType(resultType);
+  if (!elementType)
+    return op->emitOpError(
+        "tile binary result must be vector<16xi32> or vector<16xf32>");
+
+  Value lhs = op->getOperand(0);
+  Value rhs = op->getOperand(1);
+  Value result;
+  if (elementType->isSignlessInteger(32)) {
+    if (hasName(op, kVC4TileTileAddOpName))
+      result = arith::AddIOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+    else if (hasName(op, kVC4TileTileSubOpName))
+      result = arith::SubIOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+    else if (hasName(op, kVC4TileTileMulOpName))
+      result = arith::MulIOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+  } else if (elementType->isF32()) {
+    if (hasName(op, kVC4TileTileAddOpName))
+      result = arith::AddFOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+    else if (hasName(op, kVC4TileTileSubOpName))
+      result = arith::SubFOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+    else if (hasName(op, kVC4TileTileMulOpName))
+      result = arith::MulFOp::create(builder, op->getLoc(), lhs, rhs)
+                   .getResult();
+  }
+  if (!result)
+    return op->emitOpError("unsupported tile binary compute operation");
+  op->getResult(0).replaceAllUsesWith(result);
+  op->erase();
+  return success();
+}
+
+static bool tileSelectTailMaskUseIsPredicatedStore(Operation *selectOp,
+                                                   Operation *user,
+                                                   Value mask) {
+  (void)selectOp;
+  if (hasName(user, kVC4TileTileStoreOpName) && user->getNumOperands() == 4 &&
+      user->getOperand(3) == mask)
+    return true;
+  if (hasName(user, kVC4TileMaskedStoreGlobalOpName) &&
+      user->getNumOperands() == 4 && user->getOperand(3) == mask)
+    return true;
+  return false;
+}
+
+static LogicalResult canonicalizeTileSelectOp(Operation *op,
+                                              OpBuilder &builder) {
+  (void)builder;
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return op->emitOpError("tile_select expects mask, true_value, false_value, and one result");
+  if (!isVector16I1(op->getOperand(0).getType()))
+    return op->emitOpError("tile_select mask must be vector<16xi1>");
+  Type resultType = op->getResult(0).getType();
+  if (op->getOperand(1).getType() != resultType ||
+      op->getOperand(2).getType() != resultType)
+    return op->emitOpError(
+        "tile_select true_value, false_value, and result must have identical types");
+  if (!getVector16DataElementType(resultType))
+    return op->emitOpError(
+        "tile_select result must be vector<16xi32> or vector<16xf32>");
+
+  Value mask = op->getOperand(0);
+  Operation *maskDef = mask.getDefiningOp();
+  if (hasName(maskDef, kVC4TileMaskAllOpName)) {
+    op->getResult(0).replaceAllUsesWith(op->getOperand(1));
+    op->erase();
+    return success();
+  }
+
+  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+    for (Operation *user : llvm::make_early_inc_range(op->getResult(0).getUsers())) {
+      if (!tileSelectTailMaskUseIsPredicatedStore(op, user, mask)) {
+        return op->emitOpError(
+            "tile_select with tail_predicated mask requires every use to be "
+            "a tile/global store using the same mask in M5");
+      }
+    }
+    op->getResult(0).replaceAllUsesWith(op->getOperand(1));
+    op->erase();
+    return success();
+  }
+
+  return op->emitOpError(
+      "tile_select currently supports only vc4tile.mask_all or "
+      "vc4tile.tail_mask masks in M5");
+}
+
+static LogicalResult canonicalizeOneTileComputeOp(Operation *op) {
+  OpBuilder builder(op);
+  if (hasName(op, kVC4TileTileFillOpName))
+    return canonicalizeTileFillOp(op, builder);
+  if (hasName(op, kVC4TileTileBroadcastOpName))
+    return canonicalizeTileBroadcastOp(op, builder);
+  if (hasName(op, kVC4TileTileAddOpName) ||
+      hasName(op, kVC4TileTileSubOpName) ||
+      hasName(op, kVC4TileTileMulOpName))
+    return canonicalizeTileBinaryComputeOp(op, builder);
+  if (hasName(op, kVC4TileTileSelectOpName))
+    return canonicalizeTileSelectOp(op, builder);
+  return op->emitOpError("unrecognized VC4Tile tile compute operation");
+}
+
 struct CanonicalizeVC4TileSurfacePass
     : public PassWrapper<CanonicalizeVC4TileSurfacePass,
                          OperationPass<ModuleOp>> {
@@ -2886,6 +3182,7 @@ struct CanonicalizeVC4TileSurfacePass
     ModuleOp module = getOperation();
     SmallVector<Operation *, 8> placeholders;
     SmallVector<Operation *, 8> laneStrideSurfaceOps;
+    SmallVector<Operation *, 16> tileComputeOps;
     SmallVector<Operation *, 4> coreLegalizeMarkers;
     module.walk([&](Operation *op) {
       if (hasName(op, kVC4TileSurfacePlaceholderOpName)) {
@@ -2895,6 +3192,8 @@ struct CanonicalizeVC4TileSurfacePass
       if (hasName(op, kVC4TileKernelOpName) &&
           op->getAttr("requires_core_legalize"))
         coreLegalizeMarkers.push_back(op);
+      if (isVC4TileTileComputeOp(op))
+        tileComputeOps.push_back(op);
       if ((hasName(op, kVC4TileTileLoadOpName) ||
            hasName(op, kVC4TileTileStoreOpName)) &&
           (op->getAttr("lane_stride") || op->getAttr("stride")))
@@ -2913,6 +3212,15 @@ struct CanonicalizeVC4TileSurfacePass
         op->setAttr("strides", builder.getArrayAttr({strideAttr}));
       op->removeAttr("lane_stride");
       op->removeAttr("stride");
+    }
+
+    for (Operation *op : tileComputeOps) {
+      if (!op->getBlock())
+        continue;
+      if (failed(canonicalizeOneTileComputeOp(op))) {
+        signalPassFailure();
+        return;
+      }
     }
 
     for (Operation *op : placeholders)
