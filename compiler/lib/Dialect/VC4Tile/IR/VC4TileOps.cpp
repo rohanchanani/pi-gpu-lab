@@ -765,6 +765,10 @@ LogicalResult TileLoadOp::verify() {
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
+  if (op->getAttr("lane_stride") || op->getAttr("stride"))
+    return emitOpError(
+        "raw affine lane_stride shorthand must be canonicalized by "
+        "--canonicalize-vc4tile-surface before tile copy planning");
   if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
       getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
     return emitOpError("tile_load source memory_space must be global or shared_vpm");
@@ -781,6 +785,10 @@ LogicalResult TileStoreOp::verify() {
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
+  if (op->getAttr("lane_stride") || op->getAttr("stride"))
+    return emitOpError(
+        "raw affine lane_stride shorthand must be canonicalized by "
+        "--canonicalize-vc4tile-surface before tile copy planning");
   if (getMemorySpaceAttr().getValue() != MemorySpace::global &&
       getMemorySpaceAttr().getValue() != MemorySpace::shared_vpm)
     return emitOpError("tile_store destination memory_space must be global or shared_vpm");

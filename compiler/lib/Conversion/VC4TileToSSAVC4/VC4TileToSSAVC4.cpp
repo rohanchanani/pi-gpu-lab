@@ -1505,6 +1505,17 @@ static bool isDirectLaneRangeValue(Value value) {
   return hasName(def, kVC4TileLaneRangeOpName);
 }
 
+static bool isAffineLaneRangeValue(Value value) {
+  if (isDirectLaneRangeValue(value))
+    return true;
+
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kArithMulIOpName) || def->getNumOperands() != 2)
+    return false;
+  return isDirectLaneRangeValue(def->getOperand(0)) ||
+         isDirectLaneRangeValue(def->getOperand(1));
+}
+
 static bool isMaskedGlobalMemoryOp(Operation *op) {
   return hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
          hasName(op, kVC4TileMaskedStoreGlobalOpName);
@@ -1597,15 +1608,16 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
   if (offsetUnit.getValue() != mlir::vc4tile::OffsetUnit::element)
     return op->emitOpError("supports only element offsets for coalesced TMU loads");
 
-  Operation *offsetDef = op->getOperand(1).getDefiningOp();
-  if (!hasName(offsetDef, kVC4TileLaneRangeOpName)) {
+  if (!isAffineLaneRangeValue(op->getOperand(1))) {
     return op->emitOpError(
-        "requires offsets to be the direct vc4tile.lane_range value for the M4 coalesced TMU subset");
+        "requires offsets to be vc4tile.lane_range or lane_range scaled by a positive constant for the M5 affine TMU subset");
   }
 
   auto access = op->getAttrOfType<mlir::vc4tile::MemoryAccessAttr>("access");
-  if (access && access.getValue() != mlir::vc4tile::MemoryAccess::coalesced)
-    return op->emitOpError("supports only access = #vc4tile.memory_access<coalesced> for TMU loads");
+  if (access && access.getValue() != mlir::vc4tile::MemoryAccess::coalesced &&
+      access.getValue() != mlir::vc4tile::MemoryAccess::affine_contiguous)
+    return op->emitOpError(
+        "supports only coalesced or affine_contiguous TMU loads");
 
   auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
   if (memorySpace && memorySpace.getValue() != mlir::vc4tile::MemorySpace::global)
@@ -2755,10 +2767,29 @@ struct CanonicalizeVC4TileSurfacePass
   void runOnOperation() override {
     ModuleOp module = getOperation();
     SmallVector<Operation *, 8> placeholders;
+    SmallVector<Operation *, 8> laneStrideSurfaceOps;
     module.walk([&](Operation *op) {
-      if (hasName(op, kVC4TileSurfacePlaceholderOpName))
+      if (hasName(op, kVC4TileSurfacePlaceholderOpName)) {
         placeholders.push_back(op);
+        return;
+      }
+      if ((hasName(op, kVC4TileTileLoadOpName) ||
+           hasName(op, kVC4TileTileStoreOpName)) &&
+          (op->getAttr("lane_stride") || op->getAttr("stride")))
+        laneStrideSurfaceOps.push_back(op);
     });
+
+    Builder builder(module.getContext());
+    for (Operation *op : laneStrideSurfaceOps) {
+      IntegerAttr strideAttr = op->getAttrOfType<IntegerAttr>("lane_stride");
+      if (!strideAttr)
+        strideAttr = op->getAttrOfType<IntegerAttr>("stride");
+      if (strideAttr && !op->getAttr("strides"))
+        op->setAttr("strides", builder.getArrayAttr({strideAttr}));
+      op->removeAttr("lane_stride");
+      op->removeAttr("stride");
+    }
+
     for (Operation *op : placeholders)
       op->erase();
   }
@@ -2790,6 +2821,47 @@ static FailureOr<Value> createAdjustedGlobalBaseForTileCopy(OpBuilder &builder,
   Value four = arith::ConstantIntOp::create(builder, op->getLoc(), 4, 32);
   Value byteOffset = arith::MulIOp::create(builder, op->getLoc(), offset, four);
   return arith::AddIOp::create(builder, op->getLoc(), base, byteOffset)
+      .getResult();
+}
+
+static FailureOr<int64_t> getTileLaneStride(Operation *op) {
+  IntegerAttr strideAttr = op->getAttrOfType<IntegerAttr>("lane_stride");
+  if (!strideAttr)
+    strideAttr = op->getAttrOfType<IntegerAttr>("stride");
+  if (strideAttr) {
+    int64_t stride = strideAttr.getInt();
+    if (stride <= 0)
+      return op->emitOpError("lane_stride must be a positive element stride");
+    return stride;
+  }
+
+  if (auto strides = op->getAttrOfType<ArrayAttr>("strides")) {
+    if (strides.empty())
+      return op->emitOpError("strides must contain at least one element stride");
+    auto last = llvm::dyn_cast<IntegerAttr>(strides.getValue().back());
+    if (!last)
+      return op->emitOpError("strides entries must be integer attributes");
+    int64_t stride = last.getInt();
+    if (stride <= 0)
+      return op->emitOpError("strides entries must be positive element strides");
+    return stride;
+  }
+
+  return 1;
+}
+
+static Value createLaneOffsetsForTileCopy(OpBuilder &builder, Operation *op,
+                                          int64_t laneStride) {
+  Value lanes = createVC4TileLaneRangeCore(builder, op->getLoc());
+  if (laneStride == 1)
+    return lanes;
+
+  Value strideScalar =
+      arith::ConstantIntOp::create(builder, op->getLoc(), laneStride, 32);
+  Value strideVector = mlir::vector::BroadcastOp::create(
+      builder, op->getLoc(), getVector16I32Type(builder), strideScalar)
+                           .getResult();
+  return arith::MulIOp::create(builder, op->getLoc(), lanes, strideVector)
       .getResult();
 }
 
@@ -2839,10 +2911,16 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
       builder, op, op->getOperand(0), op->getOperand(1));
   if (failed(adjustedBase))
     return failure();
-  Value lanes = createVC4TileLaneRangeCore(builder, op->getLoc());
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  Value laneOffsets = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  mlir::vc4tile::MemoryAccess access =
+      *laneStride == 1 ? mlir::vc4tile::MemoryAccess::coalesced
+                       : mlir::vc4tile::MemoryAccess::affine_contiguous;
   Operation *load = createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedLoadGlobalOpName,
-      {*adjustedBase, lanes, op->getOperand(2)},
+      {*adjustedBase, laneOffsets, op->getOperand(2)},
       {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
        namedAttr(builder, "offset_unit",
                  getVC4TileOffsetUnitAttr(builder,
@@ -2851,8 +2929,7 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
                  getVC4TileMemorySpaceAttr(builder,
                                            mlir::vc4tile::MemorySpace::global)),
        namedAttr(builder, "access",
-                 getVC4TileMemoryAccessAttr(builder,
-                                            mlir::vc4tile::MemoryAccess::coalesced))},
+                 getVC4TileMemoryAccessAttr(builder, access))},
       op->getResultTypes());
   return load->getResult(0);
 }
@@ -2867,11 +2944,18 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
   if (!isVector16Data(op->getOperand(0).getType()))
     return op->emitOpError("copy planner v1 requires tile_store input to be vector<16xi32> or vector<16xf32>");
 
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "copy planner v1 supports affine lane strides for tile_load; tile_store affine strides require later VDW stride support");
+
   FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
       builder, op, op->getOperand(1), op->getOperand(2));
   if (failed(adjustedBase))
     return failure();
-  Value lanes = createVC4TileLaneRangeCore(builder, op->getLoc());
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
   createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
       {*adjustedBase, lanes, op->getOperand(0), op->getOperand(3)},
