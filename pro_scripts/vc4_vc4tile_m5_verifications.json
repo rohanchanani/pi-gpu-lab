@@ -1072,12 +1072,30 @@
             "compiler/test/Conversion/VC4TileToSSAVC4/reject-sub32-copy-m5.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_load",
-            "vc4tile.tile_store",
-            "vc4tile.copy_tile",
-            "vc4tile.tile_view",
-            "vc4tile.transpose_view",
-            "vc4tile.shared_tile_alloc"
+            {
+              "def": "VC4Tile_TileLoadOp",
+              "mnemonic": "tile_load"
+            },
+            {
+              "def": "VC4Tile_TileStoreOp",
+              "mnemonic": "tile_store"
+            },
+            {
+              "def": "VC4Tile_CopyTileOp",
+              "mnemonic": "copy_tile"
+            },
+            {
+              "def": "VC4Tile_TileViewOp",
+              "mnemonic": "tile_view"
+            },
+            {
+              "def": "VC4Tile_TransposeViewOp",
+              "mnemonic": "transpose_view"
+            },
+            {
+              "def": "VC4Tile_SharedTileAllocOp",
+              "mnemonic": "shared_tile_alloc"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_load",
@@ -1366,8 +1384,14 @@
             "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-affine-stride.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_load",
-            "vc4tile.tile_store"
+            {
+              "def": "VC4Tile_TileLoadOp",
+              "mnemonic": "tile_load"
+            },
+            {
+              "def": "VC4Tile_TileStoreOp",
+              "mnemonic": "tile_store"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_load",
@@ -1627,9 +1651,18 @@
             "compiler/test/Dialect/VC4Tile/shared-tile-copy-invalid.mlir"
           ],
           "op_defs": [
-            "vc4tile.copy_tile",
-            "vc4tile.shared_tile_alloc",
-            "vc4tile.transpose_view"
+            {
+              "def": "VC4Tile_CopyTileOp",
+              "mnemonic": "copy_tile"
+            },
+            {
+              "def": "VC4Tile_SharedTileAllocOp",
+              "mnemonic": "shared_tile_alloc"
+            },
+            {
+              "def": "VC4Tile_TransposeViewOp",
+              "mnemonic": "transpose_view"
+            }
           ],
           "assembly_ops": [
             "vc4tile.copy_tile",
@@ -1893,8 +1926,14 @@
             "compiler/test/Conversion/VC4TileToSSAVC4/scf-tiled-copy-nondiv-trip.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_load",
-            "vc4tile.tile_store"
+            {
+              "def": "VC4Tile_TileLoadOp",
+              "mnemonic": "tile_load"
+            },
+            {
+              "def": "VC4Tile_TileStoreOp",
+              "mnemonic": "tile_store"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_load",
@@ -2170,7 +2209,10 @@
             "compiler/test/Dialect/VC4Tile/resource-intent-invalid.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_load"
+            {
+              "def": "VC4Tile_TileLoadOp",
+              "mnemonic": "tile_load"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_load"
@@ -2387,12 +2429,30 @@
             "compiler/test/Dialect/VC4Tile/tile-elementwise-invalid.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_fill",
-            "vc4tile.tile_broadcast",
-            "vc4tile.tile_add",
-            "vc4tile.tile_sub",
-            "vc4tile.tile_mul",
-            "vc4tile.tile_select"
+            {
+              "def": "VC4Tile_TileFillOp",
+              "mnemonic": "tile_fill"
+            },
+            {
+              "def": "VC4Tile_TileBroadcastOp",
+              "mnemonic": "tile_broadcast"
+            },
+            {
+              "def": "VC4Tile_TileAddOp",
+              "mnemonic": "tile_add"
+            },
+            {
+              "def": "VC4Tile_TileSubOp",
+              "mnemonic": "tile_sub"
+            },
+            {
+              "def": "VC4Tile_TileMulOp",
+              "mnemonic": "tile_mul"
+            },
+            {
+              "def": "VC4Tile_TileSelectOp",
+              "mnemonic": "tile_select"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_fill",
@@ -2641,10 +2701,22 @@
             "compiler/test/Dialect/VC4Tile/tile-reductions-invalid.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_reduce",
-            "vc4tile.row_reduce",
-            "vc4tile.warp_reduce",
-            "vc4tile.block_reduce"
+            {
+              "def": "VC4Tile_TileReduceOp",
+              "mnemonic": "tile_reduce"
+            },
+            {
+              "def": "VC4Tile_RowReduceOp",
+              "mnemonic": "row_reduce"
+            },
+            {
+              "def": "VC4Tile_WarpReduceOp",
+              "mnemonic": "warp_reduce"
+            },
+            {
+              "def": "VC4Tile_BlockReduceOp",
+              "mnemonic": "block_reduce"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_reduce",
@@ -2910,9 +2982,18 @@
             "compiler/test/Dialect/VC4Tile/tile-contract-invalid.mlir"
           ],
           "op_defs": [
-            "vc4tile.tile_contract",
-            "vc4tile.tile_dot",
-            "vc4tile.tile_matmul"
+            {
+              "def": "VC4Tile_TileContractOp",
+              "mnemonic": "tile_contract"
+            },
+            {
+              "def": "VC4Tile_TileDotOp",
+              "mnemonic": "tile_dot"
+            },
+            {
+              "def": "VC4Tile_TileMatmulOp",
+              "mnemonic": "tile_matmul"
+            }
           ],
           "assembly_ops": [
             "vc4tile.tile_contract",
