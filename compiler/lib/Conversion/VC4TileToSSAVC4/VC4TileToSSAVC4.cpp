@@ -515,6 +515,50 @@ static DictionaryAttr getCarriedResource(Operation *kernel) {
   return getDictionaryAttr(kernel, "resource");
 }
 
+
+static DictionaryAttr getResourceIntent(Operation *kernel) {
+  return getDictionaryAttr(kernel, "resource_intent");
+}
+
+static std::optional<bool> getResourceIntentBool(Operation *kernel,
+                                                 StringRef name) {
+  DictionaryAttr intent = getResourceIntent(kernel);
+  if (!intent)
+    return std::nullopt;
+  auto attr = intent.getAs<BoolAttr>(name);
+  if (!attr)
+    return std::nullopt;
+  return attr.getValue();
+}
+
+static std::optional<int64_t> getResourceIntentI32(Operation *kernel,
+                                                   StringRef name) {
+  DictionaryAttr intent = getResourceIntent(kernel);
+  if (!intent)
+    return std::nullopt;
+  auto attr = intent.getAs<IntegerAttr>(name);
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static bool getBoolAttrOrResourceIntent(Operation *kernel, StringRef attrName,
+                                        bool fallback = false) {
+  if (auto attr = kernel->getAttrOfType<BoolAttr>(attrName))
+    return attr.getValue();
+  if (std::optional<bool> value = getResourceIntentBool(kernel, attrName))
+    return *value;
+  return fallback;
+}
+
+static std::optional<int64_t> getI32AttrOrResourceIntent(Operation *kernel,
+                                                         StringRef attrName,
+                                                         StringRef intentName) {
+  if (auto attr = kernel->getAttrOfType<IntegerAttr>(attrName))
+    return attr.getInt();
+  return getResourceIntentI32(kernel, intentName);
+}
+
 static bool kernelContains(Operation *kernel, llvm::StringRef opName) {
   bool found = false;
   kernel->walk([&](Operation *op) {
@@ -851,16 +895,20 @@ static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
     return carried;
 
   const bool cooperative = isCooperativeKernel(kernel);
-  const bool usesShared = getBoolAttr(kernel, "uses_shared_vpm");
-  const bool usesBarrier = getBoolAttr(kernel, "uses_barrier");
-  const int64_t warpsPerBlock =
-      getI32Attr(kernel, "warps_per_block_max").value_or(cooperative ? 12 : 1);
-  const int64_t vpmRows =
-      getI32Attr(kernel, "vpm_rows_per_block").value_or(0);
-  const int64_t vpmBytes =
-      getI32Attr(kernel, "vpm_bytes_per_block").value_or(0);
-  const int64_t semaphores =
-      getI32Attr(kernel, "semaphores_per_block").value_or(usesBarrier ? 4 : 0);
+  const bool usesShared =
+      getBoolAttrOrResourceIntent(kernel, "uses_shared_vpm");
+  const bool usesBarrier =
+      getBoolAttrOrResourceIntent(kernel, "uses_barrier");
+  const int64_t warpsPerBlock = getI32AttrOrResourceIntent(
+      kernel, "warps_per_block_max", "warps_per_block").value_or(
+      cooperative ? 12 : 1);
+  const int64_t vpmRows = getI32AttrOrResourceIntent(
+      kernel, "vpm_rows_per_block", "vpm_rows").value_or(0);
+  const int64_t vpmBytes = getI32AttrOrResourceIntent(
+      kernel, "vpm_bytes_per_block", "vpm_bytes").value_or(0);
+  const int64_t semaphores = getI32AttrOrResourceIntent(
+      kernel, "semaphores_per_block", "semaphores").value_or(
+      usesBarrier ? 4 : 0);
   const bool fullResidency =
       getBoolAttr(kernel, "require_full_block_residency", usesBarrier);
 
@@ -1019,6 +1067,12 @@ static Operation *createSSAVC4Op(OpBuilder &builder, Location loc,
     state.addAttribute(attr.getName(), attr.getValue());
   return builder.create(state);
 }
+
+static void appendTileSemanticMetadataAttrs(
+    Operation *source, OpBuilder &builder,
+    SmallVectorImpl<NamedAttribute> &attrs);
+static void copyTileSemanticMetadataAttrs(Operation *source,
+                                          Operation *target);
 
 static Value createLoadImm(OpBuilder &builder, Location loc, Type resultType,
                            Attribute value) {
@@ -1670,8 +1724,10 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
   Value address = createALUAdd(builder, op->getLoc(), addressOperands,
                                mlir::vc4::AddOpcode::add, addressType);
   Value token = createTMURequest(builder, op->getLoc(), address);
+  copyTileSemanticMetadataAttrs(op, token.getDefiningOp());
   valueMap[op->getResult(0)] =
       createTMURead(builder, op->getLoc(), token, op->getResult(0).getType());
+  copyTileSemanticMetadataAttrs(op, valueMap[op->getResult(0)].getDefiningOp());
   eraseLoweredFlagMaskIfMemoryOnly(op->getOperand(2), valueMap);
   return success();
 }
@@ -1753,16 +1809,17 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
 
   SmallVector<int32_t, 4> operandSegmentSizes{
       1, 1, static_cast<int32_t>(operands.size() == 3), 0};
+  SmallVector<NamedAttribute, 8> attrs{
+      builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+      builder.getNamedAttr("active_lanes",
+                           builder.getI32IntegerAttr(activeLanesAttr)),
+      builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(stagingRow)),
+      builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+      builder.getNamedAttr("operandSegmentSizes",
+                           builder.getDenseI32ArrayAttr(operandSegmentSizes))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
-                 {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-                  builder.getNamedAttr("active_lanes",
-                                       builder.getI32IntegerAttr(activeLanesAttr)),
-                  builder.getNamedAttr("vpm_row",
-                                       builder.getI32IntegerAttr(stagingRow)),
-                  builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
-                  builder.getNamedAttr(
-                      "operandSegmentSizes",
-                      builder.getDenseI32ArrayAttr(operandSegmentSizes))});
+                 attrs);
   return success();
 }
 
@@ -1902,12 +1959,15 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
     return failure();
 
   Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
-  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
-                 {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-                  builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
-                  builder.getNamedAttr("orientation", builder.getStringAttr(
-                      getVPMOrientation(op, "horizontal"))),
-                  builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+  Operation *write = createSSAVC4Op(
+      builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
+      {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+       builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+       builder.getNamedAttr("orientation",
+                            builder.getStringAttr(
+                                getVPMOrientation(op, "horizontal"))),
+       builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+  copyTileSemanticMetadataAttrs(op, write);
   return success();
 }
 
@@ -1936,10 +1996,12 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
       builder, op->getLoc(), kSSAVC4VPMReadOpName, {row},
       {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
-       builder.getNamedAttr("orientation", builder.getStringAttr(
-           getVPMOrientation(op, "horizontal"))),
+       builder.getNamedAttr("orientation",
+                            builder.getStringAttr(
+                                getVPMOrientation(op, "horizontal"))),
        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
       op->getResult(0).getType());
+  copyTileSemanticMetadataAttrs(op, valueMap[op->getResult(0)].getDefiningOp());
   return success();
 }
 
@@ -1970,16 +2032,19 @@ static LogicalResult lowerVDRLoadTile(Operation *op, OpBuilder &builder,
         layout.getValue() == mlir::vc4tile::Layout::transposed_view)
       orientation = "vertical";
   }
+  SmallVector<NamedAttribute, 12> attrs{
+      builder.getNamedAttr("elem_bytes", elemBytes),
+      builder.getNamedAttr("row_len", rowLen),
+      builder.getNamedAttr("nrows", nrows),
+      builder.getNamedAttr("memory_pitch_bytes", pitch),
+      builder.getNamedAttr("vpm_base_row", baseRow),
+      builder.getNamedAttr("vpm_base_col", baseCol),
+      builder.getNamedAttr("orientation", builder.getStringAttr(orientation)),
+      builder.getNamedAttr("vpitch", vpitch),
+      builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address},
-                 {builder.getNamedAttr("elem_bytes", elemBytes),
-                  builder.getNamedAttr("row_len", rowLen),
-                  builder.getNamedAttr("nrows", nrows),
-                  builder.getNamedAttr("memory_pitch_bytes", pitch),
-                  builder.getNamedAttr("vpm_base_row", baseRow),
-                  builder.getNamedAttr("vpm_base_col", baseCol),
-                  builder.getNamedAttr("orientation", builder.getStringAttr(orientation)),
-                  builder.getNamedAttr("vpitch", vpitch),
-                  builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+                 attrs);
   return success();
 }
 
@@ -2930,6 +2995,23 @@ static NamedAttribute namedAttr(OpBuilder &builder, StringRef name,
   return builder.getNamedAttr(name, attr);
 }
 
+
+static void appendTileSemanticMetadataAttrs(Operation *source,
+                                            OpBuilder &builder,
+                                            SmallVectorImpl<NamedAttribute> &attrs) {
+  for (StringRef name : {"role", "boundary", "copy_stage", "reuse_hint"}) {
+    if (Attribute attr = source->getAttr(name))
+      attrs.push_back(namedAttr(builder, name, attr));
+  }
+}
+
+static void copyTileSemanticMetadataAttrs(Operation *source, Operation *target) {
+  for (StringRef name : {"role", "boundary", "copy_stage", "reuse_hint"}) {
+    if (Attribute attr = source->getAttr(name))
+      target->setAttr(name, attr);
+  }
+}
+
 static Attribute getVC4TileMemorySpaceAttr(OpBuilder &builder,
                                            mlir::vc4tile::MemorySpace space) {
   return mlir::vc4tile::MemorySpaceAttr::get(builder.getContext(), space);
@@ -2978,18 +3060,19 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
   mlir::vc4tile::MemoryAccess access =
       *laneStride == 1 ? mlir::vc4tile::MemoryAccess::coalesced
                        : mlir::vc4tile::MemoryAccess::affine_contiguous;
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "offset_unit",
+                getVC4TileOffsetUnitAttr(builder,
+                                         mlir::vc4tile::OffsetUnit::element)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(builder,
+                                          mlir::vc4tile::MemorySpace::global)),
+      namedAttr(builder, "access", getVC4TileMemoryAccessAttr(builder, access))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   Operation *load = createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedLoadGlobalOpName,
-      {*adjustedBase, laneOffsets, op->getOperand(2)},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "offset_unit",
-                 getVC4TileOffsetUnitAttr(builder,
-                                          mlir::vc4tile::OffsetUnit::element)),
-       namedAttr(builder, "memory_space",
-                 getVC4TileMemorySpaceAttr(builder,
-                                           mlir::vc4tile::MemorySpace::global)),
-       namedAttr(builder, "access",
-                 getVC4TileMemoryAccessAttr(builder, access))},
+      {*adjustedBase, laneOffsets, op->getOperand(2)}, attrs,
       op->getResultTypes());
   return load->getResult(0);
 }
@@ -3020,19 +3103,21 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
   if (failed(adjustedBase))
     return failure();
   Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "offset_unit",
+                getVC4TileOffsetUnitAttr(builder,
+                                         mlir::vc4tile::OffsetUnit::element)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(builder,
+                                          mlir::vc4tile::MemorySpace::global)),
+      namedAttr(builder, "access",
+                getVC4TileMemoryAccessAttr(
+                    builder, mlir::vc4tile::MemoryAccess::affine_contiguous))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
-      {*adjustedBase, lanes, op->getOperand(0), op->getOperand(3)},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "offset_unit",
-                 getVC4TileOffsetUnitAttr(builder,
-                                          mlir::vc4tile::OffsetUnit::element)),
-       namedAttr(builder, "memory_space",
-                 getVC4TileMemorySpaceAttr(builder,
-                                           mlir::vc4tile::MemorySpace::global)),
-       namedAttr(builder, "access",
-                 getVC4TileMemoryAccessAttr(
-                     builder, mlir::vc4tile::MemoryAccess::affine_contiguous))});
+      {*adjustedBase, lanes, op->getOperand(0), op->getOperand(3)}, attrs);
   return success();
 }
 
@@ -3070,17 +3155,19 @@ static LogicalResult planSharedTileAlloc(Operation *op, OpBuilder &builder) {
   auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
   if (!rows || !elemBytes)
     return op->emitOpError("requires rows and elem_bytes attributes");
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "rows", rows),
+      namedAttr(builder, "elem_bytes", elemBytes),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
+      namedAttr(builder, "layout",
+                getVPMLayoutFromTileLayout(
+                    builder,
+                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout")))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   Operation *alloc = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileSharedAllocOpName, {},
-      {namedAttr(builder, "rows", rows),
-       namedAttr(builder, "elem_bytes", elemBytes),
-       namedAttr(builder, "memory_space",
-                 getVC4TileMemorySpaceAttr(builder,
-                                           mlir::vc4tile::MemorySpace::shared_vpm)),
-       namedAttr(builder, "layout",
-                 getVPMLayoutFromTileLayout(
-                     builder,
-                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout")))},
+      builder, op->getLoc(), kVC4TileSharedAllocOpName, {}, attrs,
       op->getResultTypes());
   op->getResult(0).replaceAllUsesWith(alloc->getResult(0));
   return success();
@@ -3101,17 +3188,18 @@ static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
     return op->emitOpError(
         "register->shared_vpm copy_tile requires vector value, !vc4tile.shared_tile handle, i32 row, and vector<16xi1> mask");
   }
-  createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileSharedStoreOpName,
-      {handle, row, value, mask},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "memory_space",
-                 getVC4TileMemorySpaceAttr(builder,
-                                           mlir::vc4tile::MemorySpace::shared_vpm)),
-       namedAttr(builder, "layout",
-                 getVPMLayoutFromTileLayout(
-                     builder,
-                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout")))});
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
+      namedAttr(builder, "layout",
+                getVPMLayoutFromTileLayout(
+                    builder,
+                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout")))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileSharedStoreOpName,
+                      {handle, row, value, mask}, attrs);
   return success();
 }
 
@@ -3129,17 +3217,19 @@ static LogicalResult planSharedRegisterCopy(Operation *op, OpBuilder &builder) {
     return op->emitOpError(
         "shared_vpm->register copy_tile requires !vc4tile.shared_tile handle, i32 row, vector<16xi1> mask, and vector result");
   }
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
+      namedAttr(builder, "layout",
+                getVPMLayoutFromTileLayout(
+                    builder,
+                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout")))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   Operation *load = createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileSharedLoadOpName, {handle, row, mask},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "memory_space",
-                 getVC4TileMemorySpaceAttr(builder,
-                                           mlir::vc4tile::MemorySpace::shared_vpm)),
-       namedAttr(builder, "layout",
-                 getVPMLayoutFromTileLayout(
-                     builder,
-                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout")))},
-      op->getResultTypes());
+      attrs, op->getResultTypes());
   op->getResult(0).replaceAllUsesWith(load->getResult(0));
   return success();
 }
@@ -3218,18 +3308,27 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
         "global->shared_vpm VDR copy requires row-major or vpm_row destination layout in M5");
   }
   int64_t memoryPitch = getOptionalI32AttrOr(op, builder, "memory_pitch_bytes", rowLen * 4).getInt();
-  createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileVDRLoadTileOpName, {*adjustedBase, shared},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "row_len", builder.getI32IntegerAttr(rowLen)),
-       namedAttr(builder, "nrows", builder.getI32IntegerAttr(nrows)),
-       namedAttr(builder, "memory_pitch_bytes", builder.getI32IntegerAttr(memoryPitch)),
-       namedAttr(builder, "vpm_base_row", getOptionalI32AttrOr(op, builder, "vpm_base_row", 0)),
-       namedAttr(builder, "vpm_base_col", getOptionalI32AttrOr(op, builder, "vpm_base_col", 0)),
-       namedAttr(builder, "vpitch", getOptionalI32AttrOr(op, builder, "vpitch", rowLen)),
-       namedAttr(builder, "layout", dstLayout ? dstLayout :
-                 mlir::vc4tile::LayoutAttr::get(builder.getContext(), mlir::vc4tile::Layout::vpm_row)),
-       namedAttr(builder, "serialize", builder.getStringAttr("mutex"))});
+  SmallVector<NamedAttribute, 10> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "row_len", builder.getI32IntegerAttr(rowLen)),
+      namedAttr(builder, "nrows", builder.getI32IntegerAttr(nrows)),
+      namedAttr(builder, "memory_pitch_bytes",
+                builder.getI32IntegerAttr(memoryPitch)),
+      namedAttr(builder, "vpm_base_row",
+                getOptionalI32AttrOr(op, builder, "vpm_base_row", 0)),
+      namedAttr(builder, "vpm_base_col",
+                getOptionalI32AttrOr(op, builder, "vpm_base_col", 0)),
+      namedAttr(builder, "vpitch",
+                getOptionalI32AttrOr(op, builder, "vpitch", rowLen)),
+      namedAttr(builder, "layout",
+                dstLayout ? dstLayout
+                          : mlir::vc4tile::LayoutAttr::get(
+                                builder.getContext(),
+                                mlir::vc4tile::Layout::vpm_row)),
+      namedAttr(builder, "serialize", builder.getStringAttr("mutex"))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileVDRLoadTileOpName,
+                      {*adjustedBase, shared}, attrs);
   return success();
 }
 
@@ -3242,12 +3341,16 @@ static FailureOr<Value> createSharedLoadForPlan(Operation *op, OpBuilder &builde
     return op->emitOpError(
         "shared_vpm copy/store planning requires !vc4tile.shared_tile, i32 row, and vector<16xi1> mask");
   }
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
+      namedAttr(builder, "layout", getVPMTileLoadLayoutAttr(builder, layout))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
   Operation *load = createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileSharedLoadOpName, {shared, row, mask},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "memory_space", getVC4TileMemorySpaceAttr(builder, mlir::vc4tile::MemorySpace::shared_vpm)),
-       namedAttr(builder, "layout", getVPMTileLoadLayoutAttr(builder, layout))},
-      resultType);
+      attrs, resultType);
   return load->getResult(0);
 }
 
@@ -3258,13 +3361,20 @@ static LogicalResult createGlobalStoreForPlan(Operation *op, OpBuilder &builder,
   if (failed(adjustedBase))
     return failure();
   Value lanes = createLaneOffsetsForTileCopy(builder, op, 1);
-  createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
-      {*adjustedBase, lanes, value, mask},
-      {namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-       namedAttr(builder, "offset_unit", getVC4TileOffsetUnitAttr(builder, mlir::vc4tile::OffsetUnit::element)),
-       namedAttr(builder, "memory_space", getVC4TileMemorySpaceAttr(builder, mlir::vc4tile::MemorySpace::global)),
-       namedAttr(builder, "access", getVC4TileMemoryAccessAttr(builder, mlir::vc4tile::MemoryAccess::affine_contiguous))});
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "offset_unit",
+                getVC4TileOffsetUnitAttr(builder,
+                                         mlir::vc4tile::OffsetUnit::element)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(builder,
+                                          mlir::vc4tile::MemorySpace::global)),
+      namedAttr(builder, "access",
+                getVC4TileMemoryAccessAttr(
+                    builder, mlir::vc4tile::MemoryAccess::affine_contiguous))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
+                      {*adjustedBase, lanes, value, mask}, attrs);
   return success();
 }
 

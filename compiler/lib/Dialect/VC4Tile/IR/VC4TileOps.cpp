@@ -267,8 +267,10 @@ static LogicalResult verifyM5Exact32Metadata(Operation *op) {
 
   if (auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary")) {
     if (boundary.getValue() == BoundaryPolicy::zero ||
-        boundary.getValue() == BoundaryPolicy::clamp)
-      return op->emitOpError("boundary policy zero/clamp is not implemented in M5");
+        boundary.getValue() == BoundaryPolicy::clamp ||
+        boundary.getValue() == BoundaryPolicy::reject)
+      return op->emitOpError(
+          "boundary policy zero/clamp/reject is not implemented in M5");
   }
 
   for (StringRef forbidden : {"quantization", "scale", "zero_point",
@@ -318,6 +320,172 @@ static LogicalResult verifyTransposePermutation(Operation *op,
   return success();
 }
 
+
+
+static bool isMaskAllOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.mask_all";
+}
+
+static bool isTailMaskOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.tail_mask";
+}
+
+static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
+                                                      Value mask) {
+  auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
+  if (!boundary)
+    return success();
+  switch (boundary.getValue()) {
+  case BoundaryPolicy::exact:
+    if (!isMaskAllOp(mask))
+      return op->emitOpError(
+          "boundary policy exact requires a vc4tile.mask_all mask");
+    return success();
+  case BoundaryPolicy::tail_predicated:
+    if (!isTailMaskOp(mask))
+      return op->emitOpError(
+          "boundary policy tail_predicated requires a vc4tile.tail_mask mask");
+    return success();
+  case BoundaryPolicy::zero:
+  case BoundaryPolicy::clamp:
+  case BoundaryPolicy::reject:
+    return op->emitOpError(
+        "boundary policy zero/clamp/reject is not implemented in M5");
+  }
+  return success();
+}
+
+static LogicalResult verifyCopyTileBoundaryPolicy(Operation *op) {
+  auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
+  if (!boundary)
+    return success();
+  switch (boundary.getValue()) {
+  case BoundaryPolicy::exact:
+    return success();
+  case BoundaryPolicy::tail_predicated:
+    for (Value operand : op->getOperands()) {
+      if (isVC4TileVector16I1Type(operand.getType()))
+        return success();
+    }
+    return op->emitOpError(
+        "boundary policy tail_predicated requires a vector<16xi1> mask operand");
+  case BoundaryPolicy::zero:
+  case BoundaryPolicy::clamp:
+  case BoundaryPolicy::reject:
+    return op->emitOpError(
+        "boundary policy zero/clamp/reject is not implemented in M5");
+  }
+  return success();
+}
+
+static DictionaryAttr getResourceIntent(Operation *op) {
+  return op->getAttrOfType<DictionaryAttr>("resource_intent");
+}
+
+static std::optional<bool> getResourceIntentBool(Operation *op,
+                                                 StringRef name) {
+  DictionaryAttr intent = getResourceIntent(op);
+  if (!intent)
+    return std::nullopt;
+  auto attr = intent.getAs<BoolAttr>(name);
+  if (!attr)
+    return std::nullopt;
+  return attr.getValue();
+}
+
+static std::optional<int64_t> getResourceIntentI32(Operation *op,
+                                                   StringRef name) {
+  DictionaryAttr intent = getResourceIntent(op);
+  if (!intent)
+    return std::nullopt;
+  auto attr = intent.getAs<IntegerAttr>(name);
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static LogicalResult verifyResourceIntent(Operation *op) {
+  DictionaryAttr intent = getResourceIntent(op);
+  if (!intent)
+    return success();
+
+  for (NamedAttribute named : intent) {
+    StringRef key = named.getName().getValue();
+    Attribute value = named.getValue();
+    if (key == "uses_shared_vpm" || key == "uses_barrier") {
+      if (!llvm::isa<BoolAttr>(value))
+        return op->emitOpError() << "resource_intent." << key
+                                 << " must be a bool attribute";
+      continue;
+    }
+    if (key == "vpm_rows" || key == "vpm_bytes" || key == "semaphores" ||
+        key == "warps_per_block") {
+      auto intAttr = llvm::dyn_cast<IntegerAttr>(value);
+      if (!intAttr)
+        return op->emitOpError() << "resource_intent." << key
+                                 << " must be an integer attribute";
+      if (intAttr.getInt() < 0)
+        return op->emitOpError() << "resource_intent." << key
+                                 << " must be non-negative";
+      continue;
+    }
+    return op->emitOpError() << "unsupported resource_intent key '" << key
+                             << "'";
+  }
+
+  auto checkBool = [&](StringRef intentName, StringRef attrName)
+      -> LogicalResult {
+    std::optional<bool> value = getResourceIntentBool(op, intentName);
+    if (!value)
+      return success();
+    if (auto direct = op->getAttrOfType<BoolAttr>(attrName)) {
+      if (direct.getValue() != *value)
+        return op->emitOpError() << "resource_intent." << intentName
+                                 << " must match " << attrName;
+    }
+    return success();
+  };
+  auto checkI32 = [&](StringRef intentName, StringRef attrName)
+      -> LogicalResult {
+    std::optional<int64_t> value = getResourceIntentI32(op, intentName);
+    if (!value)
+      return success();
+    if (auto direct = op->getAttrOfType<IntegerAttr>(attrName)) {
+      if (direct.getInt() != *value)
+        return op->emitOpError() << "resource_intent." << intentName
+                                 << " must match " << attrName;
+    }
+    return success();
+  };
+
+  if (failed(checkBool("uses_shared_vpm", "uses_shared_vpm")) ||
+      failed(checkBool("uses_barrier", "uses_barrier")) ||
+      failed(checkI32("vpm_rows", "vpm_rows_per_block")) ||
+      failed(checkI32("vpm_bytes", "vpm_bytes_per_block")) ||
+      failed(checkI32("semaphores", "semaphores_per_block")) ||
+      failed(checkI32("warps_per_block", "warps_per_block_max")))
+    return failure();
+  return success();
+}
+
+static bool getBoolAttrOrResourceIntent(Operation *op, StringRef attrName,
+                                        bool fallback = false) {
+  if (auto attr = op->getAttrOfType<BoolAttr>(attrName))
+    return attr.getValue();
+  if (std::optional<bool> value = getResourceIntentBool(op, attrName))
+    return *value;
+  return fallback;
+}
+
+static std::optional<int64_t> getI32AttrOrResourceIntent(Operation *op,
+                                                         StringRef attrName,
+                                                         StringRef intentName) {
+  if (auto attr = op->getAttrOfType<IntegerAttr>(attrName))
+    return attr.getInt();
+  return getResourceIntentI32(op, intentName);
+}
 
 static std::optional<int64_t> getI32Attr(Operation *op, StringRef name) {
   auto attr = op->getAttrOfType<IntegerAttr>(name);
@@ -559,16 +727,21 @@ void KernelOp::print(OpAsmPrinter &p) {
 LogicalResult KernelOp::verify() {
   Operation *op = getOperation();
   std::optional<ScheduleMode> mode = getKernelScheduleMode(*this);
-  int64_t warpsPerBlock = getI32Attr(op, "warps_per_block_max").value_or(
+  bool usesShared = getBoolAttrOrResourceIntent(op, "uses_shared_vpm");
+  bool usesBarrier = getBoolAttrOrResourceIntent(op, "uses_barrier");
+  int64_t warpsPerBlock = getI32AttrOrResourceIntent(
+      op, "warps_per_block_max", "warps_per_block").value_or(
       mode && *mode == ScheduleMode::cooperative_block ? 12 : 1);
-  int64_t vpmRows = getI32Attr(op, "vpm_rows_per_block").value_or(0);
-  int64_t vpmBytes = getI32Attr(op, "vpm_bytes_per_block").value_or(0);
-  int64_t semaphores = getI32Attr(op, "semaphores_per_block").value_or(0);
-  bool usesShared = getBoolAttr(op, "uses_shared_vpm");
-  bool usesBarrier = getBoolAttr(op, "uses_barrier");
+  int64_t vpmRows = getI32AttrOrResourceIntent(
+      op, "vpm_rows_per_block", "vpm_rows").value_or(0);
+  int64_t vpmBytes = getI32AttrOrResourceIntent(
+      op, "vpm_bytes_per_block", "vpm_bytes").value_or(0);
+  int64_t semaphores = getI32AttrOrResourceIntent(
+      op, "semaphores_per_block", "semaphores").value_or(0);
   bool requireFullResidency = getBoolAttr(op, "require_full_block_residency");
 
-  if (failed(verifyKernelFormalArgumentContract(*this)))
+  if (failed(verifyResourceIntent(op)) ||
+      failed(verifyKernelFormalArgumentContract(*this)))
     return failure();
 
   if (warpsPerBlock < 1 || warpsPerBlock > 12)
@@ -756,8 +929,10 @@ LogicalResult TileDescriptorOp::verify() {
 
   if (auto boundary = getBoundaryAttr()) {
     if (boundary.getValue() == BoundaryPolicy::zero ||
-        boundary.getValue() == BoundaryPolicy::clamp)
-      return emitOpError("boundary policy zero/clamp is not implemented in M5");
+        boundary.getValue() == BoundaryPolicy::clamp ||
+        boundary.getValue() == BoundaryPolicy::reject)
+      return emitOpError(
+          "boundary policy zero/clamp/reject is not implemented in M5");
   }
 
   for (StringRef forbidden : {"quantization", "scale", "zero_point",
@@ -779,6 +954,7 @@ LogicalResult TileLoadOp::verify() {
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
       failed(verifyM5Exact32Metadata(op)) ||
+      failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
@@ -801,6 +977,7 @@ LogicalResult TileStoreOp::verify() {
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifyM5Exact32Metadata(op)) ||
+      failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
@@ -837,6 +1014,8 @@ LogicalResult CopyTileOp::verify() {
     if (elemBytes.getInt() != 4)
       return emitOpError("elem_bytes must be 4 for M5 copy planner v1");
   }
+  if (failed(verifyCopyTileBoundaryPolicy(op)))
+    return failure();
   return success();
 }
 

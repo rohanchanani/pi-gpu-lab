@@ -60,7 +60,8 @@ def VC4Tile_BoundaryPolicy : VC4Tile_DialectI32Enum<"BoundaryPolicy",
       I32EnumAttrCase<"exact", 0>,
       I32EnumAttrCase<"tail_predicated", 1>,
       I32EnumAttrCase<"zero", 2>,
-      I32EnumAttrCase<"clamp", 3>
+      I32EnumAttrCase<"clamp", 3>,
+      I32EnumAttrCase<"reject", 4>
     ]>;
 
 def VC4Tile_Role : VC4Tile_DialectI32Enum<"Role",
@@ -69,7 +70,8 @@ def VC4Tile_Role : VC4Tile_DialectI32Enum<"Role",
       I32EnumAttrCase<"output", 1>,
       I32EnumAttrCase<"accumulator", 2>,
       I32EnumAttrCase<"scratch", 3>,
-      I32EnumAttrCase<"metadata", 4>
+      I32EnumAttrCase<"metadata", 4>,
+      I32EnumAttrCase<"constant", 5>
     ]>;
 
 def VC4Tile_Precision : VC4Tile_DialectI32Enum<"Precision",
@@ -80,6 +82,22 @@ def VC4Tile_Precision : VC4Tile_DialectI32Enum<"Precision",
 def VC4Tile_Packing : VC4Tile_DialectI32Enum<"Packing",
     "VC4Tile physical storage marker", [
       I32EnumAttrCase<"none", 0>
+    ]>;
+
+def VC4Tile_CopyStage : VC4Tile_DialectI32Enum<"CopyStage",
+    "VC4Tile copy-pipeline stage metadata", [
+      I32EnumAttrCase<"none", 0>,
+      I32EnumAttrCase<"prologue", 1>,
+      I32EnumAttrCase<"steady_state", 2>,
+      I32EnumAttrCase<"epilogue", 3>
+    ]>;
+
+def VC4Tile_ReuseHint : VC4Tile_DialectI32Enum<"ReuseHint",
+    "VC4Tile tile reuse hint metadata", [
+      I32EnumAttrCase<"none", 0>,
+      I32EnumAttrCase<"shared", 1>,
+      I32EnumAttrCase<"register_space", 2, "register">,
+      I32EnumAttrCase<"producer", 3>
     ]>;
 
 def VC4Tile_ReduceKind : VC4Tile_DialectI32Enum<"ReduceKind",
@@ -121,6 +139,10 @@ def VC4Tile_PrecisionAttr
     : VC4Tile_EnumAttr<VC4Tile_Precision, "precision">;
 def VC4Tile_PackingAttr
     : VC4Tile_EnumAttr<VC4Tile_Packing, "packing">;
+def VC4Tile_CopyStageAttr
+    : VC4Tile_EnumAttr<VC4Tile_CopyStage, "copy_stage">;
+def VC4Tile_ReuseHintAttr
+    : VC4Tile_EnumAttr<VC4Tile_ReuseHint, "reuse_hint">;
 def VC4Tile_ReduceKindAttr
     : VC4Tile_EnumAttr<VC4Tile_ReduceKind, "reduce_kind">;
 def VC4Tile_VPMLayoutAttr

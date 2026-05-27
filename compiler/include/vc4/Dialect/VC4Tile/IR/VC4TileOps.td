@@ -42,7 +42,8 @@ def VC4Tile_KernelOp : VC4Tile_Op<"kernel", [
     OptionalAttr<BoolAttr>:$require_full_block_residency,
     OptionalAttr<DictArrayAttr>:$arg_attrs,
     OptionalAttr<DictionaryAttr>:$launch_abi,
-    OptionalAttr<DictionaryAttr>:$resource
+    OptionalAttr<DictionaryAttr>:$resource,
+    OptionalAttr<DictionaryAttr>:$resource_intent
   );
   let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
@@ -181,6 +182,8 @@ def VC4Tile_TileDescriptorOp : VC4Tile_PureOp<"tile_descriptor"> {
     VC4Tile_PrecisionAttr:$precision,
     VC4Tile_PackingAttr:$packing,
     OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit,
     OptionalAttr<ArrayAttr>:$strides
   );
@@ -214,7 +217,10 @@ def VC4Tile_TileLoadOp : VC4Tile_Op<"tile_load", [
     VC4Tile_PrecisionAttr:$precision,
     OptionalAttr<TypeAttr>:$expressed_type,
     OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
     OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
     OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit
   );
@@ -245,7 +251,10 @@ def VC4Tile_TileStoreOp : VC4Tile_Op<"tile_store", [
     VC4Tile_PrecisionAttr:$precision,
     OptionalAttr<TypeAttr>:$expressed_type,
     OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
     OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
     OptionalAttr<VC4Tile_OffsetUnitAttr>:$offset_unit
   );
@@ -274,7 +283,10 @@ def VC4Tile_CopyTileOp : VC4Tile_Op<"copy_tile", [
     VC4Tile_PrecisionAttr:$precision,
     OptionalAttr<TypeAttr>:$expressed_type,
     OptionalAttr<TypeAttr>:$accumulator_type,
+    OptionalAttr<VC4Tile_RoleAttr>:$role,
     OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
     OptionalAttr<I32Attr>:$elem_bytes
   );
@@ -327,6 +339,8 @@ def VC4Tile_SharedTileAllocOp : VC4Tile_Op<"shared_tile_alloc", [
     TypeAttr:$storage_type,
     VC4Tile_LayoutAttr:$layout,
     OptionalAttr<VC4Tile_RoleAttr>:$role,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PrecisionAttr>:$precision,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
     OptionalAttr<VC4Tile_MemorySpaceAttr>:$memory_space
