@@ -496,6 +496,79 @@ def VC4Tile_BlockReduceOp
         "ergonomic cooperative-block reduction surface operation",
         [MemoryEffects<[MemRead, MemWrite]>]>;
 
+// M5 ergonomic tile contraction surface operations. They are producer-facing
+// contracts and must canonicalize into tile elementwise/reduction/core ops
+// before VC4Tile core verification or SSAVC4 lowering.
+def VC4Tile_TileDotOp : VC4Tile_PureOp<"tile_dot"> {
+  let summary = "ergonomic 1x16 tile dot-product surface operation";
+  let arguments = (ins
+    AnyType:$lhs,
+    AnyType:$rhs,
+    AnyType:$mask,
+    I32Attr:$k,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    TypeAttr:$accumulator_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<VC4Tile_RoleAttr>:$lhs_role,
+    OptionalAttr<VC4Tile_RoleAttr>:$rhs_role,
+    OptionalAttr<VC4Tile_RoleAttr>:$acc_role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<StrAttr>:$algorithm_hint
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+class VC4Tile_TileContractionSurfaceOp<string mnemonic, string summaryText>
+    : VC4Tile_PureOp<mnemonic> {
+  let summary = summaryText;
+  let arguments = (ins
+    AnyType:$lhs,
+    AnyType:$rhs,
+    AnyType:$acc,
+    AnyType:$mask,
+    I32Attr:$m,
+    I32Attr:$n,
+    I32Attr:$k,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$lhs_layout,
+    VC4Tile_LayoutAttr:$rhs_layout,
+    VC4Tile_LayoutAttr:$acc_layout,
+    VC4Tile_MemorySpaceAttr:$memory_space,
+    TypeAttr:$element_type,
+    TypeAttr:$storage_type,
+    TypeAttr:$accumulator_type,
+    VC4Tile_PrecisionAttr:$precision,
+    OptionalAttr<ArrayAttr>:$contracting_dims,
+    OptionalAttr<ArrayAttr>:$iterator_types,
+    OptionalAttr<VC4Tile_RoleAttr>:$lhs_role,
+    OptionalAttr<VC4Tile_RoleAttr>:$rhs_role,
+    OptionalAttr<VC4Tile_RoleAttr>:$acc_role,
+    OptionalAttr<VC4Tile_BoundaryPolicyAttr>:$boundary,
+    OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
+    OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
+    OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<StrAttr>:$algorithm_hint
+  );
+  let results = (outs AnyType:$result);
+  let hasVerifier = 1;
+}
+
+def VC4Tile_TileContractOp
+    : VC4Tile_TileContractionSurfaceOp<"tile_contract",
+        "ergonomic tile contraction surface operation">;
+
+def VC4Tile_TileMatmulOp
+    : VC4Tile_TileContractionSurfaceOp<"tile_matmul",
+        "ergonomic tile matrix-multiply contraction surface operation">;
+
 // Temporary M5 surface/core boundary sentinel.  This operation is deliberately
 // non-executable: surface canonicalization erases it, core verification rejects
 // it if it survives, and VC4Tile-to-SSAVC4 conversion never lowers it.

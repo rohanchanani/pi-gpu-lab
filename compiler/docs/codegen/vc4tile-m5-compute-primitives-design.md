@@ -677,3 +677,12 @@ These operations are not hardware opcodes. They are semantic surface operations.
 - IREE Common/GPU codegen pass documentation: tiling, shared-memory copy distribution, matmul operand promotion, partial reductions, packing, and vector allocation. <https://iree.dev/reference/mlir-passes/CodegenCommonGPU/>
 - IREE Global Optimization pass documentation: contraction demotion, linalg named-op generalization, matmul/dequantization fusion. <https://iree.dev/reference/mlir-passes/GlobalOptimization/>
 - Local project context: `vc4_cuda_mapping_guide.md`, `vc4tile-ir-design-m4.md`, `ssavc4-ir-design-m3-post-cleanup.md`, and related M2/M3/M4 milestone documentation.
+
+## M5 slice 11 implementation note
+
+The initial executable contraction subset is intentionally small and 32-bit-only.
+`tile_dot`, `tile_contract`, and `tile_matmul` are surface contracts erased by
+`--canonicalize-vc4tile-surface` into explicit vector multiply, add-reduction,
+accumulator add, and existing movement/copy-planning operations before VC4Tile
+core verification and SSAVC4 lowering. No opaque SSAVC4 contraction operation is
+introduced.

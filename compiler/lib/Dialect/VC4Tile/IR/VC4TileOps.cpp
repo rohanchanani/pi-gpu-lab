@@ -376,6 +376,148 @@ static LogicalResult verifyTileBinaryComputeOperands(Operation *op,
   return success();
 }
 
+static LogicalResult verifyI32AttrInRange(Operation *op, StringRef name,
+                                          int64_t minValue,
+                                          int64_t maxValue) {
+  auto attr = op->getAttrOfType<IntegerAttr>(name);
+  if (!attr)
+    return op->emitOpError() << name << " attribute is required";
+  int64_t value = attr.getInt();
+  if (value < minValue || value > maxValue)
+    return op->emitOpError() << name << " must be in range [" << minValue
+                             << ", " << maxValue << "]";
+  return success();
+}
+
+static LogicalResult verifyContractionLayoutAttr(Operation *op, StringRef name,
+                                                 bool allowRhsTransposed) {
+  auto layout = op->getAttrOfType<LayoutAttr>(name);
+  if (!layout)
+    return op->emitOpError() << name << " attribute is required";
+  Layout value = layout.getValue();
+  if (value == Layout::row_major)
+    return success();
+  if (allowRhsTransposed &&
+      (value == Layout::col_major || value == Layout::transposed_view))
+    return success();
+  return op->emitOpError()
+         << "M5 tile contractions support only row_major lhs/acc layouts and "
+            "row_major, col_major, or transposed_view rhs layouts";
+}
+
+static LogicalResult verifyTileDotContractMetadata(Operation *op,
+                                                   bool matrixForm) {
+  if (failed(verifyM5Exact32Metadata(op)))
+    return failure();
+
+  auto memorySpace = op->getAttrOfType<MemorySpaceAttr>("memory_space");
+  if (!memorySpace)
+    return op->emitOpError("memory_space attribute is required");
+  if (memorySpace.getValue() != MemorySpace::register_space)
+    return op->emitOpError(
+        "tile contraction operations require memory_space = #vc4tile.memory_space<register>");
+
+  Type resultType = op->getResult(0).getType();
+  if (!isVC4TileVector16DataType(resultType))
+    return emitTypeError(op, resultType, "result",
+                         "vector<16xi32> or vector<16xf32>");
+  auto vectorType = llvm::cast<VectorType>(resultType);
+  auto elementType = op->getAttrOfType<TypeAttr>("element_type");
+  if (!elementType)
+    return op->emitOpError("element_type attribute is required");
+  if (vectorType.getElementType() != elementType.getValue())
+    return op->emitOpError() << "result element type must match element_type; got result "
+                             << resultType << " and element_type = "
+                             << elementType.getValue();
+
+  auto accumulatorType = op->getAttrOfType<TypeAttr>("accumulator_type");
+  if (!accumulatorType)
+    return op->emitOpError("accumulator_type attribute is required");
+  if (accumulatorType.getValue() != elementType.getValue())
+    return op->emitOpError(
+        "M5 tile contractions require accumulator_type to match element_type");
+
+  SmallVector<int64_t, 4> shape;
+  if (failed(verifyTileSurfaceShape(op, shape)))
+    return failure();
+  if (matrixForm) {
+    if (shape.size() != 2)
+      return op->emitOpError(
+          "tile_contract/tile_matmul require rank-2 static tile shapes in M5");
+  } else if (shape.size() != 2 || shape[0] != 1 || shape[1] != 16) {
+    return op->emitOpError("tile_dot supports only shape = [1, 16] in M5");
+  }
+
+  int64_t elements = 1;
+  for (int64_t extent : shape)
+    elements *= extent;
+  if (elements != 16)
+    return op->emitOpError(
+        "M5 tile contractions support exactly sixteen 32-bit lanes");
+
+  if (failed(verifyI32AttrInRange(op, "k", 1, 16)))
+    return failure();
+
+  if (matrixForm) {
+    if (failed(verifyI32AttrInRange(op, "m", 1, 16)) ||
+        failed(verifyI32AttrInRange(op, "n", 1, 16)))
+      return failure();
+    auto mAttr = op->getAttrOfType<IntegerAttr>("m");
+    auto nAttr = op->getAttrOfType<IntegerAttr>("n");
+    if (mAttr && nAttr && mAttr.getInt() * nAttr.getInt() != 16)
+      return op->emitOpError("M5 tile_contract/tile_matmul require m * n = 16");
+    if (failed(verifyContractionLayoutAttr(op, "lhs_layout",
+                                           /*allowRhsTransposed=*/false)) ||
+        failed(verifyContractionLayoutAttr(op, "rhs_layout",
+                                           /*allowRhsTransposed=*/true)) ||
+        failed(verifyContractionLayoutAttr(op, "acc_layout",
+                                           /*allowRhsTransposed=*/false)))
+      return failure();
+  } else {
+    auto layout = op->getAttrOfType<LayoutAttr>("layout");
+    if (!layout)
+      return op->emitOpError("layout attribute is required");
+    if (layout.getValue() != Layout::row_major)
+      return op->emitOpError("tile_dot supports only row_major layout in M5");
+  }
+  return success();
+}
+
+static LogicalResult verifyTileDotOperands(Operation *op, Value lhs, Value rhs,
+                                           Value mask, Value result) {
+  if (failed(verifySurfaceCarrier(op, lhs.getType(), "lhs")) ||
+      failed(verifySurfaceCarrier(op, rhs.getType(), "rhs")) ||
+      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySurfaceCarrier(op, result.getType(), "result")))
+    return failure();
+  if (lhs.getType() != result.getType() || rhs.getType() != result.getType())
+    return op->emitOpError(
+        "tile_dot lhs, rhs, and result must have identical vector types in M5");
+  if (!isVC4TileVector16DataType(result.getType()))
+    return emitTypeError(op, result.getType(), "result",
+                         "vector<16xi32> or vector<16xf32>");
+  return success();
+}
+
+static LogicalResult verifyTileContractOperands(Operation *op, Value lhs,
+                                                Value rhs, Value acc,
+                                                Value mask, Value result) {
+  if (failed(verifySurfaceCarrier(op, lhs.getType(), "lhs")) ||
+      failed(verifySurfaceCarrier(op, rhs.getType(), "rhs")) ||
+      failed(verifySurfaceCarrier(op, acc.getType(), "acc")) ||
+      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySurfaceCarrier(op, result.getType(), "result")))
+    return failure();
+  if (lhs.getType() != result.getType() || rhs.getType() != result.getType() ||
+      acc.getType() != result.getType())
+    return op->emitOpError(
+        "tile contraction lhs, rhs, acc, and result must have identical vector types in M5");
+  if (!isVC4TileVector16DataType(result.getType()))
+    return emitTypeError(op, result.getType(), "result",
+                         "vector<16xi32> or vector<16xf32>");
+  return success();
+}
+
 static LogicalResult verifyReductionAxis(Operation *op, bool requireAxis) {
   auto axisAttr = op->getAttrOfType<IntegerAttr>("axis");
   if (!axisAttr)
@@ -1334,6 +1476,36 @@ LogicalResult BlockReduceOp::verify() {
       failed(verifyTileReductionCommon(op, getInput(), getMask(), getResult(),
                                        /*requireAxis=*/false)) ||
       failed(verifyBlockReductionKernelContract(op)))
+    return failure();
+  return success();
+}
+
+
+LogicalResult TileDotOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyTileDotContractMetadata(op, /*matrixForm=*/false)) ||
+      failed(verifyTileDotOperands(op, getLhs(), getRhs(), getMask(), getResult())))
+    return failure();
+  return success();
+}
+
+LogicalResult TileContractOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyTileDotContractMetadata(op, /*matrixForm=*/true)) ||
+      failed(verifyTileContractOperands(op, getLhs(), getRhs(), getAcc(),
+                                        getMask(), getResult())))
+    return failure();
+  return success();
+}
+
+LogicalResult TileMatmulOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyTileDotContractMetadata(op, /*matrixForm=*/true)) ||
+      failed(verifyTileContractOperands(op, getLhs(), getRhs(), getAcc(),
+                                        getMask(), getResult())))
     return failure();
   return success();
 }

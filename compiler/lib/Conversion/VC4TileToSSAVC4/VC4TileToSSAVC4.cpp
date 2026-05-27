@@ -94,6 +94,9 @@ constexpr llvm::StringLiteral kVC4TileTileAddOpName("vc4tile.tile_add");
 constexpr llvm::StringLiteral kVC4TileTileSubOpName("vc4tile.tile_sub");
 constexpr llvm::StringLiteral kVC4TileTileMulOpName("vc4tile.tile_mul");
 constexpr llvm::StringLiteral kVC4TileTileSelectOpName("vc4tile.tile_select");
+constexpr llvm::StringLiteral kVC4TileTileDotOpName("vc4tile.tile_dot");
+constexpr llvm::StringLiteral kVC4TileTileContractOpName("vc4tile.tile_contract");
+constexpr llvm::StringLiteral kVC4TileTileMatmulOpName("vc4tile.tile_matmul");
 constexpr llvm::StringLiteral kVC4TileTileReduceOpName("vc4tile.tile_reduce");
 constexpr llvm::StringLiteral kVC4TileRowReduceOpName("vc4tile.row_reduce");
 constexpr llvm::StringLiteral kVC4TileWarpReduceOpName("vc4tile.warp_reduce");
@@ -175,7 +178,10 @@ static bool isVC4TileSurfaceOp(Operation *op) {
          hasName(op, kVC4TileTileReduceOpName) ||
          hasName(op, kVC4TileRowReduceOpName) ||
          hasName(op, kVC4TileWarpReduceOpName) ||
-         hasName(op, kVC4TileBlockReduceOpName);
+         hasName(op, kVC4TileBlockReduceOpName) ||
+         hasName(op, kVC4TileTileDotOpName) ||
+         hasName(op, kVC4TileTileContractOpName) ||
+         hasName(op, kVC4TileTileMatmulOpName);
 }
 
 static LogicalResult emitSurfaceOpOrderingError(Operation *op,
@@ -2966,7 +2972,10 @@ static bool isVC4TileTileComputeOp(Operation *op) {
          hasName(op, kVC4TileTileReduceOpName) ||
          hasName(op, kVC4TileRowReduceOpName) ||
          hasName(op, kVC4TileWarpReduceOpName) ||
-         hasName(op, kVC4TileBlockReduceOpName);
+         hasName(op, kVC4TileBlockReduceOpName) ||
+         hasName(op, kVC4TileTileDotOpName) ||
+         hasName(op, kVC4TileTileContractOpName) ||
+         hasName(op, kVC4TileTileMatmulOpName);
 }
 
 static std::optional<Type> getVector16DataElementType(Type type) {
@@ -3198,6 +3207,109 @@ static Operation *createCoreReduceFromSurface(OpBuilder &builder,
   return builder.create(state);
 }
 
+static Operation *createCoreAddReduce(OpBuilder &builder, Operation *op,
+                                      Value input, Value mask,
+                                      TypeRange resultTypes) {
+  OperationState state(op->getLoc(), kVC4TileReduceOpName);
+  state.addOperands({input, mask});
+  state.addAttribute(
+      "kind", mlir::vc4tile::ReduceKindAttr::get(
+                  builder.getContext(), mlir::vc4tile::ReduceKind::add));
+  state.addTypes(resultTypes);
+  return builder.create(state);
+}
+
+static LogicalResult verifyContractionVectorInputsForCanonicalization(
+    Operation *op, unsigned expectedOperands) {
+  if (op->getNumOperands() != expectedOperands || op->getNumResults() != 1)
+    return op->emitOpError("tile contraction expects the declared operands and one result");
+  Type resultType = op->getResult(0).getType();
+  if (!getVector16DataElementType(resultType))
+    return op->emitOpError(
+        "tile contraction result must be vector<16xi32> or vector<16xf32>");
+  for (unsigned i = 0; i + 1 < expectedOperands; ++i) {
+    if (op->getOperand(i).getType() != resultType)
+      return op->emitOpError(
+          "tile contraction data operands and result must have identical vector types");
+  }
+  if (!isVector16I1(op->getOperand(expectedOperands - 1).getType()))
+    return op->emitOpError("tile contraction mask must be vector<16xi1>");
+  if (!isMaskAllValue(op->getOperand(expectedOperands - 1)))
+    return op->emitOpError(
+        "tile contractions currently support only vc4tile.mask_all masks in M5");
+  auto kAttr = op->getAttrOfType<IntegerAttr>("k");
+  if (!kAttr || kAttr.getInt() < 1 || kAttr.getInt() > 16)
+    return op->emitOpError("tile contraction k must be in range [1, 16]");
+  return success();
+}
+
+static Value createElementwiseProduct(OpBuilder &builder, Operation *op,
+                                      Value lhs, Value rhs, Type resultType) {
+  std::optional<Type> elementType = getVector16DataElementType(resultType);
+  if (!elementType)
+    return Value();
+  if (elementType->isSignlessInteger(32))
+    return arith::MulIOp::create(builder, op->getLoc(), lhs, rhs).getResult();
+  if (elementType->isF32())
+    return arith::MulFOp::create(builder, op->getLoc(), lhs, rhs).getResult();
+  return Value();
+}
+
+static Value createElementwiseAccumulation(OpBuilder &builder, Operation *op,
+                                           Value lhs, Value rhs,
+                                           Type resultType) {
+  std::optional<Type> elementType = getVector16DataElementType(resultType);
+  if (!elementType)
+    return Value();
+  if (elementType->isSignlessInteger(32))
+    return arith::AddIOp::create(builder, op->getLoc(), lhs, rhs).getResult();
+  if (elementType->isF32())
+    return arith::AddFOp::create(builder, op->getLoc(), lhs, rhs).getResult();
+  return Value();
+}
+
+static LogicalResult canonicalizeTileDotOp(Operation *op, OpBuilder &builder) {
+  if (failed(verifyContractionVectorInputsForCanonicalization(op,
+                                                              /*expectedOperands=*/3)))
+    return failure();
+  Type resultType = op->getResult(0).getType();
+  Value product = createElementwiseProduct(builder, op, op->getOperand(0),
+                                           op->getOperand(1), resultType);
+  if (!product)
+    return op->emitOpError("unsupported tile_dot element type");
+  Operation *reduced = createCoreAddReduce(builder, op, product, op->getOperand(2),
+                                           op->getResultTypes());
+  op->getResult(0).replaceAllUsesWith(reduced->getResult(0));
+  op->erase();
+  return success();
+}
+
+static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
+                                                        OpBuilder &builder) {
+  if (failed(verifyContractionVectorInputsForCanonicalization(op,
+                                                              /*expectedOperands=*/4)))
+    return failure();
+  Type resultType = op->getResult(0).getType();
+  Value product = createElementwiseProduct(builder, op, op->getOperand(0),
+                                           op->getOperand(1), resultType);
+  if (!product)
+    return op->emitOpError("unsupported tile contraction element type");
+
+  Value update = product;
+  auto kAttr = op->getAttrOfType<IntegerAttr>("k");
+  if (kAttr && kAttr.getInt() > 1)
+    update = createCoreAddReduce(builder, op, product, op->getOperand(3),
+                                 op->getResultTypes())->getResult(0);
+
+  Value accumulated = createElementwiseAccumulation(builder, op, op->getOperand(2),
+                                                    update, resultType);
+  if (!accumulated)
+    return op->emitOpError("unsupported tile contraction accumulation type");
+  op->getResult(0).replaceAllUsesWith(accumulated);
+  op->erase();
+  return success();
+}
+
 static Operation *createCoreBarrier(OpBuilder &builder, Location loc) {
   OperationState state(loc, kVC4TileBarrierOpName);
   state.addAttribute(
@@ -3305,6 +3417,11 @@ static LogicalResult canonicalizeOneTileComputeOp(Operation *op) {
     return canonicalizeTileOrWarpReduceOp(op, builder);
   if (hasName(op, kVC4TileBlockReduceOpName))
     return canonicalizeBlockReduceOp(op, builder);
+  if (hasName(op, kVC4TileTileDotOpName))
+    return canonicalizeTileDotOp(op, builder);
+  if (hasName(op, kVC4TileTileContractOpName) ||
+      hasName(op, kVC4TileTileMatmulOpName))
+    return canonicalizeTileContractOrMatmulOp(op, builder);
   return op->emitOpError("unrecognized VC4Tile tile compute operation");
 }
 
