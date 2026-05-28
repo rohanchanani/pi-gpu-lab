@@ -94,6 +94,7 @@
                 "tile_matmul_composed_output_mask_vc4tile",
                 "tile_reduce_tail_sum_vc4tile",
                 "tile_dot_tail_1x16_i32_vc4tile",
+                "tile_dot_composed_mask_vc4tile",
                 "tile_reduce_bounds_sum_vc4tile",
                 "tile_reduce_composed_mask_sum_vc4tile",
                 "tile_load_composed_mask_vc4tile",
@@ -189,6 +190,7 @@
             "tile_matmul_composed_output_mask_vc4tile",
             "tile_reduce_tail_sum_vc4tile",
             "tile_dot_tail_1x16_i32_vc4tile",
+            "tile_dot_composed_mask_vc4tile",
             "tile_reduce_bounds_sum_vc4tile",
             "tile_reduce_composed_mask_sum_vc4tile",
             "tile_load_composed_mask_vc4tile",
@@ -3322,6 +3324,10 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_tail_1x16_i32_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_tail_1x16_i32_vc4tile/candidate/tile_dot_tail_1x16_i32_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-tail-mask-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_composed_mask_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_composed_mask_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_dot_composed_mask_vc4tile/candidate/tile_dot_composed_mask_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-dot-composed-mask-lowering.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_bounds_sum_vc4tile/input.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_bounds_sum_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_bounds_sum_vc4tile/candidate/tile_reduce_bounds_sum_vc4tile_candidate_harness.c",
@@ -3429,6 +3435,9 @@
             },
             {
               "fixture": "tile_dot_tail_1x16_i32_vc4tile"
+            },
+            {
+              "fixture": "tile_dot_composed_mask_vc4tile"
             },
             {
               "fixture": "tile_reduce_bounds_sum_vc4tile"
