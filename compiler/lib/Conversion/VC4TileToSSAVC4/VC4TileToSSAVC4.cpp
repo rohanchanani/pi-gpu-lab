@@ -2050,6 +2050,948 @@ struct TailOutsideBoundsMaskInfo {
   Value tailLimit;
 };
 
+static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef);
+static std::optional<TileBoundsMaskInfo>
+getTileBoundsMaskInfo(Operation *maskDef);
+static std::optional<std::pair<Value, Value>> getTailMaskInfo(Operation *maskDef);
+static std::optional<BoundsAndTailMaskInfo>
+getBoundsAndTailMaskInfo(Operation *maskDef);
+static std::optional<TailOutsideBoundsMaskInfo>
+getTailOutsideBoundsMaskInfo(Operation *maskDef);
+
+enum class PredicateSemanticClass {
+  unknown,
+  full,
+  empty,
+  tailInterval1D,
+  rectangularBounds2D,
+  rowFragment,
+  rowSetFragment,
+  scalarFragment,
+  denseFragmentSet,
+  sparseFragmentSet
+};
+
+enum class PredicateDensity { denseFragmentable, sparseFallback };
+
+enum class PredicateInactiveDestPolicy { notApplicable, zeroFill, preserve };
+
+enum class PredicateSparseFallbackPolicy { disabled, enabled };
+
+enum class PredicateTransferPathKind {
+  globalToRegister,
+  registerToGlobal,
+  globalToSharedVPM,
+  sharedVPMToGlobal,
+  registerToSharedVPM,
+  sharedVPMToRegister,
+  compute
+};
+
+enum class PredicateFragmentPlanClass {
+  fullBlock,
+  empty,
+  rowFragment,
+  rowSetFragment,
+  scalarFragment,
+  sparseFallback,
+  unsupportedWithReason
+};
+
+enum class PredicateFragmentPlanPathClass {
+  denseFastPath,
+  rowTailPath,
+  guardedRowSkip,
+  sparseFallback,
+  unsupported
+};
+
+enum class PredicateFragmentKind {
+  empty,
+  fullTile,
+  rowFragment,
+  rowSetFragment,
+  scalarFragment
+};
+
+static StringRef stringifyPredicateSemanticClass(
+    PredicateSemanticClass semanticClass) {
+  switch (semanticClass) {
+  case PredicateSemanticClass::unknown:
+    return "unknown";
+  case PredicateSemanticClass::full:
+    return "full";
+  case PredicateSemanticClass::empty:
+    return "empty";
+  case PredicateSemanticClass::tailInterval1D:
+    return "tail_interval_1d";
+  case PredicateSemanticClass::rectangularBounds2D:
+    return "rectangular_bounds_2d";
+  case PredicateSemanticClass::rowFragment:
+    return "row_fragment";
+  case PredicateSemanticClass::rowSetFragment:
+    return "row_set_fragment";
+  case PredicateSemanticClass::scalarFragment:
+    return "scalar_fragment";
+  case PredicateSemanticClass::denseFragmentSet:
+    return "dense_fragment_set";
+  case PredicateSemanticClass::sparseFragmentSet:
+    return "sparse_fragment_set";
+  }
+  llvm_unreachable("unknown predicate semantic class");
+}
+
+static StringRef stringifyPredicateDensity(PredicateDensity density) {
+  switch (density) {
+  case PredicateDensity::denseFragmentable:
+    return "dense_fragmentable";
+  case PredicateDensity::sparseFallback:
+    return "sparse_fallback";
+  }
+  llvm_unreachable("unknown predicate density");
+}
+
+static StringRef
+stringifyPredicateInactiveDestPolicy(PredicateInactiveDestPolicy policy) {
+  switch (policy) {
+  case PredicateInactiveDestPolicy::notApplicable:
+    return "not_applicable";
+  case PredicateInactiveDestPolicy::zeroFill:
+    return "zero_fill";
+  case PredicateInactiveDestPolicy::preserve:
+    return "preserve";
+  }
+  llvm_unreachable("unknown predicate inactive destination policy");
+}
+
+static StringRef stringifyPredicateTransferPathKind(
+    PredicateTransferPathKind pathKind) {
+  switch (pathKind) {
+  case PredicateTransferPathKind::globalToRegister:
+    return "global_to_register";
+  case PredicateTransferPathKind::registerToGlobal:
+    return "register_to_global";
+  case PredicateTransferPathKind::globalToSharedVPM:
+    return "global_to_shared_vpm";
+  case PredicateTransferPathKind::sharedVPMToGlobal:
+    return "shared_vpm_to_global";
+  case PredicateTransferPathKind::registerToSharedVPM:
+    return "register_to_shared_vpm";
+  case PredicateTransferPathKind::sharedVPMToRegister:
+    return "shared_vpm_to_register";
+  case PredicateTransferPathKind::compute:
+    return "compute";
+  }
+  llvm_unreachable("unknown predicate transfer path kind");
+}
+
+static StringRef stringifyPredicateFragmentPlanClass(
+    PredicateFragmentPlanClass planClass) {
+  switch (planClass) {
+  case PredicateFragmentPlanClass::fullBlock:
+    return "full_block";
+  case PredicateFragmentPlanClass::empty:
+    return "empty";
+  case PredicateFragmentPlanClass::rowFragment:
+    return "row_fragment";
+  case PredicateFragmentPlanClass::rowSetFragment:
+    return "row_set_fragment";
+  case PredicateFragmentPlanClass::scalarFragment:
+    return "scalar_fragment";
+  case PredicateFragmentPlanClass::sparseFallback:
+    return "sparse_fallback";
+  case PredicateFragmentPlanClass::unsupportedWithReason:
+    return "unsupported_with_reason";
+  }
+  llvm_unreachable("unknown predicate fragment plan class");
+}
+
+static StringRef stringifyPredicateFragmentPlanPathClass(
+    PredicateFragmentPlanPathClass pathClass) {
+  switch (pathClass) {
+  case PredicateFragmentPlanPathClass::denseFastPath:
+    return "dense_fast_path";
+  case PredicateFragmentPlanPathClass::rowTailPath:
+    return "row_tail_path";
+  case PredicateFragmentPlanPathClass::guardedRowSkip:
+    return "guarded_row_skip";
+  case PredicateFragmentPlanPathClass::sparseFallback:
+    return "sparse_fallback";
+  case PredicateFragmentPlanPathClass::unsupported:
+    return "unsupported";
+  }
+  llvm_unreachable("unknown predicate fragment plan path class");
+}
+
+static StringRef
+stringifyPredicateFragmentKind(PredicateFragmentKind fragmentKind) {
+  switch (fragmentKind) {
+  case PredicateFragmentKind::empty:
+    return "empty";
+  case PredicateFragmentKind::fullTile:
+    return "full_tile";
+  case PredicateFragmentKind::rowFragment:
+    return "row_fragment";
+  case PredicateFragmentKind::rowSetFragment:
+    return "row_set_fragment";
+  case PredicateFragmentKind::scalarFragment:
+    return "scalar_fragment";
+  }
+  llvm_unreachable("unknown predicate fragment kind");
+}
+
+struct PredicateLogicalShape {
+  int64_t rank = 0;
+  SmallVector<int64_t, 4> dims;
+
+  static PredicateLogicalShape get(ArrayRef<int64_t> shape) {
+    PredicateLogicalShape logicalShape;
+    logicalShape.rank = static_cast<int64_t>(shape.size());
+    logicalShape.dims.append(shape.begin(), shape.end());
+    return logicalShape;
+  }
+
+  int64_t getNumElements() const {
+    int64_t numElements = 1;
+    for (int64_t dim : dims)
+      numElements *= dim;
+    return numElements;
+  }
+};
+
+struct PredicateFragment {
+  PredicateFragmentKind kind = PredicateFragmentKind::empty;
+  int64_t row = 0;
+  int64_t col = 0;
+  int64_t rowStart = 0;
+  int64_t rowCount = 0;
+  int64_t startCol = 0;
+  int64_t width = 0;
+
+  static PredicateFragment empty() { return PredicateFragment{}; }
+
+  static PredicateFragment fullTile(PredicateLogicalShape shape) {
+    PredicateFragment fragment;
+    fragment.kind = PredicateFragmentKind::fullTile;
+    fragment.rowStart = 0;
+    fragment.rowCount = shape.rank >= 1 ? shape.dims[0] : 0;
+    fragment.startCol = 0;
+    fragment.width = shape.rank >= 2 ? shape.dims[1] : shape.getNumElements();
+    return fragment;
+  }
+
+  static PredicateFragment rowFragment(int64_t row, int64_t startCol,
+                                       int64_t width) {
+    PredicateFragment fragment;
+    fragment.kind = PredicateFragmentKind::rowFragment;
+    fragment.row = row;
+    fragment.startCol = startCol;
+    fragment.width = width;
+    return fragment;
+  }
+
+  static PredicateFragment rowSetFragment(int64_t rowStart, int64_t rowCount,
+                                          int64_t startCol, int64_t width) {
+    PredicateFragment fragment;
+    fragment.kind = PredicateFragmentKind::rowSetFragment;
+    fragment.rowStart = rowStart;
+    fragment.rowCount = rowCount;
+    fragment.startCol = startCol;
+    fragment.width = width;
+    return fragment;
+  }
+
+  static PredicateFragment scalarFragment(int64_t row, int64_t col) {
+    PredicateFragment fragment;
+    fragment.kind = PredicateFragmentKind::scalarFragment;
+    fragment.row = row;
+    fragment.col = col;
+    return fragment;
+  }
+};
+
+struct VC4TilePredicateModel {
+  PredicateSemanticClass semanticClass = PredicateSemanticClass::unknown;
+  PredicateDensity density = PredicateDensity::denseFragmentable;
+  PredicateInactiveDestPolicy inactivePolicy =
+      PredicateInactiveDestPolicy::notApplicable;
+  PredicateLogicalShape shape;
+  Value source;
+  Value tailBase;
+  Value tailLimit;
+  Value activeRows;
+  Value activeCols;
+  SmallVector<PredicateFragment, 4> fragments;
+
+  static VC4TilePredicateModel full(PredicateLogicalShape shape,
+                                    PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::full;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.push_back(PredicateFragment::fullTile(model.shape));
+    return model;
+  }
+
+  static VC4TilePredicateModel empty(PredicateLogicalShape shape,
+                                     PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::empty;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    return model;
+  }
+
+  static VC4TilePredicateModel tailInterval1D(PredicateLogicalShape shape,
+                                             Value base, Value limit,
+                                             PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::tailInterval1D;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.tailBase = base;
+    model.tailLimit = limit;
+    return model;
+  }
+
+  static VC4TilePredicateModel rectangularBounds2D(
+      PredicateLogicalShape shape, Value activeRows, Value activeCols,
+      PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::rectangularBounds2D;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.activeRows = activeRows;
+    model.activeCols = activeCols;
+    return model;
+  }
+
+  static VC4TilePredicateModel rectangularBounds2D(
+      PredicateLogicalShape shape, int64_t activeRows, int64_t activeCols,
+      PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::rectangularBounds2D;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.push_back(PredicateFragment::rowSetFragment(
+        /*rowStart=*/0, activeRows, /*startCol=*/0, activeCols));
+    return model;
+  }
+
+  static VC4TilePredicateModel rowFragment(PredicateLogicalShape shape,
+                                           int64_t row, int64_t startCol,
+                                           int64_t width,
+                                           PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::rowFragment;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.push_back(
+        PredicateFragment::rowFragment(row, startCol, width));
+    return model;
+  }
+
+  static VC4TilePredicateModel rowSetFragment(
+      PredicateLogicalShape shape, int64_t rowStart, int64_t rowCount,
+      int64_t startCol, int64_t width, PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::rowSetFragment;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.push_back(PredicateFragment::rowSetFragment(
+        rowStart, rowCount, startCol, width));
+    return model;
+  }
+
+  static VC4TilePredicateModel scalarFragment(
+      PredicateLogicalShape shape, int64_t row, int64_t col,
+      PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::scalarFragment;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.push_back(PredicateFragment::scalarFragment(row, col));
+    return model;
+  }
+
+  static VC4TilePredicateModel denseFragmentSet(
+      PredicateLogicalShape shape, ArrayRef<PredicateFragment> fragments,
+      PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::denseFragmentSet;
+    model.density = PredicateDensity::denseFragmentable;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    model.fragments.append(fragments.begin(), fragments.end());
+    return model;
+  }
+
+  static VC4TilePredicateModel sparseFallback(PredicateLogicalShape shape,
+                                              PredicateInactiveDestPolicy policy) {
+    VC4TilePredicateModel model;
+    model.semanticClass = PredicateSemanticClass::sparseFragmentSet;
+    model.density = PredicateDensity::sparseFallback;
+    model.inactivePolicy = policy;
+    model.shape = std::move(shape);
+    return model;
+  }
+};
+
+static FailureOr<PredicateLogicalShape>
+getPredicateConsumerShape(Operation *op) {
+  auto shapeAttr = op->getAttrOfType<ArrayAttr>("shape");
+  if (!shapeAttr)
+    return op->emitOpError("requires shape attribute for semantic predicate normalization");
+
+  SmallVector<int64_t, 4> shape;
+  shape.reserve(shapeAttr.size());
+  for (Attribute attr : shapeAttr) {
+    auto intAttr = llvm::dyn_cast<IntegerAttr>(attr);
+    if (!intAttr || intAttr.getInt() <= 0)
+      return op->emitOpError(
+          "requires positive integer shape dimensions for semantic predicate normalization");
+    shape.push_back(intAttr.getInt());
+  }
+  return PredicateLogicalShape::get(shape);
+}
+
+struct NormalizedPredicateOperand {
+  Value value;
+  VC4TilePredicateModel model;
+};
+
+static bool hasSamePredicateShape(const PredicateLogicalShape &lhs,
+                                  const PredicateLogicalShape &rhs) {
+  return lhs.rank == rhs.rank && lhs.dims == rhs.dims;
+}
+
+static bool hasSamePredicateFragments(ArrayRef<PredicateFragment> lhs,
+                                      ArrayRef<PredicateFragment> rhs) {
+  if (lhs.size() != rhs.size())
+    return false;
+  for (auto [left, right] : llvm::zip_equal(lhs, rhs)) {
+    if (left.kind != right.kind || left.row != right.row ||
+        left.col != right.col || left.rowStart != right.rowStart ||
+        left.rowCount != right.rowCount || left.startCol != right.startCol ||
+        left.width != right.width)
+      return false;
+  }
+  return true;
+}
+
+static bool isSamePredicateModel(const VC4TilePredicateModel &lhs,
+                                 const VC4TilePredicateModel &rhs) {
+  if (lhs.source && rhs.source && lhs.source == rhs.source)
+    return true;
+  if (lhs.semanticClass != rhs.semanticClass || lhs.density != rhs.density ||
+      !hasSamePredicateShape(lhs.shape, rhs.shape))
+    return false;
+
+  switch (lhs.semanticClass) {
+  case PredicateSemanticClass::full:
+  case PredicateSemanticClass::empty:
+    return true;
+  case PredicateSemanticClass::tailInterval1D:
+    return lhs.tailBase == rhs.tailBase && lhs.tailLimit == rhs.tailLimit;
+  case PredicateSemanticClass::rectangularBounds2D:
+    return lhs.activeRows == rhs.activeRows &&
+           lhs.activeCols == rhs.activeCols &&
+           hasSamePredicateFragments(lhs.fragments, rhs.fragments);
+  case PredicateSemanticClass::rowFragment:
+  case PredicateSemanticClass::rowSetFragment:
+  case PredicateSemanticClass::scalarFragment:
+  case PredicateSemanticClass::denseFragmentSet:
+  case PredicateSemanticClass::sparseFragmentSet:
+    return hasSamePredicateFragments(lhs.fragments, rhs.fragments);
+  case PredicateSemanticClass::unknown:
+    return false;
+  }
+  llvm_unreachable("unknown predicate semantic class");
+}
+
+static void collectAssociativePredicateOperands(Value value, StringRef opName,
+                                                SmallVectorImpl<Value> &values) {
+  Operation *def = value.getDefiningOp();
+  if (hasName(def, opName) && def->getNumOperands() == 2) {
+    collectAssociativePredicateOperands(def->getOperand(0), opName, values);
+    collectAssociativePredicateOperands(def->getOperand(1), opName, values);
+    return;
+  }
+  values.push_back(value);
+}
+
+static bool isPredicateFull(const VC4TilePredicateModel &model) {
+  return model.semanticClass == PredicateSemanticClass::full;
+}
+
+static bool isPredicateEmpty(const VC4TilePredicateModel &model) {
+  return model.semanticClass == PredicateSemanticClass::empty;
+}
+
+static bool isDenseFragmentablePredicate(const VC4TilePredicateModel &model) {
+  return model.density == PredicateDensity::denseFragmentable;
+}
+
+static bool isTailPredicateValue(Value value) {
+  return getTailMaskInfo(value.getDefiningOp()).has_value();
+}
+
+static bool isBoundsLikePredicateValue(Value value) {
+  Operation *def = value.getDefiningOp();
+  return getTileBoundsMaskInfo(def).has_value() ||
+         getTileRectMaskInfo(def).has_value();
+}
+
+static bool isNotBoundsLikePredicateValue(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kVC4TileMaskNotOpName) || def->getNumOperands() != 1)
+    return false;
+  return isBoundsLikePredicateValue(def->getOperand(0));
+}
+
+static VC4TilePredicateModel
+makeDenseFragmentSetPlaceholder(PredicateLogicalShape shape,
+                                PredicateInactiveDestPolicy policy) {
+  PredicateFragment wholeTile = PredicateFragment::fullTile(shape);
+  return VC4TilePredicateModel::denseFragmentSet(
+      shape, ArrayRef<PredicateFragment>(wholeTile), policy);
+}
+
+static bool isSupportedDensePredicateAlgebra(
+    bool isAnd, ArrayRef<NormalizedPredicateOperand> operands) {
+  bool hasTail = false;
+  bool hasNotBoundsLike = false;
+  bool allDense = true;
+  for (const NormalizedPredicateOperand &operand : operands) {
+    hasTail |= isTailPredicateValue(operand.value);
+    hasNotBoundsLike |= isNotBoundsLikePredicateValue(operand.value);
+    allDense &= isDenseFragmentablePredicate(operand.model);
+  }
+
+  if (allDense)
+    return true;
+
+  if (isAnd && hasTail && hasNotBoundsLike)
+    return true;
+
+  return false;
+}
+
+static FailureOr<VC4TilePredicateModel> normalizePredicateModelExpr(
+    Operation *consumer, Value mask, PredicateLogicalShape consumerShape,
+    PredicateInactiveDestPolicy policy);
+
+static FailureOr<VC4TilePredicateModel> normalizePredicateBinaryModel(
+    Operation *consumer, Operation *maskDef, PredicateLogicalShape consumerShape,
+    PredicateInactiveDestPolicy policy, bool isAnd) {
+  SmallVector<Value, 4> operandValues;
+  collectAssociativePredicateOperands(maskDef->getResult(0),
+                                      isAnd ? kVC4TileMaskAndOpName
+                                            : kVC4TileMaskOrOpName,
+                                      operandValues);
+
+  SmallVector<NormalizedPredicateOperand, 4> activeOperands;
+  for (Value operandValue : operandValues) {
+    FailureOr<VC4TilePredicateModel> operand = normalizePredicateModelExpr(
+        consumer, operandValue, consumerShape, policy);
+    if (failed(operand))
+      return failure();
+
+    if (isAnd) {
+      if (isPredicateEmpty(*operand)) {
+        VC4TilePredicateModel empty =
+            VC4TilePredicateModel::empty(consumerShape, policy);
+        empty.source = maskDef->getResult(0);
+        return empty;
+      }
+      if (isPredicateFull(*operand))
+        continue;
+    } else {
+      if (isPredicateFull(*operand)) {
+        VC4TilePredicateModel full =
+            VC4TilePredicateModel::full(consumerShape, policy);
+        full.source = maskDef->getResult(0);
+        return full;
+      }
+      if (isPredicateEmpty(*operand))
+        continue;
+    }
+
+    bool duplicate = false;
+    for (const NormalizedPredicateOperand &existing : activeOperands) {
+      if (isSamePredicateModel(existing.model, *operand)) {
+        duplicate = true;
+        break;
+      }
+    }
+    if (!duplicate)
+      activeOperands.push_back(NormalizedPredicateOperand{operandValue, *operand});
+  }
+
+  if (activeOperands.empty()) {
+    VC4TilePredicateModel identity =
+        isAnd ? VC4TilePredicateModel::full(consumerShape, policy)
+              : VC4TilePredicateModel::empty(consumerShape, policy);
+    identity.source = maskDef->getResult(0);
+    return identity;
+  }
+
+  if (activeOperands.size() == 1) {
+    VC4TilePredicateModel model = activeOperands.front().model;
+    model.source = maskDef->getResult(0);
+    return model;
+  }
+
+  if (isSupportedDensePredicateAlgebra(isAnd, activeOperands)) {
+    VC4TilePredicateModel model =
+        makeDenseFragmentSetPlaceholder(consumerShape, policy);
+    model.source = maskDef->getResult(0);
+    return model;
+  }
+
+  VC4TilePredicateModel sparse =
+      VC4TilePredicateModel::sparseFallback(consumerShape, policy);
+  sparse.source = maskDef->getResult(0);
+  return sparse;
+}
+
+static FailureOr<VC4TilePredicateModel> normalizePredicateModelExpr(
+    Operation *consumer, Value mask, PredicateLogicalShape consumerShape,
+    PredicateInactiveDestPolicy policy) {
+  Operation *maskDef = mask.getDefiningOp();
+  if (!maskDef)
+    return consumer->emitOpError(
+        "semantic predicate normalization requires a defining predicate op");
+
+  if (hasName(maskDef, kVC4TileMaskAllOpName)) {
+    VC4TilePredicateModel model =
+        VC4TilePredicateModel::full(consumerShape, policy);
+    model.source = mask;
+    return model;
+  }
+
+  if (std::optional<std::pair<Value, Value>> tail = getTailMaskInfo(maskDef)) {
+    PredicateLogicalShape tailShape =
+        PredicateLogicalShape::get({consumerShape.getNumElements()});
+    VC4TilePredicateModel model = VC4TilePredicateModel::tailInterval1D(
+        tailShape, tail->first, tail->second, policy);
+    model.source = mask;
+    return model;
+  }
+
+  if (std::optional<TileRectMaskInfo> rect = getTileRectMaskInfo(maskDef)) {
+    VC4TilePredicateModel model = VC4TilePredicateModel::rectangularBounds2D(
+        consumerShape, rect->activeRows, rect->activeCols, policy);
+    model.source = mask;
+    return model;
+  }
+
+  if (std::optional<TileBoundsMaskInfo> bounds =
+          getTileBoundsMaskInfo(maskDef)) {
+    VC4TilePredicateModel model = VC4TilePredicateModel::rectangularBounds2D(
+        consumerShape, bounds->activeRows, bounds->activeCols, policy);
+    model.source = mask;
+    return model;
+  }
+
+  if (hasName(maskDef, kVC4TileMaskNotOpName) && maskDef->getNumOperands() == 1) {
+    Operation *inputDef = maskDef->getOperand(0).getDefiningOp();
+    if (hasName(inputDef, kVC4TileMaskNotOpName) &&
+        inputDef->getNumOperands() == 1) {
+      FailureOr<VC4TilePredicateModel> model = normalizePredicateModelExpr(
+          consumer, inputDef->getOperand(0), consumerShape, policy);
+      if (failed(model))
+        return failure();
+      model->source = mask;
+      return model;
+    }
+
+    FailureOr<VC4TilePredicateModel> input = normalizePredicateModelExpr(
+        consumer, maskDef->getOperand(0), consumerShape, policy);
+    if (failed(input))
+      return failure();
+    if (input->semanticClass == PredicateSemanticClass::full) {
+      VC4TilePredicateModel empty =
+          VC4TilePredicateModel::empty(consumerShape, policy);
+      empty.source = mask;
+      return empty;
+    }
+    if (input->semanticClass == PredicateSemanticClass::empty) {
+      VC4TilePredicateModel full =
+          VC4TilePredicateModel::full(consumerShape, policy);
+      full.source = mask;
+      return full;
+    }
+    VC4TilePredicateModel sparse =
+        VC4TilePredicateModel::sparseFallback(consumerShape, policy);
+    sparse.source = mask;
+    return sparse;
+  }
+
+  if ((hasName(maskDef, kVC4TileMaskAndOpName) ||
+       hasName(maskDef, kVC4TileMaskOrOpName)) &&
+      maskDef->getNumOperands() == 2) {
+    return normalizePredicateBinaryModel(
+        consumer, maskDef, consumerShape, policy,
+        hasName(maskDef, kVC4TileMaskAndOpName));
+  }
+
+  VC4TilePredicateModel sparse =
+      VC4TilePredicateModel::sparseFallback(consumerShape, policy);
+  sparse.source = mask;
+  return sparse;
+}
+
+static FailureOr<VC4TilePredicateModel> normalizePredicateModelForConsumer(
+    Operation *consumer, Value mask, PredicateInactiveDestPolicy policy,
+    PredicateSparseFallbackPolicy sparseFallbackPolicy =
+        PredicateSparseFallbackPolicy::enabled) {
+  FailureOr<PredicateLogicalShape> consumerShape =
+      getPredicateConsumerShape(consumer);
+  if (failed(consumerShape))
+    return failure();
+
+  FailureOr<VC4TilePredicateModel> model =
+      normalizePredicateModelExpr(consumer, mask, *consumerShape, policy);
+  if (failed(model))
+    return failure();
+
+  if (model->density == PredicateDensity::sparseFallback &&
+      sparseFallbackPolicy == PredicateSparseFallbackPolicy::disabled) {
+    return consumer->emitOpError()
+           << "cannot normalize predicate algebra into dense fragments and "
+              "sparse fallback is disabled (predicate class "
+           << stringifyPredicateSemanticClass(model->semanticClass) << ")";
+  }
+
+  return model;
+}
+
+struct PredicateTransferPathDescriptor {
+  PredicateTransferPathKind pathKind = PredicateTransferPathKind::compute;
+  StringRef pathName;
+  PredicateLogicalShape logicalShape;
+  PredicateInactiveDestPolicy inactivePolicy =
+      PredicateInactiveDestPolicy::notApplicable;
+  mlir::vc4tile::Layout srcLayout = mlir::vc4tile::Layout::row_major;
+  mlir::vc4tile::Layout dstLayout = mlir::vc4tile::Layout::row_major;
+  bool sparseFallbackAllowed = false;
+  bool requiresDynamic2DBlockMasks = false;
+  bool requiresDynamicVPMAlignment = false;
+};
+
+struct PredicateFragmentPlan {
+  PredicateFragmentPlanClass planClass =
+      PredicateFragmentPlanClass::unsupportedWithReason;
+  PredicateFragmentPlanPathClass pathClass =
+      PredicateFragmentPlanPathClass::unsupported;
+  PredicateDensity density = PredicateDensity::denseFragmentable;
+  PredicateInactiveDestPolicy inactivePolicy =
+      PredicateInactiveDestPolicy::notApplicable;
+  Value provenance;
+  SmallVector<PredicateFragment, 4> fragments;
+  std::string reason;
+
+  static PredicateFragmentPlan getUnsupported(
+      const VC4TilePredicateModel &predicate,
+      const PredicateTransferPathDescriptor &descriptor, Twine reason) {
+    PredicateFragmentPlan plan;
+    plan.planClass = PredicateFragmentPlanClass::unsupportedWithReason;
+    plan.pathClass = PredicateFragmentPlanPathClass::unsupported;
+    plan.density = predicate.density;
+    plan.inactivePolicy = descriptor.inactivePolicy;
+    plan.provenance = predicate.source;
+    plan.reason = reason.str();
+    return plan;
+  }
+};
+
+static bool isOneRowShape(const PredicateLogicalShape &shape) {
+  return shape.rank == 1 || (shape.rank == 2 && shape.dims[0] == 1);
+}
+
+static PredicateFragmentPlan makePredicateFragmentPlan(
+    const VC4TilePredicateModel &predicate,
+    const PredicateTransferPathDescriptor &descriptor,
+    PredicateFragmentPlanClass planClass,
+    PredicateFragmentPlanPathClass pathClass, Twine reason) {
+  PredicateFragmentPlan plan;
+  plan.planClass = planClass;
+  plan.pathClass = pathClass;
+  plan.density = predicate.density;
+  plan.inactivePolicy = descriptor.inactivePolicy;
+  plan.provenance = predicate.source;
+  plan.fragments = predicate.fragments;
+  plan.reason = reason.str();
+  return plan;
+}
+
+static PredicateFragmentPlan planPredicateTransferFragments(
+    const VC4TilePredicateModel &predicate,
+    const PredicateTransferPathDescriptor &descriptor) {
+  if (!hasSamePredicateShape(predicate.shape, descriptor.logicalShape) &&
+      predicate.semanticClass != PredicateSemanticClass::tailInterval1D) {
+    return PredicateFragmentPlan::getUnsupported(
+        predicate, descriptor,
+        "predicate coordinate shape does not match consumer logical shape");
+  }
+
+  if (descriptor.requiresDynamic2DBlockMasks) {
+    return PredicateFragmentPlan::getUnsupported(
+        predicate, descriptor,
+        "dynamic 2D block masks are not a supported VC4 predicate mechanism");
+  }
+
+  if (descriptor.requiresDynamicVPMAlignment) {
+    return PredicateFragmentPlan::getUnsupported(
+        predicate, descriptor,
+        "dynamic VPM alignment is not supported by predicate fragment planning");
+  }
+
+  if (predicate.density == PredicateDensity::sparseFallback) {
+    if (!descriptor.sparseFallbackAllowed) {
+      return PredicateFragmentPlan::getUnsupported(
+          predicate, descriptor,
+          "cannot normalize predicate algebra into dense fragments and sparse fallback is disabled");
+    }
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::sparseFallback,
+        PredicateFragmentPlanPathClass::sparseFallback,
+        "explicit sparse predicate fallback");
+  }
+
+  switch (predicate.semanticClass) {
+  case PredicateSemanticClass::full:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::fullBlock,
+        PredicateFragmentPlanPathClass::denseFastPath,
+        "full predicate maps to dense full-block path");
+  case PredicateSemanticClass::empty:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::empty,
+        PredicateFragmentPlanPathClass::denseFastPath,
+        "empty predicate has no active transfer fragments");
+  case PredicateSemanticClass::tailInterval1D: {
+    PredicateFragmentPlan plan = makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::rowFragment,
+        PredicateFragmentPlanPathClass::rowTailPath,
+        "1D tail interval maps to row-tail fragments");
+    if (plan.fragments.empty()) {
+      int64_t width = isOneRowShape(descriptor.logicalShape)
+                          ? descriptor.logicalShape.getNumElements()
+                          : descriptor.logicalShape.dims.back();
+      plan.fragments.push_back(
+          PredicateFragment::rowFragment(/*row=*/0, /*startCol=*/0, width));
+    }
+    return plan;
+  }
+  case PredicateSemanticClass::rectangularBounds2D:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::rowSetFragment,
+        PredicateFragmentPlanPathClass::guardedRowSkip,
+        "rectangular bounds map to guarded row-set fragments");
+  case PredicateSemanticClass::rowFragment:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::rowFragment,
+        PredicateFragmentPlanPathClass::rowTailPath,
+        "row predicate maps to row fragment path");
+  case PredicateSemanticClass::rowSetFragment:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::rowSetFragment,
+        PredicateFragmentPlanPathClass::guardedRowSkip,
+        "row-set predicate maps to guarded row-set fragments");
+  case PredicateSemanticClass::scalarFragment:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::scalarFragment,
+        PredicateFragmentPlanPathClass::guardedRowSkip,
+        "scalar predicate maps to guarded scalar fragment");
+  case PredicateSemanticClass::denseFragmentSet:
+    return makePredicateFragmentPlan(
+        predicate, descriptor, PredicateFragmentPlanClass::rowSetFragment,
+        PredicateFragmentPlanPathClass::guardedRowSkip,
+        "dense predicate algebra maps to finite row-set fragments");
+  case PredicateSemanticClass::sparseFragmentSet:
+    return PredicateFragmentPlan::getUnsupported(
+        predicate, descriptor,
+        "sparse predicate was not classified as explicit sparse fallback");
+  case PredicateSemanticClass::unknown:
+    return PredicateFragmentPlan::getUnsupported(
+        predicate, descriptor, "unknown predicate semantic class");
+  }
+  llvm_unreachable("unknown predicate semantic class");
+}
+
+static FailureOr<PredicateTransferPathDescriptor>
+getPredicateTransferPathDescriptorForCopyTile(
+    Operation *op, PredicateTransferPathKind pathKind, StringRef pathName,
+    PredicateInactiveDestPolicy inactivePolicy,
+    bool sparseFallbackAllowed = false) {
+  FailureOr<PredicateLogicalShape> shape = getPredicateConsumerShape(op);
+  if (failed(shape))
+    return failure();
+
+  PredicateTransferPathDescriptor descriptor;
+  descriptor.pathKind = pathKind;
+  descriptor.pathName = pathName;
+  descriptor.logicalShape = *shape;
+  descriptor.inactivePolicy = inactivePolicy;
+  descriptor.sparseFallbackAllowed = sparseFallbackAllowed;
+  if (auto srcLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout"))
+    descriptor.srcLayout = srcLayout.getValue();
+  if (auto dstLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout"))
+    descriptor.dstLayout = dstLayout.getValue();
+  return descriptor;
+}
+
+static LogicalResult emitUnsupportedPredicateModelForPath(
+    Operation *op, StringRef path, Value mask,
+    PredicateInactiveDestPolicy policy) {
+  FailureOr<VC4TilePredicateModel> model =
+      normalizePredicateModelForConsumer(op, mask, policy);
+  if (failed(model))
+    return failure();
+
+  FailureOr<PredicateTransferPathDescriptor> descriptor =
+      getPredicateTransferPathDescriptorForCopyTile(
+          op, PredicateTransferPathKind::globalToSharedVPM, path, policy);
+  if (failed(descriptor))
+    return failure();
+  PredicateFragmentPlan plan =
+      planPredicateTransferFragments(*model, *descriptor);
+  if (plan.planClass == PredicateFragmentPlanClass::unsupportedWithReason) {
+    return op->emitOpError()
+           << path << " unsupported predicate fragment plan: " << plan.reason
+           << " (predicate class "
+           << stringifyPredicateSemanticClass(model->semanticClass) << ")";
+  }
+
+  InFlightDiagnostic diag = op->emitOpError();
+  diag << path << " does not support predicate class "
+       << stringifyPredicateSemanticClass(model->semanticClass)
+       << " (density = " << stringifyPredicateDensity(model->density)
+       << ", inactive_destination = "
+       << stringifyPredicateInactiveDestPolicy(model->inactivePolicy);
+  diag << ", transfer_path = "
+       << stringifyPredicateTransferPathKind(descriptor->pathKind)
+       << ", planned_fragment_class = "
+       << stringifyPredicateFragmentPlanClass(plan.planClass)
+       << ", planned_path = "
+       << stringifyPredicateFragmentPlanPathClass(plan.pathClass);
+  if (!model->fragments.empty())
+    diag << ", first_fragment = "
+         << stringifyPredicateFragmentKind(model->fragments.front().kind);
+  diag << ") in M5";
+  return failure();
+}
+
 static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
   if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
     return std::nullopt;
@@ -5901,8 +6843,12 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   }
   if (op->getNumOperands() == 4 && !isVector16I1(op->getOperand(3).getType()))
     return op->emitOpError("optional global->shared_vpm copy_tile mask must be vector<16xi1>");
+  bool useFullBlockPath = op->getNumOperands() < 4;
   if (op->getNumOperands() == 4) {
     Operation *maskDef = op->getOperand(3).getDefiningOp();
+    // TODO: Migrate these established lowering branches to consume
+    // PredicateFragmentPlan directly as each fragment class gets executable
+    // coverage on this path.
     if (std::optional<TileRectMaskInfo> rectMask =
             getTileRectMaskInfo(maskDef))
       return planRectangularGlobalSharedCopy(op, builder, *rectMask);
@@ -5912,10 +6858,36 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
     if (std::optional<BoundsAndTailMaskInfo> boundsAndTail =
             getBoundsAndTailMaskInfo(maskDef))
       return planBoundsAndTailGlobalSharedCopy(op, builder, *boundsAndTail);
-    if (!isMaskAllForPlan(op->getOperand(3)))
-      return op->emitOpError(
-          "global->shared_vpm copy_tile supports only mask_all, tile_rect_mask, tile_bounds_mask, or tile_bounds_mask AND tail_mask masks in M5");
+    if (!isMaskAllForPlan(op->getOperand(3))) {
+      FailureOr<VC4TilePredicateModel> predicate =
+          normalizePredicateModelForConsumer(op, op->getOperand(3),
+                                             PredicateInactiveDestPolicy::zeroFill);
+      if (failed(predicate))
+        return failure();
+      FailureOr<PredicateTransferPathDescriptor> descriptor =
+          getPredicateTransferPathDescriptorForCopyTile(
+              op, PredicateTransferPathKind::globalToSharedVPM,
+              "global->shared_vpm copy_tile",
+              PredicateInactiveDestPolicy::zeroFill);
+      if (failed(descriptor))
+        return failure();
+      PredicateFragmentPlan plan =
+          planPredicateTransferFragments(*predicate, *descriptor);
+      if (plan.planClass == PredicateFragmentPlanClass::fullBlock)
+        useFullBlockPath = true;
+      else
+        return emitUnsupportedPredicateModelForPath(
+            op, "global->shared_vpm copy_tile", op->getOperand(3),
+            PredicateInactiveDestPolicy::zeroFill);
+    } else {
+      useFullBlockPath = true;
+    }
+    if (!useFullBlockPath)
+      return emitUnsupportedPredicateModelForPath(
+          op, "global->shared_vpm copy_tile", op->getOperand(3),
+          PredicateInactiveDestPolicy::zeroFill);
   }
+
   FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
   if (failed(shape))
     return failure();
