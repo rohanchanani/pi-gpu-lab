@@ -125,6 +125,7 @@ constexpr llvm::StringLiteral kArithAndIOpName("arith.andi");
 constexpr llvm::StringLiteral kArithOrIOpName("arith.ori");
 constexpr llvm::StringLiteral kArithXOrIOpName("arith.xori");
 constexpr llvm::StringLiteral kArithCmpIOpName("arith.cmpi");
+constexpr llvm::StringLiteral kArithSelectOpName("arith.select");
 constexpr llvm::StringLiteral kArithIndexCastOpName("arith.index_cast");
 constexpr llvm::StringLiteral kArithIndexCastUIOpName("arith.index_castui");
 constexpr llvm::StringLiteral kArithIndexCastSIOpName("arith.index_castsi");
@@ -340,7 +341,8 @@ static bool isAllowedCoreArithOp(Operation *op) {
          hasName(op, kArithShLIOpName) || hasName(op, kArithShRUIOpName) ||
          hasName(op, kArithShRSIOpName) || hasName(op, kArithAndIOpName) ||
          hasName(op, kArithOrIOpName) ||
-         hasName(op, kArithXOrIOpName) || hasName(op, kArithCmpIOpName);
+         hasName(op, kArithXOrIOpName) || hasName(op, kArithCmpIOpName) ||
+         hasName(op, kArithSelectOpName);
 }
 
 static bool isAllowedCoreOp(Operation *op) {
@@ -1544,6 +1546,46 @@ static LogicalResult lowerCmpI(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static std::optional<mlir::vc4::Cond>
+getCondForArithCmpI(arith::CmpIPredicate predicate) {
+  switch (predicate) {
+  case arith::CmpIPredicate::eq:
+    return mlir::vc4::Cond::zs;
+  case arith::CmpIPredicate::ne:
+    return mlir::vc4::Cond::zc;
+  case arith::CmpIPredicate::ult:
+    return mlir::vc4::Cond::cs;
+  case arith::CmpIPredicate::uge:
+    return mlir::vc4::Cond::cc;
+  default:
+    return std::nullopt;
+  }
+}
+
+static LogicalResult lowerSelect(Operation *op, OpBuilder &builder,
+                                 llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 3 || op->getNumResults() != 1)
+    return op->emitOpError("expected condition, true_value, false_value, and one result");
+  auto cmp = op->getOperand(0).getDefiningOp<arith::CmpIOp>();
+  if (!cmp)
+    return op->emitOpError(
+        "arith.select condition must be produced by arith.cmpi in VC4Tile lowering");
+  std::optional<mlir::vc4::Cond> cond = getCondForArithCmpI(cmp.getPredicate());
+  if (!cond)
+    return op->emitOpError(
+        "arith.select condition uses an unsupported arith.cmpi predicate");
+
+  Value flags = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value trueValue = lookupMappedValue(op, op->getOperand(1), valueMap);
+  Value falseValue = lookupMappedValue(op, op->getOperand(2), valueMap);
+  if (!flags || !trueValue || !falseValue)
+    return failure();
+  valueMap[op->getResult(0)] =
+      createCondSelect(builder, op->getLoc(), flags, trueValue, falseValue,
+                       *cond, op->getResult(0).getType());
+  return success();
+}
+
 static Value getOrCreateRuntimeBuiltinUniformRead(
     Operation *op, OpBuilder &builder, llvm::StringMap<Value> &builtinValueMap,
     StringRef builtinName, Type resultType) {
@@ -1815,9 +1857,10 @@ static LogicalResult lowerTileBoundsMask(Operation *op) {
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError(
         "currently lowers only vector<16xi1> tile_bounds_mask results");
-  if (!op->getResult(0).use_empty())
+  if (!op->getResult(0).use_empty() &&
+      !valueHasOnlyMaskedGlobalMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "tile_bounds_mask must be consumed by VC4Tile planning before SSAVC4 conversion");
+        "tile_bounds_mask must be consumed by VC4Tile planning or masked global memory before SSAVC4 conversion");
   return success();
 }
 
@@ -1905,9 +1948,10 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
   Operation *maskDef = op->getOperand(2).getDefiningOp();
   if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
       !hasName(maskDef, kVC4TileTailMaskOpName) &&
-      !hasName(maskDef, kVC4TileTileRectMaskOpName)) {
+      !hasName(maskDef, kVC4TileTileRectMaskOpName) &&
+      !hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
     return op->emitOpError(
-        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, or vc4tile.tile_rect_mask masks for TMU loads");
+        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for TMU loads");
   }
 
   return success();
@@ -1986,6 +2030,54 @@ getTileRectMaskLanes(Operation *maskDef) {
   return lanes;
 }
 
+static Value createTileBoundsActiveMask(Operation *op, OpBuilder &builder,
+                                        Operation *maskDef,
+                                        llvm::DenseMap<Value, Value> &valueMap,
+                                        Type addressType) {
+  std::optional<TileBoundsMaskInfo> maskInfo = getTileBoundsMaskInfo(maskDef);
+  if (!maskInfo)
+    return Value();
+
+  Value activeRows = lookupMappedValue(maskDef, maskInfo->activeRows, valueMap);
+  Value activeCols = lookupMappedValue(maskDef, maskInfo->activeCols, valueMap);
+  if (!activeRows || !activeCols)
+    return Value();
+
+  SmallVector<int32_t, 16> rowLanes;
+  SmallVector<int32_t, 16> colLanes;
+  rowLanes.reserve(16);
+  colLanes.reserve(16);
+  for (int64_t lane = 0; lane < 16; ++lane) {
+    rowLanes.push_back(static_cast<int32_t>(lane / 4));
+    colLanes.push_back(static_cast<int32_t>(lane % 4));
+  }
+
+  Value rowIds =
+      createLoadImmPerElemU2(builder, op->getLoc(), addressType, rowLanes);
+  Value colIds =
+      createLoadImmPerElemU2(builder, op->getLoc(), addressType, colLanes);
+  Value activeRowsVec = createSplat(builder, op->getLoc(), activeRows,
+                                    addressType);
+  Value activeColsVec = createSplat(builder, op->getLoc(), activeCols,
+                                    addressType);
+
+  Value one = createLoadImmI32(builder, op->getLoc(), addressType, 1);
+  Value zero = createLoadImmI32(builder, op->getLoc(), addressType, 0);
+
+  Value rowFlags = createMakeFlags(builder, op->getLoc(),
+                                   {rowIds, activeRowsVec},
+                                   mlir::ssavc4::FlagKind::compare);
+  Value rowActive = createCondSelect(builder, op->getLoc(), rowFlags, one,
+                                     zero, mlir::vc4::Cond::cs, addressType);
+  Value colFlags = createMakeFlags(builder, op->getLoc(),
+                                   {colIds, activeColsVec},
+                                   mlir::ssavc4::FlagKind::compare);
+  Value colActive = createCondSelect(builder, op->getLoc(), colFlags, one,
+                                     zero, mlir::vc4::Cond::cs, addressType);
+  return createALUAdd(builder, op->getLoc(), {rowActive, colActive},
+                      mlir::vc4::AddOpcode::bit_and, addressType);
+}
+
 static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
                                            llvm::DenseMap<Value, Value> &valueMap) {
   if (failed(verifyMaskedLoadShape(op)))
@@ -2008,6 +2100,14 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
           "tile_rect_mask TMU loads currently support only vector<16xi32> results");
     activeMask = createLoadImmPerElemU2(builder, op->getLoc(), addressType,
                                         *maskLanes);
+  } else if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+    if (!isVector16I32(op->getResult(0).getType()))
+      return op->emitOpError(
+          "tile_bounds_mask TMU loads currently support only vector<16xi32> results");
+    activeMask = createTileBoundsActiveMask(op, builder, maskDef, valueMap,
+                                            addressType);
+    if (!activeMask)
+      return failure();
   }
 
   auto offsetUnit =
@@ -2494,6 +2594,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerIntegerALU(op, builder, valueMap);
   if (hasName(op, kArithCmpIOpName))
     return lowerCmpI(op, builder, valueMap);
+  if (hasName(op, kArithSelectOpName))
+    return lowerSelect(op, builder, valueMap);
   if (hasName(op, kVC4TileProgramIdOpName))
     return lowerProgramId(op, builder, valueMap, builtinValueMap);
   if (hasName(op, kVC4TileBlockIdOpName))
@@ -3438,6 +3540,130 @@ static bool tileSelectTailMaskUseIsPredicatedStore(Operation *selectOp,
   return false;
 }
 
+static Value createVector16I32SplatConstant(OpBuilder &builder, Location loc,
+                                            VectorType vectorType,
+                                            int32_t value) {
+  auto attr = DenseIntElementsAttr::get(
+      vectorType, llvm::APInt(/*numBits=*/32, value, /*isSigned=*/true));
+  return arith::ConstantOp::create(builder, loc, vectorType, attr).getResult();
+}
+
+static Value createVector16I32DenseConstant(OpBuilder &builder, Location loc,
+                                            VectorType vectorType,
+                                            ArrayRef<int32_t> lanes) {
+  SmallVector<llvm::APInt, 16> values;
+  values.reserve(lanes.size());
+  for (int32_t lane : lanes)
+    values.emplace_back(/*numBits=*/32, lane, /*isSigned=*/true);
+  auto attr = DenseIntElementsAttr::get(vectorType, values);
+  return arith::ConstantOp::create(builder, loc, vectorType, attr).getResult();
+}
+
+static Value createTileBoundsAllBitsMask(Operation *op, OpBuilder &builder,
+                                         Operation *maskDef,
+                                         VectorType vectorType, Value allOnes,
+                                         Value zero) {
+  std::optional<TileBoundsMaskInfo> maskInfo = getTileBoundsMaskInfo(maskDef);
+  if (!maskInfo)
+    return Value();
+
+  SmallVector<int32_t, 16> rowLanes;
+  SmallVector<int32_t, 16> colLanes;
+  rowLanes.reserve(16);
+  colLanes.reserve(16);
+  for (int64_t lane = 0; lane < 16; ++lane) {
+    rowLanes.push_back(static_cast<int32_t>(lane / 4));
+    colLanes.push_back(static_cast<int32_t>(lane % 4));
+  }
+
+  Value rowIds =
+      createVector16I32DenseConstant(builder, op->getLoc(), vectorType,
+                                     rowLanes);
+  Value colIds =
+      createVector16I32DenseConstant(builder, op->getLoc(), vectorType,
+                                     colLanes);
+  Value activeRows = vector::BroadcastOp::create(
+                         builder, op->getLoc(), vectorType,
+                         maskInfo->activeRows)
+                         .getResult();
+  Value activeCols = vector::BroadcastOp::create(
+                         builder, op->getLoc(), vectorType,
+                         maskInfo->activeCols)
+                         .getResult();
+  Value rowLive = arith::CmpIOp::create(builder, op->getLoc(),
+                                        arith::CmpIPredicate::ult, rowIds,
+                                        activeRows);
+  Value colLive = arith::CmpIOp::create(builder, op->getLoc(),
+                                        arith::CmpIPredicate::ult, colIds,
+                                        activeCols);
+  Value rowBits = arith::SelectOp::create(builder, op->getLoc(), rowLive,
+                                          allOnes, zero);
+  Value colBits = arith::SelectOp::create(builder, op->getLoc(), colLive,
+                                          allOnes, zero);
+  return arith::AndIOp::create(builder, op->getLoc(), rowBits, colBits)
+      .getResult();
+}
+
+static Value createTileRectAllBitsMask(Operation *op, OpBuilder &builder,
+                                       Operation *maskDef,
+                                       VectorType vectorType, Value zero) {
+  std::optional<SmallVector<int32_t, 16>> maskLanes =
+      getTileRectMaskLanes(maskDef);
+  if (!maskLanes)
+    return Value();
+  Value active01 =
+      createVector16I32DenseConstant(builder, op->getLoc(), vectorType,
+                                     *maskLanes);
+  return arith::SubIOp::create(builder, op->getLoc(), zero, active01)
+      .getResult();
+}
+
+static LogicalResult canonicalizeTileSelectWithRectangularMask(
+    Operation *op, OpBuilder &builder, Operation *maskDef) {
+  auto vectorType = llvm::dyn_cast<VectorType>(op->getResult(0).getType());
+  if (!vectorType || vectorType.getRank() != 1 ||
+      vectorType.getDimSize(0) != 16 ||
+      !vectorType.getElementType().isSignlessInteger(32)) {
+    return op->emitOpError(
+        "tile_select with rectangular predicates currently requires vector<16xi32> values");
+  }
+
+  Value zero =
+      createVector16I32SplatConstant(builder, op->getLoc(), vectorType, 0);
+  Value allOnes =
+      createVector16I32SplatConstant(builder, op->getLoc(), vectorType, -1);
+
+  Value activeBits;
+  if (hasName(maskDef, kVC4TileTileRectMaskOpName)) {
+    activeBits =
+        createTileRectAllBitsMask(op, builder, maskDef, vectorType, zero);
+  } else if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+    activeBits = createTileBoundsAllBitsMask(op, builder, maskDef, vectorType,
+                                             allOnes, zero);
+  }
+  if (!activeBits)
+    return op->emitOpError(
+        "tile_select rectangular predicate requires shape = [4, 4] and row_major layout");
+
+  Value inactiveBits =
+      arith::XOrIOp::create(builder, op->getLoc(), activeBits, allOnes)
+          .getResult();
+  Value truePart =
+      arith::AndIOp::create(builder, op->getLoc(), op->getOperand(1),
+                            activeBits)
+          .getResult();
+  Value falsePart =
+      arith::AndIOp::create(builder, op->getLoc(), op->getOperand(2),
+                            inactiveBits)
+          .getResult();
+  Value result =
+      arith::OrIOp::create(builder, op->getLoc(), truePart, falsePart)
+          .getResult();
+  op->getResult(0).replaceAllUsesWith(result);
+  op->erase();
+  return success();
+}
+
 static LogicalResult canonicalizeTileSelectOp(Operation *op,
                                               OpBuilder &builder) {
   (void)builder;
@@ -3475,9 +3701,13 @@ static LogicalResult canonicalizeTileSelectOp(Operation *op,
     return success();
   }
 
+  if (hasName(maskDef, kVC4TileTileRectMaskOpName) ||
+      hasName(maskDef, kVC4TileTileBoundsMaskOpName))
+    return canonicalizeTileSelectWithRectangularMask(op, builder, maskDef);
+
   return op->emitOpError(
       "tile_select currently supports only vc4tile.mask_all or "
-      "vc4tile.tail_mask masks in M5");
+      "vc4tile.tail_mask masks for elision, or rectangular tile predicates for vector<16xi32> materialization in M5");
 }
 
 static bool isMaskAllValue(Value mask) {

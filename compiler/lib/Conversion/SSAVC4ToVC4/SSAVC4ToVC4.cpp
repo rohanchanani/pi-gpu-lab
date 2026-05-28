@@ -403,6 +403,8 @@ struct InstructionTemplate {
   std::optional<unsigned> branchTargetBlockId;
   SmallVector<Value, 2> operands;
   std::optional<Value> result;
+  Operation *flagSource = nullptr;
+  unsigned flagOperandCount = 0;
 };
 
 struct LivenessSummary {
@@ -1382,8 +1384,12 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   case InstructionTemplate::Kind::EdgeCopy:
     return spillActionSlots + getEdgeCopySlotCount(templ, allocator);
   case InstructionTemplate::Kind::Branch:
-  case InstructionTemplate::Kind::CondBranch:
     return spillActionSlots + 4;
+  case InstructionTemplate::Kind::CondBranch:
+    return spillActionSlots +
+           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
+                                                                         : 1) +
+           4;
   case InstructionTemplate::Kind::ThreadEnd:
     return spillActionSlots + 3;
   case InstructionTemplate::Kind::TMURequest:
@@ -1439,7 +1445,10 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   case InstructionTemplate::Kind::Mov:
     return spillActionSlots + 1 + resultSpacer;
   case InstructionTemplate::Kind::CondSelect:
-    return spillActionSlots + 2 + resultSpacer;
+    return spillActionSlots +
+           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
+                                                                         : 1) +
+           2 + resultSpacer;
   case InstructionTemplate::Kind::ALUAdd:
     return spillActionSlots +
            (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
@@ -1469,10 +1478,18 @@ public:
       unsigned preActionSlots = 0;
       for (const SpillAction &action : allocator.getPreActions(templ))
         preActionSlots += getSpillActionSlotCount(action);
+      unsigned instructionPreludeSlots = 0;
+      if (templ.kind == InstructionTemplate::Kind::CondBranch) {
+        instructionPreludeSlots =
+            makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
+                                                                         : 1;
+      }
       if (templ.source)
-        layout.opStartSlots.try_emplace(templ.source, slot + preActionSlots);
+        layout.opStartSlots.try_emplace(
+            templ.source, slot + preActionSlots + instructionPreludeSlots);
       layout.templateStartSlots.try_emplace(templ.ordinal,
-                                            slot + preActionSlots);
+                                            slot + preActionSlots +
+                                                instructionPreludeSlots);
       slot += getFlattenedSlotCount(templ, allocator);
     }
 
@@ -1577,13 +1594,17 @@ static bool aluNeedsSecondOperandAccumulatorMove(
 
 static bool canUseMirroredSecondOperandForMakeFlags(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
-  return !allocator.hasSpills() && templ.operands.size() == 2 &&
+  unsigned flagOperandCount =
+      templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
+  return !allocator.hasSpills() && flagOperandCount == 2 &&
          isMirroredLoadImm(templ.operands[1]);
 }
 
 static bool makeFlagsNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
-  if (templ.operands.size() != 2)
+  unsigned flagOperandCount =
+      templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
+  if (flagOperandCount != 2)
     return false;
   return !canUseMirroredSecondOperandForMakeFlags(templ, allocator);
 }
@@ -1974,6 +1995,21 @@ static LogicalResult selectInstructionTemplates(
     templ.ordinal = templates.size();
     templates.push_back(std::move(templ));
   };
+  auto attachFlagProducer = [&](Operation *consumer, Value flags,
+                                InstructionTemplate &templ) -> LogicalResult {
+    Operation *definingOp = flags.getDefiningOp();
+    if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
+      return consumer->emitOpError()
+             << "requires flags produced directly by ssavc4.make_flags";
+    if (definingOp->getNumOperands() == 0 || definingOp->getNumOperands() > 2)
+      return definingOp->emitOpError()
+             << "supports only unary/binary flag compares in M3 v1";
+    templ.flagSource = definingOp;
+    templ.flagOperandCount = definingOp->getNumOperands();
+    templ.operands.append(definingOp->operand_begin(),
+                          definingOp->operand_end());
+    return success();
+  };
   auto appendEdgeCopies = [&](Operation *source, Block *sourceBlock,
                               unsigned layoutBlockId, Block *targetBlock,
                               ValueRange successorOperands) -> LogicalResult {
@@ -2037,7 +2073,8 @@ static LogicalResult selectInstructionTemplates(
         templ.source = &op;
         templ.sourceBlock = block;
         templ.layoutBlockId = blockIds[block];
-        templ.operands.push_back(condBranch.getFlags());
+        if (failed(attachFlagProducer(&op, condBranch.getFlags(), templ)))
+          return failure();
         if (!hasSuccessorOperands) {
           auto nextIt = nextBlock.find(block);
           if (nextIt == nextBlock.end() || op.getSuccessor(1) != nextIt->second)
@@ -2193,7 +2230,10 @@ static LogicalResult selectInstructionTemplates(
         templ.source = &op;
         templ.sourceBlock = block;
         templ.layoutBlockId = blockIds[block];
-        templ.operands.append(op.operand_begin(), op.operand_end());
+        if (failed(attachFlagProducer(&op, op.getOperand(0), templ)))
+          return failure();
+        templ.operands.push_back(op.getOperand(1));
+        templ.operands.push_back(op.getOperand(2));
         templ.result = result;
         appendTemplate(std::move(templ));
         continue;
@@ -2224,14 +2264,9 @@ static LogicalResult selectInstructionTemplates(
           return op.emitOpError("requires exactly one flag result");
         if (op.getNumOperands() == 0 || op.getNumOperands() > 2)
           return op.emitOpError("supports only unary/binary flag compares in M3 v1");
-        InstructionTemplate templ;
-        templ.kind = InstructionTemplate::Kind::MakeFlags;
-        templ.source = &op;
-        templ.sourceBlock = block;
-        templ.layoutBlockId = blockIds[block];
-        templ.operands.append(op.operand_begin(), op.operand_end());
-        templ.result = op.getResult(0);
-        appendTemplate(std::move(templ));
+        // !ssavc4.flags is pseudo-SSA for transient physical condition
+        // state.  It is rematerialized immediately before its single
+        // conditional consumer rather than scheduled as an independent value.
         continue;
       }
 
@@ -2658,11 +2693,16 @@ static LogicalResult emitMov(OpBuilder &builder,
   return success();
 }
 
+static LogicalResult emitMakeFlags(OpBuilder &builder,
+                                   const InstructionTemplate &templ,
+                                   const SpillAwareAllocator &allocator);
+
 static LogicalResult emitCondSelect(OpBuilder &builder,
                                     const InstructionTemplate &templ,
                                     const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  if (!templ.result || templ.operands.size() != 3)
+  if (!templ.result || templ.flagOperandCount == 0 ||
+      templ.operands.size() != templ.flagOperandCount + 2)
     return source->emitError("internal lowering error: malformed cond_select");
 
   auto condAttr =
@@ -2671,11 +2711,16 @@ static LogicalResult emitCondSelect(OpBuilder &builder,
     return source->emitOpError("requires a vc4.cond condition attribute");
 
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  std::optional<int64_t> trueReg = allocator.lookup(templ, templ.operands[1]);
-  std::optional<int64_t> falseReg = allocator.lookup(templ, templ.operands[2]);
+  std::optional<int64_t> trueReg =
+      allocator.lookup(templ, templ.operands[templ.flagOperandCount]);
+  std::optional<int64_t> falseReg =
+      allocator.lookup(templ, templ.operands[templ.flagOperandCount + 1]);
   if (!resultReg || !trueReg || !falseReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M5";
+
+  if (failed(emitMakeFlags(builder, templ, allocator)))
+    return failure();
 
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -3161,9 +3206,12 @@ static LogicalResult emitBarrier(OpBuilder &builder,
 static LogicalResult emitMakeFlags(OpBuilder &builder,
                                    const InstructionTemplate &templ,
                                    const SpillAwareAllocator &allocator) {
-  Operation *source = templ.source;
+  Operation *source = templ.flagSource ? templ.flagSource : templ.source;
+  unsigned flagOperandCount =
+      templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
   SmallVector<int64_t, 2> operandRegs;
-  for (Value operand : templ.operands) {
+  for (unsigned index = 0; index < flagOperandCount; ++index) {
+    Value operand = templ.operands[index];
     std::optional<int64_t> reg = allocator.lookup(templ, operand);
     if (!reg)
       return source->emitOpError()
@@ -3173,14 +3221,14 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
   bool useMirroredSecond =
       canUseMirroredSecondOperandForMakeFlags(templ, allocator);
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
-  int64_t raddrB = operandRegs.size() < 2 ? raddrA
+  int64_t raddrB = flagOperandCount < 2 ? raddrA
                   : useMirroredSecond   ? operandRegs[1]
                                         : 0;
-  mlir::vc4::QPUMux addB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
+  mlir::vc4::QPUMux addB = flagOperandCount < 2 ? mlir::vc4::QPUMux::a
                          : useMirroredSecond     ? mlir::vc4::QPUMux::b
                                                   : mlir::vc4::QPUMux::r1;
   std::optional<int64_t> smallImm;
-  if (templ.operands.size() == 1) {
+  if (flagOperandCount == 1) {
     auto kindAttr =
         llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(source->getAttr("kind"));
     if (!kindAttr ||
@@ -4102,6 +4150,9 @@ static LogicalResult emitScheduledFunctionBody(
       break;
     case InstructionTemplate::Kind::Branch:
     case InstructionTemplate::Kind::CondBranch:
+      if (templ.kind == InstructionTemplate::Kind::CondBranch &&
+          failed(emitMakeFlags(builder, templ, allocator)))
+        return failure();
       if (failed(emitScheduledBranch(builder, templ, layout)))
         return failure();
       break;
