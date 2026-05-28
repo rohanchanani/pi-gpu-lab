@@ -126,6 +126,25 @@ def VC4Tile_TileRectMaskOp : VC4Tile_PureOp<"tile_rect_mask"> {
   let hasVerifier = 1;
 }
 
+def VC4Tile_TileBoundsMaskOp : VC4Tile_PureOp<"tile_bounds_mask"> {
+  let summary = "dynamic rectangular in-bounds predicate for a 4x4 tile";
+  let description = [{
+    CuTe-style rectangular tile predicate.  The active row/column counts are
+    dynamic scalar values already clamped by the producer to the physical tile
+    shape.  VC4Tile lowering maps this semantic predicate to concrete legal
+    hardware transfers such as full VDW blocks or guarded one-row tail stores.
+  }];
+  let arguments = (ins
+    AnyType:$active_rows,
+    AnyType:$active_cols,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$active_rows `,` $active_cols attr-dict `:` type($active_rows) `,` type($active_cols) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_MaskedLoadGlobalOp : VC4Tile_Op<"masked_load_global", [
     MemoryEffects<[MemRead]>
   ]> {

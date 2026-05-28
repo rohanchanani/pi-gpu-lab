@@ -69,6 +69,8 @@ constexpr llvm::StringLiteral kVC4TileMaskAllOpName("vc4tile.mask_all");
 constexpr llvm::StringLiteral kVC4TileTailMaskOpName("vc4tile.tail_mask");
 constexpr llvm::StringLiteral kVC4TileTileRectMaskOpName(
     "vc4tile.tile_rect_mask");
+constexpr llvm::StringLiteral kVC4TileTileBoundsMaskOpName(
+    "vc4tile.tile_bounds_mask");
 constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
     "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
@@ -317,6 +319,7 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
          hasName(op, kVC4TileMaskAllOpName) ||
          hasName(op, kVC4TileTailMaskOpName) ||
          hasName(op, kVC4TileTileRectMaskOpName) ||
+         hasName(op, kVC4TileTileBoundsMaskOpName) ||
          hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
          hasName(op, kVC4TileMaskedStoreGlobalOpName) ||
          hasName(op, kVC4TileRotateOpName) ||
@@ -1805,6 +1808,19 @@ static LogicalResult lowerTileRectMask(Operation *op) {
   return success();
 }
 
+static LogicalResult lowerTileBoundsMask(Operation *op) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError(
+        "tile_bounds_mask expects active_rows, active_cols, and one result");
+  if (!isVector16I1(op->getResult(0).getType()))
+    return op->emitOpError(
+        "currently lowers only vector<16xi1> tile_bounds_mask results");
+  if (!op->getResult(0).use_empty())
+    return op->emitOpError(
+        "tile_bounds_mask must be consumed by VC4Tile planning before SSAVC4 conversion");
+  return success();
+}
+
 
 static LogicalResult appendStoreActiveLaneOperand(Operation *op,
                                                   OpBuilder &builder,
@@ -1897,8 +1913,17 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
   return success();
 }
 
-static std::optional<SmallVector<int32_t, 16>>
-getTileRectMaskLanes(Operation *maskDef) {
+struct TileRectMaskInfo {
+  int64_t activeRows = 0;
+  int64_t activeCols = 0;
+};
+
+struct TileBoundsMaskInfo {
+  Value activeRows;
+  Value activeCols;
+};
+
+static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
   if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
     return std::nullopt;
 
@@ -1919,13 +1944,44 @@ getTileRectMaskLanes(Operation *maskDef) {
   int64_t activeCols = colsAttr.getInt();
   if (activeRows < 1 || activeRows > 4 || activeCols < 1 || activeCols > 4)
     return std::nullopt;
+  return TileRectMaskInfo{activeRows, activeCols};
+}
+
+static std::optional<TileBoundsMaskInfo>
+getTileBoundsMaskInfo(Operation *maskDef) {
+  if (!hasName(maskDef, kVC4TileTileBoundsMaskOpName))
+    return std::nullopt;
+  if (maskDef->getNumOperands() != 2)
+    return std::nullopt;
+
+  auto layout = maskDef->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout");
+  auto shape = maskDef->getAttrOfType<ArrayAttr>("shape");
+  if (!layout || !shape || shape.size() != 2 ||
+      layout.getValue() != mlir::vc4tile::Layout::row_major)
+    return std::nullopt;
+  auto shapeRows = llvm::dyn_cast<IntegerAttr>(shape[0]);
+  auto shapeCols = llvm::dyn_cast<IntegerAttr>(shape[1]);
+  if (!shapeRows || !shapeCols || shapeRows.getInt() != 4 ||
+      shapeCols.getInt() != 4)
+    return std::nullopt;
+
+  return TileBoundsMaskInfo{maskDef->getOperand(0), maskDef->getOperand(1)};
+}
+
+static std::optional<SmallVector<int32_t, 16>>
+getTileRectMaskLanes(Operation *maskDef) {
+  std::optional<TileRectMaskInfo> maskInfo = getTileRectMaskInfo(maskDef);
+  if (!maskInfo)
+    return std::nullopt;
 
   SmallVector<int32_t, 16> lanes;
   lanes.reserve(16);
   for (int64_t lane = 0; lane < 16; ++lane) {
     int64_t row = lane / 4;
     int64_t col = lane % 4;
-    lanes.push_back((row < activeRows && col < activeCols) ? 1 : 0);
+    lanes.push_back((row < maskInfo->activeRows && col < maskInfo->activeCols)
+                        ? 1
+                        : 0);
   }
   return lanes;
 }
@@ -2456,6 +2512,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerTailMask(op, builder, valueMap);
   if (hasName(op, kVC4TileTileRectMaskOpName))
     return lowerTileRectMask(op);
+  if (hasName(op, kVC4TileTileBoundsMaskOpName))
+    return lowerTileBoundsMask(op);
   if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
@@ -4050,6 +4108,200 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
 
 static LogicalResult planSharedGlobalTileStore(Operation *op, OpBuilder &builder);
 
+static bool isStatic4x4RowMajorTile(Operation *op) {
+  auto shape = op->getAttrOfType<ArrayAttr>("shape");
+  if (!shape || shape.size() != 2)
+    return false;
+  auto rows = llvm::dyn_cast<IntegerAttr>(shape[0]);
+  auto cols = llvm::dyn_cast<IntegerAttr>(shape[1]);
+  if (!rows || !cols || rows.getInt() != 4 || cols.getInt() != 4)
+    return false;
+  auto layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout");
+  return !layout || layout.getValue() == mlir::vc4tile::Layout::row_major;
+}
+
+static Value createI32ConstantInline(OpBuilder &builder, Location loc,
+                                     int64_t value) {
+  return arith::ConstantIntOp::create(builder, loc, value, 32).getResult();
+}
+
+static Value addI32ConstantInline(OpBuilder &builder, Location loc, Value base,
+                                  int64_t value) {
+  if (value == 0)
+    return base;
+  Value constant = createI32ConstantInline(builder, loc, value);
+  return arith::AddIOp::create(builder, loc, base, constant).getResult();
+}
+
+static Value createVC4TileRotateForPlan(OpBuilder &builder, Location loc,
+                                        Value input, int64_t amount,
+                                        Type resultType) {
+  amount %= 16;
+  if (amount == 0)
+    return input;
+  Operation *rotate = createVC4TileCoreOp(
+      builder, loc, kVC4TileRotateOpName, {input},
+      {namedAttr(builder, "amount", builder.getI32IntegerAttr(amount))},
+      resultType);
+  return rotate->getResult(0);
+}
+
+static LogicalResult planRectangularRegisterGlobalTileStore(
+    Operation *op, OpBuilder &builder, TileRectMaskInfo maskInfo) {
+  if (!isStatic4x4RowMajorTile(op))
+    return op->emitOpError(
+        "tile_rect_mask register->global stores currently require shape = [4, 4] and row_major layout");
+
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "tile_rect_mask register->global stores require unit lane stride in M5");
+
+  Value tile = op->getOperand(0);
+  Value base = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  if (maskInfo.activeRows == 4 && maskInfo.activeCols == 4) {
+    FailureOr<Value> adjustedBase =
+        createAdjustedGlobalBaseForTileCopy(builder, op, base, offset);
+    if (failed(adjustedBase))
+      return failure();
+    Operation *maskAll = createVC4TileCoreOp(
+        builder, op->getLoc(), kVC4TileMaskAllOpName, {}, {},
+        op->getOperand(3).getType());
+    SmallVector<NamedAttribute, 8> attrs{
+        namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+        namedAttr(builder, "offset_unit",
+                  getVC4TileOffsetUnitAttr(
+                      builder, mlir::vc4tile::OffsetUnit::element)),
+        namedAttr(builder, "memory_space",
+                  getVC4TileMemorySpaceAttr(
+                      builder, mlir::vc4tile::MemorySpace::global)),
+        namedAttr(builder, "access",
+                  getVC4TileMemoryAccessAttr(
+                      builder,
+                      mlir::vc4tile::MemoryAccess::affine_contiguous))};
+    appendTileSemanticMetadataAttrs(op, builder, attrs);
+    createVC4TileCoreOp(builder, op->getLoc(),
+                        kVC4TileMaskedStoreGlobalOpName,
+                        {*adjustedBase, lanes, tile, maskAll->getResult(0)},
+                        attrs);
+    return success();
+  }
+
+  Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
+  Value activeCols =
+      createI32ConstantInline(builder, op->getLoc(), maskInfo.activeCols);
+  Type maskType = op->getOperand(3).getType();
+  Operation *rowMask = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
+      maskType);
+
+  for (int64_t row = 0; row < maskInfo.activeRows; ++row) {
+    Value rowOffset = addI32ConstantInline(builder, op->getLoc(), offset,
+                                           row * 4);
+    FailureOr<Value> adjustedBase =
+        createAdjustedGlobalBaseForTileCopy(builder, op, base, rowOffset);
+    if (failed(adjustedBase))
+      return failure();
+    Value rowValue = createVC4TileRotateForPlan(
+        builder, op->getLoc(), tile, row * 4, tile.getType());
+    SmallVector<NamedAttribute, 8> attrs{
+        namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+        namedAttr(builder, "offset_unit",
+                  getVC4TileOffsetUnitAttr(
+                      builder, mlir::vc4tile::OffsetUnit::element)),
+        namedAttr(builder, "memory_space",
+                  getVC4TileMemorySpaceAttr(
+                      builder, mlir::vc4tile::MemorySpace::global)),
+        namedAttr(builder, "access",
+                  getVC4TileMemoryAccessAttr(
+                      builder,
+                      mlir::vc4tile::MemoryAccess::affine_contiguous)),
+        namedAttr(builder, "boundary",
+                  mlir::vc4tile::BoundaryPolicyAttr::get(
+                      builder.getContext(),
+                      mlir::vc4tile::BoundaryPolicy::tail_predicated))};
+    createVC4TileCoreOp(builder, op->getLoc(),
+                        kVC4TileMaskedStoreGlobalOpName,
+                        {*adjustedBase, lanes, rowValue, rowMask->getResult(0)},
+                        attrs);
+  }
+  return success();
+}
+
+static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
+    Operation *op, OpBuilder &builder, TileBoundsMaskInfo maskInfo) {
+  if (!isStatic4x4RowMajorTile(op))
+    return op->emitOpError(
+        "tile_bounds_mask register->global stores currently require shape = [4, 4] and row_major layout");
+
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "tile_bounds_mask register->global stores require unit lane stride in M5");
+
+  Value activeRows = maskInfo.activeRows;
+  Value activeCols = maskInfo.activeCols;
+  if (!isI32Scalar(activeRows) || !isI32Scalar(activeCols))
+    return op->emitOpError(
+        "tile_bounds_mask register->global stores require i32 active_rows and active_cols");
+
+  Value tile = op->getOperand(0);
+  Value base = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
+  Type maskType = op->getOperand(3).getType();
+  Operation *rowMask = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
+      maskType);
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value rowIndex = createI32ConstantInline(builder, op->getLoc(), row);
+    Value rowLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowIndex,
+        activeRows);
+    auto ifOp = scf::IfOp::create(builder, op->getLoc(), rowLive,
+                                  /*withElseRegion=*/false);
+    OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
+
+    Value rowOffset = addI32ConstantInline(thenBuilder, op->getLoc(), offset,
+                                           row * 4);
+    FailureOr<Value> adjustedBase =
+        createAdjustedGlobalBaseForTileCopy(thenBuilder, op, base, rowOffset);
+    if (failed(adjustedBase))
+      return failure();
+    Value rowValue = createVC4TileRotateForPlan(
+        thenBuilder, op->getLoc(), tile, row * 4, tile.getType());
+    SmallVector<NamedAttribute, 8> attrs{
+        namedAttr(thenBuilder, "elem_bytes", thenBuilder.getI32IntegerAttr(4)),
+        namedAttr(thenBuilder, "offset_unit",
+                  getVC4TileOffsetUnitAttr(
+                      thenBuilder, mlir::vc4tile::OffsetUnit::element)),
+        namedAttr(thenBuilder, "memory_space",
+                  getVC4TileMemorySpaceAttr(
+                      thenBuilder, mlir::vc4tile::MemorySpace::global)),
+        namedAttr(thenBuilder, "access",
+                  getVC4TileMemoryAccessAttr(
+                      thenBuilder,
+                      mlir::vc4tile::MemoryAccess::affine_contiguous)),
+        namedAttr(thenBuilder, "boundary",
+                  mlir::vc4tile::BoundaryPolicyAttr::get(
+                      thenBuilder.getContext(),
+                      mlir::vc4tile::BoundaryPolicy::tail_predicated))};
+    createVC4TileCoreOp(thenBuilder, op->getLoc(),
+                        kVC4TileMaskedStoreGlobalOpName,
+                        {*adjustedBase, lanes, rowValue, rowMask->getResult(0)},
+                        attrs);
+  }
+  return success();
+}
+
 static LogicalResult planRegisterGlobalTileStore(Operation *op,
                                                  OpBuilder &builder) {
   auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
@@ -4061,6 +4313,13 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
     return planSharedGlobalTileStore(op, builder);
   if (!isVector16Data(op->getOperand(0).getType()))
     return op->emitOpError("copy planner v1 requires tile_store input to be vector<16xi32>, vector<16xf32>, or !vc4tile.shared_tile");
+
+  if (std::optional<TileRectMaskInfo> rectMask =
+          getTileRectMaskInfo(op->getOperand(3).getDefiningOp()))
+    return planRectangularRegisterGlobalTileStore(op, builder, *rectMask);
+  if (std::optional<TileBoundsMaskInfo> boundsMask =
+          getTileBoundsMaskInfo(op->getOperand(3).getDefiningOp()))
+    return planDynamicBoundsRegisterGlobalTileStore(op, builder, *boundsMask);
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))

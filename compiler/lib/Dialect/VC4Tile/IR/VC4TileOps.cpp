@@ -691,6 +691,11 @@ static bool isTileRectMaskOp(Value value) {
   return def && def->getName().getStringRef() == "vc4tile.tile_rect_mask";
 }
 
+static bool isTileBoundsMaskOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.tile_bounds_mask";
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -698,9 +703,10 @@ static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
     return success();
   switch (boundary.getValue()) {
   case BoundaryPolicy::exact:
-    if (!isMaskAllOp(mask) && !isTileRectMaskOp(mask))
+    if (!isMaskAllOp(mask) && !isTileRectMaskOp(mask) &&
+        !isTileBoundsMaskOp(mask))
       return op->emitOpError(
-          "boundary policy exact requires a vc4tile.mask_all or vc4tile.tile_rect_mask mask");
+          "boundary policy exact requires a vc4tile.mask_all, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask mask");
     return success();
   case BoundaryPolicy::tail_predicated:
     if (!isTailMaskOp(mask))
@@ -1271,6 +1277,26 @@ LogicalResult TileRectMaskOp::verify() {
     return emitOpError("active_rows must be in range [1, 4]");
   if (cols < 1 || cols > 4)
     return emitOpError("active_cols must be in range [1, 4]");
+  return success();
+}
+
+LogicalResult TileBoundsMaskOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyScalarId(op, getActiveRows().getType(), "active_rows")) ||
+      failed(verifyScalarId(op, getActiveCols().getType(), "active_cols")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+
+  SmallVector<int64_t, 2> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "shape", shape)))
+    return failure();
+  if (shape.size() != 2 || shape[0] != 4 || shape[1] != 4)
+    return emitOpError("tile_bounds_mask supports only shape = [4, 4] in M5");
+
+  if (getLayout() != Layout::row_major)
+    return emitOpError("tile_bounds_mask supports only row_major layout in M5");
+
   return success();
 }
 
