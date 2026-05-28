@@ -14,7 +14,7 @@ vc4tile.kernel @reject_sub32_surface(%in : i32, %n : i32) attributes {
   // CHECK: M5 supports only 32-bit executable tile element types
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    src_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = f16,
     storage_type = f16,

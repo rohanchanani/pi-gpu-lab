@@ -27,32 +27,32 @@ vc4tile.kernel @tile_rect_mask_store_vc4tile(%out : i32) attributes {
   %mask_4x1 = vc4tile.tile_rect_mask {active_rows = 4 : i32, active_cols = 1 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
   %mask_4x4 = vc4tile.tile_rect_mask {active_rows = 4 : i32, active_cols = 4 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
   "vc4tile.tile_store"(%values, %out, %zero, %mask_1x1) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   "vc4tile.tile_store"(%values, %out, %off1, %mask_1x4) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   "vc4tile.tile_store"(%values, %out, %off2, %mask_2x3) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   "vc4tile.tile_store"(%values, %out, %off3, %mask_3x2) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   "vc4tile.tile_store"(%values, %out, %off4, %mask_4x1) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   "vc4tile.tile_store"(%values, %out, %off5, %mask_4x4) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()

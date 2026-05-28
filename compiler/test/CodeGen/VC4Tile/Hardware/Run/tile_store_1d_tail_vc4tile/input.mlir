@@ -22,7 +22,7 @@ vc4tile.kernel @tile_store_1d_tail_vc4tile(%out : i32, %n : i32) attributes {
   %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   "vc4tile.tile_store"(%values, %out, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,

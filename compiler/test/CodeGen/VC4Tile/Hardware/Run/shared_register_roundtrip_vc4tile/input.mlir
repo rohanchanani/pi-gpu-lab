@@ -37,7 +37,7 @@ vc4tile.kernel @shared_register_roundtrip_vc4tile(%out : i32) attributes {
     shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>, src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32
   } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.tile_store"(%roundtrip, %out, %zero, %mask) {
-    shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
+    shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>
   } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   vc4tile.return

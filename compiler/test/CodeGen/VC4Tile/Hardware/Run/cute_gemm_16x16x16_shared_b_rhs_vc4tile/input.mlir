@@ -37,7 +37,7 @@ vc4tile.kernel @cute_gemm_16x16x16_shared_b_rhs_vc4tile(%out : i32, %a : i32, %b
   %a_off_0 = arith.shli %a_tile_0, %four : i32
   %b_tile_0 = arith.addi %tile_j, %zero : i32
   %b_off_0 = arith.shli %b_tile_0, %four : i32
-  %lhs_0 = "vc4tile.tile_load"(%a, %a_off_0, %mask) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  %lhs_0 = "vc4tile.tile_load"(%a, %a_off_0, %mask) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.copy_tile"(%b, %rhs_shared, %b_off_0, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 64 : i32} : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   %rhs_0 = "vc4tile.copy_tile"(%rhs_shared, %zero, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>, src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
@@ -50,7 +50,7 @@ vc4tile.kernel @cute_gemm_16x16x16_shared_b_rhs_vc4tile(%out : i32, %a : i32, %b
   %k1_times4 = arith.constant 4 : i32
   %b_tile_1 = arith.addi %tile_j, %k1_times4 : i32
   %b_off_1 = arith.shli %b_tile_1, %four : i32
-  %lhs_1 = "vc4tile.tile_load"(%a, %a_off_1, %mask) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  %lhs_1 = "vc4tile.tile_load"(%a, %a_off_1, %mask) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.copy_tile"(%b, %rhs_shared, %b_off_1, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 64 : i32} : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   %rhs_1 = "vc4tile.copy_tile"(%rhs_shared, %zero, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>, src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
@@ -63,7 +63,7 @@ vc4tile.kernel @cute_gemm_16x16x16_shared_b_rhs_vc4tile(%out : i32, %a : i32, %b
   %k2_times4 = arith.constant 8 : i32
   %b_tile_2 = arith.addi %tile_j, %k2_times4 : i32
   %b_off_2 = arith.shli %b_tile_2, %four : i32
-  %lhs_2 = "vc4tile.tile_load"(%a, %a_off_2, %mask) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  %lhs_2 = "vc4tile.tile_load"(%a, %a_off_2, %mask) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.copy_tile"(%b, %rhs_shared, %b_off_2, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 64 : i32} : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   %rhs_2 = "vc4tile.copy_tile"(%rhs_shared, %zero, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>, src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
@@ -76,7 +76,7 @@ vc4tile.kernel @cute_gemm_16x16x16_shared_b_rhs_vc4tile(%out : i32, %a : i32, %b
   %k3_times4 = arith.constant 12 : i32
   %b_tile_3 = arith.addi %tile_j, %k3_times4 : i32
   %b_off_3 = arith.shli %b_tile_3, %four : i32
-  %lhs_3 = "vc4tile.tile_load"(%a, %a_off_3, %mask) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  %lhs_3 = "vc4tile.tile_load"(%a, %a_off_3, %mask) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.copy_tile"(%b, %rhs_shared, %b_off_3, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 64 : i32} : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   %rhs_3 = "vc4tile.copy_tile"(%rhs_shared, %zero, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>, src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
@@ -84,19 +84,19 @@ vc4tile.kernel @cute_gemm_16x16x16_shared_b_rhs_vc4tile(%out : i32, %a : i32, %b
   %acc4 = "vc4tile.tile_matmul"(%lhs_3, %rhs_3, %acc3, %mask) {m = 4 : i32, n = 4 : i32, k = 4 : i32, shape = [4, 4], lhs_layout = #vc4tile.layout<row_major>, rhs_layout = #vc4tile.layout<row_major>, acc_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, contracting_dims = [[1], [0]], iterator_types = ["parallel", "parallel", "reduction"], lhs_role = #vc4tile.role<input>, rhs_role = #vc4tile.role<input>, acc_role = #vc4tile.role<accumulator>, algorithm_hint = "matmul_4x4x4"} : (vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi1>) -> vector<16xi32>
 
   %out_off_0 = arith.addi %out_tile_base, %zero : i32
-  "vc4tile.tile_store"(%acc4, %out, %out_off_0, %mask4) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%acc4, %out, %out_off_0, %mask4) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   %row1 = vc4tile.rotate %acc4 {amount = 4 : i32} : vector<16xi32> -> vector<16xi32>
   %row_stride_1 = arith.constant 16 : i32
   %out_off_1 = arith.addi %out_tile_base, %row_stride_1 : i32
-  "vc4tile.tile_store"(%row1, %out, %out_off_1, %mask4) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%row1, %out, %out_off_1, %mask4) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   %row2 = vc4tile.rotate %acc4 {amount = 8 : i32} : vector<16xi32> -> vector<16xi32>
   %row_stride_2 = arith.constant 32 : i32
   %out_off_2 = arith.addi %out_tile_base, %row_stride_2 : i32
-  "vc4tile.tile_store"(%row2, %out, %out_off_2, %mask4) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%row2, %out, %out_off_2, %mask4) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   %row3 = vc4tile.rotate %acc4 {amount = 12 : i32} : vector<16xi32> -> vector<16xi32>
   %row_stride_3 = arith.constant 48 : i32
   %out_off_3 = arith.addi %out_tile_base, %row_stride_3 : i32
-  "vc4tile.tile_store"(%row3, %out, %out_off_3, %mask4) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%row3, %out, %out_off_3, %mask4) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
 
   vc4tile.return
 }

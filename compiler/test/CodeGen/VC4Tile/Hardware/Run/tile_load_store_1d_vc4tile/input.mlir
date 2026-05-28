@@ -19,7 +19,7 @@ vc4tile.kernel @tile_load_store_1d_vc4tile(%out : i32, %in : i32, %n : i32) attr
   %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    src_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,
@@ -29,7 +29,7 @@ vc4tile.kernel @tile_load_store_1d_vc4tile(%out : i32, %in : i32, %n : i32) attr
   } : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,

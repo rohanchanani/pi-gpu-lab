@@ -2,7 +2,8 @@
 #include <stdint.h>
 
 #define VC4_CASES 6u
-#define VC4_OUTPUT_WORDS 16u
+#define VC4_OUTPUT_WORDS 32u
+#define VC4_VECTOR_WORDS 16u
 #define VC4_GUARD_WORDS 7u
 #define VC4_TOTAL_WORDS (VC4_GUARD_WORDS + VC4_CASES * VC4_OUTPUT_WORDS + VC4_GUARD_WORDS)
 #define VC4_SENTINEL 0x5a5ab061u
@@ -15,11 +16,13 @@ static uint32_t source_lane(uint32_t lane) {
 }
 
 static uint32_t expected_case_lane(uint32_t which, uint32_t lane) {
-    uint32_t row = lane / 4u;
-    uint32_t col = lane % 4u;
+    uint32_t phase = lane / VC4_VECTOR_WORDS;
+    uint32_t vector_lane = lane % VC4_VECTOR_WORDS;
+    uint32_t row = vector_lane / 4u;
+    uint32_t col = vector_lane % 4u;
     if (row < k_rows[which] && col < k_cols[which])
-        return source_lane(lane);
-    return 0u;
+        return source_lane(vector_lane);
+    return phase == 0u ? VC4_SENTINEL : 0u;
 }
 
 static uint32_t expected_word(uint32_t index) {

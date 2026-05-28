@@ -837,6 +837,21 @@ static LogicalResult verifyTileMemoryPredicateAssociation(
   return verifySemanticPredicateForConsumer(op, mask, shape, layoutAttrName);
 }
 
+static LogicalResult verifyNoLegacyMovementLayoutAttrs(Operation *op) {
+  if (op->getAttr("source_layout"))
+    return op->emitOpError(
+        "legacy source_layout attribute is not supported; use explicit "
+        "src_layout/dst_layout transfer roles");
+  if (op->getAttr("layout") &&
+      (op->getName().getStringRef() == "vc4tile.tile_load" ||
+       op->getName().getStringRef() == "vc4tile.tile_store" ||
+       op->getName().getStringRef() == "vc4tile.copy_tile"))
+    return op->emitOpError(
+        "legacy movement layout attribute is not supported; use src_layout "
+        "for tile_load and dst_layout for tile_store");
+  return success();
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -1553,13 +1568,15 @@ LogicalResult TileDescriptorOp::verify() {
 LogicalResult TileLoadOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoLegacyMovementLayoutAttrs(op)) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
-      failed(verifyTileMemoryPredicateAssociation(op, getMask(), "layout")) ||
-      failed(verifyTileMovementLayout(op, "layout")))
+      failed(verifyTileMemoryPredicateAssociation(op, getMask(),
+                                                  "src_layout")) ||
+      failed(verifyTileMovementLayout(op, "src_layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
     return emitOpError(
@@ -1577,13 +1594,15 @@ LogicalResult TileLoadOp::verify() {
 LogicalResult TileStoreOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoLegacyMovementLayoutAttrs(op)) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "tile")) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
-      failed(verifyTileMemoryPredicateAssociation(op, getMask(), "layout")) ||
-      failed(verifyTileMovementLayout(op, "layout")))
+      failed(verifyTileMemoryPredicateAssociation(op, getMask(),
+                                                  "dst_layout")) ||
+      failed(verifyTileMovementLayout(op, "dst_layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
     return emitOpError(
@@ -1600,7 +1619,9 @@ LogicalResult TileStoreOp::verify() {
 
 LogicalResult CopyTileOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyInsideKernel(op)) || failed(verifyM5Exact32Metadata(op)) ||
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyNoLegacyMovementLayoutAttrs(op)) ||
+      failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyTileMovementLayout(op, "src_layout")) ||
       failed(verifyTileMovementLayout(op, "dst_layout")))
     return failure();

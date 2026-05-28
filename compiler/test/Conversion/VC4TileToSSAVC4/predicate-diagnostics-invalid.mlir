@@ -66,7 +66,7 @@ vc4tile.kernel @predicate_store_preserve_layout_diag(%out : i32, %rows : i32, %c
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
   %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  // expected-error@+1 {{store predicate requires inactive global destination preservation}}
+  // expected-error@+1 {{transposed or column-major predicate planning requires explicit logical-coordinate predicate rebasing before fragment mapping}}
   "vc4tile.copy_tile"(%shared, %zero, %out, %zero, %mask) {
     shape = [4, 4],
     src_space = #vc4tile.memory_space<shared_vpm>,

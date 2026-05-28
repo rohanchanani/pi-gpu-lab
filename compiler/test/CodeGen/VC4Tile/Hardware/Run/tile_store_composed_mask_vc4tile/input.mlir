@@ -22,6 +22,6 @@ vc4tile.kernel @tile_store_composed_mask_vc4tile(%out : i32, %rows : i32, %cols 
   %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
   %mask = vc4tile.mask_and %not_bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  "vc4tile.tile_store"(%values, %out, %zero, %mask) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%values, %out, %zero, %mask) {shape = [4, 4], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
   vc4tile.return
 }

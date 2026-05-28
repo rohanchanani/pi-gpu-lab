@@ -48,7 +48,7 @@ vc4tile.kernel @tile_bounds_mask_select_lowering(%out : i32, %rows : i32, %cols 
   } : (vector<16xi1>, vector<16xi32>, vector<16xi32>) -> vector<16xi32>
   %all = vc4tile.mask_all : vector<16xi1>
   "vc4tile.tile_store"(%selected, %out, %zero, %all) {
-    shape = [1, 16], layout = #vc4tile.layout<row_major>,
+    shape = [1, 16], dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,

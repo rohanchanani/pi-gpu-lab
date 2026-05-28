@@ -2804,6 +2804,10 @@ struct PredicateTransferPathDescriptor {
   PredicateLogicalShape logicalShape;
   PredicateInactiveDestPolicy inactivePolicy =
       PredicateInactiveDestPolicy::notApplicable;
+  mlir::vc4tile::MemorySpace srcSpace =
+      mlir::vc4tile::MemorySpace::register_space;
+  mlir::vc4tile::MemorySpace dstSpace =
+      mlir::vc4tile::MemorySpace::register_space;
   mlir::vc4tile::Layout srcLayout = mlir::vc4tile::Layout::row_major;
   mlir::vc4tile::Layout dstLayout = mlir::vc4tile::Layout::row_major;
   bool sparseFallbackAllowed = false;
@@ -2836,6 +2840,123 @@ struct PredicateFragmentPlan {
     return plan;
   }
 };
+
+static bool isRowMajorLikeLayout(mlir::vc4tile::Layout layout) {
+  switch (layout) {
+  case mlir::vc4tile::Layout::row_major:
+  case mlir::vc4tile::Layout::vpm_row:
+  case mlir::vc4tile::Layout::affine_2d:
+    return true;
+  case mlir::vc4tile::Layout::col_major:
+  case mlir::vc4tile::Layout::vpm_col:
+  case mlir::vc4tile::Layout::transposed_view:
+    return false;
+  }
+  llvm_unreachable("unknown VC4Tile layout");
+}
+
+static bool isColumnOrTransposedLayout(mlir::vc4tile::Layout layout) {
+  switch (layout) {
+  case mlir::vc4tile::Layout::col_major:
+  case mlir::vc4tile::Layout::vpm_col:
+  case mlir::vc4tile::Layout::transposed_view:
+    return true;
+  case mlir::vc4tile::Layout::row_major:
+  case mlir::vc4tile::Layout::vpm_row:
+  case mlir::vc4tile::Layout::affine_2d:
+    return false;
+  }
+  llvm_unreachable("unknown VC4Tile layout");
+}
+
+static std::optional<std::string> getPredicateLayoutLegalityFailure(
+    const VC4TilePredicateModel &predicate,
+    const PredicateTransferPathDescriptor &descriptor) {
+  bool fullPredicate = predicate.semanticClass == PredicateSemanticClass::full;
+  auto rejectColumnOrTransposedNonFull = [&]() -> std::optional<std::string> {
+    if (fullPredicate)
+      return std::nullopt;
+    return std::string(
+        "transposed or column-major predicate planning requires explicit "
+        "logical-coordinate predicate rebasing before fragment mapping; "
+        "non-full predicates cannot silently swap row/col or reuse row-major "
+        "fragments for the requested layout");
+  };
+
+  switch (descriptor.pathKind) {
+  case PredicateTransferPathKind::globalToRegister:
+    if (descriptor.srcLayout == mlir::vc4tile::Layout::row_major ||
+        descriptor.srcLayout == mlir::vc4tile::Layout::affine_2d)
+      return std::nullopt;
+    return std::string(
+        "unsupported layout + predicate combination for global->register "
+        "tile_load: load predicate requires inactive zero-fill over a "
+        "row-major or affine_2d logical source; the requested layout has no "
+        "proved VC4 fragment mapping");
+
+  case PredicateTransferPathKind::registerToGlobal:
+    if (descriptor.dstLayout == mlir::vc4tile::Layout::row_major)
+      return std::nullopt;
+    return std::string(
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: store predicate requires inactive destination "
+        "preservation over a row-major logical destination; affine, "
+        "transposed, and column-major stores need explicit layout-aware "
+        "fragment mapping");
+
+  case PredicateTransferPathKind::globalToSharedVPM:
+    if (descriptor.srcLayout != mlir::vc4tile::Layout::row_major)
+      return std::string(
+          "unsupported layout + predicate combination for global->shared_vpm "
+          "copy_tile: load predicate requires inactive zero-fill over a "
+          "row-major global source; the requested source layout has no "
+          "proved VC4 fragment mapping");
+    if (isRowMajorLikeLayout(descriptor.dstLayout))
+      return std::nullopt;
+    return std::string(
+        "unsupported layout + predicate combination for global->shared_vpm "
+        "copy_tile: load predicate requires inactive zero-fill into a "
+        "row-major-compatible VPM destination; the requested destination "
+        "layout has no proved VC4 fragment mapping");
+
+  case PredicateTransferPathKind::registerToSharedVPM:
+    if (descriptor.srcLayout != mlir::vc4tile::Layout::row_major)
+      return std::string(
+          "unsupported layout + predicate combination for "
+          "register->shared_vpm copy_tile: register predicates are logical "
+          "row-major fragments; the requested source layout is not "
+          "row-major");
+    if (isRowMajorLikeLayout(descriptor.dstLayout))
+      return std::nullopt;
+    return std::string(
+        "unsupported layout + predicate combination for register->shared_vpm "
+        "copy_tile: inactive shared destination preservation requires "
+        "row-major-compatible VPM fragments; transposed or column-major "
+        "destination predicates need explicit logical-coordinate rebasing");
+
+  case PredicateTransferPathKind::sharedVPMToRegister:
+    if (isRowMajorLikeLayout(descriptor.srcLayout))
+      return std::nullopt;
+    if (isColumnOrTransposedLayout(descriptor.srcLayout))
+      return rejectColumnOrTransposedNonFull();
+    return std::string(
+        "unsupported layout + predicate combination for "
+        "shared_vpm->register copy_tile");
+
+  case PredicateTransferPathKind::sharedVPMToGlobal:
+    if (isRowMajorLikeLayout(descriptor.srcLayout))
+      return std::nullopt;
+    if (isColumnOrTransposedLayout(descriptor.srcLayout))
+      return rejectColumnOrTransposedNonFull();
+    return std::string(
+        "unsupported layout + predicate combination for "
+        "shared_vpm->global copy_tile");
+
+  case PredicateTransferPathKind::compute:
+    return std::nullopt;
+  }
+  llvm_unreachable("unknown predicate transfer path kind");
+}
 
 static bool isOneRowShape(const PredicateLogicalShape &shape) {
   return shape.rank == 1 || (shape.rank == 2 && shape.dims[0] == 1);
@@ -2875,6 +2996,12 @@ static PredicateFragmentPlan planPredicateTransferFragments(
   if (descriptor.requiresDynamicVPMAlignment) {
     return PredicateFragmentPlan::getUnsupported(
         predicate, descriptor, kDiagDynamicVPMAlignmentUnsupported);
+  }
+
+  if (std::optional<std::string> layoutFailure =
+          getPredicateLayoutLegalityFailure(predicate, descriptor)) {
+    return PredicateFragmentPlan::getUnsupported(predicate, descriptor,
+                                                 *layoutFailure);
   }
 
   if (predicate.density == PredicateDensity::sparseFallback) {
@@ -2964,6 +3091,34 @@ getPredicateTransferPathDescriptorForCopyTile(
   descriptor.logicalShape = *shape;
   descriptor.inactivePolicy = inactivePolicy;
   descriptor.sparseFallbackAllowed = sparseFallbackAllowed;
+  if (auto srcSpace =
+          op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("src_space"))
+    descriptor.srcSpace = srcSpace.getValue();
+  if (auto dstSpace =
+          op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("dst_space"))
+    descriptor.dstSpace = dstSpace.getValue();
+  if (auto memorySpace =
+          op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space")) {
+    switch (pathKind) {
+    case PredicateTransferPathKind::globalToRegister:
+      descriptor.srcSpace = memorySpace.getValue();
+      descriptor.dstSpace = mlir::vc4tile::MemorySpace::register_space;
+      break;
+    case PredicateTransferPathKind::registerToGlobal:
+      descriptor.srcSpace = mlir::vc4tile::MemorySpace::register_space;
+      descriptor.dstSpace = memorySpace.getValue();
+      break;
+    case PredicateTransferPathKind::sharedVPMToGlobal:
+      descriptor.srcSpace = mlir::vc4tile::MemorySpace::shared_vpm;
+      descriptor.dstSpace = memorySpace.getValue();
+      break;
+    case PredicateTransferPathKind::globalToSharedVPM:
+    case PredicateTransferPathKind::registerToSharedVPM:
+    case PredicateTransferPathKind::sharedVPMToRegister:
+    case PredicateTransferPathKind::compute:
+      break;
+    }
+  }
   if (auto srcLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout"))
     descriptor.srcLayout = srcLayout.getValue();
   if (auto dstLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout"))
@@ -3358,6 +3513,26 @@ static FailureOr<Value> applySemanticMaskZeroFill(
                           mlir::vc4::Cond::zc, value.getType());
 }
 
+static FailureOr<Value> applySemanticMaskPreserve(
+    Operation *consumer, OpBuilder &builder, Value newValue, Value oldValue,
+    Value mask, llvm::DenseMap<Value, Value> &valueMap) {
+  if (newValue.getType() != oldValue.getType())
+    return consumer->emitOpError(
+        "inactive destination preservation requires matching value types");
+
+  FailureOr<Value> activeMask =
+      createActiveLaneValueForSemanticMask(consumer, builder, mask, valueMap);
+  if (failed(activeMask))
+    return failure();
+  if (!*activeMask)
+    return newValue;
+
+  Value flags = createMakeFlags(builder, consumer->getLoc(), {*activeMask},
+                                mlir::ssavc4::FlagKind::zero_test);
+  return createCondSelect(builder, consumer->getLoc(), flags, newValue,
+                          oldValue, mlir::vc4::Cond::zc, newValue.getType());
+}
+
 static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
                                            llvm::DenseMap<Value, Value> &valueMap) {
   if (failed(verifyMaskedLoadShape(op)))
@@ -3644,14 +3819,43 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
   Value value = lookupMappedValue(op, op->getOperand(2), valueMap);
   if (!baseRow || !localRow || !value)
     return failure();
-  FailureOr<Value> maskedValue = applySemanticMaskZeroFill(
-      op, builder, value, op->getOperand(3), valueMap);
-  if (failed(maskedValue))
-    return failure();
 
   Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
+  Value storedValue;
+  auto inactivePolicy = op->getAttrOfType<StringAttr>("inactive_policy");
+  if (inactivePolicy && inactivePolicy.getValue() == "preserve") {
+    if (hasName(op->getOperand(3).getDefiningOp(), kVC4TileMaskAllOpName)) {
+      storedValue = value;
+    } else {
+      Value oldValue = createSSAVC4OpWithResult(
+          builder, op->getLoc(), kSSAVC4VPMReadOpName, {row},
+          {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+           builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+           builder.getNamedAttr("orientation",
+                                builder.getStringAttr(
+                                    getVPMOrientation(op, "horizontal"))),
+           builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
+          value.getType());
+      FailureOr<Value> preservedValue = applySemanticMaskPreserve(
+          op, builder, value, oldValue, op->getOperand(3), valueMap);
+      if (failed(preservedValue))
+        return failure();
+      storedValue = *preservedValue;
+    }
+  } else if (inactivePolicy && inactivePolicy.getValue() != "zero_fill") {
+    return op->emitOpError()
+           << "unknown shared_store inactive_policy '"
+           << inactivePolicy.getValue() << "'";
+  } else {
+    FailureOr<Value> maskedValue = applySemanticMaskZeroFill(
+        op, builder, value, op->getOperand(3), valueMap);
+    if (failed(maskedValue))
+      return failure();
+    storedValue = *maskedValue;
+  }
+
   Operation *write = createSSAVC4Op(
-      builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, *maskedValue},
+      builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, storedValue},
       {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
        builder.getNamedAttr("orientation",
@@ -5750,7 +5954,7 @@ static bool isStatic4x4RowMajorTile(Operation *op) {
   auto cols = llvm::dyn_cast<IntegerAttr>(shape[1]);
   if (!rows || !cols || rows.getInt() != 4 || cols.getInt() != 4)
     return false;
-  auto layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout");
+  auto layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout");
   return !layout || layout.getValue() == mlir::vc4tile::Layout::row_major;
 }
 
@@ -6337,6 +6541,22 @@ static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
     return op->emitOpError(
         "register->shared_vpm copy_tile requires vector value, !vc4tile.shared_tile handle, i32 row, and vector<16xi1> mask");
   }
+  FailureOr<PredicateFragmentPlan> predicatePlan =
+      planPredicateTransferForMask(
+          op, mask, PredicateTransferPathKind::registerToSharedVPM,
+          "register->shared_vpm copy_tile",
+          PredicateInactiveDestPolicy::preserve);
+  if (failed(predicatePlan))
+    return failure();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::empty)
+    return success();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::scalarFragment ||
+      predicatePlan->planClass == PredicateFragmentPlanClass::sparseFallback) {
+    return op->emitOpError()
+           << "register->shared_vpm copy_tile unsupported predicate fragment "
+              "plan: inactive shared destination preservation requires dense "
+              "full/row/tail fragments; sparse fallback is disabled";
+  }
   SmallVector<NamedAttribute, 8> attrs{
       namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
       namedAttr(builder, "memory_space",
@@ -6345,7 +6565,9 @@ static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
       namedAttr(builder, "layout",
                 getVPMLayoutFromTileLayout(
                     builder,
-                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout")))};
+                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout"))),
+      namedAttr(builder, "inactive_policy",
+                builder.getStringAttr("preserve"))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
   createVC4TileCoreOp(builder, op->getLoc(), kVC4TileSharedStoreOpName,
                       {handle, row, value, mask}, attrs);
@@ -6365,6 +6587,20 @@ static LogicalResult planSharedRegisterCopy(Operation *op, OpBuilder &builder) {
       !isVector16Data(op->getResult(0).getType())) {
     return op->emitOpError(
         "shared_vpm->register copy_tile requires !vc4tile.shared_tile handle, i32 row, vector<16xi1> mask, and vector result");
+  }
+  FailureOr<PredicateFragmentPlan> predicatePlan =
+      planPredicateTransferForMask(
+          op, mask, PredicateTransferPathKind::sharedVPMToRegister,
+          "shared_vpm->register copy_tile",
+          PredicateInactiveDestPolicy::zeroFill);
+  if (failed(predicatePlan))
+    return failure();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::scalarFragment ||
+      predicatePlan->planClass == PredicateFragmentPlanClass::sparseFallback) {
+    return op->emitOpError()
+           << "shared_vpm->register copy_tile unsupported predicate fragment "
+              "plan: inactive register zero-fill requires dense full/row/tail "
+              "fragments; sparse fallback is disabled";
   }
   SmallVector<NamedAttribute, 8> attrs{
       namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
@@ -7231,9 +7467,7 @@ static LogicalResult planSharedGlobalTileStore(Operation *op, OpBuilder &builder
   Value rowBase = createI32ConstantForPlan(builder, op->getLoc(), sharedRow);
   auto elementTypeAttr = op->getAttrOfType<TypeAttr>("element_type");
   Type elementType = elementTypeAttr ? elementTypeAttr.getValue() : builder.getI32Type();
-  auto layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("source_layout");
-  if (!layout)
-    layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout");
+  mlir::vc4tile::LayoutAttr layout;
   return planSharedRowsToGlobal(op, builder, shared, base, offset, mask, rowBase,
                                 layout, elementType);
 }
@@ -7291,9 +7525,51 @@ static LogicalResult foldViewOp(Operation *op) {
         builder.getContext(), mlir::vc4tile::Layout::transposed_view);
     for (Operation *user : llvm::make_early_inc_range(op->getResult(0).getUsers())) {
       if (hasName(user, kVC4TileTileStoreOpName) &&
-          user->getNumOperands() > 0 && user->getOperand(0) == op->getResult(0) &&
-          !user->getAttr("source_layout"))
-        user->setAttr("source_layout", transposed);
+          user->getNumOperands() == 4 && user->getOperand(0) == op->getResult(0)) {
+        OpBuilder userBuilder(user);
+        OperationState state(user->getLoc(), kVC4TileCopyTileOpName);
+        Value rowBase = createI32ConstantForPlan(
+            userBuilder, user->getLoc(),
+            getI32Attr(user, "shared_row").value_or(0));
+        state.addOperands({op->getOperand(0), rowBase, user->getOperand(1),
+                           user->getOperand(2), user->getOperand(3)});
+        state.addAttribute("src_space", getVC4TileMemorySpaceAttr(
+                                            userBuilder,
+                                            mlir::vc4tile::MemorySpace::shared_vpm));
+        auto dstSpace =
+            user->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
+        state.addAttribute(
+            "dst_space",
+            dstSpace ? dstSpace
+                     : getVC4TileMemorySpaceAttr(
+                           userBuilder, mlir::vc4tile::MemorySpace::global));
+        state.addAttribute("src_layout", transposed);
+        Attribute dstLayout = user->getAttr("dst_layout");
+        if (!dstLayout)
+          dstLayout = mlir::vc4tile::LayoutAttr::get(
+              userBuilder.getContext(), mlir::vc4tile::Layout::row_major);
+        state.addAttribute("dst_layout", dstLayout);
+        bool hasElemBytes = false;
+        for (NamedAttribute attr : user->getAttrs()) {
+          StringRef name = attr.getName().getValue();
+          if (name == "elem_bytes")
+            hasElemBytes = true;
+          if (name == "memory_space" || name == "dst_layout" ||
+              name == "shared_row" || name == "layout" ||
+              name == "source_layout")
+            continue;
+          state.addAttribute(attr.getName(), attr.getValue());
+        }
+        if (!hasElemBytes)
+          state.addAttribute("elem_bytes", userBuilder.getI32IntegerAttr(4));
+        Operation *copy = userBuilder.create(state);
+        if (failed(planCopyTile(copy, userBuilder)))
+          return failure();
+        if (copy->use_empty())
+          copy->erase();
+        user->erase();
+        continue;
+      }
       if (hasName(user, kVC4TileCopyTileOpName) &&
           user->getNumOperands() > 0 && user->getOperand(0) == op->getResult(0) &&
           !user->getAttr("src_layout"))

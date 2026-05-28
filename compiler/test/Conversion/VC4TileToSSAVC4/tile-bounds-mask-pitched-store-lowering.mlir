@@ -32,7 +32,7 @@ vc4tile.kernel @tile_bounds_mask_pitched_store_lowering(%out : i32, %rows : i32,
   %values = vc4tile.lane_range : vector<16xi32>
   %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
   "vc4tile.tile_store"(%values, %out, %zero, %mask) {
-    shape = [4, 4], layout = #vc4tile.layout<row_major>,
+    shape = [4, 4], dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,

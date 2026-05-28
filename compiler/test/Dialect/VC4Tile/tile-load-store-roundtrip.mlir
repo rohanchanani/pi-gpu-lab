@@ -21,7 +21,7 @@ vc4tile.kernel @tile_load_store_roundtrip(%out : i32, %in : i32, %n : i32) attri
   // CHECK: vc4tile.tile_load
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    src_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,
@@ -32,7 +32,7 @@ vc4tile.kernel @tile_load_store_roundtrip(%out : i32, %in : i32, %n : i32) attri
   // CHECK: vc4tile.tile_store
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,

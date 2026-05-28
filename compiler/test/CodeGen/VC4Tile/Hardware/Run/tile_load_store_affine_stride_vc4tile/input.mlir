@@ -19,7 +19,7 @@ vc4tile.kernel @tile_load_store_affine_stride_vc4tile(%out : i32, %in : i32, %n 
   %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<affine_2d>,
+    src_layout = #vc4tile.layout<affine_2d>,
     strides = [2],
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
@@ -30,7 +30,7 @@ vc4tile.kernel @tile_load_store_affine_stride_vc4tile(%out : i32, %in : i32, %n 
   } : (i32, i32, vector<16xi1>) -> vector<16xi32>
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
-    layout = #vc4tile.layout<row_major>,
+    dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
     element_type = i32,
     storage_type = i32,

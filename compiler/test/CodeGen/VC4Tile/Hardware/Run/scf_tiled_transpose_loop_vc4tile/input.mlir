@@ -25,11 +25,11 @@ vc4tile.kernel @scf_tiled_transpose_loop_vc4tile(%out : i32, %in : i32) attribut
   scf.for %row = %idx0 to %idx16 step %idx1 {
     %row_i32 = arith.index_cast %row : index to i32
     %offset = arith.muli %row_i32, %sixteen : i32
-    %tile = "vc4tile.tile_load"(%in, %offset, %mask) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+    %tile = "vc4tile.tile_load"(%in, %offset, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
     "vc4tile.copy_tile"(%tile, %shared, %row_i32, %mask) {shape = [1, 16], src_space = #vc4tile.memory_space<register>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32} : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   }
   vc4tile.barrier {scope = #vc4tile.barrier_scope<block>}
   %view = "vc4tile.transpose_view"(%shared) {permutation = [1, 0]} : (!vc4tile.shared_tile) -> !vc4tile.shared_tile
-  "vc4tile.tile_store"(%view, %out, %zero, %mask) {shape = [1, 16], layout = #vc4tile.layout<transposed_view>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, shared_row = 0 : i32} : (!vc4tile.shared_tile, i32, i32, vector<16xi1>) -> ()
+  "vc4tile.tile_store"(%view, %out, %zero, %mask) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, shared_row = 0 : i32} : (!vc4tile.shared_tile, i32, i32, vector<16xi1>) -> ()
   vc4tile.return
 }
