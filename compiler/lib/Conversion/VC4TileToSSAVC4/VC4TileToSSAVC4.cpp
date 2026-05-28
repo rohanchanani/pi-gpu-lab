@@ -4068,21 +4068,14 @@ static LogicalResult verifyContractionVectorInputsForCanonicalization(
   }
   if (!isVector16I1(op->getOperand(expectedOperands - 1).getType()))
     return op->emitOpError("tile contraction mask must be vector<16xi1>");
-  Operation *maskDef = op->getOperand(expectedOperands - 1).getDefiningOp();
-  bool supportedMask =
-      hasName(maskDef, kVC4TileMaskAllOpName) ||
-      (expectedOperands == 3 && hasName(maskDef, kVC4TileTailMaskOpName)) ||
-      (expectedOperands == 4 &&
-       (hasName(maskDef, kVC4TileTileRectMaskOpName) ||
-        hasName(maskDef, kVC4TileTileBoundsMaskOpName)));
+  bool supportedMask = isSupportedAddReductionMask(
+      op->getOperand(expectedOperands - 1));
   if (!supportedMask) {
     if (expectedOperands == 3)
       return op->emitOpError(
-          "tile_dot currently supports only vc4tile.mask_all or "
-          "vc4tile.tail_mask masks in M5");
+          "tile_dot currently supports only semantic tile predicates in M5");
     return op->emitOpError(
-        "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
-        "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
+        "tile_contract/tile_matmul currently support only semantic tile predicates as output masks in M5");
   }
   auto kAttr = op->getAttrOfType<IntegerAttr>("k");
   if (!kAttr || kAttr.getInt() < 1 || kAttr.getInt() > 16)
@@ -4303,18 +4296,16 @@ static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
   Value mask = op->getOperand(3);
   Operation *maskDef = mask.getDefiningOp();
   if (!hasName(maskDef, kVC4TileMaskAllOpName)) {
-    if (!hasName(maskDef, kVC4TileTileRectMaskOpName) &&
-        !hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+    if (!isSupportedAddReductionMask(mask)) {
       return op->emitOpError(
-          "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
-          "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
+          "tile_contract/tile_matmul currently support only semantic tile predicates as output masks in M5");
     }
     result = createSemanticMaskedSelectI32(op, builder, mask, accumulated,
                                            op->getOperand(2), resultType);
     if (!result)
       return op->emitOpError(
-          "tile_contract/tile_matmul rectangular output mask requires shape = "
-          "[4, 4], row_major layout, and vector<16xi32> values");
+          "tile_contract/tile_matmul semantic output mask requires supported "
+          "vector<16xi1> mask metadata and vector<16xi32> values");
   }
 
   op->getResult(0).replaceAllUsesWith(result);
