@@ -405,6 +405,46 @@ static LogicalResult verifyContractionLayoutAttr(Operation *op, StringRef name,
             "row_major, col_major, or transposed_view rhs layouts";
 }
 
+static LogicalResult verifyContractionDimsAttr(Operation *op) {
+  auto dims = op->getAttrOfType<ArrayAttr>("contracting_dims");
+  if (!dims)
+    return success();
+  if (dims.size() != 2)
+    return op->emitOpError(
+        "contracting_dims must be [[1], [0]] for M5 matrix contractions");
+  auto lhsDims = llvm::dyn_cast<ArrayAttr>(dims[0]);
+  auto rhsDims = llvm::dyn_cast<ArrayAttr>(dims[1]);
+  if (!lhsDims || !rhsDims || lhsDims.size() != 1 || rhsDims.size() != 1)
+    return op->emitOpError(
+        "contracting_dims must be [[1], [0]] for M5 matrix contractions");
+  auto lhsDim = llvm::dyn_cast<IntegerAttr>(lhsDims[0]);
+  auto rhsDim = llvm::dyn_cast<IntegerAttr>(rhsDims[0]);
+  if (!lhsDim || !rhsDim || lhsDim.getInt() != 1 || rhsDim.getInt() != 0)
+    return op->emitOpError(
+        "contracting_dims must be [[1], [0]] for M5 matrix contractions");
+  return success();
+}
+
+static LogicalResult verifyIteratorTypesAttr(Operation *op) {
+  auto iterators = op->getAttrOfType<ArrayAttr>("iterator_types");
+  if (!iterators)
+    return success();
+  if (iterators.size() != 3)
+    return op->emitOpError(
+        "iterator_types must be [\"parallel\", \"parallel\", \"reduction\"] "
+        "for M5 matrix contractions");
+  constexpr llvm::StringLiteral expected[3] = {"parallel", "parallel",
+                                               "reduction"};
+  for (auto [index, attr] : llvm::enumerate(iterators)) {
+    auto stringAttr = llvm::dyn_cast<StringAttr>(attr);
+    if (!stringAttr || stringAttr.getValue() != expected[index])
+      return op->emitOpError(
+          "iterator_types must be [\"parallel\", \"parallel\", \"reduction\"] "
+          "for M5 matrix contractions");
+  }
+  return success();
+}
+
 static LogicalResult verifyTileDotContractMetadata(Operation *op,
                                                    bool matrixForm) {
   if (failed(verifyM5Exact32Metadata(op)))
@@ -464,14 +504,27 @@ static LogicalResult verifyTileDotContractMetadata(Operation *op,
       return failure();
     auto mAttr = op->getAttrOfType<IntegerAttr>("m");
     auto nAttr = op->getAttrOfType<IntegerAttr>("n");
+    auto kAttr = op->getAttrOfType<IntegerAttr>("k");
     if (mAttr && nAttr && mAttr.getInt() * nAttr.getInt() != 16)
       return op->emitOpError("M5 tile_contract/tile_matmul require m * n = 16");
+    if (mAttr && kAttr && mAttr.getInt() * kAttr.getInt() != 16)
+      return op->emitOpError(
+          "M5 tile_contract/tile_matmul require m * k = 16 for single-vector lhs carriers");
+    if (kAttr && nAttr && kAttr.getInt() * nAttr.getInt() != 16)
+      return op->emitOpError(
+          "M5 tile_contract/tile_matmul require k * n = 16 for single-vector rhs carriers");
+    if (shape[0] != mAttr.getInt() || shape[1] != nAttr.getInt())
+      return op->emitOpError(
+          "tile_contract/tile_matmul shape must match [m, n] in M5");
     if (failed(verifyContractionLayoutAttr(op, "lhs_layout",
                                            /*allowRhsTransposed=*/false)) ||
         failed(verifyContractionLayoutAttr(op, "rhs_layout",
                                            /*allowRhsTransposed=*/true)) ||
         failed(verifyContractionLayoutAttr(op, "acc_layout",
                                            /*allowRhsTransposed=*/false)))
+      return failure();
+    if (failed(verifyContractionDimsAttr(op)) ||
+        failed(verifyIteratorTypesAttr(op)))
       return failure();
   } else {
     auto layout = op->getAttrOfType<LayoutAttr>("layout");

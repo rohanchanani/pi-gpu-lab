@@ -83,6 +83,11 @@
         "tile_dot_1x16_i32_vc4tile",
         "tile_matmul_4x4_i32_vc4tile",
         "tile_contract_shared_rhs_vc4tile"
+      ],
+      "m5_cute_stress": [
+        "cute_gemm_8x8x8_tiled_vc4tile",
+        "cute_gemm_16x16x16_tiled_vc4tile",
+        "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
       ]
     }
   },
@@ -162,6 +167,11 @@
       "tile_dot_1x16_i32_vc4tile",
       "tile_matmul_4x4_i32_vc4tile",
       "tile_contract_shared_rhs_vc4tile"
+    ],
+    "m5_cute_stress": [
+      "cute_gemm_8x8x8_tiled_vc4tile",
+      "cute_gemm_16x16x16_tiled_vc4tile",
+      "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
     ]
   },
   "slices": {
@@ -3205,6 +3215,76 @@
                 "compiler/lib/Conversion/VC4TileToSSAVC4/**"
               ],
               "pattern": "lower.*(f16|bf16|fp8|int8|uint8|int4|uint4)|pack.*(u8|i8|nibble)"
+            }
+          ]
+        }
+      ]
+    },
+    "m5-cute-stress-hardware-matrix": {
+      "title": "M5 CuTe-style stress hardware matrix",
+      "expected_end_state": "CuTe-style composed VC4Tile GEMM fixtures lower through the ergonomic VC4Tile pipeline and pass strict real-hardware CPU-reference checks.",
+      "verifications": [
+        {
+          "id": "m5-cute-stress-source-products",
+          "mechanism": "source_products",
+          "files": [
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_8x8x8_tiled_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_8x8x8_tiled_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_8x8x8_tiled_vc4tile/candidate/cute_gemm_8x8x8_tiled_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-8x8x8-tiled.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-8x8x8-tiled-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_tiled_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_tiled_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_tiled_vc4tile/candidate/cute_gemm_16x16x16_tiled_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-16x16x16-tiled.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-16x16x16-tiled-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_shared_b_rhs_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_shared_b_rhs_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_shared_b_rhs_vc4tile/candidate/cute_gemm_16x16x16_shared_b_rhs_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-16x16x16-shared-b-rhs.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-16x16x16-shared-b-rhs-vc4tile.mlir"
+          ]
+        },
+        {
+          "id": "build-vc4_opt",
+          "mechanism": "build",
+          "target": "vc4-opt",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "build-vc4_codegen",
+          "mechanism": "build",
+          "target": "vc4-codegen",
+          "route_hint": "codex_mechanical"
+        },
+        {
+          "id": "m5-cute-stress-hardware-matrix",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "m5_cute_stress",
+          "runner": "compiler/test/CodeGen/VC4Tile/Support/run_vc4tile_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/VC4Tile/Hardware/Run/{fixture}/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/{fixture}/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/{fixture}/core.vc4tile.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/{fixture}/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/{fixture}/scheduled.vc4.mlir"
+          ],
+          "matrix": [
+            {
+              "fixture": "cute_gemm_8x8x8_tiled_vc4tile"
+            },
+            {
+              "fixture": "cute_gemm_16x16x16_tiled_vc4tile"
+            },
+            {
+              "fixture": "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
             }
           ]
         }

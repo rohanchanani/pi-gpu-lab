@@ -3115,19 +3115,29 @@ def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: st
                 shutil.rmtree(target)
     for i, raw_case in enumerate(cases):
         case = raw_case if isinstance(raw_case, Mapping) else {"value": raw_case}
-        case_result: Dict[str, Any] = {"case": i, "params": dict(case)}
+        case_fixture = str(case.get("fixture", fixture))
+        case_result: Dict[str, Any] = {"case": i, "fixture": case_fixture, "params": dict(case)}
         phase_results = []
+        if not case_fixture:
+            failures.append({"case": i, "error": "hardware_cpu_reference_contract requires fixture or per-case fixture"})
+            results.append(case_result)
+            continue
+        if case_fixture != fixture and bool(v.get("clean", True)) and not ctx.dry_run:
+            for rel in (Path("candidates") / case_fixture, Path("hardware") / case_fixture):
+                target = candidate_root / rel
+                if target.exists():
+                    shutil.rmtree(target)
         if runner and phases:
             for phase in phases:
                 if phase == "generate" and bool(v.get("clean_before_generate", True)):
                     clean_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_clean")
-                    clean_argv = ["env", *_case_env_prefix(case, i, fixture), "bash", str(runner), fixture, "clean"]
+                    clean_argv = ["env", *_case_env_prefix(case, i, case_fixture), "bash", str(runner), case_fixture, "clean"]
                     clean = ctx.run_command(clean_argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=clean_log)
                     phase_results.append({"phase": "clean", "exit_code": clean.exit_code, "ok": clean.ok, "log_path": str(clean_log)})
                     if not clean.ok:
                         failures.append({"case": i, "phase": "clean", "exit_code": clean.exit_code, "log_path": str(clean_log), "stdout_tail": tail(clean.stdout), "stderr_tail": tail(clean.stderr)})
                         break
-                argv = ["env", *_case_env_prefix(case, i, fixture), "bash", str(runner), fixture, phase]
+                argv = ["env", *_case_env_prefix(case, i, case_fixture), "bash", str(runner), case_fixture, phase]
                 log_path = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_{phase}")
                 result = ctx.run_command(argv, cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=log_path)
                 phase_results.append({"phase": phase, "exit_code": result.exit_code, "ok": result.ok, "log_path": str(log_path)})
@@ -3141,37 +3151,49 @@ def mechanism_hardware_cpu_reference_contract(ctx: VerifierContext, slice_id: st
         if isinstance(cpu_argv, list) and isinstance(cand_argv, list):
             cpu_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_cpu")
             cand_log = ctx.command_log_path(slice_id, f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_candidate")
-            cpu = ctx.run_command(_expand_case_argv(ctx, cpu_argv, case, i, fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cpu_log)
-            cand = ctx.run_command(_expand_case_argv(ctx, cand_argv, case, i, fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cand_log)
+            cpu = ctx.run_command(_expand_case_argv(ctx, cpu_argv, case, i, case_fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cpu_log)
+            cand = ctx.run_command(_expand_case_argv(ctx, cand_argv, case, i, case_fixture), cwd=ctx.repo, timeout_sec=verification_timeout_sec(ctx, v), log_path=cand_log)
             case_result.update({"cpu_exit_code": cpu.exit_code, "candidate_exit_code": cand.exit_code, "cpu_log": str(cpu_log), "candidate_log": str(cand_log)})
             if not cpu.ok or not cand.ok or cpu.stdout.strip() != cand.stdout.strip():
                 failures.append({"case": i, "error": "CPU reference and candidate output differ", "cpu_exit_code": cpu.exit_code, "candidate_exit_code": cand.exit_code, "cpu_stdout": tail(cpu.stdout), "candidate_stdout": tail(cand.stdout), "cpu_stderr": tail(cpu.stderr), "candidate_stderr": tail(cand.stderr), "cpu_log": str(cpu_log), "candidate_log": str(cand_log)})
+        if v.get("expected_json") and v.get("log"):
+            expected = _format_case_value(str(v.get("expected_json")), case, i, case_fixture)
+            log = _format_case_value(str(v.get("log")), case, i, case_fixture)
+            check_v = {
+                **v,
+                "id": f"{v.get('id', 'hardware_cpu_reference')}_case_{i}_expected_json",
+                "expected": expected,
+                "log": log,
+                "mechanism": "expected_json_result",
+            }
+            check = mechanism_expected_json_result(ctx, slice_id, check_v)
+            phase_results.append({"phase": "expected_json", "ok": check.ok})
+            if not check.ok:
+                failures.append({"case": i, "fixture": case_fixture, "expected_json_result": check.to_packet()})
         results.append(case_result)
 
     required_debug = [str(x) for x in as_list(v.get("required_debug_artifacts"))]
     missing_debug = []
     stale_debug = []
-    for raw in required_debug:
-        raw = _format_case_value(raw, {}, 0, fixture)
-        path = resolve_repo_or_auto_path(ctx, raw)
-        if not path.exists():
-            missing_debug.append(raw)
-        elif bool(v.get("require_fresh_debug_artifacts", True)) and str(raw).startswith(".vc4_auto/"):
-            try:
-                if path.stat().st_mtime + 1.0 < started:
-                    stale_debug.append(raw)
-            except OSError:
-                pass
+    debug_cases = cases if cases else [{}]
+    for raw_case in debug_cases:
+        case = raw_case if isinstance(raw_case, Mapping) else {"value": raw_case}
+        case_fixture = str(case.get("fixture", fixture))
+        for raw in required_debug:
+            raw = _format_case_value(raw, case, 0, case_fixture)
+            path = resolve_repo_or_auto_path(ctx, raw)
+            if not path.exists():
+                missing_debug.append(raw)
+            elif bool(v.get("require_fresh_debug_artifacts", True)) and str(raw).startswith(".vc4_auto/"):
+                try:
+                    if path.stat().st_mtime + 1.0 < started:
+                        stale_debug.append(raw)
+                except OSError:
+                    pass
     if missing_debug:
         failures.append({"missing_debug_artifacts": missing_debug})
     if stale_debug:
         failures.append({"stale_debug_artifacts": stale_debug})
-
-    if v.get("expected_json") and v.get("log"):
-        check_v = {**v, "expected": v.get("expected_json"), "mechanism": "expected_json_result"}
-        check = mechanism_expected_json_result(ctx, slice_id, check_v)
-        if not check.ok:
-            failures.append({"expected_json_result": check.to_packet()})
 
     if failures:
         return make_failure(ctx, slice_id, v, "hardware CPU-reference contract failed", actual={"failures": failures, "results": results}, duration=time.time() - started)

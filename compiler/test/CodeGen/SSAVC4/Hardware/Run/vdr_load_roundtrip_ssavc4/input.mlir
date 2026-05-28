@@ -25,17 +25,17 @@ ssavc4.module @vdr_load_roundtrip_ssavc4 {
   } {
     %in = ssavc4.uniform.read 0 : i32
     %out = ssavc4.uniform.read 1 : i32
-    ssavc4.vdr.load %in {
+    %vdr_row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    ssavc4.vdr.load %in, %vdr_row {
       elem_bytes = 4 : i32,
       row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
-      vpm_base_row = 0 : i32,
       vpm_base_col = 0 : i32,
       orientation = "horizontal",
       vpitch = 1 : i32,
       serialize = "mutex"
-    } : i32
+    } : i32, i32
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %tile0 = ssavc4.vpm.read %row0 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32 -> vector<16xi32>
     ssavc4.vdw.store %out, %tile0 {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>

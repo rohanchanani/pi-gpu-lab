@@ -312,17 +312,17 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
   }];
   let arguments = (ins
     AnyType:$address,
+    AnyType:$vpm_base_row,
     I32Attr:$elem_bytes,
     I32Attr:$row_len,
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
-    I32Attr:$vpm_base_row,
     I32Attr:$vpm_base_col,
     OptionalAttr<StrAttr>:$orientation,
     I32Attr:$vpitch,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address attr-dict `:` type($address)";
+  let assemblyFormat = "$address `,` $vpm_base_row attr-dict `:` type($address) `,` type($vpm_base_row)";
   let hasVerifier = 1;
 }
 

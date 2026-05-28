@@ -1119,6 +1119,18 @@ static Value createLoadImm(OpBuilder &builder, Location loc, Type resultType,
       resultType);
 }
 
+static Value createLoadImmPerElemU2(OpBuilder &builder, Location loc,
+                                    Type resultType,
+                                    ArrayRef<int32_t> values) {
+  Attribute mode = mlir::vc4::LoadImmModeAttr::get(
+      builder.getContext(), mlir::vc4::LoadImmMode::per_elem_u2);
+  return createSSAVC4OpWithResult(
+      builder, loc, kSSAVC4LoadImmOpName, {},
+      {builder.getNamedAttr("mode", mode),
+       builder.getNamedAttr("values", builder.getDenseI32ArrayAttr(values))},
+      resultType);
+}
+
 static Value createLoadImmI32(OpBuilder &builder, Location loc, Type resultType,
                               int64_t value) {
   return createLoadImm(builder, loc, resultType,
@@ -1348,11 +1360,30 @@ static LogicalResult lowerConstant(Operation *op, OpBuilder &builder,
           "unsupported arith.constant float width for VC4Tile lowering");
     value = FloatAttr::get(builder.getF32Type(), floatAttr.getValue());
   } else if (auto denseAttr = llvm::dyn_cast<DenseIntElementsAttr>(value)) {
-    if (!denseAttr.isSplat())
-      return op->emitOpError(
-          "currently lowers only splat dense integer vector constants");
-    value = builder.getI32IntegerAttr(
-        denseAttr.getSplatValue<llvm::APInt>().getSExtValue());
+    if (denseAttr.isSplat()) {
+      value = builder.getI32IntegerAttr(
+          denseAttr.getSplatValue<llvm::APInt>().getSExtValue());
+    } else {
+      auto vectorType = llvm::dyn_cast<VectorType>(resultType);
+      if (!vectorType || vectorType.getRank() != 1 ||
+          vectorType.getDimSize(0) != 16 ||
+          !vectorType.getElementType().isSignlessInteger(32))
+        return op->emitOpError(
+            "currently lowers only vector<16xi32> non-splat dense integer constants");
+      SmallVector<int32_t, 16> values;
+      values.reserve(16);
+      for (const llvm::APInt &lane : denseAttr.getValues<llvm::APInt>()) {
+        int64_t laneValue = lane.getSExtValue();
+        if (laneValue < 0 || laneValue > 3)
+          return op->emitOpError(
+              "non-splat dense integer vector constants must use lane values "
+              "in range [0, 3]");
+        values.push_back(static_cast<int32_t>(laneValue));
+      }
+      valueMap[op->getResult(0)] =
+          createLoadImmPerElemU2(builder, op->getLoc(), resultType, values);
+      return success();
+    }
   } else if (auto denseFloatAttr =
                  llvm::dyn_cast<DenseFPElementsAttr>(value)) {
     if (!denseFloatAttr.isSplat())
@@ -1411,11 +1442,44 @@ static LogicalResult lowerIntegerMul(Operation *op, OpBuilder &builder,
   Value rhs = lookupMappedValue(op, op->getOperand(1), valueMap);
   if (!lhs || !rhs)
     return failure();
+  Type resultType = op->getResult(0).getType();
   SmallVector<Value, 2> operands{lhs, rhs};
+  Value rawProduct =
+      createALUMul(builder, op->getLoc(), operands, mlir::vc4::MulOpcode::mul24,
+                   resultType);
+
+  // VC4's integer multiply is a 24-bit unsigned operation. M5 integer tile
+  // carriers are sign-extended i32 values whose dynamic payloads fit the
+  // signed 24-bit QPU multiply domain, so repair the raw product to signed
+  // two's-complement semantics:
+  //   a*b = mul24(a,b) - (a < 0 ? b << 24 : 0) - (b < 0 ? a << 24 : 0).
+  Value shift31 = createLoadImmI32(builder, op->getLoc(), resultType, 31);
+  Value shift24 = createLoadImmI32(builder, op->getLoc(), resultType, 24);
+  Value lhsSign =
+      createALUAdd(builder, op->getLoc(), {lhs, shift31},
+                   mlir::vc4::AddOpcode::asr, resultType);
+  Value rhsSign =
+      createALUAdd(builder, op->getLoc(), {rhs, shift31},
+                   mlir::vc4::AddOpcode::asr, resultType);
+  Value lhsHigh =
+      createALUAdd(builder, op->getLoc(), {lhs, shift24},
+                   mlir::vc4::AddOpcode::shl, resultType);
+  Value rhsHigh =
+      createALUAdd(builder, op->getLoc(), {rhs, shift24},
+                   mlir::vc4::AddOpcode::shl, resultType);
+  Value lhsCorrection =
+      createALUAdd(builder, op->getLoc(), {rhsHigh, lhsSign},
+                   mlir::vc4::AddOpcode::bit_and, resultType);
+  Value rhsCorrection =
+      createALUAdd(builder, op->getLoc(), {lhsHigh, rhsSign},
+                   mlir::vc4::AddOpcode::bit_and, resultType);
+  Value withoutLhsCorrection =
+      createALUAdd(builder, op->getLoc(), {rawProduct, lhsCorrection},
+                   mlir::vc4::AddOpcode::sub, resultType);
   valueMap[op->getResult(0)] =
-      createALUMul(builder, op->getLoc(), operands,
-                   mlir::vc4::MulOpcode::mul24,
-                   op->getResult(0).getType());
+      createALUAdd(builder, op->getLoc(),
+                   {withoutLhsCorrection, rhsCorrection},
+                   mlir::vc4::AddOpcode::sub, resultType);
   return success();
 }
 
@@ -2110,11 +2174,21 @@ static LogicalResult lowerVDRLoadTile(Operation *op, OpBuilder &builder,
   auto rowLen = op->getAttrOfType<IntegerAttr>("row_len");
   auto nrows = op->getAttrOfType<IntegerAttr>("nrows");
   auto pitch = op->getAttrOfType<IntegerAttr>("memory_pitch_bytes");
-  auto baseRow = op->getAttrOfType<IntegerAttr>("vpm_base_row");
   auto baseCol = op->getAttrOfType<IntegerAttr>("vpm_base_col");
   auto vpitch = op->getAttrOfType<IntegerAttr>("vpitch");
-  if (!elemBytes || !rowLen || !nrows || !pitch || !baseRow || !baseCol || !vpitch)
+  if (!elemBytes || !rowLen || !nrows || !pitch || !baseCol || !vpitch)
     return op->emitOpError("requires complete VDR load planning attributes");
+
+  Value vpmBaseRow = shared;
+  auto baseRow = op->getAttrOfType<IntegerAttr>("vpm_base_row");
+  if (baseRow && baseRow.getInt() != 0) {
+    Value localRow = createLoadImmI32(builder, op->getLoc(), builder.getI32Type(),
+                                     baseRow.getInt());
+    SmallVector<Value, 2> operands{shared, localRow};
+    vpmBaseRow = createALUAdd(builder, op->getLoc(), operands,
+                              mlir::vc4::AddOpcode::add,
+                              builder.getI32Type());
+  }
 
   StringRef orientation = "horizontal";
   if (auto layout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout")) {
@@ -2128,14 +2202,13 @@ static LogicalResult lowerVDRLoadTile(Operation *op, OpBuilder &builder,
       builder.getNamedAttr("row_len", rowLen),
       builder.getNamedAttr("nrows", nrows),
       builder.getNamedAttr("memory_pitch_bytes", pitch),
-      builder.getNamedAttr("vpm_base_row", baseRow),
       builder.getNamedAttr("vpm_base_col", baseCol),
       builder.getNamedAttr("orientation", builder.getStringAttr(orientation)),
       builder.getNamedAttr("vpitch", vpitch),
       builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
-  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address},
-                 attrs);
+  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDRLoadOpName,
+                 {address, vpmBaseRow}, attrs);
   return success();
 }
 
@@ -3268,6 +3341,94 @@ static Value createElementwiseAccumulation(OpBuilder &builder, Operation *op,
   return Value();
 }
 
+static Value createCoreRotate(OpBuilder &builder, Operation *op, Value input,
+                              int64_t amount, Type resultType) {
+  amount %= 16;
+  if (amount == 0)
+    return input;
+  OperationState state(op->getLoc(), kVC4TileRotateOpName);
+  state.addOperands(input);
+  state.addAttribute("amount", builder.getI32IntegerAttr(amount));
+  state.addTypes(resultType);
+  return builder.create(state)->getResult(0);
+}
+
+static Value createVector16I32MaskConstant(OpBuilder &builder, Location loc,
+                                           VectorType vectorType,
+                                           ArrayRef<int32_t> lanes) {
+  SmallVector<llvm::APInt, 16> values;
+  values.reserve(lanes.size());
+  for (int32_t lane : lanes)
+    values.emplace_back(/*numBits=*/32, lane);
+  auto attr = DenseIntElementsAttr::get(vectorType, values);
+  return arith::ConstantOp::create(builder, loc, vectorType, attr).getResult();
+}
+
+static Value createGatheredI32Lanes(
+    OpBuilder &builder, Operation *op, Value input, Type resultType,
+    llvm::function_ref<unsigned(unsigned)> sourceLaneForOutputLane) {
+  auto vectorType = llvm::dyn_cast<VectorType>(resultType);
+  if (!vectorType || vectorType.getRank() != 1 ||
+      vectorType.getDimSize(0) != 16 ||
+      !vectorType.getElementType().isSignlessInteger(32))
+    return Value();
+
+  Value gathered;
+  for (unsigned amount = 0; amount < 16; ++amount) {
+    SmallVector<int32_t, 16> lanes(16, 0);
+    bool any = false;
+    for (unsigned lane = 0; lane < 16; ++lane) {
+      unsigned sourceLane = sourceLaneForOutputLane(lane);
+      if (((sourceLane + 16 - lane) & 15) == amount) {
+        lanes[lane] = 1;
+        any = true;
+      }
+    }
+    if (!any)
+      continue;
+    Value rotated = createCoreRotate(builder, op, input, amount, resultType);
+    Value mask = createVector16I32MaskConstant(builder, op->getLoc(), vectorType,
+                                              lanes);
+    Value selected = createElementwiseProduct(builder, op, rotated, mask,
+                                              resultType);
+    if (!selected)
+      return Value();
+    gathered = gathered ? createElementwiseAccumulation(builder, op, gathered,
+                                                        selected, resultType)
+                        : selected;
+    if (!gathered)
+      return Value();
+  }
+  return gathered;
+}
+
+static bool hasContractionDimsAttr(Operation *op) {
+  auto dims = op->getAttrOfType<ArrayAttr>("contracting_dims");
+  if (!dims || dims.size() != 2)
+    return false;
+  auto lhsDims = llvm::dyn_cast<ArrayAttr>(dims[0]);
+  auto rhsDims = llvm::dyn_cast<ArrayAttr>(dims[1]);
+  if (!lhsDims || !rhsDims || lhsDims.size() != 1 || rhsDims.size() != 1)
+    return false;
+  auto lhsDim = llvm::dyn_cast<IntegerAttr>(lhsDims[0]);
+  auto rhsDim = llvm::dyn_cast<IntegerAttr>(rhsDims[0]);
+  return lhsDim && rhsDim && lhsDim.getInt() == 1 && rhsDim.getInt() == 0;
+}
+
+static bool hasIteratorTypesAttr(Operation *op) {
+  auto iterators = op->getAttrOfType<ArrayAttr>("iterator_types");
+  if (!iterators || iterators.size() != 3)
+    return false;
+  constexpr llvm::StringLiteral expected[3] = {"parallel", "parallel",
+                                               "reduction"};
+  for (auto [index, attr] : llvm::enumerate(iterators)) {
+    auto stringAttr = llvm::dyn_cast<StringAttr>(attr);
+    if (!stringAttr || stringAttr.getValue() != expected[index])
+      return false;
+  }
+  return true;
+}
+
 static LogicalResult canonicalizeTileDotOp(Operation *op, OpBuilder &builder) {
   if (failed(verifyContractionVectorInputsForCanonicalization(op,
                                                               /*expectedOperands=*/3)))
@@ -3290,16 +3451,67 @@ static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
                                                               /*expectedOperands=*/4)))
     return failure();
   Type resultType = op->getResult(0).getType();
-  Value product = createElementwiseProduct(builder, op, op->getOperand(0),
-                                           op->getOperand(1), resultType);
-  if (!product)
-    return op->emitOpError("unsupported tile contraction element type");
-
-  Value update = product;
+  auto vectorType = llvm::dyn_cast<VectorType>(resultType);
+  if (!vectorType || !vectorType.getElementType().isSignlessInteger(32))
+    return op->emitOpError(
+        "tile_contract/tile_matmul currently lower only i32 4x4x4 matrix forms");
+  auto mAttr = op->getAttrOfType<IntegerAttr>("m");
+  auto nAttr = op->getAttrOfType<IntegerAttr>("n");
   auto kAttr = op->getAttrOfType<IntegerAttr>("k");
-  if (kAttr && kAttr.getInt() > 1)
-    update = createCoreAddReduce(builder, op, product, op->getOperand(3),
-                                 op->getResultTypes())->getResult(0);
+  if (!mAttr || !nAttr || !kAttr || mAttr.getInt() != 4 ||
+      nAttr.getInt() != 4 || kAttr.getInt() != 4)
+    return op->emitOpError(
+        "tile_contract/tile_matmul require m = 4, n = 4, k = 4 for the "
+        "current single-vector matrix carrier");
+  if (!hasContractionDimsAttr(op))
+    return op->emitOpError(
+        "tile_contract/tile_matmul require contracting_dims = [[1], [0]]");
+  if (!hasIteratorTypesAttr(op))
+    return op->emitOpError(
+        "tile_contract/tile_matmul require iterator_types = [\"parallel\", "
+        "\"parallel\", \"reduction\"]");
+  auto lhsLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("lhs_layout");
+  auto rhsLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("rhs_layout");
+  auto accLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("acc_layout");
+  if (!lhsLayout || !rhsLayout || !accLayout ||
+      lhsLayout.getValue() != mlir::vc4tile::Layout::row_major ||
+      accLayout.getValue() != mlir::vc4tile::Layout::row_major)
+    return op->emitOpError(
+        "tile_contract/tile_matmul require row_major lhs and acc layouts in M5");
+  bool rhsRowMajor = rhsLayout.getValue() == mlir::vc4tile::Layout::row_major;
+  bool rhsTransposed =
+      rhsLayout.getValue() == mlir::vc4tile::Layout::col_major ||
+      rhsLayout.getValue() == mlir::vc4tile::Layout::transposed_view;
+  if (!rhsRowMajor && !rhsTransposed)
+    return op->emitOpError(
+        "tile_contract/tile_matmul require row_major, col_major, or "
+        "transposed_view rhs layout in M5");
+
+  Value update;
+  for (unsigned kk = 0; kk < 4; ++kk) {
+    Value lhsK = createGatheredI32Lanes(
+        builder, op, op->getOperand(0), resultType, [kk](unsigned lane) {
+          unsigned row = lane / 4;
+          return row * 4 + kk;
+        });
+    Value rhsK = createGatheredI32Lanes(
+        builder, op, op->getOperand(1), resultType,
+        [kk, rhsRowMajor](unsigned lane) {
+          unsigned col = lane & 3;
+          return rhsRowMajor ? kk * 4 + col : col * 4 + kk;
+        });
+    if (!lhsK || !rhsK)
+      return op->emitOpError("failed to materialize 4x4x4 lane gathers");
+    Value product = createElementwiseProduct(builder, op, lhsK, rhsK,
+                                             resultType);
+    if (!product)
+      return op->emitOpError("unsupported tile contraction element type");
+    update = update ? createElementwiseAccumulation(builder, op, update,
+                                                    product, resultType)
+                    : product;
+    if (!update)
+      return op->emitOpError("unsupported tile contraction accumulation type");
+  }
 
   Value accumulated = createElementwiseAccumulation(builder, op, op->getOperand(2),
                                                     update, resultType);

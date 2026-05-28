@@ -1402,8 +1402,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   case InstructionTemplate::Kind::VDRLoad:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 8 : 6);
-    return spillActionSlots + 6;
+      return spillActionSlots + (serialize.getValue() == "mutex" ? 9 : 7);
+    return spillActionSlots + 7;
   case InstructionTemplate::Kind::VDWStore:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
@@ -2362,15 +2362,16 @@ static LogicalResult selectInstructionTemplates(
       if (hasName(&op, kSSAVC4VDRLoadOpName)) {
         if (failed(verifyCooperativeVPMResource(func, &op)))
           return failure();
-        if (op.getNumOperands() != 1)
-          return op.emitOpError("requires one i32 global base address operand");
+        if (op.getNumOperands() != 2)
+          return op.emitOpError("requires i32 global base address and VPM base row operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
           return op.emitOpError("requires an i32 global base address operand for M5 lowering");
+        if (!op.getOperand(1).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 VPM base row operand for M5 lowering");
         int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
         int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
         int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
         int64_t memoryPitchBytes = getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
-        int64_t vpmBaseRow = getI32IntegerAttrOr(&op, "vpm_base_row", -1);
         int64_t vpmBaseCol = getI32IntegerAttrOr(&op, "vpm_base_col", -1);
         int64_t vpitch = getI32IntegerAttrOr(&op, "vpitch", -1);
         if (elemBytes != 4)
@@ -2382,8 +2383,6 @@ static LogicalResult selectInstructionTemplates(
         if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0 ||
             memoryPitchBytes < rowLen * elemBytes)
           return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M5 lowering");
-        if (vpmBaseRow < 0 || vpmBaseRow > 63)
-          return op.emitOpError("requires vpm_base_row in range [0, 63] for M5 lowering");
         if (vpmBaseCol != 0)
           return op.emitOpError("M5 VDR lowering supports only vpm_base_col = 0");
         if (vpitch <= 0 || vpitch > 16)
@@ -2479,7 +2478,7 @@ static LogicalResult emitLoadImm(OpBuilder &builder,
 
   state.addAttribute("mode", mode);
   if (Attribute values = source->getAttr("values"))
-    state.addAttribute("values", values);
+    state.addAttribute("value", values);
   else
     state.addAttribute("value", value);
   state.addAttribute("pm", builder.getBoolAttr(false));
@@ -3371,12 +3370,10 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
   int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
   int64_t memoryPitchBytes =
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
-  int64_t vpmBaseRow = getI32IntegerAttrOr(source, "vpm_base_row", -1);
   int64_t vpmBaseCol = getI32IntegerAttrOr(source, "vpm_base_col", -1);
   int64_t vpitch = getI32IntegerAttrOr(source, "vpitch", -1);
   if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 ||
-      vpmBaseRow < 0 || vpmBaseRow > 63 || vpmBaseCol < 0 ||
-      vpmBaseCol > 15 || vpitch < 1 || vpitch > 16)
+      vpmBaseCol < 0 || vpmBaseCol > 15 || vpitch < 1 || vpitch > 16)
     return source->emitOpError("has invalid VDR setup attributes after verification");
 
   std::optional<uint32_t> mpitch = encodeVDRMemoryPitchBytes(memoryPitchBytes);
@@ -3393,7 +3390,9 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
   //   bit 31 marks the read/DMA setup word, MPITCH encodes 8*2^n byte source
   //   pitch, zero-encoded 16-wide ROWLEN/NROWS fields describe the memory
   //   transfer, VPITCH advances the destination VPM row between source rows,
-  //   VERT selects orientation, and low bits encode ADDRA={Y[5:0], X[3:0]}.
+  //   VERT selects orientation, and low bits encode ADDRA X[3:0].  ADDRA
+  //   Y[5:0] is patched in dynamically from the block-local shared tile row
+  //   when emitting the scheduled VC4 setup sequence.
   //   This is intentionally narrower than the full
   //   VC4 setup space; M5 only exposes regular 32-bit tile loads.
   uint32_t word = 0x80000000u;
@@ -3403,14 +3402,14 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
   word |= (encodeVDRCount16(vpitch) & 0x0fu) << 12;
   if (vertical)
     word |= 1u << 11;
-  word |= encodeVDRVPMXY(vpmBaseRow, vpmBaseCol);
+  word |= encodeVDRVPMXY(/*row=*/0, vpmBaseCol);
   setupWord = static_cast<int32_t>(word);
   return success();
 }
 
 static void emitRawVDRLoad(OpBuilder &builder, Location loc,
                            int64_t addressReg, int64_t setupWord,
-                           bool useMutex) {
+                           int64_t vpmBaseRowReg, bool useMutex) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -3422,11 +3421,19 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, setupWord, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
                     /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                    mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -3445,16 +3452,19 @@ static LogicalResult emitVDRLoad(OpBuilder &builder,
                                  const InstructionTemplate &templ,
                                  const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  if (templ.operands.size() != 1)
+  if (templ.operands.size() != 2)
     return source->emitError("internal lowering error: VDR load has wrong operand count");
   std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
-  if (!addressReg)
+  std::optional<int64_t> vpmBaseRowReg =
+      allocator.lookup(templ, templ.operands[1]);
+  if (!addressReg || !vpmBaseRowReg)
     return source->emitOpError()
-           << "uses a VDR base address that is not defined by a lowerable SSAVC4 op";
+           << "uses a VDR base address or VPM base row that is not defined by a lowerable SSAVC4 op";
   int64_t setupWord = 0;
   if (failed(buildVDRLoadSetupWord(source, setupWord)))
     return failure();
   emitRawVDRLoad(builder, source->getLoc(), *addressReg, setupWord,
+                 *vpmBaseRowReg,
                  hasStringAttr(source, "serialize", "mutex"));
   return success();
 }

@@ -516,6 +516,8 @@ LogicalResult VDRLoadOp::verify() {
   Operation *op = getOperation();
   if (!getAddress().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 global base address operand");
+  if (!getVpmBaseRow().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 VPM base row operand");
 
   int64_t elemBytes = getElemBytesAttr().getInt();
   if (elemBytes != 4)
@@ -534,10 +536,6 @@ LogicalResult VDRLoadOp::verify() {
     return emitOpError("requires memory_pitch_bytes to be a positive multiple of elem_bytes");
   if (memoryPitchBytes < rowLen * elemBytes)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
-
-  int64_t vpmBaseRow = getVpmBaseRowAttr().getInt();
-  if (vpmBaseRow < 0 || vpmBaseRow > 63)
-    return emitOpError("requires vpm_base_row in range [0, 63]");
 
   int64_t vpmBaseCol = getVpmBaseColAttr().getInt();
   if (vpmBaseCol != 0)

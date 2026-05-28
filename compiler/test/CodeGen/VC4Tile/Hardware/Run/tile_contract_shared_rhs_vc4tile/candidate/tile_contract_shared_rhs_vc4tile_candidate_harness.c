@@ -3,9 +3,26 @@
 
 #define VC4_WORDS 32u
 #define VC4_SENTINEL 0x71110003u
+#define VC4_ACC_VALUE 13u
 
-static uint32_t lhs_value(uint32_t i) { return 3u + i; }
-static uint32_t rhs_value(uint32_t i) { return 5u + 2u * i; }
+static uint32_t lhs_value(uint32_t i) {
+    uint32_t row = i / 4u;
+    uint32_t kk = i % 4u;
+    return 2u + 5u * row + kk;
+}
+
+static uint32_t rhs_value(uint32_t i) {
+    uint32_t kk = i / 4u;
+    uint32_t col = i % 4u;
+    return 7u + 3u * kk + 11u * col;
+}
+
+static uint32_t matmul_expected(uint32_t row, uint32_t col) {
+    uint32_t expected = VC4_ACC_VALUE;
+    for (uint32_t kk = 0; kk < 4u; ++kk)
+        expected += lhs_value(row * 4u + kk) * rhs_value(kk * 4u + col);
+    return expected;
+}
 
 void notmain(void) {
     struct vc4_program *program = 0;
@@ -13,11 +30,8 @@ void notmain(void) {
     uint32_t host_lhs[VC4_WORDS], host_rhs[VC4_WORDS], host_out[VC4_WORDS], got[VC4_WORDS];
     uint32_t total_mismatches = 0, sentinel_mismatches = 0;
     uint32_t checksum_actual = 0, checksum_expected = 0;
-    uint32_t expected_dot = 0;
     int failures = 0;
 
-    for (uint32_t i = 0; i < 16u; ++i)
-        expected_dot += lhs_value(i) * rhs_value(i);
     for (uint32_t i = 0; i < VC4_WORDS; ++i) {
         host_lhs[i] = lhs_value(i);
         host_rhs[i] = rhs_value(i);
@@ -41,7 +55,12 @@ void notmain(void) {
     if (!failures) failures += vc4_m2_copy_dtoh(program, got, d_out, sizeof(got)) < 0;
 
     for (uint32_t i = 0; i < VC4_WORDS; ++i) {
-        uint32_t expected = (i < 16u) ? expected_dot : VC4_SENTINEL;
+        uint32_t expected = VC4_SENTINEL;
+        if (i < 16u) {
+            uint32_t row = i / 4u;
+            uint32_t col = i % 4u;
+            expected = matmul_expected(row, col);
+        }
         checksum_actual += got[i];
         checksum_expected += expected;
         if (got[i] != expected) {
