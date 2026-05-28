@@ -337,11 +337,16 @@ static LogicalResult verifyResourceMetadata(mlir::vc4::FuncOp op) {
   if (auto bytes = getI32("vpm_bytes_per_block")) vpmBytesPerBlock = *bytes;
   if (auto bytes = getI32("shared_vpm_bytes")) vpmBytesPerBlock = *bytes;
   int64_t userSharedVPMRowsPerBlock = getI32("user_shared_vpm_rows_per_block").value_or((vpmBytesPerBlock <= 0) ? 0 : (1 + (vpmBytesPerBlock - 1) / 64));
+  int64_t vdwStagingVPMRowsPerBlock = getI32("vdw_staging_vpm_rows_per_block").value_or(0);
   int64_t spillVPMRowsPerBlock = getI32("spill_vpm_rows_per_block").value_or(0);
-  int64_t vpmRowsPerBlock = getI32("vpm_rows_per_block").value_or(userSharedVPMRowsPerBlock + spillVPMRowsPerBlock);
+  int64_t vpmRowsPerBlock = getI32("vpm_rows_per_block").value_or(userSharedVPMRowsPerBlock + vdwStagingVPMRowsPerBlock + spillVPMRowsPerBlock);
   if (warpsPerBlockMax <= 0) return emitResourceError(op, "warps_per_block_max must be greater than zero");
   if (semaphoresPerBlock < 0) return emitResourceError(op, "semaphores_per_block must be non-negative");
-  if (vpmBytesPerBlock < 0 || userSharedVPMRowsPerBlock < 0 || spillVPMRowsPerBlock < 0 || vpmRowsPerBlock < 0) return emitResourceError(op, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
+  if (vpmBytesPerBlock < 0 || userSharedVPMRowsPerBlock < 0 ||
+      vdwStagingVPMRowsPerBlock < 0 || spillVPMRowsPerBlock < 0 ||
+      vpmRowsPerBlock < 0) return emitResourceError(op, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
+  if (vpmRowsPerBlock < userSharedVPMRowsPerBlock + vdwStagingVPMRowsPerBlock + spillVPMRowsPerBlock)
+    return emitResourceError(op, "vpm_rows_per_block must include user shared rows plus compiler scratch rows");
   if (scheduleMode == "independent_vector") {
     if (usesBarrier || usesSharedVPM || requireFullResidency || semaphoresPerBlock != 0 || vpmBytesPerBlock != 0 || vpmRowsPerBlock != 0)
       return emitResourceError(op, "independent_vector kernels must not request barrier/shared cooperative resources");

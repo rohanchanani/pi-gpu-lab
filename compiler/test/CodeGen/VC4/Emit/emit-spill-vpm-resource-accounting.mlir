@@ -4,14 +4,14 @@
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // SOURCE: vpm_base_row=resident_slot*20
-// SOURCE: user_shared_vpm_rows=16 spill_vpm_rows=4
+// SOURCE: user_shared_vpm_rows=16 vdw_staging_vpm_rows=0 spill_vpm_rows=4
 // SOURCE: resident_request_id=resident_block_slot*warps_per_block+logical_warp_id
 // SOURCE: spill_vpm_row=vpm_base_row+16+logical_warp_id
 // SOURCE: spill_frame_base=spill_arena_base+resident_request_id*spill_frame_stride_bytes
 // SOURCE-NOT: logical_request*spill_frame_stride
 // SOURCE-LABEL: static int spill_vpm_resource_accounting_pack_uniforms
 // SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
-// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + KERNEL_0_VDW_STAGING_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
 // SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, spill_vpm_resource_accounting_pack_uniforms, &ctx);
 // MANIFEST: "shared_vpm_bytes": 1024
 // MANIFEST: "user_shared_vpm_rows_per_block": 16

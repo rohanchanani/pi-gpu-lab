@@ -9,9 +9,10 @@
 // CORE: cf.cond_br
 // CORE: vc4tile.shared_store
 // CORE: vc4tile.barrier
-// CORE: vc4tile.shared_load
+// CORE: vc4tile.shared_store_global
 // CORE-SAME: #vc4tile.vpm_layout<column_major>
-// CORE: vc4tile.masked_store_global
+// CORE-NOT: vc4tile.shared_load
+// CORE-NOT: vc4tile.masked_store_global
 // CORE-NOT: scf.
 // CORE-NOT: : index
 // CORE-NOT: vc4tile.tile_store
@@ -20,9 +21,10 @@
 // SSAVC4-NOT: : index
 // SSAVC4: ssavc4.vpm.write
 // SSAVC4: ssavc4.barrier
-// SSAVC4: ssavc4.vpm.read
+// SSAVC4: ssavc4.vdw.store_vpm
 // SSAVC4-SAME: orientation = "vertical"
-// SSAVC4: ssavc4.vdw.store
+// SSAVC4-NOT: ssavc4.vpm.read
+// SSAVC4-NOT: ssavc4.vdw.store
 vc4tile.kernel @scf_tiled_transpose_loop(%out : i32, %in : i32) attributes {
   public_name = "scf_tiled_transpose_loop",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,

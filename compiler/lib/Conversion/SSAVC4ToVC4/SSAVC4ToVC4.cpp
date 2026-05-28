@@ -56,6 +56,7 @@ constexpr llvm::StringLiteral kSSAVC4CondSelectOpName("ssavc4.cond_select");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
+constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
 constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
 constexpr llvm::StringLiteral kSSAVC4PackOpName("ssavc4.pack");
 constexpr llvm::StringLiteral kSSAVC4UnpackOpName("ssavc4.unpack");
@@ -392,6 +393,7 @@ struct InstructionTemplate {
     VPMRead,
     VDRLoad,
     VDWStore,
+    VDWStoreVPM,
     ThreadEnd
   } kind;
   Operation *source = nullptr;
@@ -1360,6 +1362,8 @@ struct LayoutSummary {
 static bool canUseMirroredSecondOperandForALU(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator,
     bool smallImm);
+static bool hasStringAttr(Operation *op, llvm::StringRef name,
+                          llvm::StringRef expected);
 static bool aluNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static bool canUseMirroredSecondOperandForMakeFlags(
@@ -1411,6 +1415,15 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
       return spillActionSlots + (serialize.getValue() == "mutex" ? 19 : 17);
     return spillActionSlots + 17;
+  case InstructionTemplate::Kind::VDWStoreVPM:
+  {
+    if (auto serialize =
+            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
+      return spillActionSlots + (serialize.getValue() == "mutex"
+                                     ? 19
+                                     : 17);
+    return spillActionSlots + 17;
+  }
   case InstructionTemplate::Kind::Rotate:
     return spillActionSlots + 3 + resultSpacer;
   case InstructionTemplate::Kind::LoadImm:
@@ -2484,6 +2497,55 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
+      if (hasName(&op, kSSAVC4VDWStoreVPMOpName)) {
+        if (op.getNumOperands() < 3 || op.getNumOperands() > 4)
+          return op.emitOpError(
+              "requires address, VPM y, VPM x, and optional active-lane operand");
+        if (!op.getOperand(0).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 global address operand for M3 lowering");
+        if (!op.getOperand(1).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 VPM y-coordinate operand for M3 lowering");
+        if (!op.getOperand(2).getType().isSignlessInteger(32))
+          return op.emitOpError("requires an i32 VPM x-coordinate operand for M3 lowering");
+        int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
+        int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
+        int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
+        int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
+        int64_t memoryPitchBytes =
+            getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
+        if (elemBytes != 4)
+          return op.emitOpError("supports only 32-bit elements in M3 lowering");
+        if (rowLen < 1 || rowLen > 16)
+          return op.emitOpError("requires row_len in range [1, 16] for M3 lowering");
+        if (nrows < 1 || nrows > 16)
+          return op.emitOpError("requires nrows in range [1, 16] for M3 lowering");
+        if (memoryPitchBytes < rowLen * elemBytes ||
+            memoryPitchBytes % elemBytes != 0)
+          return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M3 lowering");
+        if (op.getNumOperands() == 4) {
+          if (!op.getOperand(3).getType().isSignlessInteger(32))
+            return op.emitOpError("requires an i32 dynamic active-lane operand");
+        } else if (activeLanes != -1 && activeLanes != rowLen) {
+          return op.emitOpError("requires static active_lanes to match row_len in M3 lowering");
+        }
+        if (auto orientation = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("orientation"))) {
+          if (orientation.getValue() != "horizontal" && orientation.getValue() != "vertical")
+            return op.emitOpError("supports only orientation = \"horizontal\" or \"vertical\" in M3 lowering");
+        }
+        if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
+          if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
+            return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M3 lowering");
+        }
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::VDWStoreVPM;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        appendTemplate(std::move(templ));
+        continue;
+      }
+
       return op.emitOpError()
              << "is not supported by the M3 SSAVC4 lowering; supported operations are "
                 "ssavc4.load_imm, ssavc4.element_number, ssavc4.uniform.read, "
@@ -3437,6 +3499,147 @@ static void emitRawVDWStore(OpBuilder &builder, Location loc,
     emitMutexRelease(builder, loc);
 }
 
+static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
+                                   int64_t addressReg,
+                                   int64_t vpmYReg,
+                                   int64_t vpmXReg,
+                                   std::optional<int64_t> dynamicActiveLanesReg,
+                                   int64_t activeLanes,
+                                   int64_t rowLen,
+                                   int64_t nrows,
+                                   int64_t memoryPitchBytes,
+                                   bool vertical,
+                                   bool useMutex) {
+  (void)activeLanes;
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+
+  // VDW store setup: the source coordinate uses the DMA descriptor layout
+  // dma_h32/dma_v32(y, x), i.e. y in bits 7.. and x in bits 3...
+  // The data is already resident in VPM, so unlike ssavc4.vdw.store there is
+  // no register-to-VPM staging write here.
+  int64_t strideBytes = memoryPitchBytes - rowLen * 4;
+
+  if (dynamicActiveLanesReg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
+                          *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  } else {
+    createSplat32LDI(builder, loc, rowLen, 33);
+  }
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/8);
+  uint32_t setupBase = 0x80000000u |
+                       ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
+                       (vertical ? 0u : 0x4000u);
+  createSplat32LDI(builder, loc, static_cast<int32_t>(setupBase), 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, vpmYReg, vpmYReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/7);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  // Program the extended memory stride after the basic DMA setup.  This is
+  // the order used by the handwritten VC4 examples and by VC4C's VPM writer.
+  createSplat32LDI(builder, loc,
+                   static_cast<int32_t>(0xc0000000u |
+                                        (static_cast<uint32_t>(strideBytes) &
+                                         0xffffu)),
+                   35);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
+}
+
 
 static uint32_t encodeVDRCount16(int64_t value) {
   return value == 16 ? 0u : static_cast<uint32_t>(value & 0x0f);
@@ -3602,6 +3805,57 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
   emitRawVDWStore(builder, source->getLoc(), *addressReg, *valueReg,
                   dynamicActiveLanesReg, dynamicVPMRowReg, activeLanes,
                   vpmRow, hasStringAttr(source, "serialize", "mutex"));
+  return success();
+}
+
+static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
+                                     const InstructionTemplate &templ,
+                                     const SpillAwareAllocator &allocator) {
+  Operation *source = templ.source;
+  if (templ.operands.size() < 3 || templ.operands.size() > 4)
+    return source->emitError("internal lowering error: VPM-source VDW store has wrong operand count");
+  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> vpmYReg = allocator.lookup(templ, templ.operands[1]);
+  std::optional<int64_t> vpmXReg = allocator.lookup(templ, templ.operands[2]);
+  if (!addressReg || !vpmYReg || !vpmXReg)
+    return source->emitOpError()
+           << "uses a VDW address/VPM coordinate that is not defined by a lowerable SSAVC4 op";
+
+  std::optional<int64_t> dynamicActiveLanesReg;
+  if (templ.operands.size() == 4) {
+    dynamicActiveLanesReg = allocator.lookup(templ, templ.operands[3]);
+    if (!dynamicActiveLanesReg)
+      return source->emitOpError()
+             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
+  }
+
+  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
+  int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
+  int64_t rowLen = getI32IntegerAttrOr(source, "row_len", -1);
+  int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
+  int64_t memoryPitchBytes =
+      getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
+  if (elemBytes != 4)
+    return source->emitOpError("supports only 32-bit elements in M3 lowering");
+  if (rowLen < 1 || rowLen > 16)
+    return source->emitOpError("requires row_len in range [1, 16] for M3 lowering");
+  if (nrows < 1 || nrows > 16)
+    return source->emitOpError("requires nrows in range [1, 16] for M3 lowering");
+  int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
+  if (strideBytes < 0 || strideBytes > 65535 ||
+      memoryPitchBytes % elemBytes != 0)
+    return source->emitOpError("requires memory_pitch_bytes to produce an encodable VDW stride");
+  if (dynamicActiveLanesReg && nrows != 1)
+    return source->emitOpError("supports dynamic active_lanes only for single-row VDW stores");
+  if (!dynamicActiveLanesReg && activeLanes != -1 && activeLanes != rowLen)
+    return source->emitOpError("requires static active_lanes to match row_len in M3 lowering");
+
+  bool vertical = hasStringAttr(source, "orientation", "vertical");
+  emitRawVDWStoreFromVPM(builder, source->getLoc(), *addressReg, *vpmYReg,
+                         *vpmXReg,
+                         dynamicActiveLanesReg, activeLanes, rowLen, nrows,
+                         memoryPitchBytes, vertical,
+                         hasStringAttr(source, "serialize", "mutex"));
   return success();
 }
 
@@ -3867,6 +4121,10 @@ static LogicalResult emitScheduledFunctionBody(
       if (failed(emitVDWStore(builder, templ, allocator)))
         return failure();
       break;
+    case InstructionTemplate::Kind::VDWStoreVPM:
+      if (failed(emitVDWStoreVPM(builder, templ, allocator)))
+        return failure();
+      break;
     case InstructionTemplate::Kind::ThreadEnd:
       createThreadEndBundle(builder, templ.source->getLoc());
       createNopBundle(builder, templ.source->getLoc());
@@ -4003,8 +4261,10 @@ static DictionaryAttr attachCooperativeSpillVPMRows(OpBuilder &builder,
                                           .value_or(0));
   int64_t userRows = getResourceI32(resource, "user_shared_vpm_rows_per_block")
                          .value_or(ceilDivPositiveI64(sharedBytes, 64));
+  int64_t vdwRows = getResourceI32(resource, "vdw_staging_vpm_rows_per_block")
+                        .value_or(0);
   int64_t spillRows = warpsPerBlock;
-  int64_t totalRows = userRows + spillRows;
+  int64_t totalRows = userRows + vdwRows + spillRows;
 
   SmallVector<NamedAttribute, 12> attrs;
   for (NamedAttribute attr : resource)
@@ -4023,6 +4283,8 @@ static DictionaryAttr attachCooperativeSpillVPMRows(OpBuilder &builder,
 
   replaceAttr("user_shared_vpm_rows_per_block",
               builder.getI32IntegerAttr(userRows));
+  replaceAttr("vdw_staging_vpm_rows_per_block",
+              builder.getI32IntegerAttr(vdwRows));
   replaceAttr("spill_vpm_rows_per_block",
               builder.getI32IntegerAttr(spillRows));
   replaceAttr("vpm_rows_per_block", builder.getI32IntegerAttr(totalRows));

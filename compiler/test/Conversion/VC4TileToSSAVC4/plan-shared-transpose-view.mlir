@@ -5,14 +5,16 @@
 // CORE-NOT: vc4tile.transpose_view
 // CORE-NOT: vc4tile.copy_tile
 // CORE: vc4tile.vdr_load_tile
-// CORE: vc4tile.shared_load
+// CORE: vc4tile.shared_store_global
 // CORE-SAME: #vc4tile.vpm_layout<column_major>
-// CORE: vc4tile.masked_store_global
+// CORE-NOT: vc4tile.shared_load
+// CORE-NOT: vc4tile.masked_store_global
 // SSAVC4-LABEL: ssavc4.func @plan_shared_transpose_view
 // SSAVC4: ssavc4.vdr.load
-// SSAVC4: ssavc4.vpm.read
+// SSAVC4: ssavc4.vdw.store_vpm
 // SSAVC4-SAME: orientation = "vertical"
-// SSAVC4: ssavc4.vdw.store
+// SSAVC4-NOT: ssavc4.vpm.read
+// SSAVC4-NOT: ssavc4.vdw.store
 vc4tile.kernel @plan_shared_transpose_view(%out : i32, %in : i32) attributes {
   public_name = "plan_shared_transpose_view",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,

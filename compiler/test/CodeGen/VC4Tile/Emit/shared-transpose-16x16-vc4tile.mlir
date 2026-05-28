@@ -4,12 +4,13 @@
 // SSAVC4-LABEL: ssavc4.func @shared_transpose_16x16_vc4tile
 // SSAVC4: #vc4.builtin_kind<vpm_base_row>
 // SSAVC4: uses_shared_vpm = true
+// SSAVC4: vdw_staging_vpm_rows_per_block = 1 : i32
+// SSAVC4: vpm_rows_per_block = 17 : i32
 // SSAVC4: ssavc4.vpm.write
 // SSAVC4-SAME: orientation = "horizontal"
 // SSAVC4: ssavc4.vpm.read
 // SSAVC4-SAME: orientation = "vertical"
-// SSAVC4: ssavc4.vdw.store
-// SSAVC4-SAME: vpm_row = 63 : i32
+// SSAVC4: ssavc4.vdw.store %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}}
 // SSAVC4: ssavc4.thread_end
 // VC4-LABEL: vc4.func @shared_transpose_16x16_vc4tile
 // VC4: uses_shared_vpm = true

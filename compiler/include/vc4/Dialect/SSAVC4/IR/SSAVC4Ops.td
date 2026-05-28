@@ -376,4 +376,29 @@ def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
   let assemblyFormat = "$address `,` $value (`,` $active_lanes_value^)? (`,` $vpm_row_value^)? attr-dict `:` type($address) `,` type($value) (`,` type($active_lanes_value)^)? (`,` type($vpm_row_value)^)?";
 }
 
+def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
+  let summary = "SSAVC4 effectful global store from existing VPM coordinates";
+  let description = [{
+    Commits data already resident in VPM through the VideoCore IV VDW
+    global-store path.  Unlike ssavc4.vdw.store, this operation does not stage
+    an SSA vector value into a scratch row first; it describes a VDW DMA source
+    row/column/orientation in the existing VPM window.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    AnyType:$vpm_y,
+    AnyType:$vpm_x,
+    Optional<AnyType>:$active_lanes_value,
+    I32Attr:$elem_bytes,
+    I32Attr:$row_len,
+    I32Attr:$nrows,
+    I32Attr:$memory_pitch_bytes,
+    OptionalAttr<I32Attr>:$active_lanes,
+    OptionalAttr<StrAttr>:$orientation,
+    OptionalAttr<StrAttr>:$serialize
+  );
+  let assemblyFormat = "$address `,` $vpm_y `,` $vpm_x (`,` $active_lanes_value^)? attr-dict `:` type($address) `,` type($vpm_y) `,` type($vpm_x) (`,` type($active_lanes_value)^)?";
+  let hasVerifier = 1;
+}
+
 #endif // SSAVC4_OPS_TD

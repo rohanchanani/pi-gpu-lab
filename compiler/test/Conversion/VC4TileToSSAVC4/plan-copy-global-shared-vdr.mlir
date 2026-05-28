@@ -6,12 +6,14 @@
 // CORE: vc4tile.vdr_load_tile
 // CORE-SAME: nrows = 2 : i32
 // CORE-SAME: row_len = 16 : i32
+// CORE-SAME: vpitch = 1 : i32
 // SSAVC4-LABEL: ssavc4.func @plan_copy_global_shared_vdr
 // SSAVC4-SAME: #vc4.builtin_kind<vpm_base_row>
 // SSAVC4: %[[VPM_BASE:.*]] = ssavc4.uniform.read 2 : i32
 // SSAVC4: ssavc4.vdr.load %{{.*}}, %[[VPM_BASE]]
 // SSAVC4-SAME: nrows = 2 : i32
 // SSAVC4-SAME: row_len = 16 : i32
+// SSAVC4-SAME: vpitch = 1 : i32
 vc4tile.kernel @plan_copy_global_shared_vdr(%in : i32) attributes {
   public_name = "plan_copy_global_shared_vdr",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,

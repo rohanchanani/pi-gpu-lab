@@ -1152,7 +1152,8 @@ LogicalResult KernelOp::verify() {
       return WalkResult::advance();
     if (isa<BarrierOp>(nested))
       sawBarrier = true;
-    if (isa<SharedAllocOp, SharedLoadOp, SharedStoreOp, VDRLoadTileOp>(nested))
+    if (isa<SharedAllocOp, SharedLoadOp, SharedStoreOp, SharedStoreGlobalOp,
+            VDRLoadTileOp>(nested))
       sawSharedOp = true;
     if (!markedRawSCFOp && getBoolAttr(op, "requires_core_legalize") &&
         nested->getName().getDialectNamespace() == "scf") {
@@ -1719,6 +1720,32 @@ LogicalResult SharedStoreOp::verify() {
       failed(verifyMemorySpace(op, getMemorySpaceAttr(),
                                MemorySpace::shared_vpm, "shared_vpm")))
     return failure();
+  return success();
+}
+
+LogicalResult SharedStoreGlobalOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySharedKernelContract(op)) ||
+      failed(verifySharedTile(op, getHandle().getType(), "handle")) ||
+      failed(verifyScalarId(op, getVpmY().getType(), "vpm_y")) ||
+      failed(verifyScalarId(op, getVpmX().getType(), "vpm_x")) ||
+      failed(verifyScalarId(op, getBase().getType(), "base")) ||
+      failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
+      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifyElemBytes4(op, getElemBytesAttr())))
+    return failure();
+  int64_t rowLen = getRowLenAttr().getInt();
+  if (rowLen < 1 || rowLen > 16)
+    return emitOpError("row_len must be in range [1, 16]");
+  int64_t nrows = getNrowsAttr().getInt();
+  if (nrows < 1 || nrows > 16)
+    return emitOpError("nrows must be in range [1, 16]");
+  int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return emitOpError("memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < rowLen * 4)
+    return emitOpError("memory_pitch_bytes must cover row_len elements");
   return success();
 }
 

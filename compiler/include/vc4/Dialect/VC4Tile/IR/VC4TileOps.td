@@ -668,6 +668,27 @@ def VC4Tile_SharedStoreOp : VC4Tile_Op<"shared_store", [
   let hasVerifier = 1;
 }
 
+def VC4Tile_SharedStoreGlobalOp : VC4Tile_Op<"shared_store_global", [
+    MemoryEffects<[MemRead, MemWrite]>
+  ]> {
+  let summary = "VDW global store from existing shared VPM coordinates";
+  let arguments = (ins
+    AnyType:$handle,
+    AnyType:$vpm_y,
+    AnyType:$vpm_x,
+    AnyType:$base,
+    AnyType:$offset,
+    AnyType:$mask,
+    I32Attr:$elem_bytes,
+    I32Attr:$row_len,
+    I32Attr:$nrows,
+    I32Attr:$memory_pitch_bytes,
+    OptionalAttr<VC4Tile_VPMLayoutAttr>:$layout
+  );
+  let assemblyFormat = "$handle `,` $vpm_y `,` $vpm_x `,` $base `,` $offset `,` $mask attr-dict `:` type($handle) `,` type($vpm_y) `,` type($vpm_x) `,` type($base) `,` type($offset) `,` type($mask)";
+  let hasVerifier = 1;
+}
+
 
 
 def VC4Tile_VDRLoadTileOp : VC4Tile_Op<"vdr_load_tile", [

@@ -7,13 +7,14 @@
 // SSAVC4: ssavc4.vpm.write
 // SSAVC4-SAME: orientation = "horizontal"
 // SSAVC4: ssavc4.barrier
-// SSAVC4: ssavc4.vpm.read
+// SSAVC4: ssavc4.vdw.store_vpm
 // SSAVC4-SAME: orientation = "vertical"
-// SSAVC4: ssavc4.vdw.store
+// SSAVC4-NOT: ssavc4.vpm.read
+// SSAVC4-NOT: ssavc4.vdw.store
 // VC4-LABEL: vc4.func @shared_transpose_ergonomic_vc4tile
 // VC4: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<write>
 // VC4: vc4.qpu.sema
-// VC4: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<read>
+// VC4: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<write>
 vc4tile.kernel @shared_transpose_ergonomic_vc4tile(%out : i32, %in : i32) attributes {
   public_name = "shared_transpose_ergonomic_vc4tile",
   schedule_mode = #vc4tile.schedule_mode<cooperative_block>,

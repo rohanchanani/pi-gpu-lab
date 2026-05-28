@@ -579,5 +579,49 @@ LogicalResult VDRLoadOp::verify() {
   return verifyVDRResourceMetadata(op);
 }
 
+LogicalResult VDWStoreVPMOp::verify() {
+  Operation *op = getOperation();
+  if (!getAddress().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 global base address operand");
+  if (!getVpmY().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 VPM y-coordinate operand");
+  if (!getVpmX().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 VPM x-coordinate operand");
+
+  int64_t elemBytes = getElemBytesAttr().getInt();
+  if (elemBytes != 4)
+    return emitOpError("supports only 32-bit executable VDW stores; elem_bytes must be 4");
+  int64_t rowLen = getRowLenAttr().getInt();
+  if (rowLen < 1 || rowLen > 16)
+    return emitOpError("requires row_len in range [1, 16]");
+  int64_t nrows = getNrowsAttr().getInt();
+  if (nrows < 1 || nrows > 16)
+    return emitOpError("requires nrows in range [1, 16]");
+  int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
+    return emitOpError("requires memory_pitch_bytes to be a positive multiple of elem_bytes");
+  if (memoryPitchBytes < rowLen * elemBytes)
+    return emitOpError("requires memory_pitch_bytes to cover row_len elements");
+
+  if (getActiveLanesValue() &&
+      !getActiveLanesValue().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 dynamic active-lane operand");
+  if (getActiveLanesValue() && nrows != 1)
+    return emitOpError("supports dynamic active_lanes only for single-row VDW stores");
+  if (!getActiveLanesValue()) {
+    auto activeLanes = getActiveLanesAttr();
+    if (activeLanes && activeLanes.getInt() != rowLen)
+      return emitOpError("active_lanes must match row_len for static VDW stores");
+  }
+
+  if (failed(verifyOptionalStringAttrChoice(op, "orientation", "horizontal",
+                                            "vertical", "orientation")))
+    return failure();
+  if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
+                                           "serialize")))
+    return failure();
+  return success();
+}
+
 #define GET_OP_CLASSES
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Ops.cpp.inc"

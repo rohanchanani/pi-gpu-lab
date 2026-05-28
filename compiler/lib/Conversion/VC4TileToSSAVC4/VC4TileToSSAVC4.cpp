@@ -77,6 +77,8 @@ constexpr llvm::StringLiteral kVC4TileReduceOpName("vc4tile.reduce");
 constexpr llvm::StringLiteral kVC4TileSharedAllocOpName("vc4tile.shared_alloc");
 constexpr llvm::StringLiteral kVC4TileSharedLoadOpName("vc4tile.shared_load");
 constexpr llvm::StringLiteral kVC4TileSharedStoreOpName("vc4tile.shared_store");
+constexpr llvm::StringLiteral kVC4TileSharedStoreGlobalOpName(
+    "vc4tile.shared_store_global");
 constexpr llvm::StringLiteral kVC4TileBarrierOpName("vc4tile.barrier");
 constexpr llvm::StringLiteral kVC4TileVDRLoadTileOpName("vc4tile.vdr_load_tile");
 constexpr llvm::StringLiteral kVC4TileTileDescriptorOpName(
@@ -143,6 +145,7 @@ constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
+constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
@@ -320,6 +323,7 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
          hasName(op, kVC4TileSharedAllocOpName) ||
          hasName(op, kVC4TileSharedLoadOpName) ||
          hasName(op, kVC4TileSharedStoreOpName) ||
+         hasName(op, kVC4TileSharedStoreGlobalOpName) ||
          hasName(op, kVC4TileVDRLoadTileOpName) ||
          hasName(op, kVC4TileBarrierOpName);
 }
@@ -943,6 +947,11 @@ static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
       kernel, "vpm_rows_per_block", "vpm_rows").value_or(0);
   const int64_t vpmBytes = getI32AttrOrResourceIntent(
       kernel, "vpm_bytes_per_block", "vpm_bytes").value_or(0);
+  const int64_t vdwStagingRows =
+      cooperative && kernelContains(kernel, kVC4TileMaskedStoreGlobalOpName)
+          ? 1
+          : 0;
+  const int64_t totalVPMRows = vpmRows + vdwStagingRows;
   const int64_t semaphores = getI32AttrOrResourceIntent(
       kernel, "semaphores_per_block", "semaphores").value_or(
       usesBarrier ? 4 : 0);
@@ -961,13 +970,15 @@ static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
       builder.getNamedAttr("semaphores_per_block",
                            builder.getI32IntegerAttr(semaphores)),
       builder.getNamedAttr("vpm_rows_per_block",
-                           builder.getI32IntegerAttr(vpmRows)),
+                           builder.getI32IntegerAttr(totalVPMRows)),
       builder.getNamedAttr("vpm_bytes_per_block",
                            builder.getI32IntegerAttr(vpmBytes)),
       builder.getNamedAttr("shared_vpm_bytes",
                            builder.getI32IntegerAttr(vpmBytes)),
       builder.getNamedAttr("user_shared_vpm_rows_per_block",
                            builder.getI32IntegerAttr(vpmRows)),
+      builder.getNamedAttr("vdw_staging_vpm_rows_per_block",
+                           builder.getI32IntegerAttr(vdwStagingRows)),
   });
 }
 
@@ -1278,6 +1289,11 @@ static Value createVPMRowAddress(OpBuilder &builder, Location loc,
   SmallVector<Value, 2> operands{baseRow, localRow};
   return createALUAdd(builder, loc, operands, mlir::vc4::AddOpcode::add,
                       builder.getI32Type());
+}
+
+static bool isZeroI32Constant(Value value) {
+  auto constOp = value.getDefiningOp<arith::ConstantIntOp>();
+  return constOp && constOp.value() == 0;
 }
 
 
@@ -1793,8 +1809,9 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
                                                   OpBuilder &builder,
                                                   llvm::DenseMap<Value, Value> &valueMap,
                                                   SmallVectorImpl<Value> &operands,
-                                                  int64_t &activeLanesAttr) {
-  Value sourceMask = op->getOperand(3);
+                                                  int64_t &activeLanesAttr,
+                                                  unsigned maskOperandIndex = 3) {
+  Value sourceMask = op->getOperand(maskOperandIndex);
   Operation *maskDef = sourceMask.getDefiningOp();
 
   if (hasName(maskDef, kVC4TileMaskAllOpName)) {
@@ -2017,7 +2034,8 @@ static LogicalResult verifyCoalescedStoreShape(Operation *op) {
 }
 
 static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
-                                            llvm::DenseMap<Value, Value> &valueMap) {
+                                            llvm::DenseMap<Value, Value> &valueMap,
+                                            llvm::StringMap<Value> &builtinValueMap) {
   if (failed(verifyCoalescedStoreShape(op)))
     return failure();
 
@@ -2032,24 +2050,36 @@ static LogicalResult lowerMaskedStoreGlobal(Operation *op, OpBuilder &builder,
                                           activeLanesAttr)))
     return failure();
 
-  // VDW global-store lowering stages the outgoing vector through one VPM row
-  // before kicking the VDW DMA path.  In ordinary global-store kernels row 0 is
-  // harmless and matches the earlier M4 fixtures.  In shared-VPM kernels,
-  // however, row 0 can hold user shared tile data; clobbering it between
-  // column reads turns a transpose back into an untransposed row copy.  Use the
-  // top user-visible VPM row as scratch when shared VPM is active, matching the
-  // existing SSAVC4 shared-transpose fixture convention.
   Operation *kernel = getParentVC4TileKernel(op);
   int64_t stagingRow = 0;
-  if (kernel && (getBoolAttr(kernel, "uses_shared_vpm") ||
-                 kernelContains(kernel, kVC4TileSharedAllocOpName) ||
-                 kernelContains(kernel, kVC4TileSharedLoadOpName) ||
-                 kernelContains(kernel, kVC4TileSharedStoreOpName) ||
-                 kernelContains(kernel, kVC4TileVDRLoadTileOpName)))
-    stagingRow = 63;
+  bool needsBlockLocalStagingRow =
+      kernel && isCooperativeKernel(kernel) &&
+      (getBoolAttr(kernel, "uses_shared_vpm") ||
+       kernelContains(kernel, kVC4TileSharedAllocOpName) ||
+       kernelContains(kernel, kVC4TileSharedLoadOpName) ||
+       kernelContains(kernel, kVC4TileSharedStoreOpName) ||
+       kernelContains(kernel, kVC4TileVDRLoadTileOpName));
+  if (needsBlockLocalStagingRow) {
+    Value vpmBaseRow = getOrCreateRuntimeBuiltinUniformRead(
+        op, builder, builtinValueMap, "vpm_base_row", builder.getI32Type());
+    if (!vpmBaseRow)
+      return failure();
+    int64_t userRows = getI32AttrOrResourceIntent(kernel, "vpm_rows_per_block",
+                                                  "vpm_rows")
+                           .value_or(0);
+    Value localRow =
+        createLoadImmI32(builder, op->getLoc(), builder.getI32Type(), userRows);
+    Value row = createVPMRowAddress(builder, op->getLoc(), vpmBaseRow, localRow);
+    if (operands.size() == 2) {
+      operands.push_back(createLoadImmI32(builder, op->getLoc(),
+                                         builder.getI32Type(), 16));
+    }
+    operands.push_back(row);
+  }
 
   SmallVector<int32_t, 4> operandSegmentSizes{
-      1, 1, static_cast<int32_t>(operands.size() == 3), 0};
+      1, 1, static_cast<int32_t>(operands.size() >= 3),
+      static_cast<int32_t>(operands.size() == 4)};
   SmallVector<NamedAttribute, 8> attrs{
       builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
       builder.getNamedAttr("active_lanes",
@@ -2246,6 +2276,66 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static LogicalResult lowerSharedStoreGlobal(Operation *op, OpBuilder &builder,
+                                            llvm::DenseMap<Value, Value> &valueMap) {
+  if (op->getNumOperands() != 6)
+    return op->emitOpError(
+        "expected handle, VPM y, VPM x, global base, offset, and mask operands");
+
+  Value baseRow = lookupMappedValue(op, op->getOperand(0), valueMap);
+  Value localY = lookupMappedValue(op, op->getOperand(1), valueMap);
+  Value localX = lookupMappedValue(op, op->getOperand(2), valueMap);
+  Value base = lookupMappedValue(op, op->getOperand(3), valueMap);
+  Value offset = lookupMappedValue(op, op->getOperand(4), valueMap);
+  if (!baseRow || !localY || !localX || !base || !offset)
+    return failure();
+
+  Value y = createVPMRowAddress(builder, op->getLoc(), baseRow, localY);
+  Value address = base;
+  if (!isZeroI32Constant(op->getOperand(4))) {
+    Value four =
+        createLoadImmI32(builder, op->getLoc(), builder.getI32Type(), 4);
+    Value byteOffset =
+        createALUMul(builder, op->getLoc(), {offset, four},
+                     mlir::vc4::MulOpcode::mul24, builder.getI32Type());
+    address = createALUAdd(builder, op->getLoc(), {base, byteOffset},
+                           mlir::vc4::AddOpcode::add, builder.getI32Type());
+  }
+
+  SmallVector<Value, 5> operands{address, y, localX};
+  int64_t activeLanesAttr = 16;
+  if (failed(appendStoreActiveLaneOperand(op, builder, valueMap, operands,
+                                          activeLanesAttr,
+                                          /*maskOperandIndex=*/5)))
+    return failure();
+
+  StringRef orientation = "horizontal";
+  if (auto layout = op->getAttrOfType<mlir::vc4tile::VPMLayoutAttr>("layout")) {
+    if (layout.getValue() == mlir::vc4tile::VPMLayout::column_major)
+      orientation = "vertical";
+  }
+  SmallVector<NamedAttribute, 8> attrs{
+      builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+      builder.getNamedAttr("active_lanes",
+                           builder.getI32IntegerAttr(activeLanesAttr)),
+      builder.getNamedAttr("row_len",
+                           builder.getI32IntegerAttr(
+                               getI32Attr(op, "row_len").value_or(activeLanesAttr))),
+      builder.getNamedAttr("nrows",
+                           builder.getI32IntegerAttr(
+                               getI32Attr(op, "nrows").value_or(1))),
+      builder.getNamedAttr("memory_pitch_bytes",
+                           builder.getI32IntegerAttr(
+                               getI32Attr(op, "memory_pitch_bytes")
+                                   .value_or(activeLanesAttr * 4))),
+      builder.getNamedAttr("orientation", builder.getStringAttr(orientation)),
+      builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
+                 attrs);
+  return success();
+}
+
 
 static LogicalResult lowerVDRLoadTile(Operation *op, OpBuilder &builder,
                                       llvm::DenseMap<Value, Value> &valueMap) {
@@ -2368,7 +2458,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
   if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
-    return lowerMaskedStoreGlobal(op, builder, valueMap);
+    return lowerMaskedStoreGlobal(op, builder, valueMap, builtinValueMap);
   if (hasName(op, kVC4TileRotateOpName))
     return lowerRotate(op, builder, valueMap);
   if (hasName(op, kVC4TileReduceOpName))
@@ -2381,6 +2471,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerSharedStore(op, builder, valueMap);
   if (hasName(op, kVC4TileSharedLoadOpName))
     return lowerSharedLoad(op, builder, valueMap);
+  if (hasName(op, kVC4TileSharedStoreGlobalOpName))
+    return lowerSharedStoreGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileBarrierOpName))
     return lowerBarrier(op, builder);
 
@@ -4149,6 +4241,17 @@ static Value addI32Constant(OpBuilder &builder, Location loc, Value base,
   return arith::AddIOp::create(builder, loc, base, constant).getResult();
 }
 
+static std::optional<int64_t> getI32ConstantValueForPlan(Value value) {
+  auto constOp = value.getDefiningOp<arith::ConstantIntOp>();
+  if (!constOp)
+    return std::nullopt;
+  return constOp.value();
+}
+
+static bool isMaskAllForPlan(Value mask) {
+  return mask && hasName(mask.getDefiningOp(), kVC4TileMaskAllOpName);
+}
+
 static Attribute getVPMTileLoadLayoutAttr(OpBuilder &builder,
                                           mlir::vc4tile::LayoutAttr layout) {
   return getVPMLayoutFromTileLayout(builder, layout,
@@ -4197,7 +4300,7 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
       namedAttr(builder, "vpm_base_col",
                 getOptionalI32AttrOr(op, builder, "vpm_base_col", 0)),
       namedAttr(builder, "vpitch",
-                getOptionalI32AttrOr(op, builder, "vpitch", rowLen)),
+                getOptionalI32AttrOr(op, builder, "vpitch", 1)),
       namedAttr(builder, "layout",
                 dstLayout ? dstLayout
                           : mlir::vc4tile::LayoutAttr::get(
@@ -4210,49 +4313,30 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   return success();
 }
 
-static FailureOr<Value> createSharedLoadForPlan(Operation *op, OpBuilder &builder,
-                                                Value shared, Value row, Value mask,
-                                                mlir::vc4tile::LayoutAttr layout,
-                                                Type resultType) {
+static LogicalResult createSharedGlobalStoreForPlan(
+    Operation *op, OpBuilder &builder, Value shared, Value vpmY, Value vpmX,
+    Value base, Value offset, Value mask, mlir::vc4tile::LayoutAttr layout,
+    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes) {
   if (!mlir::vc4tile::isVC4TileSharedTileType(shared.getType()) ||
-      !isI32Scalar(row) || !isVector16I1(mask.getType())) {
+      !isI32Scalar(vpmY) || !isI32Scalar(vpmX) || !isI32Scalar(base) ||
+      !isI32Scalar(offset) || !isVector16I1(mask.getType())) {
     return op->emitOpError(
-        "shared_vpm copy/store planning requires !vc4tile.shared_tile, i32 row, and vector<16xi1> mask");
+        "shared_vpm->global planning requires !vc4tile.shared_tile, i32 VPM y/x/base/offset, and vector<16xi1> mask");
   }
-  SmallVector<NamedAttribute, 8> attrs{
-      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-      namedAttr(builder, "memory_space",
-                getVC4TileMemorySpaceAttr(
-                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
-      namedAttr(builder, "layout", getVPMTileLoadLayoutAttr(builder, layout))};
-  appendTileSemanticMetadataAttrs(op, builder, attrs);
-  Operation *load = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileSharedLoadOpName, {shared, row, mask},
-      attrs, resultType);
-  return load->getResult(0);
-}
-
-static LogicalResult createGlobalStoreForPlan(Operation *op, OpBuilder &builder,
-                                              Value value, Value base,
-                                              Value offset, Value mask) {
   FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(builder, op, base, offset);
   if (failed(adjustedBase))
     return failure();
-  Value lanes = createLaneOffsetsForTileCopy(builder, op, 1);
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
   SmallVector<NamedAttribute, 8> attrs{
       namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
-      namedAttr(builder, "offset_unit",
-                getVC4TileOffsetUnitAttr(builder,
-                                         mlir::vc4tile::OffsetUnit::element)),
-      namedAttr(builder, "memory_space",
-                getVC4TileMemorySpaceAttr(builder,
-                                          mlir::vc4tile::MemorySpace::global)),
-      namedAttr(builder, "access",
-                getVC4TileMemoryAccessAttr(
-                    builder, mlir::vc4tile::MemoryAccess::affine_contiguous))};
+      namedAttr(builder, "row_len", builder.getI32IntegerAttr(rowLen)),
+      namedAttr(builder, "nrows", builder.getI32IntegerAttr(nrows)),
+      namedAttr(builder, "memory_pitch_bytes",
+                builder.getI32IntegerAttr(memoryPitchBytes)),
+      namedAttr(builder, "layout", getVPMTileLoadLayoutAttr(builder, layout))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
-  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
-                      {*adjustedBase, lanes, value, mask}, attrs);
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileSharedStoreGlobalOpName,
+                      {shared, vpmY, vpmX, *adjustedBase, zero, mask}, attrs);
   return success();
 }
 
@@ -4276,16 +4360,75 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
   if (rows < 1 || rows > 16 || cols != 16)
     return op->emitOpError(
         "shared_vpm->global copy supports static [1,16] through [16,16] 32-bit tiles in M5");
+  int64_t memoryPitchBytes =
+      getOptionalI32AttrOr(op, builder, "memory_pitch_bytes", cols * 4)
+          .getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "shared_vpm->global memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < cols * 4)
+    return op->emitOpError(
+        "shared_vpm->global memory_pitch_bytes must cover the stored row");
+  int64_t rowPitchElements = memoryPitchBytes / 4;
 
-  Type resultType = getVector16DataType(builder, elementType);
+  (void)elementType;
+  bool columnMajor = false;
+  if (Attribute layoutAttr = getVPMTileLoadLayoutAttr(builder, layout)) {
+    if (auto vpmLayout =
+            llvm::dyn_cast<mlir::vc4tile::VPMLayoutAttr>(layoutAttr))
+      columnMajor =
+          vpmLayout.getValue() == mlir::vc4tile::VPMLayout::column_major;
+  }
+  std::optional<int64_t> staticRowBase;
+  if (columnMajor) {
+    staticRowBase = getI32ConstantValueForPlan(rowBase);
+    if (!staticRowBase)
+      return op->emitOpError(
+          "column-major shared_vpm->global copy requires a static shared row in M5 VDW lowering");
+  }
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
+  if (isMaskAllForPlan(mask)) {
+    Value logicalRow = rowBase;
+    Value vpmY = logicalRow;
+    Value vpmX = zero;
+    bool canUse2DStore = !columnMajor;
+    if (columnMajor) {
+      int64_t sourceRow = *staticRowBase;
+      if (sourceRow < 0 || sourceRow > 63)
+        return op->emitOpError(
+            "column-major shared_vpm->global source row must be in range [0, 63]");
+      // Column-major shared tiles model transposed views.  One-row vertical
+      // VDW stores are hardware-proven and preserve pitched row semantics;
+      // multi-row vertical VDW block stores do not currently match the M5
+      // shared->global tile contract, so keep those as explicit row stores.
+      canUse2DStore = false;
+    }
+    if (canUse2DStore) {
+      if (failed(createSharedGlobalStoreForPlan(
+              op, builder, shared, vpmY, vpmX, base, offset, mask, layout,
+              cols, rows, memoryPitchBytes)))
+        return failure();
+      return success();
+    }
+  }
+
   for (int64_t row = 0; row < rows; ++row) {
-    Value localRow = row == 0 ? rowBase : addI32Constant(builder, op->getLoc(), rowBase, row);
-    FailureOr<Value> loaded =
-        createSharedLoadForPlan(op, builder, shared, localRow, mask, layout, resultType);
-    if (failed(loaded))
-      return failure();
-    Value rowOffset = row == 0 ? offset : addI32Constant(builder, op->getLoc(), offset, row * cols);
-    if (failed(createGlobalStoreForPlan(op, builder, *loaded, base, rowOffset, mask)))
+    Value logicalRow =
+        row == 0 ? rowBase : addI32Constant(builder, op->getLoc(), rowBase, row);
+    Value rowOffset = row == 0 ? offset : addI32Constant(builder, op->getLoc(), offset, row * rowPitchElements);
+    Value vpmY = logicalRow;
+    Value vpmX = zero;
+    if (columnMajor) {
+      int64_t sourceRow = *staticRowBase + row;
+      if (sourceRow < 0 || sourceRow > 63)
+        return op->emitOpError(
+            "column-major shared_vpm->global source row must be in range [0, 63]");
+      vpmY = createI32ConstantForPlan(builder, op->getLoc(), sourceRow & ~15);
+      vpmX = createI32ConstantForPlan(builder, op->getLoc(), sourceRow & 15);
+    }
+    if (failed(createSharedGlobalStoreForPlan(
+            op, builder, shared, vpmY, vpmX, base, rowOffset, mask, layout,
+            cols, 1, cols * 4)))
       return failure();
   }
   return success();

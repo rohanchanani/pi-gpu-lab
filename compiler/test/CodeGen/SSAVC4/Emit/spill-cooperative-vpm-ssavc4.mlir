@@ -13,11 +13,12 @@
 // LOWERED-SAME: spill_vpm_row
 // LOWERED-SAME: spill_vpm_rows_per_block = 4 : i32
 // SOURCE: #define KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK 16u
+// SOURCE: #define KERNEL_0_VDW_STAGING_VPM_ROWS_PER_BLOCK 0u
 // SOURCE: #define KERNEL_0_SPILL_VPM_ROWS_PER_BLOCK 4u
 // SOURCE: #define KERNEL_0_VPM_ROWS_PER_BLOCK 20u
 // SOURCE: spill_vpm_row=vpm_base_row+16+logical_warp_id
 // SOURCE: uniformWords[5] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
-// SOURCE: uniformWords[6] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[6] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + KERNEL_0_VDW_STAGING_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
 // SOURCE-NOT: __vc4_spill_arg
 // SOURCE: int spill_cooperative_vpm_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}

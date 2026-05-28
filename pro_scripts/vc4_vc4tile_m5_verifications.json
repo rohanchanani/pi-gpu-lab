@@ -88,7 +88,8 @@
                 "cute_gemm_8x8x8_tiled_vc4tile",
                 "cute_gemm_16x16x16_tiled_vc4tile",
                 "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
-                "cute_gemm_tail_17x13x9_vc4tile"
+                "cute_gemm_tail_17x13x9_vc4tile",
+                "cute_transpose_32x32_full_vpm_vc4tile"
             ]
     }
   },
@@ -173,7 +174,8 @@
             "cute_gemm_8x8x8_tiled_vc4tile",
             "cute_gemm_16x16x16_tiled_vc4tile",
             "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
-            "cute_gemm_tail_17x13x9_vc4tile"
+            "cute_gemm_tail_17x13x9_vc4tile",
+            "cute_transpose_32x32_full_vpm_vc4tile"
         ]
   },
   "slices": {
@@ -3224,7 +3226,7 @@
     },
     "m5-cute-stress-hardware-matrix": {
       "title": "M5 CuTe-style stress hardware matrix",
-      "expected_end_state": "CuTe-style composed VC4Tile GEMM fixtures lower through the ergonomic VC4Tile pipeline and pass strict real-hardware CPU-reference checks.",
+      "expected_end_state": "CuTe-style composed VC4Tile GEMM and shared-VPM stress fixtures lower through the ergonomic VC4Tile pipeline and pass strict real-hardware CPU-reference checks.",
       "verifications": [
         {
           "id": "m5-cute-stress-source-products",
@@ -3249,7 +3251,12 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_tail_17x13x9_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_tail_17x13x9_vc4tile/candidate/cute_gemm_tail_17x13x9_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-tail-17x13x9.mlir",
-            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-tail-17x13x9-vc4tile.mlir"
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-tail-17x13x9-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_transpose_32x32_full_vpm_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_transpose_32x32_full_vpm_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_transpose_32x32_full_vpm_vc4tile/candidate/cute_transpose_32x32_full_vpm_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/cute-transpose-32x32-full-vpm.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-transpose-32x32-full-vpm-vc4tile.mlir"
           ]
         },
         {
@@ -3295,6 +3302,9 @@
             },
             {
               "fixture": "cute_gemm_tail_17x13x9_vc4tile"
+            },
+            {
+              "fixture": "cute_transpose_32x32_full_vpm_vc4tile"
             }
           ]
         }
