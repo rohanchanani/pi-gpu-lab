@@ -3016,6 +3016,50 @@ static LogicalResult emitUnsupportedPredicateModelForPath(
   return failure();
 }
 
+static FailureOr<PredicateFragmentPlan> planPredicateTransferForMask(
+    Operation *op, Value mask, PredicateTransferPathKind pathKind,
+    StringRef pathName, PredicateInactiveDestPolicy policy,
+    bool sparseFallbackAllowed = false) {
+  FailureOr<VC4TilePredicateModel> predicate =
+      normalizePredicateModelForConsumer(
+          op, mask, policy, PredicateSparseFallbackPolicy::enabled);
+  if (failed(predicate))
+    return failure();
+
+  FailureOr<PredicateTransferPathDescriptor> descriptor =
+      getPredicateTransferPathDescriptorForCopyTile(
+          op, pathKind, pathName, policy, sparseFallbackAllowed);
+  if (failed(descriptor))
+    return failure();
+
+  PredicateFragmentPlan plan =
+      planPredicateTransferFragments(*predicate, *descriptor);
+  if (plan.planClass == PredicateFragmentPlanClass::unsupportedWithReason) {
+    return op->emitOpError()
+           << pathName << " unsupported predicate fragment plan: "
+           << plan.reason << " (predicate class "
+           << stringifyPredicateSemanticClass(predicate->semanticClass)
+           << ", density = " << stringifyPredicateDensity(predicate->density)
+           << ", inactive_destination = "
+           << stringifyPredicateInactiveDestPolicy(predicate->inactivePolicy)
+           << ", dense fragment planning failed)";
+  }
+
+  if (plan.planClass == PredicateFragmentPlanClass::sparseFallback &&
+      !sparseFallbackAllowed) {
+    return op->emitOpError()
+           << pathName << " unsupported predicate fragment plan: "
+           << kDiagSparseFallbackDisabled << " (predicate class "
+           << stringifyPredicateSemanticClass(predicate->semanticClass)
+           << ", density = " << stringifyPredicateDensity(predicate->density)
+           << ", inactive_destination = "
+           << stringifyPredicateInactiveDestPolicy(predicate->inactivePolicy)
+           << ", dense fragment planning failed)";
+  }
+
+  return plan;
+}
+
 static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
   if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
     return std::nullopt;
@@ -5653,6 +5697,21 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
   if (!isVector16Data(op->getResult(0).getType()))
     return op->emitOpError("copy planner v1 requires tile_load result to be vector<16xi32> or vector<16xf32>");
 
+  FailureOr<PredicateFragmentPlan> predicatePlan =
+      planPredicateTransferForMask(
+          op, op->getOperand(2), PredicateTransferPathKind::globalToRegister,
+          "global->register tile_load",
+          PredicateInactiveDestPolicy::zeroFill);
+  if (failed(predicatePlan))
+    return failure();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::scalarFragment ||
+      predicatePlan->planClass == PredicateFragmentPlanClass::sparseFallback) {
+    return op->emitOpError()
+           << "global->register tile_load unsupported predicate fragment plan: "
+           << "VC4 TMU vector loads support dense full/row/tail fragments for "
+              "inactive zero-fill; sparse fallback is disabled";
+  }
+
   FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
       builder, op, op->getOperand(0), op->getOperand(1));
   if (failed(adjustedBase))
@@ -5719,96 +5778,6 @@ static Value createVC4TileRotateForPlan(OpBuilder &builder, Location loc,
       {namedAttr(builder, "amount", builder.getI32IntegerAttr(amount))},
       resultType);
   return rotate->getResult(0);
-}
-
-static Value createI32FromI1ForPlan(OpBuilder &builder, Location loc,
-                                    Value predicate) {
-  Value zero = createI32ConstantInline(builder, loc, 0);
-  Value one = createI32ConstantInline(builder, loc, 1);
-  return arith::SelectOp::create(builder, loc, predicate, one, zero)
-      .getResult();
-}
-
-static FailureOr<Value> createLaneActiveI32ForStoreMask(
-    Operation *op, OpBuilder &builder, Value mask, unsigned lane) {
-  Operation *maskDef = mask.getDefiningOp();
-  if (hasName(maskDef, kVC4TileMaskAllOpName))
-    return createI32ConstantInline(builder, op->getLoc(), 1);
-
-  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
-    if (maskDef->getNumOperands() != 2)
-      return maskDef->emitOpError("expected base and limit operands");
-    Value laneValue = createI32ConstantInline(builder, op->getLoc(), lane);
-    Value absolute = arith::AddIOp::create(builder, op->getLoc(),
-                                           maskDef->getOperand(0), laneValue)
-                         .getResult();
-    Value active = arith::CmpIOp::create(builder, op->getLoc(),
-                                         arith::CmpIPredicate::ult, absolute,
-                                         maskDef->getOperand(1));
-    return createI32FromI1ForPlan(builder, op->getLoc(), active);
-  }
-
-  if (std::optional<TileRectMaskInfo> rect = getTileRectMaskInfo(maskDef)) {
-    unsigned row = lane / 4;
-    unsigned col = lane % 4;
-    return createI32ConstantInline(builder, op->getLoc(),
-                                   row < rect->activeRows &&
-                                           col < rect->activeCols
-                                       ? 1
-                                       : 0);
-  }
-
-  if (std::optional<TileBoundsMaskInfo> bounds =
-          getTileBoundsMaskInfo(maskDef)) {
-    unsigned row = lane / 4;
-    unsigned col = lane % 4;
-    Value rowValue = createI32ConstantInline(builder, op->getLoc(), row);
-    Value colValue = createI32ConstantInline(builder, op->getLoc(), col);
-    Value rowLiveI1 = arith::CmpIOp::create(
-        builder, op->getLoc(), arith::CmpIPredicate::ult, rowValue,
-        bounds->activeRows);
-    Value colLiveI1 = arith::CmpIOp::create(
-        builder, op->getLoc(), arith::CmpIPredicate::ult, colValue,
-        bounds->activeCols);
-    Value rowLive = createI32FromI1ForPlan(builder, op->getLoc(), rowLiveI1);
-    Value colLive = createI32FromI1ForPlan(builder, op->getLoc(), colLiveI1);
-    return arith::AndIOp::create(builder, op->getLoc(), rowLive, colLive)
-        .getResult();
-  }
-
-  if (hasName(maskDef, kVC4TileMaskAndOpName) ||
-      hasName(maskDef, kVC4TileMaskOrOpName)) {
-    if (maskDef->getNumOperands() != 2)
-      return maskDef->emitOpError("expected lhs and rhs operands");
-    FailureOr<Value> lhs = createLaneActiveI32ForStoreMask(
-        op, builder, maskDef->getOperand(0), lane);
-    if (failed(lhs))
-      return failure();
-    FailureOr<Value> rhs = createLaneActiveI32ForStoreMask(
-        op, builder, maskDef->getOperand(1), lane);
-    if (failed(rhs))
-      return failure();
-    if (hasName(maskDef, kVC4TileMaskAndOpName))
-      return arith::AndIOp::create(builder, op->getLoc(), *lhs, *rhs)
-          .getResult();
-    return arith::OrIOp::create(builder, op->getLoc(), *lhs, *rhs)
-        .getResult();
-  }
-
-  if (hasName(maskDef, kVC4TileMaskNotOpName)) {
-    if (maskDef->getNumOperands() != 1)
-      return maskDef->emitOpError("expected input operand");
-    FailureOr<Value> input = createLaneActiveI32ForStoreMask(
-        op, builder, maskDef->getOperand(0), lane);
-    if (failed(input))
-      return failure();
-    Value one = createI32ConstantInline(builder, op->getLoc(), 1);
-    return arith::XOrIOp::create(builder, op->getLoc(), *input, one)
-        .getResult();
-  }
-
-  return op->emitOpError(
-      "register->global composed store supports only semantic tile predicates");
 }
 
 static Operation *createOneRowTailMaskForPlan(OpBuilder &builder, Location loc,
@@ -6225,88 +6194,6 @@ static LogicalResult planTailOutsideBoundsRegisterGlobalTileStore(
   return success();
 }
 
-static LogicalResult planComposedRegisterGlobalTileStore(Operation *op,
-                                                         OpBuilder &builder) {
-  if (!isStatic4x4RowMajorTile(op))
-    return op->emitOpError(
-        "unsupported layout + predicate combination for register->global "
-        "tile_store: composed store predicate requires inactive destination "
-        "preservation over a [4, 4] row_major tile; this path would "
-        "overwrite inactive elements for the requested layout");
-
-  FailureOr<int64_t> laneStride = getTileLaneStride(op);
-  if (failed(laneStride))
-    return failure();
-  if (*laneStride != 1)
-    return op->emitOpError(
-        "store predicate requires inactive destination preservation, but "
-        "register->global composed predicate with non-unit lane stride would "
-        "overwrite inactive elements; predicate fragment planning requires "
-        "unit lane stride");
-
-  FailureOr<int64_t> rowPitchElements =
-      getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/1);
-  if (failed(rowPitchElements))
-    return failure();
-
-  Value tile = op->getOperand(0);
-  Value base = op->getOperand(1);
-  Value offset = op->getOperand(2);
-  Value mask = op->getOperand(3);
-  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
-  Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
-  Value one = createI32ConstantInline(builder, op->getLoc(), 1);
-  Operation *oneLaneMask = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, one}, {},
-      mask.getType());
-
-  for (unsigned lane = 0; lane < 16; ++lane) {
-    FailureOr<Value> laneActive =
-        createLaneActiveI32ForStoreMask(op, builder, mask, lane);
-    if (failed(laneActive))
-      return failure();
-    Value laneLive = arith::CmpIOp::create(
-        builder, op->getLoc(), arith::CmpIPredicate::ne, *laneActive, zero);
-
-    auto ifOp = scf::IfOp::create(builder, op->getLoc(), laneLive,
-                                  /*withElseRegion=*/false);
-    OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
-    unsigned row = lane / 4;
-    unsigned col = lane % 4;
-    int64_t laneOffset = row * *rowPitchElements + col;
-    Value scalarOffset =
-        addI32ConstantInline(thenBuilder, op->getLoc(), offset, laneOffset);
-    FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
-        thenBuilder, op, base, scalarOffset);
-    if (failed(adjustedBase))
-      return failure();
-    Value laneValue = createVC4TileRotateForPlan(
-        thenBuilder, op->getLoc(), tile, lane, tile.getType());
-    SmallVector<NamedAttribute, 8> attrs{
-        namedAttr(thenBuilder, "elem_bytes",
-                  thenBuilder.getI32IntegerAttr(4)),
-        namedAttr(thenBuilder, "offset_unit",
-                  getVC4TileOffsetUnitAttr(
-                      thenBuilder, mlir::vc4tile::OffsetUnit::element)),
-        namedAttr(thenBuilder, "memory_space",
-                  getVC4TileMemorySpaceAttr(
-                      thenBuilder, mlir::vc4tile::MemorySpace::global)),
-        namedAttr(thenBuilder, "access",
-                  getVC4TileMemoryAccessAttr(
-                      thenBuilder,
-                      mlir::vc4tile::MemoryAccess::affine_contiguous)),
-        namedAttr(thenBuilder, "boundary",
-                  mlir::vc4tile::BoundaryPolicyAttr::get(
-                      thenBuilder.getContext(),
-                      mlir::vc4tile::BoundaryPolicy::tail_predicated))};
-    createVC4TileCoreOp(
-        thenBuilder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
-        {*adjustedBase, lanes, laneValue, oneLaneMask->getResult(0)}, attrs);
-  }
-
-  return success();
-}
-
 static LogicalResult planRegisterGlobalTileStore(Operation *op,
                                                  OpBuilder &builder) {
   auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
@@ -6318,6 +6205,21 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
     return planSharedGlobalTileStore(op, builder);
   if (!isVector16Data(op->getOperand(0).getType()))
     return op->emitOpError("copy planner v1 requires tile_store input to be vector<16xi32>, vector<16xf32>, or !vc4tile.shared_tile");
+
+  FailureOr<PredicateFragmentPlan> predicatePlan =
+      planPredicateTransferForMask(
+          op, op->getOperand(3), PredicateTransferPathKind::registerToGlobal,
+          "register->global tile_store",
+          PredicateInactiveDestPolicy::preserve);
+  if (failed(predicatePlan))
+    return failure();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::scalarFragment ||
+      predicatePlan->planClass == PredicateFragmentPlanClass::sparseFallback) {
+    return op->emitOpError()
+           << "register->global tile_store unsupported predicate fragment "
+              "plan: inactive destination preservation requires dense "
+              "full/row/tail fragments; sparse fallback is disabled";
+  }
 
   if (std::optional<TileRectMaskInfo> rectMask =
           getTileRectMaskInfo(op->getOperand(3).getDefiningOp()))
@@ -6334,7 +6236,9 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
     return planTailOutsideBoundsRegisterGlobalTileStore(
         op, builder, *tailOutsideBounds);
   if (isSemanticMaskCompositionOp(op->getOperand(3).getDefiningOp()))
-    return planComposedRegisterGlobalTileStore(op, builder);
+    return emitUnsupportedPredicateModelForPath(
+        op, "register->global tile_store", op->getOperand(3),
+        PredicateInactiveDestPolicy::preserve);
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
@@ -6914,9 +6818,24 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   bool useFullBlockPath = op->getNumOperands() < 4;
   if (op->getNumOperands() == 4) {
     Operation *maskDef = op->getOperand(3).getDefiningOp();
-    // TODO: Migrate these established lowering branches to consume
-    // PredicateFragmentPlan directly as each fragment class gets executable
-    // coverage on this path.
+    FailureOr<PredicateFragmentPlan> predicatePlan =
+        planPredicateTransferForMask(
+            op, op->getOperand(3),
+            PredicateTransferPathKind::globalToSharedVPM,
+            "global->shared_vpm copy_tile",
+            PredicateInactiveDestPolicy::zeroFill);
+    if (failed(predicatePlan))
+      return failure();
+    if (predicatePlan->planClass ==
+            PredicateFragmentPlanClass::scalarFragment ||
+        predicatePlan->planClass ==
+            PredicateFragmentPlanClass::sparseFallback) {
+      return op->emitOpError()
+             << "global->shared_vpm copy_tile unsupported predicate fragment "
+                "plan: inactive zero-fill requires dense full/row/tail "
+                "fragments; sparse fallback is disabled";
+    }
+
     if (std::optional<TileRectMaskInfo> rectMask =
             getTileRectMaskInfo(maskDef))
       return planRectangularGlobalSharedCopy(op, builder, *rectMask);
@@ -6927,21 +6846,7 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
             getBoundsAndTailMaskInfo(maskDef))
       return planBoundsAndTailGlobalSharedCopy(op, builder, *boundsAndTail);
     if (!isMaskAllForPlan(op->getOperand(3))) {
-      FailureOr<VC4TilePredicateModel> predicate =
-          normalizePredicateModelForConsumer(op, op->getOperand(3),
-                                             PredicateInactiveDestPolicy::zeroFill);
-      if (failed(predicate))
-        return failure();
-      FailureOr<PredicateTransferPathDescriptor> descriptor =
-          getPredicateTransferPathDescriptorForCopyTile(
-              op, PredicateTransferPathKind::globalToSharedVPM,
-              "global->shared_vpm copy_tile",
-              PredicateInactiveDestPolicy::zeroFill);
-      if (failed(descriptor))
-        return failure();
-      PredicateFragmentPlan plan =
-          planPredicateTransferFragments(*predicate, *descriptor);
-      if (plan.planClass == PredicateFragmentPlanClass::fullBlock)
+      if (predicatePlan->planClass == PredicateFragmentPlanClass::fullBlock)
         useFullBlockPath = true;
       else
         return emitUnsupportedPredicateModelForPath(
@@ -7184,6 +7089,21 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
     return op->emitOpError(
         "shared_vpm->global copy requires !vc4tile.shared_tile plus i32 base/offset/row and vector<16xi1> mask");
   }
+  FailureOr<PredicateFragmentPlan> predicatePlan =
+      planPredicateTransferForMask(
+          op, mask, PredicateTransferPathKind::sharedVPMToGlobal,
+          "shared_vpm->global copy_tile",
+          PredicateInactiveDestPolicy::preserve);
+  if (failed(predicatePlan))
+    return failure();
+  if (predicatePlan->planClass == PredicateFragmentPlanClass::scalarFragment ||
+      predicatePlan->planClass == PredicateFragmentPlanClass::sparseFallback) {
+    return op->emitOpError()
+           << "shared_vpm->global copy_tile unsupported predicate fragment "
+              "plan: inactive global destination preservation requires dense "
+              "full/row/tail fragments; sparse fallback is disabled";
+  }
+
   if (std::optional<TileRectMaskInfo> rectMask =
           getTileRectMaskInfo(mask.getDefiningOp()))
     return planRectangularSharedGlobal4x4Store(
