@@ -3267,6 +3267,7 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_store_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_store_vc4tile/candidate/tile_bounds_mask_store_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/tile-bounds-mask-store-lowering.mlir",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-bounds-mask-pitched-store-lowering.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_load_vc4tile/input.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_load_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_load_vc4tile/candidate/tile_bounds_mask_load_vc4tile_candidate_harness.c",

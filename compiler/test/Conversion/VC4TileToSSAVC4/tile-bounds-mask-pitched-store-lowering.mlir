@@ -1,0 +1,44 @@
+// RUN: vc4-opt %s --canonicalize-vc4tile-surface --plan-vc4tile-copies --legalize-vc4tile-core-cfg --verify-vc4tile-core -o - | FileCheck %s --check-prefix=CORE
+// RUN: vc4-opt %s --canonicalize-vc4tile-surface --plan-vc4tile-copies --legalize-vc4tile-core-cfg --verify-vc4tile-core --convert-vc4tile-to-ssavc4 -o - | FileCheck %s --check-prefix=SSAVC4
+
+// CORE-LABEL: vc4tile.kernel @tile_bounds_mask_pitched_store_lowering
+// CORE-NOT: vc4tile.tile_store
+// CORE-DAG: arith.constant 13 : i32
+// CORE-DAG: arith.constant 26 : i32
+// CORE-DAG: arith.constant 39 : i32
+// CORE: vc4tile.masked_store_global
+
+// SSAVC4-LABEL: ssavc4.func @tile_bounds_mask_pitched_store_lowering
+// SSAVC4-NOT: vc4tile.tile_bounds_mask
+// SSAVC4-NOT: vc4tile.tile_store
+// SSAVC4-NOT: vc4tile.masked_store_global
+// SSAVC4-COUNT-4: ssavc4.vdw.store
+vc4tile.kernel @tile_bounds_mask_pitched_store_lowering(%out : i32, %rows : i32, %cols : i32) attributes {
+  public_name = "tile_bounds_mask_pitched_store_lowering",
+  arg_attrs = [
+    {abi_name = "out", kind = "buffer", direction = "out", elem_type = "u32", type = "u32"},
+    {abi_name = "rows", kind = "scalar", direction = "by_value", type = "u32"},
+    {abi_name = "cols", kind = "scalar", direction = "by_value", type = "u32"}
+  ],
+  schedule_mode = #vc4tile.schedule_mode<independent_vector>,
+  warps_per_block_max = 1 : i32,
+  uses_shared_vpm = false,
+  uses_barrier = false,
+  semaphores_per_block = 0 : i32,
+  vpm_rows_per_block = 0 : i32,
+  vpm_bytes_per_block = 0 : i32
+} {
+  %zero = arith.constant 0 : i32
+  %values = vc4tile.lane_range : vector<16xi32>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  "vc4tile.tile_store"(%values, %out, %zero, %mask) {
+    shape = [4, 4], layout = #vc4tile.layout<row_major>,
+    memory_space = #vc4tile.memory_space<global>,
+    element_type = i32, storage_type = i32,
+    precision = #vc4tile.precision<exact_32>,
+    boundary = #vc4tile.boundary_policy<exact>,
+    packing = #vc4tile.packing<none>,
+    memory_pitch_bytes = 52 : i32
+  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  vc4tile.return
+}

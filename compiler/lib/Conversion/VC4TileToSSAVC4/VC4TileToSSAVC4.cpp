@@ -4376,6 +4376,18 @@ static Value createVC4TileRotateForPlan(OpBuilder &builder, Location loc,
   return rotate->getResult(0);
 }
 
+static FailureOr<int64_t>
+getRegisterGlobalStoreRowPitchElements(Operation *op, int64_t activeCols) {
+  int64_t memoryPitchBytes = getI32Attr(op, "memory_pitch_bytes").value_or(16);
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "register->global memory_pitch_bytes must be a positive multiple of 4");
+  if (activeCols > 0 && memoryPitchBytes < activeCols * 4)
+    return op->emitOpError(
+        "register->global memory_pitch_bytes must cover the stored row");
+  return memoryPitchBytes / 4;
+}
+
 static LogicalResult planRectangularRegisterGlobalTileStore(
     Operation *op, OpBuilder &builder, TileRectMaskInfo maskInfo) {
   if (!isStatic4x4RowMajorTile(op))
@@ -4393,7 +4405,12 @@ static LogicalResult planRectangularRegisterGlobalTileStore(
   Value base = op->getOperand(1);
   Value offset = op->getOperand(2);
   Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
-  if (maskInfo.activeRows == 4 && maskInfo.activeCols == 4) {
+  FailureOr<int64_t> rowPitchElements =
+      getRegisterGlobalStoreRowPitchElements(op, maskInfo.activeCols);
+  if (failed(rowPitchElements))
+    return failure();
+  if (maskInfo.activeRows == 4 && maskInfo.activeCols == 4 &&
+      *rowPitchElements == 4) {
     FailureOr<Value> adjustedBase =
         createAdjustedGlobalBaseForTileCopy(builder, op, base, offset);
     if (failed(adjustedBase))
@@ -4431,7 +4448,7 @@ static LogicalResult planRectangularRegisterGlobalTileStore(
 
   for (int64_t row = 0; row < maskInfo.activeRows; ++row) {
     Value rowOffset = addI32ConstantInline(builder, op->getLoc(), offset,
-                                           row * 4);
+                                           row * *rowPitchElements);
     FailureOr<Value> adjustedBase =
         createAdjustedGlobalBaseForTileCopy(builder, op, base, rowOffset);
     if (failed(adjustedBase))
@@ -4485,6 +4502,10 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
   Value base = op->getOperand(1);
   Value offset = op->getOperand(2);
   Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  FailureOr<int64_t> rowPitchElements =
+      getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/0);
+  if (failed(rowPitchElements))
+    return failure();
   Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
   Type maskType = op->getOperand(3).getType();
   Operation *rowMask = createVC4TileCoreOp(
@@ -4501,7 +4522,7 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
     OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
 
     Value rowOffset = addI32ConstantInline(thenBuilder, op->getLoc(), offset,
-                                           row * 4);
+                                           row * *rowPitchElements);
     FailureOr<Value> adjustedBase =
         createAdjustedGlobalBaseForTileCopy(thenBuilder, op, base, rowOffset);
     if (failed(adjustedBase))
