@@ -113,6 +113,19 @@ def VC4Tile_TailMaskOp : VC4Tile_PureOp<"tail_mask"> {
   let hasVerifier = 1;
 }
 
+def VC4Tile_TileRectMaskOp : VC4Tile_PureOp<"tile_rect_mask"> {
+  let summary = "static rectangular active-lane mask for a 4x4 tile";
+  let arguments = (ins
+    I32Attr:$active_rows,
+    I32Attr:$active_cols,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_MaskedLoadGlobalOp : VC4Tile_Op<"masked_load_global", [
     MemoryEffects<[MemRead]>
   ]> {
@@ -520,6 +533,7 @@ def VC4Tile_TileDotOp : VC4Tile_PureOp<"tile_dot"> {
     OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
     OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<I32Attr>:$active_k,
     OptionalAttr<StrAttr>:$algorithm_hint
   );
   let results = (outs AnyType:$result);

@@ -16,6 +16,8 @@
 // CHECK: ssavc4.unpack
 // CHECK: ssavc4.make_flags
 // CHECK-SAME: kind = #ssavc4.flag_kind<sub>
+// CHECK: ssavc4.cond_select
+// CHECK-SAME: cond = #vc4.cond<zc>
 module {
   %i = ssavc4.load_imm <splat32> {value = 42 : i32} : i32
   %v = ssavc4.load_imm <per_elem_u2> {values = array<i32: 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3>} : vector<16xi32>
@@ -28,4 +30,5 @@ module {
   %packed = ssavc4.pack %rot {mode = #vc4.regfile_a_pack_mode<to_16a>} : vector<16xi32> -> vector<16xi32>
   %unpacked = ssavc4.unpack %packed {mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>} : vector<16xi32> -> vector<16xi32>
   %flags = ssavc4.make_flags %unpacked, %lane {kind = #ssavc4.flag_kind<sub>} : (vector<16xi32>, vector<16xi32>) -> !ssavc4.flags
+  %selected = ssavc4.cond_select %flags, %unpacked, %splat {cond = #vc4.cond<zc>} : !ssavc4.flags, vector<16xi32>, vector<16xi32> -> vector<16xi32>
 }

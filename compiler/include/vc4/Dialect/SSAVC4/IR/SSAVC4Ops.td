@@ -94,6 +94,35 @@ def SSAVC4_MovOp : SSAVC4_PureOp<"mov"> {
   let hasVerifier = 1;
 }
 
+def SSAVC4_CondSelectOp : SSAVC4_PureOp<"cond_select"> {
+  let summary = "SSAVC4 per-lane conditional value select";
+  let description = [{
+    Selects true_value for SIMD lanes whose current QPU flags satisfy cond,
+    and false_value otherwise.  This models the natural VC4 idiom:
+
+      set flags per SIMD lane
+      write the false value unconditionally
+      conditionally overwrite lanes with the true value
+
+    The flags operand must be produced by ssavc4.make_flags and consumed once,
+    preserving the lower-half invariant that live flag state is explicit and
+    short-lived.
+  }];
+  let arguments = (ins
+    SSAVC4_Flags:$flags,
+    AnyType:$true_value,
+    AnyType:$false_value,
+    VC4_CondAttr:$cond
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = [{
+    $flags `,` $true_value `,` $false_value attr-dict
+    `:` type($flags) `,` type($true_value) `,` type($false_value)
+    `->` type($result)
+  }];
+  let hasVerifier = 1;
+}
+
 def SSAVC4_ALUAddOp : SSAVC4_PureOp<"alu.add"> {
   let summary = "SSAVC4 ADD-pipe ALU operation before scheduling";
   let arguments = (ins

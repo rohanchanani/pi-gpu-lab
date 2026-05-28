@@ -324,6 +324,31 @@ LogicalResult MovOp::verify() {
   return success();
 }
 
+LogicalResult CondSelectOp::verify() {
+  Operation *op = getOperation();
+  if (!isa<FlagsType>(getFlags().getType()))
+    return emitOpError("flags operand must be !ssavc4.flags");
+  if (getCond() == mlir::vc4::Cond::never ||
+      getCond() == mlir::vc4::Cond::always) {
+    return emitOpError(
+        "cond_select requires a real per-lane condition, not never/always");
+  }
+
+  Type trueType = getTrueValue().getType();
+  Type falseType = getFalseValue().getType();
+  Type resultType = getResult().getType();
+  if (failed(verifyValueType(op, trueType, "true_value")) ||
+      failed(verifyValueType(op, falseType, "false_value")) ||
+      failed(verifyValueType(op, resultType, "result")))
+    return failure();
+  if (trueType != falseType || trueType != resultType) {
+    return emitOpError()
+           << "true_value, false_value, and result types must match; got "
+           << trueType << ", " << falseType << ", and " << resultType;
+  }
+  return success();
+}
+
 LogicalResult ALUAddOp::verify() {
   Operation *op = getOperation();
   Type resultType = getResult().getType();

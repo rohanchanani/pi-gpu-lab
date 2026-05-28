@@ -516,6 +516,14 @@ static LogicalResult verifyTileDotContractMetadata(Operation *op,
     if (shape[0] != mAttr.getInt() || shape[1] != nAttr.getInt())
       return op->emitOpError(
           "tile_contract/tile_matmul shape must match [m, n] in M5");
+    if (auto activeK = op->getAttrOfType<IntegerAttr>("active_k")) {
+      if (activeK.getInt() < 1 || activeK.getInt() > 4)
+        return op->emitOpError(
+            "tile_contract/tile_matmul active_k must be in range [1, 4]");
+      if (kAttr.getInt() != 4)
+        return op->emitOpError(
+            "tile_contract/tile_matmul active_k is supported only for k = 4 carriers");
+    }
     if (failed(verifyContractionLayoutAttr(op, "lhs_layout",
                                            /*allowRhsTransposed=*/false)) ||
         failed(verifyContractionLayoutAttr(op, "rhs_layout",
@@ -678,6 +686,11 @@ static bool isTailMaskOp(Value value) {
   return def && def->getName().getStringRef() == "vc4tile.tail_mask";
 }
 
+static bool isTileRectMaskOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.tile_rect_mask";
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -685,9 +698,9 @@ static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
     return success();
   switch (boundary.getValue()) {
   case BoundaryPolicy::exact:
-    if (!isMaskAllOp(mask))
+    if (!isMaskAllOp(mask) && !isTileRectMaskOp(mask))
       return op->emitOpError(
-          "boundary policy exact requires a vc4tile.mask_all mask");
+          "boundary policy exact requires a vc4tile.mask_all or vc4tile.tile_rect_mask mask");
     return success();
   case BoundaryPolicy::tail_predicated:
     if (!isTailMaskOp(mask))
@@ -1234,6 +1247,30 @@ LogicalResult TailMaskOp::verify() {
       failed(verifyScalarId(op, getLimit().getType(), "limit")))
     return failure();
   return verifyVector16I1(op, getResult().getType(), "result");
+}
+
+LogicalResult TileRectMaskOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+
+  SmallVector<int64_t, 2> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "shape", shape)))
+    return failure();
+  if (shape.size() != 2 || shape[0] != 4 || shape[1] != 4)
+    return emitOpError("tile_rect_mask supports only shape = [4, 4] in M5");
+
+  if (getLayout() != Layout::row_major)
+    return emitOpError("tile_rect_mask supports only row_major layout in M5");
+
+  int64_t rows = getActiveRowsAttr().getInt();
+  int64_t cols = getActiveColsAttr().getInt();
+  if (rows < 1 || rows > 4)
+    return emitOpError("active_rows must be in range [1, 4]");
+  if (cols < 1 || cols > 4)
+    return emitOpError("active_cols must be in range [1, 4]");
+  return success();
 }
 
 LogicalResult TileDescriptorOp::verify() {

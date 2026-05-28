@@ -66,6 +66,8 @@ constexpr llvm::StringLiteral kVC4TileLaneRangeOpName("vc4tile.lane_range");
 constexpr llvm::StringLiteral kVC4TileThreadIdOpName("vc4tile.thread_id");
 constexpr llvm::StringLiteral kVC4TileMaskAllOpName("vc4tile.mask_all");
 constexpr llvm::StringLiteral kVC4TileTailMaskOpName("vc4tile.tail_mask");
+constexpr llvm::StringLiteral kVC4TileTileRectMaskOpName(
+    "vc4tile.tile_rect_mask");
 constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
     "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
@@ -136,6 +138,7 @@ constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
 constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
+constexpr llvm::StringLiteral kSSAVC4CondSelectOpName("ssavc4.cond_select");
 constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
 constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
@@ -309,6 +312,7 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
          hasName(op, kVC4TileThreadIdOpName) ||
          hasName(op, kVC4TileMaskAllOpName) ||
          hasName(op, kVC4TileTailMaskOpName) ||
+         hasName(op, kVC4TileTileRectMaskOpName) ||
          hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
          hasName(op, kVC4TileMaskedStoreGlobalOpName) ||
          hasName(op, kVC4TileRotateOpName) ||
@@ -1209,6 +1213,16 @@ static Value createMakeFlags(OpBuilder &builder, Location loc,
       mlir::ssavc4::FlagsType::get(builder.getContext()));
 }
 
+static Value createCondSelect(OpBuilder &builder, Location loc, Value flags,
+                              Value trueValue, Value falseValue,
+                              mlir::vc4::Cond cond, Type resultType) {
+  Attribute condAttr = mlir::vc4::CondAttr::get(builder.getContext(), cond);
+  return createSSAVC4OpWithResult(
+      builder, loc, kSSAVC4CondSelectOpName,
+      {flags, trueValue, falseValue},
+      {builder.getNamedAttr("cond", condAttr)}, resultType);
+}
+
 static Value createRotate(OpBuilder &builder, Location loc, Value input,
                           int64_t amount, Type resultType) {
   return createSSAVC4OpWithResult(
@@ -1762,6 +1776,18 @@ static void eraseLoweredFlagMaskIfMemoryOnly(
   }
 }
 
+static LogicalResult lowerTileRectMask(Operation *op) {
+  if (op->getNumOperands() != 0 || op->getNumResults() != 1)
+    return op->emitOpError("tile_rect_mask expects no operands and one result");
+  if (!isVector16I1(op->getResult(0).getType()))
+    return op->emitOpError(
+        "currently lowers only vector<16xi1> tile_rect_mask results");
+  if (!valueHasOnlyMaskedGlobalMemoryUsers(op->getResult(0)))
+    return op->emitOpError(
+        "tile_rect_mask currently lowers only for masked global memory users");
+  return success();
+}
+
 
 static LogicalResult appendStoreActiveLaneOperand(Operation *op,
                                                   OpBuilder &builder,
@@ -1844,12 +1870,46 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
 
   Operation *maskDef = op->getOperand(2).getDefiningOp();
   if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
-      !hasName(maskDef, kVC4TileTailMaskOpName)) {
+      !hasName(maskDef, kVC4TileTailMaskOpName) &&
+      !hasName(maskDef, kVC4TileTileRectMaskOpName)) {
     return op->emitOpError(
-        "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for TMU loads");
+        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, or vc4tile.tile_rect_mask masks for TMU loads");
   }
 
   return success();
+}
+
+static std::optional<SmallVector<int32_t, 16>>
+getTileRectMaskLanes(Operation *maskDef) {
+  if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
+    return std::nullopt;
+
+  auto rowsAttr = maskDef->getAttrOfType<IntegerAttr>("active_rows");
+  auto colsAttr = maskDef->getAttrOfType<IntegerAttr>("active_cols");
+  auto layout = maskDef->getAttrOfType<mlir::vc4tile::LayoutAttr>("layout");
+  auto shape = maskDef->getAttrOfType<ArrayAttr>("shape");
+  if (!rowsAttr || !colsAttr || !layout || !shape || shape.size() != 2 ||
+      layout.getValue() != mlir::vc4tile::Layout::row_major)
+    return std::nullopt;
+  auto shapeRows = llvm::dyn_cast<IntegerAttr>(shape[0]);
+  auto shapeCols = llvm::dyn_cast<IntegerAttr>(shape[1]);
+  if (!shapeRows || !shapeCols || shapeRows.getInt() != 4 ||
+      shapeCols.getInt() != 4)
+    return std::nullopt;
+
+  int64_t activeRows = rowsAttr.getInt();
+  int64_t activeCols = colsAttr.getInt();
+  if (activeRows < 1 || activeRows > 4 || activeCols < 1 || activeCols > 4)
+    return std::nullopt;
+
+  SmallVector<int32_t, 16> lanes;
+  lanes.reserve(16);
+  for (int64_t lane = 0; lane < 16; ++lane) {
+    int64_t row = lane / 4;
+    int64_t col = lane % 4;
+    lanes.push_back((row < activeRows && col < activeCols) ? 1 : 0);
+  }
+  return lanes;
 }
 
 static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
@@ -1865,6 +1925,16 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
   Type addressType = getVector16I32Type(builder);
   Value baseVec = createSplat(builder, op->getLoc(), base, addressType);
   Value byteOffsets = offsets;
+  Value activeMask;
+  Operation *maskDef = op->getOperand(2).getDefiningOp();
+  if (std::optional<SmallVector<int32_t, 16>> maskLanes =
+          getTileRectMaskLanes(maskDef)) {
+    if (!isVector16I32(op->getResult(0).getType()))
+      return op->emitOpError(
+          "tile_rect_mask TMU loads currently support only vector<16xi32> results");
+    activeMask = createLoadImmPerElemU2(builder, op->getLoc(), addressType,
+                                        *maskLanes);
+  }
 
   auto offsetUnit =
       op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
@@ -1875,13 +1945,29 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
                                mlir::vc4::MulOpcode::mul24, addressType);
   }
 
+  if (activeMask) {
+    SmallVector<Value, 2> maskedOffsetOperands{byteOffsets, activeMask};
+    byteOffsets = createALUMul(builder, op->getLoc(), maskedOffsetOperands,
+                               mlir::vc4::MulOpcode::mul24, addressType);
+  }
+
   SmallVector<Value, 2> addressOperands{baseVec, byteOffsets};
   Value address = createALUAdd(builder, op->getLoc(), addressOperands,
                                mlir::vc4::AddOpcode::add, addressType);
   Value token = createTMURequest(builder, op->getLoc(), address);
   copyTileSemanticMetadataAttrs(op, token.getDefiningOp());
-  valueMap[op->getResult(0)] =
+  Value loaded =
       createTMURead(builder, op->getLoc(), token, op->getResult(0).getType());
+  if (activeMask) {
+    Value zero = createLoadImmI32(builder, op->getLoc(),
+                                  op->getResult(0).getType(), 0);
+    Value flags = createMakeFlags(builder, op->getLoc(), {activeMask},
+                                  mlir::ssavc4::FlagKind::zero_test);
+    loaded = createCondSelect(builder, op->getLoc(), flags, loaded, zero,
+                              mlir::vc4::Cond::zc,
+                              op->getResult(0).getType());
+  }
+  valueMap[op->getResult(0)] = loaded;
   copyTileSemanticMetadataAttrs(op, valueMap[op->getResult(0)].getDefiningOp());
   eraseLoweredFlagMaskIfMemoryOnly(op->getOperand(2), valueMap);
   return success();
@@ -2277,6 +2363,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerMaskAll(op, builder, valueMap);
   if (hasName(op, kVC4TileTailMaskOpName))
     return lowerTailMask(op, builder, valueMap);
+  if (hasName(op, kVC4TileTileRectMaskOpName))
+    return lowerTileRectMask(op);
   if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
@@ -3486,9 +3574,16 @@ static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
     return op->emitOpError(
         "tile_contract/tile_matmul require row_major, col_major, or "
         "transposed_view rhs layout in M5");
+  int64_t activeK = 4;
+  if (auto activeKAttr = op->getAttrOfType<IntegerAttr>("active_k")) {
+    activeK = activeKAttr.getInt();
+    if (activeK < 1 || activeK > 4)
+      return op->emitOpError(
+          "tile_contract/tile_matmul active_k must be in range [1, 4]");
+  }
 
   Value update;
-  for (unsigned kk = 0; kk < 4; ++kk) {
+  for (unsigned kk = 0; kk < static_cast<unsigned>(activeK); ++kk) {
     Value lhsK = createGatheredI32Lanes(
         builder, op, op->getOperand(0), resultType, [kk](unsigned lane) {
           unsigned row = lane / 4;

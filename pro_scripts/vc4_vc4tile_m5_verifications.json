@@ -84,11 +84,12 @@
         "tile_matmul_4x4_i32_vc4tile",
         "tile_contract_shared_rhs_vc4tile"
       ],
-      "m5_cute_stress": [
-        "cute_gemm_8x8x8_tiled_vc4tile",
-        "cute_gemm_16x16x16_tiled_vc4tile",
-        "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
-      ]
+            "m5_cute_stress": [
+                "cute_gemm_8x8x8_tiled_vc4tile",
+                "cute_gemm_16x16x16_tiled_vc4tile",
+                "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
+                "cute_gemm_tail_17x13x9_vc4tile"
+            ]
     }
   },
   "notes": [
@@ -168,11 +169,12 @@
       "tile_matmul_4x4_i32_vc4tile",
       "tile_contract_shared_rhs_vc4tile"
     ],
-    "m5_cute_stress": [
-      "cute_gemm_8x8x8_tiled_vc4tile",
-      "cute_gemm_16x16x16_tiled_vc4tile",
-      "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
-    ]
+        "m5_cute_stress": [
+            "cute_gemm_8x8x8_tiled_vc4tile",
+            "cute_gemm_16x16x16_tiled_vc4tile",
+            "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
+            "cute_gemm_tail_17x13x9_vc4tile"
+        ]
   },
   "slices": {
     "m5-00-milestone-package": {
@@ -3242,7 +3244,12 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_shared_b_rhs_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_16x16x16_shared_b_rhs_vc4tile/candidate/cute_gemm_16x16x16_shared_b_rhs_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-16x16x16-shared-b-rhs.mlir",
-            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-16x16x16-shared-b-rhs-vc4tile.mlir"
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-16x16x16-shared-b-rhs-vc4tile.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_tail_17x13x9_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_tail_17x13x9_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/cute_gemm_tail_17x13x9_vc4tile/candidate/cute_gemm_tail_17x13x9_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/cute-gemm-tail-17x13x9.mlir",
+            "compiler/test/CodeGen/VC4Tile/Emit/cute-gemm-tail-17x13x9-vc4tile.mlir"
           ]
         },
         {
@@ -3285,6 +3292,9 @@
             },
             {
               "fixture": "cute_gemm_16x16x16_shared_b_rhs_vc4tile"
+            },
+            {
+              "fixture": "cute_gemm_tail_17x13x9_vc4tile"
             }
           ]
         }

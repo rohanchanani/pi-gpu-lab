@@ -64,3 +64,24 @@ module {
   %a = "builtin.unrealized_conversion_cast"(%flags) : (!ssavc4.flags) -> i32
   %b = "builtin.unrealized_conversion_cast"(%flags) : (!ssavc4.flags) -> i32
 }
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  %v = ssavc4.splat %x : i32 -> vector<16xi32>
+  %flags = ssavc4.make_flags %v {kind = #ssavc4.flag_kind<zero_test>} : (vector<16xi32>) -> !ssavc4.flags
+  // expected-error@+1 {{cond_select requires a real per-lane condition}}
+  %bad = ssavc4.cond_select %flags, %v, %v {cond = #vc4.cond<always>} : !ssavc4.flags, vector<16xi32>, vector<16xi32> -> vector<16xi32>
+}
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  %y = ssavc4.load_imm <splat32> {value = 2 : i32} : i32
+  %v = ssavc4.splat %x : i32 -> vector<16xi32>
+  %flags = ssavc4.make_flags %v {kind = #ssavc4.flag_kind<zero_test>} : (vector<16xi32>) -> !ssavc4.flags
+  // expected-error@+1 {{true_value, false_value, and result types must match}}
+  %bad = ssavc4.cond_select %flags, %x, %y {cond = #vc4.cond<zc>} : !ssavc4.flags, i32, i32 -> vector<16xi32>
+}

@@ -52,6 +52,7 @@ constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
 constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
+constexpr llvm::StringLiteral kSSAVC4CondSelectOpName("ssavc4.cond_select");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
@@ -375,6 +376,7 @@ struct InstructionTemplate {
     ALUAdd,
     ALUMul,
     MakeFlags,
+    CondSelect,
     EdgeCopy,
     Branch,
     CondBranch,
@@ -1423,6 +1425,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   case InstructionTemplate::Kind::Splat:
   case InstructionTemplate::Kind::Mov:
     return spillActionSlots + 1 + resultSpacer;
+  case InstructionTemplate::Kind::CondSelect:
+    return spillActionSlots + 2 + resultSpacer;
   case InstructionTemplate::Kind::ALUAdd:
     return spillActionSlots +
            (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
@@ -1720,11 +1724,14 @@ static LogicalResult verifyRestrictedFlagUses(Operation *func) {
         Value flags = op.getResult(0);
         if (!flags.hasOneUse())
           return op.emitOpError()
-                 << "result must be consumed exactly once by ssavc4.cond_br in M3 v1";
+                 << "result must be consumed exactly once by ssavc4.cond_br "
+                    "or ssavc4.cond_select in M5";
         Operation *user = *flags.getUsers().begin();
-        if (!hasName(user, kSSAVC4CondBranchOpName))
+        if (!hasName(user, kSSAVC4CondBranchOpName) &&
+            !hasName(user, kSSAVC4CondSelectOpName))
           return op.emitOpError()
-                 << "result must be consumed by ssavc4.cond_br in M3 v1";
+                 << "result must be consumed by ssavc4.cond_br or "
+                    "ssavc4.cond_select in M5";
       }
 
       if (hasName(&op, kSSAVC4CondBranchOpName)) {
@@ -1733,6 +1740,14 @@ static LogicalResult verifyRestrictedFlagUses(Operation *func) {
         if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
           return op.emitOpError()
                  << "requires flags produced directly by ssavc4.make_flags in M3 v1";
+      }
+
+      if (hasName(&op, kSSAVC4CondSelectOpName)) {
+        auto condSelect = llvm::cast<mlir::ssavc4::CondSelectOp>(op);
+        Operation *definingOp = condSelect.getFlags().getDefiningOp();
+        if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
+          return op.emitOpError()
+                 << "requires flags produced directly by ssavc4.make_flags in M5";
       }
     }
   }
@@ -2144,6 +2159,33 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
+      if (hasName(&op, kSSAVC4CondSelectOpName)) {
+        if (op.getNumOperands() != 3 || op.getNumResults() != 1)
+          return op.emitOpError(
+              "requires flags, true_value, false_value, and one result for M5 lowering");
+        if (op.getOperand(1).getType() != op.getOperand(2).getType() ||
+            op.getOperand(1).getType() != op.getResult(0).getType())
+          return op.emitOpError(
+              "requires identical true_value, false_value, and result types for M5 lowering");
+        if (!isVector16I32Type(op.getResult(0).getType()) &&
+            !isVector16F32Type(op.getResult(0).getType()) &&
+            !op.getResult(0).getType().isSignlessInteger(32) &&
+            !op.getResult(0).getType().isF32())
+          return op.emitOpError(
+              "supports only i32, f32, vector<16xi32>, or vector<16xf32> values in M5 lowering");
+        Value result = op.getResult(0);
+        virtualValues.push_back({result, nextVirtualOrdinal++});
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::CondSelect;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templ.result = result;
+        appendTemplate(std::move(templ));
+        continue;
+      }
+
       if (hasName(&op, kSSAVC4ALUAddOpName) || hasName(&op, kSSAVC4ALUMulOpName)) {
         if (op.getNumResults() != 1)
           return op.emitOpError("requires exactly one result for M3 lowering");
@@ -2447,7 +2489,8 @@ static LogicalResult selectInstructionTemplates(
                 "ssavc4.load_imm, ssavc4.element_number, ssavc4.uniform.read, "
                 "ssavc4.splat, ssavc4.mov, "
                 "ssavc4.alu.add, ssavc4.alu.mul, "
-                "ssavc4.make_flags, ssavc4.br, ssavc4.cond_br, "
+                "ssavc4.make_flags, ssavc4.cond_select, ssavc4.br, "
+                "ssavc4.cond_br, "
                 "ssavc4.pack, ssavc4.unpack, ssavc4.rotate, "
                 "ssavc4.tmu.request, ssavc4.tmu.read, "
                 "ssavc4.sema.acquire, ssavc4.sema.release, "
@@ -2547,6 +2590,43 @@ static LogicalResult emitMov(OpBuilder &builder,
                         *resultReg, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::bit_or,
                         mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+  return success();
+}
+
+static LogicalResult emitCondSelect(OpBuilder &builder,
+                                    const InstructionTemplate &templ,
+                                    const SpillAwareAllocator &allocator) {
+  Operation *source = templ.source;
+  if (!templ.result || templ.operands.size() != 3)
+    return source->emitError("internal lowering error: malformed cond_select");
+
+  auto condAttr =
+      llvm::dyn_cast_or_null<mlir::vc4::CondAttr>(source->getAttr("cond"));
+  if (!condAttr)
+    return source->emitOpError("requires a vc4.cond condition attribute");
+
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> trueReg = allocator.lookup(templ, templ.operands[1]);
+  std::optional<int64_t> falseReg = allocator.lookup(templ, templ.operands[2]);
+  if (!resultReg || !trueReg || !falseReg)
+    return source->emitOpError()
+           << "uses a value that is not defined by a lowerable SSAVC4 op in M5";
+
+  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        *resultReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, *falseReg, *falseReg,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                        condAttr.getValue(), mlir::vc4::Cond::never,
+                        *resultReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, *trueReg, *trueReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
@@ -3037,6 +3117,18 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
   mlir::vc4::QPUMux addB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
                          : useMirroredSecond     ? mlir::vc4::QPUMux::b
                                                   : mlir::vc4::QPUMux::r1;
+  std::optional<int64_t> smallImm;
+  if (templ.operands.size() == 1) {
+    auto kindAttr =
+        llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(source->getAttr("kind"));
+    if (!kindAttr ||
+        kindAttr.getValue() != mlir::ssavc4::FlagKind::zero_test)
+      return source->emitOpError(
+          "one-operand make_flags must be kind zero_test in M5 lowering");
+    raddrB = 0;
+    addB = mlir::vc4::QPUMux::b;
+    smallImm = 0;
+  }
 
   if (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator)) {
     createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
@@ -3049,14 +3141,16 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
                           mlir::vc4::QPUMux::r1);
   }
 
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+  createScheduledBundle(builder, source->getLoc(),
+                        smallImm ? mlir::vc4::QPUSignal::small_imm
+                                 : mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/31, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::sub,
                         mlir::vc4::MulOpcode::nop, raddrA, raddrB,
                         mlir::vc4::QPUMux::a, addB,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        std::nullopt, /*setFlags=*/true);
+                        smallImm, /*setFlags=*/true);
   return success();
 }
 
@@ -3707,6 +3801,10 @@ static LogicalResult emitScheduledFunctionBody(
     case InstructionTemplate::Kind::Splat:
     case InstructionTemplate::Kind::Mov:
       if (failed(emitMov(builder, templ, allocator)))
+        return failure();
+      break;
+    case InstructionTemplate::Kind::CondSelect:
+      if (failed(emitCondSelect(builder, templ, allocator)))
         return failure();
       break;
     case InstructionTemplate::Kind::ALUAdd:

@@ -1,0 +1,20 @@
+{
+  "name": "cute_gemm_tail_17x13x9_vc4tile",
+  "status": "PASS",
+  "required": {
+    "cases": 6,
+    "logical_shape": "17x13x9",
+    "tile_counts_m_n_k": "5,4,3",
+    "logical_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "runtime_launches": 6,
+    "checksum_expected": 35052,
+    "checksum_actual": 35052,
+    "sample_c00": -1534,
+    "sample_c012": -1984,
+    "sample_c160": -1634,
+    "sample_c1612": -2000,
+    "sample_c75": -178
+  }
+}
