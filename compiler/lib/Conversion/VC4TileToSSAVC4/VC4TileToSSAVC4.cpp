@@ -4691,6 +4691,96 @@ static Value createVC4TileRotateForPlan(OpBuilder &builder, Location loc,
   return rotate->getResult(0);
 }
 
+static Value createI32FromI1ForPlan(OpBuilder &builder, Location loc,
+                                    Value predicate) {
+  Value zero = createI32ConstantInline(builder, loc, 0);
+  Value one = createI32ConstantInline(builder, loc, 1);
+  return arith::SelectOp::create(builder, loc, predicate, one, zero)
+      .getResult();
+}
+
+static FailureOr<Value> createLaneActiveI32ForStoreMask(
+    Operation *op, OpBuilder &builder, Value mask, unsigned lane) {
+  Operation *maskDef = mask.getDefiningOp();
+  if (hasName(maskDef, kVC4TileMaskAllOpName))
+    return createI32ConstantInline(builder, op->getLoc(), 1);
+
+  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+    if (maskDef->getNumOperands() != 2)
+      return maskDef->emitOpError("expected base and limit operands");
+    Value laneValue = createI32ConstantInline(builder, op->getLoc(), lane);
+    Value absolute = arith::AddIOp::create(builder, op->getLoc(),
+                                           maskDef->getOperand(0), laneValue)
+                         .getResult();
+    Value active = arith::CmpIOp::create(builder, op->getLoc(),
+                                         arith::CmpIPredicate::ult, absolute,
+                                         maskDef->getOperand(1));
+    return createI32FromI1ForPlan(builder, op->getLoc(), active);
+  }
+
+  if (std::optional<TileRectMaskInfo> rect = getTileRectMaskInfo(maskDef)) {
+    unsigned row = lane / 4;
+    unsigned col = lane % 4;
+    return createI32ConstantInline(builder, op->getLoc(),
+                                   row < rect->activeRows &&
+                                           col < rect->activeCols
+                                       ? 1
+                                       : 0);
+  }
+
+  if (std::optional<TileBoundsMaskInfo> bounds =
+          getTileBoundsMaskInfo(maskDef)) {
+    unsigned row = lane / 4;
+    unsigned col = lane % 4;
+    Value rowValue = createI32ConstantInline(builder, op->getLoc(), row);
+    Value colValue = createI32ConstantInline(builder, op->getLoc(), col);
+    Value rowLiveI1 = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowValue,
+        bounds->activeRows);
+    Value colLiveI1 = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, colValue,
+        bounds->activeCols);
+    Value rowLive = createI32FromI1ForPlan(builder, op->getLoc(), rowLiveI1);
+    Value colLive = createI32FromI1ForPlan(builder, op->getLoc(), colLiveI1);
+    return arith::AndIOp::create(builder, op->getLoc(), rowLive, colLive)
+        .getResult();
+  }
+
+  if (hasName(maskDef, kVC4TileMaskAndOpName) ||
+      hasName(maskDef, kVC4TileMaskOrOpName)) {
+    if (maskDef->getNumOperands() != 2)
+      return maskDef->emitOpError("expected lhs and rhs operands");
+    FailureOr<Value> lhs = createLaneActiveI32ForStoreMask(
+        op, builder, maskDef->getOperand(0), lane);
+    if (failed(lhs))
+      return failure();
+    FailureOr<Value> rhs = createLaneActiveI32ForStoreMask(
+        op, builder, maskDef->getOperand(1), lane);
+    if (failed(rhs))
+      return failure();
+    if (hasName(maskDef, kVC4TileMaskAndOpName))
+      return arith::AndIOp::create(builder, op->getLoc(), *lhs, *rhs)
+          .getResult();
+    return arith::OrIOp::create(builder, op->getLoc(), *lhs, *rhs)
+        .getResult();
+  }
+
+  if (hasName(maskDef, kVC4TileMaskNotOpName)) {
+    if (maskDef->getNumOperands() != 1)
+      return maskDef->emitOpError("expected input operand");
+    FailureOr<Value> input = createLaneActiveI32ForStoreMask(
+        op, builder, maskDef->getOperand(0), lane);
+    if (failed(input))
+      return failure();
+    Value one = createI32ConstantInline(builder, op->getLoc(), 1);
+    return arith::XOrIOp::create(builder, op->getLoc(), *input, one)
+        .getResult();
+  }
+
+  return op->emitOpError(
+      "register->global composed store supports only semantic tile predicates");
+}
+
 static FailureOr<int64_t>
 getRegisterGlobalStoreRowPitchElements(Operation *op, int64_t activeCols) {
   int64_t memoryPitchBytes = getI32Attr(op, "memory_pitch_bytes").value_or(16);
@@ -4868,6 +4958,82 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
   return success();
 }
 
+static LogicalResult planComposedRegisterGlobalTileStore(Operation *op,
+                                                         OpBuilder &builder) {
+  if (!isStatic4x4RowMajorTile(op))
+    return op->emitOpError(
+        "composed predicate register->global stores currently require shape = [4, 4] and row_major layout");
+
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "composed predicate register->global stores require unit lane stride in M5");
+
+  FailureOr<int64_t> rowPitchElements =
+      getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/1);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value tile = op->getOperand(0);
+  Value base = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value mask = op->getOperand(3);
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
+  Value one = createI32ConstantInline(builder, op->getLoc(), 1);
+  Operation *oneLaneMask = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, one}, {},
+      mask.getType());
+
+  for (unsigned lane = 0; lane < 16; ++lane) {
+    FailureOr<Value> laneActive =
+        createLaneActiveI32ForStoreMask(op, builder, mask, lane);
+    if (failed(laneActive))
+      return failure();
+    Value laneLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ne, *laneActive, zero);
+
+    auto ifOp = scf::IfOp::create(builder, op->getLoc(), laneLive,
+                                  /*withElseRegion=*/false);
+    OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
+    unsigned row = lane / 4;
+    unsigned col = lane % 4;
+    int64_t laneOffset = row * *rowPitchElements + col;
+    Value scalarOffset =
+        addI32ConstantInline(thenBuilder, op->getLoc(), offset, laneOffset);
+    FailureOr<Value> adjustedBase = createAdjustedGlobalBaseForTileCopy(
+        thenBuilder, op, base, scalarOffset);
+    if (failed(adjustedBase))
+      return failure();
+    Value laneValue = createVC4TileRotateForPlan(
+        thenBuilder, op->getLoc(), tile, lane, tile.getType());
+    SmallVector<NamedAttribute, 8> attrs{
+        namedAttr(thenBuilder, "elem_bytes",
+                  thenBuilder.getI32IntegerAttr(4)),
+        namedAttr(thenBuilder, "offset_unit",
+                  getVC4TileOffsetUnitAttr(
+                      thenBuilder, mlir::vc4tile::OffsetUnit::element)),
+        namedAttr(thenBuilder, "memory_space",
+                  getVC4TileMemorySpaceAttr(
+                      thenBuilder, mlir::vc4tile::MemorySpace::global)),
+        namedAttr(thenBuilder, "access",
+                  getVC4TileMemoryAccessAttr(
+                      thenBuilder,
+                      mlir::vc4tile::MemoryAccess::affine_contiguous)),
+        namedAttr(thenBuilder, "boundary",
+                  mlir::vc4tile::BoundaryPolicyAttr::get(
+                      thenBuilder.getContext(),
+                      mlir::vc4tile::BoundaryPolicy::tail_predicated))};
+    createVC4TileCoreOp(
+        thenBuilder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
+        {*adjustedBase, lanes, laneValue, oneLaneMask->getResult(0)}, attrs);
+  }
+
+  return success();
+}
+
 static LogicalResult planRegisterGlobalTileStore(Operation *op,
                                                  OpBuilder &builder) {
   auto memorySpace = op->getAttrOfType<mlir::vc4tile::MemorySpaceAttr>("memory_space");
@@ -4886,6 +5052,8 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
   if (std::optional<TileBoundsMaskInfo> boundsMask =
           getTileBoundsMaskInfo(op->getOperand(3).getDefiningOp()))
     return planDynamicBoundsRegisterGlobalTileStore(op, builder, *boundsMask);
+  if (isSemanticMaskCompositionOp(op->getOperand(3).getDefiningOp()))
+    return planComposedRegisterGlobalTileStore(op, builder);
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
