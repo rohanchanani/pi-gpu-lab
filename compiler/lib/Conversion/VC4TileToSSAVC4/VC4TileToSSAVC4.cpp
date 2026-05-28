@@ -3916,13 +3916,15 @@ static LogicalResult verifyContractionVectorInputsForCanonicalization(
   Operation *maskDef = op->getOperand(expectedOperands - 1).getDefiningOp();
   bool supportedMask =
       hasName(maskDef, kVC4TileMaskAllOpName) ||
+      (expectedOperands == 3 && hasName(maskDef, kVC4TileTailMaskOpName)) ||
       (expectedOperands == 4 &&
        (hasName(maskDef, kVC4TileTileRectMaskOpName) ||
         hasName(maskDef, kVC4TileTileBoundsMaskOpName)));
   if (!supportedMask) {
     if (expectedOperands == 3)
       return op->emitOpError(
-          "tile_dot currently supports only vc4tile.mask_all masks in M5");
+          "tile_dot currently supports only vc4tile.mask_all or "
+          "vc4tile.tail_mask masks in M5");
     return op->emitOpError(
         "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
         "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
