@@ -145,6 +145,19 @@ def VC4Tile_TileBoundsMaskOp : VC4Tile_PureOp<"tile_bounds_mask"> {
   let hasVerifier = 1;
 }
 
+def VC4Tile_MaskAndOp : VC4Tile_PureOp<"mask_and"> {
+  let summary = "logical conjunction of two tile predicates";
+  let description = [{
+    CuTe-style predicate composition.  This op is a semantic tile predicate:
+    it combines logical masks at the VC4Tile layer and lowers into concrete
+    active-lane values only at its final memory or compute consumer.
+  }];
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_MaskedLoadGlobalOp : VC4Tile_Op<"masked_load_global", [
     MemoryEffects<[MemRead]>
   ]> {

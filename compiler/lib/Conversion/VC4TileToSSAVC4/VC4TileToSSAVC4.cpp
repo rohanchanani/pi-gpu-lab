@@ -71,6 +71,7 @@ constexpr llvm::StringLiteral kVC4TileTileRectMaskOpName(
     "vc4tile.tile_rect_mask");
 constexpr llvm::StringLiteral kVC4TileTileBoundsMaskOpName(
     "vc4tile.tile_bounds_mask");
+constexpr llvm::StringLiteral kVC4TileMaskAndOpName("vc4tile.mask_and");
 constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
     "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
@@ -321,6 +322,7 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
          hasName(op, kVC4TileTailMaskOpName) ||
          hasName(op, kVC4TileTileRectMaskOpName) ||
          hasName(op, kVC4TileTileBoundsMaskOpName) ||
+         hasName(op, kVC4TileMaskAndOpName) ||
          hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
          hasName(op, kVC4TileMaskedStoreGlobalOpName) ||
          hasName(op, kVC4TileRotateOpName) ||
@@ -1772,6 +1774,7 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
 static bool valueHasOnlySemanticMaskMemoryUsers(Value value);
 static bool valueHasAnySharedSemanticMaskMemoryUser(Value value);
 static bool valueHasOnlyReduceSemanticMaskUsers(Value value);
+static bool isSemanticMaskCompositionOp(Operation *op);
 
 static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
                                    llvm::DenseMap<Value, Value> &valueMap) {
@@ -1833,10 +1836,23 @@ static bool isSemanticMaskMemoryUser(Operation *op) {
          hasName(op, kVC4TileReduceOpName);
 }
 
+static bool isSemanticMaskCompositionOp(Operation *op) {
+  return hasName(op, kVC4TileMaskAndOpName);
+}
+
 static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
   for (OpOperand &use : value.getUses()) {
-    if (!isSemanticMaskMemoryUser(use.getOwner()))
-      return false;
+    Operation *owner = use.getOwner();
+    if (isSemanticMaskMemoryUser(owner))
+      continue;
+    if (isSemanticMaskCompositionOp(owner)) {
+      bool allResultsSemantic = true;
+      for (Value result : owner->getResults())
+        allResultsSemantic &= valueHasOnlySemanticMaskMemoryUsers(result);
+      if (allResultsSemantic)
+        continue;
+    }
+    return false;
   }
   return true;
 }
@@ -1848,13 +1864,28 @@ static bool valueHasAnySharedSemanticMaskMemoryUser(Value value) {
         hasName(owner, kVC4TileSharedStoreOpName) ||
         hasName(owner, kVC4TileSharedStoreGlobalOpName))
       return true;
+    if (isSemanticMaskCompositionOp(owner)) {
+      for (Value result : owner->getResults()) {
+        if (valueHasAnySharedSemanticMaskMemoryUser(result))
+          return true;
+      }
+    }
   }
   return false;
 }
 
 static bool valueHasOnlyReduceSemanticMaskUsers(Value value) {
   for (OpOperand &use : value.getUses()) {
-    if (!hasName(use.getOwner(), kVC4TileReduceOpName))
+    Operation *owner = use.getOwner();
+    if (hasName(owner, kVC4TileReduceOpName))
+      continue;
+    if (isSemanticMaskCompositionOp(owner)) {
+      bool allResultsReduce = true;
+      for (Value result : owner->getResults())
+        allResultsReduce &= valueHasOnlyReduceSemanticMaskUsers(result);
+      if (allResultsReduce)
+        continue;
+    }
       return false;
   }
   return !value.use_empty();
@@ -1897,6 +1928,20 @@ static LogicalResult lowerTileBoundsMask(Operation *op) {
       !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
         "tile_bounds_mask must be consumed by VC4Tile planning or semantic masked memory before SSAVC4 conversion");
+  return success();
+}
+
+static LogicalResult lowerMaskAnd(Operation *op) {
+  if (op->getNumOperands() != 2 || op->getNumResults() != 1)
+    return op->emitOpError("mask_and expects lhs, rhs, and one result");
+  if (!isVector16I1(op->getOperand(0).getType()) ||
+      !isVector16I1(op->getOperand(1).getType()) ||
+      !isVector16I1(op->getResult(0).getType()))
+    return op->emitOpError("mask_and requires vector<16xi1> operands and result");
+  if (!op->getResult(0).use_empty() &&
+      !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+    return op->emitOpError(
+        "mask_and must be consumed by semantic masked memory or compute before SSAVC4 conversion");
   return success();
 }
 
@@ -2172,8 +2217,29 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
     return activeMask;
   }
 
+  if (hasName(maskDef, kVC4TileMaskAndOpName)) {
+    if (maskDef->getNumOperands() != 2)
+      return maskDef->emitOpError("expected lhs and rhs operands");
+    FailureOr<Value> lhs = createActiveLaneValueForSemanticMask(
+        consumer, builder, maskDef->getOperand(0), valueMap);
+    if (failed(lhs))
+      return failure();
+    FailureOr<Value> rhs = createActiveLaneValueForSemanticMask(
+        consumer, builder, maskDef->getOperand(1), valueMap);
+    if (failed(rhs))
+      return failure();
+    if (!*lhs)
+      return *rhs;
+    if (!*rhs)
+      return *lhs;
+    return createALUAdd(builder, consumer->getLoc(), {*lhs, *rhs},
+                        mlir::vc4::AddOpcode::bit_and, maskValueType);
+  }
+
   return consumer->emitOpError(
-      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for semantic mask users");
+      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, "
+      "vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or "
+      "vc4tile.mask_and masks for semantic mask users");
 }
 
 static FailureOr<Value> applySemanticMaskZeroFill(
@@ -2731,6 +2797,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerTileRectMask(op);
   if (hasName(op, kVC4TileTileBoundsMaskOpName))
     return lowerTileBoundsMask(op);
+  if (hasName(op, kVC4TileMaskAndOpName))
+    return lowerMaskAnd(op);
   if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
@@ -3846,7 +3914,8 @@ static bool isSupportedAddReductionMask(Value mask) {
   return hasName(maskDef, kVC4TileMaskAllOpName) ||
          hasName(maskDef, kVC4TileTailMaskOpName) ||
          hasName(maskDef, kVC4TileTileRectMaskOpName) ||
-         hasName(maskDef, kVC4TileTileBoundsMaskOpName);
+         hasName(maskDef, kVC4TileTileBoundsMaskOpName) ||
+         hasName(maskDef, kVC4TileMaskAndOpName);
 }
 
 static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
@@ -3864,7 +3933,7 @@ static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
     return op->emitOpError(
         "tile reductions currently support only vc4tile.mask_all, "
         "vc4tile.tail_mask, vc4tile.tile_rect_mask, or "
-        "vc4tile.tile_bounds_mask masks in M5");
+        "vc4tile.tile_bounds_mask, or vc4tile.mask_and masks in M5");
   auto kind = op->getAttrOfType<mlir::vc4tile::ReduceKindAttr>("kind");
   if (!kind)
     return op->emitOpError("tile reduction requires a kind attribute");

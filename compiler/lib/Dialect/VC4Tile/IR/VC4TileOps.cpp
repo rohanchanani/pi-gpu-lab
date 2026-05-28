@@ -1300,6 +1300,16 @@ LogicalResult TileBoundsMaskOp::verify() {
   return success();
 }
 
+LogicalResult MaskAndOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
+      failed(verifyVector16I1(op, getRhs().getType(), "rhs")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
 LogicalResult TileDescriptorOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)))
