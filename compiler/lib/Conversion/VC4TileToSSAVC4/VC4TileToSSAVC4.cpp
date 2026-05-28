@@ -1772,8 +1772,6 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
 }
 
 static bool valueHasOnlySemanticMaskMemoryUsers(Value value);
-static bool valueHasAnySharedSemanticMaskMemoryUser(Value value);
-static bool valueHasOnlyReduceSemanticMaskUsers(Value value);
 static bool isSemanticMaskCompositionOp(Operation *op);
 
 static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
@@ -1783,9 +1781,7 @@ static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError("currently lowers only vector<16xi1> tail_mask results");
   if (!op->getResult(0).use_empty() &&
-      ((valueHasAnySharedSemanticMaskMemoryUser(op->getResult(0)) &&
-        valueHasOnlySemanticMaskMemoryUsers(op->getResult(0))) ||
-       valueHasOnlyReduceSemanticMaskUsers(op->getResult(0))))
+      valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
     return success();
 
   Value base = lookupMappedValue(op, op->getOperand(0), valueMap);
@@ -1855,40 +1851,6 @@ static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
     return false;
   }
   return true;
-}
-
-static bool valueHasAnySharedSemanticMaskMemoryUser(Value value) {
-  for (OpOperand &use : value.getUses()) {
-    Operation *owner = use.getOwner();
-    if (hasName(owner, kVC4TileSharedLoadOpName) ||
-        hasName(owner, kVC4TileSharedStoreOpName) ||
-        hasName(owner, kVC4TileSharedStoreGlobalOpName))
-      return true;
-    if (isSemanticMaskCompositionOp(owner)) {
-      for (Value result : owner->getResults()) {
-        if (valueHasAnySharedSemanticMaskMemoryUser(result))
-          return true;
-      }
-    }
-  }
-  return false;
-}
-
-static bool valueHasOnlyReduceSemanticMaskUsers(Value value) {
-  for (OpOperand &use : value.getUses()) {
-    Operation *owner = use.getOwner();
-    if (hasName(owner, kVC4TileReduceOpName))
-      continue;
-    if (isSemanticMaskCompositionOp(owner)) {
-      bool allResultsReduce = true;
-      for (Value result : owner->getResults())
-        allResultsReduce &= valueHasOnlyReduceSemanticMaskUsers(result);
-      if (allResultsReduce)
-        continue;
-    }
-      return false;
-  }
-  return !value.use_empty();
 }
 
 static void eraseLoweredFlagMaskIfMemoryOnly(
@@ -2030,9 +1992,12 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
   if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
       !hasName(maskDef, kVC4TileTailMaskOpName) &&
       !hasName(maskDef, kVC4TileTileRectMaskOpName) &&
-      !hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+      !hasName(maskDef, kVC4TileTileBoundsMaskOpName) &&
+      !hasName(maskDef, kVC4TileMaskAndOpName)) {
     return op->emitOpError(
-        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for TMU loads");
+        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, "
+        "vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or "
+        "vc4tile.mask_and masks for TMU loads");
   }
 
   return success();
@@ -2273,24 +2238,11 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
   Type addressType = getVector16I32Type(builder);
   Value baseVec = createSplat(builder, op->getLoc(), base, addressType);
   Value byteOffsets = offsets;
-  Value activeMask;
-  Operation *maskDef = op->getOperand(2).getDefiningOp();
-  if (std::optional<SmallVector<int32_t, 16>> maskLanes =
-          getTileRectMaskLanes(maskDef)) {
-    if (!isVector16I32(op->getResult(0).getType()))
-      return op->emitOpError(
-          "tile_rect_mask TMU loads currently support only vector<16xi32> results");
-    activeMask = createLoadImmPerElemU2(builder, op->getLoc(), addressType,
-                                        *maskLanes);
-  } else if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
-    if (!isVector16I32(op->getResult(0).getType()))
-      return op->emitOpError(
-          "tile_bounds_mask TMU loads currently support only vector<16xi32> results");
-    activeMask = createTileBoundsActiveMask(op, builder, maskDef, valueMap,
-                                            addressType);
-    if (!activeMask)
-      return failure();
-  }
+  FailureOr<Value> semanticActiveMask = createActiveLaneValueForSemanticMask(
+      op, builder, op->getOperand(2), valueMap);
+  if (failed(semanticActiveMask))
+    return failure();
+  Value activeMask = *semanticActiveMask;
 
   auto offsetUnit =
       op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
@@ -2315,8 +2267,8 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
   Value loaded =
       createTMURead(builder, op->getLoc(), token, op->getResult(0).getType());
   if (activeMask) {
-    Value zero = createLoadImmI32(builder, op->getLoc(),
-                                  op->getResult(0).getType(), 0);
+    Value zero = createZeroForVectorDataType(builder, op->getLoc(),
+                                             op->getResult(0).getType());
     Value flags = createMakeFlags(builder, op->getLoc(), {activeMask},
                                   mlir::ssavc4::FlagKind::zero_test);
     loaded = createCondSelect(builder, op->getLoc(), flags, loaded, zero,

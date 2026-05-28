@@ -13,7 +13,10 @@
 // CORE-SAME: reuse_hint = #vc4tile.reuse_hint<producer>
 // CORE-SAME: role = #vc4tile.role<output>
 // SSAVC4-LABEL: ssavc4.func @role_boundary_metadata_preserve
-// SSAVC4: ssavc4.tmu.read
+// SSAVC4: ssavc4.tmu.request
+// SSAVC4-SAME: boundary = #vc4tile.boundary_policy<tail_predicated>
+// SSAVC4-SAME: role = #vc4tile.role<input>
+// SSAVC4: ssavc4.cond_select
 // SSAVC4-SAME: boundary = #vc4tile.boundary_policy<tail_predicated>
 // SSAVC4-SAME: role = #vc4tile.role<input>
 // SSAVC4: ssavc4.vdw.store

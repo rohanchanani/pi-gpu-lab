@@ -696,6 +696,11 @@ static bool isTileBoundsMaskOp(Value value) {
   return def && def->getName().getStringRef() == "vc4tile.tile_bounds_mask";
 }
 
+static bool isMaskAndOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.mask_and";
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -704,9 +709,9 @@ static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
   switch (boundary.getValue()) {
   case BoundaryPolicy::exact:
     if (!isMaskAllOp(mask) && !isTileRectMaskOp(mask) &&
-        !isTileBoundsMaskOp(mask))
+        !isTileBoundsMaskOp(mask) && !isMaskAndOp(mask))
       return op->emitOpError(
-          "boundary policy exact requires a vc4tile.mask_all, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask mask");
+          "boundary policy exact requires a vc4tile.mask_all, vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or vc4tile.mask_and mask");
     return success();
   case BoundaryPolicy::tail_predicated:
     if (!isTailMaskOp(mask))

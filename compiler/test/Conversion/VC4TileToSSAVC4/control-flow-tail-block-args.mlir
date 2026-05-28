@@ -4,7 +4,6 @@
 // CHECK: ssavc4.make_flags
 // CHECK: ssavc4.cond_br
 // CHECK: ssavc4.br
-// CHECK: ssavc4.element_number
 // CHECK: ssavc4.alu.add
 // CHECK: ssavc4.vdw.store
 // CHECK: active_lanes = 16 : i32
