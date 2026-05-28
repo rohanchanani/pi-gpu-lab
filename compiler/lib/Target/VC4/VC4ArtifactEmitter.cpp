@@ -2899,25 +2899,6 @@ collectLaunchABIBufferArguments(const LaunchABIModel &launchABI) {
   return buffers;
 }
 
-static const LaunchABIArgumentModel *
-findLaunchABILogicalCountArgument(const LaunchABIModel &launchABI) {
-  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
-    if (arg.kind == LaunchABIArgumentKind::Scalar && arg.name == "n")
-      return &arg;
-  }
-  return nullptr;
-}
-
-static const LaunchABIArgumentModel *
-findLaunchABIScalarArgumentNamed(const LaunchABIModel &launchABI,
-                                 llvm::StringRef name) {
-  for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
-    if (arg.kind == LaunchABIArgumentKind::Scalar && arg.name == name)
-      return &arg;
-  }
-  return nullptr;
-}
-
 static std::string getBufferElementCTypeForCodegen(
     const LaunchABIArgumentModel &arg) {
   std::optional<std::string> elemType = getElementCType(arg.elementType);
@@ -3084,17 +3065,11 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     requiresF32Packing |= launchABIRequiresF32Packing(kernel.launchABI);
     requiresCooperativeScheduling |=
         kernel.resources.scheduleMode == "cooperative_block";
-    const LaunchABIArgumentModel *rowCountArgForLaunchShape =
-        findLaunchABIScalarArgumentNamed(kernel.launchABI, "m");
-    // Kernels with both m and n, such as GEMV, use m/n as semantic dimensions;
-    // neither scalar is necessarily the one-dimensional launch element count.
-    // Those kernels must use CUDA-like grid/block launch geometry to choose
-    // logical QPU requests.  Elementwise kernels with only an n scalar keep the
-    // convenient n-as-logical-count behavior.  Cooperative-block kernels also
-    // use launch geometry because block dimensions define resident warps.
+    // Scalar arguments are semantic uniforms, even when named n/m/rows/cols.
+    // CUDA-like launch geometry is the single host-side authority for the
+    // logical element count; in-kernel predicates consume scalar extents.
     requiresLaunchElements |=
-        requiresCooperativeScheduling || rowCountArgForLaunchShape ||
-        !findLaunchABILogicalCountArgument(kernel.launchABI);
+        kernel.resources.scheduleMode != "cooperative_block";
   }
 
   os << "#define VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION 1\n";
@@ -3379,11 +3354,6 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     const std::string kernelBase = getLaunchAPIBaseName(kernelABI);
     llvm::SmallVector<const LaunchABIArgumentModel *, 4> bufferArgs =
         collectLaunchABIBufferArguments(kernelABI);
-    const LaunchABIArgumentModel *rowCountArg =
-        findLaunchABIScalarArgumentNamed(kernelABI, "m");
-    const LaunchABIArgumentModel *logicalCountArg =
-        rowCountArg ? nullptr : findLaunchABILogicalCountArgument(kernelABI);
-    const LaunchABIArgumentModel *validationCountArg = logicalCountArg;
 
     appendLauncherPrototype(os, kernelABI);
     os << " {\n";
@@ -3398,11 +3368,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       os << "  /* schedule_mode=cooperative_block; runtime computes resident_blocks and waits before VPM/semaphore resource reuse. */\n";
       os << "  uint32_t totalRequests = vc4_codegen_saturating_mul_u32(gridBlocks, warpsPerBlock);\n";
     } else {
-      if (validationCountArg) {
-        os << "  uint32_t logicalN = (uint32_t)" << validationCountArg->name << ";\n";
-      } else {
-        os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
-      }
+      os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
       os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
       os << "  uint32_t warpsPerBlock = 1u;\n";
       os << "  (void)grid;\n";

@@ -90,7 +90,8 @@
                 "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
                 "cute_gemm_tail_17x13x9_vc4tile",
                 "cute_transpose_32x32_full_vpm_vc4tile",
-                "tile_matmul_bounds_output_mask_vc4tile"
+                "tile_matmul_bounds_output_mask_vc4tile",
+                "tile_reduce_tail_sum_vc4tile"
             ]
     }
   },
@@ -177,7 +178,8 @@
             "cute_gemm_16x16x16_shared_b_rhs_vc4tile",
             "cute_gemm_tail_17x13x9_vc4tile",
             "cute_transpose_32x32_full_vpm_vc4tile",
-            "tile_matmul_bounds_output_mask_vc4tile"
+            "tile_matmul_bounds_output_mask_vc4tile",
+            "tile_reduce_tail_sum_vc4tile"
         ]
   },
   "slices": {
@@ -3294,6 +3296,10 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_bounds_output_mask_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_matmul_bounds_output_mask_vc4tile/candidate/tile_matmul_bounds_output_mask_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/tile-matmul-output-mask-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_tail_sum_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_tail_sum_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_reduce_tail_sum_vc4tile/candidate/tile_reduce_tail_sum_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/tile-reduce-tail-mask-lowering.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/expected.json",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/candidate/vdw_vertical_multirow_probe_ssavc4_candidate_harness.c",
@@ -3372,6 +3378,9 @@
             },
             {
               "fixture": "tile_matmul_bounds_output_mask_vc4tile"
+            },
+            {
+              "fixture": "tile_reduce_tail_sum_vc4tile"
             }
           ]
         },

@@ -1771,6 +1771,7 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
 
 static bool valueHasOnlySemanticMaskMemoryUsers(Value value);
 static bool valueHasAnySharedSemanticMaskMemoryUser(Value value);
+static bool valueHasOnlyReduceSemanticMaskUsers(Value value);
 
 static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
                                    llvm::DenseMap<Value, Value> &valueMap) {
@@ -1779,8 +1780,9 @@ static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError("currently lowers only vector<16xi1> tail_mask results");
   if (!op->getResult(0).use_empty() &&
-      valueHasAnySharedSemanticMaskMemoryUser(op->getResult(0)) &&
-      valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+      ((valueHasAnySharedSemanticMaskMemoryUser(op->getResult(0)) &&
+        valueHasOnlySemanticMaskMemoryUsers(op->getResult(0))) ||
+       valueHasOnlyReduceSemanticMaskUsers(op->getResult(0))))
     return success();
 
   Value base = lookupMappedValue(op, op->getOperand(0), valueMap);
@@ -1827,13 +1829,8 @@ static bool isSemanticMaskMemoryUser(Operation *op) {
   return isMaskedGlobalMemoryOp(op) ||
          hasName(op, kVC4TileSharedLoadOpName) ||
          hasName(op, kVC4TileSharedStoreOpName) ||
-         hasName(op, kVC4TileSharedStoreGlobalOpName);
-}
-
-static bool isSharedSemanticMaskMemoryUser(Operation *op) {
-  return hasName(op, kVC4TileSharedLoadOpName) ||
-         hasName(op, kVC4TileSharedStoreOpName) ||
-         hasName(op, kVC4TileSharedStoreGlobalOpName);
+         hasName(op, kVC4TileSharedStoreGlobalOpName) ||
+         hasName(op, kVC4TileReduceOpName);
 }
 
 static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
@@ -1846,10 +1843,21 @@ static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
 
 static bool valueHasAnySharedSemanticMaskMemoryUser(Value value) {
   for (OpOperand &use : value.getUses()) {
-    if (isSharedSemanticMaskMemoryUser(use.getOwner()))
+    Operation *owner = use.getOwner();
+    if (hasName(owner, kVC4TileSharedLoadOpName) ||
+        hasName(owner, kVC4TileSharedStoreOpName) ||
+        hasName(owner, kVC4TileSharedStoreGlobalOpName))
       return true;
   }
   return false;
+}
+
+static bool valueHasOnlyReduceSemanticMaskUsers(Value value) {
+  for (OpOperand &use : value.getUses()) {
+    if (!hasName(use.getOwner(), kVC4TileReduceOpName))
+      return false;
+  }
+  return !value.use_empty();
 }
 
 static void eraseLoweredFlagMaskIfMemoryOnly(
@@ -2165,7 +2173,7 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
   }
 
   return consumer->emitOpError(
-      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for shared VPM memory");
+      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for semantic mask users");
 }
 
 static FailureOr<Value> applySemanticMaskZeroFill(
@@ -2385,13 +2393,6 @@ static LogicalResult lowerRotate(Operation *op, OpBuilder &builder,
   return success();
 }
 
-static bool maskIsAllLanes(Operation *op, unsigned operandIndex) {
-  if (operandIndex >= op->getNumOperands())
-    return false;
-  return hasName(op->getOperand(operandIndex).getDefiningOp(),
-                 kVC4TileMaskAllOpName);
-}
-
 static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
                                  llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 2 || op->getNumResults() != 1)
@@ -2404,9 +2405,6 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
         "requires matching vector<16xi32> or vector<16xf32> input/result types");
   if (!isVector16I1(op->getOperand(1).getType()))
     return op->emitOpError("requires a vector<16xi1> mask");
-  if (!maskIsAllLanes(op, 1))
-    return op->emitOpError(
-        "currently lowers only vc4tile.mask_all masks for warp reductions");
 
   auto kind = op->getAttrOfType<mlir::vc4tile::ReduceKindAttr>("kind");
   if (!kind)
@@ -2418,6 +2416,11 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
   Value acc = lookupMappedValue(op, op->getOperand(0), valueMap);
   if (!acc)
     return failure();
+  FailureOr<Value> maskedAcc = applySemanticMaskZeroFill(
+      op, builder, acc, op->getOperand(1), valueMap);
+  if (failed(maskedAcc))
+    return failure();
+  acc = *maskedAcc;
 
   mlir::vc4::AddOpcode addOpcode = isVector16F32(inputType)
                                       ? mlir::vc4::AddOpcode::fadd
@@ -3838,8 +3841,12 @@ static LogicalResult canonicalizeTileSelectOp(Operation *op,
       "vc4tile.tail_mask masks for elision, or rectangular tile predicates for vector<16xi32> materialization in M5");
 }
 
-static bool isMaskAllValue(Value mask) {
-  return hasName(mask.getDefiningOp(), kVC4TileMaskAllOpName);
+static bool isSupportedAddReductionMask(Value mask) {
+  Operation *maskDef = mask.getDefiningOp();
+  return hasName(maskDef, kVC4TileMaskAllOpName) ||
+         hasName(maskDef, kVC4TileTailMaskOpName) ||
+         hasName(maskDef, kVC4TileTileRectMaskOpName) ||
+         hasName(maskDef, kVC4TileTileBoundsMaskOpName);
 }
 
 static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
@@ -3853,9 +3860,11 @@ static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
         "tile reduction requires matching vector<16xi32> or vector<16xf32> input/result types");
   if (!isVector16I1(op->getOperand(1).getType()))
     return op->emitOpError("tile reduction mask must be vector<16xi1>");
-  if (!isMaskAllValue(op->getOperand(1)))
+  if (!isSupportedAddReductionMask(op->getOperand(1)))
     return op->emitOpError(
-        "tile reductions currently support only vc4tile.mask_all masks in M5");
+        "tile reductions currently support only vc4tile.mask_all, "
+        "vc4tile.tail_mask, vc4tile.tile_rect_mask, or "
+        "vc4tile.tile_bounds_mask masks in M5");
   auto kind = op->getAttrOfType<mlir::vc4tile::ReduceKindAttr>("kind");
   if (!kind)
     return op->emitOpError("tile reduction requires a kind attribute");

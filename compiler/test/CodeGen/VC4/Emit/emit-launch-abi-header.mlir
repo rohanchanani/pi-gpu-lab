@@ -46,6 +46,8 @@
 // SOURCE: uniformWords[4] = requestInfo->logical_request; /* builtin logical_request */
 // SOURCE: uniformWords[5] = requestInfo->total_requests; /* builtin total_requests */
 // SOURCE-LABEL: int launch_abi_header_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out, vc4_deviceptr_t input, uint32_t n, float scale) {
+// SOURCE: uint32_t logicalN = vc4_codegen_launch_elements(grid, block);
+// SOURCE-NOT: uint32_t logicalN = (uint32_t)n;
 // SOURCE: vc4DeviceRangeIsAllocated(program, out,
 // SOURCE: vc4DeviceRangeIsAllocated(program, input,
 // SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, launch_abi_header_pack_uniforms, &ctx);
