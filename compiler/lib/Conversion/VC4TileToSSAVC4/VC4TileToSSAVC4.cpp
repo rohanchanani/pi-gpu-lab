@@ -3730,15 +3730,17 @@ static Value createTileRectAllBitsMask(Operation *op, OpBuilder &builder,
       .getResult();
 }
 
-static LogicalResult canonicalizeTileSelectWithRectangularMask(
-    Operation *op, OpBuilder &builder, Operation *maskDef) {
-  auto vectorType = llvm::dyn_cast<VectorType>(op->getResult(0).getType());
+static Value createRectangularMaskedSelectI32(Operation *op,
+                                              OpBuilder &builder,
+                                              Operation *maskDef,
+                                              Value trueValue,
+                                              Value falseValue,
+                                              Type resultType) {
+  auto vectorType = llvm::dyn_cast<VectorType>(resultType);
   if (!vectorType || vectorType.getRank() != 1 ||
       vectorType.getDimSize(0) != 16 ||
-      !vectorType.getElementType().isSignlessInteger(32)) {
-    return op->emitOpError(
-        "tile_select with rectangular predicates currently requires vector<16xi32> values");
-  }
+      !vectorType.getElementType().isSignlessInteger(32))
+    return Value();
 
   Value zero =
       createVector16I32SplatConstant(builder, op->getLoc(), vectorType, 0);
@@ -3754,23 +3756,37 @@ static LogicalResult canonicalizeTileSelectWithRectangularMask(
                                              allOnes, zero);
   }
   if (!activeBits)
-    return op->emitOpError(
-        "tile_select rectangular predicate requires shape = [4, 4] and row_major layout");
+    return Value();
 
   Value inactiveBits =
       arith::XOrIOp::create(builder, op->getLoc(), activeBits, allOnes)
           .getResult();
   Value truePart =
-      arith::AndIOp::create(builder, op->getLoc(), op->getOperand(1),
-                            activeBits)
+      arith::AndIOp::create(builder, op->getLoc(), trueValue, activeBits)
           .getResult();
   Value falsePart =
-      arith::AndIOp::create(builder, op->getLoc(), op->getOperand(2),
-                            inactiveBits)
+      arith::AndIOp::create(builder, op->getLoc(), falseValue, inactiveBits)
           .getResult();
-  Value result =
-      arith::OrIOp::create(builder, op->getLoc(), truePart, falsePart)
-          .getResult();
+  return arith::OrIOp::create(builder, op->getLoc(), truePart, falsePart)
+      .getResult();
+}
+
+static LogicalResult canonicalizeTileSelectWithRectangularMask(
+    Operation *op, OpBuilder &builder, Operation *maskDef) {
+  Value result = createRectangularMaskedSelectI32(
+      op, builder, maskDef, op->getOperand(1), op->getOperand(2),
+      op->getResult(0).getType());
+  if (!result) {
+    auto vectorType = llvm::dyn_cast<VectorType>(op->getResult(0).getType());
+    if (!vectorType || vectorType.getRank() != 1 ||
+        vectorType.getDimSize(0) != 16 ||
+        !vectorType.getElementType().isSignlessInteger(32)) {
+      return op->emitOpError(
+          "tile_select with rectangular predicates currently requires vector<16xi32> values");
+    }
+    return op->emitOpError(
+        "tile_select rectangular predicate requires shape = [4, 4] and row_major layout");
+  }
   op->getResult(0).replaceAllUsesWith(result);
   op->erase();
   return success();
@@ -3888,9 +3904,20 @@ static LogicalResult verifyContractionVectorInputsForCanonicalization(
   }
   if (!isVector16I1(op->getOperand(expectedOperands - 1).getType()))
     return op->emitOpError("tile contraction mask must be vector<16xi1>");
-  if (!isMaskAllValue(op->getOperand(expectedOperands - 1)))
+  Operation *maskDef = op->getOperand(expectedOperands - 1).getDefiningOp();
+  bool supportedMask =
+      hasName(maskDef, kVC4TileMaskAllOpName) ||
+      (expectedOperands == 4 &&
+       (hasName(maskDef, kVC4TileTileRectMaskOpName) ||
+        hasName(maskDef, kVC4TileTileBoundsMaskOpName)));
+  if (!supportedMask) {
+    if (expectedOperands == 3)
+      return op->emitOpError(
+          "tile_dot currently supports only vc4tile.mask_all masks in M5");
     return op->emitOpError(
-        "tile contractions currently support only vc4tile.mask_all masks in M5");
+        "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
+        "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
+  }
   auto kAttr = op->getAttrOfType<IntegerAttr>("k");
   if (!kAttr || kAttr.getInt() < 1 || kAttr.getInt() > 16)
     return op->emitOpError("tile contraction k must be in range [1, 16]");
@@ -4105,7 +4132,26 @@ static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
                                                     update, resultType);
   if (!accumulated)
     return op->emitOpError("unsupported tile contraction accumulation type");
-  op->getResult(0).replaceAllUsesWith(accumulated);
+
+  Value result = accumulated;
+  Value mask = op->getOperand(3);
+  Operation *maskDef = mask.getDefiningOp();
+  if (!hasName(maskDef, kVC4TileMaskAllOpName)) {
+    if (!hasName(maskDef, kVC4TileTileRectMaskOpName) &&
+        !hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+      return op->emitOpError(
+          "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
+          "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
+    }
+    result = createRectangularMaskedSelectI32(op, builder, maskDef, accumulated,
+                                              op->getOperand(2), resultType);
+    if (!result)
+      return op->emitOpError(
+          "tile_contract/tile_matmul rectangular output mask requires shape = "
+          "[4, 4], row_major layout, and vector<16xi32> values");
+  }
+
+  op->getResult(0).replaceAllUsesWith(result);
   op->erase();
   return success();
 }

@@ -588,6 +588,7 @@ class VC4Tile_TileContractionSurfaceOp<string mnemonic, string summaryText>
     OptionalAttr<VC4Tile_CopyStageAttr>:$copy_stage,
     OptionalAttr<VC4Tile_ReuseHintAttr>:$reuse_hint,
     OptionalAttr<VC4Tile_PackingAttr>:$packing,
+    OptionalAttr<I32Attr>:$active_k,
     OptionalAttr<StrAttr>:$algorithm_hint
   );
   let results = (outs AnyType:$result);
