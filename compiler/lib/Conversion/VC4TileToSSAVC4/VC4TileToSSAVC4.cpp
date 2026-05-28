@@ -198,6 +198,20 @@ static bool isVC4TileSurfaceOp(Operation *op) {
          hasName(op, kVC4TileTileMatmulOpName);
 }
 
+static bool isVC4TileSemanticPredicateAlgebraOp(Operation *op) {
+  return hasName(op, kVC4TileMaskAndOpName) ||
+         hasName(op, kVC4TileMaskOrOpName) ||
+         hasName(op, kVC4TileMaskNotOpName);
+}
+
+static bool isVC4TileSemanticPredicateOp(Operation *op) {
+  return hasName(op, kVC4TileMaskAllOpName) ||
+         hasName(op, kVC4TileTailMaskOpName) ||
+         hasName(op, kVC4TileTileRectMaskOpName) ||
+         hasName(op, kVC4TileTileBoundsMaskOpName) ||
+         isVC4TileSemanticPredicateAlgebraOp(op);
+}
+
 static LogicalResult emitSurfaceOpOrderingError(Operation *op,
                                                 StringRef beforePass) {
   return op->emitOpError()
@@ -2114,6 +2128,16 @@ enum class PredicateFragmentKind {
   scalarFragment
 };
 
+constexpr llvm::StringLiteral kDiagSparseFallbackDisabled(
+    "predicate normalization could not produce dense fragments and sparse "
+    "fallback is disabled");
+constexpr llvm::StringLiteral kDiagDynamic2DActiveLaneUnsupported(
+    "unsupported 2D dynamic active-lane predicate: VC4 dynamic active_lanes "
+    "are a one-row/tail fragment mechanism, not an arbitrary 2D block mask");
+constexpr llvm::StringLiteral kDiagDynamicVPMAlignmentUnsupported(
+    "predicate fragment planning would require dynamic VPM alignment; VC4Tile "
+    "must statically split VPM-aligned fragments or reject the path");
+
 static StringRef stringifyPredicateSemanticClass(
     PredicateSemanticClass semanticClass) {
   switch (semanticClass) {
@@ -2767,8 +2791,7 @@ static FailureOr<VC4TilePredicateModel> normalizePredicateModelForConsumer(
   if (model->density == PredicateDensity::sparseFallback &&
       sparseFallbackPolicy == PredicateSparseFallbackPolicy::disabled) {
     return consumer->emitOpError()
-           << "cannot normalize predicate algebra into dense fragments and "
-              "sparse fallback is disabled (predicate class "
+           << kDiagSparseFallbackDisabled << " (predicate class "
            << stringifyPredicateSemanticClass(model->semanticClass) << ")";
   }
 
@@ -2846,21 +2869,18 @@ static PredicateFragmentPlan planPredicateTransferFragments(
 
   if (descriptor.requiresDynamic2DBlockMasks) {
     return PredicateFragmentPlan::getUnsupported(
-        predicate, descriptor,
-        "dynamic 2D block masks are not a supported VC4 predicate mechanism");
+        predicate, descriptor, kDiagDynamic2DActiveLaneUnsupported);
   }
 
   if (descriptor.requiresDynamicVPMAlignment) {
     return PredicateFragmentPlan::getUnsupported(
-        predicate, descriptor,
-        "dynamic VPM alignment is not supported by predicate fragment planning");
+        predicate, descriptor, kDiagDynamicVPMAlignmentUnsupported);
   }
 
   if (predicate.density == PredicateDensity::sparseFallback) {
     if (!descriptor.sparseFallbackAllowed) {
       return PredicateFragmentPlan::getUnsupported(
-          predicate, descriptor,
-          "cannot normalize predicate algebra into dense fragments and sparse fallback is disabled");
+          predicate, descriptor, kDiagSparseFallbackDisabled);
     }
     return makePredicateFragmentPlan(
         predicate, descriptor, PredicateFragmentPlanClass::sparseFallback,
@@ -2970,7 +2990,11 @@ static LogicalResult emitUnsupportedPredicateModelForPath(
     return op->emitOpError()
            << path << " unsupported predicate fragment plan: " << plan.reason
            << " (predicate class "
-           << stringifyPredicateSemanticClass(model->semanticClass) << ")";
+           << stringifyPredicateSemanticClass(model->semanticClass)
+           << ", density = " << stringifyPredicateDensity(model->density)
+           << ", inactive_destination = "
+           << stringifyPredicateInactiveDestPolicy(model->inactivePolicy)
+           << ", dense fragment planning failed)";
   }
 
   InFlightDiagnostic diag = op->emitOpError();
@@ -5811,14 +5835,20 @@ static LogicalResult planRectangularRegisterGlobalTileStore(
     Operation *op, OpBuilder &builder, TileRectMaskInfo maskInfo) {
   if (!isStatic4x4RowMajorTile(op))
     return op->emitOpError(
-        "tile_rect_mask register->global stores currently require shape = [4, 4] and row_major layout");
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: tile_rect_mask store predicate requires inactive "
+        "destination preservation over a [4, 4] row_major tile; this path "
+        "would overwrite inactive elements for the requested layout");
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
     return failure();
   if (*laneStride != 1)
     return op->emitOpError(
-        "tile_rect_mask register->global stores require unit lane stride in M5");
+        "store predicate requires inactive destination preservation, but "
+        "register->global tile_rect_mask with non-unit lane stride would "
+        "overwrite inactive elements; predicate fragment planning requires "
+        "unit lane stride");
 
   Value tile = op->getOperand(0);
   Value base = op->getOperand(1);
@@ -5902,14 +5932,20 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
     Operation *op, OpBuilder &builder, TileBoundsMaskInfo maskInfo) {
   if (!isStatic4x4RowMajorTile(op))
     return op->emitOpError(
-        "tile_bounds_mask register->global stores currently require shape = [4, 4] and row_major layout");
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: tile_bounds_mask store predicate requires inactive "
+        "destination preservation over a [4, 4] row_major tile; this path "
+        "would overwrite inactive elements for the requested layout");
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
     return failure();
   if (*laneStride != 1)
     return op->emitOpError(
-        "tile_bounds_mask register->global stores require unit lane stride in M5");
+        "store predicate requires inactive destination preservation, but "
+        "register->global tile_bounds_mask with non-unit lane stride would "
+        "overwrite inactive elements; predicate fragment planning requires "
+        "unit lane stride");
 
   Value activeRows = maskInfo.activeRows;
   Value activeCols = maskInfo.activeCols;
@@ -5976,14 +6012,21 @@ static LogicalResult planBoundsAndTailRegisterGlobalTileStore(
     Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo) {
   if (!isStatic4x4RowMajorTile(op))
     return op->emitOpError(
-        "tile_bounds_mask AND tail_mask register->global stores currently require shape = [4, 4] and row_major layout");
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: tile_bounds_mask AND tail_mask store predicate requires "
+        "inactive destination preservation over a [4, 4] row_major tile; "
+        "this path would overwrite inactive elements for the requested "
+        "layout");
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
     return failure();
   if (*laneStride != 1)
     return op->emitOpError(
-        "tile_bounds_mask AND tail_mask register->global stores require unit lane stride in M5");
+        "store predicate requires inactive destination preservation, but "
+        "register->global tile_bounds_mask AND tail_mask with non-unit lane "
+        "stride would overwrite inactive elements; predicate fragment "
+        "planning requires unit lane stride");
 
   FailureOr<int64_t> rowPitchElements =
       getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/0);
@@ -6074,14 +6117,21 @@ static LogicalResult planTailOutsideBoundsRegisterGlobalTileStore(
     Operation *op, OpBuilder &builder, TailOutsideBoundsMaskInfo maskInfo) {
   if (!isStatic4x4RowMajorTile(op))
     return op->emitOpError(
-        "tail_mask AND mask_not(tile_bounds_mask) register->global stores currently require shape = [4, 4] and row_major layout");
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: tail_mask AND mask_not(tile_bounds_mask) store "
+        "predicate requires inactive destination preservation over a [4, 4] "
+        "row_major tile; this path would overwrite inactive elements for the "
+        "requested layout");
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
     return failure();
   if (*laneStride != 1)
     return op->emitOpError(
-        "tail_mask AND mask_not(tile_bounds_mask) register->global stores require unit lane stride in M5");
+        "store predicate requires inactive destination preservation, but "
+        "register->global tail_mask AND mask_not(tile_bounds_mask) with "
+        "non-unit lane stride would overwrite inactive elements; predicate "
+        "fragment planning requires unit lane stride");
   if (!isI32Scalar(maskInfo.bounds.activeRows) ||
       !isI32Scalar(maskInfo.bounds.activeCols) ||
       !isI32Scalar(maskInfo.tailBase) || !isI32Scalar(maskInfo.tailLimit))
@@ -6179,14 +6229,20 @@ static LogicalResult planComposedRegisterGlobalTileStore(Operation *op,
                                                          OpBuilder &builder) {
   if (!isStatic4x4RowMajorTile(op))
     return op->emitOpError(
-        "composed predicate register->global stores currently require shape = [4, 4] and row_major layout");
+        "unsupported layout + predicate combination for register->global "
+        "tile_store: composed store predicate requires inactive destination "
+        "preservation over a [4, 4] row_major tile; this path would "
+        "overwrite inactive elements for the requested layout");
 
   FailureOr<int64_t> laneStride = getTileLaneStride(op);
   if (failed(laneStride))
     return failure();
   if (*laneStride != 1)
     return op->emitOpError(
-        "composed predicate register->global stores require unit lane stride in M5");
+        "store predicate requires inactive destination preservation, but "
+        "register->global composed predicate with non-unit lane stride would "
+        "overwrite inactive elements; predicate fragment planning requires "
+        "unit lane stride");
 
   FailureOr<int64_t> rowPitchElements =
       getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/1);
@@ -6657,7 +6713,11 @@ static LogicalResult planRectangularGlobalSharedCopy(
     Operation *op, OpBuilder &builder, TileRectMaskInfo maskInfo) {
   if (!isRowMajorGlobalShared4x4Copy(op))
     return op->emitOpError(
-        "tile_rect_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+        "unsupported layout + predicate combination for global->shared_vpm "
+        "copy_tile: tile_rect_mask load predicate requires inactive "
+        "zero-fill over a [4, 4] row_major source and row-major VPM "
+        "destination; this path cannot provide zero_fill for the requested "
+        "layout");
 
   Value base = op->getOperand(0);
   Value shared = op->getOperand(1);
@@ -6710,7 +6770,11 @@ static LogicalResult planDynamicBoundsGlobalSharedCopy(
     Operation *op, OpBuilder &builder, TileBoundsMaskInfo maskInfo) {
   if (!isRowMajorGlobalShared4x4Copy(op))
     return op->emitOpError(
-        "tile_bounds_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+        "unsupported layout + predicate combination for global->shared_vpm "
+        "copy_tile: tile_bounds_mask load predicate requires inactive "
+        "zero-fill over a [4, 4] row_major source and row-major VPM "
+        "destination; this path cannot provide zero_fill for the requested "
+        "layout");
 
   Value base = op->getOperand(0);
   Value shared = op->getOperand(1);
@@ -6777,7 +6841,11 @@ static LogicalResult planBoundsAndTailGlobalSharedCopy(
     Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo) {
   if (!isRowMajorGlobalShared4x4Copy(op))
     return op->emitOpError(
-        "tile_bounds_mask AND tail_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+        "unsupported layout + predicate combination for global->shared_vpm "
+        "copy_tile: tile_bounds_mask AND tail_mask load predicate requires "
+        "inactive zero-fill over a [4, 4] row_major source and row-major VPM "
+        "destination; this path cannot provide zero_fill for the requested "
+        "layout");
 
   Value base = op->getOperand(0);
   Value shared = op->getOperand(1);
@@ -6985,7 +7053,10 @@ static LogicalResult planRectangularSharedGlobal4x4Store(
     TileRectMaskInfo maskInfo) {
   if (!isRowMajorSharedGlobal4x4Store(op, layout))
     return op->emitOpError(
-        "tile_rect_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+        "unsupported layout + predicate combination for shared_vpm->global "
+        "copy_tile: tile_rect_mask store predicate requires inactive global "
+        "destination preservation over a [4, 4] row-major VPM source; this "
+        "path would overwrite inactive elements for the requested layout");
 
   FailureOr<int64_t> rowPitchElements =
       getSharedGlobalStoreRowPitchElements(op, maskInfo.activeCols);
@@ -7021,7 +7092,10 @@ static LogicalResult planDynamicBoundsSharedGlobal4x4Store(
     TileBoundsMaskInfo maskInfo) {
   if (!isRowMajorSharedGlobal4x4Store(op, layout))
     return op->emitOpError(
-        "tile_bounds_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+        "unsupported layout + predicate combination for shared_vpm->global "
+        "copy_tile: tile_bounds_mask store predicate requires inactive global "
+        "destination preservation over a [4, 4] row-major VPM source; this "
+        "path would overwrite inactive elements for the requested layout");
   if (!isI32Scalar(maskInfo.activeRows) || !isI32Scalar(maskInfo.activeCols))
     return op->emitOpError(
         "tile_bounds_mask shared_vpm->global stores require i32 active_rows and active_cols");
@@ -7067,7 +7141,11 @@ static LogicalResult planBoundsAndTailSharedGlobal4x4Store(
     BoundsAndTailMaskInfo maskInfo) {
   if (!isRowMajorSharedGlobal4x4Store(op, layout))
     return op->emitOpError(
-        "tile_bounds_mask AND tail_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+        "unsupported layout + predicate combination for shared_vpm->global "
+        "copy_tile: tile_bounds_mask AND tail_mask store predicate requires "
+        "inactive global destination preservation over a [4, 4] row-major VPM "
+        "source; this path would overwrite inactive elements for the "
+        "requested layout");
 
   FailureOr<int64_t> rowPitchElements =
       getSharedGlobalStoreRowPitchElements(op, /*activeCols=*/0);
@@ -7151,7 +7229,9 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
     staticRowBase = getI32ConstantValueForPlan(rowBase);
     if (!staticRowBase)
       return op->emitOpError(
-          "column-major shared_vpm->global copy requires a static shared row in M5 VDW lowering");
+          "predicate fragment planning would require dynamic VPM alignment "
+          "for column-major shared_vpm->global copy_tile; VC4Tile must "
+          "statically split VPM-aligned fragments or reject the path");
   }
   Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
   if (isMaskAllForPlan(mask)) {
@@ -7335,6 +7415,23 @@ static LogicalResult planOneVC4TileSurfaceOp(Operation *op) {
   return op->emitOpError("unrecognized VC4Tile surface operation");
 }
 
+static void eraseUnusedSemanticPredicateOps(ModuleOp module) {
+  bool changed = true;
+  while (changed) {
+    changed = false;
+    SmallVector<Operation *, 16> deadPredicates;
+    module.walk([&](Operation *op) {
+      if (op != module.getOperation() && isVC4TileSemanticPredicateOp(op) &&
+          op->use_empty())
+        deadPredicates.push_back(op);
+    });
+    for (Operation *op : llvm::reverse(deadPredicates)) {
+      op->erase();
+      changed = true;
+    }
+  }
+}
+
 struct PlanVC4TileCopiesPass
     : public PassWrapper<PlanVC4TileCopiesPass, OperationPass<ModuleOp>> {
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(PlanVC4TileCopiesPass)
@@ -7373,6 +7470,7 @@ struct PlanVC4TileCopiesPass
         return;
       }
     }
+    eraseUnusedSemanticPredicateOps(module);
   }
 };
 

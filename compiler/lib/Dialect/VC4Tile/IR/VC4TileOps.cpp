@@ -131,9 +131,10 @@ static LogicalResult verifyM532BitTypeAttr(Operation *op, StringRef name,
            << "M5 supports only 32-bit executable tile storage; got "
            << "storage_type = " << type;
   }
-  return op->emitOpError() << "M5 supports only 32-bit executable tile "
-                           << diagnosticRole << "; got " << name << " = "
-                           << type;
+  return op->emitOpError()
+         << "M5 supports only 32-bit executable tile " << diagnosticRole
+         << "; sub-32 predicated executable paths are rejected by M5 policy; "
+         << "got " << name << " = " << type;
 }
 
 static LogicalResult verifyTileDescriptorLayout(Operation *op,
@@ -711,6 +712,131 @@ static bool isMaskNotOp(Value value) {
   return def && def->getName().getStringRef() == "vc4tile.mask_not";
 }
 
+static bool isOneRowPredicateConsumerShape(ArrayRef<int64_t> shape) {
+  return shape.size() == 1 || (shape.size() == 2 && shape[0] == 1);
+}
+
+static LogicalResult collectPredicateMaskShape(Operation *consumer,
+                                               Operation *maskDef,
+                                               SmallVectorImpl<int64_t> &shape) {
+  auto shapeAttr = maskDef->getAttrOfType<ArrayAttr>("shape");
+  if (!shapeAttr)
+    return consumer->emitOpError()
+           << "semantic predicate/view association requires "
+           << maskDef->getName().getStringRef() << " to carry a shape";
+  return collectPositiveI64Array(consumer, shapeAttr,
+                                 "semantic predicate shape", shape);
+}
+
+static LogicalResult verifyPredicateMaskShapeMatchesConsumer(
+    Operation *consumer, Operation *maskDef, ArrayRef<int64_t> consumerShape) {
+  SmallVector<int64_t, 4> maskShape;
+  if (failed(collectPredicateMaskShape(consumer, maskDef, maskShape)))
+    return failure();
+  if (maskShape.size() != consumerShape.size()) {
+    return consumer->emitOpError()
+           << "semantic predicate rank mismatch: predicate rank "
+           << maskShape.size() << " does not match consumer rank "
+           << consumerShape.size();
+  }
+  if (!llvm::equal(maskShape, consumerShape)) {
+    auto formatShape = [](ArrayRef<int64_t> shape) {
+      std::string result;
+      llvm::raw_string_ostream os(result);
+      os << "[";
+      llvm::interleaveComma(shape, os);
+      os << "]";
+      return result;
+    };
+    return consumer->emitOpError()
+           << "semantic predicate shape mismatch: predicate shape "
+           << formatShape(maskShape) << " does not match consumer shape "
+           << formatShape(consumerShape);
+  }
+  return success();
+}
+
+static LogicalResult verifyPredicateMaskLayoutMatchesConsumer(
+    Operation *consumer, Operation *maskDef, StringRef consumerLayoutAttr) {
+  auto maskLayout = maskDef->getAttrOfType<LayoutAttr>("layout");
+  if (!maskLayout)
+    return consumer->emitOpError()
+           << "semantic predicate/view association requires "
+           << maskDef->getName().getStringRef() << " to carry a layout";
+  auto consumerLayout = consumer->getAttrOfType<LayoutAttr>(consumerLayoutAttr);
+  if (!consumerLayout)
+    return consumer->emitOpError()
+           << "semantic predicate/view association requires "
+           << consumerLayoutAttr << " on the consuming operation";
+  if (maskLayout.getValue() != consumerLayout.getValue()) {
+    return consumer->emitOpError()
+           << "unsupported layout + predicate combination: semantic "
+              "predicate layout mismatch; predicate layout "
+           << maskLayout << " does not match consumer " << consumerLayoutAttr
+           << " " << consumerLayout;
+  }
+  return success();
+}
+
+static LogicalResult verifySemanticPredicateForConsumer(
+    Operation *consumer, Value mask, ArrayRef<int64_t> consumerShape,
+    StringRef consumerLayoutAttr, bool nested = false) {
+  Operation *maskDef = mask.getDefiningOp();
+  if (!maskDef)
+    return consumer->emitOpError(
+        "semantic predicate must be defined by a vc4tile predicate operation");
+
+  if (isMaskAllOp(mask))
+    return success();
+
+  if (isTailMaskOp(mask)) {
+    if (!nested && !isOneRowPredicateConsumerShape(consumerShape)) {
+      return consumer->emitOpError()
+             << "semantic predicate rank mismatch: vc4tile.tail_mask is a "
+                "1D tail interval and requires a rank-1 or one-row consumer "
+                "shape when used directly";
+    }
+    return success();
+  }
+
+  if (isTileRectMaskOp(mask) || isTileBoundsMaskOp(mask)) {
+    if (failed(verifyPredicateMaskShapeMatchesConsumer(
+            consumer, maskDef, consumerShape)) ||
+        failed(verifyPredicateMaskLayoutMatchesConsumer(
+            consumer, maskDef, consumerLayoutAttr)))
+      return failure();
+    return success();
+  }
+
+  if ((isMaskAndOp(mask) || isMaskOrOp(mask)) && maskDef->getNumOperands() == 2) {
+    if (failed(verifySemanticPredicateForConsumer(
+            consumer, maskDef->getOperand(0), consumerShape,
+            consumerLayoutAttr, /*nested=*/true)) ||
+        failed(verifySemanticPredicateForConsumer(
+            consumer, maskDef->getOperand(1), consumerShape,
+            consumerLayoutAttr, /*nested=*/true)))
+      return failure();
+    return success();
+  }
+
+  if (isMaskNotOp(mask) && maskDef->getNumOperands() == 1)
+    return verifySemanticPredicateForConsumer(
+        consumer, maskDef->getOperand(0), consumerShape, consumerLayoutAttr,
+        /*nested=*/true);
+
+  return consumer->emitOpError()
+         << "unsupported semantic predicate producer "
+         << maskDef->getName().getStringRef();
+}
+
+static LogicalResult verifyTileMemoryPredicateAssociation(
+    Operation *op, Value mask, StringRef layoutAttrName) {
+  SmallVector<int64_t, 4> shape;
+  if (failed(verifyTileSurfaceShape(op, shape)))
+    return failure();
+  return verifySemanticPredicateForConsumer(op, mask, shape, layoutAttrName);
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -759,6 +885,28 @@ static LogicalResult verifyCopyTileBoundaryPolicy(Operation *op) {
         "boundary policy zero/clamp/reject is not implemented in M5");
   }
   return success();
+}
+
+static Value getCopyTileMaskOperand(Operation *op) {
+  for (Value operand : op->getOperands()) {
+    if (isVC4TileVector16I1Type(operand.getType()))
+      return operand;
+  }
+  return Value();
+}
+
+static StringRef getCopyTilePredicateLayoutAttr(Operation *op) {
+  auto srcSpace = op->getAttrOfType<MemorySpaceAttr>("src_space");
+  auto dstSpace = op->getAttrOfType<MemorySpaceAttr>("dst_space");
+  if (srcSpace && srcSpace.getValue() == MemorySpace::global)
+    return "src_layout";
+  if (dstSpace && dstSpace.getValue() == MemorySpace::global)
+    return "dst_layout";
+  if (dstSpace && dstSpace.getValue() == MemorySpace::shared_vpm)
+    return "src_layout";
+  if (srcSpace && srcSpace.getValue() == MemorySpace::shared_vpm)
+    return "dst_layout";
+  return "src_layout";
 }
 
 static DictionaryAttr getResourceIntent(Operation *op) {
@@ -1410,6 +1558,7 @@ LogicalResult TileLoadOp::verify() {
       failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
+      failed(verifyTileMemoryPredicateAssociation(op, getMask(), "layout")) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
@@ -1433,6 +1582,7 @@ LogicalResult TileStoreOp::verify() {
       failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
+      failed(verifyTileMemoryPredicateAssociation(op, getMask(), "layout")) ||
       failed(verifyTileMovementLayout(op, "layout")))
     return failure();
   if (op->getAttr("lane_stride") || op->getAttr("stride"))
@@ -1471,6 +1621,11 @@ LogicalResult CopyTileOp::verify() {
   }
   if (failed(verifyCopyTileBoundaryPolicy(op)))
     return failure();
+  if (Value mask = getCopyTileMaskOperand(op)) {
+    if (failed(verifyTileMemoryPredicateAssociation(
+            op, mask, getCopyTilePredicateLayoutAttr(op))))
+      return failure();
+  }
   return success();
 }
 
@@ -1812,6 +1967,11 @@ LogicalResult SharedStoreGlobalOp::verify() {
   int64_t nrows = getNrowsAttr().getInt();
   if (nrows < 1 || nrows > 16)
     return emitOpError("nrows must be in range [1, 16]");
+  if (!isMaskAllOp(getMask()) && nrows != 1)
+    return emitOpError(
+        "unsupported 2D dynamic active-lane predicate: predicated "
+        "shared_store_global is hardware-legal only for one-row fragments; "
+        "multi-row stores require a full mask or planner-split row fragments");
   int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
   if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
     return emitOpError("memory_pitch_bytes must be a positive multiple of 4");

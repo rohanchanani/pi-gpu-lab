@@ -351,7 +351,7 @@ vc4tile.kernel @predicate_algebra_sparse_disabled(%in : i32, %n : i32) attribute
   %shared = "vc4tile.shared_tile_alloc"() {rows = 4 : i32, elem_bytes = 4 : i32, shape = [4, 16], element_type = i32, storage_type = i32, layout = #vc4tile.layout<vpm_row>, role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>} : () -> !vc4tile.shared_tile
   %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   %mask = vc4tile.mask_not %tail : vector<16xi1> -> vector<16xi1>
-  // expected-error@+1 {{unsupported predicate fragment plan: cannot normalize predicate algebra into dense fragments and sparse fallback is disabled}}
+  // expected-error@+1 {{unsupported predicate fragment plan: predicate normalization could not produce dense fragments and sparse fallback is disabled}}
   "vc4tile.copy_tile"(%in, %shared, %zero, %mask) {shape = [4, 4], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>, src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 16 : i32} : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   vc4tile.return
 }

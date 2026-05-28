@@ -23,7 +23,7 @@ vc4tile.kernel @predicate_model_tail_interval(%in : i32, %n : i32) attributes {
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
   %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  // expected-error@+1 {{planned_fragment_class = row_fragment}}
+  // expected-error@+1 {{semantic predicate rank mismatch: vc4tile.tail_mask is a 1D tail interval}}
   "vc4tile.copy_tile"(%in, %shared, %zero, %mask) {
     shape = [4, 4], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>,
     src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>,

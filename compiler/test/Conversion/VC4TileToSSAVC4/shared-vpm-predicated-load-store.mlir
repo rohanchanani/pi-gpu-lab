@@ -20,25 +20,25 @@ vc4tile.kernel @shared_vpm_bounds_predicated_load_store(%out : i32, %rows : i32,
   uses_shared_vpm = true,
   uses_barrier = false,
   semaphores_per_block = 0 : i32,
-  vpm_rows_per_block = 1 : i32,
-  vpm_bytes_per_block = 64 : i32
+  vpm_rows_per_block = 4 : i32,
+  vpm_bytes_per_block = 256 : i32
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
   %shared = "vc4tile.shared_tile_alloc"() {
-    rows = 1 : i32, elem_bytes = 4 : i32, shape = [1, 16],
+    rows = 4 : i32, elem_bytes = 4 : i32, shape = [4, 16],
     element_type = i32, storage_type = i32, layout = #vc4tile.layout<vpm_row>,
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
   %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
   "vc4tile.copy_tile"(%values, %shared, %zero, %mask) {
-    shape = [1, 16], src_space = #vc4tile.memory_space<register>, dst_space = #vc4tile.memory_space<shared_vpm>,
+    shape = [4, 4], src_space = #vc4tile.memory_space<register>, dst_space = #vc4tile.memory_space<shared_vpm>,
     src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32
   } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   %loaded = "vc4tile.copy_tile"(%shared, %zero, %mask) {
-    shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>,
+    shape = [4, 4], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>,
     src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32
   } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
@@ -66,25 +66,25 @@ vc4tile.kernel @shared_vpm_rect_predicated_load_store(%out : i32) attributes {
   uses_shared_vpm = true,
   uses_barrier = false,
   semaphores_per_block = 0 : i32,
-  vpm_rows_per_block = 1 : i32,
-  vpm_bytes_per_block = 64 : i32
+  vpm_rows_per_block = 4 : i32,
+  vpm_bytes_per_block = 256 : i32
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
   %shared = "vc4tile.shared_tile_alloc"() {
-    rows = 1 : i32, elem_bytes = 4 : i32, shape = [1, 16],
+    rows = 4 : i32, elem_bytes = 4 : i32, shape = [4, 16],
     element_type = i32, storage_type = i32, layout = #vc4tile.layout<vpm_row>,
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
   %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
   "vc4tile.copy_tile"(%values, %shared, %zero, %mask) {
-    shape = [1, 16], src_space = #vc4tile.memory_space<register>, dst_space = #vc4tile.memory_space<shared_vpm>,
+    shape = [4, 4], src_space = #vc4tile.memory_space<register>, dst_space = #vc4tile.memory_space<shared_vpm>,
     src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32
   } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
   %loaded = "vc4tile.copy_tile"(%shared, %zero, %mask) {
-    shape = [1, 16], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>,
+    shape = [4, 4], src_space = #vc4tile.memory_space<shared_vpm>, dst_space = #vc4tile.memory_space<register>,
     src_layout = #vc4tile.layout<vpm_row>, dst_layout = #vc4tile.layout<row_major>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, elem_bytes = 4 : i32
   } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>

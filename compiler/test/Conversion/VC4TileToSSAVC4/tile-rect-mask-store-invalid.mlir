@@ -1,6 +1,6 @@
 // RUN: not vc4-opt %s --canonicalize-vc4tile-surface --plan-vc4tile-copies -o /dev/null 2>&1 | FileCheck %s
 
-// CHECK: tile_rect_mask register->global stores currently require shape = [4, 4] and row_major layout
+// CHECK: semantic predicate shape mismatch: predicate shape [4, 4] does not match consumer shape [1, 16]
 vc4tile.kernel @tile_rect_mask_store_invalid_shape(%out : i32) attributes {
   public_name = "tile_rect_mask_store_invalid_shape",
   arg_attrs = [
