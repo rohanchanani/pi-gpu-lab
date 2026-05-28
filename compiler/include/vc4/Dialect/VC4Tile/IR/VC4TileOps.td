@@ -99,30 +99,30 @@ def VC4Tile_ThreadIdOp : VC4Tile_PureOp<"thread_id"> {
 }
 
 def VC4Tile_MaskAllOp : VC4Tile_PureOp<"mask_all"> {
-  let summary = "all-lanes-active mask";
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let summary = "full logical-coordinate predicate";
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
 
 def VC4Tile_TailMaskOp : VC4Tile_PureOp<"tail_mask"> {
-  let summary = "contiguous active-lane mask for a base/limit range";
+  let summary = "contiguous 1D logical-coordinate predicate for a base/limit range";
   let arguments = (ins AnyType:$base, AnyType:$limit);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "$base `,` $limit attr-dict `:` type($base) `,` type($limit) `->` type($result)";
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "$base `,` $limit attr-dict `:` type($base) `,` type($limit)";
   let hasVerifier = 1;
 }
 
 def VC4Tile_TileRectMaskOp : VC4Tile_PureOp<"tile_rect_mask"> {
-  let summary = "static rectangular active-lane mask for a 4x4 tile";
+  let summary = "static rectangular logical-coordinate predicate for a 4x4 tile";
   let arguments = (ins
     I32Attr:$active_rows,
     I32Attr:$active_cols,
     ArrayAttr:$shape,
     VC4Tile_LayoutAttr:$layout
   );
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "attr-dict `:` type($result)";
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
 
@@ -140,8 +140,8 @@ def VC4Tile_TileBoundsMaskOp : VC4Tile_PureOp<"tile_bounds_mask"> {
     ArrayAttr:$shape,
     VC4Tile_LayoutAttr:$layout
   );
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "$active_rows `,` $active_cols attr-dict `:` type($active_rows) `,` type($active_cols) `->` type($result)";
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "$active_rows `,` $active_cols attr-dict `:` type($active_rows) `,` type($active_cols)";
   let hasVerifier = 1;
 }
 
@@ -152,9 +152,9 @@ def VC4Tile_MaskAndOp : VC4Tile_PureOp<"mask_and"> {
     it combines logical masks at the VC4Tile layer and lowers into concrete
     active-lane values only at its final memory or compute consumer.
   }];
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let arguments = (ins VC4Tile_PredicateType:$lhs, VC4Tile_PredicateType:$rhs);
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
   let hasVerifier = 1;
 }
 
@@ -165,9 +165,9 @@ def VC4Tile_MaskOrOp : VC4Tile_PureOp<"mask_or"> {
     it combines logical masks at the VC4Tile layer and lowers into concrete
     active-lane values only at its final memory or compute consumer.
   }];
-  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
-  let results = (outs AnyType:$result);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let arguments = (ins VC4Tile_PredicateType:$lhs, VC4Tile_PredicateType:$rhs);
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict";
   let hasVerifier = 1;
 }
 
@@ -175,9 +175,74 @@ def VC4Tile_MaskNotOp : VC4Tile_PureOp<"mask_not"> {
   let summary = "logical complement of a tile predicate";
   let description = [{
     CuTe-style predicate composition.  This op is a semantic tile predicate:
-    it complements a mask over the fixed 16-lane tile domain and lowers into
-    concrete active-lane values only at its final memory or compute consumer.
+    it complements a predicate over the logical tile domain and lowers into
+    concrete lane-mask carriers only at its final memory or compute consumer.
   }];
+  let arguments = (ins VC4Tile_PredicateType:$input);
+  let results = (outs VC4Tile_PredicateType:$result);
+  let assemblyFormat = "$input attr-dict";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreMaskAllOp : VC4Tile_PureOp<"core_mask_all"> {
+  let summary = "lowering-ready all-lane concrete mask carrier";
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreTailMaskOp : VC4Tile_PureOp<"core_tail_mask"> {
+  let summary = "lowering-ready contiguous one-row concrete lane mask carrier";
+  let arguments = (ins AnyType:$base, AnyType:$limit);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$base `,` $limit attr-dict `:` type($base) `,` type($limit) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreTileRectMaskOp : VC4Tile_PureOp<"core_tile_rect_mask"> {
+  let summary = "lowering-ready static rectangular concrete lane mask carrier";
+  let arguments = (ins
+    I32Attr:$active_rows,
+    I32Attr:$active_cols,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreTileBoundsMaskOp : VC4Tile_PureOp<"core_tile_bounds_mask"> {
+  let summary = "lowering-ready dynamic rectangular concrete lane mask carrier";
+  let arguments = (ins
+    AnyType:$active_rows,
+    AnyType:$active_cols,
+    ArrayAttr:$shape,
+    VC4Tile_LayoutAttr:$layout
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$active_rows `,` $active_cols attr-dict `:` type($active_rows) `,` type($active_cols) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreMaskAndOp : VC4Tile_PureOp<"core_mask_and"> {
+  let summary = "lowering-ready concrete lane-mask conjunction";
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreMaskOrOp : VC4Tile_PureOp<"core_mask_or"> {
+  let summary = "lowering-ready concrete lane-mask disjunction";
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_CoreMaskNotOp : VC4Tile_PureOp<"core_mask_not"> {
+  let summary = "lowering-ready concrete lane-mask complement";
   let arguments = (ins AnyType:$input);
   let results = (outs AnyType:$result);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";

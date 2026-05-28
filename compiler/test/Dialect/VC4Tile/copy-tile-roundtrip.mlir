@@ -14,7 +14,7 @@ vc4tile.kernel @copy_tile_roundtrip(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   // CHECK: vc4tile.shared_tile_alloc
   %shared = "vc4tile.shared_tile_alloc"() {
     rows = 1 : i32,
@@ -40,7 +40,7 @@ vc4tile.kernel @copy_tile_roundtrip(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   // CHECK: vc4tile.copy_tile
   %loaded = "vc4tile.copy_tile"(%shared, %zero, %mask) {
     shape = [1, 16],
@@ -53,6 +53,6 @@ vc4tile.kernel @copy_tile_roundtrip(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
+  } : (!vc4tile.shared_tile, i32, !vc4tile.predicate) -> vector<16xi32>
   vc4tile.return
 }

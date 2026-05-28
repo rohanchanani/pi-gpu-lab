@@ -3,7 +3,7 @@
 // CHECK-LABEL: vc4tile.kernel @plan_copy_1d_tail
 // CHECK-NOT: vc4tile.tile_load
 // CHECK-NOT: vc4tile.tile_store
-// CHECK: vc4tile.tail_mask
+// CHECK: vc4tile.core_tail_mask
 // CHECK: vc4tile.masked_load_global
 // CHECK: vc4tile.masked_store_global
 vc4tile.kernel @plan_copy_1d_tail(%out : i32, %in : i32, %n : i32) attributes {
@@ -22,7 +22,7 @@ vc4tile.kernel @plan_copy_1d_tail(%out : i32, %in : i32, %n : i32) attributes {
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
     src_layout = #vc4tile.layout<row_major>,
@@ -32,7 +32,7 @@ vc4tile.kernel @plan_copy_1d_tail(%out : i32, %in : i32, %n : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -42,6 +42,6 @@ vc4tile.kernel @plan_copy_1d_tail(%out : i32, %in : i32, %n : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

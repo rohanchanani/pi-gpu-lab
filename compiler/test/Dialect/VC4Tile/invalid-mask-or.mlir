@@ -1,6 +1,6 @@
 // RUN: not vc4-opt %s -o - 2>&1 | FileCheck %s
 
-// CHECK: rhs type must be vector<16xi1>
+// CHECK: expects different type
 vc4tile.kernel @invalid_mask_or attributes {
   public_name = "invalid_mask_or",
   arg_attrs = [],
@@ -13,7 +13,7 @@ vc4tile.kernel @invalid_mask_or attributes {
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %all = vc4tile.mask_all : vector<16xi1>
+  %all = vc4tile.mask_all
   %bad = vc4tile.mask_or %all, %zero : vector<16xi1>, i32 -> vector<16xi1>
   vc4tile.return
 }

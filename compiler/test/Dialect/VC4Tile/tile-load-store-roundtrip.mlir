@@ -17,7 +17,7 @@ vc4tile.kernel @tile_load_store_roundtrip(%out : i32, %in : i32, %n : i32) attri
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
   // CHECK: vc4tile.tile_load
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
@@ -28,7 +28,7 @@ vc4tile.kernel @tile_load_store_roundtrip(%out : i32, %in : i32, %n : i32) attri
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
   // CHECK: vc4tile.tile_store
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
@@ -39,6 +39,6 @@ vc4tile.kernel @tile_load_store_roundtrip(%out : i32, %in : i32, %n : i32) attri
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

@@ -44,7 +44,7 @@ vc4tile.kernel @cooperative_block_resources_vc4tile attributes {
   %base = arith.addi %tmp_base, %warp_bytes : i32
   %block_vec = vector.broadcast %block_scaled : i32 to vector<16xi32>
   %value = arith.addi %block_vec, %thread : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   vc4tile.masked_store_global %base, %lanes, %value, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

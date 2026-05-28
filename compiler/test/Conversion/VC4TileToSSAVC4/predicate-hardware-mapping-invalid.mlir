@@ -16,8 +16,8 @@ vc4tile.kernel @predicate_hardware_mapping_reject_sparse_store(%out : i32, %n : 
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %not_tail = vc4tile.mask_not %tail : vector<16xi1> -> vector<16xi1>
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
+  %not_tail = vc4tile.mask_not %tail
   // expected-error@+1 {{register->global tile_store unsupported predicate fragment plan: predicate normalization could not produce dense fragments and sparse fallback is disabled}}
   "vc4tile.tile_store"(%values, %out, %zero, %not_tail) {
     shape = [1, 16],
@@ -27,7 +27,7 @@ vc4tile.kernel @predicate_hardware_mapping_reject_sparse_store(%out : i32, %n : 
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<exact>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -56,8 +56,8 @@ vc4tile.kernel @predicate_hardware_mapping_reject_dynamic_2d(%in : i32, %rows : 
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %not_bounds = vc4tile.mask_not %bounds
   // expected-error@+1 {{global->shared_vpm copy_tile unsupported predicate fragment plan: predicate normalization could not produce dense fragments and sparse fallback is disabled}}
   "vc4tile.copy_tile"(%in, %shared, %zero, %not_bounds) {
     shape = [4, 4],
@@ -70,7 +70,7 @@ vc4tile.kernel @predicate_hardware_mapping_reject_dynamic_2d(%in : i32, %rows : 
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (i32, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -99,8 +99,8 @@ vc4tile.kernel @predicate_hardware_mapping_reject_register_shared_sparse(%rows :
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %not_bounds = vc4tile.mask_not %bounds
   // expected-error@+1 {{register->shared_vpm copy_tile unsupported predicate fragment plan: predicate normalization could not produce dense fragments and sparse fallback is disabled}}
   "vc4tile.copy_tile"(%values, %shared, %zero, %not_bounds) {
     shape = [4, 4],
@@ -112,7 +112,7 @@ vc4tile.kernel @predicate_hardware_mapping_reject_register_shared_sparse(%rows :
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -141,8 +141,8 @@ vc4tile.kernel @predicate_hardware_mapping_reject_shared_register_sparse(%out : 
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %not_bounds = vc4tile.mask_not %bounds
   // expected-error@+1 {{shared_vpm->register copy_tile unsupported predicate fragment plan: predicate normalization could not produce dense fragments and sparse fallback is disabled}}
   %loaded = "vc4tile.copy_tile"(%shared, %zero, %not_bounds) {
     shape = [4, 4],
@@ -154,8 +154,8 @@ vc4tile.kernel @predicate_hardware_mapping_reject_shared_register_sparse(%out : 
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
-  %all = vc4tile.mask_all : vector<16xi1>
+  } : (!vc4tile.shared_tile, i32, !vc4tile.predicate) -> vector<16xi32>
+  %all = vc4tile.mask_all
   "vc4tile.tile_store"(%loaded, %out, %zero, %all) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -163,6 +163,6 @@ vc4tile.kernel @predicate_hardware_mapping_reject_shared_register_sparse(%out : 
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

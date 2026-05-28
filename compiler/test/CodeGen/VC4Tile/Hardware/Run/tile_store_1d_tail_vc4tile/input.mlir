@@ -19,7 +19,7 @@ vc4tile.kernel @tile_store_1d_tail_vc4tile(%out : i32, %n : i32) attributes {
   %lanes = vc4tile.lane_range : vector<16xi32>
   %bias = vector.broadcast %c97 : i32 to vector<16xi32>
   %values = arith.addi %lanes, %bias : vector<16xi32>
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
   "vc4tile.tile_store"(%values, %out, %zero, %mask) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -29,6 +29,6 @@ vc4tile.kernel @tile_store_1d_tail_vc4tile(%out : i32, %n : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

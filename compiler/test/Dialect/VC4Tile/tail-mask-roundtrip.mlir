@@ -15,8 +15,8 @@ vc4tile.kernel @tail_mask_roundtrip attributes {
   %base = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
   // CHECK: vc4tile.tail_mask
-  %tail = vc4tile.tail_mask %base, %limit : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %base, %limit : i32, i32
   // CHECK: vc4tile.mask_all
-  %all = vc4tile.mask_all : vector<16xi1>
+  %all = vc4tile.mask_all
   vc4tile.return
 }

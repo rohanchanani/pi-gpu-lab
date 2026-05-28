@@ -24,7 +24,7 @@ vc4tile.kernel @tile_rect_mask_store_lowering(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
+  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>}
   "vc4tile.tile_store"(%values, %out, %zero, %mask) {
     shape = [4, 4], dst_layout = #vc4tile.layout<row_major>,
     memory_space = #vc4tile.memory_space<global>,
@@ -32,6 +32,6 @@ vc4tile.kernel @tile_rect_mask_store_lowering(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<exact>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

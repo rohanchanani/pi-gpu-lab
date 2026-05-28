@@ -18,11 +18,11 @@ vc4tile.kernel @tile_load_composed_mask_vc4tile(%out : i32, %in : i32, %rows : i
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %composed = vc4tile.mask_and %bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  %tile = "vc4tile.tile_load"(%in, %zero, %composed) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<input>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
-  %all = vc4tile.mask_all : vector<16xi1>
-  "vc4tile.tile_store"(%tile, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
+  %composed = vc4tile.mask_and %bounds, %tail
+  %tile = "vc4tile.tile_load"(%in, %zero, %composed) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<input>} : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
+  %all = vc4tile.mask_all
+  "vc4tile.tile_store"(%tile, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

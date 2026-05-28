@@ -46,7 +46,7 @@ vc4tile.kernel @scf_for_big_vector_loop_vc4tile attributes {
     scf.yield %twice : vector<16xi32>
   }
 
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   vc4tile.masked_store_global %base, %lanes, %value, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

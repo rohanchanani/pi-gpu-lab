@@ -1,6 +1,6 @@
 // RUN: not vc4-opt %s -o - 2>&1 | FileCheck %s
 
-// CHECK: lhs type must be vector<16xi1>
+// CHECK: expects different type
 vc4tile.kernel @invalid_mask_and attributes {
   public_name = "invalid_mask_and",
   arg_attrs = [],

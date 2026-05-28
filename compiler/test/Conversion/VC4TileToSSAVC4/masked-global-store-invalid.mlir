@@ -6,7 +6,7 @@ vc4tile.kernel @masked_global_store_scatter attributes {
   %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %offsets = arith.addi %lanes, %lanes : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   // CHECK: requires offsets to be the direct vc4tile.lane_range value for the M4 coalesced VDW subset
   vc4tile.masked_store_global %base, %offsets, %lanes, %mask {
     elem_bytes = 4 : i32,

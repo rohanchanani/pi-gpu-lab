@@ -11,7 +11,7 @@ vc4tile.kernel @block_args_tail_loop attributes {public_name = "block_args_tail_
   %limit = arith.constant 16 : i32
   cf.br ^loop(%zero : i32)
 ^loop(%base: i32):
-  %mask = vc4tile.tail_mask %base, %limit : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %base, %limit : i32, i32 -> vector<16xi1>
   %step = arith.constant 16 : i32
   %next = arith.addi %base, %step : i32
   %done = arith.cmpi ult, %base, %limit : i32

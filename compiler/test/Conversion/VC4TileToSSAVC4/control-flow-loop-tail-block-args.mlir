@@ -22,7 +22,7 @@ vc4tile.kernel @control_flow_loop_tail_block_args attributes {
       ^loop(%next, %carried_base : i32, i32),
       ^merge(%carried_base, %zero, %limit : i32, i32, i32)
 ^merge(%mbase: i32, %mlo: i32, %mlimit: i32):
-  %mask = vc4tile.tail_mask %mlo, %mlimit : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %mlo, %mlimit : i32, i32 -> vector<16xi1>
   vc4tile.masked_store_global %mbase, %lanes, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

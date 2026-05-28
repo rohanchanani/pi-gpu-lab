@@ -20,7 +20,7 @@ vc4tile.kernel @predicate_layout_affine_load_tail(%out : i32, %in : i32, %n : i3
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
   %tile = "vc4tile.tile_load"(%in, %zero, %tail) {
     shape = [1, 16],
     src_layout = #vc4tile.layout<affine_2d>,
@@ -31,8 +31,8 @@ vc4tile.kernel @predicate_layout_affine_load_tail(%out : i32, %in : i32, %n : i3
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
-  %all = vc4tile.mask_all : vector<16xi1>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
+  %all = vc4tile.mask_all
   "vc4tile.tile_store"(%tile, %out, %zero, %all) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -42,7 +42,7 @@ vc4tile.kernel @predicate_layout_affine_load_tail(%out : i32, %in : i32, %n : i3
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<exact>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -67,7 +67,7 @@ vc4tile.kernel @predicate_layout_pitched_row_major_store(%out : i32, %rows : i32
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   "vc4tile.tile_store"(%values, %out, %zero, %mask) {
     shape = [4, 4],
     dst_layout = #vc4tile.layout<row_major>,
@@ -78,7 +78,7 @@ vc4tile.kernel @predicate_layout_pitched_row_major_store(%out : i32, %rows : i32
     boundary = #vc4tile.boundary_policy<exact>,
     packing = #vc4tile.packing<none>,
     memory_pitch_bytes = 52 : i32
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -103,7 +103,7 @@ vc4tile.kernel @predicate_layout_transposed_full_store(%out : i32, %in : i32) at
   vpm_bytes_per_block = 1024 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   %shared = "vc4tile.shared_tile_alloc"() {
     rows = 16 : i32,
     elem_bytes = 4 : i32,
@@ -138,6 +138,6 @@ vc4tile.kernel @predicate_layout_transposed_full_store(%out : i32, %in : i32) at
     storage_type = i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>
-  } : (!vc4tile.shared_tile, i32, i32, vector<16xi1>) -> ()
+  } : (!vc4tile.shared_tile, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

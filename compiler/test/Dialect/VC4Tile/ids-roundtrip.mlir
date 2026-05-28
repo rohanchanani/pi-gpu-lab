@@ -21,8 +21,8 @@ vc4tile.kernel @ids attributes {
   // CHECK: vc4tile.thread_id
   %tid = vc4tile.thread_id : vector<16xi32>
   // CHECK: vc4tile.mask_all
-  %all = vc4tile.mask_all : vector<16xi1>
+  %all = vc4tile.mask_all
   // CHECK: vc4tile.tail_mask
-  %tail = vc4tile.tail_mask %pid, %lid : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %pid, %lid : i32, i32
   vc4tile.return
 }

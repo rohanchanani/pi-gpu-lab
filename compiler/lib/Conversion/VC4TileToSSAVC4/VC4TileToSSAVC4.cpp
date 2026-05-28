@@ -75,6 +75,19 @@ constexpr llvm::StringLiteral kVC4TileTileBoundsMaskOpName(
 constexpr llvm::StringLiteral kVC4TileMaskAndOpName("vc4tile.mask_and");
 constexpr llvm::StringLiteral kVC4TileMaskOrOpName("vc4tile.mask_or");
 constexpr llvm::StringLiteral kVC4TileMaskNotOpName("vc4tile.mask_not");
+constexpr llvm::StringLiteral kVC4TileCoreMaskAllOpName(
+    "vc4tile.core_mask_all");
+constexpr llvm::StringLiteral kVC4TileCoreTailMaskOpName(
+    "vc4tile.core_tail_mask");
+constexpr llvm::StringLiteral kVC4TileCoreTileRectMaskOpName(
+    "vc4tile.core_tile_rect_mask");
+constexpr llvm::StringLiteral kVC4TileCoreTileBoundsMaskOpName(
+    "vc4tile.core_tile_bounds_mask");
+constexpr llvm::StringLiteral kVC4TileCoreMaskAndOpName(
+    "vc4tile.core_mask_and");
+constexpr llvm::StringLiteral kVC4TileCoreMaskOrOpName("vc4tile.core_mask_or");
+constexpr llvm::StringLiteral kVC4TileCoreMaskNotOpName(
+    "vc4tile.core_mask_not");
 constexpr llvm::StringLiteral kVC4TileMaskedLoadGlobalOpName(
     "vc4tile.masked_load_global");
 constexpr llvm::StringLiteral kVC4TileMaskedStoreGlobalOpName(
@@ -335,13 +348,13 @@ static bool isAllowedCoreVC4TileOp(Operation *op) {
          hasName(op, kVC4TileLaneIdOpName) ||
          hasName(op, kVC4TileLaneRangeOpName) ||
          hasName(op, kVC4TileThreadIdOpName) ||
-         hasName(op, kVC4TileMaskAllOpName) ||
-         hasName(op, kVC4TileTailMaskOpName) ||
-         hasName(op, kVC4TileTileRectMaskOpName) ||
-         hasName(op, kVC4TileTileBoundsMaskOpName) ||
-         hasName(op, kVC4TileMaskAndOpName) ||
-         hasName(op, kVC4TileMaskOrOpName) ||
-         hasName(op, kVC4TileMaskNotOpName) ||
+         hasName(op, kVC4TileCoreMaskAllOpName) ||
+         hasName(op, kVC4TileCoreTailMaskOpName) ||
+         hasName(op, kVC4TileCoreTileRectMaskOpName) ||
+         hasName(op, kVC4TileCoreTileBoundsMaskOpName) ||
+         hasName(op, kVC4TileCoreMaskAndOpName) ||
+         hasName(op, kVC4TileCoreMaskOrOpName) ||
+         hasName(op, kVC4TileCoreMaskNotOpName) ||
          hasName(op, kVC4TileMaskedLoadGlobalOpName) ||
          hasName(op, kVC4TileMaskedStoreGlobalOpName) ||
          hasName(op, kVC4TileRotateOpName) ||
@@ -1781,26 +1794,28 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
   if (op->getNumResults() != 1)
     return op->emitOpError("expected one result");
   if (!isVector16I1(op->getResult(0).getType()))
-    return op->emitOpError("currently lowers only vector<16xi1> mask_all results");
+    return op->emitOpError(
+        "currently lowers only vector<16xi1> core_mask_all results");
 
-  // VC4Tile mask values are semantic operands for M4 global memory and
-  // reduction operations.  The current SSAVC4 flags value is only legal when
-  // consumed exactly once by ssavc4.cond_br, so do not materialize mask_all as
-  // ssavc4.make_flags unless a future non-memory mask consumer requires it.
+  // Core mask values are planned concrete carriers.  The current SSAVC4 flags
+  // value is only legal when consumed exactly once by ssavc4.cond_br, so do
+  // not materialize core_mask_all as ssavc4.make_flags unless a future
+  // non-memory mask consumer requires it.
   return success();
 }
 
-static bool valueHasOnlySemanticMaskMemoryUsers(Value value);
-static bool isSemanticMaskCompositionOp(Operation *op);
+static bool valueHasOnlyMaskMemoryUsers(Value value);
+static bool isMaskCompositionOp(Operation *op);
 
 static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
                                    llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 2 || op->getNumResults() != 1)
     return op->emitOpError("expected base, limit, and one result");
   if (!isVector16I1(op->getResult(0).getType()))
-    return op->emitOpError("currently lowers only vector<16xi1> tail_mask results");
+    return op->emitOpError(
+        "currently lowers only vector<16xi1> core_tail_mask results");
   if (!op->getResult(0).use_empty() &&
-      valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+      valueHasOnlyMaskMemoryUsers(op->getResult(0)))
     return success();
 
   Value base = lookupMappedValue(op, op->getOperand(0), valueMap);
@@ -1843,7 +1858,7 @@ static bool isMaskedGlobalMemoryOp(Operation *op) {
          hasName(op, kVC4TileMaskedStoreGlobalOpName);
 }
 
-static bool isSemanticMaskMemoryUser(Operation *op) {
+static bool isMaskMemoryUser(Operation *op) {
   return isMaskedGlobalMemoryOp(op) ||
          hasName(op, kVC4TileSharedLoadOpName) ||
          hasName(op, kVC4TileSharedStoreOpName) ||
@@ -1851,22 +1866,25 @@ static bool isSemanticMaskMemoryUser(Operation *op) {
          hasName(op, kVC4TileReduceOpName);
 }
 
-static bool isSemanticMaskCompositionOp(Operation *op) {
+static bool isMaskCompositionOp(Operation *op) {
   return hasName(op, kVC4TileMaskAndOpName) ||
          hasName(op, kVC4TileMaskOrOpName) ||
-         hasName(op, kVC4TileMaskNotOpName);
+         hasName(op, kVC4TileMaskNotOpName) ||
+         hasName(op, kVC4TileCoreMaskAndOpName) ||
+         hasName(op, kVC4TileCoreMaskOrOpName) ||
+         hasName(op, kVC4TileCoreMaskNotOpName);
 }
 
-static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
+static bool valueHasOnlyMaskMemoryUsers(Value value) {
   for (OpOperand &use : value.getUses()) {
     Operation *owner = use.getOwner();
-    if (isSemanticMaskMemoryUser(owner))
+    if (isMaskMemoryUser(owner))
       continue;
-    if (isSemanticMaskCompositionOp(owner)) {
-      bool allResultsSemantic = true;
+    if (isMaskCompositionOp(owner)) {
+      bool allResultsPlanned = true;
       for (Value result : owner->getResults())
-        allResultsSemantic &= valueHasOnlySemanticMaskMemoryUsers(result);
-      if (allResultsSemantic)
+        allResultsPlanned &= valueHasOnlyMaskMemoryUsers(result);
+      if (allResultsPlanned)
         continue;
     }
     return false;
@@ -1876,7 +1894,7 @@ static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
 
 static void eraseLoweredFlagMaskIfMemoryOnly(
     Value sourceMask, llvm::DenseMap<Value, Value> &valueMap) {
-  if (!valueHasOnlySemanticMaskMemoryUsers(sourceMask))
+  if (!valueHasOnlyMaskMemoryUsers(sourceMask))
     return;
   auto it = valueMap.find(sourceMask);
   if (it == valueMap.end())
@@ -1893,10 +1911,10 @@ static LogicalResult lowerTileRectMask(Operation *op) {
     return op->emitOpError("tile_rect_mask expects no operands and one result");
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError(
-        "currently lowers only vector<16xi1> tile_rect_mask results");
-  if (!valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+        "currently lowers only vector<16xi1> core_tile_rect_mask results");
+  if (!valueHasOnlyMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "tile_rect_mask currently lowers only for semantic masked memory users");
+        "core_tile_rect_mask must be consumed by planned mask memory or compute users before SSAVC4 conversion");
   return success();
 }
 
@@ -1906,11 +1924,11 @@ static LogicalResult lowerTileBoundsMask(Operation *op) {
         "tile_bounds_mask expects active_rows, active_cols, and one result");
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError(
-        "currently lowers only vector<16xi1> tile_bounds_mask results");
+        "currently lowers only vector<16xi1> core_tile_bounds_mask results");
   if (!op->getResult(0).use_empty() &&
-      !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+      !valueHasOnlyMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "tile_bounds_mask must be consumed by VC4Tile planning or semantic masked memory before SSAVC4 conversion");
+        "core_tile_bounds_mask must be consumed by planned mask memory or compute users before SSAVC4 conversion");
   return success();
 }
 
@@ -1924,23 +1942,23 @@ static LogicalResult lowerMaskBinary(Operation *op,
     return op->emitOpError()
            << opName << " requires vector<16xi1> operands and result";
   if (!op->getResult(0).use_empty() &&
-      !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+      !valueHasOnlyMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "mask composition must be consumed by semantic masked memory or compute before SSAVC4 conversion");
+        "core mask composition must be consumed by planned mask memory or compute users before SSAVC4 conversion");
   return success();
 }
 
 static LogicalResult lowerMaskNot(Operation *op) {
   if (op->getNumOperands() != 1 || op->getNumResults() != 1)
-    return op->emitOpError("mask_not expects input and one result");
+    return op->emitOpError("core_mask_not expects input and one result");
   if (!isVector16I1(op->getOperand(0).getType()) ||
       !isVector16I1(op->getResult(0).getType()))
     return op->emitOpError(
-        "mask_not requires vector<16xi1> operand and result");
+        "core_mask_not requires vector<16xi1> operand and result");
   if (!op->getResult(0).use_empty() &&
-      !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+      !valueHasOnlyMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "mask composition must be consumed by semantic masked memory or compute before SSAVC4 conversion");
+        "core mask composition must be consumed by planned mask memory or compute users before SSAVC4 conversion");
   return success();
 }
 
@@ -1954,13 +1972,15 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
   Value sourceMask = op->getOperand(maskOperandIndex);
   Operation *maskDef = sourceMask.getDefiningOp();
 
-  if (hasName(maskDef, kVC4TileMaskAllOpName)) {
+  if (hasName(maskDef, kVC4TileMaskAllOpName) ||
+      hasName(maskDef, kVC4TileCoreMaskAllOpName)) {
     activeLanesAttr = 16;
     eraseLoweredFlagMaskIfMemoryOnly(sourceMask, valueMap);
     return success();
   }
 
-  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+  if (hasName(maskDef, kVC4TileTailMaskOpName) ||
+      hasName(maskDef, kVC4TileCoreTailMaskOpName)) {
     if (maskDef->getNumOperands() != 2)
       return maskDef->emitOpError("expected base and limit operands");
 
@@ -1985,7 +2005,7 @@ static LogicalResult appendStoreActiveLaneOperand(Operation *op,
   }
 
   return op->emitOpError(
-      "currently supports only vc4tile.mask_all or vc4tile.tail_mask masks for coalesced VDW stores");
+      "currently supports only full or one-row tail predicate fragments for coalesced VDW stores");
 }
 
 static LogicalResult verifyMaskedLoadShape(Operation *op) {
@@ -2026,17 +2046,16 @@ static LogicalResult verifyMaskedLoadShape(Operation *op) {
     return op->emitOpError("requires memory_space = #vc4tile.memory_space<global>");
 
   Operation *maskDef = op->getOperand(2).getDefiningOp();
-  if (!hasName(maskDef, kVC4TileMaskAllOpName) &&
-      !hasName(maskDef, kVC4TileTailMaskOpName) &&
-      !hasName(maskDef, kVC4TileTileRectMaskOpName) &&
-      !hasName(maskDef, kVC4TileTileBoundsMaskOpName) &&
-      !hasName(maskDef, kVC4TileMaskAndOpName) &&
-      !hasName(maskDef, kVC4TileMaskOrOpName) &&
-      !hasName(maskDef, kVC4TileMaskNotOpName)) {
+  if (!hasName(maskDef, kVC4TileCoreMaskAllOpName) &&
+      !hasName(maskDef, kVC4TileCoreTailMaskOpName) &&
+      !hasName(maskDef, kVC4TileCoreTileRectMaskOpName) &&
+      !hasName(maskDef, kVC4TileCoreTileBoundsMaskOpName) &&
+      !hasName(maskDef, kVC4TileCoreMaskAndOpName) &&
+      !hasName(maskDef, kVC4TileCoreMaskOrOpName) &&
+      !hasName(maskDef, kVC4TileCoreMaskNotOpName)) {
     return op->emitOpError(
-        "currently supports only vc4tile.mask_all, vc4tile.tail_mask, "
-        "vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or "
-        "predicate composition masks for TMU loads");
+        "currently supports only planned concrete full, tail, rectangular, "
+        "bounds, or composed masks for TMU loads");
   }
 
   return success();
@@ -3216,7 +3235,8 @@ static FailureOr<PredicateFragmentPlan> planPredicateTransferForMask(
 }
 
 static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
-  if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
+  if (!hasName(maskDef, kVC4TileTileRectMaskOpName) &&
+      !hasName(maskDef, kVC4TileCoreTileRectMaskOpName))
     return std::nullopt;
 
   auto rowsAttr = maskDef->getAttrOfType<IntegerAttr>("active_rows");
@@ -3241,7 +3261,8 @@ static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
 
 static std::optional<TileBoundsMaskInfo>
 getTileBoundsMaskInfo(Operation *maskDef) {
-  if (!hasName(maskDef, kVC4TileTileBoundsMaskOpName))
+  if (!hasName(maskDef, kVC4TileTileBoundsMaskOpName) &&
+      !hasName(maskDef, kVC4TileCoreTileBoundsMaskOpName))
     return std::nullopt;
   if (maskDef->getNumOperands() != 2)
     return std::nullopt;
@@ -3261,7 +3282,8 @@ getTileBoundsMaskInfo(Operation *maskDef) {
 }
 
 static std::optional<std::pair<Value, Value>> getTailMaskInfo(Operation *maskDef) {
-  if (!hasName(maskDef, kVC4TileTailMaskOpName) ||
+  if ((!hasName(maskDef, kVC4TileTailMaskOpName) &&
+       !hasName(maskDef, kVC4TileCoreTailMaskOpName)) ||
       maskDef->getNumOperands() != 2)
     return std::nullopt;
   return std::make_pair(maskDef->getOperand(0), maskDef->getOperand(1));
@@ -3385,16 +3407,18 @@ static Value createZeroForVectorDataType(OpBuilder &builder, Location loc,
   return createLoadImmI32(builder, loc, resultType, 0);
 }
 
-static FailureOr<Value> createActiveLaneValueForSemanticMask(
+static FailureOr<Value> createActiveLaneValueForMaskCarrier(
     Operation *consumer, OpBuilder &builder, Value mask,
     llvm::DenseMap<Value, Value> &valueMap) {
   Type maskValueType = getVector16I32Type(builder);
   Operation *maskDef = mask.getDefiningOp();
 
-  if (hasName(maskDef, kVC4TileMaskAllOpName))
+  if (hasName(maskDef, kVC4TileMaskAllOpName) ||
+      hasName(maskDef, kVC4TileCoreMaskAllOpName))
     return Value();
 
-  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+  if (hasName(maskDef, kVC4TileTailMaskOpName) ||
+      hasName(maskDef, kVC4TileCoreTailMaskOpName)) {
     if (maskDef->getNumOperands() != 2)
       return maskDef->emitOpError("expected base and limit operands");
     Value base = lookupMappedValue(maskDef, maskDef->getOperand(0), valueMap);
@@ -3427,7 +3451,8 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
                                   *maskLanes);
   }
 
-  if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+  if (hasName(maskDef, kVC4TileTileBoundsMaskOpName) ||
+      hasName(maskDef, kVC4TileCoreTileBoundsMaskOpName)) {
     Value activeMask = createTileBoundsActiveMask(consumer, builder, maskDef,
                                                   valueMap, maskValueType);
     if (!activeMask)
@@ -3435,14 +3460,15 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
     return activeMask;
   }
 
-  if (hasName(maskDef, kVC4TileMaskAndOpName)) {
+  if (hasName(maskDef, kVC4TileMaskAndOpName) ||
+      hasName(maskDef, kVC4TileCoreMaskAndOpName)) {
     if (maskDef->getNumOperands() != 2)
       return maskDef->emitOpError("expected lhs and rhs operands");
-    FailureOr<Value> lhs = createActiveLaneValueForSemanticMask(
+    FailureOr<Value> lhs = createActiveLaneValueForMaskCarrier(
         consumer, builder, maskDef->getOperand(0), valueMap);
     if (failed(lhs))
       return failure();
-    FailureOr<Value> rhs = createActiveLaneValueForSemanticMask(
+    FailureOr<Value> rhs = createActiveLaneValueForMaskCarrier(
         consumer, builder, maskDef->getOperand(1), valueMap);
     if (failed(rhs))
       return failure();
@@ -3454,14 +3480,15 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
                         mlir::vc4::AddOpcode::bit_and, maskValueType);
   }
 
-  if (hasName(maskDef, kVC4TileMaskOrOpName)) {
+  if (hasName(maskDef, kVC4TileMaskOrOpName) ||
+      hasName(maskDef, kVC4TileCoreMaskOrOpName)) {
     if (maskDef->getNumOperands() != 2)
       return maskDef->emitOpError("expected lhs and rhs operands");
-    FailureOr<Value> lhs = createActiveLaneValueForSemanticMask(
+    FailureOr<Value> lhs = createActiveLaneValueForMaskCarrier(
         consumer, builder, maskDef->getOperand(0), valueMap);
     if (failed(lhs))
       return failure();
-    FailureOr<Value> rhs = createActiveLaneValueForSemanticMask(
+    FailureOr<Value> rhs = createActiveLaneValueForMaskCarrier(
         consumer, builder, maskDef->getOperand(1), valueMap);
     if (failed(rhs))
       return failure();
@@ -3471,10 +3498,11 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
                         mlir::vc4::AddOpcode::bit_or, maskValueType);
   }
 
-  if (hasName(maskDef, kVC4TileMaskNotOpName)) {
+  if (hasName(maskDef, kVC4TileMaskNotOpName) ||
+      hasName(maskDef, kVC4TileCoreMaskNotOpName)) {
     if (maskDef->getNumOperands() != 1)
       return maskDef->emitOpError("expected input operand");
-    FailureOr<Value> input = createActiveLaneValueForSemanticMask(
+    FailureOr<Value> input = createActiveLaneValueForMaskCarrier(
         consumer, builder, maskDef->getOperand(0), valueMap);
     if (failed(input))
       return failure();
@@ -3490,16 +3518,15 @@ static FailureOr<Value> createActiveLaneValueForSemanticMask(
   }
 
   return consumer->emitOpError(
-      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, "
-      "vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or "
-      "predicate composition masks for semantic mask users");
+      "currently supports only full, one-row tail, rectangular, bounds, or "
+      "composed predicate mask carriers for planned mask users");
 }
 
-static FailureOr<Value> applySemanticMaskZeroFill(
+static FailureOr<Value> applyPredicateMaskZeroFill(
     Operation *consumer, OpBuilder &builder, Value value, Value mask,
     llvm::DenseMap<Value, Value> &valueMap) {
   FailureOr<Value> activeMask =
-      createActiveLaneValueForSemanticMask(consumer, builder, mask, valueMap);
+      createActiveLaneValueForMaskCarrier(consumer, builder, mask, valueMap);
   if (failed(activeMask))
     return failure();
   if (!*activeMask)
@@ -3513,7 +3540,7 @@ static FailureOr<Value> applySemanticMaskZeroFill(
                           mlir::vc4::Cond::zc, value.getType());
 }
 
-static FailureOr<Value> applySemanticMaskPreserve(
+static FailureOr<Value> applyPredicateMaskPreserve(
     Operation *consumer, OpBuilder &builder, Value newValue, Value oldValue,
     Value mask, llvm::DenseMap<Value, Value> &valueMap) {
   if (newValue.getType() != oldValue.getType())
@@ -3521,7 +3548,7 @@ static FailureOr<Value> applySemanticMaskPreserve(
         "inactive destination preservation requires matching value types");
 
   FailureOr<Value> activeMask =
-      createActiveLaneValueForSemanticMask(consumer, builder, mask, valueMap);
+      createActiveLaneValueForMaskCarrier(consumer, builder, mask, valueMap);
   if (failed(activeMask))
     return failure();
   if (!*activeMask)
@@ -3546,11 +3573,11 @@ static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
   Type addressType = getVector16I32Type(builder);
   Value baseVec = createSplat(builder, op->getLoc(), base, addressType);
   Value byteOffsets = offsets;
-  FailureOr<Value> semanticActiveMask = createActiveLaneValueForSemanticMask(
+  FailureOr<Value> plannedActiveMask = createActiveLaneValueForMaskCarrier(
       op, builder, op->getOperand(2), valueMap);
-  if (failed(semanticActiveMask))
+  if (failed(plannedActiveMask))
     return failure();
-  Value activeMask = *semanticActiveMask;
+  Value activeMask = *plannedActiveMask;
 
   auto offsetUnit =
       op->getAttrOfType<mlir::vc4tile::OffsetUnitAttr>("offset_unit");
@@ -3742,7 +3769,7 @@ static LogicalResult lowerReduce(Operation *op, OpBuilder &builder,
   Value acc = lookupMappedValue(op, op->getOperand(0), valueMap);
   if (!acc)
     return failure();
-  FailureOr<Value> maskedAcc = applySemanticMaskZeroFill(
+  FailureOr<Value> maskedAcc = applyPredicateMaskZeroFill(
       op, builder, acc, op->getOperand(1), valueMap);
   if (failed(maskedAcc))
     return failure();
@@ -3824,7 +3851,8 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
   Value storedValue;
   auto inactivePolicy = op->getAttrOfType<StringAttr>("inactive_policy");
   if (inactivePolicy && inactivePolicy.getValue() == "preserve") {
-    if (hasName(op->getOperand(3).getDefiningOp(), kVC4TileMaskAllOpName)) {
+    if (hasName(op->getOperand(3).getDefiningOp(),
+                kVC4TileCoreMaskAllOpName)) {
       storedValue = value;
     } else {
       Value oldValue = createSSAVC4OpWithResult(
@@ -3836,7 +3864,7 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
                                     getVPMOrientation(op, "horizontal"))),
            builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
           value.getType());
-      FailureOr<Value> preservedValue = applySemanticMaskPreserve(
+      FailureOr<Value> preservedValue = applyPredicateMaskPreserve(
           op, builder, value, oldValue, op->getOperand(3), valueMap);
       if (failed(preservedValue))
         return failure();
@@ -3847,7 +3875,7 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
            << "unknown shared_store inactive_policy '"
            << inactivePolicy.getValue() << "'";
   } else {
-    FailureOr<Value> maskedValue = applySemanticMaskZeroFill(
+    FailureOr<Value> maskedValue = applyPredicateMaskZeroFill(
         op, builder, value, op->getOperand(3), valueMap);
     if (failed(maskedValue))
       return failure();
@@ -3893,7 +3921,7 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
                                 getVPMOrientation(op, "horizontal"))),
        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
       op->getResult(0).getType());
-  FailureOr<Value> maskedLoaded = applySemanticMaskZeroFill(
+  FailureOr<Value> maskedLoaded = applyPredicateMaskZeroFill(
       op, builder, loaded, op->getOperand(2), valueMap);
   if (failed(maskedLoaded))
     return failure();
@@ -4078,20 +4106,24 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return lowerLaneId(op, builder, valueMap);
   if (hasName(op, kVC4TileThreadIdOpName))
     return lowerThreadId(op, builder, valueMap, builtinValueMap);
-  if (hasName(op, kVC4TileMaskAllOpName))
+  if (hasName(op, kVC4TileCoreMaskAllOpName))
     return lowerMaskAll(op, builder, valueMap);
-  if (hasName(op, kVC4TileTailMaskOpName))
+  if (hasName(op, kVC4TileCoreTailMaskOpName))
     return lowerTailMask(op, builder, valueMap);
-  if (hasName(op, kVC4TileTileRectMaskOpName))
+  if (hasName(op, kVC4TileCoreTileRectMaskOpName))
     return lowerTileRectMask(op);
-  if (hasName(op, kVC4TileTileBoundsMaskOpName))
+  if (hasName(op, kVC4TileCoreTileBoundsMaskOpName))
     return lowerTileBoundsMask(op);
-  if (hasName(op, kVC4TileMaskAndOpName))
-    return lowerMaskBinary(op, kVC4TileMaskAndOpName);
-  if (hasName(op, kVC4TileMaskOrOpName))
-    return lowerMaskBinary(op, kVC4TileMaskOrOpName);
-  if (hasName(op, kVC4TileMaskNotOpName))
+  if (hasName(op, kVC4TileCoreMaskAndOpName))
+    return lowerMaskBinary(op, kVC4TileCoreMaskAndOpName);
+  if (hasName(op, kVC4TileCoreMaskOrOpName))
+    return lowerMaskBinary(op, kVC4TileCoreMaskOrOpName);
+  if (hasName(op, kVC4TileCoreMaskNotOpName))
     return lowerMaskNot(op);
+  if (isVC4TileSemanticPredicateOp(op))
+    return op->emitOpError(
+        "semantic predicate operation must be consumed by VC4Tile predicate "
+        "planning before VC4Tile-to-SSAVC4 conversion");
   if (hasName(op, kVC4TileMaskedLoadGlobalOpName))
     return lowerMaskedLoadGlobal(op, builder, valueMap);
   if (hasName(op, kVC4TileMaskedStoreGlobalOpName))
@@ -5226,8 +5258,8 @@ static LogicalResult canonicalizeTileSelectOp(Operation *op,
   (void)builder;
   if (op->getNumOperands() != 3 || op->getNumResults() != 1)
     return op->emitOpError("tile_select expects mask, true_value, false_value, and one result");
-  if (!isVector16I1(op->getOperand(0).getType()))
-    return op->emitOpError("tile_select mask must be vector<16xi1>");
+  if (!mlir::vc4tile::isVC4TilePredicateType(op->getOperand(0).getType()))
+    return op->emitOpError("tile_select mask must be !vc4tile.predicate");
   Type resultType = op->getResult(0).getType();
   if (op->getOperand(1).getType() != resultType ||
       op->getOperand(2).getType() != resultType)
@@ -5282,6 +5314,90 @@ static bool isSupportedAddReductionMask(Value mask) {
          hasName(maskDef, kVC4TileMaskNotOpName);
 }
 
+static bool isCoreMaskCarrierOp(Operation *op) {
+  return hasName(op, kVC4TileCoreMaskAllOpName) ||
+         hasName(op, kVC4TileCoreTailMaskOpName) ||
+         hasName(op, kVC4TileCoreTileRectMaskOpName) ||
+         hasName(op, kVC4TileCoreTileBoundsMaskOpName) ||
+         hasName(op, kVC4TileCoreMaskAndOpName) ||
+         hasName(op, kVC4TileCoreMaskOrOpName) ||
+         hasName(op, kVC4TileCoreMaskNotOpName);
+}
+
+static FailureOr<Value> createCoreMaskCarrier(OpBuilder &builder, Location loc,
+                                              Value mask) {
+  Operation *maskDef = mask.getDefiningOp();
+  if (!maskDef)
+    return emitError(loc)
+           << "predicate canonicalization requires a defining predicate op";
+  if (isVector16I1(mask.getType())) {
+    if (isCoreMaskCarrierOp(maskDef))
+      return mask;
+    return emitError(loc)
+           << "raw vector<16xi1> is not a semantic predicate; expected "
+              "!vc4tile.predicate or a planned vc4tile.core_* mask carrier";
+  }
+
+  Type maskType = getVector16I1Type(builder);
+  auto createCoreOp = [&](StringRef name, ArrayRef<Value> operands,
+                          ArrayRef<NamedAttribute> attrs) -> Value {
+    OperationState state(loc, name);
+    state.addOperands(operands);
+    for (NamedAttribute attr : attrs)
+      state.addAttribute(attr.getName(), attr.getValue());
+    state.addTypes(maskType);
+    return builder.create(state)->getResult(0);
+  };
+
+  if (hasName(maskDef, kVC4TileMaskAllOpName))
+    return createCoreOp(kVC4TileCoreMaskAllOpName, {}, {});
+  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+    SmallVector<Value, 2> operands(maskDef->getOperands());
+    return createCoreOp(kVC4TileCoreTailMaskOpName, operands, {});
+  }
+  if (hasName(maskDef, kVC4TileTileRectMaskOpName)) {
+    SmallVector<NamedAttribute, 4> attrs{
+        builder.getNamedAttr("active_rows", maskDef->getAttr("active_rows")),
+        builder.getNamedAttr("active_cols", maskDef->getAttr("active_cols")),
+        builder.getNamedAttr("shape", maskDef->getAttr("shape")),
+        builder.getNamedAttr("layout", maskDef->getAttr("layout"))};
+    return createCoreOp(kVC4TileCoreTileRectMaskOpName, {}, attrs);
+  }
+  if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+    SmallVector<Value, 2> operands(maskDef->getOperands());
+    SmallVector<NamedAttribute, 2> attrs{
+        builder.getNamedAttr("shape", maskDef->getAttr("shape")),
+        builder.getNamedAttr("layout", maskDef->getAttr("layout"))};
+    return createCoreOp(kVC4TileCoreTileBoundsMaskOpName, operands, attrs);
+  }
+  if (hasName(maskDef, kVC4TileMaskAndOpName) ||
+      hasName(maskDef, kVC4TileMaskOrOpName)) {
+    FailureOr<Value> lhs =
+        createCoreMaskCarrier(builder, loc, maskDef->getOperand(0));
+    if (failed(lhs))
+      return failure();
+    FailureOr<Value> rhs =
+        createCoreMaskCarrier(builder, loc, maskDef->getOperand(1));
+    if (failed(rhs))
+      return failure();
+    StringRef name = hasName(maskDef, kVC4TileMaskAndOpName)
+                         ? kVC4TileCoreMaskAndOpName
+                         : kVC4TileCoreMaskOrOpName;
+    return createCoreOp(name, {*lhs, *rhs}, {});
+  }
+  if (hasName(maskDef, kVC4TileMaskNotOpName)) {
+    FailureOr<Value> input =
+        createCoreMaskCarrier(builder, loc, maskDef->getOperand(0));
+    if (failed(input))
+      return failure();
+    return createCoreOp(kVC4TileCoreMaskNotOpName, {*input}, {});
+  }
+
+  return emitError(loc)
+         << "semantic predicate algebra must be normalized into dense "
+            "fragments before concrete lane-mask materialization";
+}
+
 static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
                                                                bool requireAxis) {
   if (op->getNumOperands() != 2 || op->getNumResults() != 1)
@@ -5291,8 +5407,8 @@ static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
   if (!getVector16DataElementType(inputType) || inputType != resultType)
     return op->emitOpError(
         "tile reduction requires matching vector<16xi32> or vector<16xf32> input/result types");
-  if (!isVector16I1(op->getOperand(1).getType()))
-    return op->emitOpError("tile reduction mask must be vector<16xi1>");
+  if (!mlir::vc4tile::isVC4TilePredicateType(op->getOperand(1).getType()))
+    return op->emitOpError("tile reduction mask must be !vc4tile.predicate");
   if (!isSupportedAddReductionMask(op->getOperand(1)))
     return op->emitOpError(
         "tile reductions currently support only vc4tile.mask_all, "
@@ -5309,21 +5425,31 @@ static LogicalResult verifySurfaceReductionForCanonicalization(Operation *op,
   return success();
 }
 
-static Operation *createCoreReduceFromSurface(OpBuilder &builder,
-                                              Operation *op, Value input,
-                                              Value mask) {
+static FailureOr<Operation *> createCoreReduceFromSurface(OpBuilder &builder,
+                                                          Operation *op,
+                                                          Value input,
+                                                          Value mask) {
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   OperationState state(op->getLoc(), kVC4TileReduceOpName);
-  state.addOperands({input, mask});
+  state.addOperands({input, *coreMask});
   state.addAttribute("kind", op->getAttr("kind"));
   state.addTypes(op->getResultTypes());
   return builder.create(state);
 }
 
-static Operation *createCoreAddReduce(OpBuilder &builder, Operation *op,
-                                      Value input, Value mask,
-                                      TypeRange resultTypes) {
+static FailureOr<Operation *> createCoreAddReduce(OpBuilder &builder,
+                                                  Operation *op, Value input,
+                                                  Value mask,
+                                                  TypeRange resultTypes) {
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   OperationState state(op->getLoc(), kVC4TileReduceOpName);
-  state.addOperands({input, mask});
+  state.addOperands({input, *coreMask});
   state.addAttribute(
       "kind", mlir::vc4tile::ReduceKindAttr::get(
                   builder.getContext(), mlir::vc4tile::ReduceKind::add));
@@ -5344,8 +5470,10 @@ static LogicalResult verifyContractionVectorInputsForCanonicalization(
       return op->emitOpError(
           "tile contraction data operands and result must have identical vector types");
   }
-  if (!isVector16I1(op->getOperand(expectedOperands - 1).getType()))
-    return op->emitOpError("tile contraction mask must be vector<16xi1>");
+  if (!mlir::vc4tile::isVC4TilePredicateType(
+          op->getOperand(expectedOperands - 1).getType()))
+    return op->emitOpError(
+        "tile contraction mask must be !vc4tile.predicate");
   bool supportedMask = isSupportedAddReductionMask(
       op->getOperand(expectedOperands - 1));
   if (!supportedMask) {
@@ -5483,9 +5611,12 @@ static LogicalResult canonicalizeTileDotOp(Operation *op, OpBuilder &builder) {
                                            op->getOperand(1), resultType);
   if (!product)
     return op->emitOpError("unsupported tile_dot element type");
-  Operation *reduced = createCoreAddReduce(builder, op, product, op->getOperand(2),
-                                           op->getResultTypes());
-  op->getResult(0).replaceAllUsesWith(reduced->getResult(0));
+  FailureOr<Operation *> reduced =
+      createCoreAddReduce(builder, op, product, op->getOperand(2),
+                          op->getResultTypes());
+  if (failed(reduced))
+    return failure();
+  op->getResult(0).replaceAllUsesWith((*reduced)->getResult(0));
   op->erase();
   return success();
 }
@@ -5614,11 +5745,16 @@ static Operation *createCoreSharedAlloc(OpBuilder &builder, Operation *op) {
   return builder.create(state);
 }
 
-static Operation *createCoreSharedStore(OpBuilder &builder, Operation *op,
-                                        Value shared, Value row, Value value,
-                                        Value mask) {
+static FailureOr<Operation *> createCoreSharedStore(OpBuilder &builder,
+                                                    Operation *op,
+                                                    Value shared, Value row,
+                                                    Value value, Value mask) {
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   OperationState state(op->getLoc(), kVC4TileSharedStoreOpName);
-  state.addOperands({shared, row, value, mask});
+  state.addOperands({shared, row, value, *coreMask});
   state.addAttribute("elem_bytes", builder.getI32IntegerAttr(4));
   state.addAttribute(
       "memory_space", mlir::vc4tile::MemorySpaceAttr::get(
@@ -5630,11 +5766,16 @@ static Operation *createCoreSharedStore(OpBuilder &builder, Operation *op,
   return builder.create(state);
 }
 
-static Operation *createCoreSharedLoad(OpBuilder &builder, Operation *op,
-                                       Value shared, Value row, Value mask,
-                                       TypeRange resultTypes) {
+static FailureOr<Operation *> createCoreSharedLoad(OpBuilder &builder,
+                                                   Operation *op, Value shared,
+                                                   Value row, Value mask,
+                                                   TypeRange resultTypes) {
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   OperationState state(op->getLoc(), kVC4TileSharedLoadOpName);
-  state.addOperands({shared, row, mask});
+  state.addOperands({shared, row, *coreMask});
   state.addAttribute("elem_bytes", builder.getI32IntegerAttr(4));
   state.addAttribute(
       "memory_space", mlir::vc4tile::MemorySpaceAttr::get(
@@ -5652,9 +5793,11 @@ static LogicalResult canonicalizeTileOrWarpReduceOp(Operation *op,
   if (failed(verifySurfaceReductionForCanonicalization(
           op, /*requireAxis=*/hasName(op, kVC4TileTileReduceOpName))))
     return failure();
-  Operation *reduce = createCoreReduceFromSurface(builder, op, op->getOperand(0),
-                                                 op->getOperand(1));
-  op->getResult(0).replaceAllUsesWith(reduce->getResult(0));
+  FailureOr<Operation *> reduce = createCoreReduceFromSurface(
+      builder, op, op->getOperand(0), op->getOperand(1));
+  if (failed(reduce))
+    return failure();
+  op->getResult(0).replaceAllUsesWith((*reduce)->getResult(0));
   op->erase();
   return success();
 }
@@ -5667,15 +5810,20 @@ static LogicalResult canonicalizeBlockReduceOp(Operation *op,
   Value mask = op->getOperand(1);
   Value zero = arith::ConstantIntOp::create(builder, op->getLoc(), 0, 32);
   Operation *shared = createCoreSharedAlloc(builder, op);
-  createCoreSharedStore(builder, op, shared->getResult(0), zero, op->getOperand(0),
-                        mask);
+  if (failed(createCoreSharedStore(builder, op, shared->getResult(0), zero,
+                                   op->getOperand(0), mask)))
+    return failure();
   createCoreBarrier(builder, op->getLoc());
-  Operation *loaded = createCoreSharedLoad(builder, op, shared->getResult(0), zero,
-                                          mask, op->getResultTypes());
-  Operation *reduce = createCoreReduceFromSurface(builder, op,
-                                                 loaded->getResult(0), mask);
+  FailureOr<Operation *> loaded = createCoreSharedLoad(
+      builder, op, shared->getResult(0), zero, mask, op->getResultTypes());
+  if (failed(loaded))
+    return failure();
+  FailureOr<Operation *> reduce = createCoreReduceFromSurface(
+      builder, op, (*loaded)->getResult(0), mask);
+  if (failed(reduce))
+    return failure();
   createCoreBarrier(builder, op->getLoc());
-  op->getResult(0).replaceAllUsesWith(reduce->getResult(0));
+  op->getResult(0).replaceAllUsesWith((*reduce)->getResult(0));
   op->erase();
   return success();
 }
@@ -5937,9 +6085,13 @@ static FailureOr<Value> planGlobalRegisterTileLoad(Operation *op,
                                           mlir::vc4tile::MemorySpace::global)),
       namedAttr(builder, "access", getVC4TileMemoryAccessAttr(builder, access))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), op->getOperand(2));
+  if (failed(coreMask))
+    return failure();
   Operation *load = createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedLoadGlobalOpName,
-      {*adjustedBase, laneOffsets, op->getOperand(2)}, attrs,
+      {*adjustedBase, laneOffsets, *coreMask}, attrs,
       op->getResultTypes());
   return load->getResult(0);
 }
@@ -6037,9 +6189,9 @@ static LogicalResult planRectangularRegisterGlobalTileStore(
         createAdjustedGlobalBaseForTileCopy(builder, op, base, offset);
     if (failed(adjustedBase))
       return failure();
-    Operation *maskAll = createVC4TileCoreOp(
-        builder, op->getLoc(), kVC4TileMaskAllOpName, {}, {},
-        op->getOperand(3).getType());
+    Operation *maskAll =
+        createVC4TileCoreOp(builder, op->getLoc(), kVC4TileCoreMaskAllOpName,
+                            {}, {}, getVector16I1Type(builder));
     SmallVector<NamedAttribute, 8> attrs{
         namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
         namedAttr(builder, "offset_unit",
@@ -6063,10 +6215,9 @@ static LogicalResult planRectangularRegisterGlobalTileStore(
   Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
   Value activeCols =
       createI32ConstantInline(builder, op->getLoc(), maskInfo.activeCols);
-  Type maskType = op->getOperand(3).getType();
   Operation *rowMask = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
-      maskType);
+      builder, op->getLoc(), kVC4TileCoreTailMaskOpName, {zero, activeCols},
+      {}, getVector16I1Type(builder));
 
   for (int64_t row = 0; row < maskInfo.activeRows; ++row) {
     Value rowOffset = addI32ConstantInline(builder, op->getLoc(), offset,
@@ -6135,10 +6286,9 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
   if (failed(rowPitchElements))
     return failure();
   Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
-  Type maskType = op->getOperand(3).getType();
   Operation *rowMask = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
-      maskType);
+      builder, op->getLoc(), kVC4TileCoreTailMaskOpName, {zero, activeCols},
+      {}, getVector16I1Type(builder));
 
   for (int64_t row = 0; row < 4; ++row) {
     Value rowIndex = createI32ConstantInline(builder, op->getLoc(), row);
@@ -6439,7 +6589,7 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
           getTailOutsideBoundsMaskInfo(op->getOperand(3).getDefiningOp()))
     return planTailOutsideBoundsRegisterGlobalTileStore(
         op, builder, *tailOutsideBounds);
-  if (isSemanticMaskCompositionOp(op->getOperand(3).getDefiningOp()))
+  if (isMaskCompositionOp(op->getOperand(3).getDefiningOp()))
     return emitUnsupportedPredicateModelForPath(
         op, "register->global tile_store", op->getOperand(3),
         PredicateInactiveDestPolicy::preserve);
@@ -6468,9 +6618,13 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
                 getVC4TileMemoryAccessAttr(
                     builder, mlir::vc4tile::MemoryAccess::affine_contiguous))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
+  FailureOr<Value> coreMask =
+      createCoreMaskCarrier(builder, op->getLoc(), op->getOperand(3));
+  if (failed(coreMask))
+    return failure();
   createVC4TileCoreOp(
       builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
-      {*adjustedBase, lanes, op->getOperand(0), op->getOperand(3)}, attrs);
+      {*adjustedBase, lanes, op->getOperand(0), *coreMask}, attrs);
   return success();
 }
 
@@ -6537,9 +6691,9 @@ static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
   Value mask = op->getOperand(3);
   if (!isVector16Data(value.getType()) ||
       !mlir::vc4tile::isVC4TileSharedTileType(handle.getType()) ||
-      !isI32Scalar(row) || !isVector16I1(mask.getType())) {
+      !isI32Scalar(row) || !mlir::vc4tile::isVC4TilePredicateType(mask.getType())) {
     return op->emitOpError(
-        "register->shared_vpm copy_tile requires vector value, !vc4tile.shared_tile handle, i32 row, and vector<16xi1> mask");
+        "register->shared_vpm copy_tile requires vector value, !vc4tile.shared_tile handle, i32 row, and !vc4tile.predicate mask");
   }
   FailureOr<PredicateFragmentPlan> predicatePlan =
       planPredicateTransferForMask(
@@ -6569,8 +6723,11 @@ static LogicalResult planRegisterSharedCopy(Operation *op, OpBuilder &builder) {
       namedAttr(builder, "inactive_policy",
                 builder.getStringAttr("preserve"))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
+  FailureOr<Value> coreMask = createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   createVC4TileCoreOp(builder, op->getLoc(), kVC4TileSharedStoreOpName,
-                      {handle, row, value, mask}, attrs);
+                      {handle, row, value, *coreMask}, attrs);
   return success();
 }
 
@@ -6583,10 +6740,10 @@ static LogicalResult planSharedRegisterCopy(Operation *op, OpBuilder &builder) {
   Value row = op->getOperand(1);
   Value mask = op->getOperand(2);
   if (!mlir::vc4tile::isVC4TileSharedTileType(handle.getType()) ||
-      !isI32Scalar(row) || !isVector16I1(mask.getType()) ||
+      !isI32Scalar(row) || !mlir::vc4tile::isVC4TilePredicateType(mask.getType()) ||
       !isVector16Data(op->getResult(0).getType())) {
     return op->emitOpError(
-        "shared_vpm->register copy_tile requires !vc4tile.shared_tile handle, i32 row, vector<16xi1> mask, and vector result");
+        "shared_vpm->register copy_tile requires !vc4tile.shared_tile handle, i32 row, !vc4tile.predicate mask, and vector result");
   }
   FailureOr<PredicateFragmentPlan> predicatePlan =
       planPredicateTransferForMask(
@@ -6612,8 +6769,11 @@ static LogicalResult planSharedRegisterCopy(Operation *op, OpBuilder &builder) {
                     builder,
                     op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout")))};
   appendTileSemanticMetadataAttrs(op, builder, attrs);
+  FailureOr<Value> coreMask = createCoreMaskCarrier(builder, op->getLoc(), mask);
+  if (failed(coreMask))
+    return failure();
   Operation *load = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileSharedLoadOpName, {handle, row, mask},
+      builder, op->getLoc(), kVC4TileSharedLoadOpName, {handle, row, *coreMask},
       attrs, op->getResultTypes());
   op->getResult(0).replaceAllUsesWith(load->getResult(0));
   return success();
@@ -6674,7 +6834,7 @@ static Attribute getVPMTileLoadLayoutAttr(OpBuilder &builder,
 }
 
 static Operation *createMaskAllForPlan(OpBuilder &builder, Location loc) {
-  return createVC4TileCoreOp(builder, loc, kVC4TileMaskAllOpName, {}, {},
+  return createVC4TileCoreOp(builder, loc, kVC4TileCoreMaskAllOpName, {}, {},
                              getVector16I1Type(builder));
 }
 
@@ -6688,41 +6848,25 @@ static Value createZeroVectorForPlan(OpBuilder &builder, Location loc) {
 static Operation *createOneRowTileRectMaskForPlan(OpBuilder &builder,
                                                   Location loc,
                                                   int64_t activeCols) {
-  SmallVector<NamedAttribute, 4> attrs{
-      namedAttr(builder, "active_rows", builder.getI32IntegerAttr(1)),
-      namedAttr(builder, "active_cols", builder.getI32IntegerAttr(activeCols)),
-      namedAttr(builder, "shape",
-                builder.getArrayAttr(
-                    {builder.getI32IntegerAttr(4),
-                     builder.getI32IntegerAttr(4)})),
-      namedAttr(builder, "layout",
-                mlir::vc4tile::LayoutAttr::get(
-                    builder.getContext(), mlir::vc4tile::Layout::row_major))};
-  return createVC4TileCoreOp(builder, loc, kVC4TileTileRectMaskOpName, {},
-                             attrs, getVector16I1Type(builder));
+  Value zero = createI32ConstantForPlan(builder, loc, 0);
+  Value cols = createI32ConstantForPlan(builder, loc, activeCols);
+  return createVC4TileCoreOp(builder, loc, kVC4TileCoreTailMaskOpName,
+                             {zero, cols}, {}, getVector16I1Type(builder));
 }
 
 static Operation *createOneRowTileBoundsMaskForPlan(OpBuilder &builder,
                                                     Location loc,
                                                     Value activeCols) {
-  Value one = createI32ConstantForPlan(builder, loc, 1);
-  SmallVector<NamedAttribute, 2> attrs{
-      namedAttr(builder, "shape",
-                builder.getArrayAttr(
-                    {builder.getI32IntegerAttr(4),
-                     builder.getI32IntegerAttr(4)})),
-      namedAttr(builder, "layout",
-                mlir::vc4tile::LayoutAttr::get(
-                    builder.getContext(), mlir::vc4tile::Layout::row_major))};
-  return createVC4TileCoreOp(builder, loc, kVC4TileTileBoundsMaskOpName,
-                             {one, activeCols}, attrs,
+  Value zero = createI32ConstantForPlan(builder, loc, 0);
+  return createVC4TileCoreOp(builder, loc, kVC4TileCoreTailMaskOpName,
+                             {zero, activeCols}, {},
                              getVector16I1Type(builder));
 }
 
 static Operation *createOneRowTailMaskForPlan(OpBuilder &builder, Location loc,
                                               Value activeCols) {
   Value zero = createI32ConstantForPlan(builder, loc, 0);
-  return createVC4TileCoreOp(builder, loc, kVC4TileTailMaskOpName,
+  return createVC4TileCoreOp(builder, loc, kVC4TileCoreTailMaskOpName,
                              {zero, activeCols}, {}, getVector16I1Type(builder));
 }
 
@@ -7049,8 +7193,10 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
     return op->emitOpError(
         "global->shared_vpm copy_tile requires i32 base, !vc4tile.shared_tile handle, and i32 element offset");
   }
-  if (op->getNumOperands() == 4 && !isVector16I1(op->getOperand(3).getType()))
-    return op->emitOpError("optional global->shared_vpm copy_tile mask must be vector<16xi1>");
+  if (op->getNumOperands() == 4 &&
+      !mlir::vc4tile::isVC4TilePredicateType(op->getOperand(3).getType()))
+    return op->emitOpError(
+        "optional global->shared_vpm copy_tile mask must be !vc4tile.predicate");
   bool useFullBlockPath = op->getNumOperands() < 4;
   if (op->getNumOperands() == 4) {
     Operation *maskDef = op->getOperand(3).getDefiningOp();
@@ -7208,7 +7354,7 @@ static LogicalResult planRectangularSharedGlobal4x4Store(
   Value activeCols =
       createI32ConstantForPlan(builder, op->getLoc(), maskInfo.activeCols);
   Operation *rowMask = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
+      builder, op->getLoc(), kVC4TileCoreTailMaskOpName, {zero, activeCols}, {},
       getVector16I1Type(builder));
 
   for (int64_t row = 0; row < maskInfo.activeRows; ++row) {
@@ -7248,7 +7394,7 @@ static LogicalResult planDynamicBoundsSharedGlobal4x4Store(
 
   Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
   Operation *rowMask = createVC4TileCoreOp(
-      builder, op->getLoc(), kVC4TileTailMaskOpName,
+      builder, op->getLoc(), kVC4TileCoreTailMaskOpName,
       {zero, maskInfo.activeCols}, {}, getVector16I1Type(builder));
 
   for (int64_t row = 0; row < 4; ++row) {
@@ -7321,9 +7467,10 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
                                             Type elementType) {
   if (!mlir::vc4tile::isVC4TileSharedTileType(shared.getType()) ||
       !isI32Scalar(base) || !isI32Scalar(offset) ||
-      !isI32Scalar(rowBase) || !isVector16I1(mask.getType())) {
+      !isI32Scalar(rowBase) ||
+      !mlir::vc4tile::isVC4TilePredicateType(mask.getType())) {
     return op->emitOpError(
-        "shared_vpm->global copy requires !vc4tile.shared_tile plus i32 base/offset/row and vector<16xi1> mask");
+        "shared_vpm->global copy requires !vc4tile.shared_tile plus i32 base/offset/row and !vc4tile.predicate mask");
   }
   FailureOr<PredicateFragmentPlan> predicatePlan =
       planPredicateTransferForMask(
@@ -7391,6 +7538,9 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
   }
   Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
   if (isMaskAllForPlan(mask)) {
+    FailureOr<Value> coreMask = createCoreMaskCarrier(builder, op->getLoc(), mask);
+    if (failed(coreMask))
+      return failure();
     Value logicalRow = rowBase;
     Value vpmY = logicalRow;
     Value vpmX = zero;
@@ -7417,7 +7567,7 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
             createI32ConstantForPlan(builder, op->getLoc(), vpmXBase);
         if (failed(createSharedGlobalStoreForPlan(
                 op, builder, shared, chunkVPMY, chunkVPMX, base, rowOffset,
-                mask, layout, cols, chunkRows, memoryPitchBytes)))
+                *coreMask, layout, cols, chunkRows, memoryPitchBytes)))
           return failure();
         row += chunkRows;
       }
@@ -7425,7 +7575,7 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
     }
     if (canUse2DStore) {
       if (failed(createSharedGlobalStoreForPlan(
-              op, builder, shared, vpmY, vpmX, base, offset, mask, layout,
+              op, builder, shared, vpmY, vpmX, base, offset, *coreMask, layout,
               cols, rows, memoryPitchBytes)))
         return failure();
       return success();
@@ -7446,8 +7596,11 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
       vpmY = createI32ConstantForPlan(builder, op->getLoc(), sourceRow & ~15);
       vpmX = createI32ConstantForPlan(builder, op->getLoc(), sourceRow & 15);
     }
+    FailureOr<Value> coreMask = createCoreMaskCarrier(builder, op->getLoc(), mask);
+    if (failed(coreMask))
+      return failure();
     if (failed(createSharedGlobalStoreForPlan(
-            op, builder, shared, vpmY, vpmX, base, rowOffset, mask, layout,
+            op, builder, shared, vpmY, vpmX, base, rowOffset, *coreMask, layout,
             cols, 1, cols * 4)))
       return failure();
   }

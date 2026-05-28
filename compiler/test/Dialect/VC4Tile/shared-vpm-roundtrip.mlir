@@ -14,7 +14,7 @@ vc4tile.kernel @shared_vpm attributes {
 } {
   %row = vc4tile.warp_id : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   // CHECK: vc4tile.shared_alloc
   %tile = vc4tile.shared_alloc {rows = 8 : i32, elem_bytes = 4 : i32, memory_space = #vc4tile.memory_space<shared_vpm>, layout = #vc4tile.vpm_layout<row_major>} : !vc4tile.shared_tile
   // CHECK: vc4tile.shared_store

@@ -5,7 +5,7 @@
 // CORE-NOT: vc4tile.copy_tile
 // CORE-NOT: vc4tile.vdr_load_tile
 // CORE: cf.cond_br
-// CORE: vc4tile.tail_mask
+// CORE: vc4tile.core_tail_mask
 // CORE: vc4tile.masked_load_global
 // CORE: vc4tile.shared_store
 
@@ -38,14 +38,14 @@ vc4tile.kernel @plan_copy_global_shared_bounds_and_tail(%in : i32, %rows : i32, 
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %mask = vc4tile.mask_and %bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
+  %mask = vc4tile.mask_and %bounds, %tail
   "vc4tile.copy_tile"(%in, %shared, %zero, %mask) {
     shape = [4, 4], src_space = #vc4tile.memory_space<global>, dst_space = #vc4tile.memory_space<shared_vpm>,
     src_layout = #vc4tile.layout<row_major>, dst_layout = #vc4tile.layout<vpm_row>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, elem_bytes = 4 : i32, memory_pitch_bytes = 16 : i32
-  } : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (i32, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

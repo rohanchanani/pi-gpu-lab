@@ -8,7 +8,7 @@ vc4tile.kernel @masked_memory attributes {
 } {
   %base = arith.constant 0 : i32
   %offsets = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   // CHECK: vc4tile.masked_load_global
   %loaded = vc4tile.masked_load_global %base, %offsets, %mask {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<coalesced>} : i32, vector<16xi32>, vector<16xi1> -> vector<16xi32>
   // CHECK: vc4tile.masked_store_global

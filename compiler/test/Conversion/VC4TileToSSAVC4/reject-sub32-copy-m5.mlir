@@ -11,7 +11,7 @@ vc4tile.kernel @reject_sub32_copy(%in : i32, %n : i32) attributes {
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %tile = "vc4tile.tile_load"(%in, %zero, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = f16, storage_type = f16, precision = #vc4tile.precision<exact_32>} : (i32, i32, vector<16xi1>) -> vector<16xf32>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
+  %tile = "vc4tile.tile_load"(%in, %zero, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = f16, storage_type = f16, precision = #vc4tile.precision<exact_32>} : (i32, i32, !vc4tile.predicate) -> vector<16xf32>
   vc4tile.return
 }

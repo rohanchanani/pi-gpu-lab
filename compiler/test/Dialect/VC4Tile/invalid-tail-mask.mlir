@@ -7,6 +7,6 @@ vc4tile.kernel @bad_tail_mask attributes {
   %base = arith.constant 0 : i32
   %limit = vc4tile.lane_range : vector<16xi32>
   // CHECK: limit type must be i32 or index
-  %tail = vc4tile.tail_mask %base, %limit : i32, vector<16xi32> -> vector<16xi1>
+  %tail = vc4tile.tail_mask %base, %limit : i32, vector<16xi32>
   vc4tile.return
 }

@@ -6,7 +6,7 @@ vc4tile.kernel @bad_store attributes {
 } {
   %base = arith.constant 0 : i32
   %offsets = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   // CHECK: generic per-lane store access is outside the M4 hardware-lowered contract
   vc4tile.masked_store_global %base, %offsets, %offsets, %mask {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, access = #vc4tile.memory_access<generic>} : i32, vector<16xi32>, vector<16xi32>, vector<16xi1>
   vc4tile.return

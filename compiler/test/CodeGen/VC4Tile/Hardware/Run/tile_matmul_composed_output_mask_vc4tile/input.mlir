@@ -26,13 +26,13 @@ vc4tile.kernel @tile_matmul_composed_output_mask_vc4tile(%out : i32, %rows : i32
   %rhs_scaled = "vc4tile.tile_mul"(%lane, %two) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
   %rhs = "vc4tile.tile_add"(%rhs_scaled, %three) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
   %acc = "vc4tile.tile_add"(%lane, %base) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
-  %tail_outside_bounds = vc4tile.mask_and %not_bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  %mask = vc4tile.mask_or %bounds, %tail_outside_bounds : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  %result = "vc4tile.tile_matmul"(%lhs, %rhs, %acc, %mask) {m = 4 : i32, n = 4 : i32, k = 4 : i32, shape = [4, 4], lhs_layout = #vc4tile.layout<row_major>, rhs_layout = #vc4tile.layout<row_major>, acc_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, contracting_dims = [[1], [0]], iterator_types = ["parallel", "parallel", "reduction"], lhs_role = #vc4tile.role<input>, rhs_role = #vc4tile.role<input>, acc_role = #vc4tile.role<accumulator>, algorithm_hint = "matmul_4x4x4_composed_output_predicate"} : (vector<16xi32>, vector<16xi32>, vector<16xi32>, vector<16xi1>) -> vector<16xi32>
-  %all = vc4tile.mask_all : vector<16xi1>
-  "vc4tile.tile_store"(%result, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
+  %not_bounds = vc4tile.mask_not %bounds
+  %tail_outside_bounds = vc4tile.mask_and %not_bounds, %tail
+  %mask = vc4tile.mask_or %bounds, %tail_outside_bounds
+  %result = "vc4tile.tile_matmul"(%lhs, %rhs, %acc, %mask) {m = 4 : i32, n = 4 : i32, k = 4 : i32, shape = [4, 4], lhs_layout = #vc4tile.layout<row_major>, rhs_layout = #vc4tile.layout<row_major>, acc_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, accumulator_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, contracting_dims = [[1], [0]], iterator_types = ["parallel", "parallel", "reduction"], lhs_role = #vc4tile.role<input>, rhs_role = #vc4tile.role<input>, acc_role = #vc4tile.role<accumulator>, algorithm_hint = "matmul_4x4x4_composed_output_predicate"} : (vector<16xi32>, vector<16xi32>, vector<16xi32>, !vc4tile.predicate) -> vector<16xi32>
+  %all = vc4tile.mask_all
+  "vc4tile.tile_store"(%result, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, boundary = #vc4tile.boundary_policy<exact>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

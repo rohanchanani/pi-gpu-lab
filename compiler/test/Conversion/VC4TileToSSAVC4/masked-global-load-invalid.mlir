@@ -16,7 +16,7 @@ vc4tile.kernel @masked_global_load_scatter attributes {
 ^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
   %offsets = arith.addi %lanes, %lanes : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %loaded = vc4tile.masked_load_global %base, %offsets, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

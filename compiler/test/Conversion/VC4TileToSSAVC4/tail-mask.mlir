@@ -8,6 +8,6 @@
 vc4tile.kernel @tail_mask attributes {public_name = "tail_mask"} {
   %base = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
-  %mask = vc4tile.tail_mask %base, %limit : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %base, %limit : i32, i32 -> vector<16xi1>
   vc4tile.return
 }

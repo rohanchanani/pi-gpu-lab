@@ -21,7 +21,7 @@ vc4tile.kernel @saxpy_independent_vector attributes {
 } {
 ^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %loaded = vc4tile.masked_load_global %base, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

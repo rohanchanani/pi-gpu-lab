@@ -26,7 +26,7 @@ vc4tile.kernel @legalize_scf_for_tail_mask_store_core attributes {
   %lanes = vc4tile.lane_range : vector<16xi32>
   %total_vec = vector.broadcast %total : i32 to vector<16xi32>
   %value = arith.addi %lanes, %total_vec : vector<16xi32>
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   vc4tile.masked_store_global %out, %lanes, %value, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

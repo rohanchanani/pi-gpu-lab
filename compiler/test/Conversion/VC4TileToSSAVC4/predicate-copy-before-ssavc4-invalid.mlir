@@ -17,7 +17,7 @@ vc4tile.kernel @predicate_copy_before_ssavc4(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %tile = arith.constant dense<0> : vector<16xi32>
-  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
+  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>}
   "vc4tile.copy_tile"(%tile, %out, %zero, %mask) {
     shape = [4, 4],
     src_space = #vc4tile.memory_space<register>,
@@ -29,6 +29,6 @@ vc4tile.kernel @predicate_copy_before_ssavc4(%out : i32) attributes {
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

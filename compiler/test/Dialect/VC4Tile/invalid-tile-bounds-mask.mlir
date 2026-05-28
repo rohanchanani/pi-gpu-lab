@@ -14,6 +14,6 @@ vc4tile.kernel @invalid_tile_bounds_mask attributes {
 } {
   %rows = arith.constant 3 : i32
   %cols = arith.constant 2 : i32
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [8, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [8, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   vc4tile.return
 }

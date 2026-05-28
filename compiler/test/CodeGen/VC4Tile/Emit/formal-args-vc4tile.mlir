@@ -20,7 +20,7 @@ vc4tile.kernel @formal_args_vc4tile attributes {
 ^entry(%out: i32, %n: i32):
   %zero = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   vc4tile.masked_store_global %out, %lanes, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

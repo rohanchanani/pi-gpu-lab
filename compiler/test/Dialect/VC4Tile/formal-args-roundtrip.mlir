@@ -18,12 +18,12 @@ vc4tile.kernel @formal_args(%out : i32, %n : i32, %alpha : f32) attributes {
   ]
 } {
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %sum = arith.addf %alpha, %alpha : f32
   // CHECK: vc4tile.masked_store_global
   vc4tile.masked_store_global %out, %lanes, %lanes, %mask {elem_bytes = 4 : i32, offset_unit = #vc4tile.offset_unit<byte>, memory_space = #vc4tile.memory_space<global>, access = #vc4tile.memory_access<coalesced>} : i32, vector<16xi32>, vector<16xi32>, vector<16xi1>
   %zero = arith.constant 0 : i32
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.core_tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   %all = arith.andi %tail, %mask : vector<16xi1>
   %cmp = arith.cmpf oeq, %sum, %alpha : f32
   vc4tile.return

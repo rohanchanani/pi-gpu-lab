@@ -6,7 +6,7 @@ vc4tile.kernel @invalid_divergent_side_effecting_branch attributes {
   %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
   %value = arith.constant dense<0> : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %one = arith.constant 1 : i32
   %pred = arith.cmpi eq, %base, %one : i32
   cf.cond_br %pred, ^store, ^exit

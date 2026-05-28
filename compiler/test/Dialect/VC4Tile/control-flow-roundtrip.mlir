@@ -3,7 +3,7 @@
 // CHECK-LABEL: vc4tile.kernel @control_flow_roundtrip
 // CHECK: cf.cond_br
 // CHECK: cf.br
-// CHECK: vc4tile.tail_mask
+// CHECK: vc4tile.core_tail_mask
 vc4tile.kernel @control_flow_roundtrip attributes {public_name = "control_flow_roundtrip"} {
   %base = arith.constant 0 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
@@ -19,7 +19,7 @@ vc4tile.kernel @control_flow_roundtrip attributes {public_name = "control_flow_r
 ^else(%fbase: i32, %flo: i32, %flimit: i32):
   cf.br ^merge(%fbase, %flo, %flimit : i32, i32, i32)
 ^merge(%mbase: i32, %mlo: i32, %mlimit: i32):
-  %mask = vc4tile.tail_mask %mlo, %mlimit : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %mlo, %mlimit : i32, i32 -> vector<16xi1>
   %bias = arith.constant 5 : i32
   %bias_vec = vector.broadcast %bias : i32 to vector<16xi32>
   %value = arith.addi %lanes, %bias_vec : vector<16xi32>

@@ -23,12 +23,12 @@ vc4tile.kernel @scf_tiled_saxpy_loop_vc4tile(%out : i32, %x : i32, %y : i32, %n 
   %two_vec = vector.broadcast %two : i32 to vector<16xi32>
   scf.for %i = %lb to %n_idx step %step {
     %i32 = arith.index_cast %i : index to i32
-    %mask = vc4tile.tail_mask %i32, %n : i32, i32 -> vector<16xi1>
-    %xv = "vc4tile.tile_load"(%x, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
-    %yv = "vc4tile.tile_load"(%y, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
+    %mask = vc4tile.tail_mask %i32, %n : i32, i32
+    %xv = "vc4tile.tile_load"(%x, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
+    %yv = "vc4tile.tile_load"(%y, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
     %scaled = arith.muli %xv, %two_vec : vector<16xi32>
     %result = arith.addi %scaled, %yv : vector<16xi32>
-    "vc4tile.tile_store"(%result, %out, %i32, %mask) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+    "vc4tile.tile_store"(%result, %out, %i32, %mask) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   }
   vc4tile.return
 }

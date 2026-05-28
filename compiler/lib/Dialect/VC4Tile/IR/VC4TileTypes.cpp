@@ -53,6 +53,10 @@ bool mlir::vc4tile::isVC4TileTileType(Type type) {
   return type && llvm::isa<TileType>(type);
 }
 
+bool mlir::vc4tile::isVC4TilePredicateType(Type type) {
+  return type && llvm::isa<PredicateType>(type);
+}
+
 bool mlir::vc4tile::isVC4TileSupportedM532BitElementType(Type type) {
   if (!type)
     return false;

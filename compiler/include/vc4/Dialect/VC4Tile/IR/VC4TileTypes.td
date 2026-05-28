@@ -31,4 +31,16 @@ def VC4Tile_TileType : VC4Tile_Type<"Tile", "tile"> {
   let assemblyFormat = "";
 }
 
+def VC4Tile_PredicateType : VC4Tile_Type<"Predicate", "predicate"> {
+  let summary = "CuTe-style logical-coordinate predicate handle";
+  let description = [{
+    Surface-level semantic predicate over logical tile/view coordinates.  This
+    is not a hardware lane-mask carrier.  Copy planning and compute
+    canonicalization normalize predicate values into fragment plans and only
+    then materialize concrete vector<16xi1> masks where VC4 hardware requires
+    them.
+  }];
+  let assemblyFormat = "";
+}
+
 #endif // VC4TILE_TYPES_TD

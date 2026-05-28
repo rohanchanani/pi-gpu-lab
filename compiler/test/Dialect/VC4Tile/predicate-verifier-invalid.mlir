@@ -13,7 +13,7 @@ vc4tile.kernel @predicate_shape_mismatch(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %tile = arith.constant dense<0> : vector<16xi32>
-  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
+  %mask = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>}
   // expected-error@+1 {{semantic predicate shape mismatch: predicate shape [4, 4] does not match consumer shape [1, 16]}}
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16], dst_layout = #vc4tile.layout<row_major>,
@@ -22,7 +22,7 @@ vc4tile.kernel @predicate_shape_mismatch(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<exact>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -43,7 +43,7 @@ vc4tile.kernel @predicate_rank_mismatch_direct_tail(%in : i32, %n : i32) attribu
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
   // expected-error@+1 {{semantic predicate rank mismatch: vc4tile.tail_mask is a 1D tail interval}}
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [4, 4], src_layout = #vc4tile.layout<row_major>,
@@ -52,7 +52,7 @@ vc4tile.kernel @predicate_rank_mismatch_direct_tail(%in : i32, %n : i32) attribu
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
   vc4tile.return
 }
 
@@ -77,7 +77,7 @@ vc4tile.kernel @predicate_layout_mismatch_copy(%in : i32) attributes {
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tile_bounds_mask %zero, %zero {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %zero, %zero {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   // expected-error@+1 {{unsupported layout + predicate combination: semantic predicate layout mismatch}}
   "vc4tile.copy_tile"(%in, %shared, %zero, %mask) {
     shape = [4, 4],
@@ -90,7 +90,7 @@ vc4tile.kernel @predicate_layout_mismatch_copy(%in : i32) attributes {
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (i32, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -118,7 +118,7 @@ vc4tile.kernel @predicate_dynamic_multirow_store(%out : i32, %n : i32) attribute
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %zero, %n : i32, i32 -> vector<16xi1>
   // expected-error@+1 {{unsupported 2D dynamic active-lane predicate}}
   vc4tile.shared_store_global %shared, %zero, %zero, %out, %zero, %mask {
     elem_bytes = 4 : i32,
@@ -144,7 +144,7 @@ vc4tile.kernel @legacy_tile_load_layout_rejected(%in : i32) attributes {
   vpm_bytes_per_block = 0 : i32
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   // expected-error@+1 {{legacy movement layout attribute is not supported; use src_layout for tile_load and dst_layout for tile_store}}
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16],
@@ -154,7 +154,7 @@ vc4tile.kernel @legacy_tile_load_layout_rejected(%in : i32) attributes {
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
   vc4tile.return
 }
 
@@ -173,7 +173,7 @@ vc4tile.kernel @legacy_tile_store_layout_rejected(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %tile = arith.constant dense<0> : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   // expected-error@+1 {{legacy movement layout attribute is not supported; use src_layout for tile_load and dst_layout for tile_store}}
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16],
@@ -183,7 +183,7 @@ vc4tile.kernel @legacy_tile_store_layout_rejected(%out : i32) attributes {
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -208,7 +208,7 @@ vc4tile.kernel @legacy_copy_tile_source_layout_rejected(%out : i32) attributes {
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   // expected-error@+1 {{legacy source_layout attribute is not supported; use explicit src_layout/dst_layout transfer roles}}
   "vc4tile.copy_tile"(%shared, %zero, %out, %zero, %mask) {
     shape = [1, 16],
@@ -221,6 +221,6 @@ vc4tile.kernel @legacy_copy_tile_source_layout_rejected(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (!vc4tile.shared_tile, i32, i32, i32, vector<16xi1>) -> ()
+  } : (!vc4tile.shared_tile, i32, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

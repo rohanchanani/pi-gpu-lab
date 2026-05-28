@@ -6,7 +6,7 @@ vc4tile.kernel @warp_reduce_sum_vc4tile attributes {
 } {
 ^entry(%base: i32):
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %sum = vc4tile.reduce %lanes, %mask {kind = #vc4tile.reduce_kind<add>} : vector<16xi32>, vector<16xi1> -> vector<16xi32>
   vc4tile.masked_store_global %base, %lanes, %sum, %mask {
     elem_bytes = 4 : i32,

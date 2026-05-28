@@ -24,18 +24,18 @@ vc4tile.kernel @boundary_tail_predicated_load_store_vc4tile(%out : i32, %in : i3
   }
 } {
   %zero = arith.constant 0 : i32
-  %mask = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tail_mask %zero, %n : i32, i32
   %tile = "vc4tile.tile_load"(%in, %zero, %mask) {
     shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<tail_predicated>, role = #vc4tile.role<input>,
     copy_stage = #vc4tile.copy_stage<prologue>, reuse_hint = #vc4tile.reuse_hint<register>
-  } : (i32, i32, vector<16xi1>) -> vector<16xi32>
+  } : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
   "vc4tile.tile_store"(%tile, %out, %zero, %mask) {
     shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>,
     boundary = #vc4tile.boundary_policy<tail_predicated>, role = #vc4tile.role<output>,
     copy_stage = #vc4tile.copy_stage<epilogue>, reuse_hint = #vc4tile.reuse_hint<producer>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

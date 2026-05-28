@@ -23,7 +23,7 @@ vc4tile.kernel @predicate_load_zero_fill_layout_diag(%in : i32, %rows : i32, %co
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   // expected-error@+1 {{load predicate requires inactive zero-fill}}
   "vc4tile.copy_tile"(%in, %shared, %zero, %mask) {
     shape = [4, 4],
@@ -36,7 +36,7 @@ vc4tile.kernel @predicate_load_zero_fill_layout_diag(%in : i32, %rows : i32, %co
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (i32, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -65,7 +65,7 @@ vc4tile.kernel @predicate_store_preserve_layout_diag(%out : i32, %rows : i32, %c
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   // expected-error@+1 {{transposed or column-major predicate planning requires explicit logical-coordinate predicate rebasing before fragment mapping}}
   "vc4tile.copy_tile"(%shared, %zero, %out, %zero, %mask) {
     shape = [4, 4],
@@ -78,7 +78,7 @@ vc4tile.kernel @predicate_store_preserve_layout_diag(%out : i32, %rows : i32, %c
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (!vc4tile.shared_tile, i32, i32, i32, vector<16xi1>) -> ()
+  } : (!vc4tile.shared_tile, i32, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -106,7 +106,7 @@ vc4tile.kernel @predicate_dynamic_vpm_alignment_diag(%out : i32, %row : i32) att
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   // expected-error@+1 {{predicate fragment planning would require dynamic VPM alignment}}
   "vc4tile.copy_tile"(%shared, %row, %out, %zero, %mask) {
     shape = [2, 16],
@@ -119,6 +119,6 @@ vc4tile.kernel @predicate_dynamic_vpm_alignment_diag(%out : i32, %row : i32) att
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 64 : i32
-  } : (!vc4tile.shared_tile, i32, i32, i32, vector<16xi1>) -> ()
+  } : (!vc4tile.shared_tile, i32, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

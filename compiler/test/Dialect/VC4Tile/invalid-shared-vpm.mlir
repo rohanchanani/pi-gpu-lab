@@ -13,7 +13,7 @@ vc4tile.kernel @bad_shared_contract attributes {
 } {
   %row = vc4tile.warp_id : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %tile = vc4tile.shared_alloc {
     rows = 1 : i32,
     elem_bytes = 4 : i32,

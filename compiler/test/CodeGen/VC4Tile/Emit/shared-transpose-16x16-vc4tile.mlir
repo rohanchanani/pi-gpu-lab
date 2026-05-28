@@ -50,7 +50,7 @@ vc4tile.kernel @shared_transpose_16x16_vc4tile attributes {
   %c15 = arith.constant 15 : i32
   %shift = arith.constant 6 : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %tile = vc4tile.shared_alloc {
     rows = 16 : i32,
     elem_bytes = 4 : i32,

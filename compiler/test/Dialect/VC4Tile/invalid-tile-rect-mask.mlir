@@ -13,6 +13,6 @@ vc4tile.kernel @invalid_tile_rect_mask attributes {
   vpm_rows_per_block = 0 : i32,
   vpm_bytes_per_block = 0 : i32
 } {
-  %mask = vc4tile.tile_rect_mask {active_rows = 4 : i32, active_cols = 5 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
+  %mask = vc4tile.tile_rect_mask {active_rows = 4 : i32, active_cols = 5 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>}
   vc4tile.return
 }

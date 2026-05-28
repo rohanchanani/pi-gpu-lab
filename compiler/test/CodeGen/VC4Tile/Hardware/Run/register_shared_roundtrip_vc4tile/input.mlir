@@ -14,7 +14,7 @@ vc4tile.kernel @register_shared_roundtrip_vc4tile(%out : i32) attributes {
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.mask_all
   %shared = "vc4tile.shared_tile_alloc"() {
     rows = 1 : i32,
     elem_bytes = 4 : i32,
@@ -38,7 +38,7 @@ vc4tile.kernel @register_shared_roundtrip_vc4tile(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   %roundtrip = "vc4tile.copy_tile"(%shared, %zero, %mask) {
     shape = [1, 16],
     src_space = #vc4tile.memory_space<shared_vpm>,
@@ -50,10 +50,10 @@ vc4tile.kernel @register_shared_roundtrip_vc4tile(%out : i32) attributes {
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
+  } : (!vc4tile.shared_tile, i32, !vc4tile.predicate) -> vector<16xi32>
   "vc4tile.tile_store"(%roundtrip, %out, %zero, %mask) {
     shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>,
     element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

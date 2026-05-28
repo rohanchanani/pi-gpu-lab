@@ -9,7 +9,7 @@
 // CORE-NOT: : index
 // CORE-NOT: vc4tile.tile_load
 // CORE: cf.cond_br
-// CORE: vc4tile.tail_mask
+// CORE: vc4tile.core_tail_mask
 // CORE: vc4tile.masked_load_global
 // CORE: vc4tile.masked_store_global
 // CORE-NOT: scf.
@@ -42,9 +42,9 @@ vc4tile.kernel @scf_tiled_copy_nondiv_trip(%out : i32, %in : i32, %n : i32) attr
   %step = arith.constant 16 : index
   scf.for %i = %lb to %n_idx step %step {
     %i32 = arith.index_cast %i : index to i32
-    %mask = vc4tile.tail_mask %i32, %n : i32, i32 -> vector<16xi1>
-    %tile = "vc4tile.tile_load"(%in, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
-    "vc4tile.tile_store"(%tile, %out, %i32, %mask) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+    %mask = vc4tile.tail_mask %i32, %n : i32, i32
+    %tile = "vc4tile.tile_load"(%in, %i32, %mask) {shape = [1, 16], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
+    "vc4tile.tile_store"(%tile, %out, %i32, %mask) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<tail_predicated>, packing = #vc4tile.packing<none>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   }
   vc4tile.return
 }

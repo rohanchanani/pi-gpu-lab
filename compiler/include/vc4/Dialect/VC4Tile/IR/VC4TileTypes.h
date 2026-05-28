@@ -24,6 +24,7 @@ bool isVC4TileVector16F32Type(Type type);
 bool isVC4TileVector16DataType(Type type);
 bool isVC4TileSharedTileType(Type type);
 bool isVC4TileTileType(Type type);
+bool isVC4TilePredicateType(Type type);
 bool isVC4TileSupportedM532BitElementType(Type type);
 
 } // namespace mlir::vc4tile

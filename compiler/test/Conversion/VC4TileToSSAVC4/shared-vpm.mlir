@@ -27,7 +27,7 @@ vc4tile.kernel @shared_vpm_vc4tile attributes {
 } {
   %row = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   %tile = vc4tile.shared_alloc {
     rows = 16 : i32,
     elem_bytes = 4 : i32,

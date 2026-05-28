@@ -19,16 +19,16 @@ vc4tile.kernel @tile_mask_algebra_vc4tile(%out : i32, %in : i32, %rows : i32, %c
 } {
   %zero = arith.constant 0 : i32
   %sixteen = arith.constant 16 : i32
-  %all = vc4tile.mask_all : vector<16xi1>
-  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
-  %union = vc4tile.mask_or %bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  %not_bounds = vc4tile.mask_not %bounds : vector<16xi1> -> vector<16xi1>
-  %tail_outside_bounds = vc4tile.mask_and %not_bounds, %tail : vector<16xi1>, vector<16xi1> -> vector<16xi1>
-  %tile = "vc4tile.tile_load"(%in, %zero, %all) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>} : (i32, i32, vector<16xi1>) -> vector<16xi32>
-  %sum_union = "vc4tile.tile_reduce"(%tile, %union) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<add>, axis = 1 : i32, algorithm_hint = "predicate_algebra_union"} : (vector<16xi32>, vector<16xi1>) -> vector<16xi32>
-  %sum_tail_outside = "vc4tile.tile_reduce"(%tile, %tail_outside_bounds) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<add>, axis = 1 : i32, algorithm_hint = "predicate_algebra_not_and"} : (vector<16xi32>, vector<16xi1>) -> vector<16xi32>
-  "vc4tile.tile_store"(%sum_union, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
-  "vc4tile.tile_store"(%sum_tail_outside, %out, %sixteen, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  %all = vc4tile.mask_all
+  %bounds = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
+  %union = vc4tile.mask_or %bounds, %tail
+  %not_bounds = vc4tile.mask_not %bounds
+  %tail_outside_bounds = vc4tile.mask_and %not_bounds, %tail
+  %tile = "vc4tile.tile_load"(%in, %zero, %all) {shape = [4, 4], src_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>} : (i32, i32, !vc4tile.predicate) -> vector<16xi32>
+  %sum_union = "vc4tile.tile_reduce"(%tile, %union) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<add>, axis = 1 : i32, algorithm_hint = "predicate_algebra_union"} : (vector<16xi32>, !vc4tile.predicate) -> vector<16xi32>
+  %sum_tail_outside = "vc4tile.tile_reduce"(%tile, %tail_outside_bounds) {shape = [4, 4], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<add>, axis = 1 : i32, algorithm_hint = "predicate_algebra_not_and"} : (vector<16xi32>, !vc4tile.predicate) -> vector<16xi32>
+  "vc4tile.tile_store"(%sum_union, %out, %zero, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
+  "vc4tile.tile_store"(%sum_tail_outside, %out, %sixteen, %all) {shape = [1, 16], dst_layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<global>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, boundary = #vc4tile.boundary_policy<exact>, packing = #vc4tile.packing<none>, role = #vc4tile.role<output>} : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

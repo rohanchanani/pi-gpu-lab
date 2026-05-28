@@ -13,7 +13,7 @@ vc4tile.kernel @tile_reductions_invalid attributes {
   vpm_bytes_per_block = 0 : i32
 } {
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
-  %bad = "vc4tile.tile_reduce"(%values, %mask) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<max>, axis = 1 : i32} : (vector<16xi32>, vector<16xi1>) -> vector<16xi32>
+  %mask = vc4tile.mask_all
+  %bad = "vc4tile.tile_reduce"(%values, %mask) {shape = [1, 16], layout = #vc4tile.layout<row_major>, memory_space = #vc4tile.memory_space<register>, element_type = i32, storage_type = i32, precision = #vc4tile.precision<exact_32>, packing = #vc4tile.packing<none>, kind = #vc4tile.reduce_kind<max>, axis = 1 : i32} : (vector<16xi32>, !vc4tile.predicate) -> vector<16xi32>
   vc4tile.return
 }

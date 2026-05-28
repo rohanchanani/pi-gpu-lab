@@ -24,7 +24,7 @@ vc4tile.kernel @scf_if_no_result_vc4tile attributes {
   %zero = arith.constant 0 : i32
   %cond = arith.cmpi ne, %flag, %zero : i32
   %lanes = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   scf.if %cond {
     %then_total = arith.constant 28 : i32
     %then_vec = vector.broadcast %then_total : i32 to vector<16xi32>

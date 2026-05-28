@@ -26,7 +26,7 @@ vc4tile.kernel @predicate_hardware_mapping_full_static_rect(%in : i32) attribute
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %all = vc4tile.mask_all : vector<16xi1>
+  %all = vc4tile.mask_all
   "vc4tile.copy_tile"(%in, %shared, %zero, %all) {
     shape = [4, 4],
     src_space = #vc4tile.memory_space<global>,
@@ -38,7 +38,7 @@ vc4tile.kernel @predicate_hardware_mapping_full_static_rect(%in : i32) attribute
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 16 : i32
-  } : (i32, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (i32, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -62,7 +62,7 @@ vc4tile.kernel @predicate_hardware_mapping_register_row_tail(%out : i32, %n : i3
 } {
   %zero = arith.constant 0 : i32
   %values = vc4tile.lane_range : vector<16xi32>
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
   "vc4tile.tile_store"(%values, %out, %zero, %tail) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -71,7 +71,7 @@ vc4tile.kernel @predicate_hardware_mapping_register_row_tail(%out : i32, %n : i3
     precision = #vc4tile.precision<exact_32>,
     boundary = #vc4tile.boundary_policy<tail_predicated>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -103,7 +103,7 @@ vc4tile.kernel @predicate_hardware_mapping_shared_row_tail(%out : i32, %n : i32)
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %tail = vc4tile.tail_mask %zero, %n : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %zero, %n : i32, i32
   "vc4tile.copy_tile"(%shared, %out, %zero, %tail) {
     shape = [1, 16],
     src_space = #vc4tile.memory_space<shared_vpm>,
@@ -115,7 +115,7 @@ vc4tile.kernel @predicate_hardware_mapping_shared_row_tail(%out : i32, %n : i32)
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32,
     memory_pitch_bytes = 64 : i32
-  } : (!vc4tile.shared_tile, i32, i32, vector<16xi1>) -> ()
+  } : (!vc4tile.shared_tile, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -147,7 +147,7 @@ vc4tile.kernel @predicate_hardware_mapping_register_shared_preserve(%rows : i32,
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   "vc4tile.copy_tile"(%values, %shared, %zero, %mask) {
     shape = [4, 4],
     src_space = #vc4tile.memory_space<register>,
@@ -158,7 +158,7 @@ vc4tile.kernel @predicate_hardware_mapping_register_shared_preserve(%rows : i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (vector<16xi32>, !vc4tile.shared_tile, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, !vc4tile.shared_tile, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }
 
@@ -189,7 +189,7 @@ vc4tile.kernel @predicate_hardware_mapping_shared_register_zero_fill(%out : i32,
     role = #vc4tile.role<scratch>, precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>, memory_space = #vc4tile.memory_space<shared_vpm>
   } : () -> !vc4tile.shared_tile
-  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.tile_bounds_mask %rows, %cols {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   %loaded = "vc4tile.copy_tile"(%shared, %zero, %mask) {
     shape = [4, 4],
     src_space = #vc4tile.memory_space<shared_vpm>,
@@ -200,8 +200,8 @@ vc4tile.kernel @predicate_hardware_mapping_shared_register_zero_fill(%out : i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>,
     elem_bytes = 4 : i32
-  } : (!vc4tile.shared_tile, i32, vector<16xi1>) -> vector<16xi32>
-  %all = vc4tile.mask_all : vector<16xi1>
+  } : (!vc4tile.shared_tile, i32, !vc4tile.predicate) -> vector<16xi32>
+  %all = vc4tile.mask_all
   "vc4tile.tile_store"(%loaded, %out, %zero, %all) {
     shape = [1, 16],
     dst_layout = #vc4tile.layout<row_major>,
@@ -209,6 +209,6 @@ vc4tile.kernel @predicate_hardware_mapping_shared_register_zero_fill(%out : i32,
     element_type = i32, storage_type = i32,
     precision = #vc4tile.precision<exact_32>,
     packing = #vc4tile.packing<none>
-  } : (vector<16xi32>, i32, i32, vector<16xi1>) -> ()
+  } : (vector<16xi32>, i32, i32, !vc4tile.predicate) -> ()
   vc4tile.return
 }

@@ -35,7 +35,7 @@ vc4tile.kernel @program_id_writeback_vc4tile attributes {
   %pid_lanes = arith.shli %pid, %four : i32
   %pid_bytes = arith.shli %pid, %six : i32
   %base = arith.addi %out, %pid_bytes : i32
-  %mask = vc4tile.tail_mask %pid_lanes, %n : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %pid_lanes, %n : i32, i32 -> vector<16xi1>
   %pid_vec = vector.broadcast %pid_lanes : i32 to vector<16xi32>
   %value = arith.addi %pid_vec, %lanes : vector<16xi32>
   vc4tile.masked_store_global %base, %lanes, %value, %mask {

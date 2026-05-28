@@ -7,7 +7,7 @@ vc4tile.kernel @rotate_reduce attributes {
   semaphores_per_block = 0 : i32
 } {
   %values = vc4tile.lane_range : vector<16xi32>
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   // CHECK: vc4tile.rotate
   %rot = vc4tile.rotate %values {amount = 3 : i32} : vector<16xi32> -> vector<16xi32>
   // CHECK: vc4tile.reduce

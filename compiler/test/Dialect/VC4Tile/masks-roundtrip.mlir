@@ -15,18 +15,18 @@ vc4tile.kernel @masks_roundtrip attributes {
   %base = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
   // CHECK: vc4tile.mask_all
-  %all = vc4tile.mask_all : vector<16xi1>
+  %all = vc4tile.mask_all
   // CHECK: vc4tile.tail_mask
-  %tail = vc4tile.tail_mask %base, %limit : i32, i32 -> vector<16xi1>
+  %tail = vc4tile.tail_mask %base, %limit : i32, i32
   // CHECK: vc4tile.tile_rect_mask
-  %rect = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>} : vector<16xi1>
+  %rect = vc4tile.tile_rect_mask {active_rows = 3 : i32, active_cols = 2 : i32, shape = [4, 4], layout = #vc4tile.layout<row_major>}
   // CHECK: vc4tile.tile_bounds_mask
-  %bounds = vc4tile.tile_bounds_mask %base, %limit {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
+  %bounds = vc4tile.tile_bounds_mask %base, %limit {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32
   // CHECK: vc4tile.mask_and
-  %composed = vc4tile.mask_and %tail, %bounds : vector<16xi1>, vector<16xi1> -> vector<16xi1>
+  %composed = vc4tile.mask_and %tail, %bounds
   // CHECK: vc4tile.mask_or
-  %union = vc4tile.mask_or %composed, %rect : vector<16xi1>, vector<16xi1> -> vector<16xi1>
+  %union = vc4tile.mask_or %composed, %rect
   // CHECK: vc4tile.mask_not
-  %inverse = vc4tile.mask_not %union : vector<16xi1> -> vector<16xi1>
+  %inverse = vc4tile.mask_not %union
   vc4tile.return
 }

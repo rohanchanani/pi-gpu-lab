@@ -13,7 +13,7 @@ vc4tile.kernel @masked_global_store_tail attributes {
   %lanes = vc4tile.lane_range : vector<16xi32>
   %zero = arith.constant 0 : i32
   %limit = arith.constant 13 : i32
-  %mask = vc4tile.tail_mask %zero, %limit : i32, i32 -> vector<16xi1>
+  %mask = vc4tile.core_tail_mask %zero, %limit : i32, i32 -> vector<16xi1>
   vc4tile.masked_store_global %base_addr, %lanes, %lanes, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,

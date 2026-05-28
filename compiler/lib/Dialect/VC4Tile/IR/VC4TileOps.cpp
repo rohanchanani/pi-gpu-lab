@@ -67,6 +67,13 @@ static LogicalResult verifyVector16I1(Operation *op, Type type,
   return emitTypeError(op, type, role, "vector<16xi1>");
 }
 
+static LogicalResult verifySemanticPredicate(Operation *op, Type type,
+                                             StringRef role) {
+  if (isVC4TilePredicateType(type))
+    return success();
+  return emitTypeError(op, type, role, "!vc4tile.predicate");
+}
+
 static LogicalResult verifyVector16Data(Operation *op, Type type,
                                         StringRef role) {
   if (isVC4TileVector16DataType(type))
@@ -226,7 +233,7 @@ static LogicalResult verifySurfaceCarrier(Operation *op, Type type,
 
 static bool isVC4TileCopyOperandType(Type type) {
   return isVC4TileSurfaceCarrierType(type) || isVC4TileScalarIdType(type) ||
-         isVC4TileVector16I1Type(type);
+         isVC4TilePredicateType(type);
 }
 
 static LogicalResult verifyM5Exact32Metadata(Operation *op) {
@@ -549,7 +556,7 @@ static LogicalResult verifyTileDotOperands(Operation *op, Value lhs, Value rhs,
                                            Value mask, Value result) {
   if (failed(verifySurfaceCarrier(op, lhs.getType(), "lhs")) ||
       failed(verifySurfaceCarrier(op, rhs.getType(), "rhs")) ||
-      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, mask.getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, result.getType(), "result")))
     return failure();
   if (lhs.getType() != result.getType() || rhs.getType() != result.getType())
@@ -567,7 +574,7 @@ static LogicalResult verifyTileContractOperands(Operation *op, Value lhs,
   if (failed(verifySurfaceCarrier(op, lhs.getType(), "lhs")) ||
       failed(verifySurfaceCarrier(op, rhs.getType(), "rhs")) ||
       failed(verifySurfaceCarrier(op, acc.getType(), "acc")) ||
-      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, mask.getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, result.getType(), "result")))
     return failure();
   if (lhs.getType() != result.getType() || rhs.getType() != result.getType() ||
@@ -600,7 +607,7 @@ static LogicalResult verifyTileReductionCommon(Operation *op, Value input,
                                                bool requireAxis) {
   if (failed(verifyTileComputeMetadata(op)) ||
       failed(verifySurfaceCarrier(op, input.getType(), "input")) ||
-      failed(verifyVector16I1(op, mask.getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, mask.getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, result.getType(), "result")))
     return failure();
   if (input.getType() != result.getType())
@@ -680,6 +687,11 @@ static LogicalResult verifyTransposePermutation(Operation *op,
 static bool isMaskAllOp(Value value) {
   Operation *def = value.getDefiningOp();
   return def && def->getName().getStringRef() == "vc4tile.mask_all";
+}
+
+static bool isCoreMaskAllOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.core_mask_all";
 }
 
 static bool isTailMaskOp(Value value) {
@@ -888,11 +900,11 @@ static LogicalResult verifyCopyTileBoundaryPolicy(Operation *op) {
     return success();
   case BoundaryPolicy::tail_predicated:
     for (Value operand : op->getOperands()) {
-      if (isVC4TileVector16I1Type(operand.getType()))
+      if (isVC4TilePredicateType(operand.getType()))
         return success();
     }
     return op->emitOpError(
-        "boundary policy tail_predicated requires a vector<16xi1> mask operand");
+        "boundary policy tail_predicated requires a !vc4tile.predicate operand");
   case BoundaryPolicy::zero:
   case BoundaryPolicy::clamp:
   case BoundaryPolicy::reject:
@@ -904,7 +916,7 @@ static LogicalResult verifyCopyTileBoundaryPolicy(Operation *op) {
 
 static Value getCopyTileMaskOperand(Operation *op) {
   for (Value operand : op->getOperands()) {
-    if (isVC4TileVector16I1Type(operand.getType()))
+    if (isVC4TilePredicateType(operand.getType()))
       return operand;
   }
   return Value();
@@ -1423,7 +1435,7 @@ LogicalResult MaskAllOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)))
     return failure();
-  return verifyVector16I1(op, getResult().getType(), "result");
+  return verifySemanticPredicate(op, getResult().getType(), "result");
 }
 
 LogicalResult TailMaskOp::verify() {
@@ -1432,13 +1444,13 @@ LogicalResult TailMaskOp::verify() {
       failed(verifyScalarId(op, getBase().getType(), "base")) ||
       failed(verifyScalarId(op, getLimit().getType(), "limit")))
     return failure();
-  return verifyVector16I1(op, getResult().getType(), "result");
+  return verifySemanticPredicate(op, getResult().getType(), "result");
 }
 
 LogicalResult TileRectMaskOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
-      failed(verifyVector16I1(op, getResult().getType(), "result")))
+      failed(verifySemanticPredicate(op, getResult().getType(), "result")))
     return failure();
 
   SmallVector<int64_t, 2> shape;
@@ -1464,7 +1476,7 @@ LogicalResult TileBoundsMaskOp::verify() {
   if (failed(verifyInsideKernel(op)) ||
       failed(verifyScalarId(op, getActiveRows().getType(), "active_rows")) ||
       failed(verifyScalarId(op, getActiveCols().getType(), "active_cols")) ||
-      failed(verifyVector16I1(op, getResult().getType(), "result")))
+      failed(verifySemanticPredicate(op, getResult().getType(), "result")))
     return failure();
 
   SmallVector<int64_t, 2> shape;
@@ -1482,14 +1494,87 @@ LogicalResult TileBoundsMaskOp::verify() {
 LogicalResult MaskAndOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
-      failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
-      failed(verifyVector16I1(op, getRhs().getType(), "rhs")) ||
-      failed(verifyVector16I1(op, getResult().getType(), "result")))
+      failed(verifySemanticPredicate(op, getLhs().getType(), "lhs")) ||
+      failed(verifySemanticPredicate(op, getRhs().getType(), "rhs")) ||
+      failed(verifySemanticPredicate(op, getResult().getType(), "result")))
     return failure();
   return success();
 }
 
 LogicalResult MaskOrOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySemanticPredicate(op, getLhs().getType(), "lhs")) ||
+      failed(verifySemanticPredicate(op, getRhs().getType(), "rhs")) ||
+      failed(verifySemanticPredicate(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
+LogicalResult MaskNotOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifySemanticPredicate(op, getInput().getType(), "input")) ||
+      failed(verifySemanticPredicate(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
+LogicalResult CoreMaskAllOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)))
+    return failure();
+  return verifyVector16I1(op, getResult().getType(), "result");
+}
+
+LogicalResult CoreTailMaskOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyScalarId(op, getBase().getType(), "base")) ||
+      failed(verifyScalarId(op, getLimit().getType(), "limit")))
+    return failure();
+  return verifyVector16I1(op, getResult().getType(), "result");
+}
+
+LogicalResult CoreTileRectMaskOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  SmallVector<int64_t, 2> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "shape", shape)) ||
+      shape.size() != 2)
+    return emitOpError("shape must be rank-2 for core_tile_rect_mask");
+  int64_t activeRows = getActiveRowsAttr().getInt();
+  int64_t activeCols = getActiveColsAttr().getInt();
+  if (activeRows < 1 || activeRows > shape[0] || activeCols < 1 ||
+      activeCols > shape[1])
+    return emitOpError(
+        "active_rows/active_cols must be non-empty and within the logical shape");
+  if (getLayout() != Layout::row_major)
+    return emitOpError(
+        "core_tile_rect_mask currently supports row_major logical layout");
+  return success();
+}
+
+LogicalResult CoreTileBoundsMaskOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyScalarId(op, getActiveRows().getType(), "active_rows")) ||
+      failed(verifyScalarId(op, getActiveCols().getType(), "active_cols")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  SmallVector<int64_t, 2> shape;
+  if (failed(collectPositiveI64Array(op, getShapeAttr(), "shape", shape)) ||
+      shape.size() != 2)
+    return emitOpError("shape must be rank-2 for core_tile_bounds_mask");
+  if (getLayout() != Layout::row_major)
+    return emitOpError(
+        "core_tile_bounds_mask currently supports row_major logical layout");
+  return success();
+}
+
+LogicalResult CoreMaskAndOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
       failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
@@ -1499,7 +1584,17 @@ LogicalResult MaskOrOp::verify() {
   return success();
 }
 
-LogicalResult MaskNotOp::verify() {
+LogicalResult CoreMaskOrOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
+      failed(verifyVector16I1(op, getRhs().getType(), "rhs")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
+LogicalResult CoreMaskNotOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) ||
       failed(verifyVector16I1(op, getInput().getType(), "input")) ||
@@ -1570,7 +1665,7 @@ LogicalResult TileLoadOp::verify() {
   if (failed(verifyInsideKernel(op)) ||
       failed(verifyNoLegacyMovementLayoutAttrs(op)) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
-      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, getMask().getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "result")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
@@ -1597,7 +1692,7 @@ LogicalResult TileStoreOp::verify() {
       failed(verifyNoLegacyMovementLayoutAttrs(op)) ||
       failed(verifySurfaceCarrier(op, getTile().getType(), "tile")) ||
       failed(verifyScalarId(op, getOffset().getType(), "offset")) ||
-      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, getMask().getType(), "mask")) ||
       failed(verifyM5Exact32Metadata(op)) ||
       failed(verifyBoundaryPolicyMatchesMask(op, getMask())) ||
       failed(verifyTileMemoryPredicateAssociation(op, getMask(),
@@ -1630,7 +1725,7 @@ LogicalResult CopyTileOp::verify() {
   for (Value operand : getOperands()) {
     if (!isVC4TileCopyOperandType(operand.getType()))
       return emitTypeError(op, operand.getType(), "operand",
-                           "tile carrier, i32/index row, or vector<16xi1> mask");
+                           "tile carrier, i32/index row, or !vc4tile.predicate");
   }
   for (Value result : getResults()) {
     if (failed(verifySurfaceCarrier(op, result.getType(), "result")))
@@ -1769,7 +1864,7 @@ LogicalResult TileMulOp::verify() {
 LogicalResult TileSelectOp::verify() {
   Operation *op = getOperation();
   if (failed(verifyInsideKernel(op)) || failed(verifyTileComputeMetadata(op)) ||
-      failed(verifyVector16I1(op, getMask().getType(), "mask")) ||
+      failed(verifySemanticPredicate(op, getMask().getType(), "mask")) ||
       failed(verifySurfaceCarrier(op, getTrueValue().getType(), "true_value")) ||
       failed(verifySurfaceCarrier(op, getFalseValue().getType(), "false_value")) ||
       failed(verifySurfaceCarrier(op, getResult().getType(), "result")))
@@ -1988,7 +2083,7 @@ LogicalResult SharedStoreGlobalOp::verify() {
   int64_t nrows = getNrowsAttr().getInt();
   if (nrows < 1 || nrows > 16)
     return emitOpError("nrows must be in range [1, 16]");
-  if (!isMaskAllOp(getMask()) && nrows != 1)
+  if (!isCoreMaskAllOp(getMask()) && nrows != 1)
     return emitOpError(
         "unsupported 2D dynamic active-lane predicate: predicated "
         "shared_store_global is hardware-legal only for one-row fragments; "

@@ -24,7 +24,7 @@ vc4tile.kernel @legalize_scf_for_vector_iter_arg_core attributes {
     %next = arith.addi %acc, %s : vector<16xi32>
     scf.yield %next : vector<16xi32>
   }
-  %mask = vc4tile.mask_all : vector<16xi1>
+  %mask = vc4tile.core_mask_all : vector<16xi1>
   vc4tile.masked_store_global %out, %lanes0, %vec, %mask {
     elem_bytes = 4 : i32,
     offset_unit = #vc4tile.offset_unit<element>,
