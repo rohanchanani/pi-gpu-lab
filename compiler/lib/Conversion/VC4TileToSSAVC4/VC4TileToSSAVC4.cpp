@@ -3816,12 +3816,83 @@ static Value createTileRectAllBitsMask(Operation *op, OpBuilder &builder,
       .getResult();
 }
 
-static Value createRectangularMaskedSelectI32(Operation *op,
-                                              OpBuilder &builder,
-                                              Operation *maskDef,
-                                              Value trueValue,
-                                              Value falseValue,
-                                              Type resultType) {
+static Value createTailAllBitsMask(Operation *op, OpBuilder &builder,
+                                   Operation *maskDef, VectorType vectorType,
+                                   Value allOnes, Value zero) {
+  if (!hasName(maskDef, kVC4TileTailMaskOpName) ||
+      maskDef->getNumOperands() != 2)
+    return Value();
+
+  OperationState laneRangeState(op->getLoc(), kVC4TileLaneRangeOpName);
+  laneRangeState.addTypes(vectorType);
+  Value lanes = builder.create(laneRangeState)->getResult(0);
+  Value base = vector::BroadcastOp::create(
+                   builder, op->getLoc(), vectorType, maskDef->getOperand(0))
+                   .getResult();
+  Value absolute = arith::AddIOp::create(builder, op->getLoc(), base, lanes)
+                       .getResult();
+  Value limit = vector::BroadcastOp::create(
+                    builder, op->getLoc(), vectorType, maskDef->getOperand(1))
+                    .getResult();
+  Value active = arith::CmpIOp::create(builder, op->getLoc(),
+                                      arith::CmpIPredicate::ult, absolute,
+                                      limit);
+  return arith::SelectOp::create(builder, op->getLoc(), active, allOnes, zero)
+      .getResult();
+}
+
+static Value createSemanticAllBitsMask(Operation *op, OpBuilder &builder,
+                                       Value mask, VectorType vectorType,
+                                       Value allOnes, Value zero) {
+  Operation *maskDef = mask.getDefiningOp();
+  if (hasName(maskDef, kVC4TileMaskAllOpName))
+    return allOnes;
+
+  if (hasName(maskDef, kVC4TileTailMaskOpName))
+    return createTailAllBitsMask(op, builder, maskDef, vectorType, allOnes,
+                                 zero);
+
+  if (hasName(maskDef, kVC4TileTileRectMaskOpName))
+    return createTileRectAllBitsMask(op, builder, maskDef, vectorType, zero);
+
+  if (hasName(maskDef, kVC4TileTileBoundsMaskOpName))
+    return createTileBoundsAllBitsMask(op, builder, maskDef, vectorType,
+                                       allOnes, zero);
+
+  if (hasName(maskDef, kVC4TileMaskAndOpName) ||
+      hasName(maskDef, kVC4TileMaskOrOpName)) {
+    if (maskDef->getNumOperands() != 2)
+      return Value();
+    Value lhs = createSemanticAllBitsMask(op, builder, maskDef->getOperand(0),
+                                          vectorType, allOnes, zero);
+    Value rhs = createSemanticAllBitsMask(op, builder, maskDef->getOperand(1),
+                                          vectorType, allOnes, zero);
+    if (!lhs || !rhs)
+      return Value();
+    if (hasName(maskDef, kVC4TileMaskAndOpName))
+      return arith::AndIOp::create(builder, op->getLoc(), lhs, rhs)
+          .getResult();
+    return arith::OrIOp::create(builder, op->getLoc(), lhs, rhs).getResult();
+  }
+
+  if (hasName(maskDef, kVC4TileMaskNotOpName)) {
+    if (maskDef->getNumOperands() != 1)
+      return Value();
+    Value input = createSemanticAllBitsMask(op, builder, maskDef->getOperand(0),
+                                            vectorType, allOnes, zero);
+    if (!input)
+      return Value();
+    return arith::XOrIOp::create(builder, op->getLoc(), input, allOnes)
+        .getResult();
+  }
+
+  return Value();
+}
+
+static Value createSemanticMaskedSelectI32(Operation *op, OpBuilder &builder,
+                                           Value mask, Value trueValue,
+                                           Value falseValue,
+                                           Type resultType) {
   auto vectorType = llvm::dyn_cast<VectorType>(resultType);
   if (!vectorType || vectorType.getRank() != 1 ||
       vectorType.getDimSize(0) != 16 ||
@@ -3833,14 +3904,8 @@ static Value createRectangularMaskedSelectI32(Operation *op,
   Value allOnes =
       createVector16I32SplatConstant(builder, op->getLoc(), vectorType, -1);
 
-  Value activeBits;
-  if (hasName(maskDef, kVC4TileTileRectMaskOpName)) {
-    activeBits =
-        createTileRectAllBitsMask(op, builder, maskDef, vectorType, zero);
-  } else if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
-    activeBits = createTileBoundsAllBitsMask(op, builder, maskDef, vectorType,
-                                             allOnes, zero);
-  }
+  Value activeBits = createSemanticAllBitsMask(op, builder, mask, vectorType,
+                                               allOnes, zero);
   if (!activeBits)
     return Value();
 
@@ -3857,10 +3922,10 @@ static Value createRectangularMaskedSelectI32(Operation *op,
       .getResult();
 }
 
-static LogicalResult canonicalizeTileSelectWithRectangularMask(
-    Operation *op, OpBuilder &builder, Operation *maskDef) {
-  Value result = createRectangularMaskedSelectI32(
-      op, builder, maskDef, op->getOperand(1), op->getOperand(2),
+static LogicalResult canonicalizeTileSelectWithSemanticMask(
+    Operation *op, OpBuilder &builder, Value mask) {
+  Value result = createSemanticMaskedSelectI32(
+      op, builder, mask, op->getOperand(1), op->getOperand(2),
       op->getResult(0).getType());
   if (!result) {
     auto vectorType = llvm::dyn_cast<VectorType>(op->getResult(0).getType());
@@ -3868,10 +3933,10 @@ static LogicalResult canonicalizeTileSelectWithRectangularMask(
         vectorType.getDimSize(0) != 16 ||
         !vectorType.getElementType().isSignlessInteger(32)) {
       return op->emitOpError(
-          "tile_select with rectangular predicates currently requires vector<16xi32> values");
+          "tile_select with semantic predicates currently requires vector<16xi32> values");
     }
     return op->emitOpError(
-        "tile_select rectangular predicate requires shape = [4, 4] and row_major layout");
+        "tile_select semantic predicate requires supported vector<16xi1> mask metadata");
   }
   op->getResult(0).replaceAllUsesWith(result);
   op->erase();
@@ -3903,25 +3968,29 @@ static LogicalResult canonicalizeTileSelectOp(Operation *op,
   }
 
   if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+    bool canElideIntoPredicatedStore = !op->getResult(0).use_empty();
     for (Operation *user : llvm::make_early_inc_range(op->getResult(0).getUsers())) {
-      if (!tileSelectTailMaskUseIsPredicatedStore(op, user, mask)) {
-        return op->emitOpError(
-            "tile_select with tail_predicated mask requires every use to be "
-            "a tile/global store using the same mask in M5");
-      }
+      canElideIntoPredicatedStore &=
+          tileSelectTailMaskUseIsPredicatedStore(op, user, mask);
     }
-    op->getResult(0).replaceAllUsesWith(op->getOperand(1));
-    op->erase();
-    return success();
+    if (canElideIntoPredicatedStore) {
+      op->getResult(0).replaceAllUsesWith(op->getOperand(1));
+      op->erase();
+      return success();
+    }
+    return canonicalizeTileSelectWithSemanticMask(op, builder, mask);
   }
 
   if (hasName(maskDef, kVC4TileTileRectMaskOpName) ||
-      hasName(maskDef, kVC4TileTileBoundsMaskOpName))
-    return canonicalizeTileSelectWithRectangularMask(op, builder, maskDef);
+      hasName(maskDef, kVC4TileTileBoundsMaskOpName) ||
+      hasName(maskDef, kVC4TileMaskAndOpName) ||
+      hasName(maskDef, kVC4TileMaskOrOpName) ||
+      hasName(maskDef, kVC4TileMaskNotOpName))
+    return canonicalizeTileSelectWithSemanticMask(op, builder, mask);
 
   return op->emitOpError(
       "tile_select currently supports only vc4tile.mask_all or "
-      "vc4tile.tail_mask masks for elision, or rectangular tile predicates for vector<16xi32> materialization in M5");
+      "vc4tile.tail_mask masks for elision, or semantic tile predicates for vector<16xi32> materialization in M5");
 }
 
 static bool isSupportedAddReductionMask(Value mask) {
@@ -4240,8 +4309,8 @@ static LogicalResult canonicalizeTileContractOrMatmulOp(Operation *op,
           "tile_contract/tile_matmul currently support only vc4tile.mask_all, "
           "vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask output masks in M5");
     }
-    result = createRectangularMaskedSelectI32(op, builder, maskDef, accumulated,
-                                              op->getOperand(2), resultType);
+    result = createSemanticMaskedSelectI32(op, builder, mask, accumulated,
+                                           op->getOperand(2), resultType);
     if (!result)
       return op->emitOpError(
           "tile_contract/tile_matmul rectangular output mask requires shape = "
