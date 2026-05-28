@@ -6,8 +6,11 @@
 // SSAVC4-SAME: memory_pitch_bytes = 128 : i32
 // SSAVC4: ssavc4.barrier
 // SSAVC4: ssavc4.vdw.store_vpm
+// SSAVC4-SAME: memory_pitch_bytes = 128 : i32
+// SSAVC4-SAME: nrows = 16 : i32
 // SSAVC4-SAME: orientation = "vertical"
 // SSAVC4-NOT: ssavc4.vpm.read
+// SSAVC4-NOT: ssavc4.vdw.store_vpm
 // VC4-LABEL: vc4.func @cute_transpose_32x32_full_vpm_vc4tile_emit
 // VC4: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<read>
 // VC4: vc4.qpu.sema

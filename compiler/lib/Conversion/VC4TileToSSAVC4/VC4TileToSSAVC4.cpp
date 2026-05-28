@@ -46,6 +46,7 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/Casting.h"
 
+#include <algorithm>
 #include <cctype>
 #include <iterator>
 #include <memory>
@@ -4397,11 +4398,28 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
       if (sourceRow < 0 || sourceRow > 63)
         return op->emitOpError(
             "column-major shared_vpm->global source row must be in range [0, 63]");
-      // Column-major shared tiles model transposed views.  One-row vertical
-      // VDW stores are hardware-proven and preserve pitched row semantics;
-      // multi-row vertical VDW block stores do not currently match the M5
-      // shared->global tile contract, so keep those as explicit row stores.
-      canUse2DStore = false;
+      if (sourceRow + rows - 1 > 63)
+        return op->emitOpError(
+            "column-major shared_vpm->global source row range must fit in VPM rows [0, 63]");
+      for (int64_t row = 0; row < rows;) {
+        int64_t chunkSourceRow = sourceRow + row;
+        int64_t vpmXBase = chunkSourceRow & 15;
+        int64_t chunkRows = std::min<int64_t>(rows - row, 16 - vpmXBase);
+        Value rowOffset =
+            row == 0 ? offset
+                     : addI32Constant(builder, op->getLoc(), offset,
+                                      row * rowPitchElements);
+        Value chunkVPMY = createI32ConstantForPlan(
+            builder, op->getLoc(), chunkSourceRow & ~15);
+        Value chunkVPMX =
+            createI32ConstantForPlan(builder, op->getLoc(), vpmXBase);
+        if (failed(createSharedGlobalStoreForPlan(
+                op, builder, shared, chunkVPMY, chunkVPMX, base, rowOffset,
+                mask, layout, cols, chunkRows, memoryPitchBytes)))
+          return failure();
+        row += chunkRows;
+      }
+      return success();
     }
     if (canUse2DStore) {
       if (failed(createSharedGlobalStoreForPlan(

@@ -9,10 +9,11 @@
 // CHECK-SAME: nrows = 16 : i32
 // CHECK-SAME: row_len = 16 : i32
 // CHECK: ssavc4.vdw.store_vpm
-// CHECK-SAME: memory_pitch_bytes = 64 : i32
-// CHECK-SAME: nrows = 1 : i32
+// CHECK-SAME: memory_pitch_bytes = 128 : i32
+// CHECK-SAME: nrows = 16 : i32
 // CHECK-SAME: orientation = "vertical"
 // CHECK-SAME: row_len = 16 : i32
+// CHECK-NOT: ssavc4.vdw.store_vpm
 // CHECK-NOT: vc4tile.copy_tile
 // CHECK-NOT: vc4tile.tile_store
 // CHECK-NOT: vc4tile.transpose_view
