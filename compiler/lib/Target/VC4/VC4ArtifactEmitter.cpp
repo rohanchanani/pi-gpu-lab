@@ -3071,6 +3071,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     requiresLaunchElements |=
         kernel.resources.scheduleMode != "cooperative_block";
   }
+  bool requiresSaturatingMul =
+      requiresLaunchElements || requiresCooperativeScheduling;
 
   os << "#define VC4_CODEGEN_KERNEL_LAUNCH_IMPLEMENTATION 1\n";
   os << "#include \"kernel_launch.h\"\n";
@@ -3153,13 +3155,15 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "  return 1u + (value - 1u) / divisor;\n";
   os << "}\n\n";
 
-  if (requiresLaunchElements) {
+  if (requiresSaturatingMul) {
     os << "static uint32_t vc4_codegen_saturating_mul_u32(uint32_t lhs, uint32_t rhs) {\n";
     os << "  if (lhs != 0u && rhs > 0xffffffffu / lhs)\n";
     os << "    return 0xffffffffu;\n";
     os << "  return lhs * rhs;\n";
     os << "}\n\n";
+  }
 
+  if (requiresLaunchElements) {
     os << "static uint32_t vc4_codegen_launch_elements(vc4_dim3 grid, vc4_dim3 block) {\n";
     os << "  uint32_t total = 1u;\n";
     os << "  total = vc4_codegen_saturating_mul_u32(total, grid.x);\n";
