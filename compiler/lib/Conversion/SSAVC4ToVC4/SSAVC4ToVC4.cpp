@@ -3585,6 +3585,24 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                           *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::max,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/0);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::min,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/static_cast<int32_t>(rowLen));
   } else {
     createSplat32LDI(builder, loc, rowLen, 33);
   }

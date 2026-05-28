@@ -608,11 +608,9 @@ LogicalResult VDWStoreVPMOp::verify() {
     return emitOpError("requires an i32 dynamic active-lane operand");
   if (getActiveLanesValue() && nrows != 1)
     return emitOpError("supports dynamic active_lanes only for single-row VDW stores");
-  if (!getActiveLanesValue()) {
-    auto activeLanes = getActiveLanesAttr();
-    if (activeLanes && activeLanes.getInt() != rowLen)
-      return emitOpError("active_lanes must match row_len for static VDW stores");
-  }
+  if (auto activeLanes = getActiveLanesAttr())
+    if (activeLanes.getInt() != rowLen)
+      return emitOpError("active_lanes must match row_len for VDW stores");
 
   if (failed(verifyOptionalStringAttrChoice(op, "orientation", "horizontal",
                                             "vertical", "orientation")))

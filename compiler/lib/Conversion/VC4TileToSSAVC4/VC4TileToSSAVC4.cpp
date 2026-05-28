@@ -1064,6 +1064,10 @@ static VectorType getVector16I32Type(OpBuilder &builder) {
   return VectorType::get({16}, builder.getI32Type());
 }
 
+static VectorType getVector16I1Type(OpBuilder &builder) {
+  return VectorType::get({16}, builder.getI1Type());
+}
+
 static VectorType getVector16DataType(OpBuilder &builder, Type elementType) {
   if (elementType && elementType.isF32())
     return VectorType::get({16}, builder.getF32Type());
@@ -1280,10 +1284,6 @@ static StringRef getVPMOrientation(Operation *op, StringRef fallback) {
     return "vertical";
   }
   return fallback;
-}
-
-static bool isAllLanesMask(Value value) {
-  return hasName(value.getDefiningOp(), kVC4TileMaskAllOpName);
 }
 
 struct SharedVPMAllocationState {
@@ -1769,12 +1769,19 @@ static LogicalResult lowerMaskAll(Operation *op, OpBuilder &builder,
   return success();
 }
 
+static bool valueHasOnlySemanticMaskMemoryUsers(Value value);
+static bool valueHasAnySharedSemanticMaskMemoryUser(Value value);
+
 static LogicalResult lowerTailMask(Operation *op, OpBuilder &builder,
                                    llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 2 || op->getNumResults() != 1)
     return op->emitOpError("expected base, limit, and one result");
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError("currently lowers only vector<16xi1> tail_mask results");
+  if (!op->getResult(0).use_empty() &&
+      valueHasAnySharedSemanticMaskMemoryUser(op->getResult(0)) &&
+      valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
+    return success();
 
   Value base = lookupMappedValue(op, op->getOperand(0), valueMap);
   Value limit = lookupMappedValue(op, op->getOperand(1), valueMap);
@@ -1816,17 +1823,38 @@ static bool isMaskedGlobalMemoryOp(Operation *op) {
          hasName(op, kVC4TileMaskedStoreGlobalOpName);
 }
 
-static bool valueHasOnlyMaskedGlobalMemoryUsers(Value value) {
+static bool isSemanticMaskMemoryUser(Operation *op) {
+  return isMaskedGlobalMemoryOp(op) ||
+         hasName(op, kVC4TileSharedLoadOpName) ||
+         hasName(op, kVC4TileSharedStoreOpName) ||
+         hasName(op, kVC4TileSharedStoreGlobalOpName);
+}
+
+static bool isSharedSemanticMaskMemoryUser(Operation *op) {
+  return hasName(op, kVC4TileSharedLoadOpName) ||
+         hasName(op, kVC4TileSharedStoreOpName) ||
+         hasName(op, kVC4TileSharedStoreGlobalOpName);
+}
+
+static bool valueHasOnlySemanticMaskMemoryUsers(Value value) {
   for (OpOperand &use : value.getUses()) {
-    if (!isMaskedGlobalMemoryOp(use.getOwner()))
+    if (!isSemanticMaskMemoryUser(use.getOwner()))
       return false;
   }
   return true;
 }
 
+static bool valueHasAnySharedSemanticMaskMemoryUser(Value value) {
+  for (OpOperand &use : value.getUses()) {
+    if (isSharedSemanticMaskMemoryUser(use.getOwner()))
+      return true;
+  }
+  return false;
+}
+
 static void eraseLoweredFlagMaskIfMemoryOnly(
     Value sourceMask, llvm::DenseMap<Value, Value> &valueMap) {
-  if (!valueHasOnlyMaskedGlobalMemoryUsers(sourceMask))
+  if (!valueHasOnlySemanticMaskMemoryUsers(sourceMask))
     return;
   auto it = valueMap.find(sourceMask);
   if (it == valueMap.end())
@@ -1844,9 +1872,9 @@ static LogicalResult lowerTileRectMask(Operation *op) {
   if (!isVector16I1(op->getResult(0).getType()))
     return op->emitOpError(
         "currently lowers only vector<16xi1> tile_rect_mask results");
-  if (!valueHasOnlyMaskedGlobalMemoryUsers(op->getResult(0)))
+  if (!valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "tile_rect_mask currently lowers only for masked global memory users");
+        "tile_rect_mask currently lowers only for semantic masked memory users");
   return success();
 }
 
@@ -1858,9 +1886,9 @@ static LogicalResult lowerTileBoundsMask(Operation *op) {
     return op->emitOpError(
         "currently lowers only vector<16xi1> tile_bounds_mask results");
   if (!op->getResult(0).use_empty() &&
-      !valueHasOnlyMaskedGlobalMemoryUsers(op->getResult(0)))
+      !valueHasOnlySemanticMaskMemoryUsers(op->getResult(0)))
     return op->emitOpError(
-        "tile_bounds_mask must be consumed by VC4Tile planning or masked global memory before SSAVC4 conversion");
+        "tile_bounds_mask must be consumed by VC4Tile planning or semantic masked memory before SSAVC4 conversion");
   return success();
 }
 
@@ -2076,6 +2104,86 @@ static Value createTileBoundsActiveMask(Operation *op, OpBuilder &builder,
                                      zero, mlir::vc4::Cond::cs, addressType);
   return createALUAdd(builder, op->getLoc(), {rowActive, colActive},
                       mlir::vc4::AddOpcode::bit_and, addressType);
+}
+
+static Value createZeroForVectorDataType(OpBuilder &builder, Location loc,
+                                         Type resultType) {
+  if (isVector16F32(resultType))
+    return createLoadImm(builder, loc, resultType,
+                         FloatAttr::get(builder.getF32Type(), 0.0));
+  return createLoadImmI32(builder, loc, resultType, 0);
+}
+
+static FailureOr<Value> createActiveLaneValueForSemanticMask(
+    Operation *consumer, OpBuilder &builder, Value mask,
+    llvm::DenseMap<Value, Value> &valueMap) {
+  Type maskValueType = getVector16I32Type(builder);
+  Operation *maskDef = mask.getDefiningOp();
+
+  if (hasName(maskDef, kVC4TileMaskAllOpName))
+    return Value();
+
+  if (hasName(maskDef, kVC4TileTailMaskOpName)) {
+    if (maskDef->getNumOperands() != 2)
+      return maskDef->emitOpError("expected base and limit operands");
+    Value base = lookupMappedValue(maskDef, maskDef->getOperand(0), valueMap);
+    Value limit = lookupMappedValue(maskDef, maskDef->getOperand(1), valueMap);
+    if (!base || !limit)
+      return failure();
+
+    Value lanes = createElementNumber(builder, consumer->getLoc());
+    Value baseVec = createSplat(builder, consumer->getLoc(), base,
+                                maskValueType);
+    Value absoluteIndex = createALUAdd(builder, consumer->getLoc(),
+                                       {baseVec, lanes},
+                                       mlir::vc4::AddOpcode::add,
+                                       maskValueType);
+    Value limitVec = createSplat(builder, consumer->getLoc(), limit,
+                                 maskValueType);
+    Value flags = createMakeFlags(builder, consumer->getLoc(),
+                                  {absoluteIndex, limitVec},
+                                  mlir::ssavc4::FlagKind::compare);
+    Value one = createLoadImmI32(builder, consumer->getLoc(), maskValueType, 1);
+    Value zero =
+        createLoadImmI32(builder, consumer->getLoc(), maskValueType, 0);
+    return createCondSelect(builder, consumer->getLoc(), flags, one, zero,
+                            mlir::vc4::Cond::cs, maskValueType);
+  }
+
+  if (std::optional<SmallVector<int32_t, 16>> maskLanes =
+          getTileRectMaskLanes(maskDef)) {
+    return createLoadImmPerElemU2(builder, consumer->getLoc(), maskValueType,
+                                  *maskLanes);
+  }
+
+  if (hasName(maskDef, kVC4TileTileBoundsMaskOpName)) {
+    Value activeMask = createTileBoundsActiveMask(consumer, builder, maskDef,
+                                                  valueMap, maskValueType);
+    if (!activeMask)
+      return failure();
+    return activeMask;
+  }
+
+  return consumer->emitOpError(
+      "currently supports only vc4tile.mask_all, vc4tile.tail_mask, vc4tile.tile_rect_mask, or vc4tile.tile_bounds_mask masks for shared VPM memory");
+}
+
+static FailureOr<Value> applySemanticMaskZeroFill(
+    Operation *consumer, OpBuilder &builder, Value value, Value mask,
+    llvm::DenseMap<Value, Value> &valueMap) {
+  FailureOr<Value> activeMask =
+      createActiveLaneValueForSemanticMask(consumer, builder, mask, valueMap);
+  if (failed(activeMask))
+    return failure();
+  if (!*activeMask)
+    return value;
+
+  Value zero =
+      createZeroForVectorDataType(builder, consumer->getLoc(), value.getType());
+  Value flags = createMakeFlags(builder, consumer->getLoc(), {*activeMask},
+                                mlir::ssavc4::FlagKind::zero_test);
+  return createCondSelect(builder, consumer->getLoc(), flags, value, zero,
+                          mlir::vc4::Cond::zc, value.getType());
 }
 
 static LogicalResult lowerMaskedLoadGlobal(Operation *op, OpBuilder &builder,
@@ -2370,9 +2478,6 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
                                       llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 4)
     return op->emitOpError("expected handle, row, value, and mask operands");
-  if (!isAllLanesMask(op->getOperand(3)))
-    return op->emitOpError(
-        "currently lowers only vc4tile.mask_all masks for shared VPM stores");
 
   auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
   if (!elemBytes || elemBytes.getInt() != 4)
@@ -2385,10 +2490,14 @@ static LogicalResult lowerSharedStore(Operation *op, OpBuilder &builder,
   Value value = lookupMappedValue(op, op->getOperand(2), valueMap);
   if (!baseRow || !localRow || !value)
     return failure();
+  FailureOr<Value> maskedValue = applySemanticMaskZeroFill(
+      op, builder, value, op->getOperand(3), valueMap);
+  if (failed(maskedValue))
+    return failure();
 
   Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
   Operation *write = createSSAVC4Op(
-      builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
+      builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, *maskedValue},
       {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
        builder.getNamedAttr("orientation",
@@ -2403,9 +2512,6 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
                                      llvm::DenseMap<Value, Value> &valueMap) {
   if (op->getNumOperands() != 3 || op->getNumResults() != 1)
     return op->emitOpError("expected handle, row, mask, and one result");
-  if (!isAllLanesMask(op->getOperand(2)))
-    return op->emitOpError(
-        "currently lowers only vc4tile.mask_all masks for shared VPM loads");
 
   auto elemBytes = op->getAttrOfType<IntegerAttr>("elem_bytes");
   if (!elemBytes || elemBytes.getInt() != 4)
@@ -2420,7 +2526,7 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
     return failure();
 
   Value row = createVPMRowAddress(builder, op->getLoc(), baseRow, localRow);
-  valueMap[op->getResult(0)] = createSSAVC4OpWithResult(
+  Value loaded = createSSAVC4OpWithResult(
       builder, op->getLoc(), kSSAVC4VPMReadOpName, {row},
       {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
@@ -2429,6 +2535,11 @@ static LogicalResult lowerSharedLoad(Operation *op, OpBuilder &builder,
                                 getVPMOrientation(op, "horizontal"))),
        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))},
       op->getResult(0).getType());
+  FailureOr<Value> maskedLoaded = applySemanticMaskZeroFill(
+      op, builder, loaded, op->getOperand(2), valueMap);
+  if (failed(maskedLoaded))
+    return failure();
+  valueMap[op->getResult(0)] = *maskedLoaded;
   copyTileSemanticMetadataAttrs(op, valueMap[op->getResult(0)].getDefiningOp());
   return success();
 }
@@ -2465,28 +2576,29 @@ static LogicalResult lowerSharedStoreGlobal(Operation *op, OpBuilder &builder,
                                           activeLanesAttr,
                                           /*maskOperandIndex=*/5)))
     return failure();
+  bool hasDynamicActiveLanes = operands.size() == 4;
 
   StringRef orientation = "horizontal";
   if (auto layout = op->getAttrOfType<mlir::vc4tile::VPMLayoutAttr>("layout")) {
     if (layout.getValue() == mlir::vc4tile::VPMLayout::column_major)
       orientation = "vertical";
   }
+  int64_t rowLen = getI32Attr(op, "row_len").value_or(activeLanesAttr);
   SmallVector<NamedAttribute, 8> attrs{
       builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-      builder.getNamedAttr("active_lanes",
-                           builder.getI32IntegerAttr(activeLanesAttr)),
-      builder.getNamedAttr("row_len",
-                           builder.getI32IntegerAttr(
-                               getI32Attr(op, "row_len").value_or(activeLanesAttr))),
+      builder.getNamedAttr("row_len", builder.getI32IntegerAttr(rowLen)),
       builder.getNamedAttr("nrows",
                            builder.getI32IntegerAttr(
                                getI32Attr(op, "nrows").value_or(1))),
       builder.getNamedAttr("memory_pitch_bytes",
                            builder.getI32IntegerAttr(
                                getI32Attr(op, "memory_pitch_bytes")
-                                   .value_or(activeLanesAttr * 4))),
+                                   .value_or(rowLen * 4))),
       builder.getNamedAttr("orientation", builder.getStringAttr(orientation)),
       builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+  if (!hasDynamicActiveLanes)
+    attrs.push_back(builder.getNamedAttr("active_lanes",
+                                         builder.getI32IntegerAttr(rowLen)));
   appendTileSemanticMetadataAttrs(op, builder, attrs);
   createSSAVC4Op(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
                  attrs);
@@ -4769,6 +4881,236 @@ static Attribute getVPMTileLoadLayoutAttr(OpBuilder &builder,
                                     /*defaultColumn=*/false);
 }
 
+static Operation *createMaskAllForPlan(OpBuilder &builder, Location loc) {
+  return createVC4TileCoreOp(builder, loc, kVC4TileMaskAllOpName, {}, {},
+                             getVector16I1Type(builder));
+}
+
+static Value createZeroVectorForPlan(OpBuilder &builder, Location loc) {
+  Value zero = createI32ConstantForPlan(builder, loc, 0);
+  return mlir::vector::BroadcastOp::create(builder, loc, getVector16I32Type(builder),
+                                           zero)
+      .getResult();
+}
+
+static Operation *createOneRowTileRectMaskForPlan(OpBuilder &builder,
+                                                  Location loc,
+                                                  int64_t activeCols) {
+  SmallVector<NamedAttribute, 4> attrs{
+      namedAttr(builder, "active_rows", builder.getI32IntegerAttr(1)),
+      namedAttr(builder, "active_cols", builder.getI32IntegerAttr(activeCols)),
+      namedAttr(builder, "shape",
+                builder.getArrayAttr(
+                    {builder.getI32IntegerAttr(4),
+                     builder.getI32IntegerAttr(4)})),
+      namedAttr(builder, "layout",
+                mlir::vc4tile::LayoutAttr::get(
+                    builder.getContext(), mlir::vc4tile::Layout::row_major))};
+  return createVC4TileCoreOp(builder, loc, kVC4TileTileRectMaskOpName, {},
+                             attrs, getVector16I1Type(builder));
+}
+
+static Operation *createOneRowTileBoundsMaskForPlan(OpBuilder &builder,
+                                                    Location loc,
+                                                    Value activeCols) {
+  Value one = createI32ConstantForPlan(builder, loc, 1);
+  SmallVector<NamedAttribute, 2> attrs{
+      namedAttr(builder, "shape",
+                builder.getArrayAttr(
+                    {builder.getI32IntegerAttr(4),
+                     builder.getI32IntegerAttr(4)})),
+      namedAttr(builder, "layout",
+                mlir::vc4tile::LayoutAttr::get(
+                    builder.getContext(), mlir::vc4tile::Layout::row_major))};
+  return createVC4TileCoreOp(builder, loc, kVC4TileTileBoundsMaskOpName,
+                             {one, activeCols}, attrs,
+                             getVector16I1Type(builder));
+}
+
+static FailureOr<Value> createPredicatedGlobalRowLoadForPlan(
+    Operation *op, OpBuilder &builder, Value base, Value rowOffset,
+    Value rowMask) {
+  FailureOr<Value> adjustedBase =
+      createAdjustedGlobalBaseForTileCopy(builder, op, base, rowOffset);
+  if (failed(adjustedBase))
+    return failure();
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, /*laneStride=*/1);
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "offset_unit",
+                getVC4TileOffsetUnitAttr(
+                    builder, mlir::vc4tile::OffsetUnit::element)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::global)),
+      namedAttr(builder, "access",
+                getVC4TileMemoryAccessAttr(
+                    builder, mlir::vc4tile::MemoryAccess::coalesced)),
+      namedAttr(builder, "boundary",
+                mlir::vc4tile::BoundaryPolicyAttr::get(
+                    builder.getContext(),
+                    mlir::vc4tile::BoundaryPolicy::exact))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  Operation *load = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileMaskedLoadGlobalOpName,
+      {*adjustedBase, lanes, rowMask}, attrs, getVector16I32Type(builder));
+  return load->getResult(0);
+}
+
+static LogicalResult createSharedRowStoreForPlan(Operation *op,
+                                                 OpBuilder &builder,
+                                                 Value shared, Value localRow,
+                                                 Value value,
+                                                 Value maskAll) {
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::shared_vpm)),
+      namedAttr(builder, "layout",
+                getVPMLayoutFromTileLayout(
+                    builder,
+                    op->getAttrOfType<mlir::vc4tile::LayoutAttr>(
+                        "dst_layout")))};
+  appendTileSemanticMetadataAttrs(op, builder, attrs);
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileSharedStoreOpName,
+                      {shared, localRow, value, maskAll}, attrs);
+  return success();
+}
+
+static bool isRowMajorGlobalShared4x4Copy(Operation *op) {
+  FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
+  if (failed(shape) || (*shape)[0] != 4 || (*shape)[1] != 4)
+    return false;
+  auto srcLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("src_layout");
+  auto dstLayout = op->getAttrOfType<mlir::vc4tile::LayoutAttr>("dst_layout");
+  if (!srcLayout || srcLayout.getValue() != mlir::vc4tile::Layout::row_major)
+    return false;
+  return !dstLayout || dstLayout.getValue() == mlir::vc4tile::Layout::vpm_row ||
+         dstLayout.getValue() == mlir::vc4tile::Layout::row_major ||
+         dstLayout.getValue() == mlir::vc4tile::Layout::affine_2d;
+}
+
+static LogicalResult planRectangularGlobalSharedCopy(
+    Operation *op, OpBuilder &builder, TileRectMaskInfo maskInfo) {
+  if (!isRowMajorGlobalShared4x4Copy(op))
+    return op->emitOpError(
+        "tile_rect_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+
+  Value base = op->getOperand(0);
+  Value shared = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  int64_t memoryPitchBytes =
+      getOptionalI32AttrOr(op, builder, "memory_pitch_bytes", 16).getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < maskInfo.activeCols * 4)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must cover the active row");
+  int64_t rowPitchElements = memoryPitchBytes / 4;
+  int64_t vpmBaseRow =
+      getOptionalI32AttrOr(op, builder, "vpm_base_row", 0).getInt();
+  if (vpmBaseRow < 0 || vpmBaseRow + 3 > 63)
+    return op->emitOpError(
+        "predicated global->shared_vpm copy_tile vpm_base_row range must fit in VPM rows [0, 63]");
+
+  Value maskAll = createMaskAllForPlan(builder, op->getLoc())->getResult(0);
+  Value zeroVector = createZeroVectorForPlan(builder, op->getLoc());
+  Value rowMask =
+      createOneRowTileRectMaskForPlan(builder, op->getLoc(),
+                                      maskInfo.activeCols)
+          ->getResult(0);
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value localRow =
+        createI32ConstantForPlan(builder, op->getLoc(), vpmBaseRow + row);
+    Value rowValue = zeroVector;
+    if (row < maskInfo.activeRows) {
+      Value rowOffset =
+          row == 0 ? offset
+                   : addI32Constant(builder, op->getLoc(), offset,
+                                    row * rowPitchElements);
+      FailureOr<Value> loaded = createPredicatedGlobalRowLoadForPlan(
+          op, builder, base, rowOffset, rowMask);
+      if (failed(loaded))
+        return failure();
+      rowValue = *loaded;
+    }
+    if (failed(createSharedRowStoreForPlan(op, builder, shared, localRow,
+                                           rowValue, maskAll)))
+      return failure();
+  }
+  return success();
+}
+
+static LogicalResult planDynamicBoundsGlobalSharedCopy(
+    Operation *op, OpBuilder &builder, TileBoundsMaskInfo maskInfo) {
+  if (!isRowMajorGlobalShared4x4Copy(op))
+    return op->emitOpError(
+        "tile_bounds_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+
+  Value base = op->getOperand(0);
+  Value shared = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value activeRows = maskInfo.activeRows;
+  Value activeCols = maskInfo.activeCols;
+  if (!isI32Scalar(activeRows) || !isI32Scalar(activeCols))
+    return op->emitOpError(
+        "tile_bounds_mask global->shared_vpm copy_tile requires i32 active_rows and active_cols");
+
+  int64_t memoryPitchBytes =
+      getOptionalI32AttrOr(op, builder, "memory_pitch_bytes", 16).getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < 4)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must cover at least one active element");
+  int64_t rowPitchElements = memoryPitchBytes / 4;
+  int64_t vpmBaseRow =
+      getOptionalI32AttrOr(op, builder, "vpm_base_row", 0).getInt();
+  if (vpmBaseRow < 0 || vpmBaseRow + 3 > 63)
+    return op->emitOpError(
+        "predicated global->shared_vpm copy_tile vpm_base_row range must fit in VPM rows [0, 63]");
+
+  Value maskAll = createMaskAllForPlan(builder, op->getLoc())->getResult(0);
+  Value zeroVector = createZeroVectorForPlan(builder, op->getLoc());
+  Value rowMask =
+      createOneRowTileBoundsMaskForPlan(builder, op->getLoc(), activeCols)
+          ->getResult(0);
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value localRow =
+        createI32ConstantForPlan(builder, op->getLoc(), vpmBaseRow + row);
+    if (failed(createSharedRowStoreForPlan(op, builder, shared, localRow,
+                                           zeroVector, maskAll)))
+      return failure();
+
+    Value rowIndex = createI32ConstantForPlan(builder, op->getLoc(), row);
+    Value rowLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowIndex,
+        activeRows);
+    auto ifOp = scf::IfOp::create(builder, op->getLoc(), rowLive,
+                                  /*withElseRegion=*/false);
+    OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
+    Value rowOffset =
+        row == 0 ? offset
+                 : addI32Constant(thenBuilder, op->getLoc(), offset,
+                                  row * rowPitchElements);
+    FailureOr<Value> loaded = createPredicatedGlobalRowLoadForPlan(
+        op, thenBuilder, base, rowOffset, rowMask);
+    if (failed(loaded))
+      return failure();
+    Value thenLocalRow =
+        createI32ConstantForPlan(thenBuilder, op->getLoc(), vpmBaseRow + row);
+    if (failed(createSharedRowStoreForPlan(op, thenBuilder, shared,
+                                           thenLocalRow, *loaded, maskAll)))
+      return failure();
+  }
+  return success();
+}
+
 static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   if (op->getNumOperands() < 3 || op->getNumOperands() > 4 || op->getNumResults() != 0) {
     return op->emitOpError(
@@ -4784,6 +5126,18 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   }
   if (op->getNumOperands() == 4 && !isVector16I1(op->getOperand(3).getType()))
     return op->emitOpError("optional global->shared_vpm copy_tile mask must be vector<16xi1>");
+  if (op->getNumOperands() == 4) {
+    Operation *maskDef = op->getOperand(3).getDefiningOp();
+    if (std::optional<TileRectMaskInfo> rectMask =
+            getTileRectMaskInfo(maskDef))
+      return planRectangularGlobalSharedCopy(op, builder, *rectMask);
+    if (std::optional<TileBoundsMaskInfo> boundsMask =
+            getTileBoundsMaskInfo(maskDef))
+      return planDynamicBoundsGlobalSharedCopy(op, builder, *boundsMask);
+    if (!isMaskAllForPlan(op->getOperand(3)))
+      return op->emitOpError(
+          "global->shared_vpm copy_tile supports only mask_all, tile_rect_mask, or tile_bounds_mask masks in M5");
+  }
   FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
   if (failed(shape))
     return failure();
@@ -4851,6 +5205,112 @@ static LogicalResult createSharedGlobalStoreForPlan(
   return success();
 }
 
+static bool isRowMajorSharedGlobal4x4Store(
+    Operation *op, mlir::vc4tile::LayoutAttr layout) {
+  FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
+  if (failed(shape) || (*shape)[0] != 4 || (*shape)[1] != 4)
+    return false;
+  if (!layout)
+    return true;
+  return layout.getValue() == mlir::vc4tile::Layout::vpm_row ||
+         layout.getValue() == mlir::vc4tile::Layout::row_major ||
+         layout.getValue() == mlir::vc4tile::Layout::affine_2d;
+}
+
+static FailureOr<int64_t>
+getSharedGlobalStoreRowPitchElements(Operation *op, int64_t activeCols) {
+  int64_t memoryPitchBytes = getI32Attr(op, "memory_pitch_bytes").value_or(16);
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "shared_vpm->global memory_pitch_bytes must be a positive multiple of 4");
+  if (activeCols > 0 && memoryPitchBytes < activeCols * 4)
+    return op->emitOpError(
+        "shared_vpm->global memory_pitch_bytes must cover the active row");
+  return memoryPitchBytes / 4;
+}
+
+static LogicalResult planRectangularSharedGlobal4x4Store(
+    Operation *op, OpBuilder &builder, Value shared, Value base, Value offset,
+    Value rowBase, mlir::vc4tile::LayoutAttr layout,
+    TileRectMaskInfo maskInfo) {
+  if (!isRowMajorSharedGlobal4x4Store(op, layout))
+    return op->emitOpError(
+        "tile_rect_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+
+  FailureOr<int64_t> rowPitchElements =
+      getSharedGlobalStoreRowPitchElements(op, maskInfo.activeCols);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
+  Value activeCols =
+      createI32ConstantForPlan(builder, op->getLoc(), maskInfo.activeCols);
+  Operation *rowMask = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileTailMaskOpName, {zero, activeCols}, {},
+      getVector16I1Type(builder));
+
+  for (int64_t row = 0; row < maskInfo.activeRows; ++row) {
+    Value logicalRow =
+        row == 0 ? rowBase : addI32Constant(builder, op->getLoc(), rowBase, row);
+    Value rowOffset =
+        row == 0 ? offset
+                 : addI32Constant(builder, op->getLoc(), offset,
+                                  row * *rowPitchElements);
+    if (failed(createSharedGlobalStoreForPlan(
+            op, builder, shared, logicalRow, zero, base, rowOffset,
+            rowMask->getResult(0), layout, /*rowLen=*/4, /*nrows=*/1,
+            /*memoryPitchBytes=*/16)))
+      return failure();
+  }
+  return success();
+}
+
+static LogicalResult planDynamicBoundsSharedGlobal4x4Store(
+    Operation *op, OpBuilder &builder, Value shared, Value base, Value offset,
+    Value rowBase, mlir::vc4tile::LayoutAttr layout,
+    TileBoundsMaskInfo maskInfo) {
+  if (!isRowMajorSharedGlobal4x4Store(op, layout))
+    return op->emitOpError(
+        "tile_bounds_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+  if (!isI32Scalar(maskInfo.activeRows) || !isI32Scalar(maskInfo.activeCols))
+    return op->emitOpError(
+        "tile_bounds_mask shared_vpm->global stores require i32 active_rows and active_cols");
+
+  FailureOr<int64_t> rowPitchElements =
+      getSharedGlobalStoreRowPitchElements(op, /*activeCols=*/0);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
+  Operation *rowMask = createVC4TileCoreOp(
+      builder, op->getLoc(), kVC4TileTailMaskOpName,
+      {zero, maskInfo.activeCols}, {}, getVector16I1Type(builder));
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value rowIndex = createI32ConstantForPlan(builder, op->getLoc(), row);
+    Value rowLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowIndex,
+        maskInfo.activeRows);
+    auto ifOp = scf::IfOp::create(builder, op->getLoc(), rowLive,
+                                  /*withElseRegion=*/false);
+    OpBuilder thenBuilder = ifOp.getThenBodyBuilder();
+
+    Value logicalRow =
+        row == 0 ? rowBase
+                 : addI32Constant(thenBuilder, op->getLoc(), rowBase, row);
+    Value rowOffset =
+        row == 0 ? offset
+                 : addI32Constant(thenBuilder, op->getLoc(), offset,
+                                  row * *rowPitchElements);
+    if (failed(createSharedGlobalStoreForPlan(
+            op, thenBuilder, shared, logicalRow, zero, base, rowOffset,
+            rowMask->getResult(0), layout, /*rowLen=*/4, /*nrows=*/1,
+            /*memoryPitchBytes=*/16)))
+      return failure();
+  }
+  return success();
+}
+
 static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
                                             Value shared, Value base,
                                             Value offset, Value mask,
@@ -4863,6 +5323,15 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
     return op->emitOpError(
         "shared_vpm->global copy requires !vc4tile.shared_tile plus i32 base/offset/row and vector<16xi1> mask");
   }
+  if (std::optional<TileRectMaskInfo> rectMask =
+          getTileRectMaskInfo(mask.getDefiningOp()))
+    return planRectangularSharedGlobal4x4Store(
+        op, builder, shared, base, offset, rowBase, layout, *rectMask);
+  if (std::optional<TileBoundsMaskInfo> boundsMask =
+          getTileBoundsMaskInfo(mask.getDefiningOp()))
+    return planDynamicBoundsSharedGlobal4x4Store(
+        op, builder, shared, base, offset, rowBase, layout, *boundsMask);
+
   FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
   if (failed(shape))
     return failure();

@@ -383,6 +383,10 @@ def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
     global-store path.  Unlike ssavc4.vdw.store, this operation does not stage
     an SSA vector value into a scratch row first; it describes a VDW DMA source
     row/column/orientation in the existing VPM window.
+
+    A dynamic active_lanes_value is a one-row active-depth request.  Lowering
+    clamps it to [0, row_len] before programming the VDW descriptor.  Multi-row
+    dynamic predicates must be represented as row-decomposed store_vpm ops.
   }];
   let arguments = (ins
     AnyType:$address,

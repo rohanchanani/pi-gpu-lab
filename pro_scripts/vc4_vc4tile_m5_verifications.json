@@ -3272,13 +3272,28 @@
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_load_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_load_vc4tile/candidate/tile_bounds_mask_load_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/tile-bounds-mask-load-lowering.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_global_shared_load_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_global_shared_load_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_global_shared_load_vc4tile/candidate/tile_bounds_mask_global_shared_load_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-copy-global-shared-predicated.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_roundtrip_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_roundtrip_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_roundtrip_vc4tile/candidate/tile_bounds_mask_shared_roundtrip_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/shared-vpm-predicated-load-store.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_global_store_vc4tile/input.mlir",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_global_store_vc4tile/expected.json",
+            "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_shared_global_store_vc4tile/candidate/tile_bounds_mask_shared_global_store_vc4tile_candidate_harness.c",
+            "compiler/test/Conversion/VC4TileToSSAVC4/plan-shared-global-predicated.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_select_vc4tile/input.mlir",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_select_vc4tile/expected.json",
             "compiler/test/CodeGen/VC4Tile/Hardware/Run/tile_bounds_mask_select_vc4tile/candidate/tile_bounds_mask_select_vc4tile_candidate_harness.c",
             "compiler/test/Conversion/VC4TileToSSAVC4/tile-bounds-mask-select-lowering.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/input.mlir",
             "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/expected.json",
-            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/candidate/vdw_vertical_multirow_probe_ssavc4_candidate_harness.c"
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_vertical_multirow_probe_ssavc4/candidate/vdw_vertical_multirow_probe_ssavc4_candidate_harness.c",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_store_vpm_dynamic_row4_probe_ssavc4/input.mlir",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_store_vpm_dynamic_row4_probe_ssavc4/expected.json",
+            "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_store_vpm_dynamic_row4_probe_ssavc4/candidate/vdw_store_vpm_dynamic_row4_probe_ssavc4_candidate_harness.c"
           ]
         },
         {
@@ -3338,6 +3353,15 @@
               "fixture": "tile_bounds_mask_load_vc4tile"
             },
             {
+              "fixture": "tile_bounds_mask_global_shared_load_vc4tile"
+            },
+            {
+              "fixture": "tile_bounds_mask_shared_roundtrip_vc4tile"
+            },
+            {
+              "fixture": "tile_bounds_mask_shared_global_store_vc4tile"
+            },
+            {
               "fixture": "tile_bounds_mask_select_vc4tile"
             }
           ]
@@ -3360,6 +3384,26 @@
           "required_debug_artifacts": [
             ".vc4_auto/vc4tile_m5/candidates/vdw_vertical_multirow_probe_ssavc4/lowered.ssavc4.mlir",
             ".vc4_auto/vc4tile_m5/candidates/vdw_vertical_multirow_probe_ssavc4/scheduled.vc4.mlir"
+          ]
+        },
+        {
+          "id": "m5-cute-stress-vdw-store-vpm-dynamic-depth-probe",
+          "mechanism": "hardware_cpu_reference_contract",
+          "feature": "m5_cute_stress_vdw_store_vpm_dynamic_depth",
+          "fixture": "vdw_store_vpm_dynamic_row4_probe_ssavc4",
+          "runner": "compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh",
+          "phases": [
+            "generate",
+            "assemble",
+            "build",
+            "run"
+          ],
+          "expected_json": "compiler/test/CodeGen/SSAVC4/Hardware/Run/vdw_store_vpm_dynamic_row4_probe_ssavc4/expected.json",
+          "log": ".vc4_auto/vc4tile_m5/hardware/vdw_store_vpm_dynamic_row4_probe_ssavc4/candidate_work/.vc4_candidate_run_attempt.log",
+          "requires_hardware": true,
+          "required_debug_artifacts": [
+            ".vc4_auto/vc4tile_m5/candidates/vdw_store_vpm_dynamic_row4_probe_ssavc4/lowered.ssavc4.mlir",
+            ".vc4_auto/vc4tile_m5/candidates/vdw_store_vpm_dynamic_row4_probe_ssavc4/scheduled.vc4.mlir"
           ]
         }
       ]
