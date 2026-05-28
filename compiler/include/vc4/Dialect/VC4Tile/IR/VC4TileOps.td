@@ -158,6 +158,32 @@ def VC4Tile_MaskAndOp : VC4Tile_PureOp<"mask_and"> {
   let hasVerifier = 1;
 }
 
+def VC4Tile_MaskOrOp : VC4Tile_PureOp<"mask_or"> {
+  let summary = "logical disjunction of two tile predicates";
+  let description = [{
+    CuTe-style predicate composition.  This op is a semantic tile predicate:
+    it combines logical masks at the VC4Tile layer and lowers into concrete
+    active-lane values only at its final memory or compute consumer.
+  }];
+  let arguments = (ins AnyType:$lhs, AnyType:$rhs);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Tile_MaskNotOp : VC4Tile_PureOp<"mask_not"> {
+  let summary = "logical complement of a tile predicate";
+  let description = [{
+    CuTe-style predicate composition.  This op is a semantic tile predicate:
+    it complements a mask over the fixed 16-lane tile domain and lowers into
+    concrete active-lane values only at its final memory or compute consumer.
+  }];
+  let arguments = (ins AnyType:$input);
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Tile_MaskedLoadGlobalOp : VC4Tile_Op<"masked_load_global", [
     MemoryEffects<[MemRead]>
   ]> {

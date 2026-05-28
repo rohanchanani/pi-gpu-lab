@@ -24,5 +24,9 @@ vc4tile.kernel @masks_roundtrip attributes {
   %bounds = vc4tile.tile_bounds_mask %base, %limit {shape = [4, 4], layout = #vc4tile.layout<row_major>} : i32, i32 -> vector<16xi1>
   // CHECK: vc4tile.mask_and
   %composed = vc4tile.mask_and %tail, %bounds : vector<16xi1>, vector<16xi1> -> vector<16xi1>
+  // CHECK: vc4tile.mask_or
+  %union = vc4tile.mask_or %composed, %rect : vector<16xi1>, vector<16xi1> -> vector<16xi1>
+  // CHECK: vc4tile.mask_not
+  %inverse = vc4tile.mask_not %union : vector<16xi1> -> vector<16xi1>
   vc4tile.return
 }

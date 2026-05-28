@@ -701,6 +701,16 @@ static bool isMaskAndOp(Value value) {
   return def && def->getName().getStringRef() == "vc4tile.mask_and";
 }
 
+static bool isMaskOrOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.mask_or";
+}
+
+static bool isMaskNotOp(Value value) {
+  Operation *def = value.getDefiningOp();
+  return def && def->getName().getStringRef() == "vc4tile.mask_not";
+}
+
 static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
                                                       Value mask) {
   auto boundary = op->getAttrOfType<BoundaryPolicyAttr>("boundary");
@@ -709,9 +719,10 @@ static LogicalResult verifyBoundaryPolicyMatchesMask(Operation *op,
   switch (boundary.getValue()) {
   case BoundaryPolicy::exact:
     if (!isMaskAllOp(mask) && !isTileRectMaskOp(mask) &&
-        !isTileBoundsMaskOp(mask) && !isMaskAndOp(mask))
+        !isTileBoundsMaskOp(mask) && !isMaskAndOp(mask) &&
+        !isMaskOrOp(mask) && !isMaskNotOp(mask))
       return op->emitOpError(
-          "boundary policy exact requires a vc4tile.mask_all, vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, or vc4tile.mask_and mask");
+          "boundary policy exact requires a vc4tile.mask_all, vc4tile.tile_rect_mask, vc4tile.tile_bounds_mask, vc4tile.mask_and, vc4tile.mask_or, or vc4tile.mask_not mask");
     return success();
   case BoundaryPolicy::tail_predicated:
     if (!isTailMaskOp(mask))
@@ -1310,6 +1321,25 @@ LogicalResult MaskAndOp::verify() {
   if (failed(verifyInsideKernel(op)) ||
       failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
       failed(verifyVector16I1(op, getRhs().getType(), "rhs")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
+LogicalResult MaskOrOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getLhs().getType(), "lhs")) ||
+      failed(verifyVector16I1(op, getRhs().getType(), "rhs")) ||
+      failed(verifyVector16I1(op, getResult().getType(), "result")))
+    return failure();
+  return success();
+}
+
+LogicalResult MaskNotOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyInsideKernel(op)) ||
+      failed(verifyVector16I1(op, getInput().getType(), "input")) ||
       failed(verifyVector16I1(op, getResult().getType(), "result")))
     return failure();
   return success();
