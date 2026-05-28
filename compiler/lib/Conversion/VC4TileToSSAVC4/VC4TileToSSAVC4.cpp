@@ -52,6 +52,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 using namespace mlir;
 
@@ -2037,6 +2038,18 @@ struct TileBoundsMaskInfo {
   Value activeCols;
 };
 
+struct BoundsAndTailMaskInfo {
+  TileBoundsMaskInfo bounds;
+  Value tailBase;
+  Value tailLimit;
+};
+
+struct TailOutsideBoundsMaskInfo {
+  TileBoundsMaskInfo bounds;
+  Value tailBase;
+  Value tailLimit;
+};
+
 static std::optional<TileRectMaskInfo> getTileRectMaskInfo(Operation *maskDef) {
   if (!hasName(maskDef, kVC4TileTileRectMaskOpName))
     return std::nullopt;
@@ -2080,6 +2093,57 @@ getTileBoundsMaskInfo(Operation *maskDef) {
     return std::nullopt;
 
   return TileBoundsMaskInfo{maskDef->getOperand(0), maskDef->getOperand(1)};
+}
+
+static std::optional<std::pair<Value, Value>> getTailMaskInfo(Operation *maskDef) {
+  if (!hasName(maskDef, kVC4TileTailMaskOpName) ||
+      maskDef->getNumOperands() != 2)
+    return std::nullopt;
+  return std::make_pair(maskDef->getOperand(0), maskDef->getOperand(1));
+}
+
+static std::optional<BoundsAndTailMaskInfo>
+getBoundsAndTailMaskInfo(Operation *maskDef) {
+  if (!hasName(maskDef, kVC4TileMaskAndOpName) || maskDef->getNumOperands() != 2)
+    return std::nullopt;
+
+  Operation *lhs = maskDef->getOperand(0).getDefiningOp();
+  Operation *rhs = maskDef->getOperand(1).getDefiningOp();
+  if (std::optional<TileBoundsMaskInfo> bounds = getTileBoundsMaskInfo(lhs)) {
+    if (std::optional<std::pair<Value, Value>> tail = getTailMaskInfo(rhs))
+      return BoundsAndTailMaskInfo{*bounds, tail->first, tail->second};
+  }
+  if (std::optional<TileBoundsMaskInfo> bounds = getTileBoundsMaskInfo(rhs)) {
+    if (std::optional<std::pair<Value, Value>> tail = getTailMaskInfo(lhs))
+      return BoundsAndTailMaskInfo{*bounds, tail->first, tail->second};
+  }
+  return std::nullopt;
+}
+
+static std::optional<TailOutsideBoundsMaskInfo>
+getTailOutsideBoundsMaskInfo(Operation *maskDef) {
+  if (!hasName(maskDef, kVC4TileMaskAndOpName) || maskDef->getNumOperands() != 2)
+    return std::nullopt;
+
+  auto getNotBounds = [](Operation *candidate)
+      -> std::optional<TileBoundsMaskInfo> {
+    if (!hasName(candidate, kVC4TileMaskNotOpName) ||
+        candidate->getNumOperands() != 1)
+      return std::nullopt;
+    return getTileBoundsMaskInfo(candidate->getOperand(0).getDefiningOp());
+  };
+
+  Operation *lhs = maskDef->getOperand(0).getDefiningOp();
+  Operation *rhs = maskDef->getOperand(1).getDefiningOp();
+  if (std::optional<TileBoundsMaskInfo> bounds = getNotBounds(lhs)) {
+    if (std::optional<std::pair<Value, Value>> tail = getTailMaskInfo(rhs))
+      return TailOutsideBoundsMaskInfo{*bounds, tail->first, tail->second};
+  }
+  if (std::optional<TileBoundsMaskInfo> bounds = getNotBounds(rhs)) {
+    if (std::optional<std::pair<Value, Value>> tail = getTailMaskInfo(lhs))
+      return TailOutsideBoundsMaskInfo{*bounds, tail->first, tail->second};
+  }
+  return std::nullopt;
 }
 
 static std::optional<SmallVector<int32_t, 16>>
@@ -4781,6 +4845,14 @@ static FailureOr<Value> createLaneActiveI32ForStoreMask(
       "register->global composed store supports only semantic tile predicates");
 }
 
+static Operation *createOneRowTailMaskForPlan(OpBuilder &builder, Location loc,
+                                              Value activeCols);
+static Value createMinUI32ForPlan(OpBuilder &builder, Location loc, Value lhs,
+                                  Value rhs);
+static LogicalResult emitBoundsAndTailRows(
+    Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo,
+    llvm::function_ref<LogicalResult(OpBuilder &, int64_t, Value)> emitRow);
+
 static FailureOr<int64_t>
 getRegisterGlobalStoreRowPitchElements(Operation *op, int64_t activeCols) {
   int64_t memoryPitchBytes = getI32Attr(op, "memory_pitch_bytes").value_or(16);
@@ -4958,6 +5030,209 @@ static LogicalResult planDynamicBoundsRegisterGlobalTileStore(
   return success();
 }
 
+static LogicalResult planBoundsAndTailRegisterGlobalTileStore(
+    Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo) {
+  if (!isStatic4x4RowMajorTile(op))
+    return op->emitOpError(
+        "tile_bounds_mask AND tail_mask register->global stores currently require shape = [4, 4] and row_major layout");
+
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "tile_bounds_mask AND tail_mask register->global stores require unit lane stride in M5");
+
+  FailureOr<int64_t> rowPitchElements =
+      getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/0);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value tile = op->getOperand(0);
+  Value base = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+
+  return emitBoundsAndTailRows(
+      op, builder, maskInfo,
+      [&](OpBuilder &thenBuilder, int64_t row, Value rowCols) -> LogicalResult {
+        Value rowOffset =
+            row == 0 ? offset
+                     : addI32ConstantInline(thenBuilder, op->getLoc(), offset,
+                                            row * *rowPitchElements);
+        FailureOr<Value> adjustedBase =
+            createAdjustedGlobalBaseForTileCopy(thenBuilder, op, base,
+                                                rowOffset);
+        if (failed(adjustedBase))
+          return failure();
+        Value rowValue = createVC4TileRotateForPlan(
+            thenBuilder, op->getLoc(), tile, row * 4, tile.getType());
+        Operation *rowMask =
+            createOneRowTailMaskForPlan(thenBuilder, op->getLoc(), rowCols);
+        SmallVector<NamedAttribute, 8> attrs{
+            namedAttr(thenBuilder, "elem_bytes",
+                      thenBuilder.getI32IntegerAttr(4)),
+            namedAttr(thenBuilder, "offset_unit",
+                      getVC4TileOffsetUnitAttr(
+                          thenBuilder, mlir::vc4tile::OffsetUnit::element)),
+            namedAttr(thenBuilder, "memory_space",
+                      getVC4TileMemorySpaceAttr(
+                          thenBuilder, mlir::vc4tile::MemorySpace::global)),
+            namedAttr(thenBuilder, "access",
+                      getVC4TileMemoryAccessAttr(
+                          thenBuilder,
+                          mlir::vc4tile::MemoryAccess::affine_contiguous)),
+            namedAttr(thenBuilder, "boundary",
+                      mlir::vc4tile::BoundaryPolicyAttr::get(
+                          thenBuilder.getContext(),
+                          mlir::vc4tile::BoundaryPolicy::tail_predicated))};
+        createVC4TileCoreOp(
+            thenBuilder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
+            {*adjustedBase, lanes, rowValue, rowMask->getResult(0)}, attrs);
+        return success();
+      });
+}
+
+static LogicalResult emitRegisterGlobalRowFragmentForPlan(
+    Operation *op, OpBuilder &builder, Value tile, Value base, Value offset,
+    Value lanes, int64_t rowPitchElements, int64_t row, int64_t startCol,
+    Value rowCols) {
+  Value rowOffset = addI32ConstantInline(
+      builder, op->getLoc(), offset, row * rowPitchElements + startCol);
+  FailureOr<Value> adjustedBase =
+      createAdjustedGlobalBaseForTileCopy(builder, op, base, rowOffset);
+  if (failed(adjustedBase))
+    return failure();
+  Value rowValue = createVC4TileRotateForPlan(
+      builder, op->getLoc(), tile, row * 4 + startCol, tile.getType());
+  Operation *rowMask =
+      createOneRowTailMaskForPlan(builder, op->getLoc(), rowCols);
+  SmallVector<NamedAttribute, 8> attrs{
+      namedAttr(builder, "elem_bytes", builder.getI32IntegerAttr(4)),
+      namedAttr(builder, "offset_unit",
+                getVC4TileOffsetUnitAttr(
+                    builder, mlir::vc4tile::OffsetUnit::element)),
+      namedAttr(builder, "memory_space",
+                getVC4TileMemorySpaceAttr(
+                    builder, mlir::vc4tile::MemorySpace::global)),
+      namedAttr(builder, "access",
+                getVC4TileMemoryAccessAttr(
+                    builder, mlir::vc4tile::MemoryAccess::affine_contiguous)),
+      namedAttr(builder, "boundary",
+                mlir::vc4tile::BoundaryPolicyAttr::get(
+                    builder.getContext(),
+                    mlir::vc4tile::BoundaryPolicy::tail_predicated))};
+  createVC4TileCoreOp(builder, op->getLoc(), kVC4TileMaskedStoreGlobalOpName,
+                      {*adjustedBase, lanes, rowValue, rowMask->getResult(0)},
+                      attrs);
+  return success();
+}
+
+static LogicalResult planTailOutsideBoundsRegisterGlobalTileStore(
+    Operation *op, OpBuilder &builder, TailOutsideBoundsMaskInfo maskInfo) {
+  if (!isStatic4x4RowMajorTile(op))
+    return op->emitOpError(
+        "tail_mask AND mask_not(tile_bounds_mask) register->global stores currently require shape = [4, 4] and row_major layout");
+
+  FailureOr<int64_t> laneStride = getTileLaneStride(op);
+  if (failed(laneStride))
+    return failure();
+  if (*laneStride != 1)
+    return op->emitOpError(
+        "tail_mask AND mask_not(tile_bounds_mask) register->global stores require unit lane stride in M5");
+  if (!isI32Scalar(maskInfo.bounds.activeRows) ||
+      !isI32Scalar(maskInfo.bounds.activeCols) ||
+      !isI32Scalar(maskInfo.tailBase) || !isI32Scalar(maskInfo.tailLimit))
+    return op->emitOpError(
+        "tail_mask AND mask_not(tile_bounds_mask) planning requires i32 bounds and tail operands");
+
+  FailureOr<int64_t> rowPitchElements =
+      getRegisterGlobalStoreRowPitchElements(op, /*activeCols=*/0);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value tile = op->getOperand(0);
+  Value base = op->getOperand(1);
+  Value offset = op->getOperand(2);
+  Value lanes = createLaneOffsetsForTileCopy(builder, op, *laneStride);
+  Value zero = createI32ConstantInline(builder, op->getLoc(), 0);
+  Value four = createI32ConstantInline(builder, op->getLoc(), 4);
+  Value activeColsClamped = createMinUI32ForPlan(
+      builder, op->getLoc(), maskInfo.bounds.activeCols, four);
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value rowTailBase =
+        row == 0 ? maskInfo.tailBase
+                 : addI32ConstantInline(builder, op->getLoc(),
+                                        maskInfo.tailBase, row * 4);
+    Value tailLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowTailBase,
+        maskInfo.tailLimit);
+    auto tailIf = scf::IfOp::create(builder, op->getLoc(), tailLive,
+                                    /*withElseRegion=*/false);
+    OpBuilder tailBuilder = tailIf.getThenBodyBuilder();
+    Value tailRemaining = arith::SubIOp::create(
+        tailBuilder, op->getLoc(), maskInfo.tailLimit, rowTailBase);
+    Value tailCols =
+        createMinUI32ForPlan(tailBuilder, op->getLoc(), tailRemaining, four);
+    Value anyTailCols = arith::CmpIOp::create(
+        tailBuilder, op->getLoc(), arith::CmpIPredicate::ult, zero, tailCols);
+    auto anyTailIf = scf::IfOp::create(tailBuilder, op->getLoc(), anyTailCols,
+                                       /*withElseRegion=*/false);
+    OpBuilder liveBuilder = anyTailIf.getThenBodyBuilder();
+
+    Value rowIndex = createI32ConstantInline(liveBuilder, op->getLoc(), row);
+    Value rowOutsideBounds = arith::CmpIOp::create(
+        liveBuilder, op->getLoc(), arith::CmpIPredicate::uge, rowIndex,
+        maskInfo.bounds.activeRows);
+    auto outsideIf = scf::IfOp::create(liveBuilder, op->getLoc(),
+                                       rowOutsideBounds,
+                                       /*withElseRegion=*/false);
+    OpBuilder outsideBuilder = outsideIf.getThenBodyBuilder();
+    if (failed(emitRegisterGlobalRowFragmentForPlan(
+            op, outsideBuilder, tile, base, offset, lanes, *rowPitchElements,
+            row, /*startCol=*/0, tailCols)))
+      return failure();
+
+    Value rowInsideBounds = arith::CmpIOp::create(
+        liveBuilder, op->getLoc(), arith::CmpIPredicate::ult, rowIndex,
+        maskInfo.bounds.activeRows);
+    auto insideIf = scf::IfOp::create(liveBuilder, op->getLoc(),
+                                      rowInsideBounds,
+                                      /*withElseRegion=*/false);
+    OpBuilder insideBuilder = insideIf.getThenBodyBuilder();
+    for (int64_t startCol = 0; startCol < 4; ++startCol) {
+      Value start = createI32ConstantInline(insideBuilder, op->getLoc(),
+                                            startCol);
+      Value startMatches = arith::CmpIOp::create(
+          insideBuilder, op->getLoc(), arith::CmpIPredicate::eq,
+          activeColsClamped, start);
+      auto startIf = scf::IfOp::create(insideBuilder, op->getLoc(),
+                                       startMatches,
+                                       /*withElseRegion=*/false);
+      OpBuilder startBuilder = startIf.getThenBodyBuilder();
+      Value hasSuffix = arith::CmpIOp::create(
+          startBuilder, op->getLoc(), arith::CmpIPredicate::ult, start,
+          tailCols);
+      auto suffixIf = scf::IfOp::create(startBuilder, op->getLoc(), hasSuffix,
+                                        /*withElseRegion=*/false);
+      OpBuilder suffixBuilder = suffixIf.getThenBodyBuilder();
+      Value rowCols =
+          startCol == 0
+              ? tailCols
+              : arith::SubIOp::create(suffixBuilder, op->getLoc(), tailCols,
+                                      start)
+                    .getResult();
+      if (failed(emitRegisterGlobalRowFragmentForPlan(
+              op, suffixBuilder, tile, base, offset, lanes, *rowPitchElements,
+              row, startCol, rowCols)))
+        return failure();
+    }
+  }
+
+  return success();
+}
+
 static LogicalResult planComposedRegisterGlobalTileStore(Operation *op,
                                                          OpBuilder &builder) {
   if (!isStatic4x4RowMajorTile(op))
@@ -5052,6 +5327,14 @@ static LogicalResult planRegisterGlobalTileStore(Operation *op,
   if (std::optional<TileBoundsMaskInfo> boundsMask =
           getTileBoundsMaskInfo(op->getOperand(3).getDefiningOp()))
     return planDynamicBoundsRegisterGlobalTileStore(op, builder, *boundsMask);
+  if (std::optional<BoundsAndTailMaskInfo> boundsAndTail =
+          getBoundsAndTailMaskInfo(op->getOperand(3).getDefiningOp()))
+    return planBoundsAndTailRegisterGlobalTileStore(op, builder,
+                                                    *boundsAndTail);
+  if (std::optional<TailOutsideBoundsMaskInfo> tailOutsideBounds =
+          getTailOutsideBoundsMaskInfo(op->getOperand(3).getDefiningOp()))
+    return planTailOutsideBoundsRegisterGlobalTileStore(
+        op, builder, *tailOutsideBounds);
   if (isSemanticMaskCompositionOp(op->getOperand(3).getDefiningOp()))
     return planComposedRegisterGlobalTileStore(op, builder);
 
@@ -5298,6 +5581,72 @@ static Operation *createOneRowTileBoundsMaskForPlan(OpBuilder &builder,
                              getVector16I1Type(builder));
 }
 
+static Operation *createOneRowTailMaskForPlan(OpBuilder &builder, Location loc,
+                                              Value activeCols) {
+  Value zero = createI32ConstantForPlan(builder, loc, 0);
+  return createVC4TileCoreOp(builder, loc, kVC4TileTailMaskOpName,
+                             {zero, activeCols}, {}, getVector16I1Type(builder));
+}
+
+static Value createMinUI32ForPlan(OpBuilder &builder, Location loc, Value lhs,
+                                  Value rhs) {
+  Value lhsLtRhs =
+      arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult, lhs, rhs);
+  return arith::SelectOp::create(builder, loc, lhsLtRhs, lhs, rhs).getResult();
+}
+
+static LogicalResult emitBoundsAndTailRows(
+    Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo,
+    llvm::function_ref<LogicalResult(OpBuilder &, int64_t, Value)> emitRow) {
+  if (!isI32Scalar(maskInfo.bounds.activeRows) ||
+      !isI32Scalar(maskInfo.bounds.activeCols) ||
+      !isI32Scalar(maskInfo.tailBase) || !isI32Scalar(maskInfo.tailLimit))
+    return op->emitOpError(
+        "tile_bounds_mask AND tail_mask planning requires i32 bounds and tail operands");
+
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
+  Value four = createI32ConstantForPlan(builder, op->getLoc(), 4);
+  Value activeColsClamped = createMinUI32ForPlan(
+      builder, op->getLoc(), maskInfo.bounds.activeCols, four);
+
+  for (int64_t row = 0; row < 4; ++row) {
+    Value rowIndex = createI32ConstantForPlan(builder, op->getLoc(), row);
+    Value rowLive = arith::CmpIOp::create(
+        builder, op->getLoc(), arith::CmpIPredicate::ult, rowIndex,
+        maskInfo.bounds.activeRows);
+    Value rowTailBase =
+        row == 0 ? maskInfo.tailBase
+                 : addI32Constant(builder, op->getLoc(), maskInfo.tailBase,
+                                  row * 4);
+
+    auto rowIf = scf::IfOp::create(builder, op->getLoc(), rowLive,
+                                   /*withElseRegion=*/false);
+    OpBuilder rowBuilder = rowIf.getThenBodyBuilder();
+    Value tailLive = arith::CmpIOp::create(
+        rowBuilder, op->getLoc(), arith::CmpIPredicate::ult, rowTailBase,
+        maskInfo.tailLimit);
+    auto tailIf = scf::IfOp::create(rowBuilder, op->getLoc(), tailLive,
+                                    /*withElseRegion=*/false);
+    OpBuilder tailBuilder = tailIf.getThenBodyBuilder();
+    Value anyCols = arith::CmpIOp::create(
+        tailBuilder, op->getLoc(), arith::CmpIPredicate::ult, zero,
+        activeColsClamped);
+    auto colsIf = scf::IfOp::create(tailBuilder, op->getLoc(), anyCols,
+                                    /*withElseRegion=*/false);
+    OpBuilder thenBuilder = colsIf.getThenBodyBuilder();
+    Value tailRemaining = arith::SubIOp::create(
+        thenBuilder, op->getLoc(), maskInfo.tailLimit, rowTailBase);
+    Value tailCols = createMinUI32ForPlan(thenBuilder, op->getLoc(),
+                                          tailRemaining, four);
+    Value rowCols = createMinUI32ForPlan(
+        thenBuilder, op->getLoc(), activeColsClamped, tailCols);
+    if (failed(emitRow(thenBuilder, row, rowCols)))
+      return failure();
+  }
+
+  return success();
+}
+
 static FailureOr<Value> createPredicatedGlobalRowLoadForPlan(
     Operation *op, OpBuilder &builder, Value base, Value rowOffset,
     Value rowMask) {
@@ -5482,6 +5831,61 @@ static LogicalResult planDynamicBoundsGlobalSharedCopy(
   return success();
 }
 
+static LogicalResult planBoundsAndTailGlobalSharedCopy(
+    Operation *op, OpBuilder &builder, BoundsAndTailMaskInfo maskInfo) {
+  if (!isRowMajorGlobalShared4x4Copy(op))
+    return op->emitOpError(
+        "tile_bounds_mask AND tail_mask global->shared_vpm copy_tile currently requires shape = [4, 4], row_major source, and row-major VPM destination");
+
+  Value base = op->getOperand(0);
+  Value shared = op->getOperand(1);
+  Value offset = op->getOperand(2);
+
+  int64_t memoryPitchBytes =
+      getOptionalI32AttrOr(op, builder, "memory_pitch_bytes", 16).getInt();
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must be a positive multiple of 4");
+  if (memoryPitchBytes < 4)
+    return op->emitOpError(
+        "global->shared_vpm memory_pitch_bytes must cover at least one active element");
+  int64_t rowPitchElements = memoryPitchBytes / 4;
+  int64_t vpmBaseRow =
+      getOptionalI32AttrOr(op, builder, "vpm_base_row", 0).getInt();
+  if (vpmBaseRow < 0 || vpmBaseRow + 3 > 63)
+    return op->emitOpError(
+        "predicated global->shared_vpm copy_tile vpm_base_row range must fit in VPM rows [0, 63]");
+
+  Value maskAll = createMaskAllForPlan(builder, op->getLoc())->getResult(0);
+  Value zeroVector = createZeroVectorForPlan(builder, op->getLoc());
+  for (int64_t row = 0; row < 4; ++row) {
+    Value localRow =
+        createI32ConstantForPlan(builder, op->getLoc(), vpmBaseRow + row);
+    if (failed(createSharedRowStoreForPlan(op, builder, shared, localRow,
+                                           zeroVector, maskAll)))
+      return failure();
+  }
+
+  return emitBoundsAndTailRows(
+      op, builder, maskInfo,
+      [&](OpBuilder &thenBuilder, int64_t row, Value rowCols) -> LogicalResult {
+        Value rowOffset =
+            row == 0 ? offset
+                     : addI32Constant(thenBuilder, op->getLoc(), offset,
+                                      row * rowPitchElements);
+        Operation *rowMask =
+            createOneRowTailMaskForPlan(thenBuilder, op->getLoc(), rowCols);
+        FailureOr<Value> loaded = createPredicatedGlobalRowLoadForPlan(
+            op, thenBuilder, base, rowOffset, rowMask->getResult(0));
+        if (failed(loaded))
+          return failure();
+        Value localRow = createI32ConstantForPlan(thenBuilder, op->getLoc(),
+                                                  vpmBaseRow + row);
+        return createSharedRowStoreForPlan(op, thenBuilder, shared, localRow,
+                                           *loaded, maskAll);
+      });
+}
+
 static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
   if (op->getNumOperands() < 3 || op->getNumOperands() > 4 || op->getNumResults() != 0) {
     return op->emitOpError(
@@ -5505,9 +5909,12 @@ static LogicalResult planGlobalSharedCopy(Operation *op, OpBuilder &builder) {
     if (std::optional<TileBoundsMaskInfo> boundsMask =
             getTileBoundsMaskInfo(maskDef))
       return planDynamicBoundsGlobalSharedCopy(op, builder, *boundsMask);
+    if (std::optional<BoundsAndTailMaskInfo> boundsAndTail =
+            getBoundsAndTailMaskInfo(maskDef))
+      return planBoundsAndTailGlobalSharedCopy(op, builder, *boundsAndTail);
     if (!isMaskAllForPlan(op->getOperand(3)))
       return op->emitOpError(
-          "global->shared_vpm copy_tile supports only mask_all, tile_rect_mask, or tile_bounds_mask masks in M5");
+          "global->shared_vpm copy_tile supports only mask_all, tile_rect_mask, tile_bounds_mask, or tile_bounds_mask AND tail_mask masks in M5");
   }
   FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
   if (failed(shape))
@@ -5682,6 +6089,39 @@ static LogicalResult planDynamicBoundsSharedGlobal4x4Store(
   return success();
 }
 
+static LogicalResult planBoundsAndTailSharedGlobal4x4Store(
+    Operation *op, OpBuilder &builder, Value shared, Value base, Value offset,
+    Value rowBase, mlir::vc4tile::LayoutAttr layout,
+    BoundsAndTailMaskInfo maskInfo) {
+  if (!isRowMajorSharedGlobal4x4Store(op, layout))
+    return op->emitOpError(
+        "tile_bounds_mask AND tail_mask shared_vpm->global stores currently require shape = [4, 4] and row-major VPM source layout");
+
+  FailureOr<int64_t> rowPitchElements =
+      getSharedGlobalStoreRowPitchElements(op, /*activeCols=*/0);
+  if (failed(rowPitchElements))
+    return failure();
+
+  Value zero = createI32ConstantForPlan(builder, op->getLoc(), 0);
+  return emitBoundsAndTailRows(
+      op, builder, maskInfo,
+      [&](OpBuilder &thenBuilder, int64_t row, Value rowCols) -> LogicalResult {
+        Operation *rowMask =
+            createOneRowTailMaskForPlan(thenBuilder, op->getLoc(), rowCols);
+        Value logicalRow =
+            row == 0 ? rowBase
+                     : addI32Constant(thenBuilder, op->getLoc(), rowBase, row);
+        Value rowOffset =
+            row == 0 ? offset
+                     : addI32Constant(thenBuilder, op->getLoc(), offset,
+                                      row * *rowPitchElements);
+        return createSharedGlobalStoreForPlan(
+            op, thenBuilder, shared, logicalRow, zero, base, rowOffset,
+            rowMask->getResult(0), layout, /*rowLen=*/4, /*nrows=*/1,
+            /*memoryPitchBytes=*/16);
+      });
+}
+
 static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
                                             Value shared, Value base,
                                             Value offset, Value mask,
@@ -5702,6 +6142,10 @@ static LogicalResult planSharedRowsToGlobal(Operation *op, OpBuilder &builder,
           getTileBoundsMaskInfo(mask.getDefiningOp()))
     return planDynamicBoundsSharedGlobal4x4Store(
         op, builder, shared, base, offset, rowBase, layout, *boundsMask);
+  if (std::optional<BoundsAndTailMaskInfo> boundsAndTail =
+          getBoundsAndTailMaskInfo(mask.getDefiningOp()))
+    return planBoundsAndTailSharedGlobal4x4Store(
+        op, builder, shared, base, offset, rowBase, layout, *boundsAndTail);
 
   FailureOr<SmallVector<int64_t, 2>> shape = getTileShape2D(op);
   if (failed(shape))
