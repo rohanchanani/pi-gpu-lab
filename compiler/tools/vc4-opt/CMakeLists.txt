@@ -2,6 +2,7 @@ add_mlir_tool(vc4-opt
   vc4-opt.cpp
   ${PROJECT_SOURCE_DIR}/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp
   ${PROJECT_SOURCE_DIR}/lib/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.cpp
+  ${PROJECT_SOURCE_DIR}/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp
 )
 
 add_dependencies(vc4-opt
@@ -16,6 +17,11 @@ add_dependencies(vc4-opt
   VC4TileAttrDefsIncGen
   VC4TileTypesIncGen
   VC4TileOpsIncGen
+  VC4KernelDialectIncGen
+  VC4KernelEnumsIncGen
+  VC4KernelAttrDefsIncGen
+  VC4KernelTypesIncGen
+  VC4KernelOpsIncGen
 )
 
 target_link_libraries(vc4-opt
@@ -23,5 +29,6 @@ target_link_libraries(vc4-opt
     VC4Dialect
     SSAVC4Dialect
     VC4TileDialect
+    VC4KernelDialect
     MLIR
 )

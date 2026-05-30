@@ -1,0 +1,22 @@
+set(LLVM_TARGET_DEFINITIONS VC4KernelDialect.td)
+mlir_tablegen(VC4KernelDialect.h.inc -gen-dialect-decls -dialect=vc4kernel)
+mlir_tablegen(VC4KernelDialect.cpp.inc -gen-dialect-defs -dialect=vc4kernel)
+add_public_tablegen_target(VC4KernelDialectIncGen)
+
+set(LLVM_TARGET_DEFINITIONS VC4KernelAttrs.td)
+mlir_tablegen(VC4KernelEnums.h.inc -gen-enum-decls)
+mlir_tablegen(VC4KernelEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(VC4KernelEnumsIncGen)
+mlir_tablegen(VC4KernelAttrDefs.h.inc -gen-attrdef-decls -attrdefs-dialect=vc4kernel)
+mlir_tablegen(VC4KernelAttrDefs.cpp.inc -gen-attrdef-defs -attrdefs-dialect=vc4kernel)
+add_public_tablegen_target(VC4KernelAttrDefsIncGen)
+
+set(LLVM_TARGET_DEFINITIONS VC4KernelTypes.td)
+mlir_tablegen(VC4KernelTypes.h.inc -gen-typedef-decls -typedefs-dialect=vc4kernel)
+mlir_tablegen(VC4KernelTypes.cpp.inc -gen-typedef-defs -typedefs-dialect=vc4kernel)
+add_public_tablegen_target(VC4KernelTypesIncGen)
+
+set(LLVM_TARGET_DEFINITIONS VC4KernelOps.td)
+mlir_tablegen(VC4KernelOps.h.inc -gen-op-decls)
+mlir_tablegen(VC4KernelOps.cpp.inc -gen-op-defs)
+add_public_tablegen_target(VC4KernelOpsIncGen)

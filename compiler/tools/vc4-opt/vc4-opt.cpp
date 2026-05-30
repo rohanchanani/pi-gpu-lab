@@ -7,12 +7,14 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Conversion/VC4TileToSSAVC4/VC4TileToSSAVC4.h"
+#include "vc4/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Tile/IR/VC4TileDialect.h"
+#include "vc4/Dialect/VC4Kernel/IR/VC4KernelDialect.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
 #include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
 
@@ -1278,6 +1280,7 @@ struct VC4VerifyScheduledPeripheralAccessesPass
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
   mlir::vc4::registerConvertVC4TileToSSAVC4Pass();
+  mlir::vc4::registerConvertVC4KernelToSSAVC4Pass();
   mlir::PassRegistration<VC4TestPrintEffectsPass>();
   mlir::PassRegistration<VC4VerifyEmitContractPass>();
   mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
@@ -1290,7 +1293,8 @@ int main(int argc, char **argv) {
                   mlir::scf::SCFDialect, mlir::vector::VectorDialect,
                   mlir::vc4::VC4Dialect,
                   mlir::ssavc4::SSAVC4Dialect,
-                  mlir::vc4tile::VC4TileDialect>();
+                  mlir::vc4tile::VC4TileDialect,
+                  mlir::vc4kernel::VC4KernelDialect>();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "VC4 modular optimizer driver\n", registry));
