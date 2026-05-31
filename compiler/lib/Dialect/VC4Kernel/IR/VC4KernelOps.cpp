@@ -133,6 +133,49 @@ static std::optional<int64_t> getConstantI32(Value value) {
   return attr.getInt();
 }
 
+static bool isKnownScalarByteOffsetAligned4Impl(Value value,
+                                                unsigned depth);
+static bool isKnownVectorByteOffsetsAligned4Impl(Value value,
+                                                 unsigned depth);
+
+static bool isKnownScalarByteOffsetAligned4(Value value) {
+  return isKnownScalarByteOffsetAligned4Impl(value, 0);
+}
+
+static bool isKnownVectorByteOffsetsAligned4(Value value) {
+  return isKnownVectorByteOffsetsAligned4Impl(value, 0);
+}
+
+static bool isKnownScalarByteOffsetAligned4Impl(Value value, unsigned depth) {
+  if (depth > 16)
+    return false;
+  std::optional<int64_t> constant = getConstantI32(value);
+  if (constant)
+    return *constant % 4 == 0;
+
+  Operation *def = value.getDefiningOp();
+  if (!def || !value.getType().isSignlessInteger(32))
+    return false;
+
+  if (hasName(def, "arith.addi") || hasName(def, "arith.subi"))
+    return def->getNumOperands() == 2 &&
+           isKnownScalarByteOffsetAligned4Impl(def->getOperand(0), depth + 1) &&
+           isKnownScalarByteOffsetAligned4Impl(def->getOperand(1), depth + 1);
+
+  if (hasName(def, "arith.shli") && def->getNumOperands() == 2) {
+    std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
+    return amount && *amount >= 2;
+  }
+
+  if (hasName(def, "arith.muli") && def->getNumOperands() == 2) {
+    std::optional<int64_t> lhs = getConstantI32(def->getOperand(0));
+    std::optional<int64_t> rhs = getConstantI32(def->getOperand(1));
+    return (lhs && *lhs % 4 == 0) || (rhs && *rhs % 4 == 0);
+  }
+
+  return false;
+}
+
 static bool isLaneBytes(Value value) {
   Operation *def = value.getDefiningOp();
   if (!hasName(def, "vc4kernel.fragment_shl") || def->getNumOperands() != 2)
@@ -142,6 +185,39 @@ static bool isLaneBytes(Value value) {
     return false;
   std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
   return amount && *amount == 2;
+}
+
+static bool isLaneBytesOrGreater(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, "vc4kernel.fragment_shl") || def->getNumOperands() != 2)
+    return false;
+  Operation *laneRange = def->getOperand(0).getDefiningOp();
+  if (!hasName(laneRange, "vc4kernel.lane_range"))
+    return false;
+  std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
+  return amount && *amount >= 2;
+}
+
+static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
+  if (depth > 16)
+    return false;
+  if (isLaneBytesOrGreater(value))
+    return true;
+
+  Operation *def = value.getDefiningOp();
+  if (!def)
+    return false;
+
+  if (hasName(def, "vc4kernel.splat") && def->getNumOperands() == 1)
+    return isKnownScalarByteOffsetAligned4Impl(def->getOperand(0), depth + 1);
+
+  if ((hasName(def, "vc4kernel.fragment_add") ||
+       hasName(def, "vc4kernel.fragment_sub")) &&
+      def->getNumOperands() == 2)
+    return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) &&
+           isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
+
+  return false;
 }
 
 static bool isContiguousByteOffsets(Value value) {
@@ -600,6 +676,9 @@ LogicalResult FragmentReduceOp::verify() {
 }
 
 LogicalResult TMULoadFragmentOp::verify() {
+  if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
+    return emitOpError(
+        "tmu_load_fragment byte_offsets must be statically 4-byte aligned");
   if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
@@ -607,6 +686,9 @@ LogicalResult TMULoadFragmentOp::verify() {
 LogicalResult VDWStoreFragmentOp::verify() {
   if (!isContiguousByteOffsets(getByteOffsets()))
     return emitOpError("vdw_store_fragment requires contiguous byte offsets");
+  if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
+    return emitOpError(
+        "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
   if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
@@ -637,6 +719,9 @@ LogicalResult VPMReadFragmentOp::verify() {
 LogicalResult VDRLoadToVPMOp::verify() {
   if (getOperation()->getNumOperands() != 4)
     return emitOpError("does not accept a predicate operand");
+  if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
+    return emitOpError(
+        "vdr_load_to_vpm byte_offset must be statically 4-byte aligned");
   if (getRows() <= 0)
     return emitOpError("rows must be positive");
   if (getCols() < 1 || getCols() > 16)
@@ -650,6 +735,9 @@ LogicalResult VDRLoadToVPMOp::verify() {
 LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (getElemBytes() != 4)
     return emitOpError("elem_bytes must be 4");
+  if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
+    return emitOpError(
+        "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
   if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
