@@ -25,9 +25,11 @@ module {
     // CHECK: vc4kernel.pred.and
     %and = vc4kernel.pred.and %full, %tail : !vc4kernel.pred<16>, !vc4kernel.pred<16> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.pred.or
-    %or = vc4kernel.pred.or %and, %empty : !vc4kernel.pred<16>, !vc4kernel.pred<16> -> !vc4kernel.pred<16>
+    %or = vc4kernel.pred.or %empty, %tail : !vc4kernel.pred<16>, !vc4kernel.pred<16> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.pred.not
-    %not = vc4kernel.pred.not %empty : !vc4kernel.pred<16> -> !vc4kernel.pred<16>
+    %not_full = vc4kernel.pred.not %full : !vc4kernel.pred<16> -> !vc4kernel.pred<16>
+    // CHECK: vc4kernel.pred.not
+    %not_empty = vc4kernel.pred.not %empty : !vc4kernel.pred<16> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.pred.any
     %any = vc4kernel.pred.any %tail : !vc4kernel.pred<16> -> i1
     // CHECK: vc4kernel.pred.all

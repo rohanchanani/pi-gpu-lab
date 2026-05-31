@@ -26,7 +26,7 @@ module {
     // CHECK: vc4kernel.fragment_cmp
     %cmp = vc4kernel.fragment_cmp %shl, %a {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.fragment_select
-    %sel = vc4kernel.fragment_select %cmp, %shl, %a : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %sel = vc4kernel.fragment_select %full, %shl, %a : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
     // CHECK: vc4kernel.fragment_rotate
     %rot = vc4kernel.fragment_rotate %sel {amount = 1 : i32} : vector<16xi32> -> vector<16xi32>
     // CHECK: vc4kernel.fragment_reduce

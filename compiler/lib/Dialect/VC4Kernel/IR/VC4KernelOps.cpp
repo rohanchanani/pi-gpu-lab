@@ -158,26 +158,71 @@ static bool isContiguousByteOffsets(Value value) {
          isBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
 }
 
-static bool isSupportedPredExpression(Value pred) {
+enum class PredNormalForm { Full, Empty, Tail, RectRow };
+
+static std::optional<PredNormalForm> normalizePredExpression(Value pred) {
   Operation *def = pred.getDefiningOp();
   if (!def)
-    return false;
-  if (hasName(def, "vc4kernel.pred.full") ||
-      hasName(def, "vc4kernel.pred.empty") ||
-      hasName(def, "vc4kernel.pred.tail") ||
-      hasName(def, "vc4kernel.pred.rect"))
-    return true;
-  if (hasName(def, "vc4kernel.pred.and") ||
-      hasName(def, "vc4kernel.pred.or"))
-    return def->getNumOperands() == 2 &&
-           isSupportedPredExpression(def->getOperand(0)) &&
-           isSupportedPredExpression(def->getOperand(1));
+    return std::nullopt;
+  if (hasName(def, "vc4kernel.pred.full"))
+    return PredNormalForm::Full;
+  if (hasName(def, "vc4kernel.pred.empty"))
+    return PredNormalForm::Empty;
+  if (hasName(def, "vc4kernel.pred.tail"))
+    return PredNormalForm::Tail;
+  if (hasName(def, "vc4kernel.pred.rect"))
+    return PredNormalForm::RectRow;
   if (hasName(def, "vc4kernel.pred.not")) {
-    Operation *inputDef = def->getOperand(0).getDefiningOp();
-    return hasName(inputDef, "vc4kernel.pred.full") ||
-           hasName(inputDef, "vc4kernel.pred.empty");
+    if (def->getNumOperands() != 1)
+      return std::nullopt;
+    std::optional<PredNormalForm> input =
+        normalizePredExpression(def->getOperand(0));
+    if (!input)
+      return std::nullopt;
+    if (*input == PredNormalForm::Full)
+      return PredNormalForm::Empty;
+    if (*input == PredNormalForm::Empty)
+      return PredNormalForm::Full;
+    return std::nullopt;
   }
-  return false;
+  if (hasName(def, "vc4kernel.pred.and") ||
+      hasName(def, "vc4kernel.pred.or")) {
+    if (def->getNumOperands() != 2)
+      return std::nullopt;
+    Value lhs = def->getOperand(0);
+    Value rhs = def->getOperand(1);
+    std::optional<PredNormalForm> lhsForm = normalizePredExpression(lhs);
+    std::optional<PredNormalForm> rhsForm = normalizePredExpression(rhs);
+    if (!lhsForm || !rhsForm)
+      return std::nullopt;
+    if (hasName(def, "vc4kernel.pred.and")) {
+      if (*lhsForm == PredNormalForm::Empty ||
+          *rhsForm == PredNormalForm::Empty)
+        return PredNormalForm::Empty;
+      if (*lhsForm == PredNormalForm::Full)
+        return rhsForm;
+      if (*rhsForm == PredNormalForm::Full)
+        return lhsForm;
+      if (lhs == rhs)
+        return lhsForm;
+      return std::nullopt;
+    }
+    if (*lhsForm == PredNormalForm::Full ||
+        *rhsForm == PredNormalForm::Full)
+      return PredNormalForm::Full;
+    if (*lhsForm == PredNormalForm::Empty)
+      return rhsForm;
+    if (*rhsForm == PredNormalForm::Empty)
+      return lhsForm;
+    if (lhs == rhs)
+      return lhsForm;
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+static bool isNormalizablePredExpression(Value pred) {
+  return normalizePredExpression(pred).has_value();
 }
 
 static std::optional<int64_t> getVPMAllocRows(Value tile) {
@@ -452,26 +497,30 @@ LogicalResult PredRectOp::verify() {
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult PredAndOp::verify() {
-  if (!isSupportedPredExpression(getOperation()->getOperand(0)) ||
-      !isSupportedPredExpression(getOperation()->getOperand(1)))
+  if (!isNormalizablePredExpression(getResult()))
     return emitOpError("predicate expression is not normalizable");
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult PredOrOp::verify() {
-  if (!isSupportedPredExpression(getOperation()->getOperand(0)) ||
-      !isSupportedPredExpression(getOperation()->getOperand(1)))
+  if (!isNormalizablePredExpression(getResult()))
     return emitOpError("predicate expression is not normalizable");
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult PredNotOp::verify() {
-  Operation *inputDef = getInput().getDefiningOp();
-  if (!hasName(inputDef, "vc4kernel.pred.full") &&
-      !hasName(inputDef, "vc4kernel.pred.empty"))
-    return emitOpError("pred.not is supported only for full/empty predicates");
+  if (!isNormalizablePredExpression(getResult()))
+    return emitOpError("predicate expression is not normalizable");
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
-LogicalResult PredAnyOp::verify() { return success(); }
-LogicalResult PredAllOp::verify() { return success(); }
+LogicalResult PredAnyOp::verify() {
+  if (!isNormalizablePredExpression(getInput()))
+    return emitOpError("predicate expression is not normalizable");
+  return success();
+}
+LogicalResult PredAllOp::verify() {
+  if (!isNormalizablePredExpression(getInput()))
+    return emitOpError("predicate expression is not normalizable");
+  return success();
+}
 
 LogicalResult SplatOp::verify() {
   Type inputType = getInput().getType();
@@ -521,6 +570,8 @@ LogicalResult FragmentCmpOp::verify() {
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult FragmentSelectOp::verify() {
+  if (!isNormalizablePredExpression(getPred()))
+    return emitOpError("predicate expression is not normalizable");
   if (failed(verifySameType(getOperation(), getTrueValue().getType(),
                             getFalseValue().getType(),
                             "fragment_select value operands")) ||
@@ -540,7 +591,7 @@ LogicalResult FragmentRotateOp::verify() {
 LogicalResult FragmentReduceOp::verify() {
   if (getKind() != ReduceKind::add)
     return emitOpError("only #vc4kernel.reduce<add> is supported");
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   if (failed(verifySameType(getOperation(), getInput().getType(),
                             getResult().getType(), "fragment_reduce result")))
@@ -549,14 +600,14 @@ LogicalResult FragmentReduceOp::verify() {
 }
 
 LogicalResult TMULoadFragmentOp::verify() {
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
 }
 LogicalResult VDWStoreFragmentOp::verify() {
   if (!isContiguousByteOffsets(getByteOffsets()))
     return emitOpError("vdw_store_fragment requires contiguous byte offsets");
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
 }
@@ -571,7 +622,7 @@ LogicalResult VPMWriteFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
 }
@@ -579,7 +630,7 @@ LogicalResult VPMReadFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return success();
 }
@@ -599,7 +650,7 @@ LogicalResult VDRLoadToVPMOp::verify() {
 LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (getElemBytes() != 4)
     return emitOpError("elem_bytes must be 4");
-  if (!isSupportedPredExpression(getPred()))
+  if (!isNormalizablePredExpression(getPred()))
     return emitOpError("predicate expression is not normalizable");
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }
