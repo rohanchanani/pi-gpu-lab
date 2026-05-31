@@ -156,6 +156,82 @@ static bool containsIllegalType(Type type) {
   return true;
 }
 
+static bool isScalarI1(Type type) { return type && type.isInteger(1); }
+
+static bool isScalarI32(Type type) {
+  return type && type.isSignlessInteger(32);
+}
+
+static bool isScalarF32(Type type) { return type && type.isF32(); }
+
+static bool isAllowedScalarArithType(Type type) {
+  return isScalarI1(type) || isScalarI32(type) || isScalarF32(type);
+}
+
+static LogicalResult verifyNoArithVectors(Operation *op) {
+  for (Value operand : op->getOperands())
+    if (llvm::isa<VectorType>(operand.getType()))
+      return op->emitOpError(
+          "arith operations may not operate on or produce vectors");
+  for (Type type : op->getResultTypes())
+    if (llvm::isa<VectorType>(type))
+      return op->emitOpError(
+          "arith operations may not produce vectors; arith operations may not "
+          "operate on or produce vectors");
+  return success();
+}
+
+static LogicalResult verifyIntegerArithI32(Operation *op) {
+  for (Value operand : op->getOperands())
+    if (!isScalarI32(operand.getType()))
+      return op->emitOpError(
+          "integer arith operations in vc4kernel require scalar i32 operands and results");
+  for (Type type : op->getResultTypes())
+    if (!isScalarI32(type))
+      return op->emitOpError(
+          "integer arith operations in vc4kernel require scalar i32 operands and results");
+  return success();
+}
+
+static LogicalResult verifyArithBoundary(Operation *op) {
+  if (failed(verifyNoArithVectors(op)))
+    return failure();
+
+  StringRef name = op->getName().getStringRef();
+  if (name == "arith.constant") {
+    if (op->getNumResults() == 1 &&
+        isAllowedScalarArithType(op->getResult(0).getType()))
+      return success();
+    return op->emitOpError(
+        "arith.constant in vc4kernel requires one scalar i1/i32/f32 result");
+  }
+  if (name == "arith.addi" || name == "arith.subi" ||
+      name == "arith.muli" || name == "arith.shli")
+    return verifyIntegerArithI32(op);
+  if (name == "arith.cmpi") {
+    if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
+        isScalarI32(op->getOperand(0).getType()) &&
+        isScalarI32(op->getOperand(1).getType()) &&
+        isScalarI1(op->getResult(0).getType()))
+      return success();
+    return op->emitOpError(
+        "arith.cmpi in vc4kernel requires scalar i32 operands and scalar i1 result");
+  }
+  if (name == "arith.select") {
+    if (op->getNumOperands() == 3 && op->getNumResults() == 1 &&
+        isScalarI1(op->getOperand(0).getType())) {
+      Type valueType = op->getOperand(1).getType();
+      if (isAllowedScalarArithType(valueType) &&
+          op->getOperand(2).getType() == valueType &&
+          op->getResult(0).getType() == valueType)
+        return success();
+    }
+    return op->emitOpError(
+        "arith.select in vc4kernel requires scalar i1 condition and matching scalar i1/i32/f32 values");
+  }
+  return op->emitOpError("arith operation is not allowed in vc4kernel");
+}
+
 static LogicalResult verifyOperationBoundary(Operation *op) {
   StringRef dialect = op->getName().getDialectNamespace();
   if (dialect == "builtin")
@@ -166,21 +242,8 @@ static LogicalResult verifyOperationBoundary(Operation *op) {
       return op->emitOpError("unknown or forbidden vc4kernel operation");
     return success();
   }
-  if (dialect == "arith") {
-    StringRef name = op->getName().getStringRef();
-    if (name != "arith.constant" && name != "arith.addi" &&
-        name != "arith.subi" && name != "arith.muli" &&
-        name != "arith.shli" && name != "arith.cmpi" &&
-        name != "arith.select")
-      return op->emitOpError("arith operation is not allowed in vc4kernel");
-    for (Value operand : op->getOperands())
-      if (llvm::isa<VectorType>(operand.getType()))
-        return op->emitOpError("arith operations may not operate on vectors");
-    for (Type type : op->getResultTypes())
-      if (llvm::isa<VectorType>(type))
-        return op->emitOpError("arith operations may not produce vectors");
-    return success();
-  }
+  if (dialect == "arith")
+    return verifyArithBoundary(op);
   if (dialect == "cf") {
     if (!hasName(op, "cf.br") && !hasName(op, "cf.cond_br"))
       return op->emitOpError("only cf.br and cf.cond_br are allowed");
