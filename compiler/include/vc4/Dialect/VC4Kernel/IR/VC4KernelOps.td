@@ -16,6 +16,7 @@ def VC4Kernel_I1 : Type<CPred<"$_self.isInteger(1)">, "i1">;
 def VC4Kernel_I32 : Type<CPred<"$_self.isSignlessInteger(32)">, "i32">;
 def VC4Kernel_F32 : Type<CPred<"$_self.isF32()">, "f32">;
 def VC4Kernel_Scalar : AnyTypeOf<[VC4Kernel_I1, VC4Kernel_I32, VC4Kernel_F32]>;
+def VC4Kernel_DataScalar : AnyTypeOf<[VC4Kernel_I32, VC4Kernel_F32]>;
 def VC4Kernel_Vector16I32 : Type<CPred<
     "::mlir::vc4kernel::isVC4KernelVector16I32Type($_self)">,
     "vector<16xi32>">;
@@ -36,12 +37,12 @@ def VC4Kernel_KernelOp : VC4Kernel_Op<"kernel", [
   ]> {
   let summary = "strict VC4 target-kernel planning operation";
   let arguments = (ins
-    AnyAttr:$sym_name,
+    SymbolNameAttr:$sym_name,
     TypeAttrOf<FunctionType>:$function_type,
-    AnyAttr:$public_name,
-    AnyAttr:$schedule_mode,
-    AnyAttr:$arg_attrs,
-    AnyAttr:$resource
+    StrAttr:$public_name,
+    VC4Kernel_ScheduleModeAttr:$schedule_mode,
+    ArrayAttr:$arg_attrs,
+    DictionaryAttr:$resource
   );
   let regions = (region AnyRegion:$body);
   let hasCustomAssemblyFormat = 1;
@@ -140,7 +141,7 @@ def VC4Kernel_PredAnyOp : VC4Kernel_PredScalarOp<"pred.any">;
 def VC4Kernel_PredAllOp : VC4Kernel_PredScalarOp<"pred.all">;
 
 def VC4Kernel_SplatOp : VC4Kernel_PureOp<"splat"> {
-  let arguments = (ins AnyType:$input);
+  let arguments = (ins VC4Kernel_DataScalar:$input);
   let results = (outs VC4Kernel_Vector16Data:$result);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
