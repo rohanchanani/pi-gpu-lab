@@ -193,6 +193,15 @@ static LogicalResult verifyIntegerArithI32(Operation *op) {
   return success();
 }
 
+static LogicalResult verifyNoVPMSuccessorOperands(Operation *op,
+                                                  ValueRange operands) {
+  for (Value operand : operands)
+    if (mlir::vc4kernel::isVC4KernelVPMTileType(operand.getType()))
+      return op->emitOpError(
+          "cf successor operands may not carry !vc4kernel.vpm_tile in Stage 1");
+  return success();
+}
+
 static LogicalResult verifyArithBoundary(Operation *op) {
   if (failed(verifyNoArithVectors(op)))
     return failure();
@@ -247,9 +256,15 @@ static LogicalResult verifyOperationBoundary(Operation *op) {
   if (dialect == "cf") {
     if (!hasName(op, "cf.br") && !hasName(op, "cf.cond_br"))
       return op->emitOpError("only cf.br and cf.cond_br are allowed");
-    if (auto cond = dyn_cast<cf::CondBranchOp>(op))
+    if (auto br = dyn_cast<cf::BranchOp>(op))
+      return verifyNoVPMSuccessorOperands(op, br.getDestOperands());
+    if (auto cond = dyn_cast<cf::CondBranchOp>(op)) {
       if (!cond.getCondition().getType().isInteger(1))
         return op->emitOpError("cf.cond_br condition must be scalar i1");
+      if (failed(verifyNoVPMSuccessorOperands(op, cond.getTrueDestOperands())) ||
+          failed(verifyNoVPMSuccessorOperands(op, cond.getFalseDestOperands())))
+        return failure();
+    }
     return success();
   }
   if (dialect == "vector")
@@ -288,13 +303,23 @@ static LogicalResult verifyVC4Kernel(ModuleOp module) {
           return WalkResult::interrupt();
         }
       for (Region &region : op->getRegions())
-        for (Block &block : region)
-          for (BlockArgument arg : block.getArguments())
+        for (Block &block : region) {
+          bool isKernelEntryBlock = op == &top && &region == &top.getRegion(0) &&
+                                    &block == &region.front();
+          for (BlockArgument arg : block.getArguments()) {
+            if (!isKernelEntryBlock &&
+                mlir::vc4kernel::isVC4KernelVPMTileType(arg.getType())) {
+              op->emitOpError(
+                  "cf block arguments may not carry !vc4kernel.vpm_tile in Stage 1");
+              return WalkResult::interrupt();
+            }
             if (containsIllegalType(arg.getType())) {
               op->emitOpError("region block argument has illegal type ")
                   << arg.getType();
               return WalkResult::interrupt();
             }
+          }
+        }
       return WalkResult::advance();
     });
     if (walk.wasInterrupted())
