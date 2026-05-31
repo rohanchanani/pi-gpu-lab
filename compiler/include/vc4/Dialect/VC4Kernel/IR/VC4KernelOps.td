@@ -10,6 +10,7 @@ include "mlir/IR/BuiltinTypes.td"
 include "mlir/IR/CommonAttrConstraints.td"
 include "mlir/IR/OpBase.td"
 include "mlir/IR/SymbolInterfaces.td"
+include "mlir/Interfaces/FunctionInterfaces.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 
 def VC4Kernel_I1 : Type<CPred<"$_self.isInteger(1)">, "i1">;
@@ -33,7 +34,7 @@ class VC4Kernel_PureOp<string mnemonic, list<Trait> traits = []>
     : VC4Kernel_Op<mnemonic, [Pure] # traits>;
 
 def VC4Kernel_KernelOp : VC4Kernel_Op<"kernel", [
-    IsolatedFromAbove, Symbol
+    FunctionOpInterface, IsolatedFromAbove, Symbol
   ]> {
   let summary = "strict VC4 target-kernel planning operation";
   let arguments = (ins
@@ -41,10 +42,50 @@ def VC4Kernel_KernelOp : VC4Kernel_Op<"kernel", [
     TypeAttrOf<FunctionType>:$function_type,
     StrAttr:$public_name,
     VC4Kernel_ScheduleModeAttr:$schedule_mode,
-    ArrayAttr:$arg_attrs,
     DictionaryAttr:$resource
   );
   let regions = (region AnyRegion:$body);
+  let extraClassDeclaration = [{
+    ::mlir::Region *getCallableRegion() {
+      return &getBody();
+    }
+
+    ::llvm::ArrayRef<::mlir::Type> getArgumentTypes() {
+      return getFunctionType().getInputs();
+    }
+
+    ::llvm::ArrayRef<::mlir::Type> getResultTypes() {
+      return getFunctionType().getResults();
+    }
+
+    ::mlir::ArrayAttr getArgAttrsAttr() {
+      return nullptr;
+    }
+
+    ::mlir::ArrayAttr getResAttrsAttr() {
+      return nullptr;
+    }
+
+    void setArgAttrsAttr(::mlir::ArrayAttr attrs) {
+      (void)attrs;
+    }
+
+    void setResAttrsAttr(::mlir::ArrayAttr attrs) {
+      (void)attrs;
+    }
+
+    ::mlir::Attribute removeArgAttrsAttr() {
+      return nullptr;
+    }
+
+    ::mlir::Attribute removeResAttrsAttr() {
+      return nullptr;
+    }
+
+    bool isDeclaration() {
+      return false;
+    }
+  }];
   let hasCustomAssemblyFormat = 1;
   let hasVerifier = 1;
 }
