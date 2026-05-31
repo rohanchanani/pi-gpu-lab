@@ -313,10 +313,18 @@ static std::optional<int64_t> getVPMAllocRows(Value tile) {
 
 static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
                                           int64_t span = 1) {
+  Operation *alloc = tile.getDefiningOp();
+  if (!hasName(alloc, "vc4kernel.vpm_alloc"))
+    return op->emitOpError(
+        "VPM tile operand must be produced by vc4kernel.vpm_alloc");
+
   std::optional<int64_t> rows = getVPMAllocRows(tile);
+  if (!rows)
+    return op->emitOpError(
+        "VPM tile operand must be produced by vc4kernel.vpm_alloc");
   std::optional<int64_t> rowCst = getConstantI32(row);
-  if (!rows || !rowCst)
-    return success();
+  if (!rowCst)
+    return op->emitOpError("VPM row must be a scalar i32 constant in Stage 1");
   if (*rowCst < 0 || *rowCst + span > *rows)
     return op->emitOpError("VPM row access is out of bounds for allocation");
   return success();
