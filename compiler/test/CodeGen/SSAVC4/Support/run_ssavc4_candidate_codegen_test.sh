@@ -3,7 +3,7 @@
 # a hardware ground-truth test without mutating the checked-in reference side.
 #
 # M2 program-bundle behavior:
-#   * VC4_CODEGEN_STATE_ROOT selects the M5 .vc4_auto/vc4tile_m5 state root cleanly.
+#   * VC4_CODEGEN_STATE_ROOT selects the generated-code state root.
 #   * manifest-v2 kernels[] are treated as the general case, including the
 #     single-kernel case.
 #   * every manifest-listed qasm_path is assembled to its code_symbol .c/.h.
@@ -49,7 +49,7 @@ REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
 BUNDLE_ONLY_FIXTURE=0
 
-AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/vc4tile_m5}"
+AUTO_ROOT_RAW="${VC4_CODEGEN_STATE_ROOT:-.vc4_auto/codegen_ssavc4}"
 case "$AUTO_ROOT_RAW" in
   /*) AUTO_ROOT="$AUTO_ROOT_RAW" ;;
   *) AUTO_ROOT="$REPO_ROOT/$AUTO_ROOT_RAW" ;;
@@ -183,8 +183,8 @@ if count != 1:
     raise SystemExit(f'{path}: expected exactly one scheduled vc4.module, found {count}')
 if 'ssavc4.' in text:
     raise SystemExit(f'{path}: still contains ssavc4 operations after --convert-ssavc4-to-vc4')
-if 'vc4tile.' in text:
-    raise SystemExit(f'{path}: still contains vc4tile operations after lowering')
+if 'vc4kernel.' in text:
+    raise SystemExit(f'{path}: still contains vc4kernel operations after lowering')
 if 'vc4.qpu.' not in text:
     raise SystemExit(f'{path}: scheduled VC4 output contains no vc4.qpu.* operations')
 PY_VALIDATE_VC4

@@ -333,7 +333,7 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
   let description = [{
     Starts and waits for a lower-half VideoCore IV VDR/VCD DMA load from a
     global-memory base address into the shared VPM window.  This is the
-    hardware-natural global-to-shared path that later M5 VC4Tile copy planning
+    hardware-natural global-to-shared path that kernel planning
     can target for regular 32-bit tile loads.  The operation is intentionally
     not Pure: lowering owns the concrete VPMVCD_RD_SETUP, VPM_LD_ADDR, wait,
     and optional mutex serialization sequence.  M5 executable semantics are

@@ -1,7 +1,7 @@
 # VC4 Codegen Milestone 2 Plan
 
 **Document status:** proposed M2 implementation plan after M1 completion  
-**Scope:** finish the scheduled-VC4 artifact/runtime backend so later `vc4tile -> ssavc4 -> vc4` lowering has a stable CUDA-like target
+**Scope:** finish the scheduled-VC4 artifact/runtime backend so later `vc4kernel -> ssavc4 -> vc4` lowering has a stable CUDA-like target
 **Non-scope:** SSAVC4 lowering, register allocation, instruction scheduling from SSA ops, or `gpu` dialect lowering
 
 ---
@@ -35,7 +35,7 @@ versioned artifact bundle
   candidate workdir that builds and runs on Pi hardware
 ```
 
-M2 should not lower pre-scheduled SSA VC4 IR to scheduled QPU instructions. That remains M3 and will use a separate `ssavc4` dialect. M2 may add metadata contracts that `ssavc4` and the later VC4 Tile dialect (`vc4tile`) will target.
+M2 should not lower pre-scheduled SSA VC4 IR to scheduled QPU instructions. That remains M3 and uses a separate `ssavc4` dialect. M2 may add metadata contracts that `ssavc4` and the current `vc4kernel` dialect target.
 
 After the post-M2 cleanup, active `vc4` is only the scheduled sink dialect:
 TMU/SFU/VPM/VDW/DMA behavior appears as scheduled QPU bundles, load-immediates,
@@ -1592,7 +1592,7 @@ M2 is complete when:
 9. Cooperative-block scheduled kernels run through backend full-residency/resource scheduling.
 10. Required fixture matrices pass candidate hardware or are explicitly unsupported with deterministic diagnostics.
 11. No reference bundles, expected JSON files, generated lit Output files, run logs, or `.vc4_auto/**` artifacts are committed.
-12. The backend target is stable enough for M3 `ssavc4` lowering and later `vc4tile -> ssavc4 -> vc4` lowering.
+12. The backend target is stable enough for M3 `ssavc4` lowering and later `vc4kernel -> ssavc4 -> vc4` lowering.
 
 
 ### Canonical single-kernel bundle policy

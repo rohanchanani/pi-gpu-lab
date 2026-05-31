@@ -1,5 +1,0 @@
-storage_type=f32
-expressed_type=f32
-accumulator_type=f32
-precision_policy=exact_32
-allowed=i32,u32,f32,vector<16xi32>,vector<16xf32>

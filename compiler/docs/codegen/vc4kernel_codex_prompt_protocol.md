@@ -49,7 +49,7 @@ Surface-only does **not** mean:
 - adding new hardware fixture matrices
 - implementing vector -> vc4kernel
 - implementing Triton -> vector
-- deleting VC4Tile before the surface lock is accepted
+- deleting unrelated active compiler layers
 ```
 
 ---
@@ -63,11 +63,10 @@ Do not do any of the following unless the current prompt explicitly requests it:
 - do not add hardware fixtures during surface-only prompts
 - do not introduce vector/memref/Triton lowering
 - do not introduce TTIR, TTGIR, gpu, IREE, StableHLO, Torch, or producer-integration work
-- do not delete VC4Tile during surface-lock prompts
 - do not weaken SSAVC4 or scheduled-VC4 verifiers
-- do not add a direct VC4KernelToVC4 path
+- do not add a direct kernel-to-scheduled-VC4 path
 - do not route around ssavc4
-- do not make the verifier accept forbidden dialects, forbidden types, or old vc4tile surface ops
+- do not make the verifier accept forbidden dialects, forbidden types, or removed producer-surface ops
 ```
 
 Forbidden shortcuts include:
@@ -221,7 +220,7 @@ Use `FAILURE` only if you are genuinely blocked, such as:
 - the requested behavior is incompatible with the current architecture
 - passing would require weakening the verifier or diagnostics
 - passing would require a fixture-name/public_name shortcut
-- passing would require host-side substitution, reference-output substitution, or direct VC4KernelToVC4 lowering
+- passing would require host-side substitution, reference-output substitution, or direct kernel-to-scheduled-VC4 lowering
 - passing would require broad unrelated infrastructure changes outside the prompt's scope
 - required verification cannot be made deterministic without a non-local design/infrastructure change
 ```

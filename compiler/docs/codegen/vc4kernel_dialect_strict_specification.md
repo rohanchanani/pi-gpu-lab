@@ -2,8 +2,8 @@
 
 **Status:** locked Stage 1 target specification for the `vc4kernel` dialect.  
 **Date:** 2026-05-30.  
-**Audience:** implementation agents that will create `vc4kernel` by copying `vc4tile`, then pruning, renaming, adapting, and adding code until the result exactly matches this document.  
-**Primary purpose:** define the final `vc4kernel` dialect contract, independent of compatibility with existing `vc4tile` names or M5 surface choices.
+**Audience:** implementation agents maintaining the locked `vc4kernel` dialect and its lowering boundary.
+**Primary purpose:** define the final `vc4kernel` dialect contract.
 
 ---
 
@@ -11,7 +11,7 @@
 
 This document is the source of truth for `vc4kernel`.
 
-The implementation must not preserve an existing `vc4tile` operation, attribute, type, verifier rule, pass, or lowering behavior merely because it exists. Existing `vc4tile` is only implementation source material. The final `vc4kernel` dialect must match this specification.
+The final `vc4kernel` dialect must match this specification. Anything outside this specification is not part of verified `vc4kernel` IR.
 
 Anything not explicitly permitted by this document is forbidden in verified `vc4kernel` IR.
 
@@ -32,12 +32,10 @@ Triton-emitted TTIR / future IREE-Linalg-value IR
 The implementation order is bottom-up:
 
 ```text
-1. Specify vc4kernel exactly.                         <-- this document
-2. Create vc4kernel by copying vc4tile.
-3. Prune / rename / adapt vc4kernel until it matches this spec.
-4. Prove vc4kernel -> ssavc4 -> scheduled vc4 -> hardware.
-5. Only then add standard vector/memref/arith -> vc4kernel.
-6. Only then add real Triton-emitted TTIR -> standard value layer.
+1. Maintain vc4kernel exactly as specified here.
+2. Prove vc4kernel -> ssavc4 -> scheduled vc4 -> hardware.
+3. Only then add standard vector/memref/arith -> vc4kernel.
+4. Only then add real Triton-emitted TTIR -> standard value layer.
 ```
 
 ---
@@ -121,15 +119,9 @@ vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware
 
 ---
 
-## 2. Source material and transformation strategy
+## 2. Required semantic material
 
-The implementation should create `vc4kernel` by copying the current `vc4tile` dialect and conversion structure, then editing the copy until it exactly matches this document.
-
-The copy-from-`vc4tile` strategy is an implementation-risk reduction technique only. It does not constrain this specification.
-
-### 2.1 Source material to preserve semantically
-
-Current `vc4tile` contains useful target-kernel material that should be reworked into `vc4kernel`:
+The dialect contains only target-kernel planning material:
 
 ```text
 kernel wrapper / return
@@ -143,43 +135,11 @@ shared/VPM allocation and access
 VDR/VCD and VDW experience
 barrier and cooperative resources
 core CFG / block-argument lowering
-vc4tile -> ssavc4 conversion structure
+vc4kernel -> ssavc4 conversion boundary
 hardware candidate runner discipline
 ```
 
-### 2.2 Source material that must not survive as `vc4kernel`
-
-The old ergonomic `vc4tile` surface must not survive in the final `vc4kernel` dialect:
-
-```text
-tile_descriptor
-tile_load
-tile_store
-copy_tile
-tile_view
-tile_subview
-transpose_view
-shared_tile_alloc as ergonomic tile allocation
-tile_fill
-tile_broadcast
-tile_add
-tile_sub
-tile_mul
-tile_select
-tile_reduce as ergonomic tile surface
-row_reduce as ergonomic tile surface
-warp_reduce as ergonomic tile surface
-block_reduce as ergonomic tile surface
-tile_dot
-tile_contract
-tile_matmul
-surface_placeholder
-layout algebra attributes
-role metadata attributes
-precision/packing metadata fields copied from M5 surface
-```
-
-These concepts belong either above `vc4kernel` in standard MLIR (`vector`, `memref`, `arith`, `scf/cf`) or later as planned low-level `vc4kernel` fragment/resource operations with different semantics.
+Producer-facing value semantics belong above `vc4kernel` in standard MLIR (`vector`, `memref`, `arith`, `scf/cf`) or in future producer-to-kernel passes. They are not legal inside verified `vc4kernel` IR.
 
 ---
 
@@ -239,7 +199,7 @@ Optional but allowed helper passes:
 
 `--legalize-vc4kernel-cfg` is allowed only if it lowers a small remaining CFG legality detail inside `vc4kernel`. It must not accept raw `scf.*` in verified core. Structured `scf` lowering belongs above `vc4kernel`.
 
-These pass names must not be aliases to old `vc4tile` passes in the final implementation. Temporary aliases may be used only during early migration, but the completed Stage 1 implementation must own real `vc4kernel` pass registrations and tests.
+These pass names must be real `vc4kernel` pass registrations with tests.
 
 ---
 
@@ -551,7 +511,7 @@ warp_id * 16 + lane_id
 program_id * block_size + lane_range
 ```
 
-The dialect must reject any copied `vc4tile.thread_id` operation if it survives the port.
+The dialect must reject any `vc4kernel.thread_id` operation.
 
 Rationale:
 
@@ -2120,7 +2080,7 @@ Every hardware fixture must:
 The test suite must scan for and reject:
 
 ```text
-- direct VC4KernelToVC4 conversion pass
+- direct kernel-to-scheduled-VC4 conversion pass
 - producer lowering in Stage 1
 - executable sub-32 lowering
 - vc4kernel.tile_* surface op definitions
@@ -2133,87 +2093,20 @@ The test suite must scan for and reject:
 
 ---
 
-## 22. Implementation checklist for the copy/prune/adapt step
-
-After copying `vc4tile` to `vc4kernel`, perform this checklist in order.
+## 22. Implementation checklist
 
 ### 22.1 Namespace and build integration
 
 ```text
-- Rename include/lib/test directories to VC4Kernel.
-- Rename TableGen prefix VC4Tile -> VC4Kernel.
-- Rename C++ namespace vc4tile -> vc4kernel.
 - Register VC4Kernel dialect in vc4-opt.
 - Add VC4Kernel dialect and conversion libraries to CMake.
 - Add --verify-vc4kernel.
 - Add --convert-vc4kernel-to-ssavc4.
 ```
 
-### 22.2 Delete/prune old surface
+### 22.2 Keep producer value operations out
 
-Delete all old ergonomic surface op definitions, verifiers, conversion patterns, tests, and verifier allowances:
-
-```text
-tile_descriptor
-tile_load
-tile_store
-copy_tile
-tile_view
-tile_subview
-transpose_view
-shared_tile_alloc
-tile_fill
-tile_broadcast
-tile_add
-tile_sub
-tile_mul
-tile_select
-tile_reduce
-row_reduce
-warp_reduce
-block_reduce
-tile_dot
-tile_contract
-tile_matmul
-surface_placeholder
-```
-
-Do not leave them as hidden aliases in `vc4kernel`.
-
-### 22.3 Delete old surface attrs/types
-
-Delete or exclude:
-
-```text
-layout attrs
-role attrs
-precision attrs
-packing attrs
-M5 tile descriptor types
-storage/expressed/accumulator metadata attrs
-```
-
-### 22.4 Replace old names with final path names
-
-Map implementation source material as follows:
-
-```text
-vc4tile.masked_load_global  -> vc4kernel.tmu_load_fragment
-vc4tile.masked_store_global -> vc4kernel.vdw_store_fragment
-vc4tile.shared_alloc        -> vc4kernel.vpm_alloc
-vc4tile.shared_load         -> vc4kernel.vpm_read_fragment
-vc4tile.shared_store        -> vc4kernel.vpm_write_fragment
-vc4tile.shared_store_global -> vc4kernel.vdw_store_vpm_fragment
-vc4tile.vdr_load_tile       -> vc4kernel.vdr_load_to_vpm
-vc4tile.rotate              -> vc4kernel.fragment_rotate
-vc4tile.reduce              -> vc4kernel.fragment_reduce
-vc4tile.mask_all            -> vc4kernel.pred.full
-vc4tile.tail_mask           -> vc4kernel.pred.tail
-```
-
-### 22.5 Replace `vector.broadcast`
-
-Any copied `vector.broadcast` or `vector.splat` usage inside `vc4kernel` must become:
+Any `vector.broadcast` or `vector.splat` usage inside `vc4kernel` must become:
 
 ```text
 vc4kernel.splat
@@ -2221,13 +2114,11 @@ vc4kernel.splat
 
 The verifier must reject all `vector.*` operations.
 
-### 22.6 Remove `thread_id`
+### 22.3 Forbid synthetic thread identity
 
-Do not port `vc4tile.thread_id`.
+Do not add `vc4kernel.thread_id`. If a direct thread identity helper is proposed, reject it and use explicit arithmetic from legal identity values instead.
 
-If copied accidentally, delete it and add invalid tests proving `vc4kernel.thread_id` is not accepted.
-
-### 22.7 Convert raw masks to predicate type
+### 22.4 Use predicate type for masks
 
 Replace raw `vector<16xi1>` mask results/operands with:
 
@@ -2237,7 +2128,7 @@ Replace raw `vector<16xi1>` mask results/operands with:
 
 Ensure all consumers are updated and tests reject `vector<16xi1>` masks.
 
-### 22.8 Tighten ODS constraints
+### 22.5 Tighten ODS constraints
 
 No final `vc4kernel` op should use unconstrained `AnyType` when a precise constraint exists.
 
@@ -2253,21 +2144,12 @@ vector<16xf32>
 !vc4kernel.vpm_tile
 ```
 
-### 22.9 Conversion cleanup
+### 22.6 Conversion cleanup
 
-The new conversion must be named and scoped as:
+The conversion must be named and scoped as:
 
 ```text
 VC4KernelToSSAVC4
-```
-
-It must not contain surface pipeline logic such as:
-
-```text
-canonicalize-vc4tile-surface
-plan-vc4tile-copies
-surface_placeholder handling
-copy_tile planning
 ```
 
 If planning is needed, it belongs above `vc4kernel` in the future vector-to-vc4kernel pass.
@@ -2282,7 +2164,7 @@ If planning is needed, it belongs above `vc4kernel` in the future vector-to-vc4k
 1. The dialect exists as vc4kernel with final names and namespace.
 2. The ODS op/type/attr inventory exactly matches this document.
 3. The verifier rejects every forbidden dialect/type/op class listed here.
-4. No old ergonomic vc4tile surface op exists in vc4kernel.
+4. No producer-facing surface op exists in vc4kernel.
 5. No vc4kernel.thread_id exists.
 6. No vector dialect op is legal in vc4kernel.
 7. No memref/tensor/scf/tt/gpu/linalg/producers are legal in vc4kernel.

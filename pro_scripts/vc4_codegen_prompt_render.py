@@ -411,8 +411,8 @@ def render_failure_repair_discipline_markdown(
     if slice_id.startswith("m4-"):
         lines.extend(
             [
-                "- VC4Tile M4 rule: preserve custom `vc4tile.kernel` parser/printer definitions when ODS declares custom parse/print.",
-                "- VC4Tile M4 rule: do not set or keep ODS custom parser/printer declarations unless matching C++ definitions are present and linked.",
+                "- Preserve custom parser/printer definitions when ODS declares custom parse/print.",
+                "- Do not set or keep ODS custom parser/printer declarations unless matching C++ definitions are present and linked.",
                 "- Do not touch earlier-passed formal-args, program-id, global-store, SAXPY, vector-store, warp-reduce, m4-03 minimal ABI, or m4-09 cooperative matrix surfaces unless the current failure log explicitly names them.",
             ]
         )

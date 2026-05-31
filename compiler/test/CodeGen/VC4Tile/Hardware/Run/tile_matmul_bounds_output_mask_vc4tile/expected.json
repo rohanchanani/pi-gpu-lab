@@ -1,1 +1,0 @@
-{"name":"tile_matmul_bounds_output_mask_vc4tile","status":"PASS","required":{"cases":6,"output_predicate_path":1,"total_mismatches":0,"sentinel_mismatches":0,"launch_failures":0,"runtime_launches":6}}

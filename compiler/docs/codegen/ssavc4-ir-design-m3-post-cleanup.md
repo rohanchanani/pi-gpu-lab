@@ -70,9 +70,9 @@ Canonical pipeline after M4 and later producer work:
 
 ```text
 Triton TTIR / IREE late executable IR / producer kernel IR
-  ↓ future producer adapters, after M4
-vc4tile dialect
-  ↓ M4, not part of M3
+  ↓ future producer adapters
+vc4kernel dialect
+  ↓ kernel-planning lowering, not part of M3
 ssavc4 dialect
   ↓ M3
 scheduled vc4 dialect
@@ -80,7 +80,7 @@ scheduled vc4 dialect
 QASM + kernel_launch.c/h + shader arrays + libpi runtime execution
 ```
 
-M3 is **not** producer lowering from `gpu`, Triton, IREE, or any other frontend IR. M3 is **only** `ssavc4 -> scheduled vc4` plus the SSAVC4 IR definition and tests. M4 is the VC4 Tile dialect (`vc4tile`) and `vc4tile -> ssavc4` lowering; producer lowering into `vc4tile` is later work.
+M3 is **not** producer lowering from `gpu`, Triton, IREE, or any other frontend IR. M3 is **only** `ssavc4 -> scheduled vc4` plus the SSAVC4 IR definition and tests. Kernel-planning lowering into SSAVC4 is owned by the current `vc4kernel` layer; producer lowering into `vc4kernel` is later work.
 
 ---
 
@@ -88,7 +88,7 @@ M3 is **not** producer lowering from `gpu`, Triton, IREE, or any other frontend 
 
 The scheduled `vc4` dialect is close to QASM. It exposes physical read/write register addresses, mux selections, ADD/MUL opcodes, pack/unpack modes, QPU signals, load-immediate forms, branch immediates, branch delay slots, semaphores, VPM/VDW/TMU/SFU setup words, waits, thread-end epilogues, launch ABI metadata, and resource metadata.
 
-That is exactly right for the post-scheduling artifact boundary, but it is too physical for direct lowering from upstream IR. M4 must not lower directly from `gpu` or other producer IR to scheduled `vc4`; it introduces `vc4tile` so producer-like tile/kernel structure can be normalized before SSAVC4 lowering. Direct producer-to-`vc4` lowering would have to make these decisions too early:
+That is exactly right for the post-scheduling artifact boundary, but it is too physical for direct lowering from upstream IR. Producer IR must not lower directly to scheduled `vc4`; the `vc4kernel` layer captures target-kernel planning before SSAVC4 lowering. Direct producer-to-`vc4` lowering would have to make these decisions too early:
 
 ```text
 physical register allocation
@@ -1428,7 +1428,7 @@ Deliver:
 full M3 verifier pass
 full M2 generic verifier pass or required M2 cumulative subset
 final documentation
-handoff for M4 vc4tile -> ssavc4
+handoff for vc4kernel -> ssavc4
 ```
 
 ---
@@ -1564,7 +1564,7 @@ M3 is accepted only when all of the following are true:
 Out of M3 v1 unless a later M3 slice explicitly adds them:
 
 ```text
-vc4tile -> ssavc4 lowering
+vc4kernel -> ssavc4 lowering
 more spill placement optimization
 aggressive ADD/MUL bundling
 useful branch delay-slot filling
@@ -1595,7 +1595,7 @@ matmul/attention/layernorm/softmax high-level kernels
 13. Start with conservative one-active-pipe scheduling and no useful delay-slot filling.
 14. Use `ssavc4.vdw.store` as the first practical 1:N low-level global-store op.
 15. Bring up hardware fixtures incrementally: store, branch/tail, TMU/saxpy, reductions, cooperative barriers.
-16. Keep M3 below `vc4tile` lowering and above scheduled `vc4`; producer lowering into `vc4tile` is later work.
+16. Keep M3 below `vc4kernel` lowering and above scheduled `vc4`; producer lowering into `vc4kernel` is later work.
 17. M3 final verification must prove both SSAVC4 progress and M2 scheduled-backend persistence.
 
 
@@ -1605,6 +1605,6 @@ M3 originally planned a conservative no-spill allocator, but the current SSAVC4 
 
 The lowering implementation remains structured around allocator and scheduler phases. The pipeline should separate instruction template selection, virtual value/liveness analysis, physical allocation and spill planning, scheduling, hazard insertion, and branch layout.
 
-Spilling is not represented as public `ssavc4.push`, `ssavc4.pop`, or stack operations. Spill loads/stores are lowering-internal templates inserted by the allocator/spill planner. Upstream producer lowering to `vc4tile` must not know whether later SSAVC4 values are spilled.
+Spilling is not represented as public `ssavc4.push`, `ssavc4.pop`, or stack operations. Spill loads/stores are lowering-internal templates inserted by the allocator/spill planner. Upstream producer lowering to `vc4kernel` must not know whether later SSAVC4 values are spilled.
 
 The spill target is a private per-logical-request spill frame in global GPU memory, allocated from the existing VC4 program heap by generated launcher/runtime support. The compiler statically computes frame bytes per request from spill slots. Shared/VPM spilling is deferred as a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.

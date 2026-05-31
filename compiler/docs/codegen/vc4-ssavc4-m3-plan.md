@@ -26,7 +26,7 @@ M3 is accepted only when SSAVC4-input fixtures lower into scheduled VC4, emit M2
 
 ## Register allocation and spilling policy
 
-Historical note: this document records the original M3 plan. The implemented M3 state has since advanced: SSAVC4 now includes spilling and block-argument/edge-copy support, and the next milestone is `vc4tile -> ssavc4`, not `gpu -> ssavc4`.
+Historical note: this document records the original M3 plan. The implemented M3 state has since advanced: SSAVC4 now includes spilling and block-argument/edge-copy support, and the active kernel-planning path is `vc4kernel -> ssavc4`, not `gpu -> ssavc4`.
 
 M3 originally planned a conservative no-spill allocator, but the current SSAVC4 lower half now includes spilling support and block-argument/edge-copy lowering. Future milestones should treat spilling and SSAVC4 block arguments as existing lower-half capabilities, while still generating low-pressure IR where practical.
 
@@ -37,7 +37,7 @@ Spilling remains a lowering-private allocator feature, not public SSAVC4 syntax.
 
 ## 2. What M3 is not
 
-M3 does not lower MLIR `gpu`, Triton, IREE, or any frontend producer IR. M3's scope is SSAVC4 -> scheduled VC4. M4's scope is `vc4tile -> ssavc4`. Producer lowering into `vc4tile` is future work.
+M3 does not lower MLIR `gpu`, Triton, IREE, or any frontend producer IR. M3's scope is SSAVC4 -> scheduled VC4. Kernel-planning lowering is `vc4kernel -> ssavc4`. Producer lowering into `vc4kernel` is future work.
 
 M3 does not revive the old structured `vc4` operation surface. The active `vc4` dialect remains the scheduled sink with `vc4.module`, `vc4.func`, `vc4.qpu.ldi`, `vc4.qpu.sema`, `vc4.qpu.bundle`, and `vc4.qpu.branch`, plus metadata and live scheduled-QPU attrs/enums.
 
@@ -190,7 +190,7 @@ M3 is accepted only when:
 
 M2 is cumulative and preserved. M3 final acceptance proves this by running the M2 milestone verifier from `m2-00-scaffold` through `m2-10-final-acceptance`.
 
-M4 will define the VC4 Tile dialect (`vc4tile`) and lower `vc4tile` to SSAVC4. Producer lowerings such as Triton TTIR -> `vc4tile`, IREE executable/kernel IR -> `vc4tile`, or MLIR GPU-like normalization -> `vc4tile` are future work after M4. M3 should leave M4 with a stable target-specific SSA dialect, documented launch/resource metadata expectations, and tested SSAVC4-to-scheduled-VC4 lowering.
+The kernel-planning layer lowers `vc4kernel` to SSAVC4. Producer lowerings such as Triton TTIR, IREE executable/kernel IR, or MLIR GPU-like normalization into `vc4kernel` are future work. M3 leaves that layer with a stable target-specific SSA dialect, documented launch/resource metadata expectations, and tested SSAVC4-to-scheduled-VC4 lowering.
 
 ---
 

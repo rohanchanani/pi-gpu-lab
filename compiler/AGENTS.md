@@ -9,7 +9,7 @@ This repository is building an MLIR-based backend for the Raspberry Pi VideoCore
 The active lower stack is:
 
 ```text
-vc4tile        // planned M4 VC4 Tile dialect above SSAVC4
+vc4kernel     // strict VC4 target-kernel planning dialect above SSAVC4
   v
 ssavc4        // implemented M3 target-specific SSA machine IR
   v
@@ -20,7 +20,7 @@ QASM / shader arrays / kernel_launch.c/h / manifest/layout artifacts
 vc4_runtime
 ```
 
-M4 is the VC4 Tile dialect (`vc4tile`) and lowering from `vc4tile` to `ssavc4`. Direct producer lowering from Triton, IREE, MLIR `gpu`, or other frontend IR into `vc4tile` is future work after M4.
+The active kernel-planning layer is `vc4kernel`, lowered to `ssavc4`. Direct producer lowering from Triton, IREE, MLIR `gpu`, or other frontend IR into `vc4kernel` is future work unless a task explicitly requests it.
 
 Do **not** implement any of the following unless the task explicitly asks for them:
 
@@ -33,7 +33,7 @@ Do **not** implement any of the following unless the task explicitly asks for th
 
 Read these first before changing the relevant dialect layer:
 
-1. `docs/vc4tile_architecture_and_project_plan.md` for M4 `vc4tile` work
+1. `docs/codegen/vc4kernel_dialect_strict_specification.md` for the `vc4kernel` surface
 2. `docs/codegen/ssavc4-ir-design-m3-post-cleanup.md` for the SSAVC4 lower half
 3. `docs/vc4-dialect-spec.md` for the scheduled `vc4` sink
 
@@ -44,7 +44,7 @@ If code and docs disagree, prefer the layer-specific current design doc unless t
 Compiler work is **compute/QPU focused**.
 
 Keep:
-- `vc4tile` as the planned tile/kernel IR above SSAVC4
+- `vc4kernel` as the strict kernel-planning IR above SSAVC4
 - `ssavc4` as target-specific machine SSA with existing spilling and block-argument/edge-copy lowering support
 - scheduled `vc4` as the QASM-near artifact sink
 - launch/resource metadata and the existing `vc4_runtime` ABI
@@ -65,7 +65,7 @@ Do not reintroduce:
 - Prefer CMake + Ninja.
 - Prefer TableGen/ODS for op/type/attr definitions.
 - Add custom C++ only where ODS/declarative assembly is not enough.
-- Keep `vc4tile`, `ssavc4`, and scheduled `vc4` forms separate.
+- Keep `vc4kernel`, `ssavc4`, and scheduled `vc4` forms separate.
 - Do not mix producer-integration work into M4 unless the task explicitly asks for it.
 
 ## Expected layout
@@ -78,7 +78,7 @@ Use or preserve this general layout:
 - `test/...`
 - `docs/...`
 
-Keep dialect IR code under clear dialect subtrees such as `Dialect/VC4Tile`, `Dialect/SSAVC4`, or `Dialect/VC4`.
+Keep dialect IR code under clear dialect subtrees such as `Dialect/VC4Kernel`, `Dialect/SSAVC4`, or `Dialect/VC4`.
 
 ## Build and test expectations
 

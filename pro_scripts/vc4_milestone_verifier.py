@@ -2073,24 +2073,24 @@ def mechanism_negative_diagnostic(ctx: VerifierContext, slice_id: str, v: Mappin
 
 
 # ---------------------------------------------------------------------------
-# M5-style VC4Tile ergonomic verifier mechanisms
+# M5-style retired_kernel_ir ergonomic verifier mechanisms
 # ---------------------------------------------------------------------------
 
-VC4TILE_DEFAULT_SURFACE_OPS = [
-    "vc4tile.surface_placeholder",
-    "vc4tile.tile_load",
-    "vc4tile.tile_store",
-    "vc4tile.copy_tile",
-    "vc4tile.tile_view",
-    "vc4tile.tile_transpose",
-    "vc4tile.tile_reduce",
-    "vc4tile.block_reduce",
-    "vc4tile.tile_contract",
-    "vc4tile.tile_dot",
-    "vc4tile.tile_matmul",
+RETIRED_KERNEL_IR_DEFAULT_SURFACE_OPS = [
+    "retired_kernel_ir.surface_placeholder",
+    "retired_kernel_ir.tile_load",
+    "retired_kernel_ir.tile_store",
+    "retired_kernel_ir.copy_tile",
+    "retired_kernel_ir.tile_view",
+    "retired_kernel_ir.tile_transpose",
+    "retired_kernel_ir.tile_reduce",
+    "retired_kernel_ir.block_reduce",
+    "retired_kernel_ir.tile_contract",
+    "retired_kernel_ir.tile_dot",
+    "retired_kernel_ir.tile_matmul",
 ]
 
-VC4TILE_DEFAULT_PRODUCER_OP_PREFIXES = [
+RETIRED_KERNEL_IR_DEFAULT_PRODUCER_OP_PREFIXES = [
     "tt.",
     "ttir.",
     "triton.",
@@ -2127,7 +2127,7 @@ def _resolve_m5_input_path(ctx: VerifierContext, v: Mapping[str, Any], raw: Any)
     read checked-in source inputs such as ``compiler/test/...``.  The generic
     work-path resolver intentionally treats relative paths as work-dir relative
     when a work_dir is present, which is correct for outputs like
-    ``core.vc4tile.mlir`` but wrong for checked-in inputs.  Prefer an existing
+    ``core.retired_kernel_ir.mlir`` but wrong for checked-in inputs.  Prefer an existing
     repo-relative source path for inputs, and fall back to work_dir only for
     generated inputs explicitly staged by a previous step.
     """
@@ -2195,7 +2195,7 @@ def _check_m5_text_expectations(
     }
 
 
-def _run_vc4tile_pipeline_if_requested(
+def _run_retired_kernel_ir_pipeline_if_requested(
     ctx: VerifierContext,
     slice_id: str,
     v: Mapping[str, Any],
@@ -2246,16 +2246,16 @@ def _m5_contract_failed(checks: Mapping[str, Any]) -> bool:
     )
 
 
-def mechanism_vc4tile_surface_core_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+def mechanism_retired_kernel_ir_surface_core_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
-    step_results, step_failures = _run_vc4tile_pipeline_if_requested(ctx, slice_id, v, "surface_core", "core_output")
+    step_results, step_failures = _run_retired_kernel_ir_pipeline_if_requested(ctx, slice_id, v, "surface_core", "core_output")
     paths = _m5_output_paths(ctx, v, ["core_output", "inspect_files", "files"])
     checks = _check_m5_text_expectations(ctx, v, paths)
     combined = str(checks.pop("combined_text"))
     failures: List[Dict[str, Any]] = step_failures[:]
 
     if bool(v.get("forbid_surface_ops", False)):
-        surface_ops = [str(x) for x in as_list(v.get("surface_ops"))] or VC4TILE_DEFAULT_SURFACE_OPS
+        surface_ops = [str(x) for x in as_list(v.get("surface_ops"))] or RETIRED_KERNEL_IR_DEFAULT_SURFACE_OPS
         present = [op for op in surface_ops if op in combined]
         if present:
             failures.append({"surface_ops_survived": present})
@@ -2267,15 +2267,15 @@ def mechanism_vc4tile_surface_core_contract(ctx: VerifierContext, slice_id: str,
         if present_index:
             failures.append({"index_type_or_literal_survived": present_index})
     if bool(v.get("forbid_producer_ops", False)):
-        prefixes = [str(x) for x in as_list(v.get("producer_prefixes"))] or VC4TILE_DEFAULT_PRODUCER_OP_PREFIXES
+        prefixes = [str(x) for x in as_list(v.get("producer_prefixes"))] or RETIRED_KERNEL_IR_DEFAULT_PRODUCER_OP_PREFIXES
         present = [prefix for prefix in prefixes if prefix in combined]
         if present:
             failures.append({"producer_ops_survived": present})
     if _m5_contract_failed(checks):
         failures.append({"text_expectations": checks})
     if failures:
-        return make_failure(ctx, slice_id, v, "VC4Tile surface-to-core contract failed", actual={"step_results": step_results, "checks": checks, "failures": failures}, duration=time.time() - started)
-    return make_success(ctx, slice_id, v, message="VC4Tile surface-to-core contract passed", details={"step_results": step_results, "checks": checks}, duration=time.time() - started)
+        return make_failure(ctx, slice_id, v, "retired_kernel_ir surface-to-core contract failed", actual={"step_results": step_results, "checks": checks, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="retired_kernel_ir surface-to-core contract passed", details={"step_results": step_results, "checks": checks}, duration=time.time() - started)
 
 
 def _load_copy_plan(ctx: VerifierContext, v: Mapping[str, Any]) -> Tuple[Optional[Path], List[Mapping[str, Any]], Optional[Dict[str, Any]]]:
@@ -2306,9 +2306,9 @@ def _copy_plan_entry_matches(actual: Mapping[str, Any], expected: Mapping[str, A
     return True
 
 
-def mechanism_vc4tile_copy_plan_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+def mechanism_retired_kernel_ir_copy_plan_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
-    step_results, step_failures = _run_vc4tile_pipeline_if_requested(ctx, slice_id, v, "copy_plan", "core_output")
+    step_results, step_failures = _run_retired_kernel_ir_pipeline_if_requested(ctx, slice_id, v, "copy_plan", "core_output")
     paths = _m5_output_paths(ctx, v, ["core_output", "inspect_files", "files"])
     checks = _check_m5_text_expectations(ctx, v, paths)
     combined = str(checks.pop("combined_text"))
@@ -2346,8 +2346,8 @@ def mechanism_vc4tile_copy_plan_contract(ctx: VerifierContext, slice_id: str, v:
     if _m5_contract_failed(checks):
         failures.append({"text_expectations": checks})
     if failures:
-        return make_failure(ctx, slice_id, v, "VC4Tile copy-plan contract failed", actual={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies, "failures": failures}, duration=time.time() - started)
-    return make_success(ctx, slice_id, v, message="VC4Tile copy-plan contract passed", details={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies}, duration=time.time() - started)
+        return make_failure(ctx, slice_id, v, "retired_kernel_ir copy-plan contract failed", actual={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="retired_kernel_ir copy-plan contract passed", details={"step_results": step_results, "checks": checks, "plan_path": str(plan_path) if plan_path else None, "copy_plan": plan_copies}, duration=time.time() - started)
 
 
 def mechanism_precision_policy_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
@@ -2401,7 +2401,7 @@ def mechanism_precision_policy_contract(ctx: VerifierContext, slice_id: str, v: 
     return make_success(ctx, slice_id, v, message="precision policy contract passed", details={"step_results": step_results, "checks": checks, "invalid_results": invalid_results, "allowed_executable_precisions": as_list(v.get("allowed_executable_precisions"))}, duration=time.time() - started)
 
 
-def mechanism_vc4tile_pipeline_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
+def mechanism_retired_kernel_ir_pipeline_contract(ctx: VerifierContext, slice_id: str, v: Mapping[str, Any]) -> VerificationResult:
     started = time.time()
     step_results, step_failures = _run_contract_steps(ctx, slice_id, v, "pipeline")
     failures: List[Dict[str, Any]] = step_failures[:]
@@ -2445,8 +2445,8 @@ def mechanism_vc4tile_pipeline_contract(ctx: VerifierContext, slice_id: str, v: 
         failures.append({"text_expectations": checks})
 
     if failures:
-        return make_failure(ctx, slice_id, v, "VC4Tile pipeline contract failed", actual={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "checks": checks, "failures": failures}, duration=time.time() - started)
-    return make_success(ctx, slice_id, v, message="VC4Tile pipeline contract passed", details={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "intermediates": [str(p) for p in required_intermediates], "checks": checks}, duration=time.time() - started)
+        return make_failure(ctx, slice_id, v, "retired_kernel_ir pipeline contract failed", actual={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "checks": checks, "failures": failures}, duration=time.time() - started)
+    return make_success(ctx, slice_id, v, message="retired_kernel_ir pipeline contract passed", details={"step_results": step_results, "script": str(script_path) if script_path else None, "order_positions": order_positions, "intermediates": [str(p) for p in required_intermediates], "checks": checks}, duration=time.time() - started)
 
 # ---------------------------------------------------------------------------
 # M4-style feature contract verifier mechanisms
@@ -2458,10 +2458,10 @@ FEATURE_REQUIREMENT_TO_MECHANISM = {
     "lowered_ir": "lowered_ir_contract",
     "scheduled_artifact": "scheduled_artifact_contract",
     "hardware_cpu_reference": "hardware_cpu_reference_contract",
-    "surface_core": "vc4tile_surface_core_contract",
-    "copy_plan": "vc4tile_copy_plan_contract",
+    "surface_core": "retired_kernel_ir_surface_core_contract",
+    "copy_plan": "retired_kernel_ir_copy_plan_contract",
     "precision_policy": "precision_policy_contract",
-    "pipeline": "vc4tile_pipeline_contract",
+    "pipeline": "retired_kernel_ir_pipeline_contract",
 }
 
 FEATURE_GATE_DEFAULT_REQUIREMENTS = (
@@ -3000,10 +3000,10 @@ def _validate_scheduled_vc4_intermediates(ctx: VerifierContext, v: Mapping[str, 
         text = read_text(path)
         count = _vc4_module_count(text)
         rec["vc4_module_count"] = count
-        rec["contains_vc4tile"] = "vc4tile." in text
+        rec["contains_retired_kernel_ir"] = "retired_kernel_ir." in text
         rec["contains_ssavc4"] = "ssavc4." in text
         rec["contains_vc4_qpu"] = "vc4.qpu." in text
-        if count != 1 or rec["contains_vc4tile"] or rec["contains_ssavc4"] or not rec["contains_vc4_qpu"]:
+        if count != 1 or rec["contains_retired_kernel_ir"] or rec["contains_ssavc4"] or not rec["contains_vc4_qpu"]:
             failures.append(rec)
         checked.append(rec)
     return {"checked": checked, "failures": failures}
@@ -3264,9 +3264,9 @@ def mechanism_implementation_integrity_contract(ctx: VerifierContext, slice_id: 
         {
             "description": "No verifier-gaming comments or source literals may be added to satisfy dialect_contract text scans.",
             "globs": [
-                "compiler/include/vc4/Dialect/VC4Tile/**",
-                "compiler/lib/Dialect/VC4Tile/**",
-                "compiler/lib/Conversion/VC4TileToSSAVC4/**",
+                "compiler/include/vc4/Dialect/retired_kernel_ir/**",
+                "compiler/lib/Dialect/retired_kernel_ir/**",
+                "compiler/lib/Conversion/retired_kernel_ir_to_ssavc4/**",
             ],
             "pattern": r"verifier-required|fully-qualified op name|required fully-qualified|satisfy the verifier",
         }
@@ -3411,10 +3411,10 @@ MECHANISMS: Dict[str, Callable[[VerifierContext, str, Mapping[str, Any]], Verifi
     "milestone_scope_contract": mechanism_milestone_scope_contract,
     "implementation_integrity_contract": mechanism_implementation_integrity_contract,
     "regression_contract": mechanism_regression_contract,
-    "vc4tile_surface_core_contract": mechanism_vc4tile_surface_core_contract,
-    "vc4tile_copy_plan_contract": mechanism_vc4tile_copy_plan_contract,
+    "retired_kernel_ir_surface_core_contract": mechanism_retired_kernel_ir_surface_core_contract,
+    "retired_kernel_ir_copy_plan_contract": mechanism_retired_kernel_ir_copy_plan_contract,
     "precision_policy_contract": mechanism_precision_policy_contract,
-    "vc4tile_pipeline_contract": mechanism_vc4tile_pipeline_contract,
+    "retired_kernel_ir_pipeline_contract": mechanism_retired_kernel_ir_pipeline_contract,
 }
 
 MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
@@ -3456,10 +3456,10 @@ MECHANISM_REQUIRED_FIELDS: Dict[str, List[str]] = {
     "milestone_scope_contract": [],
     "implementation_integrity_contract": [],
     "regression_contract": [],
-    "vc4tile_surface_core_contract": [],
-    "vc4tile_copy_plan_contract": [],
+    "retired_kernel_ir_surface_core_contract": [],
+    "retired_kernel_ir_copy_plan_contract": [],
     "precision_policy_contract": [],
-    "vc4tile_pipeline_contract": [],
+    "retired_kernel_ir_pipeline_contract": [],
 }
 
 MECHANISM_DOCS: Dict[str, str] = {
@@ -3501,10 +3501,10 @@ MECHANISM_DOCS: Dict[str, str] = {
     "milestone_scope_contract": "Verify milestone docs/specs/prompts use the intended scope and avoid stale/forbidden scope language.",
     "implementation_integrity_contract": "Audit implementation integrity with static scans and optional read-only Codex exec YES/NO classifier.",
     "regression_contract": "Run cumulative regression commands and assert required lower-stack mechanisms/files still exist.",
-    "vc4tile_surface_core_contract": "Run or inspect ergonomic VC4Tile surface-to-core canonicalization and require no surface/scf/index/producer ops survive in core IR.",
-    "vc4tile_copy_plan_contract": "Run or inspect VC4Tile copy planning, optional JSON plan output, and required/forbidden concrete core copy paths.",
+    "retired_kernel_ir_surface_core_contract": "Run or inspect ergonomic retired_kernel_ir surface-to-core canonicalization and require no surface/scf/index/producer ops survive in core IR.",
+    "retired_kernel_ir_copy_plan_contract": "Run or inspect retired_kernel_ir copy planning, optional JSON plan output, and required/forbidden concrete core copy paths.",
     "precision_policy_contract": "Enforce the M5 32-bit executable precision policy while allowing forward-looking precision metadata and deterministic unsupported-precision diagnostics.",
-    "vc4tile_pipeline_contract": "Inspect the VC4Tile candidate runner/generation pipeline for required pass ordering, forbidden shortcuts, and preserved intermediates.",
+    "retired_kernel_ir_pipeline_contract": "Inspect the retired_kernel_ir candidate runner/generation pipeline for required pass ordering, forbidden shortcuts, and preserved intermediates.",
 }
 
 

@@ -8,7 +8,7 @@ it whenever an issue is found, fixed, or generalized.
 
 **Symptom:** During M4, Codex mechanical repair prompts still described
 "VC4 codegen Milestone 2" and pointed at M2-style files/verification commands
-even though the active milestone was VC4Tile M4.
+even though the active milestone was retired_kernel_ir M4.
 
 **Root cause:** `vc4_milestone_autorun.py` rendered its Codex prompt from a
 hard-coded string instead of the active milestone's prompt package.
@@ -64,7 +64,7 @@ is exercised.
 ## 2026-05-22: A local workaround marker appeared in slice 3 output
 
 **Symptom:** A failed M4 slice 3 attempt printed a marker like
-`// vc4tile-to-ssavc4-lowered: ...` to satisfy a broken text-inspection gate.
+`// retired_kernel_ir-to-ssavc4-lowered: ...` to satisfy a broken text-inspection gate.
 
 **Root cause:** The verifier was inspecting the wrong field, so GPT attempted
 to make expected text visible through stdout rather than through the intended
@@ -80,7 +80,7 @@ resuming.
 
 ## Dialect-contract raw text checks can be gamed by comments
 
-Do not verify dialect operation existence by scanning arbitrary source text for fully qualified operation names such as `vc4tile.program_id`. ODS often stores the operation mnemonic as `"program_id"` and composes the dialect prefix through MLIR, so source code does not naturally need to contain the assembled spelling. Raw scans also let agents satisfy the verifier with comments such as "verifier-required fully-qualified op name".
+Do not verify dialect operation existence by scanning arbitrary source text for fully qualified operation names such as `retired_kernel_ir.program_id`. ODS often stores the operation mnemonic as `"program_id"` and composes the dialect prefix through MLIR, so source code does not naturally need to contain the assembled spelling. Raw scans also let agents satisfy the verifier with comments such as "verifier-required fully-qualified op name".
 
 Persistent rule: `dialect_contract` must distinguish source-native evidence (`op_defs`, `attr_defs`, `type_defs`) from assembled MLIR evidence (`assembly_ops`, `assembly_attrs`). Comments must be stripped before matching, and fully qualified operation names must appear in real MLIR roundtrip/invalid tests or generated roundtrip output, not in verifier-only comments.
 
@@ -119,7 +119,7 @@ Failed or cancelled attempts can leave copied tests under `compiler/build/test` 
 
 **Root cause:** Candidate generation and hardware/reference contracts did not force a clean generation boundary strongly enough.
 
-**Permanent rule:** VC4Tile scheduled-artifact and hardware CPU-reference contracts must clean the relevant candidate bundle before generation and require fresh debug artifacts (`input.vc4tile.mlir`, `lowered.ssavc4.mlir`, `scheduled.vc4.mlir`, manifest/layout, and launch wrappers). Support runners should validate that scheduled output contains exactly one `vc4.module` and no remaining `vc4tile`/`ssavc4` operations before invoking `vc4-codegen`.
+**Permanent rule:** retired_kernel_ir scheduled-artifact and hardware CPU-reference contracts must clean the relevant candidate bundle before generation and require fresh debug artifacts (`input.retired_kernel_ir.mlir`, `lowered.ssavc4.mlir`, `scheduled.vc4.mlir`, manifest/layout, and launch wrappers). Support runners should validate that scheduled output contains exactly one `vc4.module` and no remaining `retired_kernel_ir`/`ssavc4` operations before invoking `vc4-codegen`.
 
 ## Final check-vc4 must run after slice artifact/hardware checks
 
@@ -147,13 +147,13 @@ Hardware and scheduled-artifact verifications must not pass by reusing stale
 intermediate outputs before generation. Hardware CPU/reference checks should
 clean the fixture candidate/hardware directories before running phases. Support
 runners should validate that scheduled intermediates contain exactly one
-`vc4.module` and no remaining `vc4tile`/`ssavc4` operations before calling
+`vc4.module` and no remaining `retired_kernel_ir`/`ssavc4` operations before calling
 `vc4-codegen`.
 
 ## 2026-05-23: program_id was misused as a generic uniform argument
 
-**Symptom:** Some VC4Tile fixtures and lowering paths treated
-`vc4tile.program_id` like a generic uniform/user-argument read, including forms
+**Symptom:** Some retired_kernel_ir fixtures and lowering paths treated
+`retired_kernel_ir.program_id` like a generic uniform/user-argument read, including forms
 with `uniform_index` or uses where `program_id` stood in for output pointers,
 input pointers, `n`, `alpha`, or other caller-supplied values.
 
@@ -162,14 +162,14 @@ physical uniform stream transport. Runtime identity metadata and user kernel
 arguments both eventually travel through uniforms, but they are different ABI
 categories and have different ownership.
 
-**Permanent rule:** User/caller values are formal `vc4tile.kernel` arguments and
-lower to `vc4.launch_abi.args[]`. `vc4tile.program_id`, `vc4tile.block_id`, and
-`vc4tile.warp_id` are zero-operand runtime builtin identity ops and lower to
+**Permanent rule:** User/caller values are formal `retired_kernel_ir.kernel` arguments and
+lower to `vc4.launch_abi.args[]`. `retired_kernel_ir.program_id`, `retired_kernel_ir.block_id`, and
+`retired_kernel_ir.warp_id` are zero-operand runtime builtin identity ops and lower to
 `vc4.launch_abi.builtins[]`. They must never carry `uniform_index` and must not
 be used as pointer/scalar launch arguments.
 
 **Verification implication:** Future ABI-refactor verifiers should forbid
-`uniform_index` on VC4Tile identity ops, stale lower ABI builtin kinds
+`uniform_index` on retired_kernel_ir identity ops, stale lower ABI builtin kinds
 (`qpu_num`, `num_qpus`, `elem_num`, `hidden_runtime`), and launch ABI `args[]`
 entries named like runtime metadata. These checks must be introduced as an
 ABI-refactor gate so already-passed slices do not fail solely because old source
@@ -244,17 +244,17 @@ after cumulative prefix success.
 
 ## 2026-05-24: Later M4 slices regressed the m4-03 minimal launch ABI
 
-**Symptom:** Slices m4-09 and m4-10 could pass their active verifier locally but fail cumulative prefix recheck at `m4-03-scheduled-artifact-minimal`. The dirty candidates changed generic VC4Tile launch ABI completion so an empty/minimal kernel acquired a synthetic `total_requests` builtin, `uniform_words_per_qpu = 1`, and an `ssavc4.uniform.read`, which then introduced scheduled hazards in the minimal thread-end pipeline.
+**Symptom:** Slices m4-09 and m4-10 could pass their active verifier locally but fail cumulative prefix recheck at `m4-03-scheduled-artifact-minimal`. The dirty candidates changed generic retired_kernel_ir launch ABI completion so an empty/minimal kernel acquired a synthetic `total_requests` builtin, `uniform_words_per_qpu = 1`, and an `ssavc4.uniform.read`, which then introduced scheduled hazards in the minimal thread-end pipeline.
 
 **Root cause:** Later-slice implementation attempts repaired local FileCheck/build failures by modifying generic launch ABI normalization and earlier minimal ABI tests instead of preserving the m4-03 prefix invariant.
 
-**Permanent rule:** Empty/no-formal kernels with no used runtime builtins must lower with `args=[]`, `builtins=[]`, `uniform_words_per_qpu=0`, and no `ssavc4.uniform.read`. Runtime builtins belong in `vc4.launch_abi.builtins[]` only when a corresponding vc4tile op/resource uses them. Later slices must not edit m4-03 minimal ABI tests or generic launch ABI completion to satisfy unrelated local failures.
+**Permanent rule:** Empty/no-formal kernels with no used runtime builtins must lower with `args=[]`, `builtins=[]`, `uniform_words_per_qpu=0`, and no `ssavc4.uniform.read`. Runtime builtins belong in `vc4.launch_abi.builtins[]` only when a corresponding retired_kernel_ir op/resource uses them. Later slices must not edit m4-03 minimal ABI tests or generic launch ABI completion to satisfy unrelated local failures.
 
-**Verification implication:** m4-10 and later M4 slices must include a minimal ABI prefix canary in their active typed verifier, not only in resume-level cumulative prefix recheck. The canary lowers `minimal-thrend-vc4tile.mlir` through `vc4tile -> ssavc4 -> scheduled vc4 -> vc4-codegen` and asserts the empty ABI invariant above.
+**Verification implication:** m4-10 and later M4 slices must include a minimal ABI prefix canary in their active typed verifier, not only in resume-level cumulative prefix recheck. The canary lowers `minimal-thrend-retired_kernel_ir.mlir` through `retired_kernel_ir -> ssavc4 -> scheduled vc4 -> vc4-codegen` and asserts the empty ABI invariant above.
 
 ## 2026-05-24: Lower-half hardware checks accepted stale or fixed PASS evidence
 
-**Symptom:** Final integrity audit found lower-half hardware-test surfaces where a candidate harness could print `VC4_TEST_RESULT status=PASS` after a failed launch, VC4Tile candidate `run/all` could reuse old generated bundles, and some hardware-labeled reference `run.sh` scripts emitted fixed PASS results without running hardware.
+**Symptom:** Final integrity audit found lower-half hardware-test surfaces where a candidate harness could print `VC4_TEST_RESULT status=PASS` after a failed launch, retired_kernel_ir candidate `run/all` could reuse old generated bundles, and some hardware-labeled reference `run.sh` scripts emitted fixed PASS results without running hardware.
 
 **Permanent rule:** Hardware result lines must be derived from real execution and semantic checks. Candidate runners must generate fresh bundles by default before hardware execution, with any reuse path explicit and opt-in. Fixed PASS reference scripts must be rejected by integrity scans until converted to real hardware-backed reference runs.
 
@@ -275,7 +275,7 @@ after cumulative prefix success.
 
 ## 2026-05-27: M5 surface/core contract resolved checked-in inputs under work_dir
 
-**Symptom:** M5 slice 1 failed the `vc4tile_surface_core_contract` because the verifier tried to open a checked-in source input under `.vc4_auto/vc4tile_m5/.../compiler/test/...` instead of under the repository root.
+**Symptom:** M5 slice 1 failed the `retired_kernel_ir_surface_core_contract` because the verifier tried to open a checked-in source input under `.vc4_auto/retired_kernel_ir_m5/.../compiler/test/...` instead of under the repository root.
 
 **Root cause:** The new M5 contract resolver used one helper for both generated outputs and checked-in inputs. When `work_dir` was present, all relative paths were treated as work-dir relative.
 
@@ -285,7 +285,7 @@ after cumulative prefix success.
 
 **Symptom:** M5 slice 1 expected `reject-surface-before-canonicalize.mlir` to fail, but the verifier command was only `vc4-opt file.mlir`, so the file parsed and printed successfully.
 
-**Root cause:** The invalid diagnostic spec forgot to invoke `--convert-vc4tile-to-ssavc4`, the pass that owns the surface-before-core rejection.
+**Root cause:** The invalid diagnostic spec forgot to invoke `--convert-retired-kernel-ir-to-ssavc4`, the pass that owns the surface-before-core rejection.
 
 **Permanent rule:** Invalid diagnostics must invoke the pass that owns the diagnostic. Parser-only commands are valid only for parser/verifier diagnostics, not lowering-order diagnostics.
 
