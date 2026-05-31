@@ -159,7 +159,8 @@ static bool containsIllegalType(Type type) {
 static LogicalResult verifyOperationBoundary(Operation *op) {
   StringRef dialect = op->getName().getDialectNamespace();
   if (dialect == "builtin")
-    return success();
+    return op->emitOpError(
+        "builtin dialect operations are forbidden inside vc4kernel.kernel");
   if (dialect == "vc4kernel") {
     if (!isAllowedVC4KernelOp(op))
       return op->emitOpError("unknown or forbidden vc4kernel operation");
