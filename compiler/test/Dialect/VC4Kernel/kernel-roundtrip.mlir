@@ -1,8 +1,11 @@
 // RUN: vc4-opt %s --verify-vc4kernel | FileCheck %s
+// RUN: vc4-opt %s --verify-vc4kernel --mlir-print-op-generic | FileCheck %s --check-prefix=GENERIC
 // CHECK-LABEL: vc4kernel.kernel @minimal
 // CHECK-NOT: <invalid-symbol>
 // CHECK: public_name = "minimal"
 // CHECK: vc4kernel.return
+// GENERIC: "vc4kernel.kernel"
+// GENERIC: function_type = () -> ()
 module {
   vc4kernel.kernel @minimal attributes {
     public_name = "minimal",

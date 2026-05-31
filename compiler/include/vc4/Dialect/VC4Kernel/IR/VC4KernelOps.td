@@ -37,7 +37,7 @@ def VC4Kernel_KernelOp : VC4Kernel_Op<"kernel", [
   let summary = "strict VC4 target-kernel planning operation";
   let arguments = (ins
     AnyAttr:$sym_name,
-    OptionalAttr<TypeAttrOf<FunctionType>>:$function_type,
+    TypeAttrOf<FunctionType>:$function_type,
     AnyAttr:$public_name,
     AnyAttr:$schedule_mode,
     AnyAttr:$arg_attrs,

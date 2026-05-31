@@ -523,13 +523,18 @@ ParseResult KernelOp::parse(OpAsmParser &parser, OperationState &result) {
 
   SmallVector<Type, 4> argTypes;
   if (!entryArgs.empty()) {
+    argTypes.reserve(entryArgs.size());
     for (const OpAsmParser::Argument &arg : entryArgs)
       argTypes.push_back(arg.type);
   } else if (!body->empty()) {
+    argTypes.reserve(body->front().getNumArguments());
     for (BlockArgument arg : body->front().getArguments())
       argTypes.push_back(arg.getType());
   }
-  (void)argTypes;
+
+  result.attributes.set(
+      "function_type",
+      TypeAttr::get(FunctionType::get(parser.getContext(), argTypes, {})));
   return success();
 }
 
@@ -573,6 +578,21 @@ LogicalResult KernelOp::verify() {
   if (getBody().empty())
     return emitOpError("requires a non-empty body region");
   Block &entry = getBody().front();
+  auto functionTypeAttr = (*this)->getAttrOfType<TypeAttr>("function_type");
+  auto functionType =
+      functionTypeAttr
+          ? llvm::dyn_cast<FunctionType>(functionTypeAttr.getValue())
+          : FunctionType();
+  if (!functionType || functionType.getNumResults() != 0)
+    return emitOpError("function_type must be a FunctionType with no results");
+  if (functionType.getNumInputs() != entry.getNumArguments())
+    return emitOpError(
+        "function_type inputs must match kernel entry block argument types");
+  for (auto indexed : llvm::enumerate(entry.getArguments())) {
+    if (functionType.getInput(indexed.index()) != indexed.value().getType())
+      return emitOpError(
+          "function_type inputs must match kernel entry block argument types");
+  }
   for (BlockArgument arg : entry.getArguments()) {
     if (!arg.getType().isSignlessInteger(32) && !arg.getType().isF32())
       return emitOpError("formal arguments may only be i32 or f32");
