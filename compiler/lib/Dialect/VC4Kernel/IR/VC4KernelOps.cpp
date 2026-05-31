@@ -455,6 +455,44 @@ static LogicalResult verifyResource(KernelOp kernel) {
   return success();
 }
 
+static bool isVPMUser(Operation *op) {
+  return hasName(op, "vc4kernel.vpm_alloc") ||
+         hasName(op, "vc4kernel.vpm_write_fragment") ||
+         hasName(op, "vc4kernel.vpm_read_fragment") ||
+         hasName(op, "vc4kernel.vdr_load_to_vpm") ||
+         hasName(op, "vc4kernel.vdw_store_vpm_fragment");
+}
+
+static LogicalResult verifyVPMResourceUsage(KernelOp kernel) {
+  DictionaryAttr resource = getKernelResourceAttr(kernel);
+  std::optional<bool> usesVPM = getBoolAttr(resource, "uses_vpm");
+  std::optional<int64_t> vpmRows = getI32Attr(resource, "vpm_rows_per_block");
+  std::optional<int64_t> vpmBytes = getI32Attr(resource, "vpm_bytes_per_block");
+  if (!usesVPM || !vpmRows || !vpmBytes)
+    return kernel.emitOpError("requires verified kernel resource metadata");
+
+  bool hasVPMOp = false;
+  int64_t totalRows = 0;
+  kernel.getBody().walk([&](Operation *op) {
+    if (!isVPMUser(op))
+      return;
+    hasVPMOp = true;
+    if (!hasName(op, "vc4kernel.vpm_alloc"))
+      return;
+    auto rows = op->getAttrOfType<IntegerAttr>("rows");
+    if (rows)
+      totalRows += rows.getInt();
+  });
+
+  if (hasVPMOp && !*usesVPM)
+    return kernel.emitOpError("VPM operations require uses_vpm = true");
+  if (totalRows > *vpmRows)
+    return kernel.emitOpError("VPM allocations exceed vpm_rows_per_block");
+  if (totalRows * 16 * 4 > *vpmBytes)
+    return kernel.emitOpError("VPM allocations exceed vpm_bytes_per_block");
+  return success();
+}
+
 } // namespace
 
 ParseResult KernelOp::parse(OpAsmParser &parser, OperationState &result) {
@@ -541,7 +579,9 @@ LogicalResult KernelOp::verify() {
   }
   if (failed(verifyArgAttrs(*this, entry)))
     return failure();
-  return verifyResource(*this);
+  if (failed(verifyResource(*this)))
+    return failure();
+  return verifyVPMResourceUsage(*this);
 }
 
 LogicalResult ReturnOp::verify() {
