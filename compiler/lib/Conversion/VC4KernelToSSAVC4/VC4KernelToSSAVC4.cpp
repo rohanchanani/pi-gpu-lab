@@ -203,8 +203,14 @@ static LogicalResult verifyOperationBoundary(Operation *op) {
 static LogicalResult verifyVC4Kernel(ModuleOp module) {
   for (Operation &top : module.getBody()->getOperations()) {
     if (!hasName(&top, kKernelOpName))
-      continue;
+      return top.emitOpError(
+          "only vc4kernel.kernel operations may appear at module top level");
     WalkResult walk = top.walk([&](Operation *op) {
+      if (op != &top && hasName(op, kKernelOpName)) {
+        op->emitOpError(
+            "vc4kernel.kernel operations may appear only at module top level");
+        return WalkResult::interrupt();
+      }
       if (op != &top && failed(verifyOperationBoundary(op)))
         return WalkResult::interrupt();
       for (Value operand : op->getOperands())
