@@ -1,24 +1,24 @@
 # VC4Kernel Dialect Strict Specification
 
-**Status:** locked Stage 1 target specification for the `vc4kernel` dialect.  
-**Date:** 2026-05-30.  
-**Audience:** implementation agents maintaining the locked `vc4kernel` dialect and its lowering boundary.
-**Primary purpose:** define the final `vc4kernel` dialect contract.
+**Status:** corrected Stage 1 target specification for the `vc4kernel` dialect and its lowering boundary.  
+**Date:** 2026-05-31.  
+**Audience:** implementation agents maintaining `vc4kernel`, `VC4KernelToSSAVC4`, SSAVC4, scheduled `vc4`, `vc4-codegen`, and the libpi-backed launch/runtime path.  
+**Primary purpose:** replace the earlier strict specification with the corrected final contract after the pre-lowering design review.
 
 ---
 
 ## 0. Normative rule
 
-This document is the source of truth for `vc4kernel`.
+This document is the source of truth for the current `vc4kernel` Stage 1 contract.
 
-The final `vc4kernel` dialect must match this specification. Anything outside this specification is not part of verified `vc4kernel` IR.
+The implementation must reflect the clean final stack we want. Existing SSAVC4, scheduled `vc4`, `vc4-codegen`, and runtime behavior is implementation material, not a constraint. If an existing lower-half name, schema, verifier rule, or runtime field is unnatural, ambiguous, or only historically convenient, update the lower half instead of contorting `vc4kernel` to match it.
 
 Anything not explicitly permitted by this document is forbidden in verified `vc4kernel` IR.
 
-The required final stack is:
+The required final stack remains:
 
 ```text
-Triton-emitted TTIR / future IREE-Linalg-value IR
+Triton-emitted TTIR / future producer IR
   -> standard MLIR value layer
      vector + memref + arith + math + scf/cf
   -> vc4kernel
@@ -32,27 +32,108 @@ Triton-emitted TTIR / future IREE-Linalg-value IR
 The implementation order is bottom-up:
 
 ```text
-1. Maintain vc4kernel exactly as specified here.
-2. Prove vc4kernel -> ssavc4 -> scheduled vc4 -> hardware.
-3. Only then add standard vector/memref/arith -> vc4kernel.
-4. Only then add real Triton-emitted TTIR -> standard value layer.
+1. Correct and re-lock vc4kernel according to this document.
+2. Update SSAVC4 / scheduled vc4 / codegen / runtime to match this document.
+3. Prove vc4kernel -> ssavc4 -> scheduled vc4 -> hardware.
+4. Only then specify and implement the upstream standard vector surface.
+5. Only then lower real Triton-emitted TTIR to the standard value layer.
+```
+
+This document deliberately supersedes the previous strict spec in the following important ways:
+
+```text
+- remove vc4kernel.lane_id
+- remove vc4kernel.block_id
+- remove user-authored vc4kernel resource summary dictionaries
+- keep vc4kernel.fragment_cmp
+- broaden !vc4kernel.pred<16> from only normalizable tails to a true 16-lane predicate/mask with structured and general classes
+- define resource requirements as compiler-computed metadata emitted below vc4kernel
+- define runtime-assigned vpm_base_row and semaphore_base builtins
+- require hardware-derived VPM/VDR/VDW mode schema in the lower half
+- support 32-bit horizontal, vertical, and strided/pitched VPM/VDR/VDW movement in v1
+- keep sub-32 packed/laned schema only as non-executable metadata until the sub-32 precision milestone
 ```
 
 ---
 
-## 1. Core identity of the dialect
+## 1. Design principles
 
-### 1.1 What `vc4kernel` is
+Every design and implementation decision must be evaluated in this order:
+
+```text
+1. Upstream expressibility:
+   What must the future standard vector layer and Triton TTIR path be able to express?
+
+2. VC4 hardware truth:
+   What is the natural, legitimate mapping onto QPU SIMD, uniforms, TMU, VPM, VDR/VCD, VDW, semaphores, and scheduled QASM?
+
+3. Triton/NVIDIA precedent:
+   Where the NVIDIA Triton backend has an analogous decision, mirror the level of intent rather than copying names mechanically.
+```
+
+### 1.1 NVIDIA/Triton resource precedent
+
+The relevant NVIDIA/Triton pattern is separation of concerns:
+
+```text
+source/autotune configuration:
+  num_warps
+  num_stages
+  num_ctas
+  maxnreg
+
+compiler-planned target IR metadata:
+  total number of warps after target planning / specialization
+  shared-memory byte requirement
+  tensor-memory requirement on newer NVIDIA targets
+  scratch-memory size/alignment
+  final entry name and target codegen metadata
+
+runtime launch metadata:
+  compact metadata needed to launch the kernel and check resource limits
+```
+
+Triton does not make source IR manually maintain a redundant summary like `uses_shared=true, shared_bytes=N`. It has explicit local/shared-memory IR concepts, target passes compute allocation offsets and total shared-memory usage, and the final NVIDIA backend packs compact launch metadata such as `num_warps`, `num_ctas`, and `shared`.
+
+The VC4 equivalent is:
+
+```text
+vc4kernel source:
+  schedule mode
+  warps_per_block
+  formal ABI args
+  explicit VPM/dataflow ops
+  fragment/predicate/memory operations
+
+vc4kernel verifier/planner and VC4KernelToSSAVC4:
+  compute user VPM rows
+  compute hidden compiler staging rows
+  compute TMU/VPM/VDR/VDW/barrier/semaphore usage
+  assign per-block and per-warp resource requirements
+
+SSAVC4 / scheduled vc4 / manifest:
+  carry computed launch ABI and resource metadata
+
+runtime:
+  assign vpm_base_row and semaphore_base per resident logical request/block
+  pack builtins and launch QPU work
+```
+
+---
+
+## 2. Core identity of the dialect
+
+### 2.1 What `vc4kernel` is
 
 `vc4kernel` is the VC4 target-kernel planning dialect immediately above SSAVC4.
 
-It represents a kernel after generic value-layer semantics have been lowered into VC4-specific execution fragments, memory paths, predicates, launch identity, VPM resources, and synchronization/resource requirements.
+It represents a kernel after generic value-layer semantics have been lowered into VC4-specific execution fragments, predicates, memory paths, launch identity, VPM resources, and synchronization requirements.
 
 It answers:
 
 > How should this already-tiled, already-vectorized kernel execute on VC4 QPUs, VPM, TMU, VDR/VCD, VDW, uniforms, and semaphores?
 
-### 1.2 What `vc4kernel` is not
+### 2.2 What `vc4kernel` is not
 
 `vc4kernel` is not:
 
@@ -67,11 +148,10 @@ It answers:
 - scheduled vc4 / QASM-near IR
 - a host/runtime ABI dialect
 - a sub-32 precision dialect
+- a compatibility layer for old vc4tile
 ```
 
-### 1.3 Required boundary separation
-
-The three major compiler layers must stay distinct:
+### 2.3 Required layer separation
 
 ```text
 standard value layer:
@@ -87,28 +167,33 @@ standard value layer:
 vc4kernel:
   VC4 execution-plan semantics
   16-lane fragments
-  VC4 predicates
+  VC4 predicates/masks
   raw device-pointer words
   TMU/VDR/VPM/VDW path choice
-  VPM allocation and access
-  program/block/warp/lane identity
-  launch/resource metadata
+  explicit VPM allocation and access
+  compiler-managed VPM staging requirements
+  program/warp/lane-range identity
+  schedule mode and warps_per_block
   barriers
   target fragment arithmetic/reductions
-  core CFG
+  scalar core CFG
 
 ssavc4:
   target machine SSA
   uniforms
   element_number
   ALU dataflow
-  flags and branches
+  condition plans / flags / branches
   TMU requests/reads
   VPM reads/writes
   VDR loads
   VDW stores
+  semantic launch/resource metadata
   semaphores/barriers
   thread_end
+
+scheduled vc4:
+  register-allocated, scheduled, QASM-near machine operations
 ```
 
 No `vc4kernel` pass may lower directly to scheduled `vc4`. The only valid lower path is:
@@ -119,35 +204,9 @@ vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware
 
 ---
 
-## 2. Required semantic material
-
-The dialect contains only target-kernel planning material:
-
-```text
-kernel wrapper / return
-formal kernel ABI args
-program/block/warp/lane identity
-lane range
-mask and tail-mask concepts
-global load/store core paths
-rotate/reduce core operations
-shared/VPM allocation and access
-VDR/VCD and VDW experience
-barrier and cooperative resources
-core CFG / block-argument lowering
-vc4kernel -> ssavc4 conversion boundary
-hardware candidate runner discipline
-```
-
-Producer-facing value semantics belong above `vc4kernel` in standard MLIR (`vector`, `memref`, `arith`, `scf/cf`) or in future producer-to-kernel passes. They are not legal inside verified `vc4kernel` IR.
-
----
-
 ## 3. Names, files, and pass names
 
 ### 3.1 Dialect identity
-
-Final dialect identity:
 
 ```text
 MLIR operation prefix: vc4kernel.
@@ -159,8 +218,6 @@ Dialect class:         VC4KernelDialect
 ```
 
 ### 3.2 Expected file layout
-
-The final implementation should use this file layout:
 
 ```text
 compiler/include/vc4/Dialect/VC4Kernel/IR/VC4KernelDialect.td
@@ -184,22 +241,12 @@ compiler/test/CodeGen/VC4Kernel/...
 
 ### 3.3 Required passes
 
-Final required passes:
-
 ```text
 --verify-vc4kernel
 --convert-vc4kernel-to-ssavc4
 ```
 
-Optional but allowed helper passes:
-
-```text
---legalize-vc4kernel-cfg
-```
-
-`--legalize-vc4kernel-cfg` is allowed only if it lowers a small remaining CFG legality detail inside `vc4kernel`. It must not accept raw `scf.*` in verified core. Structured `scf` lowering belongs above `vc4kernel`.
-
-These pass names must be real `vc4kernel` pass registrations with tests.
+Optional helper passes are allowed only if they remain inside the `vc4kernel` boundary and do not admit producer dialects or direct scheduled-VC4 lowering. A helper such as `--legalize-vc4kernel-cfg` may lower small CFG details inside `vc4kernel`; it must not accept raw `scf.*` as verified core.
 
 ---
 
@@ -218,12 +265,12 @@ f32
 Interpretation:
 
 ```text
-i1   scalar branch/condition/result of scalar predicates
+i1   scalar condition value used for scalar CFG/select; lowers through condition plans/flags, not normally as generic data
 i32  signed or unsigned 32-bit integer / raw device pointer word / byte offset / index / resource count
-f32  32-bit floating-point scalar
+f32  32-bit floating-point scalar, including scalar f32 uniforms
 ```
 
-`u32` is represented as MLIR `i32` with unsigned interpretation documented by operation semantics or ABI metadata. There is no distinct unsigned MLIR builtin type.
+`u32` is represented as MLIR `i32` with unsigned interpretation documented by operation semantics or ABI metadata. There is no distinct unsigned builtin type.
 
 ### 4.2 Legal fragment carrier types
 
@@ -236,9 +283,7 @@ vector<16xf32>
 
 These are data carriers for one VC4 QPU 16-lane fragment. They are legal types even though `vector.*` dialect operations are forbidden inside verified `vc4kernel` IR.
 
-### 4.3 Legal `vc4kernel` types
-
-Final custom types:
+### 4.3 Legal custom types
 
 ```text
 !vc4kernel.pred<16>
@@ -253,33 +298,32 @@ No other `vc4kernel` types are legal unless this document is revised.
 
 It is not equivalent to `vector<16xi1>`.
 
-It represents a VC4-planned predicate over the current 16-lane fragment. It carries enough semantic information for the verifier/planner/lowering to distinguish legal VC4 predicate classes such as:
+It represents a 16-lane VC4-planned predicate/mask over the current fragment. It can represent structured masks and general masks.
+
+Required predicate classes:
 
 ```text
-full fragment
-empty fragment
-contiguous tail fragment
-rectangular row fragment projected onto current lanes
-normalizable Boolean composition of supported classes
+full:
+  all 16 lanes active
+
+empty:
+  no lanes active
+
+tail_prefix:
+  active lanes are a contiguous prefix [0, active_count), 0 <= active_count <= 16
+
+rect_row:
+  the predicate for one row-fragment of a rectangular tile; semantically row-in-bounds AND tail_prefix on columns
+
+general_mask:
+  arbitrary per-lane predicate, including fragment_cmp results and Boolean compositions that do not simplify to a structured class
 ```
 
-It must be rejected if it cannot be normalized into a class accepted by a consuming operation.
+Consumers must declare which classes they accept and what fallback they use for general masks. The verifier must reject only masks that a consumer cannot lower correctly.
 
 ### 4.5 VPM handle type
 
-`!vc4kernel.vpm_tile` is an opaque handle to a statically planned VPM allocation inside a kernel/block.
-
-It is a VC4 resource handle. It is not:
-
-```text
-- a tensor type
-- a memref type
-- a CuTe layout object
-- a generic tile descriptor
-- an owning heap allocation
-```
-
-The allocation op determines rows, element width, and scope. The type itself is intentionally simple.
+`!vc4kernel.vpm_tile` is an opaque handle to a statically planned VPM allocation within the logical kernel block/request. It is a VC4 resource handle. It is not a tensor, memref, layout algebra object, generic tile descriptor, pointer, or runtime heap allocation.
 
 ### 4.6 Forbidden types
 
@@ -299,10 +343,10 @@ Triton pointer types
 Triton block/tensor types
 LLVM pointer types
 SSAVC4 async token types
-VC4 scheduled dialect types
+scheduled VC4 dialect types
 ```
 
-Sub-32 precision is rejected before or at the boundary into `vc4kernel`. There are no executable sub-32 types in this dialect.
+Sub-32 data movement modes may be modeled in lower-half attrs as schema for future work, but no executable sub-32 `vc4kernel` value type or lowering is legal in this stage.
 
 ---
 
@@ -319,9 +363,7 @@ cf, restricted to cf.br and cf.cond_br
 builtin/module wrappers as required by MLIR
 ```
 
-### 5.2 Allowed `arith` operations
-
-Only scalar `arith` operations are allowed:
+### 5.2 Allowed scalar `arith` operations
 
 ```text
 arith.constant
@@ -339,15 +381,14 @@ Restrictions:
 - arith operations may not have vector result types.
 - arith operations may not have vector operands.
 - arith.constant may produce only scalar i1/i32/f32.
+- arith.addi/subi/muli/shli may operate only on scalar i32.
 - arith.cmpi may compare only scalar i32 values and produce scalar i1.
-- arith.select may select only scalar i1/i32/f32 values.
+- arith.select condition must be scalar i1 and selected values must be scalar i1/i32/f32.
 ```
 
-All vector/fragment arithmetic must use `vc4kernel.fragment_*` operations.
+Scalar `i1` lowers through condition plans. It is not assumed to be a persistent hardware flag value.
 
 ### 5.3 Allowed `cf` operations
-
-Allowed CFG operations:
 
 ```text
 cf.br
@@ -361,11 +402,12 @@ Restrictions:
 - cf successor operands may use only legal vc4kernel types.
 - cf terminators are legal only inside vc4kernel.kernel regions.
 - raw scf must not appear in verified vc4kernel IR.
+- !vc4kernel.vpm_tile must not be passed through block arguments unless the verifier proves it is the same static allocation handle; v1 should conservatively reject VPM handle block args.
 ```
 
 ### 5.4 Forbidden dialects
 
-The following dialects are always forbidden inside verified `vc4kernel` IR:
+Always forbidden inside verified `vc4kernel` IR:
 
 ```text
 vector
@@ -389,13 +431,11 @@ ssavc4
 vc4
 ```
 
-The dialect verifier must reject them with deterministic diagnostics.
-
-Important: `vector<16xi32>` and `vector<16xf32>` types are legal; `vector.*` operations are not.
+Important: `vector<16xi32>` and `vector<16xf32>` types are legal. `vector.*` operations are not.
 
 ---
 
-## 6. Kernel operation and launch/resource metadata
+## 6. Kernel operation, launch ABI, and computed resources
 
 ### 6.1 `vc4kernel.kernel`
 
@@ -410,7 +450,8 @@ Required traits/interfaces:
 ```text
 IsolatedFromAbove
 Symbol
-Function-like region with no results
+FunctionOpInterface-compatible function-like region
+No results
 ```
 
 Final syntax target:
@@ -419,8 +460,8 @@ Final syntax target:
 vc4kernel.kernel @name(%arg0: i32, %arg1: f32) attributes {
   public_name = "name",
   schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
-  arg_attrs = [ ... ],
-  resource = { ... }
+  warps_per_block = 1 : i32,
+  arg_attrs = [ ... ]
 } {
 ^entry(%arg0: i32, %arg1: f32):
   ...
@@ -428,11 +469,11 @@ vc4kernel.kernel @name(%arg0: i32, %arg1: f32) attributes {
 }
 ```
 
-The exact printer may use standard function-like assembly, but the semantics must match this contract.
+There is no user-authored `resource = { ... }` dictionary in source `vc4kernel`.
 
-### 6.2 Kernel formal arguments
+### 6.2 Formal arguments
 
-Formal arguments are user/caller-provided values. They lower to `vc4.launch_abi.args[]` on the generated SSAVC4 function.
+Formal arguments are user/caller-provided values. They lower to `vc4.launch_abi.args[]` on the generated SSAVC4 function and then to sequential uniform reads.
 
 Legal formal argument types:
 
@@ -445,13 +486,13 @@ f32
 
 ```text
 - by-value integer scalar
-- raw `vc4_deviceptr_t` device pointer word
+- raw vc4_deviceptr_t device pointer word
 - by-value unsigned scalar
 ```
 
-`f32` represents a by-value 32-bit float scalar.
+`f32` represents a by-value 32-bit float scalar. It lowers to a scalar `f32` uniform read. If the current lower half lacks scalar f32 uniform support, the lower half must be updated.
 
-No formal argument may be a memref, tensor, vector, predicate, VPM handle, index, or sub-32 type.
+No formal argument may be a memref, tensor, vector, predicate, VPM handle, index, pointer type, or sub-32 type.
 
 ### 6.3 Argument metadata
 
@@ -471,58 +512,12 @@ Rules:
 
 ```text
 - kind="buffer" means the formal argument type is i32 and the value is one raw VC4 device pointer word.
-- No full host-side memref descriptor is ever represented in vc4kernel.
+- No full host-side memref descriptor is represented in vc4kernel.
 - uniform_index is not user-authored in vc4kernel source. It is assigned during vc4kernel -> ssavc4 launch ABI construction.
 - The verifier must reject missing, malformed, duplicate, or length-mismatched arg_attrs.
 ```
 
-### 6.4 Builtin identity values
-
-The following ops are zero-operand runtime identity ops and lower to launch builtins or lane machinery:
-
-```text
-vc4kernel.program_id
-vc4kernel.block_id
-vc4kernel.warp_id
-vc4kernel.lane_id
-vc4kernel.lane_range
-```
-
-They are not formal kernel arguments. They must not carry `uniform_index`. They must not be interpreted as arbitrary user values.
-
-Lowering categories:
-
-```text
-program_id -> vc4.launch_abi.builtins logical_request-like uniform
-block_id   -> vc4.launch_abi.builtins logical_block_id-like uniform
-warp_id    -> vc4.launch_abi.builtins logical_warp_id-like uniform
-lane_id    -> derived from ssavc4.element_number, not a uniform
-lane_range -> derived from ssavc4.element_number / lane vector construction, not a uniform
-```
-
-### 6.5 `thread_id` is forbidden
-
-There is no `vc4kernel.thread_id` op.
-
-If a thread-like scalar is needed, compute it explicitly from legal identity values:
-
-```text
-warp_id * 16 + lane_id
-program_id * block_size + lane_range
-```
-
-The dialect must reject any `vc4kernel.thread_id` operation.
-
-Rationale:
-
-```text
-Triton exposes program IDs and vector/block offsets.
-The standard value layer exposes vector-shaped lanes.
-VC4 hardware exposes QPU lane identity.
-A CUDA thread_id primitive is not fundamental here and risks reintroducing a wrong SIMT abstraction.
-```
-
-### 6.6 Schedule mode
+### 6.4 Schedule mode and warps_per_block
 
 `vc4kernel.kernel` must carry:
 
@@ -536,60 +531,152 @@ or:
 schedule_mode = #vc4kernel.schedule_mode<cooperative_block>
 ```
 
-Semantics:
+and:
+
+```text
+warps_per_block = N : i32
+```
+
+Rules:
 
 ```text
 independent_vector:
-  each logical request is independently schedulable over the 12 QPU warp slots.
-  barriers are forbidden.
-  VPM use is permitted only if the verifier proves no cross-request shared-state hazard or the resource policy reserves isolated rows.
+  warps_per_block must be 1.
+  Each logical request/block is one QPU warp executing one 16-lane SIMD fragment at a time.
+  Barriers are forbidden.
+  VPM use is legal, but VPM rows are private to the resident logical request and addressed relative to runtime-assigned vpm_base_row.
 
 cooperative_block:
-  a block consists of 1..12 logical warps that must be resident together if barriers or shared VPM communication are used.
-  block_id and warp_id are meaningful.
-  barriers and shared VPM require full-block residency.
+  warps_per_block must be in [1, 12].
+  All warps in one logical block are resident together.
+  All warps in one block share the same vpm_base_row and semaphore_base.
+  warp_id is meaningful and ranges 0 <= warp_id < warps_per_block.
+  Barriers are legal only in cooperative_block mode.
 ```
 
-### 6.7 Resource metadata
+`require_full_block_residency` is not a user-authored source attr. It is derived from cooperative scheduling and barrier/resource planning below `vc4kernel`.
 
-`vc4kernel.kernel` must carry a resource dictionary or equivalent first-class attrs with these fields:
+### 6.5 Computed resource metadata
+
+The compiler must compute a semantic resource summary during `vc4kernel -> ssavc4`. This summary is emitted as lower-half metadata on the resulting SSAVC4 function and propagated into scheduled VC4 / manifest / runtime.
+
+Recommended lower-half attr name:
 
 ```text
-warps_per_block_max:           i32, required, 1..12
-uses_vpm:                      bool, required
-uses_barrier:                  bool, required
-require_full_block_residency:  bool, required
-vpm_rows_per_block:            i32, required, 0..64
-vpm_bytes_per_block:           i32, required, must equal vpm_rows_per_block * 16 * 4 unless 0
-semaphores_per_block:          i32, required, 0 or 4 for barrier-using kernels unless future spec revises
+vc4.resource
 ```
 
-Rules:
+Required computed fields:
 
 ```text
-- If uses_barrier=true, schedule_mode must be cooperative_block.
-- If uses_barrier=true, require_full_block_residency must be true.
-- If uses_barrier=true, semaphores_per_block must be 4.
-- If uses_vpm=true, vpm_rows_per_block must be >0.
-- If vpm_rows_per_block >0, uses_vpm must be true.
-- vpm_rows_per_block must not exceed 64.
-- vpm_bytes_per_block must not exceed 4096.
-- warps_per_block_max must be 1 for independent_vector unless a later verified independent multi-warp policy is added.
-- warps_per_block_max must be 1..12 for cooperative_block.
+schedule_mode:                         "independent_vector" | "cooperative_block"
+warps_per_block:                       i32
+qpu_slots_per_block:                   i32, equal to warps_per_block for v1
+
+uses_tmu:                              bool
+uses_vpm:                              bool
+uses_vpm_qpu_read:                     bool
+uses_vpm_qpu_write:                    bool
+uses_vdr:                              bool
+uses_vdw:                              bool
+uses_barrier:                          bool
+
+user_vpm_rows_per_block:               i32
+compiler_vpm_staging_rows_per_warp:    i32
+compiler_vpm_staging_rows_per_block:   i32
+total_vpm_rows_per_block:              i32
+total_vpm_bytes_per_block:             i32, derived = total_vpm_rows_per_block * 16 * 4
+
+semaphore_count_per_block:             i32
+requires_vpm_base_row_builtin:         bool
+requires_semaphore_base_builtin:       bool
 ```
 
-### 6.8 `vc4kernel.return`
+No old compatibility-only fields may be preserved unless they have a real semantic meaning. In particular, ambiguous fields such as `shared_vpm_bytes`, `user_shared_vpm_rows_per_block`, and source-authored `uses_vpm`/`uses_barrier` should be replaced by computed semantic fields.
 
-Terminator for `vc4kernel.kernel` blocks that exit the kernel.
-
-Rules:
+### 6.6 Resource computation rules
 
 ```text
-- Takes no operands.
-- Returns no values.
-- Must appear only inside vc4kernel.kernel.
-- Lowers to ssavc4.thread_end on terminal paths.
+user_vpm_rows_per_block:
+  sum of explicit vc4kernel.vpm_alloc rows after deterministic allocation planning.
+
+compiler_vpm_staging_rows_per_warp:
+  rows needed for per-warp hidden staging, especially vdw_store_fragment register->global lowering.
+
+compiler_vpm_staging_rows_per_block:
+  rows needed for block-level hidden staging not owned by a single warp.
+
+total_vpm_rows_per_block:
+  user_vpm_rows_per_block
+  + warps_per_block * compiler_vpm_staging_rows_per_warp
+  + compiler_vpm_staging_rows_per_block
+
+uses_vpm:
+  true if any explicit VPM op exists or hidden staging rows are required.
+
+uses_vdr / uses_vdw / uses_tmu:
+  derived from memory ops and lowerer-selected fallback paths.
+
+semaphore_count_per_block:
+  0 if no barrier.
+  4 for the v1 cooperative barrier protocol unless a later verified protocol revises this.
 ```
+
+Resource validity:
+
+```text
+- total_vpm_rows_per_block must be <= 64 for v1 general-purpose VPM window planning.
+- total_vpm_bytes_per_block must be <= 4096 when the runtime reserves a 4 KiB general-purpose VPM window.
+- semaphore_count_per_block must be <= 16.
+- warps_per_block must be <= 12.
+```
+
+### 6.7 Runtime-assigned launch builtins
+
+`vc4kernel` source does not contain these as formal args. They are inserted into `vc4.launch_abi.builtins[]` only when needed:
+
+```text
+program_id:
+  logical program/request index. Required when vc4kernel.program_id is used.
+
+warp_id:
+  logical warp id within the cooperative block. Required when vc4kernel.warp_id is used or when barrier/lowering needs it.
+  Constant 0 in independent_vector if needed internally, preferably omitted if not used.
+
+warps_per_block:
+  compile-time constant may be embedded; a builtin is required only if the lower-half barrier sequence expects it dynamically.
+
+vpm_base_row:
+  runtime-assigned base row for the current resident logical request/block. Required when total_vpm_rows_per_block > 0.
+
+semaphore_base:
+  runtime-assigned base semaphore id for the current resident cooperative block. Required when semaphore_count_per_block > 0.
+```
+
+The runtime residency planner computes:
+
+```text
+qpu_limit = floor(12 / warps_per_block)
+
+vpm_limit =
+  infinity, if total_vpm_rows_per_block == 0
+  floor(64 / total_vpm_rows_per_block), otherwise
+
+semaphore_limit =
+  infinity, if semaphore_count_per_block == 0
+  floor(16 / semaphore_count_per_block), otherwise
+
+resident_blocks = min(qpu_limit, vpm_limit, semaphore_limit)
+```
+
+For each resident block/request slot:
+
+```text
+vpm_base_row = slot * total_vpm_rows_per_block
+semaphore_base = slot * semaphore_count_per_block
+```
+
+Independent-vector kernels are treated as one-warp logical blocks for residency purposes.
 
 ---
 
@@ -606,29 +693,13 @@ Signature:
 Semantics:
 
 ```text
-Logical program/request index for the current kernel launch.
+Logical program/request index for the current launch.
 For Triton axis-0 v1 lowering, tt.get_program_id(axis=0) maps here.
 It is not physical QPU_NUMBER.
 It is not a formal argument.
 ```
 
-### 7.2 `vc4kernel.block_id`
-
-Signature:
-
-```mlir
-%bid = vc4kernel.block_id : i32
-```
-
-Semantics:
-
-```text
-Logical cooperative block id.
-Valid primarily for cooperative_block schedule mode.
-May be used in independent_vector only if the verifier/lowering has a documented mapping.
-```
-
-### 7.3 `vc4kernel.warp_id`
+### 7.2 `vc4kernel.warp_id`
 
 Signature:
 
@@ -639,27 +710,13 @@ Signature:
 Semantics:
 
 ```text
-Logical warp/QPU slot id within a cooperative block.
+Logical warp id within a cooperative block.
 Range is 0 <= warp_id < warps_per_block.
-Not physical QPU_NUMBER.
+It is not physical QPU_NUMBER.
+Legal only in cooperative_block kernels or inside lowering-generated internal paths that need a constant/logical warp slot.
 ```
 
-### 7.4 `vc4kernel.lane_id`
-
-Signature:
-
-```mlir
-%lane = vc4kernel.lane_id : i32
-```
-
-Semantics:
-
-```text
-Current scalar lane id, 0..15, derived from QPU lane element number.
-Not a uniform.
-```
-
-### 7.5 `vc4kernel.lane_range`
+### 7.3 `vc4kernel.lane_range`
 
 Signature:
 
@@ -672,7 +729,29 @@ Semantics:
 ```text
 Vector [0, 1, 2, ..., 15] in lane order.
 Used to form fragment offsets and lane-wise values.
+Lowers from SSAVC4 element_number / hardware ELEMENT_NUMBER.
 ```
+
+### 7.4 Removed identity operations
+
+These operations are not part of corrected `vc4kernel`:
+
+```text
+vc4kernel.block_id
+vc4kernel.lane_id
+vc4kernel.thread_id
+```
+
+Rationale:
+
+```text
+program_id is the logical Triton-facing program/block identity.
+warp_id is the only needed cooperative intra-block identity.
+lane_range is the SIMD-friendly lane expression.
+lane_id and thread_id reintroduce scalar SIMT-shaped vocabulary and are not needed for the upstream vector/Triton path.
+```
+
+If a future pass needs a scalar element extracted from `lane_range`, that scalarization belongs above `vc4kernel` or in a separately specified later pass. It must not reintroduce `lane_id` as a core identity op.
 
 ---
 
@@ -680,22 +759,20 @@ Used to form fragment offsets and lane-wise values.
 
 ### 8.1 Predicate design goal
 
-`vc4kernel` predicates are target-planned predicates, not generic vector masks.
-
-They must preserve enough structure to let the verifier and lowering decide whether a memory path is legal on VC4:
+`vc4kernel` predicates are target-planned 16-lane masks. They preserve enough structure to let the lowering choose correct VC4 implementations for:
 
 ```text
-TMU direct per-lane load
-VDW contiguous store
-VDR full-rectangle load to VPM
-VPM row/column read/write
-barrier/skipping control flow
+TMU per-lane loads
+VDW contiguous stores and read-modify-write fallbacks
+VDR full rectangular DMA
+VPM read/write zero-fill semantics
 fragment select/reduce
+scalar pred.any / pred.all branches
 ```
 
 ### 8.2 Predicate classes
 
-Every `!vc4kernel.pred<16>` value must be normalizable into one of these classes:
+Every predicate value has one of these classes or can be conservatively classified as one of these classes during planning:
 
 ```text
 full:
@@ -704,129 +781,72 @@ full:
 empty:
   no lanes active
 
-tail:
-  active lanes form a contiguous prefix [0, width), where 0 <= width <= 16
+tail_prefix:
+  lanes [0, active_count) active, lanes [active_count, 16) inactive
 
 rect_row:
-  predicate for one row of a rectangular tile; in a single 16-lane fragment this is equivalent to full, empty, or tail but carries row/bounds provenance for diagnostics
+  row-in-bounds AND tail-prefix column mask for one row-fragment
 
-normal_composition:
-  Boolean composition of full/empty/tail/rect_row that normalizes to full, empty, or tail
+general_mask:
+  arbitrary lane mask, including fragment_cmp results and Boolean compositions that do not simplify to a structured class
 ```
 
-Sparse arbitrary masks are not part of the initial final `vc4kernel` contract. If a future milestone supports sparse fallback, it must add an explicit op/class such as `vc4kernel.pred.sparse` and a corresponding lowering contract. Until then, non-normalizable predicates are rejected.
+General masks are legal. They are not represented as `vector<16xi1>`; they are `!vc4kernel.pred<16>`.
 
-### 8.3 `vc4kernel.pred.full`
-
-Signature:
+### 8.3 Predicate operations
 
 ```mlir
 %p = vc4kernel.pred.full : !vc4kernel.pred<16>
-```
-
-Semantics: all lanes active.
-
-### 8.4 `vc4kernel.pred.empty`
-
-Signature:
-
-```mlir
 %p = vc4kernel.pred.empty : !vc4kernel.pred<16>
-```
-
-Semantics: no lanes active.
-
-### 8.5 `vc4kernel.pred.tail`
-
-Signature:
-
-```mlir
 %p = vc4kernel.pred.tail %base, %limit : i32, i32 -> !vc4kernel.pred<16>
-```
-
-Semantics:
-
-```text
-lane l is active iff %base + l < %limit, with unsigned/nonnegative semantics established by verifier constraints.
-```
-
-Rules:
-
-```text
-- %base and %limit are scalar i32.
-- The operation represents a contiguous prefix over lane_range.
-- If the verifier can prove base >= limit, the predicate may canonicalize to empty.
-- If the verifier can prove base + 15 < limit, the predicate may canonicalize to full.
-```
-
-### 8.6 `vc4kernel.pred.rect`
-
-Signature:
-
-```mlir
 %p = vc4kernel.pred.rect %row, %rows, %col_base, %cols
   : i32, i32, i32, i32 -> !vc4kernel.pred<16>
-```
-
-Semantics:
-
-```text
-lane l is active iff:
-  %row < %rows and %col_base + l < %cols
-```
-
-This is the canonical predicate for one 16-lane row-fragment of a rectangular/tail tile.
-
-Rules:
-
-```text
-- row/rows/col_base/cols are scalar i32.
-- The result must normalize to empty, full, or tail for the current fragment.
-- This op does not represent an entire 2D mask at once; it represents the predicate for the current 16-lane fragment/row.
-```
-
-### 8.7 Boolean predicate operations
-
-Allowed operations:
-
-```mlir
 %p = vc4kernel.pred.and %a, %b : !vc4kernel.pred<16>
 %p = vc4kernel.pred.or  %a, %b : !vc4kernel.pred<16>
 %p = vc4kernel.pred.not %a     : !vc4kernel.pred<16>
-```
-
-Rules:
-
-```text
-- Results must remain normalizable into an accepted predicate class.
-- Non-normalizable results are rejected by --verify-vc4kernel or by the first consumer that requires a stricter class.
-- Boolean ops must canonicalize constants: full/empty identities, double-not, associative flattening.
-```
-
-### 8.8 Predicate-to-scalar operations
-
-Allowed operations:
-
-```mlir
 %b = vc4kernel.pred.any %p : !vc4kernel.pred<16> -> i1
 %b = vc4kernel.pred.all %p : !vc4kernel.pred<16> -> i1
 ```
 
-Semantics:
+Boolean ops should canonicalize full/empty identities when possible, but non-simplified results are still legal as `general_mask` when consumers can lower them.
+
+### 8.4 Consumer legality by predicate class
 
 ```text
-pred.any is true if at least one lane is active.
-pred.all is true if every lane is active.
+fragment_select:
+  accepts full, empty, tail_prefix, rect_row, general_mask
+
+fragment_reduce:
+  accepts all classes by first selecting inactive lanes to zero
+
+pred.any / pred.all:
+  accepts all classes; general_mask lowers through hardware flags and any/all branch conditions
+
+tmu_load_fragment:
+  accepts all classes; inactive lanes must return zero and must not issue unsafe out-of-bounds loads
+
+vpm_write_fragment:
+  accepts all classes; inactive lanes write zero into VPM
+
+vpm_read_fragment:
+  accepts all classes; inactive lanes return zero
+
+vdw_store_fragment:
+  accepts all classes for contiguous 32-bit row offsets; full/tail may use direct active-prefix path; general_mask must preserve inactive destination memory through fallback such as TMU old-row load + fragment_select + VPM staging + full-row VDW store
+
+vdr_load_to_vpm:
+  accepts only full rectangular DMA semantics; tail/general masks must be decomposed above into TMU + VPM writes or rejected by verifier/planner
+
+vdw_store_vpm and vdw_store_vpm_fragment:
+  direct DMA accepts full rectangular or full/tail row semantics; general_mask requires a preserve-destination fallback or deterministic rejection until that fallback is implemented
 ```
 
-These are the only way to branch on a predicate in `vc4kernel`.
-
-### 8.9 Forbidden predicate representations
+### 8.5 Forbidden predicate representations
 
 Forbidden:
 
 ```text
-vector<16xi1> as a mask type
+vector<16xi1>
 arith.cmpi producing vector<16xi1>
 vector.mask
 vector.create_mask
@@ -840,53 +860,49 @@ opaque predicate attributes on memory ops instead of !vc4kernel.pred<16> values
 
 ### 9.1 Fragment operation rule
 
-All operations over `vector<16xi32>` or `vector<16xf32>` values inside `vc4kernel` must be `vc4kernel` operations.
-
-No `arith.*` op may operate on vector types.
+All operations over `vector<16xi32>` or `vector<16xf32>` values inside `vc4kernel` must be `vc4kernel` operations. No `arith.*` operation may operate on vector types.
 
 ### 9.2 `vc4kernel.splat`
-
-Signature:
 
 ```mlir
 %v = vc4kernel.splat %x : i32 -> vector<16xi32>
 %v = vc4kernel.splat %x : f32 -> vector<16xf32>
 ```
 
-Semantics:
-
-```text
-Broadcast scalar value to all 16 lanes.
-```
-
-This replaces all uses of `vector.broadcast` or `vector.splat` inside `vc4kernel`.
+Broadcasts a scalar to all 16 lanes. Scalar `f32` splat is first-class and must be supported by SSAVC4/lower-half uniform and splat machinery.
 
 ### 9.3 Arithmetic fragment ops
 
-Allowed operations:
-
 ```mlir
-%r = vc4kernel.fragment_add %a, %b : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-%r = vc4kernel.fragment_add %a, %b : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-%r = vc4kernel.fragment_sub %a, %b : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-%r = vc4kernel.fragment_sub %a, %b : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-%r = vc4kernel.fragment_mul %a, %b : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-%r = vc4kernel.fragment_mul %a, %b : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+%r = vc4kernel.fragment_add %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
+%r = vc4kernel.fragment_sub %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
+%r = vc4kernel.fragment_mul %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
 %r = vc4kernel.fragment_shl %a, %amount : vector<16xi32>, i32 -> vector<16xi32>
 ```
 
-Rules:
+Allowed `T`:
 
 ```text
-- Operand and result element types must match.
-- i32 addition/subtraction/multiplication use 32-bit modular integer semantics unless a consumer/verifier documents unsigned interpretation.
-- f32 addition/subtraction/multiplication use VC4 f32 semantics exposed by the lower half.
-- fragment_shl is i32 only. Shift amount must be a scalar i32 constant in the initial implementation unless later verified otherwise.
+i32
+f32
+```
+
+Semantics:
+
+```text
+i32 add/sub/shl:
+  32-bit integer semantics.
+
+i32 mul:
+  full 32-bit modular integer multiplication.
+  Lowering may use hardware mul24 only when operands are proven 24-bit safe; otherwise it must use a software full-32-bit fallback.
+  It must never silently compile general i32 multiply to mul24.
+
+f32 add/sub/mul:
+  VC4 f32 semantics; f32 fragment_mul lowers to hardware fmul, not mul24.
 ```
 
 ### 9.4 `vc4kernel.fragment_cmp`
-
-Signature:
 
 ```mlir
 %p = vc4kernel.fragment_cmp %a, %b {predicate = #vc4kernel.cmp<eq>}
@@ -909,12 +925,10 @@ Rules:
 ```text
 - Initial support is i32 fragments only.
 - f32 fragment compare is forbidden until a later spec revision.
-- Result must be normalizable or legal for the consuming operation.
+- Result is normally class general_mask unless the planner proves a more structured class.
 ```
 
 ### 9.5 `vc4kernel.fragment_select`
-
-Signature:
 
 ```mlir
 %r = vc4kernel.fragment_select %p, %true, %false
@@ -931,12 +945,12 @@ f32
 Semantics:
 
 ```text
-lane l = true[l] if p[l] active, else false[l]
+lane l = true[l] if p[l] is active, else false[l]
 ```
 
-### 9.6 `vc4kernel.fragment_rotate`
+Accepts all predicate classes.
 
-Signature:
+### 9.6 `vc4kernel.fragment_rotate`
 
 ```mlir
 %r = vc4kernel.fragment_rotate %value {amount = 1 : i32}
@@ -954,13 +968,11 @@ Rules:
 
 ```text
 - amount must be an integer attribute in [0, 15].
-- Rotation direction must be documented and consistent with existing SSAVC4 rotate. The final implementation must choose one direction and prove it with tests.
-- No dynamic rotate amount is permitted in the initial final spec.
+- Rotation direction must be documented and proven by lit plus hardware tests.
+- No dynamic rotate amount is permitted in this stage.
 ```
 
 ### 9.7 `vc4kernel.fragment_reduce`
-
-Signature:
 
 ```mlir
 %r = vc4kernel.fragment_reduce %value, %pred {kind = #vc4kernel.reduce<add>}
@@ -974,27 +986,15 @@ i32
 f32
 ```
 
-Supported reduction kinds in this spec:
-
-```text
-add
-```
-
 Semantics:
 
 ```text
 Computes the sum of active lanes and returns a vector<16xT> in which every lane contains the same reduced value.
-Inactive lanes do not contribute to the sum.
+Inactive lanes do not contribute.
 If pred is empty, the result is zero for add.
 ```
 
-Rationale:
-
-```text
-Returning a broadcast fragment keeps the operation implementable on VC4 SIMD lanes and lets later code choose which lane(s) to store using predicates.
-```
-
-Future scalar-returning reduction forms are not part of this spec.
+Lowering uses a fragment_select-to-zero plus rotate/ALU tree. There is no first-class VC4 hardware reduction instruction in v1.
 
 ---
 
@@ -1002,11 +1002,7 @@ Future scalar-returning reduction forms are not part of this spec.
 
 ### 10.1 Raw device pointer convention
 
-All global memory base pointers inside `vc4kernel` are scalar `i32` raw VC4 device pointer words.
-
-This matches `vc4_deviceptr_t` in the runtime.
-
-No `memref` values exist inside `vc4kernel`.
+All global memory base pointers inside `vc4kernel` are scalar `i32` raw VC4 device pointer words. This matches `vc4_deviceptr_t` in the runtime. No `memref` values exist inside `vc4kernel`.
 
 ### 10.2 Byte offsets
 
@@ -1017,7 +1013,7 @@ Rules:
 ```text
 - No memory op accepts element offsets.
 - No memory op has offset_unit="element".
-- Byte offsets must be 4-byte aligned in current 32-bit executable semantics.
+- Byte offsets must be 4-byte aligned for 32-bit executable semantics.
 - Element-indexed semantics belong above vc4kernel in the memref/vector value layer.
 ```
 
@@ -1029,68 +1025,143 @@ Per-lane byte offsets are represented as:
 vector<16xi32>
 ```
 
-They are data fragments, not vector-dialect computations. They must be produced through `vc4kernel` identity/splat/fragment arithmetic or through future vector-to-vc4kernel lowering.
+They are data fragments, not vector-dialect computations.
 
-### 10.4 Contiguity requirements
-
-Some memory paths require contiguous row fragments. The verifier must enforce this.
-
-Definitions:
+### 10.4 Contiguity classes
 
 ```text
+general per-lane offsets:
+  byte_offsets[l] can vary arbitrarily but must be aligned for active lanes.
+
 contiguous 32-bit row fragment:
-  byte_offsets[l] = base_byte_offset + 4*l for active lanes
+  byte_offsets[l] = base_byte_offset + 4*l for all lanes in the row.
 
 row-tail fragment:
-  contiguous row fragment with predicate full/empty/tail
+  contiguous row fragment with full/empty/tail_prefix predicate.
 ```
 
 Rules:
 
 ```text
-- TMU load may accept general per-lane byte offsets if the lower half supports the pattern.
-- VDW store must reject non-contiguous byte offsets.
-- VDR global-to-VPM must reject non-rectangular/non-full fragments.
-- VPM row/column access must reject predicates or orientations that would require unsupported dynamic VPM layout.
+- TMU load may accept general per-lane byte offsets.
+- VDW direct DMA store paths require contiguous row/rectangle memory. vdw_store_fragment supports general masks only by preserving inactive destination through fallback, not by arbitrary scatter DMA.
+- VDR global-to-VPM supports full rectangular memory movement only.
+- Arbitrary scatter stores are not part of v1.
 ```
 
 ---
 
-## 11. Global/register/VPM memory operations
+## 11. VPM/VDR/VDW hardware mode model
 
-### 11.1 Memory operation naming principle
+### 11.1 Hardware-derived lower-half schema
 
-Final `vc4kernel` memory op names must encode the VC4 path, not generic intent.
+SSAVC4 and scheduled VC4 must model VPM/VDR/VDW using hardware-derived attrs/enums rather than old string compatibility names.
 
-Use:
+Required enums/attrs at lower-half level, with corresponding vc4kernel attrs where exposed:
+
+```text
+orientation:
+  horizontal
+  vertical
+
+width:
+  w32
+  w16
+  w8
+
+subword_mode:
+  none
+  packed
+  laned
+
+coordinate fields:
+  x
+  y
+
+VPM QPU read/write fields:
+  orientation
+  width
+  subword_mode
+  x
+  y
+  stride
+  num_vectors, for grouped setup where applicable
+
+VDR fields:
+  width
+  orientation
+  x
+  y
+  row_len
+  nrows
+  memory_pitch_bytes
+  vpm_pitch
+  extended_memory_stride_bytes, if needed
+
+VDW fields:
+  width
+  orientation
+  x
+  y
+  units_or_nrows
+  depth_or_row_len
+  memory_stride_bytes
+  block_mode
+```
+
+### 11.2 Executable v1 precision policy for modes
+
+The schema must include `w8`, `w16`, `packed`, and `laned` to avoid an artificial lower-half shape, but executable `vc4kernel` v1 may use only:
+
+```text
+width = w32
+subword_mode = none
+orientation = horizontal | vertical
+stride / pitch / blockmode where meaningful for 32-bit movement
+```
+
+Sub-32 packed/laned executable movement is a future precision/storage milestone. In 32-bit mode, the hardware ignores the laned bit, so executable 32-bit ops must require `subword_mode = none`.
+
+### 11.3 VPM coordinate rules for 32-bit mode
+
+For QPU VPM read/write:
+
+```text
+horizontal 32-bit:
+  x must be 0 for a full 16-lane row fragment.
+  y selects the VPM row.
+
+vertical 32-bit:
+  x selects the column.
+  y must be aligned as required by the hardware vertical 32-bit address encoding.
+```
+
+All row/coordinate accesses are relative to the runtime-assigned `vpm_base_row` plus planned allocation offsets.
+
+---
+
+## 12. Memory and VPM operations
+
+### 12.1 Naming principle
+
+Operation names must encode VC4 path/planning intent, not generic producer intent.
+
+Use explicit path names:
 
 ```text
 tmu_load_fragment
 vdw_store_fragment
-vdr_load_to_vpm
 vpm_alloc
-vpm_read_fragment
 vpm_write_fragment
+vpm_read_fragment
+vdr_load_to_vpm
+vdw_store_vpm
 vdw_store_vpm_fragment
 ```
 
-Do not use ambiguous final names such as:
+Do not add producer-facing names such as `masked_load_global`, `masked_store_global`, `tile_load`, `tile_store`, or `copy_tile`.
 
-```text
-masked_load_global
-masked_store_global
-global_load_fragment
-global_store_fragment
-copy_tile
-tile_load
-tile_store
-```
-
-Those names may be implementation source material only.
-
-### 11.2 `vc4kernel.tmu_load_fragment`
-
-Signature:
+### 12.2 `vc4kernel.tmu_load_fragment`
 
 ```mlir
 %value = vc4kernel.tmu_load_fragment %base, %byte_offsets, %pred
@@ -1107,33 +1178,23 @@ f32
 Semantics:
 
 ```text
-global memory -> register fragment through the TMU/direct load path.
-For each active lane l:
-  load 32 bits from address base + byte_offsets[l]
-For each inactive lane:
-  result lane is zero for i32 or +0.0 for f32.
+global memory -> register fragment through TMU direct-address load.
+For each active lane l: load 32 bits from base + byte_offsets[l].
+For each inactive lane: result lane is zero for the element type.
 ```
 
 Rules:
 
 ```text
-- base is a raw i32 device pointer word.
-- byte_offsets is vector<16xi32> in bytes.
-- byte_offsets must be 4-byte aligned for all active lanes.
-- pred must be normalizable.
-- Result type selects interpretation of loaded raw32 bits.
-- The op has memory read effects.
+- base is raw i32 device pointer word.
+- byte_offsets are byte offsets.
+- active byte offsets must be 4-byte aligned.
+- all predicate classes are legal.
+- empty predicates must not issue a TMU request.
+- tail/general masks must use safe inactive addresses before zero-selecting inactive lanes.
 ```
 
-Lowering obligation:
-
-```text
-Lower to ssavc4.tmu.request / ssavc4.tmu.read or equivalent SSAVC4 TMU path.
-```
-
-### 11.3 `vc4kernel.vdw_store_fragment`
-
-Signature:
+### 12.3 `vc4kernel.vdw_store_fragment`
 
 ```mlir
 vc4kernel.vdw_store_fragment %base, %byte_offsets, %value, %pred
@@ -1150,31 +1211,23 @@ f32
 Semantics:
 
 ```text
-register fragment -> global memory through the VC4 VPM/VDW store path.
-For each active lane l:
-  store value[l] to address base + byte_offsets[l]
-For each inactive lane:
-  destination memory is preserved.
+Planning op for register fragment -> global memory through compiler-managed VPM staging and VDW.
+For each active lane l: store value[l] to base + byte_offsets[l].
+For each inactive lane: preserve destination memory.
 ```
 
 Rules:
 
 ```text
-- byte_offsets must describe a contiguous 32-bit row fragment unless a later verified sparse/scatter store path is added.
-- pred must normalize to full, empty, or tail for the current contiguous row.
-- Non-contiguous stores are rejected.
-- This op has memory write effects.
+- byte_offsets must describe a contiguous 32-bit row fragment.
+- pred may be full, empty, tail_prefix, rect_row, or general_mask.
+- full/tail may lower to direct staging plus active-prefix store if hardware path preserves inactive destination.
+- general_mask must lower through preserve-destination fallback, e.g. TMU old-row load + fragment_select + hidden VPM staging + full-row VDW.
+- empty predicate skips the store.
+- This op must never lower as if VC4 had a direct register-to-global store instruction.
 ```
 
-Lowering obligation:
-
-```text
-Lower through SSAVC4 VPM/VDW support. It must not pretend VC4 has a direct register-to-global store instruction.
-```
-
-### 11.4 `vc4kernel.vpm_alloc`
-
-Signature:
+### 12.4 `vc4kernel.vpm_alloc`
 
 ```mlir
 %tile = vc4kernel.vpm_alloc {rows = 16 : i32, elem_bytes = 4 : i32}
@@ -1184,28 +1237,27 @@ Signature:
 Semantics:
 
 ```text
-Declares a statically planned VPM allocation in the current kernel/block.
+Declares a statically planned VPM allocation in the current logical request/block.
 ```
 
 Rules:
 
 ```text
-- rows must be an integer attribute in [1, 64].
-- elem_bytes must be exactly 4 in this spec.
-- Total bytes = rows * 16 * 4.
-- The kernel resource metadata must account for this allocation.
-- Multiple allocations are allowed only if their total rows do not exceed vpm_rows_per_block and the lowering assigns non-overlapping row ranges.
+- rows is an integer attribute in [1, 64].
+- elem_bytes must be exactly 4 in executable v1.
 - The op is a resource declaration, not a runtime heap allocation.
+- The lowering assigns non-overlapping row offsets relative to vpm_base_row.
+- Explicit user rows are accounted separately from compiler hidden staging rows.
 ```
 
-### 11.5 `vc4kernel.vpm_write_fragment`
-
-Signature:
+### 12.5 `vc4kernel.vpm_write_fragment`
 
 ```mlir
-vc4kernel.vpm_write_fragment %tile, %row, %value, %pred
-  {orientation = #vc4kernel.vpm_orientation<row>}
-  : !vc4kernel.vpm_tile, i32, vector<16xT>, !vc4kernel.pred<16>
+vc4kernel.vpm_write_fragment %tile, %y, %x, %value, %pred
+  {orientation = #vc4kernel.vpm_orientation<horizontal>,
+   width = #vc4kernel.vpm_width<w32>,
+   subword_mode = #vc4kernel.vpm_subword<none>}
+  : !vc4kernel.vpm_tile, i32, i32, vector<16xT>, !vc4kernel.pred<16>
 ```
 
 Allowed `T`:
@@ -1215,41 +1267,32 @@ i32
 f32
 ```
 
-Supported orientations:
-
-```text
-row
-column
-```
-
 Semantics:
 
 ```text
 register fragment -> VPM.
 Active lanes write value[l].
-Inactive lanes write zero for the element type.
+Inactive lanes write zero.
 ```
 
 Rules:
 
 ```text
-- row is scalar i32 and must be within the vpm_tile allocation.
-- orientation=row writes one VPM row of up to 16 words.
-- orientation=column writes one VPM column-style fragment only if supported by current SSAVC4/VC4 lowering; otherwise verifier rejects it.
-- pred must be legal for the orientation.
-- This op has VPM write effects.
+- y/x identify a location inside the planned VPM allocation, relative to that allocation.
+- orientation horizontal or vertical is legal in v1.
+- width must be w32 in executable v1.
+- subword_mode must be none in executable v1.
+- all predicate classes are legal.
 ```
 
-Zero-fill for inactive lanes is intentional. If a future use case needs VPM preserve-on-inactive semantics, it must add an explicit new policy/op and prove it.
-
-### 11.6 `vc4kernel.vpm_read_fragment`
-
-Signature:
+### 12.6 `vc4kernel.vpm_read_fragment`
 
 ```mlir
-%value = vc4kernel.vpm_read_fragment %tile, %row, %pred
-  {orientation = #vc4kernel.vpm_orientation<row>}
-  : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xT>
+%value = vc4kernel.vpm_read_fragment %tile, %y, %x, %pred
+  {orientation = #vc4kernel.vpm_orientation<horizontal>,
+   width = #vc4kernel.vpm_width<w32>,
+   subword_mode = #vc4kernel.vpm_subword<none>}
+  : !vc4kernel.vpm_tile, i32, i32, !vc4kernel.pred<16> -> vector<16xT>
 ```
 
 Allowed `T`:
@@ -1264,96 +1307,111 @@ Semantics:
 ```text
 VPM -> register fragment.
 Active lanes read VPM data.
-Inactive lanes return zero for the element type.
+Inactive lanes return zero.
 ```
 
-Rules:
+Rules match `vpm_write_fragment` for coordinate/mode legality.
 
-```text
-- row is scalar i32 and must be within the vpm_tile allocation.
-- orientation=row reads one VPM row.
-- orientation=column reads one VPM column-style fragment only if supported by current SSAVC4/VC4 lowering; otherwise verifier rejects it.
-- pred must be legal for the orientation.
-- This op has VPM read effects.
-```
-
-### 11.7 `vc4kernel.vdr_load_to_vpm`
-
-Signature:
+### 12.7 `vc4kernel.vdr_load_to_vpm`
 
 ```mlir
-vc4kernel.vdr_load_to_vpm %base, %byte_offset, %tile, %dst_row
-  {rows = 4 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32}
-  : i32, i32, !vc4kernel.vpm_tile, i32
+vc4kernel.vdr_load_to_vpm %base, %byte_offset, %tile, %dst_y, %dst_x
+  {rows = 4 : i32,
+   cols = 16 : i32,
+   memory_pitch_bytes = 64 : i32,
+   vpm_pitch = 16 : i32,
+   orientation = #vc4kernel.vpm_orientation<horizontal>,
+   width = #vc4kernel.vpm_width<w32>,
+   subword_mode = #vc4kernel.vpm_subword<none>}
+  : i32, i32, !vc4kernel.vpm_tile, i32, i32
 ```
 
 Semantics:
 
 ```text
-global memory -> VPM through the VDR/VCD load path.
-Copies a static row-major 32-bit rectangular block from global memory into consecutive VPM rows.
+global memory -> VPM through VDR/VCD DMA.
+Copies a full static 32-bit rectangular block from global memory into VPM.
 ```
 
 Rules:
 
 ```text
-- base is a raw i32 device pointer word.
-- byte_offset is scalar i32 in bytes.
-- rows must be a positive integer attribute.
-- cols must be an integer attribute in [1, 16].
-- elem_bytes must be exactly 4.
-- global_stride_bytes must be a positive 4-byte-aligned integer attribute.
-- dst_row must be within the vpm_tile allocation, and dst_row + rows must not exceed allocation rows.
-- This op supports only full rectangular VDR copies. Tail/partial copies must be decomposed before this op or handled by TMU + VPM write.
-- No predicate operand is accepted.
-- This op has global memory read and VPM write effects.
+- base is raw i32 device pointer word.
+- byte_offset is scalar byte offset and must be 4-byte aligned.
+- rows > 0.
+- cols in [1, 16] for one row fragment width; future extensions may expose larger rectangles by multiple rows.
+- memory_pitch_bytes is a positive 4-byte-aligned integer attr.
+- vpm_pitch is a hardware VPM pitch value; v1 supports 32-bit legal pitch modes.
+- dst_y/dst_x plus rectangle dimensions must fit the allocation.
+- no predicate operand is accepted.
+- partial/tail loads must decompose into TMU + VPM writes above this op.
 ```
 
-Lowering obligation:
-
-```text
-Lower to SSAVC4 VDR/VCD global-to-VPM support. If SSAVC4 lacks sufficient VDR support, Stage 1 must add it before this op is considered implemented.
-```
-
-### 11.8 `vc4kernel.vdw_store_vpm_fragment`
-
-Signature:
+### 12.8 `vc4kernel.vdw_store_vpm`
 
 ```mlir
-vc4kernel.vdw_store_vpm_fragment %tile, %src_row, %base, %byte_offset, %pred
-  {elem_bytes = 4 : i32}
-  : !vc4kernel.vpm_tile, i32, i32, i32, !vc4kernel.pred<16>
+vc4kernel.vdw_store_vpm %tile, %src_y, %src_x, %base, %byte_offset
+  {rows = 4 : i32,
+   cols = 16 : i32,
+   memory_stride_bytes = 0 : i32,
+   block_mode = false,
+   orientation = #vc4kernel.vpm_orientation<horizontal>,
+   width = #vc4kernel.vpm_width<w32>,
+   subword_mode = #vc4kernel.vpm_subword<none>}
+  : !vc4kernel.vpm_tile, i32, i32, i32, i32
 ```
 
 Semantics:
 
 ```text
-VPM row fragment -> global memory through VDW.
-Active lanes store words from VPM row to global memory.
+VPM rectangle -> global memory through VDW DMA.
+Full rectangular store. No general lane predicate.
+```
+
+Rules:
+
+```text
+- source coordinates plus rectangle dimensions must fit the allocation.
+- base is raw i32 device pointer word.
+- byte_offset is scalar byte offset and must be 4-byte aligned.
+- rows/cols describe the full DMA rectangle.
+- width must be w32 in executable v1.
+- subword_mode must be none in executable v1.
+```
+
+### 12.9 `vc4kernel.vdw_store_vpm_fragment`
+
+```mlir
+vc4kernel.vdw_store_vpm_fragment %tile, %src_y, %src_x, %base, %byte_offset, %pred
+  {orientation = #vc4kernel.vpm_orientation<horizontal>,
+   width = #vc4kernel.vpm_width<w32>,
+   subword_mode = #vc4kernel.vpm_subword<none>}
+  : !vc4kernel.vpm_tile, i32, i32, i32, i32, !vc4kernel.pred<16>
+```
+
+Semantics:
+
+```text
+One VPM fragment -> global memory through VDW.
+Active lanes store VPM words.
 Inactive lanes preserve destination memory.
 ```
 
 Rules:
 
 ```text
-- src_row must be within the vpm_tile allocation.
-- base is a raw i32 device pointer word.
-- byte_offset is scalar i32 in bytes.
-- elem_bytes must be exactly 4.
-- pred must normalize to full, empty, or tail.
-- This op stores one contiguous row fragment only.
-- This op has VPM read and global memory write effects.
+- full/empty/tail_prefix are direct classes.
+- general_mask requires preserve-destination fallback or deterministic rejection until fallback is implemented.
+- byte_offset must be 4-byte aligned.
 ```
 
-This op is for shared/VPM-to-global paths. Register-to-global paths use `vdw_store_fragment`.
+This op is for shared/VPM-to-global fragment paths. Register-to-global convenience paths use `vdw_store_fragment` and compiler-managed staging.
 
 ---
 
-## 12. Synchronization
+## 13. Synchronization
 
-### 12.1 `vc4kernel.barrier`
-
-Signature:
+### 13.1 `vc4kernel.barrier`
 
 ```mlir
 vc4kernel.barrier
@@ -1362,40 +1420,30 @@ vc4kernel.barrier
 Semantics:
 
 ```text
-Cooperative-block barrier equivalent to a VC4-safe __syncthreads-like synchronization for all resident warps in the current block.
+Cooperative-block barrier equivalent to VC4-safe __syncthreads-like synchronization for all resident warps in the current logical block.
 ```
 
 Rules:
 
 ```text
 - Legal only in schedule_mode=cooperative_block kernels.
-- Kernel must have uses_barrier=true.
-- Kernel must have require_full_block_residency=true.
-- Kernel must reserve semaphores_per_block=4 unless future verifier proves another protocol.
-- No barrier may appear in independent_vector kernels.
-- The op has synchronization side effects.
+- The compiler computes uses_barrier=true below vc4kernel.
+- The compiler computes semaphore_count_per_block=4 for the v1 barrier protocol.
+- The runtime assigns semaphore_base per resident cooperative block.
+- Raw semaphore protocol remains below vc4kernel.
 ```
 
-Lowering obligation:
-
-```text
-Lower to ssavc4.barrier or equivalent SSAVC4 semaphore/barrier sequence.
-The raw semaphore protocol must remain below vc4kernel.
-```
+Barrier lowering must use `warp_id`, `warps_per_block`, and `semaphore_base` through SSAVC4/lower-half mechanisms.
 
 ---
 
-## 13. Control flow
+## 14. Control flow
 
-### 13.1 Raw SCF is forbidden
+### 14.1 Raw SCF forbidden
 
-No raw `scf.*` op is legal inside verified `vc4kernel` IR.
+No raw `scf.*` op is legal inside verified `vc4kernel` IR. Structured control flow must be lowered before entering `vc4kernel` or by an explicit pre-verification helper pass.
 
-Structured control flow must be lowered before entering `vc4kernel` or by an explicit pre-verification pass. Verified `vc4kernel` uses `cf` plus block arguments.
-
-### 13.2 Legal terminators
-
-Legal terminators in a `vc4kernel.kernel` region:
+### 14.2 Legal terminators
 
 ```text
 vc4kernel.return
@@ -1403,9 +1451,9 @@ cf.br
 cf.cond_br
 ```
 
-### 13.3 Branch operands
+### 14.3 Branch operands
 
-`cf.br` and `cf.cond_br` may carry successor operands of legal `vc4kernel` types:
+Allowed successor operand/block-arg types:
 
 ```text
 i1
@@ -1414,85 +1462,75 @@ f32
 vector<16xi32>
 vector<16xf32>
 !vc4kernel.pred<16>
-!vc4kernel.vpm_tile
 ```
 
-However, passing `!vc4kernel.vpm_tile` through block arguments should be rejected unless the verifier proves it is the same static resource handle and not a dynamic runtime value.
+`!vc4kernel.vpm_tile` block arguments should be rejected in v1 unless the verifier proves they are the same static allocation handle. The conservative locked behavior is to reject them.
 
-### 13.4 Branch conditions
+### 14.4 Branch conditions
 
 `cf.cond_br` condition must be scalar `i1`.
 
-If a predicate controls branching, it must first use:
+Predicates must be converted to scalar conditions through:
 
 ```mlir
 %i1 = vc4kernel.pred.any %p : !vc4kernel.pred<16> -> i1
-```
-
-or:
-
-```mlir
 %i1 = vc4kernel.pred.all %p : !vc4kernel.pred<16> -> i1
 ```
 
-### 13.5 Lowering obligation
-
-`vc4kernel -> ssavc4` must preserve control-flow semantics through SSAVC4 successor operands/block arguments. It must not use fixture-name special cases or precomputed layout assumptions.
-
-If SSAVC4 branch layout requires false-successor fallthrough or other scheduled constraints, the conversion must perform a deterministic block layout transformation or reject with a clear diagnostic. It must not silently generate invalid scheduled VC4.
+Scalar `i1` lowering uses condition plans and hardware flags/branch conditions.
 
 ---
 
-## 14. Attributes and enums
+## 15. Attributes and enums
 
-### 14.1 Required enum attributes
-
-The dialect must define at least these enums:
+### 15.1 Required enum attributes
 
 ```text
 #vc4kernel.schedule_mode<independent_vector | cooperative_block>
 #vc4kernel.reduce<add>
 #vc4kernel.cmp<eq | ne | ult | ule | ugt | uge>
-#vc4kernel.vpm_orientation<row | column>
+#vc4kernel.vpm_orientation<horizontal | vertical>
+#vc4kernel.vpm_width<w32 | w16 | w8>
+#vc4kernel.vpm_subword<none | packed | laned>
 ```
 
-### 14.2 Forbidden old M5 surface attrs
+Executable v1 accepts only:
 
-Final `vc4kernel` must not define or depend on these old ergonomic-surface attributes:
+```text
+vpm_width = w32
+vpm_subword = none
+```
+
+### 15.2 Forbidden old surface attrs
+
+Final `vc4kernel` must not define or depend on old ergonomic-surface attributes:
 
 ```text
 layout
 role
 precision
 packing
-storage_type as an attribute
-expressed_type as an attribute
-accumulator_type as an attribute
+storage_type as a generic tile attr
+expressed_type as a generic tile attr
+accumulator_type as a generic tile attr
 boundary_policy as generic tile policy
 tile shape descriptors
 rank descriptors
 strides descriptors as generic layout algebra
 ```
 
-If a path needs concrete stride or shape information, it must encode it directly in the relevant path op, such as:
+Concrete hardware mode information belongs in concrete memory path ops or lower-half VPM/VDR/VDW mode attrs.
 
-```text
-global_stride_bytes on vdr_load_to_vpm
-rows/cols on vdr_load_to_vpm
-rows on vpm_alloc
-```
+### 15.3 Precision policy
 
-### 14.3 Precision policy
-
-`vc4kernel` executable semantics are 32-bit only.
-
-Allowed executable element/storage types:
+Executable `vc4kernel` semantics are 32-bit only:
 
 ```text
 i32 / u32 represented as i32
 f32
 vector<16xi32>
 vector<16xf32>
+32-bit global/VPM/VDR/VDW movement
 ```
 
 Forbidden executable precision:
@@ -1505,31 +1543,35 @@ fp4
 i8/u8
 i16/u16
 int4/uint4
-packed/nibble modes
+packed/nibble movement
 quantization scale/zero-point lowering
 ```
 
-No `vc4kernel` op may silently widen, narrow, pack, or unpack sub-32 types. Unsupported precision must be rejected before or at the `vc4kernel` verifier.
+Sub-32 hardware mode attrs may exist in the lower half but must be rejected for executable vc4kernel v1.
 
 ---
 
-## 15. Operation inventory summary
+## 16. Operation inventory summary
 
-This is the complete final `vc4kernel` op inventory for the initial strict dialect.
-
-### 15.1 Kernel and identity
+### 16.1 Kernel and identity
 
 ```text
 vc4kernel.kernel
 vc4kernel.return
 vc4kernel.program_id
-vc4kernel.block_id
 vc4kernel.warp_id
-vc4kernel.lane_id
 vc4kernel.lane_range
 ```
 
-### 15.2 Predicates
+Explicitly removed:
+
+```text
+vc4kernel.block_id
+vc4kernel.lane_id
+vc4kernel.thread_id
+```
+
+### 16.2 Predicates
 
 ```text
 vc4kernel.pred.full
@@ -1543,7 +1585,7 @@ vc4kernel.pred.any
 vc4kernel.pred.all
 ```
 
-### 15.3 Fragment values and compute
+### 16.3 Fragment values and compute
 
 ```text
 vc4kernel.splat
@@ -1557,7 +1599,7 @@ vc4kernel.fragment_rotate
 vc4kernel.fragment_reduce
 ```
 
-### 15.4 Memory/resources
+### 16.4 Memory/resources
 
 ```text
 vc4kernel.tmu_load_fragment
@@ -1566,21 +1608,22 @@ vc4kernel.vpm_alloc
 vc4kernel.vpm_write_fragment
 vc4kernel.vpm_read_fragment
 vc4kernel.vdr_load_to_vpm
+vc4kernel.vdw_store_vpm
 vc4kernel.vdw_store_vpm_fragment
 ```
 
-### 15.5 Synchronization
+### 16.5 Synchronization
 
 ```text
 vc4kernel.barrier
 ```
 
-### 15.6 Explicitly absent from final inventory
-
-The final initial dialect does not contain:
+### 16.6 Explicitly absent from final inventory
 
 ```text
 vc4kernel.thread_id
+vc4kernel.block_id
+vc4kernel.lane_id
 vc4kernel.tile_load
 vc4kernel.tile_store
 vc4kernel.copy_tile
@@ -1608,17 +1651,25 @@ vc4kernel.vector_transfer_write
 vc4kernel.fragment_contract
 ```
 
-`fragment_contract` is intentionally absent from the initial final spec. It may be added later only if the `vector.contract -> vc4kernel` lowering proves that a planned fragment-contract op is necessary and the op is specified separately.
+`fragment_contract` remains outside this stage. It may be added only if the future `vector.contract -> vc4kernel` path proves that a planned contract op is necessary.
 
 ---
 
-## 16. Verifier contract
+## 17. Verifier contract
 
 `--verify-vc4kernel` must enforce all of the following.
 
-### 16.1 Dialect boundary
+### 17.1 Module boundary
 
-Reject any operation inside `vc4kernel.kernel` that is not explicitly allowed by this document.
+```text
+- module top-level operations must be vc4kernel.kernel only.
+- every non-kernel vc4kernel op must be nested inside exactly one vc4kernel.kernel.
+- nested vc4kernel.kernel ops are forbidden.
+```
+
+### 17.2 Dialect boundary
+
+Reject any operation inside `vc4kernel.kernel` not explicitly allowed by this document.
 
 Required diagnostic classes:
 
@@ -1630,12 +1681,12 @@ producer dialect forbidden
 ssavc4/vc4 forbidden
 unknown vc4kernel op forbidden
 old tile surface op forbidden
-thread_id forbidden
+thread_id/block_id/lane_id forbidden
 sub-32 type forbidden
 index type forbidden
 ```
 
-### 16.2 Type legality
+### 17.3 Type legality
 
 Reject:
 
@@ -1649,53 +1700,54 @@ sub-32 scalar/vector types
 unknown vc4kernel types
 ```
 
-### 16.3 Kernel metadata
+### 17.4 Kernel metadata
 
 Verify:
 
 ```text
 - public_name exists and is a non-empty string.
 - schedule_mode is present and valid.
+- warps_per_block is present and valid.
+- independent_vector has warps_per_block=1.
+- cooperative_block has 1 <= warps_per_block <= 12.
 - arg_attrs length equals entry block argument count.
 - each arg_attrs dictionary has required fields.
 - buffer args are i32 formal args.
 - scalar args have matching i32/f32 formal types.
-- resource metadata is present and internally consistent.
-- barrier/resource constraints are respected.
+- user-authored resource dictionaries are forbidden in source vc4kernel.
 ```
 
-### 16.4 Predicate legality
+### 17.5 Predicate legality
 
 Verify:
 
 ```text
 - every pred op produces !vc4kernel.pred<16>.
-- every pred consumer accepts the predicate's normalized class.
-- non-normalizable Boolean predicate expressions are rejected.
 - vector<16xi1> masks are rejected.
 - branching on pred directly is rejected.
+- consumer-specific predicate legality is enforced.
+- general_mask is legal where the consumer has a specified fallback.
 ```
 
-### 16.5 Memory legality
+### 17.6 Memory legality
 
 Verify:
 
 ```text
 - global bases are i32.
 - global offsets are byte offsets.
-- byte offsets are 4-byte aligned when statically provable; otherwise lowering must preserve an alignment check or reject if the target path requires it.
+- active byte offsets are 4-byte aligned, or the path must reject if alignment cannot be proven.
 - vdw_store_fragment offsets are contiguous row fragments.
-- vdw_store_fragment predicates are full/empty/tail.
+- arbitrary scatter global stores are forbidden.
 - vdr_load_to_vpm is full rectangular and statically shaped.
-- vpm rows are within allocation bounds.
-- VPM allocations fit kernel resources.
-- inactive store semantics are preserve-global for global stores.
-- inactive load semantics are zero-fill.
+- vpm coordinates are within allocation bounds where statically provable; dynamic/unproven coordinates must be rejected unless a range proof exists.
+- VPM allocations plus required hidden staging must fit the 64-row v1 planning window.
+- inactive global store semantics preserve destination.
+- inactive load and VPM read semantics zero-fill.
+- inactive VPM write semantics write zero.
 ```
 
-### 16.6 Control-flow legality
-
-Verify:
+### 17.7 Control-flow legality
 
 ```text
 - only allowed terminators are vc4kernel.return, cf.br, cf.cond_br.
@@ -1703,9 +1755,10 @@ Verify:
 - successor operands and block args use legal types.
 - no unresolved raw scf remains.
 - no illegal region nesting or non-isolated capture exists.
+- VPM handle block args are rejected in v1.
 ```
 
-### 16.7 Lowering-boundary legality
+### 17.8 Lowering-boundary legality
 
 Reject any `vc4kernel` IR that would require:
 
@@ -1716,142 +1769,131 @@ Reject any `vc4kernel` IR that would require:
 - unknown hardware path
 - unimplemented VDR/VDW/TMU/VPM mode
 - executable sub-32 precision
-- arbitrary sparse predication
 - arbitrary scatter global stores
-- dynamic VPM layout not proven by hardware
+- dynamic VPM layout not proven by hardware/range analysis
 ```
 
 ---
 
-## 17. `vc4kernel -> ssavc4` lowering contract
+## 18. `vc4kernel -> ssavc4` lowering contract
 
-### 17.1 Required input
+### 18.1 Required input
 
-The conversion pass accepts verified `vc4kernel` IR only.
+The conversion pass accepts verified `vc4kernel` IR only and must reject malformed IR with deterministic diagnostics.
 
-It must reject unverified or malformed IR with deterministic diagnostics.
+### 18.2 Required output
 
-### 17.2 Required output
-
-The conversion pass emits:
+Successful conversion emits:
 
 ```text
 ssavc4.module
 ssavc4.func
 ssavc4 operations
 vc4.launch_abi metadata on ssavc4.func
-vc4.resource metadata on ssavc4.func
+computed vc4.resource metadata on ssavc4.func
 ```
 
-No `vc4kernel.*` op may remain after successful conversion.
+No `vc4kernel.*` op may remain.
 
-### 17.3 Launch ABI lowering
-
-The pass must lower:
+### 18.3 Launch ABI lowering
 
 ```text
-vc4kernel formal args -> vc4.launch_abi.args[] -> ssavc4.uniform.read
-vc4kernel.program_id  -> vc4.launch_abi.builtins[] -> ssavc4.uniform.read
-vc4kernel.block_id    -> vc4.launch_abi.builtins[] -> ssavc4.uniform.read
-vc4kernel.warp_id     -> vc4.launch_abi.builtins[] -> ssavc4.uniform.read
-vc4kernel.lane_id     -> ssavc4.element_number-derived scalar value
-vc4kernel.lane_range  -> ssavc4.element_number-derived vector value
+formal args -> vc4.launch_abi.args[] -> sequential ssavc4.uniform.read
+program_id  -> builtin uniform when used
+warp_id     -> builtin uniform when cooperative/local-warp identity is used
+vpm_base_row -> builtin uniform when total_vpm_rows_per_block > 0
+semaphore_base -> builtin uniform when semaphore_count_per_block > 0
+lane_range  -> ssavc4.element_number-derived vector
 ```
 
-The pass must not use physical QPU number for logical identity.
+Scalar `f32` formals lower to scalar `f32` uniform reads. Scalar `i1` values lower through condition plans, not as ordinary data unless materialization is explicitly needed.
 
-### 17.4 Resource lowering
+Physical `QPU_NUMBER` must not be used for logical identity or canonical VPM ownership. VPM ownership is via runtime-assigned `vpm_base_row`.
 
-The pass must lower resource metadata into the existing `vc4.resource` dictionary expected by SSAVC4 and scheduled VC4 emission.
+### 18.4 Resource lowering
 
-Required mapping includes:
+The pass computes the semantic `vc4.resource` summary described in §6.5 and emits it on the SSAVC4 function. Scheduled VC4/codegen/runtime must consume this semantic summary.
 
-```text
-schedule_mode
-warps_per_block_max
-uses_vpm / uses_shared_vpm equivalent
-uses_barrier
-require_full_block_residency
-vpm_rows_per_block
-vpm_bytes_per_block
-semaphores_per_block
-```
-
-### 17.5 Fragment lowering
+### 18.5 Fragment lowering
 
 Representative mappings:
 
 ```text
-vc4kernel.splat            -> ssavc4.splat or ssavc4.load_imm as appropriate
-vc4kernel.fragment_add     -> ssavc4.alu.add
-vc4kernel.fragment_sub     -> ssavc4.alu.add with subtract opcode/path if supported, otherwise deterministic reject
-vc4kernel.fragment_mul     -> ssavc4.alu.mul
-vc4kernel.fragment_shl     -> ssavc4.alu.add shl path or equivalent
+vc4kernel.splat            -> ssavc4.splat / scalar uniform splat / load immediate as appropriate
+vc4kernel.fragment_add     -> ssavc4 ALU add/fadd
+vc4kernel.fragment_sub     -> ssavc4 ALU sub/fsub
+vc4kernel.fragment_mul f32 -> ssavc4 fmul
+vc4kernel.fragment_mul i32 -> semantic imul32; use mul24 fast path only if proven safe, else software fallback
+vc4kernel.fragment_shl     -> SSAVC4 integer shl path
+vc4kernel.fragment_cmp     -> predicate plan / flags / mask value as needed
+vc4kernel.fragment_select  -> conditional select using predicate plan
 vc4kernel.fragment_rotate  -> ssavc4.rotate
-vc4kernel.fragment_reduce  -> rotate/ALU reduction sequence or existing ssavc4 reduction helper path
-vc4kernel.fragment_select  -> flags/select sequence or deterministic reject if unsupported
+vc4kernel.fragment_reduce  -> zero-mask then rotate/ALU tree
 ```
 
-### 17.6 Predicate lowering
+### 18.6 Predicate lowering
 
-Predicates lower to concrete SSAVC4 flags, active-lane metadata, branch conditions, or zero-fill/preserve logic depending on consumer.
+Predicates lower to structured active-lane counts, mask values, flags, branch conditions, or select/merge logic depending on the consumer. No `!vc4kernel.pred<16>` value may survive into SSAVC4.
 
-No `!vc4kernel.pred<16>` value may survive into SSAVC4.
-
-The lowering must preserve:
+Required semantic preservation:
 
 ```text
-load inactive lanes -> zero
+TMU inactive lanes -> zero result and safe/no inactive memory requests
 VPM read inactive lanes -> zero
-VPM write inactive lanes -> zero
-VDW/global store inactive lanes -> preserve destination
+VPM write inactive lanes -> zero written to VPM
+VDW/global store inactive lanes -> preserve destination memory
+pred.any/pred.all -> correct scalar i1 via any/all hardware flag logic
 ```
 
-### 17.7 Memory lowering
-
-Representative mappings:
+### 18.7 Memory lowering
 
 ```text
-vc4kernel.tmu_load_fragment       -> ssavc4.tmu.request + ssavc4.tmu.read
-vc4kernel.vdw_store_fragment      -> VPM staging + ssavc4.vdw.store
-vc4kernel.vpm_alloc               -> resource metadata / row assignment; no runtime heap op
-vc4kernel.vpm_write_fragment      -> ssavc4.vpm.write
-vc4kernel.vpm_read_fragment       -> ssavc4.vpm.read
-vc4kernel.vdr_load_to_vpm         -> ssavc4 VDR/VCD global-to-VPM op/sequence
-vc4kernel.vdw_store_vpm_fragment  -> ssavc4.vdw.store from planned VPM row
-vc4kernel.barrier                 -> ssavc4.barrier
+tmu_load_fragment:
+  TMU request/read with safe masked-address behavior and zero-fill.
+
+vdw_store_fragment:
+  compiler-managed hidden VPM staging; general masks use destination-preserving fallback.
+
+vpm_alloc:
+  allocation table/resource planning only; no runtime heap op.
+
+vpm_write_fragment / vpm_read_fragment:
+  SSAVC4 VPM setup/read/write using hardware mode attrs and vpm_base_row-relative coordinates.
+
+vdr_load_to_vpm:
+  SSAVC4 VDR/VCD global-to-VPM setup/address/wait sequence using hardware mode attrs.
+
+vdw_store_vpm / vdw_store_vpm_fragment:
+  SSAVC4 VDW setup/address/wait sequence using hardware mode attrs; preserve inactive destination where predicated.
+
+barrier:
+  SSAVC4 barrier/semaphore sequence using semaphore_base, warp_id, and warps_per_block.
 ```
 
-The conversion must fail rather than inventing unsupported hardware behavior.
+### 18.8 CFG lowering
 
-### 17.8 CFG lowering
+`cf.br` and `cf.cond_br` lower to SSAVC4 branch ops with successor operands/block args. If scheduled-VC4 constraints require block layout or branch-delay-slot transformations, they belong in SSAVC4-to-VC4/scheduling machinery or a deterministic conversion subpass, not in fixture-specific hacks.
 
-`cf.br` and `cf.cond_br` lower to SSAVC4 branch ops with successor operands/block args.
-
-If SSAVC4/scheduled-VC4 requires a particular block layout, the conversion pass must produce that layout or reject.
-
-### 17.9 No shortcuts
+### 18.9 No shortcuts
 
 Forbidden conversion behavior:
 
 ```text
-- no scheduled vc4 ops in vc4kernel -> ssavc4 output
-- no direct QASM emission
-- no fixture-name special cases
-- no public_name special cases
-- no expected JSON edits
-- no reference bundle substitution
-- no host-side computation to satisfy tests
-- no weakening of scheduled VC4 verifier rules
+- scheduled vc4 ops in vc4kernel -> ssavc4 output
+- direct QASM emission
+- fixture-name special cases
+- public_name special cases
+- expected JSON edits
+- reference bundle substitution
+- host-side computation to satisfy tests
+- weakened scheduled VC4 verifier rules
 ```
 
 ---
 
-## 18. Relationship to standard vector/memref layer
+## 19. Relationship to future standard vector/memref layer
 
-### 18.1 Future vector layer responsibilities
-
-The future vector/memref/arith layer handles:
+The future value layer handles:
 
 ```text
 memref<?xi32, #vc4.global>
@@ -1862,128 +1904,42 @@ vector.contract
 vector.reduction
 vector.mask
 vector.transpose
+vector.step
 arith on vector types
 scf structured control flow
 ```
 
-### 18.2 Vector-to-vc4kernel responsibilities
-
-A later pass lowers standard value-layer operations to `vc4kernel`:
+Vector-to-vc4kernel lowering responsibilities:
 
 ```text
 memref raw pointer arg      -> i32 formal arg with buffer arg_attrs
-vector.step/lane-like math  -> vc4kernel.lane_range and fragment ops
-vector.transfer_read        -> vc4kernel.tmu_load_fragment or vdr_load_to_vpm + vpm_read
-vector.transfer_write       -> vc4kernel.vdw_store_fragment or vdw_store_vpm_fragment
-vector.reduction            -> vc4kernel.fragment_reduce
-vector.contract             -> explicit vc4kernel fragment ops, or future fragment_contract if separately specified
-vector.mask                 -> vc4kernel.pred.*
-arith vector ops            -> vc4kernel.fragment_* ops
-scf                         -> cf/block args before verified vc4kernel
+vector.step                 -> vc4kernel.lane_range
+vector<16xi1> masks         -> !vc4kernel.pred<16>
+vector.transfer_read        -> tmu_load_fragment or VDR+VPM path
+vector.transfer_write       -> vdw_store_fragment or explicit VPM+VDW path
+vector arithmetic           -> fragment ops
+vector reduction            -> fragment_reduce
+scf                         -> cf before verified vc4kernel
 ```
 
-### 18.3 What must not happen
-
-Do not lower producers into old `tile_*` surface ops.
-
-Do not put memref or vector operations in `vc4kernel` to avoid implementing the vector-to-vc4kernel pass.
-
-Do not let `vc4kernel` become a second copy of the vector dialect.
-
----
-
-## 19. Relationship to Triton TTIR
-
-### 19.1 TTIR is not consumed by `vc4kernel` directly
-
-Triton-emitted TTIR lowers first to the standard value layer:
+Triton lowering responsibilities after vector is locked:
 
 ```text
-tt.get_program_id -> value-layer identity that later maps to vc4kernel.program_id
-tt.arange         -> vector lane values / later vc4kernel.lane_range
-tt.load           -> vector.transfer_read
-tt.store          -> vector.transfer_write
-tt.dot            -> vector.contract
+tt.get_program_id(axis=0)   -> program_id
+tt.make_range / arange      -> vector.step -> lane_range
+tt.load mask/other          -> vector.transfer_read -> vc4kernel predicate + TMU/VDR plan
+tt.store mask               -> vector.transfer_write -> vc4kernel predicate + VDW plan
 ```
 
-Then value-layer lowering produces `vc4kernel`.
-
-### 19.2 No TTIR/TTGIR in verified vc4kernel
-
-`tt.*`, `ttg.*`, NVIDIA-specific TritonGPU, NVGPU, NVVM, ROCDL, or any other producer/target dialect is forbidden inside verified `vc4kernel` IR.
+Do not lower TTIR directly into old tile surface ops or directly into SSAVC4/scheduled VC4 as an accepted path.
 
 ---
 
-## 20. Examples
+## 20. Required tests and acceptance
 
-### 20.1 Minimal store kernel sketch
+### 20.1 Dialect roundtrip tests
 
-```mlir
-module {
-  vc4kernel.kernel @store16(%out : i32) attributes {
-    public_name = "store16",
-    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
-    arg_attrs = [{name = "out", kind = "buffer", direction = "out", elem_type = "u32"}],
-    resource = {
-      warps_per_block_max = 1 : i32,
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
-  } {
-  ^entry(%out : i32):
-    %zero = arith.constant 0 : i32
-    %two = arith.constant 2 : i32
-    %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %two : vector<16xi32>, i32 -> vector<16xi32>
-    %pred = vc4kernel.pred.full : !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %lanes, %pred
-      : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    vc4kernel.return
-  }
-}
-```
-
-### 20.2 Tail load + store sketch
-
-```mlir
-%pid = vc4kernel.program_id : i32
-%lanes = vc4kernel.lane_range : vector<16xi32>
-%sixteen = arith.constant 16 : i32
-%base_elem = arith.muli %pid, %sixteen : i32
-%base_byte = arith.shli %base_elem, %two : i32
-%base_byte_v = vc4kernel.splat %base_byte : i32 -> vector<16xi32>
-%lane_bytes = vc4kernel.fragment_shl %lanes, %two : vector<16xi32>, i32 -> vector<16xi32>
-%byte_offsets = vc4kernel.fragment_add %base_byte_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-%pred = vc4kernel.pred.tail %base_elem, %n : i32, i32 -> !vc4kernel.pred<16>
-%xv = vc4kernel.tmu_load_fragment %x, %byte_offsets, %pred : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-vc4kernel.vdw_store_fragment %y, %byte_offsets, %xv, %pred : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
-```
-
-### 20.3 VPM roundtrip sketch
-
-```mlir
-%tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-%row0 = arith.constant 0 : i32
-%pred = vc4kernel.pred.full : !vc4kernel.pred<16>
-vc4kernel.vpm_write_fragment %tile, %row0, %value, %pred {orientation = #vc4kernel.vpm_orientation<row>}
-  : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
-%read = vc4kernel.vpm_read_fragment %tile, %row0, %pred {orientation = #vc4kernel.vpm_orientation<row>}
-  : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
-```
-
----
-
-## 21. Required tests for the dialect/conversion implementation
-
-A `vc4kernel` implementation is not complete unless it includes tests covering these categories.
-
-### 21.1 Dialect roundtrip tests
-
-Required files under `compiler/test/Dialect/VC4Kernel/`:
+Required source tests include:
 
 ```text
 kernel-roundtrip.mlir
@@ -1994,36 +1950,50 @@ tmu-vdw-roundtrip.mlir
 vpm-roundtrip.mlir
 vdr-vpm-roundtrip.mlir
 barrier-roundtrip.mlir
-resource-roundtrip.mlir
+resource-computation-roundtrip-or-diagnostic.mlir
 ```
 
-### 21.2 Invalid diagnostics
+Tests must be updated to remove `block_id`, `lane_id`, and source-authored resource dictionaries.
 
-Required invalid tests:
+### 20.2 Invalid diagnostics
+
+Required invalid tests include:
 
 ```text
 invalid-forbidden-vector-op.mlir
 invalid-forbidden-memref.mlir
 invalid-forbidden-scf.mlir
 invalid-forbidden-thread-id.mlir
+invalid-forbidden-block-id.mlir
+invalid-forbidden-lane-id.mlir
 invalid-index-type.mlir
 invalid-vector-width.mlir
 invalid-vector-i1-mask.mlir
 invalid-sub32-type.mlir
 invalid-kernel-arg-attrs.mlir
-invalid-resource-metadata.mlir
-invalid-predicate-nonnormalizable.mlir
+invalid-user-resource-metadata.mlir
 invalid-vdw-noncontiguous-store.mlir
 invalid-vdr-predicate.mlir
 invalid-vpm-out-of-bounds.mlir
 invalid-barrier-independent-vector.mlir
+invalid-top-level-nonkernel-op.mlir
+invalid-stray-vc4kernel-op-outside-kernel.mlir
+invalid-builtin-unrealized-cast.mlir
+invalid-arith-cmpi-non-i32.mlir
+invalid-vpm-dynamic-coordinate-unproven.mlir
+invalid-vpm-handle-block-arg.mlir
+invalid-lower-half-dialect-ssavc4-vc4.mlir
+invalid-producer-dialect-tt-gpu-linalg.mlir
+invalid-vdr-vdw-vpm-unaligned-offset.mlir
+invalid-vdw-unaligned-or-unknown-base.mlir
+invalid-subword-executable-vpm-mode.mlir
 ```
 
-Each invalid test must check a deterministic semantic diagnostic, not only a parser failure.
+`invalid-predicate-nonnormalizable` from the old spec should be replaced or revised: non-normalizable/general masks are now legal where consumers have a fallback, and illegal only for consumers that cannot support them.
 
-### 21.3 Conversion lit tests
+### 20.3 Conversion tests
 
-Required files under `compiler/test/Conversion/VC4KernelToSSAVC4/`:
+Required conversion lit files include:
 
 ```text
 minimal-kernel.mlir
@@ -2031,181 +2001,146 @@ formal-args-launch-abi.mlir
 identity-lowering.mlir
 lane-range-lowering.mlir
 predicate-tail-lowering.mlir
+predicate-general-mask-lowering.mlir
+fragment-cmp-select-lowering.mlir
 fragment-arith-lowering.mlir
-fragment-rotate-reduce-lowering.mlir
-tmu-load-fragment.mlir
-vdw-store-fragment.mlir
-vpm-read-write-fragment.mlir
-vdr-load-to-vpm.mlir
-vdw-store-vpm-fragment.mlir
+fragment-imul32-lowering.mlir
+fragment-rotate-lowering.mlir
+fragment-reduce-lowering.mlir
+tmu-load-fragment-full-tail-general.mlir
+vdw-store-fragment-staging.mlir
+vdw-store-fragment-general-mask-preserve.mlir
+vpm-read-write-horizontal.mlir
+vpm-read-write-vertical.mlir
+vdr-load-to-vpm-horizontal-vertical.mlir
+vdw-store-vpm-horizontal-vertical.mlir
 barrier-lowering.mlir
 control-flow-block-args.mlir
 reject-forbidden-surface-ops.mlir
 reject-direct-scheduled-vc4.mlir
 ```
 
-### 21.4 Hardware fixtures
+### 20.4 Hardware fixtures
 
-At least these executable hardware fixtures must be added under `compiler/test/CodeGen/VC4Kernel/Hardware/Run/` or the equivalent final location:
+Every executable feature requires real hardware proof.
+
+Minimum hardware fixtures:
 
 ```text
-vector_store_smoke_vc4kernel
-program_id_writeback_vc4kernel
-tmu_load_saxpy_vc4kernel
-vdw_tail_store_vc4kernel
-vpm_roundtrip_vc4kernel
-vdr_to_vpm_roundtrip_vc4kernel
-vpm_to_global_vdw_vc4kernel
-fragment_reduce_sum_vc4kernel
-control_flow_tail_block_args_vc4kernel
-qpu_barrier_syncthreads_vc4kernel
+vc4kernel_vector_store_full
+vc4kernel_vector_store_tail_preserve
+vc4kernel_vector_store_general_mask_preserve
+vc4kernel_program_id_writeback
+vc4kernel_tmu_load_full
+vc4kernel_tmu_load_tail_zero_fill
+vc4kernel_tmu_load_general_mask_zero_fill
+vc4kernel_saxpy_f32
+vc4kernel_f32_scalar_uniform_splat
+vc4kernel_imul32_fast_mul24
+vc4kernel_imul32_software_fallback
+vc4kernel_fragment_rotate
+vc4kernel_fragment_reduce_sum
+vc4kernel_vpm_roundtrip_horizontal_32
+vc4kernel_vpm_roundtrip_vertical_32
+vc4kernel_vdr_to_vpm_horizontal_32
+vc4kernel_vdr_to_vpm_vertical_32
+vc4kernel_vpm_to_global_vdw_horizontal_32
+vc4kernel_vpm_to_global_vdw_vertical_32
+vc4kernel_control_flow_block_args
+vc4kernel_qpu_barrier_syncthreads
 ```
 
 Every hardware fixture must:
 
 ```text
-- generate candidate artifacts from vc4kernel input
+- generate fresh candidate artifacts from vc4kernel input
 - lower through vc4kernel -> ssavc4 -> scheduled vc4
 - assemble/build/run on real hardware
 - compare copied-back device output to a CPU reference
-- check sentinels for inactive-store preservation where stores are predicated
-- check zero-fill behavior where loads are predicated
+- check sentinel preservation for predicated stores
+- check zero-fill behavior for predicated loads
 - not use reference QASM
 - not fake VC4_TEST_RESULT
 - not compute the output on the host harness instead of the device
 ```
 
-### 21.5 Static anti-shortcut tests
+### 20.5 Static anti-shortcut tests
 
-The test suite must scan for and reject:
+The suite must scan for and reject:
 
 ```text
-- direct kernel-to-scheduled-VC4 conversion pass
-- producer lowering in Stage 1
+- direct vc4kernel -> scheduled VC4 conversion path
+- producer lowering before the vector/Triton stages
 - executable sub-32 lowering
-- vc4kernel.tile_* surface op definitions
-- vc4kernel.thread_id
+- old tile surface op definitions
+- vc4kernel.thread_id / block_id / lane_id
 - vector dialect ops allowed by verifier
 - memref/tensor/scf/tt/gpu inside verified vc4kernel
-- fixture-name special casing in conversion
-- comments or dummy literals added solely to satisfy verifier scans
+- fixture-name/public_name special casing
+- comments or dummy literals added solely to satisfy scans
+- stale candidate reuse in acceptance gates
 ```
 
----
-
-## 22. Implementation checklist
-
-### 22.1 Namespace and build integration
-
-```text
-- Register VC4Kernel dialect in vc4-opt.
-- Add VC4Kernel dialect and conversion libraries to CMake.
-- Add --verify-vc4kernel.
-- Add --convert-vc4kernel-to-ssavc4.
-```
-
-### 22.2 Keep producer value operations out
-
-Any `vector.broadcast` or `vector.splat` usage inside `vc4kernel` must become:
-
-```text
-vc4kernel.splat
-```
-
-The verifier must reject all `vector.*` operations.
-
-### 22.3 Forbid synthetic thread identity
-
-Do not add `vc4kernel.thread_id`. If a direct thread identity helper is proposed, reject it and use explicit arithmetic from legal identity values instead.
-
-### 22.4 Use predicate type for masks
-
-Replace raw `vector<16xi1>` mask results/operands with:
-
-```text
-!vc4kernel.pred<16>
-```
-
-Ensure all consumers are updated and tests reject `vector<16xi1>` masks.
-
-### 22.5 Tighten ODS constraints
-
-No final `vc4kernel` op should use unconstrained `AnyType` when a precise constraint exists.
-
-Use precise constraints for:
-
-```text
-i1
-i32
-f32
-vector<16xi32>
-vector<16xf32>
-!vc4kernel.pred<16>
-!vc4kernel.vpm_tile
-```
-
-### 22.6 Conversion cleanup
-
-The conversion must be named and scoped as:
-
-```text
-VC4KernelToSSAVC4
-```
-
-If planning is needed, it belongs above `vc4kernel` in the future vector-to-vc4kernel pass.
-
----
-
-## 23. Acceptance definition
+### 20.6 Final Stage 1 acceptance definition
 
 `vc4kernel` Stage 1 is accepted only when all of these are true:
 
 ```text
 1. The dialect exists as vc4kernel with final names and namespace.
-2. The ODS op/type/attr inventory exactly matches this document.
-3. The verifier rejects every forbidden dialect/type/op class listed here.
-4. No producer-facing surface op exists in vc4kernel.
-5. No vc4kernel.thread_id exists.
-6. No vector dialect op is legal in vc4kernel.
-7. No memref/tensor/scf/tt/gpu/linalg/producers are legal in vc4kernel.
-8. Raw vector<16xi1> masks are replaced by !vc4kernel.pred<16>.
-9. Global memory ops use explicit TMU/VDR/VDW path names.
-10. VPM ops use !vc4kernel.vpm_tile and VPM-specific names.
-11. Conversion is vc4kernel -> ssavc4 only.
-12. No direct vc4kernel -> scheduled vc4 path exists.
-13. Required lit tests pass.
-14. Required hardware fixtures pass on real VC4 hardware.
-15. check-vc4 remains green.
-16. Anti-shortcut/integrity scans pass.
+2. The ODS op/type/attr inventory matches this document.
+3. FunctionOpInterface and function_type behavior are coherent.
+4. The verifier rejects every forbidden dialect/type/op class listed here.
+5. No producer-facing surface op exists in vc4kernel.
+6. No vc4kernel.thread_id, vc4kernel.block_id, or vc4kernel.lane_id exists.
+7. No vector dialect op is legal in vc4kernel.
+8. No memref/tensor/scf/tt/gpu/linalg/producers are legal in vc4kernel.
+9. Raw vector<16xi1> masks are replaced by !vc4kernel.pred<16>.
+10. General predicates and fragment_cmp are supported where consumers define fallbacks.
+11. Global memory ops use explicit TMU/VDR/VDW path names.
+12. Register->global stores lower through compiler-managed VPM staging.
+13. VPM ops use !vc4kernel.vpm_tile and hardware-derived mode attrs.
+14. Resource metadata is computed, not source-authored.
+15. Runtime-assigned vpm_base_row and semaphore_base are supported where required.
+16. Conversion is vc4kernel -> ssavc4 only.
+17. No direct vc4kernel -> scheduled vc4 path exists.
+18. Required lit tests pass.
+19. Required hardware fixtures pass on real VC4 hardware.
+20. check-vc4 remains green.
+21. Anti-shortcut/integrity scans pass.
 ```
-
-If any item fails, the dialect is not complete.
 
 ---
 
-## 24. Future revisions explicitly outside this spec
+## 21. Future revisions outside this spec
 
-The following are deliberately outside the initial final `vc4kernel` spec:
+Outside the current executable spec:
 
 ```text
-- Triton TTIR parsing/registration/lowering
+- Triton TTIR parsing/registration/lowering implementation
 - IREE/Linalg lowering
-- standard vector/memref/arith -> vc4kernel lowering implementation
-- executable sub-32 precision
+- standard vector/memref/arith -> vc4kernel implementation
+- executable f16/bf16/fp8/int8/int4/sub-32 precision
 - quantization
-- packed VPM lane modes
-- arbitrary sparse predicates
-- arbitrary scatter stores
+- packed/laned executable VPM movement
+- arbitrary global scatter stores
 - fragment_contract / matmul-specific planned op
-- column-major/transposed layout algebra as a vc4kernel surface
-- dynamic VPM layout beyond verified hardware modes
-- multi-axis program_id support beyond axis 0
+- multi-axis program_id beyond axis 0
 ```
 
 These may be added only by separate design documents and vertical hardware-proven implementation slices.
 
 ---
 
-## 25. Final one-paragraph contract
+## 22. Final one-paragraph contract
 
-`vc4kernel` is a strict VC4 target-kernel planning dialect below standard MLIR vector/memref/arith/scf/cf and above SSAVC4. It contains only kernel metadata, logical identity, 16-lane data fragments, structured VC4 predicates, explicit TMU/VDR/VPM/VDW memory path operations, VPM resource handles, barriers, scalar CFG, and target fragment arithmetic/reduction operations. It contains no old ergonomic tile surface, no memref, no vector dialect operations, no raw SCF, no Triton/IREE/producers, no thread_id, no vector<16xi1> masks, and no executable sub-32 precision. Its only valid lower path is `vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware`.
+`vc4kernel` is a strict VC4 target-kernel planning dialect below standard MLIR vector/memref/arith/scf/cf and above SSAVC4. It contains only a function-like kernel wrapper, formal ABI metadata, logical program/warp identity, SIMD lane ranges, 16-lane data fragments, 16-lane predicate/mask values, explicit TMU/VDR/VPM/VDW memory path operations, VPM allocation handles, compiler-managed VPM staging requirements, barriers, scalar CFG, and target fragment arithmetic/reduction operations. It contains no old tile surface, no memref, no vector dialect operations, no raw SCF, no Triton/IREE/producers, no thread_id/block_id/lane_id, no vector<16xi1> masks, and no executable sub-32 precision. It computes resource requirements instead of accepting source-authored resource summaries. Its only valid lower path is `vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware`.
+
+---
+
+## References used for this replacement spec
+
+- Current old strict spec attached in this conversation: `vc4kernel_dialect_strict_specification.md`, 2026-05-31 upload.
+- Earlier strict spec and rescope roadmap attached in this conversation.
+- Broadcom, *VideoCore IV 3D Architecture Reference Guide*, especially QPU SIMD/uniform/condition/branch sections and VPM/VDR/VDW setup tables.
+- vc4asm documentation: <https://www.maazl.de/project/vc4asm/doc/index.html> and <https://www.maazl.de/project/vc4asm/doc/vc4.qinc.html>.
+- Triton documentation for `tt.load`, `tt.store`, `tt.make_range`, `triton.Config`, TritonGPU local-memory/memdesc ops, and NVIDIA backend metadata extraction/packing.
