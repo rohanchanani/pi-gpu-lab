@@ -6,7 +6,12 @@
 #define CHECKSUM_SCALE 1024.0f
 #define SAXPY_FULL_SSAVC4_MAX_N 1000u
 #define SAXPY_FULL_SSAVC4_GUARD 32u
-#define SAXPY_FULL_SSAVC4_BUFFER_N (SAXPY_FULL_SSAVC4_MAX_N + SAXPY_FULL_SSAVC4_GUARD)
+#define SAXPY_FULL_SSAVC4_ACTIVE_QPUS 12u
+#define SAXPY_FULL_SSAVC4_LANE_WIDTH 16u
+#define SAXPY_FULL_SSAVC4_ELEMENTS_PER_WAVE (SAXPY_FULL_SSAVC4_ACTIVE_QPUS * SAXPY_FULL_SSAVC4_LANE_WIDTH)
+#define SAXPY_FULL_SSAVC4_MAX_WAVES ((SAXPY_FULL_SSAVC4_MAX_N + SAXPY_FULL_SSAVC4_ELEMENTS_PER_WAVE - 1u) / SAXPY_FULL_SSAVC4_ELEMENTS_PER_WAVE)
+#define SAXPY_FULL_SSAVC4_MAX_COVERAGE_N (SAXPY_FULL_SSAVC4_MAX_WAVES * SAXPY_FULL_SSAVC4_ELEMENTS_PER_WAVE)
+#define SAXPY_FULL_SSAVC4_BUFFER_N (SAXPY_FULL_SSAVC4_MAX_COVERAGE_N + SAXPY_FULL_SSAVC4_GUARD)
 #define SAXPY_FULL_SSAVC4_SENTINEL (-12345.0f)
 
 static float x_values[SAXPY_FULL_SSAVC4_BUFFER_N];
@@ -24,7 +29,7 @@ static void fill_inputs(uint32_t n) {
         y_initial[i] = y_values[i];
         expected_values[i] = y_values[i];
     }
-    for (uint32_t i = n; i < n + SAXPY_FULL_SSAVC4_GUARD && i < SAXPY_FULL_SSAVC4_BUFFER_N; i++) {
+    for (uint32_t i = n; i < SAXPY_FULL_SSAVC4_BUFFER_N; i++) {
         y_values[i] = SAXPY_FULL_SSAVC4_SENTINEL;
         y_initial[i] = SAXPY_FULL_SSAVC4_SENTINEL;
         expected_values[i] = SAXPY_FULL_SSAVC4_SENTINEL;
@@ -44,9 +49,9 @@ static void verify_results(uint32_t n, int *mismatch_count, float *max_abs_diff)
         }
     }
 }
-static int verify_sentinel_tail(uint32_t n) {
+static int verify_sentinel_region(uint32_t n) {
     int mismatches = 0;
-    for (uint32_t i = n; i < n + SAXPY_FULL_SSAVC4_GUARD && i < SAXPY_FULL_SSAVC4_BUFFER_N; i++) {
+    for (uint32_t i = n; i < SAXPY_FULL_SSAVC4_BUFFER_N; i++) {
         if (y_values[i] != SAXPY_FULL_SSAVC4_SENTINEL) {
             if (mismatches < 8) printk("ERROR: sentinel changed n=%d i=%d value=%f expected=%f\n", (int)n, (int)i, y_values[i], SAXPY_FULL_SSAVC4_SENTINEL);
             mismatches++;
@@ -60,8 +65,12 @@ void notmain(void) {
     struct vc4_program *program = 0;
     if (vc4_program_create(&program, 0) < 0 || !program) panic("vc4_program_create failed");
 
-    uint32_t activeQpus = 12u;
-    uint32_t laneWidth = 16u;
+    uint32_t activeQpus = SAXPY_FULL_SSAVC4_ACTIVE_QPUS;
+    uint32_t laneWidth = SAXPY_FULL_SSAVC4_LANE_WIDTH;
+    uint32_t elements_per_wave = activeQpus * laneWidth;
+    uint32_t max_waves = (SAXPY_FULL_SSAVC4_MAX_N + elements_per_wave - 1u) / elements_per_wave;
+    uint32_t max_coverage_n = max_waves * elements_per_wave;
+    uint32_t buffer_n = max_coverage_n + SAXPY_FULL_SSAVC4_GUARD;
     vc4_dim3 block = vc4_m2_dim3(activeQpus * laneWidth, 1, 1);
 
     printk("Running VC4 saxpy_full_ssavc4 candidate bundle...\n");
@@ -77,14 +86,14 @@ void notmain(void) {
         fill_inputs(n);
         run_cpu_reference(alpha, n);
         vc4_deviceptr_t x_dev = 0, y_dev = 0;
-        uint32_t bytes = SAXPY_FULL_SSAVC4_BUFFER_N * sizeof(float);
+        uint32_t bytes = buffer_n * sizeof(float);
         if (vc4_m2_malloc(program, &x_dev, bytes) < 0 || vc4_m2_malloc(program, &y_dev, bytes) < 0 ||
             vc4_m2_copy_htod(program, x_dev, x_values, bytes) < 0 || vc4_m2_copy_htod(program, y_dev, y_values, bytes) < 0) {
             launchFailures++;
             continue;
         }
-        uint32_t elementsPerWave = activeQpus * laneWidth;
-        uint32_t waves = n == 0u ? 0u : (n + elementsPerWave - 1u) / elementsPerWave;
+        uint32_t waves = n == 0u ? 0u : (n + elements_per_wave - 1u) / elements_per_wave;
+        uint32_t roundedCoverage = waves * elements_per_wave;
         vc4_dim3 grid = vc4_m2_dim3(waves, 1, 1);
         printk("VC4_KERNEL_LAUNCH name=saxpy_full_ssavc4 case=%u n=%u\n", caseIndex, n);
         if (saxpy_full_ssavc4_launch(program, grid, block, x_dev, y_dev, alpha, n) < 0 ||
@@ -96,7 +105,7 @@ void notmain(void) {
         vc4Free(program, y_dev);
         int mismatches = 0; float maxAbsDiff = 0.0f;
         verify_results(n, &mismatches, &maxAbsDiff);
-        int caseSentinelMismatches = verify_sentinel_tail(n);
+        int caseSentinelMismatches = verify_sentinel_region(n);
         int checksum = scaled_checksum(y_values, n);
         int expectedChecksum = scaled_checksum(expected_values, n);
         if (checksum != expectedChecksum) { printk("ERROR: checksum mismatch n=%d gpu=%d cpu=%d\n", (int)n, checksum, expectedChecksum); mismatches++; }
@@ -104,7 +113,7 @@ void notmain(void) {
         totalMismatches += mismatches;
         sentinelMismatches += caseSentinelMismatches;
         checksumAccum += checksum;
-        printk("SAXPY_FULL_SSAVC4_CASE n=%d qpus=%d lanes=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n", (int)n, (int)activeQpus, (int)laneWidth, mismatches, caseSentinelMismatches, checksum, maxAbsDiff, (int)(caseIndex + 1), 1);
+        printk("SAXPY_FULL_SSAVC4_CASE n=%d qpus=%d lanes=%d coverage=%d buffer_n=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f launches=%d allocations=%d\n", (int)n, (int)activeQpus, (int)laneWidth, (int)roundedCoverage, (int)buffer_n, mismatches, caseSentinelMismatches, checksum, maxAbsDiff, (int)(caseIndex + 1), 1);
     }
     int elapsed = timer_get_usec() - start;
     const char *status = (totalMismatches == 0 && sentinelMismatches == 0 && launchFailures == 0) ? "PASS" : "FAIL";
