@@ -90,6 +90,8 @@ constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
 constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
+constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
+constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
 
 static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -901,6 +903,16 @@ static Value createI32Add(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
+static Value createI32Sub(OpBuilder &builder, Location loc, Value lhs,
+                          Value rhs) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(),
+                                          mlir::vc4::AddOpcode::sub))},
+      lhs.getType());
+}
+
 static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
                             int64_t constant) {
   if (constant == 0)
@@ -963,6 +975,58 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
   if (result.matched)
     return result;
   return matchBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
+}
+
+static Value createSubFlags(OpBuilder &builder, Location loc, Value lhs,
+                            Value rhs) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4MakeFlagsOpName, {lhs, rhs},
+      {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
+                                        builder.getContext(),
+                                        mlir::ssavc4::FlagKind::sub))},
+      mlir::ssavc4::FlagsType::get(builder.getContext()));
+}
+
+static void createBranch(OpBuilder &builder, Location loc, Block *target) {
+  OperationState state(loc, kSSAVC4BranchOpName);
+  state.addSuccessors(target);
+  builder.create(state);
+}
+
+static void createCondBranch(OpBuilder &builder, Location loc, Value flags,
+                             Block *trueDest, Block *falseDest,
+                             mlir::vc4::BranchCond cond) {
+  OperationState state(loc, kSSAVC4CondBranchOpName);
+  state.addOperands(flags);
+  state.addSuccessors({trueDest, falseDest});
+  state.addAttribute("cond",
+                     mlir::vc4::BranchCondAttr::get(builder.getContext(),
+                                                    cond));
+  state.addAttribute("operandSegmentSizes",
+                     builder.getDenseI32ArrayAttr({1, 0, 0}));
+  builder.create(state);
+}
+
+static void emitVDWStore(Operation *op, OpBuilder &builder, Value base,
+                         Value value, Value activeLanes, LoweringState &state,
+                         std::optional<int64_t> staticActiveLanes) {
+  SmallVector<Value, 4> operands{base, value, activeLanes};
+  SmallVector<int32_t, 4> segments{1, 1, 1, 0};
+  if (Value vpmBase = state.launchABI.lookupBuiltin("vpm_base_row")) {
+    operands.push_back(vpmBase);
+    segments[3] = 1;
+  }
+  SmallVector<NamedAttribute, 8> attrs{
+      getSSAVC4VPMWidth(builder, op),
+      getSSAVC4VPMSubword(builder, op),
+      builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
+      builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+      builder.getNamedAttr("operandSegmentSizes",
+                           builder.getDenseI32ArrayAttr(segments))};
+  if (staticActiveLanes)
+    attrs.push_back(builder.getNamedAttr(
+        "active_lanes", builder.getI32IntegerAttr(*staticActiveLanes)));
+  createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands, attrs);
 }
 
 static FailureOr<Value> applyVPMTileBase(Operation *op, OpBuilder &builder,
@@ -1214,14 +1278,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreOpName)) {
-    if (failed(requireFullPredicate(op, op->getOperand(3), state,
-                                    "vdw_store_fragment")))
-      return failure();
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
     if (!offsets.matched)
       return op->emitOpError(
           "vdw_store_fragment lowering currently supports only contiguous "
           "byte_offsets = base_byte_offset + 4*lane_range");
+    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(3),
+                                                         state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    if (predicate->kind != PredicatePlan::Class::Full &&
+        predicate->kind != PredicatePlan::Class::Empty &&
+        predicate->kind != PredicatePlan::Class::TailPrefix)
+      return op->emitOpError()
+             << "vdw_store_fragment lowering currently supports only "
+                "pred.full, pred.empty, and pred.tail";
     Value base = mapValue(op, op->getOperand(0), state);
     Value value = mapValue(op, op->getOperand(2), state);
     if (!base || !value)
@@ -1233,25 +1304,62 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         return failure();
       base = createI32Add(builder, op->getLoc(), base, mappedOffset);
     }
-    Value activeLanes =
+    if (predicate->kind == PredicatePlan::Class::Empty)
+      return success();
+    Value sixteen =
         createLoadImm(builder, op->getLoc(), builder.getI32Type(),
                       builder.getI32IntegerAttr(16));
-    SmallVector<Value, 4> operands{base, value, activeLanes};
-    SmallVector<int32_t, 4> segments{1, 1, 1, 0};
-    if (Value vpmBase = state.launchABI.lookupBuiltin("vpm_base_row")) {
-      operands.push_back(vpmBase);
-      segments[3] = 1;
+    if (predicate->kind == PredicatePlan::Class::Full) {
+      emitVDWStore(op, builder, base, value, sixteen, state,
+                   /*staticActiveLanes=*/16);
+      return success();
     }
-    createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
-             {getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("active_lanes",
-                                   builder.getI32IntegerAttr(16)),
-              builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
-              builder.getNamedAttr("serialize",
-                                   builder.getStringAttr("mutex")),
-              builder.getNamedAttr("operandSegmentSizes",
-                                   builder.getDenseI32ArrayAttr(segments))});
+
+    Value baseIndex = predicate->base;
+    Value limit = predicate->limit;
+    if (!baseIndex || !limit)
+      return op->emitOpError("pred.tail plan is missing base or limit values");
+
+    Value one =
+        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                      builder.getI32IntegerAttr(1));
+    Value basePlusOne = createI32Add(builder, op->getLoc(), baseIndex, one);
+    Value basePlusSixteen =
+        createI32Add(builder, op->getLoc(), baseIndex, sixteen);
+    Value activeTail = createI32Sub(builder, op->getLoc(), limit, baseIndex);
+    Value nonEmptyFlags =
+        createSubFlags(builder, op->getLoc(), limit, basePlusOne);
+
+    Region *region = builder.getInsertionBlock()->getParent();
+    Block *nonEmptyBlock = new Block();
+    Block *tailBlock = new Block();
+    Block *fullBlock = new Block();
+    Block *doneBlock = new Block();
+    region->push_back(nonEmptyBlock);
+    region->push_back(tailBlock);
+    region->push_back(fullBlock);
+    region->push_back(doneBlock);
+
+    createCondBranch(builder, op->getLoc(), nonEmptyFlags, doneBlock,
+                     nonEmptyBlock, mlir::vc4::BranchCond::any_c_set);
+
+    builder.setInsertionPointToEnd(nonEmptyBlock);
+    Value fullFlags =
+        createSubFlags(builder, op->getLoc(), limit, basePlusSixteen);
+    createCondBranch(builder, op->getLoc(), fullFlags, fullBlock, tailBlock,
+                     mlir::vc4::BranchCond::any_c_clear);
+
+    builder.setInsertionPointToEnd(tailBlock);
+    emitVDWStore(op, builder, base, value, activeTail, state,
+                 /*staticActiveLanes=*/std::nullopt);
+    createBranch(builder, op->getLoc(), doneBlock);
+
+    builder.setInsertionPointToEnd(fullBlock);
+    emitVDWStore(op, builder, base, value, sixteen, state,
+                 /*staticActiveLanes=*/16);
+    createBranch(builder, op->getLoc(), doneBlock);
+
+    builder.setInsertionPointToEnd(doneBlock);
     return success();
   }
   if (hasName(op, kVPMAllocOpName)) {
