@@ -730,6 +730,14 @@ LogicalResult FragmentShlOp::verify() {
                              "vector<16xi32>");
 }
 LogicalResult FragmentCmpOp::verify() {
+  if (!isVC4KernelVector16I32Type(getLhs().getType()) ||
+      !isVC4KernelVector16I32Type(getRhs().getType()))
+    return emitOpError(
+        "fragment_cmp supports only vector<16xi32> operands in v1");
+  if (failed(verifySameType(getOperation(), getLhs().getType(),
+                            getRhs().getType(),
+                            "fragment_cmp operands")))
+    return failure();
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult FragmentSelectOp::verify() {

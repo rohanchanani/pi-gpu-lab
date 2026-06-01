@@ -197,8 +197,8 @@ def VC4Kernel_FragmentShlOp : VC4Kernel_PureOp<"fragment_shl"> {
 }
 
 def VC4Kernel_FragmentCmpOp : VC4Kernel_PureOp<"fragment_cmp"> {
-  let arguments = (ins VC4Kernel_Vector16I32:$lhs,
-                       VC4Kernel_Vector16I32:$rhs,
+  let arguments = (ins VC4Kernel_Vector16Data:$lhs,
+                       VC4Kernel_Vector16Data:$rhs,
                        VC4Kernel_CmpPredicateAttr:$predicate);
   let results = (outs VC4Kernel_PredType:$result);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
