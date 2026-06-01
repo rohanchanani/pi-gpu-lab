@@ -12,7 +12,7 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     // CHECK: expected 4 operands
-    "vc4kernel.vdr_load_to_vpm"(%ptr, %c0, %tile, %c0, %full) {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32} : (i32, i32, !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16>) -> ()
+    "vc4kernel.vdr_load_to_vpm"(%ptr, %c0, %tile, %c0, %full) {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32} : (i32, i32, !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16>) -> ()
     vc4kernel.return
   }
 }

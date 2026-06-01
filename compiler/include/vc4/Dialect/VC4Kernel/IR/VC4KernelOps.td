@@ -268,7 +268,11 @@ def VC4Kernel_VPMWriteFragmentOp : VC4Kernel_Op<"vpm_write_fragment", [
                        VC4Kernel_I32:$row,
                        VC4Kernel_Vector16Data:$value,
                        VC4Kernel_PredType:$pred,
-                       VC4Kernel_VPMOrientationAttr:$orientation);
+                       VC4Kernel_VPMOrientationAttr:$orientation,
+                       VC4Kernel_VPMWidthAttr:$width,
+                       VC4Kernel_VPMSubwordAttr:$subword,
+                       I32Attr:$x,
+                       I32Attr:$stride);
   let assemblyFormat = "$tile `,` $row `,` $value `,` $pred attr-dict `:` type($tile) `,` type($row) `,` type($value) `,` type($pred)";
   let hasVerifier = 1;
 }
@@ -279,7 +283,11 @@ def VC4Kernel_VPMReadFragmentOp : VC4Kernel_Op<"vpm_read_fragment", [
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$row,
                        VC4Kernel_PredType:$pred,
-                       VC4Kernel_VPMOrientationAttr:$orientation);
+                       VC4Kernel_VPMOrientationAttr:$orientation,
+                       VC4Kernel_VPMWidthAttr:$width,
+                       VC4Kernel_VPMSubwordAttr:$subword,
+                       I32Attr:$x,
+                       I32Attr:$stride);
   let results = (outs VC4Kernel_Vector16Data:$result);
   let assemblyFormat = "$tile `,` $row `,` $pred attr-dict `:` type($tile) `,` type($row) `,` type($pred) `->` type($result)";
   let hasVerifier = 1;
@@ -295,7 +303,12 @@ def VC4Kernel_VDRLoadToVPMOp : VC4Kernel_Op<"vdr_load_to_vpm", [
                        I32Attr:$rows,
                        I32Attr:$cols,
                        I32Attr:$global_stride_bytes,
-                       I32Attr:$elem_bytes);
+                       I32Attr:$elem_bytes,
+                       VC4Kernel_VPMOrientationAttr:$orientation,
+                       VC4Kernel_VPMWidthAttr:$width,
+                       VC4Kernel_VPMSubwordAttr:$subword,
+                       I32Attr:$dst_x,
+                       I32Attr:$vpm_pitch);
   let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row)";
   let hasVerifier = 1;
 }
@@ -308,7 +321,12 @@ def VC4Kernel_VDWStoreVPMFragmentOp : VC4Kernel_Op<"vdw_store_vpm_fragment", [
                        VC4Kernel_I32:$base,
                        VC4Kernel_I32:$byte_offset,
                        VC4Kernel_PredType:$pred,
-                       I32Attr:$elem_bytes);
+                       I32Attr:$elem_bytes,
+                       VC4Kernel_VPMOrientationAttr:$orientation,
+                       VC4Kernel_VPMWidthAttr:$width,
+                       VC4Kernel_VPMSubwordAttr:$subword,
+                       I32Attr:$src_x,
+                       I32Attr:$vpm_pitch);
   let assemblyFormat = "$tile `,` $src_row `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) `,` type($base) `,` type($byte_offset) `,` type($pred)";
   let hasVerifier = 1;
 }

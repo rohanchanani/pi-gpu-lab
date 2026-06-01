@@ -40,8 +40,22 @@ def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
 
 def VC4Kernel_VPMOrientation : VC4Kernel_DialectI32Enum<"VPMOrientation",
     "VC4Kernel VPM fragment orientation", [
-      I32EnumAttrCase<"row", 0>,
-      I32EnumAttrCase<"column", 1>
+      I32EnumAttrCase<"horizontal", 0>,
+      I32EnumAttrCase<"vertical", 1>
+    ]>;
+
+def VC4Kernel_VPMWidth : VC4Kernel_DialectI32Enum<"VPMWidth",
+    "VC4Kernel VPM element width", [
+      I32EnumAttrCase<"w32", 0>,
+      I32EnumAttrCase<"w16", 1>,
+      I32EnumAttrCase<"w8", 2>
+    ]>;
+
+def VC4Kernel_VPMSubword : VC4Kernel_DialectI32Enum<"VPMSubword",
+    "VC4Kernel VPM subword packing mode", [
+      I32EnumAttrCase<"none", 0>,
+      I32EnumAttrCase<"packed", 1>,
+      I32EnumAttrCase<"laned", 2>
     ]>;
 
 def VC4Kernel_ScheduleModeAttr
@@ -52,5 +66,9 @@ def VC4Kernel_CmpPredicateAttr
     : VC4Kernel_EnumAttr<VC4Kernel_CmpPredicate, "cmp">;
 def VC4Kernel_VPMOrientationAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMOrientation, "vpm_orientation">;
+def VC4Kernel_VPMWidthAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_VPMWidth, "vpm_width">;
+def VC4Kernel_VPMSubwordAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_VPMSubword, "vpm_subword">;
 
 #endif // VC4KERNEL_ATTRS_TD

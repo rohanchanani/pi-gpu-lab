@@ -16,11 +16,13 @@ module {
     // CHECK: vc4kernel.vpm_alloc
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     // CHECK: vc4kernel.vpm_write_fragment
-    // CHECK: #vc4kernel.vpm_orientation<row>
-    vc4kernel.vpm_write_fragment %tile, %c0, %frag, %cmp {orientation = #vc4kernel.vpm_orientation<row>} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
+    // CHECK-SAME: orientation = #vc4kernel.vpm_orientation<horizontal>
+    // CHECK-SAME: subword = #vc4kernel.vpm_subword<none>
+    // CHECK-SAME: width = #vc4kernel.vpm_width<w32>
+    vc4kernel.vpm_write_fragment %tile, %c0, %frag, %cmp {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
     // CHECK: vc4kernel.vpm_read_fragment
-    // CHECK: #vc4kernel.vpm_orientation<row>
-    %read = vc4kernel.vpm_read_fragment %tile, %c0, %cmp {orientation = #vc4kernel.vpm_orientation<row>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
+    // CHECK-SAME: orientation = #vc4kernel.vpm_orientation<vertical>
+    %read = vc4kernel.vpm_read_fragment %tile, %c0, %cmp {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 3 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
 }

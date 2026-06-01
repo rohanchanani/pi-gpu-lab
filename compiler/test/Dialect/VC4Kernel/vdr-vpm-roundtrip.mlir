@@ -15,11 +15,13 @@ module {
     // CHECK-SAME: cols = 16
     // CHECK-SAME: elem_bytes = 4
     // CHECK-SAME: global_stride_bytes = 64
+    // CHECK-SAME: orientation = #vc4kernel.vpm_orientation<horizontal>
     // CHECK-SAME: rows = 1
-    vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32} : i32, i32, !vc4kernel.vpm_tile, i32
+    vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32} : i32, i32, !vc4kernel.vpm_tile, i32
     // CHECK: vc4kernel.vdw_store_vpm_fragment
     // CHECK-SAME: elem_bytes = 4
-    vc4kernel.vdw_store_vpm_fragment %tile, %c0, %ptr, %c0, %full {elem_bytes = 4 : i32} : !vc4kernel.vpm_tile, i32, i32, i32, !vc4kernel.pred<16>
+    // CHECK-SAME: orientation = #vc4kernel.vpm_orientation<vertical>
+    vc4kernel.vdw_store_vpm_fragment %tile, %c0, %ptr, %c0, %full {elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, src_x = 2 : i32, vpm_pitch = 1 : i32} : !vc4kernel.vpm_tile, i32, i32, i32, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -380,15 +380,43 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
   return success();
 }
 
-static LogicalResult verifyOrientationRowOnly(Operation *op) {
+static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
+                                             StringRef strideAttrName) {
   auto orientation =
       llvm::dyn_cast_if_present<VPMOrientationAttr>(op->getAttr("orientation"));
   if (!orientation)
     return op->emitOpError("orientation attribute is required");
-  if (orientation.getValue() == VPMOrientation::row)
-    return success();
-  return op->emitOpError(
-      "column VPM orientation is not supported by Stage 1 lowering");
+  auto width = llvm::dyn_cast_if_present<VPMWidthAttr>(op->getAttr("width"));
+  if (!width)
+    return op->emitOpError("width attribute is required");
+  if (width.getValue() != VPMWidth::w32)
+    return op->emitOpError(
+        "sub-32 VPM width is not executable in vc4kernel v1");
+  auto subword =
+      llvm::dyn_cast_if_present<VPMSubwordAttr>(op->getAttr("subword"));
+  if (!subword)
+    return op->emitOpError("subword attribute is required");
+  if (subword.getValue() != VPMSubword::none)
+    return op->emitOpError(
+        "packed/laned VPM subword modes are not executable in vc4kernel v1");
+
+  auto xAttr = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(xAttrName));
+  if (!xAttr)
+    return op->emitOpError() << xAttrName << " attribute is required";
+  int64_t x = xAttr.getInt();
+  if (orientation.getValue() == VPMOrientation::horizontal && x != 0)
+    return op->emitOpError(
+        "horizontal 32-bit VPM access requires x = 0 in vc4kernel v1");
+  if (orientation.getValue() == VPMOrientation::vertical && (x < 0 || x > 15))
+    return op->emitOpError("vertical VPM x must be in range [0, 15]");
+
+  auto strideAttr =
+      llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(strideAttrName));
+  if (!strideAttr)
+    return op->emitOpError() << strideAttrName << " attribute is required";
+  if (strideAttr.getInt() <= 0)
+    return op->emitOpError() << strideAttrName << " must be positive";
+  return success();
 }
 
 static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
@@ -844,13 +872,13 @@ LogicalResult VPMAllocOp::verify() {
   return success();
 }
 LogicalResult VPMWriteFragmentOp::verify() {
-  if (failed(verifyOrientationRowOnly(getOperation())) ||
+  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VPMReadFragmentOp::verify() {
-  if (failed(verifyOrientationRowOnly(getOperation())) ||
+  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());
@@ -869,6 +897,8 @@ LogicalResult VDRLoadToVPMOp::verify() {
     return emitOpError("elem_bytes must be 4");
   if (getGlobalStrideBytes() <= 0 || getGlobalStrideBytes() % 4 != 0)
     return emitOpError("global_stride_bytes must be positive and 4-byte aligned");
+  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch")))
+    return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
 }
 LogicalResult VDWStoreVPMFragmentOp::verify() {
@@ -877,6 +907,8 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
     return emitOpError(
         "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
+  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
+    return failure();
   if (failed(verifyPredicateForRowTailVDW(getOperation(), getPred())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
