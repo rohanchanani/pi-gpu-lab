@@ -80,26 +80,8 @@ static IntegerAttr asIntegerAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<IntegerAttr>(attr);
 }
 
-static BoolAttr asBoolAttr(Attribute attr) {
-  return llvm::dyn_cast_if_present<BoolAttr>(attr);
-}
-
 static StringAttr getStringAttr(DictionaryAttr dict, StringRef name) {
   return dict ? asStringAttr(dict.get(name)) : nullptr;
-}
-
-static std::optional<int64_t> getI32Attr(DictionaryAttr dict, StringRef name) {
-  auto attr = dict ? asIntegerAttr(dict.get(name)) : nullptr;
-  if (!attr)
-    return std::nullopt;
-  return attr.getInt();
-}
-
-static std::optional<bool> getBoolAttr(DictionaryAttr dict, StringRef name) {
-  auto attr = dict ? asBoolAttr(dict.get(name)) : nullptr;
-  if (!attr)
-    return std::nullopt;
-  return attr.getValue();
 }
 
 static StringAttr getKernelSymNameAttr(KernelOp kernel) {
@@ -119,8 +101,8 @@ static ArrayAttr getKernelArgAttrsAttr(KernelOp kernel) {
   return asArrayAttr(kernel->getAttr("arg_attrs"));
 }
 
-static DictionaryAttr getKernelResourceAttr(KernelOp kernel) {
-  return asDictionaryAttr(kernel->getAttr("resource"));
+static IntegerAttr getKernelWarpsPerBlockAttr(KernelOp kernel) {
+  return asIntegerAttr(kernel->getAttr("warps_per_block"));
 }
 
 static std::optional<int64_t> getConstantI32(Value value) {
@@ -401,57 +383,28 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
   return success();
 }
 
-static LogicalResult verifyResource(KernelOp kernel) {
-  DictionaryAttr resource = getKernelResourceAttr(kernel);
-  if (!resource)
-    return kernel.emitOpError("resource must be a dictionary");
+static LogicalResult verifyScheduleShape(KernelOp kernel) {
+  if (kernel->getAttr("resource"))
+    return kernel.emitOpError(
+        "resource metadata is compiler-computed and must not be authored on vc4kernel.kernel");
+
   ScheduleModeAttr scheduleMode = getKernelScheduleModeAttr(kernel);
   if (!scheduleMode)
     return kernel.emitOpError(
         "schedule_mode must be #vc4kernel.schedule_mode<...>");
 
-  std::optional<int64_t> warps = getI32Attr(resource, "warps_per_block_max");
-  std::optional<bool> usesVPM = getBoolAttr(resource, "uses_vpm");
-  std::optional<bool> usesBarrier = getBoolAttr(resource, "uses_barrier");
-  std::optional<bool> fullResidency =
-      getBoolAttr(resource, "require_full_block_residency");
-  std::optional<int64_t> vpmRows = getI32Attr(resource, "vpm_rows_per_block");
-  std::optional<int64_t> vpmBytes = getI32Attr(resource, "vpm_bytes_per_block");
-  std::optional<int64_t> semaphores =
-      getI32Attr(resource, "semaphores_per_block");
-  if (!warps || !usesVPM || !usesBarrier || !fullResidency || !vpmRows ||
-      !vpmBytes || !semaphores)
-    return kernel.emitOpError("resource metadata is missing required fields");
-
-  if (*warps < 1 || *warps > 12)
-    return kernel.emitOpError("warps_per_block_max must be in range [1, 12]");
-  if (*vpmRows < 0 || *vpmRows > 64)
-    return kernel.emitOpError("vpm_rows_per_block must be in range [0, 64]");
-  if (*vpmBytes < 0 || *vpmBytes > 4096)
-    return kernel.emitOpError("vpm_bytes_per_block must be in range [0, 4096]");
-  int64_t expectedBytes = *vpmRows == 0 ? 0 : *vpmRows * 16 * 4;
-  if (*vpmBytes != expectedBytes)
-    return kernel.emitOpError(
-        "vpm_bytes_per_block must equal vpm_rows_per_block * 16 * 4");
+  IntegerAttr warpsAttr = getKernelWarpsPerBlockAttr(kernel);
+  if (!warpsAttr)
+    return kernel.emitOpError("warps_per_block must be an integer attr");
+  int64_t warps = warpsAttr.getInt();
 
   ScheduleMode mode = scheduleMode.getValue();
-  if (mode == ScheduleMode::independent_vector && *warps != 1)
+  if (mode == ScheduleMode::independent_vector && warps != 1)
     return kernel.emitOpError(
-        "independent_vector kernels must have warps_per_block_max = 1");
-  if (*usesBarrier) {
-    if (mode != ScheduleMode::cooperative_block)
-      return kernel.emitOpError(
-          "uses_barrier requires cooperative_block schedule_mode");
-    if (!*fullResidency)
-      return kernel.emitOpError(
-          "uses_barrier requires require_full_block_residency = true");
-    if (*semaphores != 4)
-      return kernel.emitOpError("uses_barrier requires semaphores_per_block = 4");
-  }
-  if (*usesVPM && *vpmRows <= 0)
-    return kernel.emitOpError("uses_vpm requires vpm_rows_per_block > 0");
-  if (*vpmRows > 0 && !*usesVPM)
-    return kernel.emitOpError("vpm_rows_per_block > 0 requires uses_vpm = true");
+        "independent_vector kernels must have warps_per_block = 1");
+  if (mode == ScheduleMode::cooperative_block && (warps < 1 || warps > 12))
+    return kernel.emitOpError(
+        "cooperative_block kernels require warps_per_block in range [1, 12]");
   return success();
 }
 
@@ -464,19 +417,10 @@ static bool isVPMUser(Operation *op) {
 }
 
 static LogicalResult verifyVPMResourceUsage(KernelOp kernel) {
-  DictionaryAttr resource = getKernelResourceAttr(kernel);
-  std::optional<bool> usesVPM = getBoolAttr(resource, "uses_vpm");
-  std::optional<int64_t> vpmRows = getI32Attr(resource, "vpm_rows_per_block");
-  std::optional<int64_t> vpmBytes = getI32Attr(resource, "vpm_bytes_per_block");
-  if (!usesVPM || !vpmRows || !vpmBytes)
-    return kernel.emitOpError("requires verified kernel resource metadata");
-
-  bool hasVPMOp = false;
   int64_t totalRows = 0;
   kernel.getBody().walk([&](Operation *op) {
     if (!isVPMUser(op))
       return;
-    hasVPMOp = true;
     if (!hasName(op, "vc4kernel.vpm_alloc"))
       return;
     auto rows = op->getAttrOfType<IntegerAttr>("rows");
@@ -484,12 +428,8 @@ static LogicalResult verifyVPMResourceUsage(KernelOp kernel) {
       totalRows += rows.getInt();
   });
 
-  if (hasVPMOp && !*usesVPM)
-    return kernel.emitOpError("VPM operations require uses_vpm = true");
-  if (totalRows > *vpmRows)
-    return kernel.emitOpError("VPM allocations exceed vpm_rows_per_block");
-  if (totalRows * 16 * 4 > *vpmBytes)
-    return kernel.emitOpError("VPM allocations exceed vpm_bytes_per_block");
+  if (totalRows > 64)
+    return kernel.emitOpError("VPM allocations exceed 64 rows");
   return success();
 }
 
@@ -599,7 +539,7 @@ LogicalResult KernelOp::verify() {
   }
   if (failed(verifyArgAttrs(*this, entry)))
     return failure();
-  if (failed(verifyResource(*this)))
+  if (failed(verifyScheduleShape(*this)))
     return failure();
   return verifyVPMResourceUsage(*this);
 }
@@ -808,19 +748,11 @@ LogicalResult BarrierOp::verify() {
   KernelOp kernel = getOperation()->getParentOfType<KernelOp>();
   if (!kernel)
     return emitOpError("must appear only inside vc4kernel.kernel");
-  DictionaryAttr resource = getKernelResourceAttr(kernel);
   ScheduleModeAttr scheduleMode = getKernelScheduleModeAttr(kernel);
-  if (!resource || !scheduleMode)
-    return emitOpError("requires verified kernel resource metadata");
+  if (!scheduleMode)
+    return emitOpError("requires verified kernel schedule metadata");
   if (scheduleMode.getValue() != ScheduleMode::cooperative_block)
     return emitOpError("barrier requires cooperative_block schedule_mode");
-  if (getBoolAttr(resource, "uses_barrier") != true)
-    return emitOpError("barrier requires uses_barrier = true");
-  if (getBoolAttr(resource, "require_full_block_residency") != true)
-    return emitOpError(
-        "barrier requires require_full_block_residency = true");
-  if (getI32Attr(resource, "semaphores_per_block") != 4)
-    return emitOpError("barrier requires semaphores_per_block = 4");
   return success();
 }
 

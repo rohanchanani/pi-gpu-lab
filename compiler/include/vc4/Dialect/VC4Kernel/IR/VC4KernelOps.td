@@ -42,7 +42,7 @@ def VC4Kernel_KernelOp : VC4Kernel_Op<"kernel", [
     TypeAttrOf<FunctionType>:$function_type,
     StrAttr:$public_name,
     VC4Kernel_ScheduleModeAttr:$schedule_mode,
-    DictionaryAttr:$resource
+    I32Attr:$warps_per_block
   );
   let regions = (region AnyRegion:$body);
   let extraClassDeclaration = [{

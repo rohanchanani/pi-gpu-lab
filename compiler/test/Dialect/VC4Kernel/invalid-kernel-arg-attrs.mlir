@@ -5,15 +5,7 @@ module {
     public_name = "length",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
     arg_attrs = [],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: arg_attrs length must match formal argument count
     vc4kernel.return
@@ -30,15 +22,7 @@ module {
       {name = "dup", kind = "scalar", direction = "by_value", type = "i32"},
       {name = "dup", kind = "scalar", direction = "by_value", type = "i32"}
     ],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: duplicate arg_attrs name 'dup'
     vc4kernel.return
@@ -54,15 +38,7 @@ module {
     arg_attrs = [
       {name = "x", kind = "scalar", direction = "by_value", type = "i32", uniform_index = 0 : i32}
     ],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: arg_attrs must not contain uniform_index
     vc4kernel.return
@@ -78,15 +54,7 @@ module {
     arg_attrs = [
       {name = "ptr", kind = "buffer", direction = "inout", elem_type = "i32"}
     ],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: buffer args must be i32 raw device pointers
     vc4kernel.return
@@ -102,15 +70,7 @@ module {
     arg_attrs = [
       {name = "x", kind = "scalar", direction = "by_value", type = "i32"}
     ],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: scalar i32/u32 arg must have i32 formal type
     vc4kernel.return
@@ -126,15 +86,7 @@ module {
     arg_attrs = [
       {name = "x", kind = "scalar", direction = "by_value"}
     ],
-    resource = {
-      uses_vpm = false,
-      uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32,
-      vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32,
-      semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     // CHECK: scalar arg_attrs require type and must not use elem_type
     vc4kernel.return

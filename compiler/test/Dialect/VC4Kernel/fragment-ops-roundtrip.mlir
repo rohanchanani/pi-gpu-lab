@@ -4,12 +4,7 @@ module {
     public_name = "frags",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
     arg_attrs = [{name = "x", kind = "scalar", direction = "by_value", type = "i32"}],
-    resource = {
-      uses_vpm = false, uses_barrier = false,
-      require_full_block_residency = false,
-      warps_per_block_max = 1 : i32, vpm_rows_per_block = 0 : i32,
-      vpm_bytes_per_block = 0 : i32, semaphores_per_block = 0 : i32
-    }
+    warps_per_block = 1 : i32
   } {
     %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>

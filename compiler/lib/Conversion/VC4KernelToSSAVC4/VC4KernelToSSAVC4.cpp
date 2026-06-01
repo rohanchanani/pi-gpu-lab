@@ -100,10 +100,6 @@ static IntegerAttr asIntegerAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<IntegerAttr>(attr);
 }
 
-static BoolAttr asBoolAttr(Attribute attr) {
-  return llvm::dyn_cast_if_present<BoolAttr>(attr);
-}
-
 static StringAttr getSymbolNameAttr(Operation *op) {
   return asStringAttr(op->getAttr(SymbolTable::getSymbolAttrName()));
 }
@@ -344,24 +340,6 @@ static StringRef getPublicName(Operation *kernel) {
   return "vc4kernel_kernel";
 }
 
-static DictionaryAttr getResource(Operation *kernel) {
-  return asDictionaryAttr(kernel->getAttr("resource"));
-}
-
-static std::optional<int64_t> getI32Attr(DictionaryAttr dict, StringRef name) {
-  auto attr = dict ? asIntegerAttr(dict.get(name)) : nullptr;
-  if (!attr)
-    return std::nullopt;
-  return attr.getInt();
-}
-
-static std::optional<bool> getBoolAttr(DictionaryAttr dict, StringRef name) {
-  auto attr = dict ? asBoolAttr(dict.get(name)) : nullptr;
-  if (!attr)
-    return std::nullopt;
-  return attr.getValue();
-}
-
 static bool kernelContains(Operation *kernel, StringRef opName) {
   bool found = false;
   kernel->walk([&](Operation *op) {
@@ -473,44 +451,76 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
   });
 }
 
-static DictionaryAttr buildResource(Operation *kernel, OpBuilder &builder) {
-  DictionaryAttr resource = getResource(kernel);
+struct VC4KernelResourceSummary {
+  StringRef scheduleMode;
+  int64_t warpsPerBlock = 1;
+  bool usesVPM = false;
+  bool usesBarrier = false;
+  bool requireFullBlockResidency = false;
+  int64_t vpmRowsPerBlock = 0;
+  int64_t vpmBytesPerBlock = 0;
+  int64_t semaphoresPerBlock = 0;
+};
+
+static VC4KernelResourceSummary
+computeVC4KernelResourceSummary(Operation *kernel) {
+  VC4KernelResourceSummary summary;
+  summary.scheduleMode = "independent_vector";
+  if (auto mode = llvm::dyn_cast_if_present<mlir::vc4kernel::ScheduleModeAttr>(
+          kernel->getAttr("schedule_mode"))) {
+    if (mode.getValue() == mlir::vc4kernel::ScheduleMode::cooperative_block)
+      summary.scheduleMode = "cooperative_block";
+  }
+  if (auto warps = asIntegerAttr(kernel->getAttr("warps_per_block")))
+    summary.warpsPerBlock = warps.getInt();
+
+  kernel->walk([&](Operation *op) {
+    if (hasName(op, kVPMAllocOpName)) {
+      summary.usesVPM = true;
+      if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
+        summary.vpmRowsPerBlock += rows.getInt();
+      return;
+    }
+    if (hasName(op, kVPMWriteOpName) || hasName(op, kVPMReadOpName) ||
+        hasName(op, kVDRLoadOpName) || hasName(op, kVDWStoreVPMOpName))
+      summary.usesVPM = true;
+    if (hasName(op, kBarrierOpName))
+      summary.usesBarrier = true;
+  });
+
+  summary.vpmBytesPerBlock = summary.vpmRowsPerBlock * 16 * 4;
+  summary.requireFullBlockResidency = summary.usesBarrier;
+  summary.semaphoresPerBlock = summary.usesBarrier ? 4 : 0;
+  return summary;
+}
+
+static DictionaryAttr buildSSAVC4ResourceMetadataFromVC4KernelSummary(
+    const VC4KernelResourceSummary &summary, OpBuilder &builder) {
   StringRef scheduleMode = "independent_vector";
-  auto mode = llvm::dyn_cast_if_present<mlir::vc4kernel::ScheduleModeAttr>(
-      kernel->getAttr("schedule_mode"));
-  if (mode &&
-      mode.getValue() == mlir::vc4kernel::ScheduleMode::cooperative_block)
+  if (summary.scheduleMode == "cooperative_block")
     scheduleMode = "cooperative_block";
   return builder.getDictionaryAttr({
       builder.getNamedAttr("schedule_mode", builder.getStringAttr(scheduleMode)),
       builder.getNamedAttr(
           "warps_per_block_max",
-          builder.getI32IntegerAttr(
-              getI32Attr(resource, "warps_per_block_max").value_or(1))),
+          builder.getI32IntegerAttr(summary.warpsPerBlock)),
       builder.getNamedAttr(
           "uses_shared_vpm",
-          builder.getBoolAttr(getBoolAttr(resource, "uses_vpm").value_or(false))),
+          builder.getBoolAttr(summary.usesVPM)),
       builder.getNamedAttr(
-          "uses_barrier",
-          builder.getBoolAttr(
-              getBoolAttr(resource, "uses_barrier").value_or(false))),
+          "uses_barrier", builder.getBoolAttr(summary.usesBarrier)),
       builder.getNamedAttr(
           "require_full_block_residency",
-          builder.getBoolAttr(
-              getBoolAttr(resource, "require_full_block_residency")
-                  .value_or(false))),
+          builder.getBoolAttr(summary.requireFullBlockResidency)),
       builder.getNamedAttr(
           "vpm_rows_per_block",
-          builder.getI32IntegerAttr(
-              getI32Attr(resource, "vpm_rows_per_block").value_or(0))),
+          builder.getI32IntegerAttr(summary.vpmRowsPerBlock)),
       builder.getNamedAttr(
           "vpm_bytes_per_block",
-          builder.getI32IntegerAttr(
-              getI32Attr(resource, "vpm_bytes_per_block").value_or(0))),
+          builder.getI32IntegerAttr(summary.vpmBytesPerBlock)),
       builder.getNamedAttr(
           "semaphores_per_block",
-          builder.getI32IntegerAttr(
-              getI32Attr(resource, "semaphores_per_block").value_or(0))),
+          builder.getI32IntegerAttr(summary.semaphoresPerBlock)),
   });
 }
 
@@ -582,7 +592,8 @@ static Operation *createSSAVC4Func(Operation *kernel, Operation *module,
   state.addAttribute(builder.getStringAttr("vc4.launch_abi"),
                      buildLaunchABI(kernel, builder));
   state.addAttribute(builder.getStringAttr("vc4.resource"),
-                     buildResource(kernel, builder));
+                     buildSSAVC4ResourceMetadataFromVC4KernelSummary(
+                         computeVC4KernelResourceSummary(kernel), builder));
   state.addRegion();
   builder.setInsertionPointToEnd(&module->getRegion(0).front());
   return builder.create(state);
