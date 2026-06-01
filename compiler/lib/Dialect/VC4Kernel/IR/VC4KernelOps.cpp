@@ -615,14 +615,8 @@ LogicalResult ReturnOp::verify() {
 LogicalResult ProgramIdOp::verify() {
   return verifyNoUniformIndex(getOperation(), "program_id");
 }
-LogicalResult BlockIdOp::verify() {
-  return verifyNoUniformIndex(getOperation(), "block_id");
-}
 LogicalResult WarpIdOp::verify() {
   return verifyNoUniformIndex(getOperation(), "warp_id");
-}
-LogicalResult LaneIdOp::verify() {
-  return verifyNoUniformIndex(getOperation(), "lane_id");
 }
 LogicalResult LaneRangeOp::verify() {
   return verifyNoUniformIndex(getOperation(), "lane_range");

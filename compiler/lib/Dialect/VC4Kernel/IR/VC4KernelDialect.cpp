@@ -22,6 +22,8 @@ using namespace mlir::vc4kernel;
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelTypes.cpp.inc"
 
 void VC4KernelDialect::initialize() {
+  allowUnknownOperations();
+
   addAttributes<
 #define GET_ATTRDEF_LIST
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelAttrDefs.cpp.inc"

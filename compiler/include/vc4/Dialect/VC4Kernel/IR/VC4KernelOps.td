@@ -102,19 +102,7 @@ def VC4Kernel_ProgramIdOp : VC4Kernel_PureOp<"program_id"> {
   let hasVerifier = 1;
 }
 
-def VC4Kernel_BlockIdOp : VC4Kernel_PureOp<"block_id"> {
-  let results = (outs VC4Kernel_I32:$result);
-  let assemblyFormat = "attr-dict `:` type($result)";
-  let hasVerifier = 1;
-}
-
 def VC4Kernel_WarpIdOp : VC4Kernel_PureOp<"warp_id"> {
-  let results = (outs VC4Kernel_I32:$result);
-  let assemblyFormat = "attr-dict `:` type($result)";
-  let hasVerifier = 1;
-}
-
-def VC4Kernel_LaneIdOp : VC4Kernel_PureOp<"lane_id"> {
   let results = (outs VC4Kernel_I32:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
   let hasVerifier = 1;

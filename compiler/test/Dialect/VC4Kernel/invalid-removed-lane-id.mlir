@@ -1,7 +1,7 @@
-// RUN: vc4-opt %s --verify-vc4kernel | FileCheck %s
+// RUN: not vc4-opt %s --allow-unregistered-dialect --verify-vc4kernel 2>&1 | FileCheck %s
 module {
-  vc4kernel.kernel @ids attributes {
-    public_name = "ids",
+  vc4kernel.kernel @bad attributes {
+    public_name = "bad",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
     arg_attrs = [],
     resource = {
@@ -11,12 +11,8 @@ module {
       vpm_bytes_per_block = 0 : i32, semaphores_per_block = 0 : i32
     }
   } {
-    // CHECK: vc4kernel.program_id
-    %p = vc4kernel.program_id : i32
-    // CHECK: vc4kernel.warp_id
-    %w = vc4kernel.warp_id : i32
-    // CHECK: vc4kernel.lane_range
-    %r = vc4kernel.lane_range : vector<16xi32>
+    // CHECK: unknown or forbidden vc4kernel operation
+    %lane = "vc4kernel.lane_id"() : () -> i32
     vc4kernel.return
   }
 }

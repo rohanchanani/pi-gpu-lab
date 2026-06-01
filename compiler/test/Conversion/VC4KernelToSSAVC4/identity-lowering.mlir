@@ -2,9 +2,7 @@
 // CHECK-LABEL: ssavc4.func @ids
 // CHECK-SAME: builtins = [
 // CHECK-SAME: logical_request
-// CHECK-SAME: logical_block_id
 // CHECK-SAME: logical_warp_id
-// CHECK: ssavc4.uniform.read
 // CHECK: ssavc4.uniform.read
 // CHECK: ssavc4.uniform.read
 // CHECK-NOT: vc4kernel.
@@ -21,7 +19,6 @@ module {
     }
   } {
     %p = vc4kernel.program_id : i32
-    %b = vc4kernel.block_id : i32
     %w = vc4kernel.warp_id : i32
     vc4kernel.return
   }

@@ -41,9 +41,7 @@ namespace {
 constexpr llvm::StringLiteral kKernelOpName("vc4kernel.kernel");
 constexpr llvm::StringLiteral kReturnOpName("vc4kernel.return");
 constexpr llvm::StringLiteral kProgramIdOpName("vc4kernel.program_id");
-constexpr llvm::StringLiteral kBlockIdOpName("vc4kernel.block_id");
 constexpr llvm::StringLiteral kWarpIdOpName("vc4kernel.warp_id");
-constexpr llvm::StringLiteral kLaneIdOpName("vc4kernel.lane_id");
 constexpr llvm::StringLiteral kLaneRangeOpName("vc4kernel.lane_range");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
 constexpr llvm::StringLiteral kFragmentAddOpName("vc4kernel.fragment_add");
@@ -115,9 +113,7 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.kernel",
       "vc4kernel.return",
       "vc4kernel.program_id",
-      "vc4kernel.block_id",
       "vc4kernel.warp_id",
-      "vc4kernel.lane_id",
       "vc4kernel.lane_range",
       "vc4kernel.pred.full",
       "vc4kernel.pred.empty",
@@ -390,9 +386,6 @@ static Attribute getBuiltinKindAttr(OpBuilder &builder, StringRef name) {
   if (name == "total_requests")
     return mlir::vc4::BuiltinKindAttr::get(
         ctx, mlir::vc4::BuiltinKind::total_requests);
-  if (name == "logical_block_id")
-    return mlir::vc4::BuiltinKindAttr::get(
-        ctx, mlir::vc4::BuiltinKind::logical_block_id);
   if (name == "logical_warp_id")
     return mlir::vc4::BuiltinKindAttr::get(
         ctx, mlir::vc4::BuiltinKind::logical_warp_id);
@@ -459,8 +452,6 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
     appendBuiltin("logical_request");
     appendBuiltin("total_requests");
   }
-  if (kernelContains(kernel, kBlockIdOpName))
-    appendBuiltin("logical_block_id");
   if (kernelContains(kernel, kWarpIdOpName))
     appendBuiltin("logical_warp_id");
 
@@ -606,10 +597,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         createLoadImm(builder, op->getLoc(), cst.getType(), cst.getValue());
     return success();
   }
-  if (hasName(op, kProgramIdOpName) || hasName(op, kBlockIdOpName) ||
-      hasName(op, kWarpIdOpName)) {
+  if (hasName(op, kProgramIdOpName) || hasName(op, kWarpIdOpName)) {
     StringRef name = hasName(op, kProgramIdOpName)   ? "logical_request"
-                     : hasName(op, kBlockIdOpName) ? "logical_block_id"
                                                     : "logical_warp_id";
     Value builtin = builtinMap.lookup(name);
     if (!builtin)
@@ -617,10 +606,6 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     valueMap[op->getResult(0)] = builtin;
     return success();
   }
-  if (hasName(op, kLaneIdOpName))
-    return op->emitOpError(
-        "lane_id scalar lowering is not implemented; lower-half SSAVC4 only "
-        "has vector element_number today");
   if (hasName(op, kLaneRangeOpName)) {
     valueMap[op->getResult(0)] = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ElementNumberOpName, {}, {},
@@ -893,8 +878,6 @@ static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
     materializeBuiltin("logical_request");
     materializeBuiltin("total_requests");
   }
-  if (kernelContains(kernel, kBlockIdOpName))
-    materializeBuiltin("logical_block_id");
   if (kernelContains(kernel, kWarpIdOpName))
     materializeBuiltin("logical_warp_id");
 
