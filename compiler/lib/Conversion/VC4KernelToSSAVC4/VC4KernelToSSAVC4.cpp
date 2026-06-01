@@ -44,11 +44,21 @@ constexpr llvm::StringLiteral kReturnOpName("vc4kernel.return");
 constexpr llvm::StringLiteral kProgramIdOpName("vc4kernel.program_id");
 constexpr llvm::StringLiteral kWarpIdOpName("vc4kernel.warp_id");
 constexpr llvm::StringLiteral kLaneRangeOpName("vc4kernel.lane_range");
+constexpr llvm::StringLiteral kPredFullOpName("vc4kernel.pred.full");
+constexpr llvm::StringLiteral kPredEmptyOpName("vc4kernel.pred.empty");
+constexpr llvm::StringLiteral kPredTailOpName("vc4kernel.pred.tail");
+constexpr llvm::StringLiteral kPredRectOpName("vc4kernel.pred.rect");
+constexpr llvm::StringLiteral kPredAndOpName("vc4kernel.pred.and");
+constexpr llvm::StringLiteral kPredOrOpName("vc4kernel.pred.or");
+constexpr llvm::StringLiteral kPredNotOpName("vc4kernel.pred.not");
+constexpr llvm::StringLiteral kPredAnyOpName("vc4kernel.pred.any");
+constexpr llvm::StringLiteral kPredAllOpName("vc4kernel.pred.all");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
 constexpr llvm::StringLiteral kFragmentAddOpName("vc4kernel.fragment_add");
 constexpr llvm::StringLiteral kFragmentSubOpName("vc4kernel.fragment_sub");
 constexpr llvm::StringLiteral kFragmentMulOpName("vc4kernel.fragment_mul");
 constexpr llvm::StringLiteral kFragmentShlOpName("vc4kernel.fragment_shl");
+constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentRotateOpName("vc4kernel.fragment_rotate");
 constexpr llvm::StringLiteral kTMULoadOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreOpName("vc4kernel.vdw_store_fragment");
@@ -395,10 +405,6 @@ static bool kernelContains(Operation *kernel, StringRef opName) {
   return found;
 }
 
-static bool isFullPredicate(Value pred) {
-  return hasName(pred.getDefiningOp(), "vc4kernel.pred.full");
-}
-
 static Attribute getBuiltinKindAttr(OpBuilder &builder, StringRef name) {
   MLIRContext *ctx = builder.getContext();
   if (name == "logical_request")
@@ -687,14 +693,170 @@ static Value createLoadImm(OpBuilder &builder, Location loc, Type type,
   return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs, type);
 }
 
-static Value mapValue(Operation *op, Value value,
-                      llvm::DenseMap<Value, Value> &valueMap) {
-  auto it = valueMap.find(value);
-  if (it == valueMap.end()) {
-    op->emitOpError("operand has not been lowered");
+struct LoweredValue {
+  Value value;
+};
+
+// PredicatePlan and ConditionPlan are compiler lowering plans. VC4 flags are
+// mutable machine state, so later passes must emit or consume flags at the
+// exact program point instead of treating them as persistent SSA values.
+struct PredicatePlan {
+  enum class Class { Full, Empty, TailPrefix, RectRow, GeneralMask };
+
+  Class kind = Class::GeneralMask;
+  Value base;
+  Value limit;
+  Value row;
+  Value rows;
+  Value colBase;
+  Value cols;
+
+  static PredicatePlan full() {
+    PredicatePlan plan;
+    plan.kind = Class::Full;
+    return plan;
+  }
+  static PredicatePlan empty() {
+    PredicatePlan plan;
+    plan.kind = Class::Empty;
+    return plan;
+  }
+  static PredicatePlan tailPrefix(Value base, Value limit) {
+    PredicatePlan plan;
+    plan.kind = Class::TailPrefix;
+    plan.base = base;
+    plan.limit = limit;
+    return plan;
+  }
+  static PredicatePlan rectRow(Value row, Value rows, Value colBase,
+                               Value cols) {
+    PredicatePlan plan;
+    plan.kind = Class::RectRow;
+    plan.row = row;
+    plan.rows = rows;
+    plan.colBase = colBase;
+    plan.cols = cols;
+    return plan;
+  }
+  static PredicatePlan generalMask() {
+    PredicatePlan plan;
+    plan.kind = Class::GeneralMask;
+    return plan;
+  }
+
+  bool isFull() const { return kind == Class::Full; }
+};
+
+struct ConditionPlan {
+  enum class Class {
+    ConstantTrue,
+    ConstantFalse,
+    ScalarI32Compare,
+    PredicateAny,
+    PredicateAll,
+    FlagsValue
+  };
+
+  Class kind = Class::FlagsValue;
+  Value lhs;
+  Value rhs;
+  Value predicateSource;
+  Value flags;
+  Attribute predicate;
+
+  static ConditionPlan constant(bool value) {
+    ConditionPlan plan;
+    plan.kind = value ? Class::ConstantTrue : Class::ConstantFalse;
+    return plan;
+  }
+  static ConditionPlan scalarI32Compare(Value lhs, Value rhs,
+                                        Attribute predicate) {
+    ConditionPlan plan;
+    plan.kind = Class::ScalarI32Compare;
+    plan.lhs = lhs;
+    plan.rhs = rhs;
+    plan.predicate = predicate;
+    return plan;
+  }
+  static ConditionPlan predicateAny(Value source) {
+    ConditionPlan plan;
+    plan.kind = Class::PredicateAny;
+    plan.predicateSource = source;
+    return plan;
+  }
+  static ConditionPlan predicateAll(Value source) {
+    ConditionPlan plan;
+    plan.kind = Class::PredicateAll;
+    plan.predicateSource = source;
+    return plan;
+  }
+  static ConditionPlan flagsValue(Value flags) {
+    ConditionPlan plan;
+    plan.kind = Class::FlagsValue;
+    plan.flags = flags;
+    return plan;
+  }
+};
+
+struct VPMAllocationPlan {
+  int64_t baseRowOffset = 0;
+  int64_t rows = 0;
+  int64_t elemBytes = 4;
+};
+
+struct ResourcePlan {
+  VC4KernelResourceSummary summary;
+};
+
+struct LaunchABIPlan {
+  llvm::StringMap<Value> builtinValues;
+
+  void bindBuiltin(StringRef name, Value value) { builtinValues[name] = value; }
+  Value lookupBuiltin(StringRef name) const {
+    auto it = builtinValues.find(name);
+    return it == builtinValues.end() ? Value() : it->second;
+  }
+};
+
+struct LoweringState {
+  explicit LoweringState(ResourcePlan resourcePlan)
+      : resourcePlan(resourcePlan) {}
+
+  llvm::DenseMap<Value, LoweredValue> values;
+  llvm::DenseMap<Value, PredicatePlan> predicates;
+  llvm::DenseMap<Value, ConditionPlan> conditions;
+  llvm::DenseMap<Value, VPMAllocationPlan> vpmAllocations;
+  llvm::DenseMap<Block *, Block *> blockMap;
+  ResourcePlan resourcePlan;
+  LaunchABIPlan launchABI;
+  int64_t nextVPMRowOffset = 0;
+};
+
+static Value mapValue(Operation *op, Value value, LoweringState &state) {
+  auto it = state.values.find(value);
+  if (it == state.values.end()) {
+    op->emitOpError("normal SSA operand has no lowering plan");
     return {};
   }
-  return it->second;
+  return it->second.value;
+}
+
+static const PredicatePlan *lookupPredicatePlan(Value value,
+                                                const LoweringState &state) {
+  auto it = state.predicates.find(value);
+  return it == state.predicates.end() ? nullptr : &it->second;
+}
+
+static LogicalResult requireFullPredicate(Operation *op, Value pred,
+                                          LoweringState &state,
+                                          StringRef consumerName) {
+  const PredicatePlan *plan = lookupPredicatePlan(pred, state);
+  if (!plan)
+    return op->emitOpError("predicate operand has no lowering plan");
+  if (!plan->isFull())
+    return op->emitOpError()
+           << consumerName << " lowering currently supports only pred.full";
+  return success();
 }
 
 static Operation *createSSAVC4Module(Operation *kernel, OpBuilder &builder) {
@@ -803,50 +965,52 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
   return matchBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
 }
 
-static Value applyVPMTileBase(Operation *op, OpBuilder &builder, Value tile,
-                              Value row, llvm::StringMap<Value> &builtinMap,
-                              llvm::DenseMap<Value, int64_t> &vpmRows) {
-  int64_t tileOffset = 0;
-  auto tileIt = vpmRows.find(tile);
-  if (tileIt != vpmRows.end())
-    tileOffset = tileIt->second;
-  Value result = addI32Constant(builder, op->getLoc(), row, tileOffset);
-  Value base = builtinMap.lookup("vpm_base_row");
+static FailureOr<Value> applyVPMTileBase(Operation *op, OpBuilder &builder,
+                                         Value tile, Value row,
+                                         LoweringState &state) {
+  auto tileIt = state.vpmAllocations.find(tile);
+  if (tileIt == state.vpmAllocations.end())
+    return op->emitOpError("vpm tile operand has no allocation plan");
+  const VPMAllocationPlan &plan = tileIt->second;
+  Value result = addI32Constant(builder, op->getLoc(), row, plan.baseRowOffset);
+  Value base = state.launchABI.lookupBuiltin("vpm_base_row");
   if (base)
     result = createI32Add(builder, op->getLoc(), base, result);
   return result;
 }
 
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
-                                 llvm::DenseMap<Value, Value> &valueMap,
-                                 llvm::StringMap<Value> &builtinMap,
-                                 llvm::DenseMap<Value, int64_t> &vpmRows,
-                                 int64_t &nextVPMRowOffset) {
+                                 LoweringState &state) {
   if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
-    valueMap[cst.getResult()] =
-        createLoadImm(builder, op->getLoc(), cst.getType(), cst.getValue());
+    state.values[cst.getResult()] = {createLoadImm(
+        builder, op->getLoc(), cst.getType(), cst.getValue())};
+    if (cst.getType().isInteger(1)) {
+      if (auto value = llvm::dyn_cast<IntegerAttr>(cst.getValue()))
+        state.conditions[cst.getResult()] =
+            ConditionPlan::constant(!value.getValue().isZero());
+    }
     return success();
   }
   if (hasName(op, kProgramIdOpName) || hasName(op, kWarpIdOpName)) {
     StringRef name = hasName(op, kProgramIdOpName)   ? "logical_request"
                                                     : "logical_warp_id";
-    Value builtin = builtinMap.lookup(name);
+    Value builtin = state.launchABI.lookupBuiltin(name);
     if (!builtin)
       return op->emitOpError("missing launch builtin uniform for identity op");
-    valueMap[op->getResult(0)] = builtin;
+    state.values[op->getResult(0)] = {builtin};
     return success();
   }
   if (hasName(op, kLaneRangeOpName)) {
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ElementNumberOpName, {}, {},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, "arith.addi") || hasName(op, "arith.subi") ||
       hasName(op, "arith.shli")) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
-      Value mapped = mapValue(op, operand, valueMap);
+      Value mapped = mapValue(op, operand, state);
       if (!mapped)
         return failure();
       operands.push_back(mapped);
@@ -856,27 +1020,39 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       opcode = mlir::vc4::AddOpcode::sub;
     if (hasName(op, "arith.shli"))
       opcode = mlir::vc4::AddOpcode::shl;
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
         {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
                                             builder.getContext(), opcode))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
+  if (auto cmp = dyn_cast<arith::CmpIOp>(op)) {
+    Value lhs = mapValue(op, cmp.getLhs(), state);
+    Value rhs = mapValue(op, cmp.getRhs(), state);
+    if (!lhs || !rhs)
+      return failure();
+    state.conditions[cmp.getResult()] =
+        ConditionPlan::scalarI32Compare(lhs, rhs, cmp.getPredicateAttr());
+    return success();
+  }
+  if (isa<arith::SelectOp>(op))
+    return op->emitOpError(
+        "arith.select lowering requires condition plan emission, which is not implemented in this Stage 1 slice");
   if (hasName(op, kSplatOpName)) {
-    Value input = mapValue(op, op->getOperand(0), valueMap);
+    Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4SplatOpName, input, {},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentAddOpName) || hasName(op, kFragmentSubOpName) ||
       hasName(op, kFragmentShlOpName)) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
-      Value mapped = mapValue(op, operand, valueMap);
+      Value mapped = mapValue(op, operand, state);
       if (!mapped)
         return failure();
       operands.push_back(mapped);
@@ -892,50 +1068,128 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             op->getResult(0).getType());
       }
     }
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
         {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
                                             builder.getContext(), opcode))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentMulOpName)) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
-      Value mapped = mapValue(op, operand, valueMap);
+      Value mapped = mapValue(op, operand, state);
       if (!mapped)
         return failure();
       operands.push_back(mapped);
     }
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
         {builder.getNamedAttr("opcode", mlir::vc4::MulOpcodeAttr::get(
                                             builder.getContext(),
                                             mlir::vc4::MulOpcode::mul24))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentRotateOpName)) {
-    Value input = mapValue(op, op->getOperand(0), valueMap);
+    Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4RotateOpName, input,
         {builder.getNamedAttr("amount", op->getAttr("amount"))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
-  if (op->getName().getStringRef().starts_with("vc4kernel.pred.")) {
-    if (op->getNumResults() != 0)
-      valueMap[op->getResult(0)] = Value();
+  if (hasName(op, kFragmentCmpOpName)) {
+    Value lhs = mapValue(op, op->getOperand(0), state);
+    Value rhs = mapValue(op, op->getOperand(1), state);
+    if (!lhs || !rhs)
+      return failure();
+    state.predicates[op->getResult(0)] = PredicatePlan::generalMask();
+    return success();
+  }
+  if (hasName(op, kPredFullOpName)) {
+    state.predicates[op->getResult(0)] = PredicatePlan::full();
+    return success();
+  }
+  if (hasName(op, kPredEmptyOpName)) {
+    state.predicates[op->getResult(0)] = PredicatePlan::empty();
+    return success();
+  }
+  if (hasName(op, kPredTailOpName)) {
+    Value base = mapValue(op, op->getOperand(0), state);
+    Value limit = mapValue(op, op->getOperand(1), state);
+    if (!base || !limit)
+      return failure();
+    state.predicates[op->getResult(0)] =
+        PredicatePlan::tailPrefix(base, limit);
+    return success();
+  }
+  if (hasName(op, kPredRectOpName)) {
+    Value row = mapValue(op, op->getOperand(0), state);
+    Value rows = mapValue(op, op->getOperand(1), state);
+    Value colBase = mapValue(op, op->getOperand(2), state);
+    Value cols = mapValue(op, op->getOperand(3), state);
+    if (!row || !rows || !colBase || !cols)
+      return failure();
+    state.predicates[op->getResult(0)] =
+        PredicatePlan::rectRow(row, rows, colBase, cols);
+    return success();
+  }
+  if (hasName(op, kPredAndOpName) || hasName(op, kPredOrOpName)) {
+    const PredicatePlan *lhs = lookupPredicatePlan(op->getOperand(0), state);
+    const PredicatePlan *rhs = lookupPredicatePlan(op->getOperand(1), state);
+    if (!lhs || !rhs)
+      return op->emitOpError("predicate operand has no lowering plan");
+    PredicatePlan result = PredicatePlan::generalMask();
+    if (hasName(op, kPredAndOpName)) {
+      if (lhs->kind == PredicatePlan::Class::Empty ||
+          rhs->kind == PredicatePlan::Class::Empty)
+        result = PredicatePlan::empty();
+      else if (lhs->kind == PredicatePlan::Class::Full)
+        result = *rhs;
+      else if (rhs->kind == PredicatePlan::Class::Full)
+        result = *lhs;
+    } else {
+      if (lhs->kind == PredicatePlan::Class::Full ||
+          rhs->kind == PredicatePlan::Class::Full)
+        result = PredicatePlan::full();
+      else if (lhs->kind == PredicatePlan::Class::Empty)
+        result = *rhs;
+      else if (rhs->kind == PredicatePlan::Class::Empty)
+        result = *lhs;
+    }
+    state.predicates[op->getResult(0)] = result;
+    return success();
+  }
+  if (hasName(op, kPredNotOpName)) {
+    const PredicatePlan *input = lookupPredicatePlan(op->getOperand(0), state);
+    if (!input)
+      return op->emitOpError("predicate operand has no lowering plan");
+    PredicatePlan result = PredicatePlan::generalMask();
+    if (input->kind == PredicatePlan::Class::Full)
+      result = PredicatePlan::empty();
+    else if (input->kind == PredicatePlan::Class::Empty)
+      result = PredicatePlan::full();
+    state.predicates[op->getResult(0)] = result;
+    return success();
+  }
+  if (hasName(op, kPredAnyOpName) || hasName(op, kPredAllOpName)) {
+    if (!lookupPredicatePlan(op->getOperand(0), state))
+      return op->emitOpError("predicate operand has no lowering plan");
+    state.conditions[op->getResult(0)] =
+        hasName(op, kPredAnyOpName)
+            ? ConditionPlan::predicateAny(op->getOperand(0))
+            : ConditionPlan::predicateAll(op->getOperand(0));
     return success();
   }
   if (hasName(op, kTMULoadOpName)) {
-    if (!isFullPredicate(op->getOperand(2)))
-      return op->emitOpError(
-          "tmu_load_fragment lowering currently supports only pred.full");
-    Value base = mapValue(op, op->getOperand(0), valueMap);
-    Value offsets = mapValue(op, op->getOperand(1), valueMap);
+    if (failed(requireFullPredicate(op, op->getOperand(2), state,
+                                    "tmu_load_fragment")))
+      return failure();
+    Value base = mapValue(op, op->getOperand(0), state);
+    Value offsets = mapValue(op, op->getOperand(1), state);
     if (!base || !offsets)
       return failure();
     if (base.getType() != offsets.getType())
@@ -952,29 +1206,29 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
          builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
         mlir::ssavc4::AsyncTokenType::get(builder.getContext()));
-    valueMap[op->getResult(0)] = createOpWithResult(
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4TMUReadOpName, token,
         {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
          builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kVDWStoreOpName)) {
-    if (!isFullPredicate(op->getOperand(3)))
-      return op->emitOpError(
-          "vdw_store_fragment lowering currently supports only pred.full");
+    if (failed(requireFullPredicate(op, op->getOperand(3), state,
+                                    "vdw_store_fragment")))
+      return failure();
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
     if (!offsets.matched)
       return op->emitOpError(
           "vdw_store_fragment lowering currently supports only contiguous "
           "byte_offsets = base_byte_offset + 4*lane_range");
-    Value base = mapValue(op, op->getOperand(0), valueMap);
-    Value value = mapValue(op, op->getOperand(2), valueMap);
+    Value base = mapValue(op, op->getOperand(0), state);
+    Value value = mapValue(op, op->getOperand(2), state);
     if (!base || !value)
       return failure();
     if (offsets.scalarBaseByteOffset) {
       Value mappedOffset =
-          mapValue(op, offsets.scalarBaseByteOffset, valueMap);
+          mapValue(op, offsets.scalarBaseByteOffset, state);
       if (!mappedOffset)
         return failure();
       base = createI32Add(builder, op->getLoc(), base, mappedOffset);
@@ -984,7 +1238,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                       builder.getI32IntegerAttr(16));
     SmallVector<Value, 4> operands{base, value, activeLanes};
     SmallVector<int32_t, 4> segments{1, 1, 1, 0};
-    if (Value vpmBase = builtinMap.lookup("vpm_base_row")) {
+    if (Value vpmBase = state.launchABI.lookupBuiltin("vpm_base_row")) {
       operands.push_back(vpmBase);
       segments[3] = 1;
     }
@@ -1001,21 +1255,30 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMAllocOpName)) {
-    vpmRows[op->getResult(0)] = nextVPMRowOffset;
-    if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
-      nextVPMRowOffset += rows.getInt();
+    int64_t rows = 0;
+    if (auto rowsAttr = op->getAttrOfType<IntegerAttr>("rows"))
+      rows = rowsAttr.getInt();
+    int64_t elemBytes = 4;
+    if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
+      elemBytes = elemBytesAttr.getInt();
+    state.vpmAllocations[op->getResult(0)] = {
+        state.nextVPMRowOffset, rows, elemBytes};
+    state.nextVPMRowOffset += rows;
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
-    if (!isFullPredicate(op->getOperand(3)))
-      return op->emitOpError(
-          "vpm_write_fragment lowering currently supports only pred.full");
-    Value row = mapValue(op, op->getOperand(1), valueMap);
-    Value value = mapValue(op, op->getOperand(2), valueMap);
+    if (failed(requireFullPredicate(op, op->getOperand(3), state,
+                                    "vpm_write_fragment")))
+      return failure();
+    Value row = mapValue(op, op->getOperand(1), state);
+    Value value = mapValue(op, op->getOperand(2), state);
     if (!row || !value)
       return failure();
-    row = applyVPMTileBase(op, builder, op->getOperand(0), row, builtinMap,
-                           vpmRows);
+    FailureOr<Value> plannedRow =
+        applyVPMTileBase(op, builder, op->getOperand(0), row, state);
+    if (failed(plannedRow))
+      return failure();
+    row = *plannedRow;
     createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
              {getSSAVC4VPMOrientation(builder, op),
               getSSAVC4VPMWidth(builder, op),
@@ -1026,15 +1289,18 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
-    if (!isFullPredicate(op->getOperand(2)))
-      return op->emitOpError(
-          "vpm_read_fragment lowering currently supports only pred.full");
-    Value row = mapValue(op, op->getOperand(1), valueMap);
+    if (failed(requireFullPredicate(op, op->getOperand(2), state,
+                                    "vpm_read_fragment")))
+      return failure();
+    Value row = mapValue(op, op->getOperand(1), state);
     if (!row)
       return failure();
-    row = applyVPMTileBase(op, builder, op->getOperand(0), row, builtinMap,
-                           vpmRows);
-    valueMap[op->getResult(0)] = createOpWithResult(
+    FailureOr<Value> plannedRow =
+        applyVPMTileBase(op, builder, op->getOperand(0), row, state);
+    if (failed(plannedRow))
+      return failure();
+    row = *plannedRow;
+    state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
         {getSSAVC4VPMOrientation(builder, op),
          getSSAVC4VPMWidth(builder, op),
@@ -1042,13 +1308,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
          builder.getNamedAttr("x", op->getAttr("x")),
          builder.getNamedAttr("stride", op->getAttr("stride")),
          builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
-        op->getResult(0).getType());
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kVDRLoadOpName)) {
-    Value base = mapValue(op, op->getOperand(0), valueMap);
-    Value byteOffset = mapValue(op, op->getOperand(1), valueMap);
-    Value dstRow = mapValue(op, op->getOperand(3), valueMap);
+    Value base = mapValue(op, op->getOperand(0), state);
+    Value byteOffset = mapValue(op, op->getOperand(1), state);
+    Value dstRow = mapValue(op, op->getOperand(3), state);
     if (!base || !byteOffset || !dstRow)
       return failure();
     Value address = createOpWithResult(
@@ -1057,8 +1323,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             builder.getContext(),
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
-    dstRow = applyVPMTileBase(op, builder, op->getOperand(2), dstRow,
-                              builtinMap, vpmRows);
+    FailureOr<Value> plannedDstRow =
+        applyVPMTileBase(op, builder, op->getOperand(2), dstRow, state);
+    if (failed(plannedDstRow))
+      return failure();
+    dstRow = *plannedDstRow;
     createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
              {getSSAVC4VPMOrientation(builder, op),
               getSSAVC4VPMWidth(builder, op),
@@ -1072,12 +1341,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
-    if (!isFullPredicate(op->getOperand(4)))
-      return op->emitOpError(
-          "vdw_store_vpm_fragment lowering currently supports only pred.full");
-    Value srcRow = mapValue(op, op->getOperand(1), valueMap);
-    Value base = mapValue(op, op->getOperand(2), valueMap);
-    Value byteOffset = mapValue(op, op->getOperand(3), valueMap);
+    if (failed(requireFullPredicate(op, op->getOperand(4), state,
+                                    "vdw_store_vpm_fragment")))
+      return failure();
+    Value srcRow = mapValue(op, op->getOperand(1), state);
+    Value base = mapValue(op, op->getOperand(2), state);
+    Value byteOffset = mapValue(op, op->getOperand(3), state);
     if (!srcRow || !base || !byteOffset)
       return failure();
     Value address = createOpWithResult(
@@ -1086,8 +1355,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             builder.getContext(),
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
-    srcRow = applyVPMTileBase(op, builder, op->getOperand(0), srcRow,
-                              builtinMap, vpmRows);
+    FailureOr<Value> plannedSrcRow =
+        applyVPMTileBase(op, builder, op->getOperand(0), srcRow, state);
+    if (failed(plannedSrcRow))
+      return failure();
+    srcRow = *plannedSrcRow;
     auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
     Value vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
                                builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
@@ -1104,8 +1376,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kBarrierOpName)) {
-    Value logicalWarp = builtinMap.lookup("logical_warp_id");
-    Value warpsPerBlock = builtinMap.lookup("warps_per_block");
+    Value logicalWarp = state.launchABI.lookupBuiltin("logical_warp_id");
+    Value warpsPerBlock = state.launchABI.lookupBuiltin("warps_per_block");
     if (!logicalWarp || !warpsPerBlock)
       return op->emitOpError(
           "missing launch builtin uniforms for cooperative barrier");
@@ -1121,8 +1393,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
 }
 
 static LogicalResult lowerTerminator(Operation *op, OpBuilder &builder,
-                                     llvm::DenseMap<Value, Value> &valueMap,
-                                     llvm::DenseMap<Block *, Block *> &blockMap) {
+                                     LoweringState &state) {
   if (hasName(op, kReturnOpName)) {
     createOp(builder, op->getLoc(), kSSAVC4ThreadEndOpName, {}, {});
     return success();
@@ -1130,69 +1401,67 @@ static LogicalResult lowerTerminator(Operation *op, OpBuilder &builder,
   if (auto br = dyn_cast<cf::BranchOp>(op)) {
     SmallVector<Value, 4> operands;
     for (Value operand : br.getDestOperands()) {
-      Value mapped = mapValue(op, operand, valueMap);
+      Value mapped = mapValue(op, operand, state);
       if (!mapped)
         return failure();
       operands.push_back(mapped);
     }
-    OperationState state(op->getLoc(), kSSAVC4BranchOpName);
-    state.addOperands(operands);
-    state.addSuccessors(blockMap.lookup(br.getDest()));
-    builder.create(state);
+    OperationState branchState(op->getLoc(), kSSAVC4BranchOpName);
+    branchState.addOperands(operands);
+    branchState.addSuccessors(state.blockMap.lookup(br.getDest()));
+    builder.create(branchState);
     return success();
   }
-  if (isa<cf::CondBranchOp>(op))
+  if (auto cond = dyn_cast<cf::CondBranchOp>(op)) {
+    auto conditionIt = state.conditions.find(cond.getCondition());
+    if (conditionIt == state.conditions.end())
+      return op->emitOpError("condition operand has no lowering plan");
     return op->emitOpError(
-        "cf.cond_br lowering requires flag-producing pred.any/all support, "
+        "cf.cond_br lowering requires condition plan emission, "
         "which is not implemented in this Stage 1 slice");
+  }
   return op->emitOpError("unsupported terminator");
 }
 
 static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
   Region &source = kernel->getRegion(0);
   Region &dest = func->getRegion(0);
-  llvm::DenseMap<Value, Value> valueMap;
-  llvm::StringMap<Value> builtinMap;
-  llvm::DenseMap<Block *, Block *> blockMap;
-  llvm::DenseMap<Value, int64_t> vpmRows;
-  VC4KernelResourceSummary resourceSummary =
-      computeVC4KernelResourceSummary(kernel);
-  int64_t nextVPMRowOffset = 0;
+  LoweringState state({computeVC4KernelResourceSummary(kernel)});
   OpBuilder builder(func->getContext());
 
   for (Block &sourceBlock : source) {
     Block *destBlock = new Block();
     dest.push_back(destBlock);
-    blockMap[&sourceBlock] = destBlock;
+    state.blockMap[&sourceBlock] = destBlock;
     if (&sourceBlock != &source.front()) {
       for (BlockArgument arg : sourceBlock.getArguments())
-        valueMap[arg] = destBlock->addArgument(arg.getType(), arg.getLoc());
+        state.values[arg] = {destBlock->addArgument(arg.getType(),
+                                                    arg.getLoc())};
     }
   }
 
-  builder.setInsertionPointToStart(blockMap.lookup(&source.front()));
+  builder.setInsertionPointToStart(state.blockMap.lookup(&source.front()));
   int64_t nextUniform = 0;
   for (BlockArgument arg : source.front().getArguments())
-    valueMap[arg] = createUniformRead(builder, arg.getLoc(), arg.getType(),
-                                      nextUniform++);
+    state.values[arg] = {createUniformRead(builder, arg.getLoc(),
+                                           arg.getType(), nextUniform++)};
   auto materializeBuiltin = [&](StringRef name) {
-    builtinMap[name] =
-        createUniformRead(builder, kernel->getLoc(), builder.getI32Type(),
-                          nextUniform++);
+    state.launchABI.bindBuiltin(
+        name, createUniformRead(builder, kernel->getLoc(),
+                                builder.getI32Type(), nextUniform++));
   };
-  appendRequiredBuiltins(kernel, resourceSummary, materializeBuiltin);
+  appendRequiredBuiltins(kernel, state.resourcePlan.summary, materializeBuiltin);
 
   for (Block &sourceBlock : source) {
-    Block *destBlock = blockMap.lookup(&sourceBlock);
+    Block *destBlock = state.blockMap.lookup(&sourceBlock);
     builder.setInsertionPointToEnd(destBlock);
     for (Operation &nested : sourceBlock) {
       if (nested.hasTrait<OpTrait::IsTerminator>()) {
-        if (failed(lowerTerminator(&nested, builder, valueMap, blockMap)))
+        if (failed(lowerTerminator(&nested, builder, state)))
           return failure();
         continue;
       }
-      if (failed(lowerBodyOp(&nested, builder, valueMap, builtinMap, vpmRows,
-                             nextVPMRowOffset)))
+      if (failed(lowerBodyOp(&nested, builder, state)))
         return failure();
     }
   }
