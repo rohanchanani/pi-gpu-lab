@@ -1,0 +1,21 @@
+import os
+
+import lit.formats
+
+config.name = "VC4Kernel codegen emit"
+config.test_format = lit.formats.ShTest(True)
+config.suffixes = [".mlir"]
+config.excludes = ["Output"]
+config.test_source_root = os.path.dirname(__file__)
+config.test_exec_root = os.path.dirname(__file__)
+
+_tool_dirs = [
+    os.path.join("@CMAKE_BINARY_DIR@", "bin"),
+    "@CMAKE_RUNTIME_OUTPUT_DIRECTORY@",
+    "@LLVM_TOOLS_BINARY_DIR@",
+    "@LLVM_TOOLS_DIR@",
+    "@MLIR_TOOLS_DIR@",
+]
+_configured_tool_dirs = [path for path in _tool_dirs if path and "@" not in path]
+_existing_path = config.environment.get("PATH", os.environ.get("PATH", ""))
+config.environment["PATH"] = os.pathsep.join(_configured_tool_dirs + [_existing_path])

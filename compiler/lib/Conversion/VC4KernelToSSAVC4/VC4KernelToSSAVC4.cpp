@@ -749,6 +749,60 @@ static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
   return createI32Add(builder, loc, value, offset);
 }
 
+static std::optional<int64_t> getI32ConstantValue(Value value) {
+  auto constant = value.getDefiningOp<arith::ConstantOp>();
+  if (!constant)
+    return std::nullopt;
+  auto attr = llvm::dyn_cast<IntegerAttr>(constant.getValue());
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
+static bool isLaneByteOffsets(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kFragmentShlOpName) || def->getNumOperands() != 2)
+    return false;
+  if (!hasName(def->getOperand(0).getDefiningOp(), kLaneRangeOpName))
+    return false;
+  std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
+  return shift && *shift == 2;
+}
+
+static Value getSplatScalar(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kSplatOpName) || def->getNumOperands() != 1)
+    return {};
+  return def->getOperand(0);
+}
+
+struct FullRowVDWOffsets {
+  bool matched = false;
+  Value scalarBaseByteOffset;
+};
+
+static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
+  if (isLaneByteOffsets(value))
+    return {/*matched=*/true, /*scalarBaseByteOffset=*/{}};
+
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kFragmentAddOpName) || def->getNumOperands() != 2)
+    return {};
+
+  auto matchBasePlusLaneBytes = [](Value lhs,
+                                   Value rhs) -> FullRowVDWOffsets {
+    Value scalarBase = getSplatScalar(lhs);
+    if (scalarBase && isLaneByteOffsets(rhs))
+      return {/*matched=*/true, scalarBase};
+    return {};
+  };
+  FullRowVDWOffsets result =
+      matchBasePlusLaneBytes(def->getOperand(0), def->getOperand(1));
+  if (result.matched)
+    return result;
+  return matchBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
+}
+
 static Value applyVPMTileBase(Operation *op, OpBuilder &builder, Value tile,
                               Value row, llvm::StringMap<Value> &builtinMap,
                               llvm::DenseMap<Value, int64_t> &vpmRows) {
@@ -785,6 +839,27 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
   if (hasName(op, kLaneRangeOpName)) {
     valueMap[op->getResult(0)] = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ElementNumberOpName, {}, {},
+        op->getResult(0).getType());
+    return success();
+  }
+  if (hasName(op, "arith.addi") || hasName(op, "arith.subi") ||
+      hasName(op, "arith.shli")) {
+    SmallVector<Value, 2> operands;
+    for (Value operand : op->getOperands()) {
+      Value mapped = mapValue(op, operand, valueMap);
+      if (!mapped)
+        return failure();
+      operands.push_back(mapped);
+    }
+    mlir::vc4::AddOpcode opcode = mlir::vc4::AddOpcode::add;
+    if (hasName(op, "arith.subi"))
+      opcode = mlir::vc4::AddOpcode::sub;
+    if (hasName(op, "arith.shli"))
+      opcode = mlir::vc4::AddOpcode::shl;
+    valueMap[op->getResult(0)] = createOpWithResult(
+        builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
+        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                            builder.getContext(), opcode))},
         op->getResult(0).getType());
     return success();
   }
@@ -888,12 +963,27 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!isFullPredicate(op->getOperand(3)))
       return op->emitOpError(
           "vdw_store_fragment lowering currently supports only pred.full");
+    FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
+    if (!offsets.matched)
+      return op->emitOpError(
+          "vdw_store_fragment lowering currently supports only contiguous "
+          "byte_offsets = base_byte_offset + 4*lane_range");
     Value base = mapValue(op, op->getOperand(0), valueMap);
     Value value = mapValue(op, op->getOperand(2), valueMap);
     if (!base || !value)
       return failure();
-    SmallVector<Value, 4> operands{base, value};
-    SmallVector<int32_t, 4> segments{1, 1, 0, 0};
+    if (offsets.scalarBaseByteOffset) {
+      Value mappedOffset =
+          mapValue(op, offsets.scalarBaseByteOffset, valueMap);
+      if (!mappedOffset)
+        return failure();
+      base = createI32Add(builder, op->getLoc(), base, mappedOffset);
+    }
+    Value activeLanes =
+        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                      builder.getI32IntegerAttr(16));
+    SmallVector<Value, 4> operands{base, value, activeLanes};
+    SmallVector<int32_t, 4> segments{1, 1, 1, 0};
     if (Value vpmBase = builtinMap.lookup("vpm_base_row")) {
       operands.push_back(vpmBase);
       segments[3] = 1;
@@ -901,7 +991,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
              {getSSAVC4VPMWidth(builder, op),
               getSSAVC4VPMSubword(builder, op),
+              builder.getNamedAttr("active_lanes",
+                                   builder.getI32IntegerAttr(16)),
               builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
+              builder.getNamedAttr("serialize",
+                                   builder.getStringAttr("mutex")),
               builder.getNamedAttr("operandSegmentSizes",
                                    builder.getDenseI32ArrayAttr(segments))});
     return success();
