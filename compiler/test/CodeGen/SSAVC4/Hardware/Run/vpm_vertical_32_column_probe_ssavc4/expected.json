@@ -1,0 +1,14 @@
+{
+  "name": "vpm_vertical_32_column_probe_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "columns": 2,
+    "lanes": 16,
+    "checksum_accum": 536932576,
+    "runtime_launches": 1
+  }
+}

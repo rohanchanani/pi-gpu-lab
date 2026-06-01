@@ -103,7 +103,7 @@ ssavc4.module @reserved_scratch_reg31 {
     %s26 = ssavc4.alu.add %s25, %v26 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %s27 = ssavc4.alu.add %s26, %v27 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %sum = ssavc4.alu.add %s27, %v28 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    ssavc4.vpm.write %logical, %sum {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal"} : i32, vector<16xi32>
+    ssavc4.vpm.write %logical, %sum {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

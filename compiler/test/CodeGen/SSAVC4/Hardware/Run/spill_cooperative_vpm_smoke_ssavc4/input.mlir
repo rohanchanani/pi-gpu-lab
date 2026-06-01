@@ -52,7 +52,7 @@ args = [
     %base_vec = ssavc4.splat %base_elem : i32 -> vector<16xi32>
     %index = ssavc4.alu.add %base_vec, %lane {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %user_row = ssavc4.alu.add %vpm_base_row, %logical_warp_id {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vpm.write %user_row, %index {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.vpm.write %user_row, %index {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, vector<16xi32>
     %v01 = ssavc4.load_imm <splat32> {value = 1 : i32} : vector<16xi32>
     %v02 = ssavc4.load_imm <splat32> {value = 2 : i32} : vector<16xi32>
     %v03 = ssavc4.load_imm <splat32> {value = 3 : i32} : vector<16xi32>
@@ -110,9 +110,9 @@ args = [
     %s27 = ssavc4.alu.add %s26, %v27 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value = ssavc4.alu.add %s27, %v28 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     ssavc4.barrier %logical_warp_id, %warps_per_block : i32, i32 {arrive_offset = 0 : i32, go_offset = 1 : i32, depart_offset = 2 : i32, reset_offset = 3 : i32}
-    %shared = ssavc4.vpm.read %user_row {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32 -> vector<16xi32>
+    %shared = ssavc4.vpm.read %user_row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32 -> vector<16xi32>
     %final = ssavc4.alu.add %value, %shared {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    ssavc4.vdw.store %addr, %final, %active_full, %qpu_id {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    ssavc4.vdw.store %addr, %final, %active_full, %qpu_id {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
     ssavc4.thread_end
   }
 }

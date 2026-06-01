@@ -1668,19 +1668,41 @@ static LogicalResult verifyVPMResource(Operation *func, Operation *vpmOp) {
 }
 
 static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
-  int64_t elemBytes = getI32IntegerAttrOr(op, "elem_bytes", -1);
   int64_t lanes = getI32IntegerAttrOr(op, "lanes", -1);
-  if (elemBytes != 4)
-    return op->emitOpError("supports only 32-bit VPM elements in M3 lowering");
   if (lanes != 16)
     return op->emitOpError("supports only full 16-lane VPM vectors in M3 lowering");
   if (!isVector16I32Type(valueType) && !isVector16F32Type(valueType))
     return op->emitOpError(
         "supports only vector<16xi32> or vector<16xf32> VPM values in M3 lowering");
-  if (auto orientation = llvm::dyn_cast_or_null<StringAttr>(op->getAttr("orientation"))) {
-    if (orientation.getValue() != "horizontal" && orientation.getValue() != "vertical")
-      return op->emitOpError("supports only horizontal or vertical VPM orientation in M3 v1");
-  }
+  auto orientation =
+      llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
+          op->getAttr("orientation"));
+  if (!orientation)
+    return op->emitOpError("requires typed VPM orientation attr");
+  auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
+      op->getAttr("width"));
+  if (!width)
+    return op->emitOpError("requires typed VPM width attr");
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+    return op->emitOpError(
+        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+  auto subword = llvm::dyn_cast_or_null<mlir::ssavc4::VPMSubwordAttr>(
+      op->getAttr("subword"));
+  if (!subword)
+    return op->emitOpError("requires typed VPM subword attr");
+  if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+    return op->emitOpError(
+        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+  int64_t x = getI32IntegerAttrOr(op, "x", -1);
+  int64_t stride = getI32IntegerAttrOr(op, "stride", -1);
+  if (x < 0 || x > 15)
+    return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
+      x != 0)
+    return op->emitOpError(
+        "horizontal 32-bit VPM QPU access requires x = 0 in executable v1");
+  if (stride <= 0)
+    return op->emitOpError("requires positive VPM stride");
   return success();
 }
 
@@ -2403,29 +2425,32 @@ static LogicalResult selectInstructionTemplates(
           return op.emitOpError("requires an i32 global base address operand for M5 lowering");
         if (!op.getOperand(1).getType().isSignlessInteger(32))
           return op.emitOpError("requires an i32 VPM base row operand for M5 lowering");
-        int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
         int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
         int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
         int64_t memoryPitchBytes = getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
-        int64_t vpmBaseCol = getI32IntegerAttrOr(&op, "vpm_base_col", -1);
-        int64_t vpitch = getI32IntegerAttrOr(&op, "vpitch", -1);
-        if (elemBytes != 4)
-          return op.emitOpError("supports only 32-bit executable VDR loads; elem_bytes must be 4");
+        int64_t vpmX = getI32IntegerAttrOr(&op, "vpm_x", -1);
+        int64_t vpmPitch = getI32IntegerAttrOr(&op, "vpm_pitch", -1);
+        auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
+            op.getAttr("width"));
+        auto subword = llvm::dyn_cast_or_null<mlir::ssavc4::VPMSubwordAttr>(
+            op.getAttr("subword"));
+        if (!width || !subword)
+          return op.emitOpError("requires typed VDR width and subword attrs");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
         if (rowLen <= 0 || rowLen > 16)
           return op.emitOpError("requires row_len in range [1, 16] for M5 lowering");
         if (nrows <= 0 || nrows > 16)
           return op.emitOpError("requires nrows in range [1, 16] for M5 lowering");
-        if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0 ||
-            memoryPitchBytes < rowLen * elemBytes)
+        if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0 ||
+            memoryPitchBytes < rowLen * 4)
           return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M5 lowering");
-        if (vpmBaseCol != 0)
-          return op.emitOpError("M5 VDR lowering supports only vpm_base_col = 0");
-        if (vpitch <= 0 || vpitch > 16)
-          return op.emitOpError("requires vpitch in range [1, 16] for M5 lowering");
-        if (auto orientation = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("orientation"))) {
-          if (orientation.getValue() != "horizontal" && orientation.getValue() != "vertical")
-            return op.emitOpError("supports only orientation = \"horizontal\" or \"vertical\" in M5 VDR lowering");
-        }
+        if (vpmX < 0 || vpmX > 15)
+          return op.emitOpError("requires vpm_x in range [0, 15] for M5 lowering");
+        if (vpmPitch <= 0 || vpmPitch > 16)
+          return op.emitOpError("requires vpm_pitch in range [1, 16] for M5 lowering");
         if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
             return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M5 VDR lowering");
@@ -2448,10 +2473,17 @@ static LogicalResult selectInstructionTemplates(
         if (!isVector16I32Type(op.getOperand(1).getType()) &&
             !isVector16F32Type(op.getOperand(1).getType()))
           return op.emitOpError("requires a vector<16xi32> or vector<16xf32> value operand for M3 lowering");
-        int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
         int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
-        if (elemBytes != 4)
-          return op.emitOpError("supports only 32-bit elements in M3 lowering");
+        auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
+            op.getAttr("width"));
+        auto subword = llvm::dyn_cast_or_null<mlir::ssavc4::VPMSubwordAttr>(
+            op.getAttr("subword"));
+        if (!width || !subword)
+          return op.emitOpError("requires typed VDW width and subword attrs");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
         if (op.getNumOperands() == 3) {
           if (!op.getOperand(2).getType().isSignlessInteger(32))
             return op.emitOpError("requires an i32 dynamic active-lane operand");
@@ -2487,30 +2519,33 @@ static LogicalResult selectInstructionTemplates(
           return op.emitOpError("requires an i32 VPM y-coordinate operand for M3 lowering");
         if (!op.getOperand(2).getType().isSignlessInteger(32))
           return op.emitOpError("requires an i32 VPM x-coordinate operand for M3 lowering");
-        int64_t elemBytes = getI32IntegerAttrOr(&op, "elem_bytes", -1);
         int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
         int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
         int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
         int64_t memoryPitchBytes =
             getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
-        if (elemBytes != 4)
-          return op.emitOpError("supports only 32-bit elements in M3 lowering");
+        auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
+            op.getAttr("width"));
+        auto subword = llvm::dyn_cast_or_null<mlir::ssavc4::VPMSubwordAttr>(
+            op.getAttr("subword"));
+        if (!width || !subword)
+          return op.emitOpError("requires typed VDW width and subword attrs");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
         if (rowLen < 1 || rowLen > 16)
           return op.emitOpError("requires row_len in range [1, 16] for M3 lowering");
         if (nrows < 1 || nrows > 16)
           return op.emitOpError("requires nrows in range [1, 16] for M3 lowering");
-        if (memoryPitchBytes < rowLen * elemBytes ||
-            memoryPitchBytes % elemBytes != 0)
+        if (memoryPitchBytes < rowLen * 4 ||
+            memoryPitchBytes % 4 != 0)
           return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M3 lowering");
         if (op.getNumOperands() == 4) {
           if (!op.getOperand(3).getType().isSignlessInteger(32))
             return op.emitOpError("requires an i32 dynamic active-lane operand");
         } else if (activeLanes != -1 && activeLanes != rowLen) {
           return op.emitOpError("requires static active_lanes to match row_len in M3 lowering");
-        }
-        if (auto orientation = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("orientation"))) {
-          if (orientation.getValue() != "horizontal" && orientation.getValue() != "vertical")
-            return op.emitOpError("supports only orientation = \"horizontal\" or \"vertical\" in M3 lowering");
         }
         if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
@@ -3243,12 +3278,16 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
 
-  int64_t setupBase = 1055232;
-  if (auto orientation =
-          llvm::dyn_cast_or_null<StringAttr>(source->getAttr("orientation"))) {
-    if (orientation.getValue() == "vertical")
-      setupBase = 1053184;
-  }
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
+  int64_t x = getI32IntegerAttrOr(source, "x", 0);
+  int64_t setupBase =
+      (1 << 20) | ((stride & 0x3f) << 12) |
+      (orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical
+           ? (0x200 | x)
+           : 0xa00);
 
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
@@ -3295,12 +3334,16 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
 
-  int64_t setupBase = 1055232;
-  if (auto orientation =
-          llvm::dyn_cast_or_null<StringAttr>(source->getAttr("orientation"))) {
-    if (orientation.getValue() == "vertical")
-      setupBase = 1053184;
-  }
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
+  int64_t x = getI32IntegerAttrOr(source, "x", 0);
+  int64_t setupBase =
+      (1 << 20) | ((stride & 0x3f) << 12) |
+      (orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical
+           ? (0x200 | x)
+           : 0xa00);
 
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
@@ -3678,10 +3721,10 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
   int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
   int64_t memoryPitchBytes =
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
-  int64_t vpmBaseCol = getI32IntegerAttrOr(source, "vpm_base_col", -1);
-  int64_t vpitch = getI32IntegerAttrOr(source, "vpitch", -1);
+  int64_t vpmX = getI32IntegerAttrOr(source, "vpm_x", -1);
+  int64_t vpmPitch = getI32IntegerAttrOr(source, "vpm_pitch", -1);
   if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 ||
-      vpmBaseCol < 0 || vpmBaseCol > 15 || vpitch < 1 || vpitch > 16)
+      vpmX < 0 || vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
     return source->emitOpError("has invalid VDR setup attributes after verification");
 
   std::optional<uint32_t> mpitch = encodeVDRMemoryPitchBytes(memoryPitchBytes);
@@ -3689,10 +3732,11 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
     return source->emitOpError()
            << "requires memory_pitch_bytes encodable as VDR MPITCH = 8 * 2^n bytes";
 
-  bool vertical = false;
-  if (auto orientation =
-          llvm::dyn_cast_or_null<StringAttr>(source->getAttr("orientation")))
-    vertical = orientation.getValue() == "vertical";
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  bool vertical =
+      orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
 
   // VPMVCD_RD_SETUP basic 32-bit DMA-load setup:
   //   bit 31 marks the read/DMA setup word, MPITCH encodes 8*2^n byte source
@@ -3707,10 +3751,10 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
   word |= (*mpitch & 0x0fu) << 24;
   word |= (encodeVDRCount16(rowLen) & 0x0fu) << 20;
   word |= (encodeVDRCount16(nrows) & 0x0fu) << 16;
-  word |= (encodeVDRCount16(vpitch) & 0x0fu) << 12;
+  word |= (encodeVDRCount16(vpmPitch) & 0x0fu) << 12;
   if (vertical)
     word |= 1u << 11;
-  word |= encodeVDRVPMXY(/*row=*/0, vpmBaseCol);
+  word |= encodeVDRVPMXY(/*row=*/0, vpmX);
   setupWord = static_cast<int32_t>(word);
   return success();
 }
@@ -3803,11 +3847,18 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
              << "uses a dynamic VPM row value that is not defined by a lowerable SSAVC4 op";
   }
 
-  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
   int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
   int64_t vpmRow = getI32IntegerAttrOr(source, "vpm_row", 0);
-  if (elemBytes != 4)
-    return source->emitOpError("supports only 32-bit elements in M3 lowering");
+  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
+      source->getAttr("width"));
+  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
+      source->getAttr("subword"));
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+    return source->emitOpError(
+        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+  if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+    return source->emitOpError(
+        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
   if (!dynamicActiveLanesReg && activeLanes != 16)
     return source->emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
   if (vpmRow < 0)
@@ -3840,28 +3891,39 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
              << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
   }
 
-  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", -1);
   int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
   int64_t rowLen = getI32IntegerAttrOr(source, "row_len", -1);
   int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
   int64_t memoryPitchBytes =
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
-  if (elemBytes != 4)
-    return source->emitOpError("supports only 32-bit elements in M3 lowering");
+  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
+      source->getAttr("width"));
+  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
+      source->getAttr("subword"));
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+    return source->emitOpError(
+        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+  if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+    return source->emitOpError(
+        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
   if (rowLen < 1 || rowLen > 16)
     return source->emitOpError("requires row_len in range [1, 16] for M3 lowering");
   if (nrows < 1 || nrows > 16)
     return source->emitOpError("requires nrows in range [1, 16] for M3 lowering");
-  int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
+  int64_t strideBytes = memoryPitchBytes - rowLen * 4;
   if (strideBytes < 0 || strideBytes > 65535 ||
-      memoryPitchBytes % elemBytes != 0)
+      memoryPitchBytes % 4 != 0)
     return source->emitOpError("requires memory_pitch_bytes to produce an encodable VDW stride");
   if (dynamicActiveLanesReg && nrows != 1)
     return source->emitOpError("supports dynamic active_lanes only for single-row VDW stores");
   if (!dynamicActiveLanesReg && activeLanes != -1 && activeLanes != rowLen)
     return source->emitOpError("requires static active_lanes to match row_len in M3 lowering");
 
-  bool vertical = hasStringAttr(source, "orientation", "vertical");
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  bool vertical =
+      orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
   emitRawVDWStoreFromVPM(builder, source->getLoc(), *addressReg, *vpmYReg,
                          *vpmXReg,
                          dynamicActiveLanesReg, activeLanes, rowLen, nrows,

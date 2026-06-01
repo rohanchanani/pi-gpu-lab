@@ -7,7 +7,7 @@ ssavc4.module @vdw_store_vpm_invalid {
     %x = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %active = ssavc4.load_imm <splat32> {value = 3 : i32} : i32
     // CHECK: supports dynamic active_lanes only for single-row VDW stores
-    ssavc4.vdw.store_vpm %addr, %y, %x, %active {elem_bytes = 4 : i32, row_len = 4 : i32, nrows = 2 : i32, memory_pitch_bytes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, i32, i32, i32
+    ssavc4.vdw.store_vpm %addr, %y, %x, %active {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 4 : i32, nrows = 2 : i32, memory_pitch_bytes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, i32, i32, i32
     ssavc4.thread_end
   }
 
@@ -16,7 +16,7 @@ ssavc4.module @vdw_store_vpm_invalid {
     %y = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     // CHECK: active_lanes must match row_len for VDW stores
-    ssavc4.vdw.store_vpm %addr, %y, %x {elem_bytes = 4 : i32, row_len = 4 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, active_lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, i32, i32
+    ssavc4.vdw.store_vpm %addr, %y, %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 4 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, active_lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, i32, i32
     ssavc4.thread_end
   }
 }

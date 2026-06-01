@@ -66,7 +66,7 @@ ssavc4.module @cond_branch_block_args_flags_ssavc4 {
   ^merge(%selected: vector<16xi32>):
     %byte_offset = ssavc4.alu.add %qpu_id, %shift_six {opcode = #vc4.add_opcode<shl>} : (i32, i32) -> i32
     %addr = ssavc4.alu.add %out, %byte_offset {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vdw.store %addr, %selected, %active_full, %qpu_id {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    ssavc4.vdw.store %addr, %selected, %active_full, %qpu_id {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
     ssavc4.thread_end
   }
 }

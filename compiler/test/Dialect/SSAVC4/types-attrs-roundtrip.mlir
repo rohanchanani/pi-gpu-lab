@@ -8,7 +8,7 @@
 // CHECK-DAG: #ssavc4.tmu_mode<direct>
 // CHECK-DAG: #ssavc4.tmu_read_part<raw32>
 // CHECK-DAG: #ssavc4.vpm_orientation<horizontal>
-// CHECK-DAG: #ssavc4.vpm_lane_mode<laned>
+// CHECK-DAG: #ssavc4.vpm_subword<laned>
 // CHECK-DAG: #ssavc4.vpm_elem_width<w32>
 // CHECK-DAG: #ssavc4.vdw_store_serialize<mutex>
 // CHECK-DAG: #ssavc4.flag_kind<zero_test>
@@ -17,7 +17,7 @@ module attributes {
   ssavc4.tmu_mode = #ssavc4.tmu_mode<direct>,
   ssavc4.tmu_part = #ssavc4.tmu_read_part<raw32>,
   ssavc4.vpm_orientation = #ssavc4.vpm_orientation<horizontal>,
-  ssavc4.vpm_lane_mode = #ssavc4.vpm_lane_mode<laned>,
+  ssavc4.vpm_subword = #ssavc4.vpm_subword<laned>,
   ssavc4.vpm_elem_width = #ssavc4.vpm_elem_width<w32>,
   ssavc4.vdw_serialize = #ssavc4.vdw_store_serialize<mutex>,
   ssavc4.flag_kind = #ssavc4.flag_kind<zero_test>

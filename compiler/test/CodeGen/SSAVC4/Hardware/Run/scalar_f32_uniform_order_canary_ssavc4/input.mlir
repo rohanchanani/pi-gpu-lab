@@ -72,11 +72,11 @@ ssavc4.module @scalar_f32_uniform_order_canary_ssavc4 {
 
   ^tail:
     %active = ssavc4.alu.add %remaining, %shift_two {opcode = #vc4.add_opcode<shr>} : (i32, i32) -> i32
-    ssavc4.vdw.store %out_chunk, %sum, %active, %qpu_id {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>, i32, i32
+    ssavc4.vdw.store %out_chunk, %sum, %active, %qpu_id {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>, i32, i32
     ssavc4.br ^done
 
   ^full:
-    ssavc4.vdw.store %out_chunk, %sum, %active_full, %qpu_id {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>, i32, i32
+    ssavc4.vdw.store %out_chunk, %sum, %active_full, %qpu_id {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>, i32, i32
     ssavc4.br ^done
 
   ^done:

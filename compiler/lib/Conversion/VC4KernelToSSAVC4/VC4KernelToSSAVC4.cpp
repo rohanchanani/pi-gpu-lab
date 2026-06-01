@@ -100,6 +100,48 @@ static IntegerAttr asIntegerAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<IntegerAttr>(attr);
 }
 
+static NamedAttribute getSSAVC4VPMOrientation(OpBuilder &builder,
+                                              Operation *op) {
+  auto attr =
+      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMOrientationAttr>(
+          op->getAttr("orientation"));
+  mlir::ssavc4::VPMOrientation value =
+      attr && attr.getValue() == mlir::vc4kernel::VPMOrientation::vertical
+          ? mlir::ssavc4::VPMOrientation::vertical
+          : mlir::ssavc4::VPMOrientation::horizontal;
+  return builder.getNamedAttr(
+      "orientation",
+      mlir::ssavc4::VPMOrientationAttr::get(builder.getContext(), value));
+}
+
+static NamedAttribute getSSAVC4VPMWidth(OpBuilder &builder, Operation *op) {
+  auto attr =
+      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMWidthAttr>(
+          op->getAttr("width"));
+  mlir::ssavc4::VPMElemWidth value = mlir::ssavc4::VPMElemWidth::w32;
+  if (attr && attr.getValue() == mlir::vc4kernel::VPMWidth::w16)
+    value = mlir::ssavc4::VPMElemWidth::w16;
+  if (attr && attr.getValue() == mlir::vc4kernel::VPMWidth::w8)
+    value = mlir::ssavc4::VPMElemWidth::w8;
+  return builder.getNamedAttr(
+      "width",
+      mlir::ssavc4::VPMElemWidthAttr::get(builder.getContext(), value));
+}
+
+static NamedAttribute getSSAVC4VPMSubword(OpBuilder &builder, Operation *op) {
+  auto attr =
+      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMSubwordAttr>(
+          op->getAttr("subword"));
+  mlir::ssavc4::VPMSubword value = mlir::ssavc4::VPMSubword::none;
+  if (attr && attr.getValue() == mlir::vc4kernel::VPMSubword::packed)
+    value = mlir::ssavc4::VPMSubword::packed;
+  if (attr && attr.getValue() == mlir::vc4kernel::VPMSubword::laned)
+    value = mlir::ssavc4::VPMSubword::laned;
+  return builder.getNamedAttr(
+      "subword",
+      mlir::ssavc4::VPMSubwordAttr::get(builder.getContext(), value));
+}
+
 static StringAttr getSymbolNameAttr(Operation *op) {
   return asStringAttr(op->getAttr(SymbolTable::getSymbolAttrName()));
 }
@@ -791,7 +833,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!base || !value)
       return failure();
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, {base, value},
-             {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
+             {getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
               builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
               builder.getNamedAttr("operandSegmentSizes",
                                    builder.getDenseI32ArrayAttr({1, 1, 0, 0}))});
@@ -810,9 +853,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!row || !value)
       return failure();
     createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
-             {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-              builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
-              builder.getNamedAttr("orientation", builder.getStringAttr("row"))});
+             {getSSAVC4VPMOrientation(builder, op),
+              getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
+              builder.getNamedAttr("x", op->getAttr("x")),
+              builder.getNamedAttr("stride", op->getAttr("stride")),
+              builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))});
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
@@ -824,9 +870,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     valueMap[op->getResult(0)] = createOpWithResult(
         builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
-        {builder.getNamedAttr("elem_bytes", builder.getI32IntegerAttr(4)),
-         builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
-         builder.getNamedAttr("orientation", builder.getStringAttr("row"))},
+        {getSSAVC4VPMOrientation(builder, op),
+         getSSAVC4VPMWidth(builder, op),
+         getSSAVC4VPMSubword(builder, op),
+         builder.getNamedAttr("x", op->getAttr("x")),
+         builder.getNamedAttr("stride", op->getAttr("stride")),
+         builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
         op->getResult(0).getType());
     return success();
   }
@@ -843,14 +892,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
     createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
-             {builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+             {getSSAVC4VPMOrientation(builder, op),
+              getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
               builder.getNamedAttr("row_len", op->getAttr("cols")),
               builder.getNamedAttr("nrows", op->getAttr("rows")),
               builder.getNamedAttr("memory_pitch_bytes",
                                    op->getAttr("global_stride_bytes")),
-              builder.getNamedAttr("vpm_base_col", builder.getI32IntegerAttr(0)),
-              builder.getNamedAttr("orientation", builder.getStringAttr("row")),
-              builder.getNamedAttr("vpitch", builder.getI32IntegerAttr(1))});
+              builder.getNamedAttr("vpm_x", op->getAttr("dst_x")),
+              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch"))});
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
@@ -868,16 +918,19 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             builder.getContext(),
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
-    Value zero = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                               builder.getI32IntegerAttr(0));
+    auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
+    Value vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                               builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName,
-             {address, srcRow, zero},
-             {builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+             {address, srcRow, vpmX},
+             {getSSAVC4VPMOrientation(builder, op),
+              getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
               builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
               builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
               builder.getNamedAttr("memory_pitch_bytes",
                                    builder.getI32IntegerAttr(64)),
-              builder.getNamedAttr("orientation", builder.getStringAttr("row"))});
+              builder.getNamedAttr("active_lanes", builder.getI32IntegerAttr(16))});
     return success();
   }
   if (hasName(op, kBarrierOpName)) {

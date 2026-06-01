@@ -48,100 +48,91 @@ ssavc4.module @vdw_vertical_multirow_probe_ssavc4 {
     %off7 = ssavc4.load_imm <splat32> {value = 7168 : i32} : i32
 
     ssavc4.vdr.load %in, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
-      vpm_base_col = 0 : i32,
-      orientation = "horizontal",
-      vpitch = 1 : i32,
+      vpm_x = 0 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      vpm_pitch = 1 : i32,
       serialize = "mutex"
     } : i32, i32
 
     ssavc4.vdw.store_vpm %out, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 4 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "horizontal",
+      orientation = #ssavc4.vpm_orientation<horizontal>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr1 = ssavc4.alu.add %out, %off1 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr1, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "horizontal",
+      orientation = #ssavc4.vpm_orientation<horizontal>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr2 = ssavc4.alu.add %out, %off2 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr2, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 1 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr3 = ssavc4.alu.add %out, %off3 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr3, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 4 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr4 = ssavc4.alu.add %out, %off4 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr4, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr5 = ssavc4.alu.add %out, %off5 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr5, %zero, %one {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 4 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 16 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr6 = ssavc4.alu.add %out, %off6 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr6, %zero, %zero {
-      elem_bytes = 4 : i32,
-      row_len = 8 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 8 : i32,
       nrows = 4 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 8 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 
     %addr7 = ssavc4.alu.add %out, %off7 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
     ssavc4.vdw.store_vpm %addr7, %four, %two {
-      elem_bytes = 4 : i32,
-      row_len = 8 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 8 : i32,
       nrows = 3 : i32,
       memory_pitch_bytes = 64 : i32,
       active_lanes = 8 : i32,
-      orientation = "vertical",
+      orientation = #ssavc4.vpm_orientation<vertical>,
       serialize = "mutex"
     } : i32, i32, i32
 

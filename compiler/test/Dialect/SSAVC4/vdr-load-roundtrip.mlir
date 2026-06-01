@@ -4,14 +4,15 @@
 // CHECK: %[[ROW:.*]] = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
 // CHECK: ssavc4.vdr.load
 // CHECK-SAME: %[[ROW]]
-// CHECK-SAME: elem_bytes = 4 : i32
 // CHECK-SAME: memory_pitch_bytes = 64 : i32
 // CHECK-SAME: nrows = 16 : i32
-// CHECK-SAME: orientation = "horizontal"
+// CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK-SAME: row_len = 16 : i32
 // CHECK-SAME: serialize = "mutex"
-// CHECK-SAME: vpitch = 1 : i32
-// CHECK-SAME: vpm_base_col = 0 : i32
+// CHECK-SAME: subword = #ssavc4.vpm_subword<none>
+// CHECK-SAME: vpm_pitch = 1 : i32
+// CHECK-SAME: vpm_x = 0 : i32
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w32>
 ssavc4.module @vdr_load_roundtrip {
   ssavc4.func @vdr_load_kernel() attributes {
     kernel,
@@ -38,13 +39,12 @@ ssavc4.module @vdr_load_roundtrip {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     ssavc4.vdr.load %addr, %row {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
-      vpm_base_col = 0 : i32,
-      orientation = "horizontal",
-      vpitch = 1 : i32,
+      vpm_x = 0 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      vpm_pitch = 1 : i32,
       serialize = "mutex"
     } : i32, i32
     ssavc4.thread_end

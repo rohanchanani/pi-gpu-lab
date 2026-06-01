@@ -61,7 +61,7 @@ ssavc4.module @neutral_vector_module {
     %x = ssavc4.tmu.read %tok {unit = "tmu0", part = "raw32"} : !ssavc4.async.token -> vector<16xf32>
     %scaled = ssavc4.alu.mul %x, %scale {opcode = #vc4.mul_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %sum = ssavc4.alu.add %scaled, %x {opcode = #vc4.add_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    ssavc4.vdw.store %out, %sum {elem_bytes = 4 : i32, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>
+    ssavc4.vdw.store %out, %sum {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, active_lanes = 16 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xf32>
     ssavc4.thread_end
   }
 }

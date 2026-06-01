@@ -26,7 +26,7 @@ ssavc4.module @shared_vpm_invalid {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %tile = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
     // CHECK: error:
-    ssavc4.vpm.write %row0, %tile {elem_bytes = "bad", lanes = 16 : i32, orientation = "horizontal"} : i32, vector<16xi32>
+    ssavc4.vpm.write %row0, %tile {elem_bytes = "bad", lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

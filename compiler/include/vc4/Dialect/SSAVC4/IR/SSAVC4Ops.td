@@ -291,39 +291,45 @@ def SSAVC4_TMUReadOp : SSAVC4_Op<"tmu.read"> {
 def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
   let summary = "SSAVC4 effectful shared VPM vector write";
   let description = [{
-    Writes one 16-lane vector value to a cooperative-block VPM row.  M3 v1
-    supports only the h32-style 32-bit horizontal subset needed by shared VPM
-    programs.  The operation is intentionally not Pure and lowers to
-    scheduled QPU VPM setup/write-register traffic, not to removed structured
-    vc4.vpm.* operations.
+    Writes one 16-lane vector value to VPM through QPU register-space VPM
+    setup/write traffic.  The typed mode attrs describe the hardware-derived
+    32-bit VPM setup word; executable v1 accepts only width = w32 and
+    subword = none.
   }];
   let arguments = (ins
     AnyType:$row,
     AnyType:$value,
-    I32Attr:$elem_bytes,
-    I32Attr:$lanes,
-    OptionalAttr<StrAttr>:$orientation
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
+    I32Attr:$x,
+    I32Attr:$stride,
+    I32Attr:$lanes
   );
   let assemblyFormat = "$row `,` $value attr-dict `:` type($row) `,` type($value)";
+  let hasVerifier = 1;
 }
 
 def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let summary = "SSAVC4 effectful shared VPM vector read";
   let description = [{
-    Reads one 16-lane vector value from a cooperative-block VPM row.  M3 v1
-    supports only the h32-style 32-bit horizontal subset needed by shared VPM
-    programs.  The operation is intentionally not Pure and lowers to
-    scheduled QPU VPM setup/read-register traffic, not to removed structured
-    vc4.vpm.* operations.
+    Reads one 16-lane vector value from VPM through QPU register-space VPM
+    setup/read traffic.  The typed mode attrs describe the hardware-derived
+    32-bit VPM setup word; executable v1 accepts only width = w32 and
+    subword = none.
   }];
   let arguments = (ins
     AnyType:$row,
-    I32Attr:$elem_bytes,
-    I32Attr:$lanes,
-    OptionalAttr<StrAttr>:$orientation
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
+    I32Attr:$x,
+    I32Attr:$stride,
+    I32Attr:$lanes
   );
   let results = (outs AnyType:$result);
   let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
+  let hasVerifier = 1;
 }
 
 
@@ -337,18 +343,19 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
     can target for regular 32-bit tile loads.  The operation is intentionally
     not Pure: lowering owns the concrete VPMVCD_RD_SETUP, VPM_LD_ADDR, wait,
     and optional mutex serialization sequence.  M5 executable semantics are
-    32-bit-only, so elem_bytes must be 4 and no packed/sub-32 mode is accepted.
+    32-bit-only, so width must be w32 and subword must be none.
   }];
   let arguments = (ins
     AnyType:$address,
     AnyType:$vpm_base_row,
-    I32Attr:$elem_bytes,
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
     I32Attr:$row_len,
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
-    I32Attr:$vpm_base_col,
-    OptionalAttr<StrAttr>:$orientation,
-    I32Attr:$vpitch,
+    I32Attr:$vpm_x,
+    I32Attr:$vpm_pitch,
     OptionalAttr<StrAttr>:$serialize
   );
   let assemblyFormat = "$address `,` $vpm_base_row attr-dict `:` type($address) `,` type($vpm_base_row)";
@@ -368,7 +375,8 @@ def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
     AnyType:$value,
     Optional<AnyType>:$active_lanes_value,
     Optional<AnyType>:$vpm_row_value,
-    I32Attr:$elem_bytes,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
     OptionalAttr<I32Attr>:$active_lanes,
     I32Attr:$vpm_row,
     OptionalAttr<StrAttr>:$serialize
@@ -393,12 +401,13 @@ def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
     AnyType:$vpm_y,
     AnyType:$vpm_x,
     Optional<AnyType>:$active_lanes_value,
-    I32Attr:$elem_bytes,
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
     I32Attr:$row_len,
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
     OptionalAttr<I32Attr>:$active_lanes,
-    OptionalAttr<StrAttr>:$orientation,
     OptionalAttr<StrAttr>:$serialize
   );
   let assemblyFormat = "$address `,` $vpm_y `,` $vpm_x (`,` $active_lanes_value^)? attr-dict `:` type($address) `,` type($vpm_y) `,` type($vpm_x) (`,` type($active_lanes_value)^)?";

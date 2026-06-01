@@ -35,13 +35,12 @@ ssavc4.module @bad_vdr_load_lowering {
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     // CHECK: requires semantic vc4.resource VDR/VPM rows and vpm_base_row
     ssavc4.vdr.load %addr, %row {
-      elem_bytes = 4 : i32,
-      row_len = 16 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 16 : i32,
       memory_pitch_bytes = 64 : i32,
-      vpm_base_col = 0 : i32,
-      orientation = "horizontal",
-      vpitch = 1 : i32,
+      vpm_x = 0 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      vpm_pitch = 1 : i32,
       serialize = "mutex"
     } : i32, i32
     ssavc4.thread_end

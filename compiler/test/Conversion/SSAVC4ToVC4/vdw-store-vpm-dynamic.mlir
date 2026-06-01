@@ -47,11 +47,10 @@ ssavc4.module @vdw_store_vpm_dynamic {
     %x = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %active = ssavc4.load_imm <splat32> {value = 7 : i32} : i32
     ssavc4.vdw.store_vpm %addr, %y, %x, %active {
-      elem_bytes = 4 : i32,
-      row_len = 4 : i32,
+      width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 4 : i32,
       nrows = 1 : i32,
       memory_pitch_bytes = 16 : i32,
-      orientation = "horizontal",
+      orientation = #ssavc4.vpm_orientation<horizontal>,
       serialize = "mutex"
     } : i32, i32, i32, i32
     ssavc4.thread_end

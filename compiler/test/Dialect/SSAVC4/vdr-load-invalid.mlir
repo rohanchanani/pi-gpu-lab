@@ -25,15 +25,16 @@ ssavc4.module @bad_vdr_load {
   } {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
-    // CHECK: supports only 32-bit executable VDR loads; elem_bytes must be 4
+    // CHECK: supports only width = #ssavc4.vpm_elem_width<w32> in executable v1
     ssavc4.vdr.load %addr, %row {
-      elem_bytes = 2 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      width = #ssavc4.vpm_elem_width<w16>,
+      subword = #ssavc4.vpm_subword<none>,
       row_len = 16 : i32,
       nrows = 1 : i32,
       memory_pitch_bytes = 32 : i32,
-      vpm_base_col = 0 : i32,
-      orientation = "horizontal",
-      vpitch = 1 : i32,
+      vpm_x = 0 : i32,
+      vpm_pitch = 1 : i32,
       serialize = "mutex"
     } : i32, i32
     ssavc4.thread_end

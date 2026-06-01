@@ -25,8 +25,15 @@ ssavc4.module @bad_shared_vpm_resource {
   } {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %seed = ssavc4.load_imm <splat32> {value = 42 : i32} : vector<16xi32>
-    // CHECK: supports only 32-bit VPM elements
-    ssavc4.vpm.write %row0, %seed {elem_bytes = 2 : i32, lanes = 16 : i32, orientation = "horizontal"} : i32, vector<16xi32>
+    // CHECK: supports only width = #ssavc4.vpm_elem_width<w32> in executable v1
+    ssavc4.vpm.write %row0, %seed {
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      width = #ssavc4.vpm_elem_width<w16>,
+      subword = #ssavc4.vpm_subword<none>,
+      x = 0 : i32,
+      stride = 1 : i32,
+      lanes = 16 : i32
+    } : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

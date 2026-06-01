@@ -1,13 +1,19 @@
 // RUN: vc4-opt %s | FileCheck %s
 
 // CHECK: ssavc4.vpm.write
-// CHECK-SAME: elem_bytes = 4 : i32
 // CHECK-SAME: lanes = 16 : i32
-// CHECK-SAME: orientation = "horizontal"
+// CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
+// CHECK-SAME: stride = 1 : i32
+// CHECK-SAME: subword = #ssavc4.vpm_subword<none>
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w32>
+// CHECK-SAME: x = 0 : i32
 // CHECK: ssavc4.vpm.read
-// CHECK-SAME: elem_bytes = 4 : i32
 // CHECK-SAME: lanes = 16 : i32
-// CHECK-SAME: orientation = "vertical"
+// CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
+// CHECK-SAME: stride = 1 : i32
+// CHECK-SAME: subword = #ssavc4.vpm_subword<none>
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w32>
+// CHECK-SAME: x = 0 : i32
 ssavc4.module @shared_vpm_roundtrip {
   ssavc4.func @shared_vpm_kernel() attributes {
     kernel,
@@ -33,9 +39,9 @@ ssavc4.module @shared_vpm_roundtrip {
   } {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %tile = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
-    ssavc4.vpm.write %row0, %tile {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal"} : i32, vector<16xi32>
-    %read = ssavc4.vpm.read %row0 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "vertical"} : i32 -> vector<16xi32>
-    ssavc4.vpm.write %row0, %read {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal"} : i32, vector<16xi32>
+    ssavc4.vpm.write %row0, %tile {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, vector<16xi32>
+    %read = ssavc4.vpm.read %row0 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 -> vector<16xi32>
+    ssavc4.vpm.write %row0, %read {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }

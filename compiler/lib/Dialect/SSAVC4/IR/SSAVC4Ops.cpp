@@ -145,6 +145,28 @@ static LogicalResult verifyOptionalStringAttrChoice(Operation *op,
                            << "\"; got \"" << attr.getValue() << "\"";
 }
 
+static LogicalResult verifyExecutableVPMMode(Operation *op,
+                                             VPMElemWidth width,
+                                             VPMSubword subword) {
+  if (width != VPMElemWidth::w32)
+    return op->emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+  if (subword != VPMSubword::none)
+    return op->emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+  return success();
+}
+
+static LogicalResult verifyVPMQPUCoordinates(Operation *op,
+                                             VPMOrientation orientation,
+                                             int64_t x, int64_t stride) {
+  if (x < 0 || x > 15)
+    return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+  if (orientation == VPMOrientation::horizontal && x != 0)
+    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0 in executable v1");
+  if (stride <= 0)
+    return op->emitOpError("requires positive VPM stride");
+  return success();
+}
+
 static LogicalResult verifySuccessorOperands(Operation *op, Block *successor,
                                              OperandRange operands,
                                              StringRef edgeName = "") {
@@ -290,6 +312,36 @@ LogicalResult SplatOp::verify() {
            << inputType << " and " << resultType;
   }
   return success();
+}
+
+LogicalResult VPMWriteOp::verify() {
+  Operation *op = getOperation();
+  if (!getRow().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 VPM row/y operand");
+  if (failed(verifyVector16(op, getValue().getType(), "value")))
+    return failure();
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
+  int64_t lanes = getLanesAttr().getInt();
+  if (lanes != 16)
+    return emitOpError("supports only full 16-lane VPM vectors in executable v1");
+  return verifyVPMQPUCoordinates(op, getOrientation(), getXAttr().getInt(),
+                                 getStrideAttr().getInt());
+}
+
+LogicalResult VPMReadOp::verify() {
+  Operation *op = getOperation();
+  if (!getRow().getType().isSignlessInteger(32))
+    return emitOpError("requires an i32 VPM row/y operand");
+  if (failed(verifyVector16(op, getResult().getType(), "result")))
+    return failure();
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
+  int64_t lanes = getLanesAttr().getInt();
+  if (lanes != 16)
+    return emitOpError("supports only full 16-lane VPM vectors in executable v1");
+  return verifyVPMQPUCoordinates(op, getOrientation(), getXAttr().getInt(),
+                                 getStrideAttr().getInt());
 }
 
 LogicalResult MovOp::verify() {
@@ -525,9 +577,8 @@ LogicalResult VDRLoadOp::verify() {
   if (!getVpmBaseRow().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM base row operand");
 
-  int64_t elemBytes = getElemBytesAttr().getInt();
-  if (elemBytes != 4)
-    return emitOpError("supports only 32-bit executable VDR loads; elem_bytes must be 4");
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
 
   int64_t rowLen = getRowLenAttr().getInt();
   if (rowLen <= 0 || rowLen > 16)
@@ -538,22 +589,19 @@ LogicalResult VDRLoadOp::verify() {
     return emitOpError("requires nrows in range [1, 16]");
 
   int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
-  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
-    return emitOpError("requires memory_pitch_bytes to be a positive multiple of elem_bytes");
-  if (memoryPitchBytes < rowLen * elemBytes)
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return emitOpError("requires memory_pitch_bytes to be a positive multiple of 4 bytes");
+  if (memoryPitchBytes < rowLen * 4)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
 
-  int64_t vpmBaseCol = getVpmBaseColAttr().getInt();
-  if (vpmBaseCol != 0)
-    return emitOpError("M5 VDR loads support only vpm_base_col = 0");
+  int64_t vpmX = getVpmXAttr().getInt();
+  if (vpmX < 0 || vpmX > 15)
+    return emitOpError("requires vpm_x in range [0, 15]");
 
-  int64_t vpitch = getVpitchAttr().getInt();
-  if (vpitch <= 0 || vpitch > 16)
-    return emitOpError("requires vpitch in range [1, 16]");
+  int64_t vpmPitch = getVpmPitchAttr().getInt();
+  if (vpmPitch <= 0 || vpmPitch > 16)
+    return emitOpError("requires vpm_pitch in range [1, 16]");
 
-  if (failed(verifyOptionalStringAttrChoice(op, "orientation", "horizontal",
-                                            "vertical", "orientation")))
-    return failure();
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
                                            "serialize")))
     return failure();
@@ -569,9 +617,8 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (!getVpmX().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM x-coordinate operand");
 
-  int64_t elemBytes = getElemBytesAttr().getInt();
-  if (elemBytes != 4)
-    return emitOpError("supports only 32-bit executable VDW stores; elem_bytes must be 4");
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
   int64_t rowLen = getRowLenAttr().getInt();
   if (rowLen < 1 || rowLen > 16)
     return emitOpError("requires row_len in range [1, 16]");
@@ -579,9 +626,9 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (nrows < 1 || nrows > 16)
     return emitOpError("requires nrows in range [1, 16]");
   int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
-  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
-    return emitOpError("requires memory_pitch_bytes to be a positive multiple of elem_bytes");
-  if (memoryPitchBytes < rowLen * elemBytes)
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
+    return emitOpError("requires memory_pitch_bytes to be a positive multiple of 4 bytes");
+  if (memoryPitchBytes < rowLen * 4)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
 
   if (getActiveLanesValue() &&
@@ -593,9 +640,6 @@ LogicalResult VDWStoreVPMOp::verify() {
     if (activeLanes.getInt() != rowLen)
       return emitOpError("active_lanes must match row_len for VDW stores");
 
-  if (failed(verifyOptionalStringAttrChoice(op, "orientation", "horizontal",
-                                            "vertical", "orientation")))
-    return failure();
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
                                            "serialize")))
     return failure();

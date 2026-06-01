@@ -39,10 +39,11 @@ def SSAVC4_VPMOrientation : SSAVC4_DialectI32Enum<"VPMOrientation",
       I32EnumAttrCase<"vertical", 1>
     ]>;
 
-def SSAVC4_VPMLaneMode : SSAVC4_DialectI32Enum<"VPMLaneMode",
-    "SSAVC4 VPM lane mode", [
-      I32EnumAttrCase<"packed", 0>,
-      I32EnumAttrCase<"laned", 1>
+def SSAVC4_VPMSubword : SSAVC4_DialectI32Enum<"VPMSubword",
+    "SSAVC4 VPM subword mode", [
+      I32EnumAttrCase<"none", 0>,
+      I32EnumAttrCase<"packed", 1>,
+      I32EnumAttrCase<"laned", 2>
     ]>;
 
 def SSAVC4_VPMElemWidth : SSAVC4_DialectI32Enum<"VPMElemWidth",
@@ -71,8 +72,8 @@ def SSAVC4_TMUReadPartAttr
     : SSAVC4_EnumAttr<SSAVC4_TMUReadPart, "tmu_read_part">;
 def SSAVC4_VPMOrientationAttr
     : SSAVC4_EnumAttr<SSAVC4_VPMOrientation, "vpm_orientation">;
-def SSAVC4_VPMLaneModeAttr
-    : SSAVC4_EnumAttr<SSAVC4_VPMLaneMode, "vpm_lane_mode">;
+def SSAVC4_VPMSubwordAttr
+    : SSAVC4_EnumAttr<SSAVC4_VPMSubword, "vpm_subword">;
 def SSAVC4_VPMElemWidthAttr
     : SSAVC4_EnumAttr<SSAVC4_VPMElemWidth, "vpm_elem_width">;
 def SSAVC4_VDWStoreSerializeAttr

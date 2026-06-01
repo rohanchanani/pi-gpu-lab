@@ -94,7 +94,7 @@ args = [
     %tok0 = ssavc4.tmu.request %row0_addr {unit = "tmu0", mode = "direct"} : vector<16xi32> -> !ssavc4.async.token
     %tile0 = ssavc4.tmu.read %tok0 {unit = "tmu0", part = "raw32"} : !ssavc4.async.token -> vector<16xi32>
     %vpm_row0 = ssavc4.alu.add %vpm_base_row, %row0 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vpm.write %vpm_row0, %tile0 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.vpm.write %vpm_row0, %tile0 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, vector<16xi32>
 
     %row1_bytes = ssavc4.alu.add %row1, %shift_six {opcode = #vc4.add_opcode<shl>} : (i32, i32) -> i32
     %row1_input = ssavc4.alu.add %input_base, %row1_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
@@ -103,7 +103,7 @@ args = [
     %tok1 = ssavc4.tmu.request %row1_addr {unit = "tmu0", mode = "direct"} : vector<16xi32> -> !ssavc4.async.token
     %tile1 = ssavc4.tmu.read %tok1 {unit = "tmu0", part = "raw32"} : !ssavc4.async.token -> vector<16xi32>
     %vpm_row1 = ssavc4.alu.add %vpm_base_row, %row1 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vpm.write %vpm_row1, %tile1 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.vpm.write %vpm_row1, %tile1 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, vector<16xi32>
 
     %row2_bytes = ssavc4.alu.add %row2, %shift_six {opcode = #vc4.add_opcode<shl>} : (i32, i32) -> i32
     %row2_input = ssavc4.alu.add %input_base, %row2_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
@@ -112,7 +112,7 @@ args = [
     %tok2 = ssavc4.tmu.request %row2_addr {unit = "tmu0", mode = "direct"} : vector<16xi32> -> !ssavc4.async.token
     %tile2 = ssavc4.tmu.read %tok2 {unit = "tmu0", part = "raw32"} : !ssavc4.async.token -> vector<16xi32>
     %vpm_row2 = ssavc4.alu.add %vpm_base_row, %row2 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vpm.write %vpm_row2, %tile2 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.vpm.write %vpm_row2, %tile2 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, vector<16xi32>
 
     %row3_bytes = ssavc4.alu.add %row3, %shift_six {opcode = #vc4.add_opcode<shl>} : (i32, i32) -> i32
     %row3_input = ssavc4.alu.add %input_base, %row3_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
@@ -121,25 +121,25 @@ args = [
     %tok3 = ssavc4.tmu.request %row3_addr {unit = "tmu0", mode = "direct"} : vector<16xi32> -> !ssavc4.async.token
     %tile3 = ssavc4.tmu.read %tok3 {unit = "tmu0", part = "raw32"} : !ssavc4.async.token -> vector<16xi32>
     %vpm_row3 = ssavc4.alu.add %vpm_base_row, %row3 {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    ssavc4.vpm.write %vpm_row3, %tile3 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "horizontal", serialize = "mutex"} : i32, vector<16xi32>
+    ssavc4.vpm.write %vpm_row3, %tile3 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, serialize = "mutex"} : i32, vector<16xi32>
 
     ssavc4.barrier %logical_warp_id, %warps_per_block : i32, i32 {arrive_offset = 0 : i32, go_offset = 1 : i32, depart_offset = 2 : i32, reset_offset = 3 : i32}
 
     %out0 = ssavc4.alu.add %out_base, %row0_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    %read0 = ssavc4.vpm.read %row0 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "vertical", serialize = "mutex"} : i32 -> vector<16xi32>
-    ssavc4.vdw.store %out0, %read0, %active_full, %store_row {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    %read0 = ssavc4.vpm.read %row0 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>, serialize = "mutex"} : i32 -> vector<16xi32>
+    ssavc4.vdw.store %out0, %read0, %active_full, %store_row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
 
     %out1 = ssavc4.alu.add %out_base, %row1_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    %read1 = ssavc4.vpm.read %row1 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "vertical", serialize = "mutex"} : i32 -> vector<16xi32>
-    ssavc4.vdw.store %out1, %read1, %active_full, %store_row {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    %read1 = ssavc4.vpm.read %row1 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>, serialize = "mutex"} : i32 -> vector<16xi32>
+    ssavc4.vdw.store %out1, %read1, %active_full, %store_row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
 
     %out2 = ssavc4.alu.add %out_base, %row2_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    %read2 = ssavc4.vpm.read %row2 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "vertical", serialize = "mutex"} : i32 -> vector<16xi32>
-    ssavc4.vdw.store %out2, %read2, %active_full, %store_row {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    %read2 = ssavc4.vpm.read %row2 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>, serialize = "mutex"} : i32 -> vector<16xi32>
+    ssavc4.vdw.store %out2, %read2, %active_full, %store_row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
 
     %out3 = ssavc4.alu.add %out_base, %row3_bytes {opcode = #vc4.add_opcode<add>} : (i32, i32) -> i32
-    %read3 = ssavc4.vpm.read %row3 {elem_bytes = 4 : i32, lanes = 16 : i32, orientation = "vertical", serialize = "mutex"} : i32 -> vector<16xi32>
-    ssavc4.vdw.store %out3, %read3, %active_full, %store_row {elem_bytes = 4 : i32, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
+    %read3 = ssavc4.vpm.read %row3 {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>, serialize = "mutex"} : i32 -> vector<16xi32>
+    ssavc4.vdw.store %out3, %read3, %active_full, %store_row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_row = 0 : i32, serialize = "mutex"} : i32, vector<16xi32>, i32, i32
 
     ssavc4.thread_end
   }
