@@ -27,6 +27,7 @@
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 
 #include <algorithm>
 #include <cctype>
@@ -409,6 +410,15 @@ static Attribute getBuiltinKindAttr(OpBuilder &builder, StringRef name) {
   if (name == "logical_warp_id")
     return mlir::vc4::BuiltinKindAttr::get(
         ctx, mlir::vc4::BuiltinKind::logical_warp_id);
+  if (name == "warps_per_block")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::warps_per_block);
+  if (name == "vpm_base_row")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::vpm_base_row);
+  if (name == "semaphore_base")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::semaphore_base);
   return {};
 }
 
@@ -450,49 +460,6 @@ static DictionaryAttr buildArgABIEntry(OpBuilder &builder, DictionaryAttr source
   return builder.getDictionaryAttr(attrs);
 }
 
-static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
-  SmallVector<Attribute, 8> args;
-  int64_t nextUniform = 0;
-  ArrayAttr argAttrs = asArrayAttr(kernel->getAttr("arg_attrs"));
-  if (!kernel->getRegion(0).empty()) {
-    for (BlockArgument arg : kernel->getRegion(0).front().getArguments()) {
-      DictionaryAttr source;
-      if (argAttrs && arg.getArgNumber() < argAttrs.size())
-        source = asDictionaryAttr(argAttrs[arg.getArgNumber()]);
-      args.push_back(buildArgABIEntry(builder, source, arg, arg.getArgNumber(),
-                                      nextUniform++));
-    }
-  }
-
-  SmallVector<Attribute, 4> builtins;
-  auto appendBuiltin = [&](StringRef name) {
-    builtins.push_back(buildBuiltinABIEntry(builder, name, nextUniform++));
-  };
-  if (kernelContains(kernel, kProgramIdOpName)) {
-    appendBuiltin("logical_request");
-    appendBuiltin("total_requests");
-  }
-  if (kernelContains(kernel, kWarpIdOpName))
-    appendBuiltin("logical_warp_id");
-
-  StringRef publicName = getPublicName(kernel);
-  StringAttr sym = getSymbolNameAttr(kernel);
-  return builder.getDictionaryAttr({
-      builder.getNamedAttr("public_name", builder.getStringAttr(publicName)),
-      builder.getNamedAttr("symbol_name",
-                           sym ? sym : builder.getStringAttr(publicName)),
-      builder.getNamedAttr(
-          "code_symbol",
-          builder.getStringAttr(makeCIdentifier(publicName) + "_shader")),
-      builder.getNamedAttr("tail_policy",
-                           builder.getStringAttr("exact_multiple")),
-      builder.getNamedAttr("uniform_words_per_qpu",
-                           builder.getI32IntegerAttr(nextUniform)),
-      builder.getNamedAttr("args", builder.getArrayAttr(args)),
-      builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
-  });
-}
-
 struct VC4KernelResourceSummary {
   StringRef schedule_mode;
   int64_t warps_per_block = 1;
@@ -512,6 +479,62 @@ struct VC4KernelResourceSummary {
   bool requires_vpm_base_row_builtin = false;
   bool requires_semaphore_base_builtin = false;
 };
+
+static void appendRequiredBuiltins(Operation *kernel,
+                                   const VC4KernelResourceSummary &summary,
+                                   llvm::function_ref<void(StringRef)> append) {
+  if (kernelContains(kernel, kProgramIdOpName)) {
+    append("logical_request");
+    append("total_requests");
+  }
+  if (kernelContains(kernel, kWarpIdOpName) || summary.uses_barrier)
+    append("logical_warp_id");
+  if (summary.uses_barrier)
+    append("warps_per_block");
+  if (summary.requires_vpm_base_row_builtin)
+    append("vpm_base_row");
+  if (summary.requires_semaphore_base_builtin)
+    append("semaphore_base");
+}
+
+static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder,
+                                     const VC4KernelResourceSummary &summary) {
+  SmallVector<Attribute, 8> args;
+  int64_t nextUniform = 0;
+  ArrayAttr argAttrs = asArrayAttr(kernel->getAttr("arg_attrs"));
+  if (!kernel->getRegion(0).empty()) {
+    for (BlockArgument arg : kernel->getRegion(0).front().getArguments()) {
+      DictionaryAttr source;
+      if (argAttrs && arg.getArgNumber() < argAttrs.size())
+        source = asDictionaryAttr(argAttrs[arg.getArgNumber()]);
+      args.push_back(buildArgABIEntry(builder, source, arg, arg.getArgNumber(),
+                                      nextUniform++));
+    }
+  }
+
+  SmallVector<Attribute, 4> builtins;
+  auto appendBuiltin = [&](StringRef name) {
+    builtins.push_back(buildBuiltinABIEntry(builder, name, nextUniform++));
+  };
+  appendRequiredBuiltins(kernel, summary, appendBuiltin);
+
+  StringRef publicName = getPublicName(kernel);
+  StringAttr sym = getSymbolNameAttr(kernel);
+  return builder.getDictionaryAttr({
+      builder.getNamedAttr("public_name", builder.getStringAttr(publicName)),
+      builder.getNamedAttr("symbol_name",
+                           sym ? sym : builder.getStringAttr(publicName)),
+      builder.getNamedAttr(
+          "code_symbol",
+          builder.getStringAttr(makeCIdentifier(publicName) + "_shader")),
+      builder.getNamedAttr("tail_policy",
+                           builder.getStringAttr("exact_multiple")),
+      builder.getNamedAttr("uniform_words_per_qpu",
+                           builder.getI32IntegerAttr(nextUniform)),
+      builder.getNamedAttr("args", builder.getArrayAttr(args)),
+      builder.getNamedAttr("builtins", builder.getArrayAttr(builtins)),
+  });
+}
 
 static VC4KernelResourceSummary
 computeVC4KernelResourceSummary(Operation *kernel) {
@@ -686,6 +709,8 @@ static Operation *createSSAVC4Module(Operation *kernel, OpBuilder &builder) {
 
 static Operation *createSSAVC4Func(Operation *kernel, Operation *module,
                                    OpBuilder &builder) {
+  VC4KernelResourceSummary resourceSummary =
+      computeVC4KernelResourceSummary(kernel);
   OperationState state(kernel->getLoc(), kSSAVC4FuncOpName);
   StringAttr sym = getSymbolNameAttr(kernel);
   auto &properties =
@@ -695,19 +720,54 @@ static Operation *createSSAVC4Func(Operation *kernel, Operation *module,
   properties.threading = mlir::vc4::ThreadingModeAttr::get(
       builder.getContext(), mlir::vc4::ThreadingMode::single);
   state.addAttribute(builder.getStringAttr("vc4.launch_abi"),
-                     buildLaunchABI(kernel, builder));
+                     buildLaunchABI(kernel, builder, resourceSummary));
   state.addAttribute(builder.getStringAttr("vc4.resource"),
                      buildSSAVC4ResourceMetadataFromVC4KernelSummary(
-                         computeVC4KernelResourceSummary(kernel), builder));
+                         resourceSummary, builder));
   state.addRegion();
   builder.setInsertionPointToEnd(&module->getRegion(0).front());
   return builder.create(state);
 }
 
+static Value createI32Add(OpBuilder &builder, Location loc, Value lhs,
+                          Value rhs) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(),
+                                          mlir::vc4::AddOpcode::add))},
+      lhs.getType());
+}
+
+static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
+                            int64_t constant) {
+  if (constant == 0)
+    return value;
+  Value offset =
+      createLoadImm(builder, loc, builder.getI32Type(),
+                    builder.getI32IntegerAttr(constant));
+  return createI32Add(builder, loc, value, offset);
+}
+
+static Value applyVPMTileBase(Operation *op, OpBuilder &builder, Value tile,
+                              Value row, llvm::StringMap<Value> &builtinMap,
+                              llvm::DenseMap<Value, int64_t> &vpmRows) {
+  int64_t tileOffset = 0;
+  auto tileIt = vpmRows.find(tile);
+  if (tileIt != vpmRows.end())
+    tileOffset = tileIt->second;
+  Value result = addI32Constant(builder, op->getLoc(), row, tileOffset);
+  Value base = builtinMap.lookup("vpm_base_row");
+  if (base)
+    result = createI32Add(builder, op->getLoc(), base, result);
+  return result;
+}
+
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  llvm::DenseMap<Value, Value> &valueMap,
                                  llvm::StringMap<Value> &builtinMap,
-                                 llvm::DenseMap<Value, int64_t> &vpmRows) {
+                                 llvm::DenseMap<Value, int64_t> &vpmRows,
+                                 int64_t &nextVPMRowOffset) {
   if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
     valueMap[cst.getResult()] =
         createLoadImm(builder, op->getLoc(), cst.getType(), cst.getValue());
@@ -832,16 +892,24 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value value = mapValue(op, op->getOperand(2), valueMap);
     if (!base || !value)
       return failure();
-    createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, {base, value},
+    SmallVector<Value, 4> operands{base, value};
+    SmallVector<int32_t, 4> segments{1, 1, 0, 0};
+    if (Value vpmBase = builtinMap.lookup("vpm_base_row")) {
+      operands.push_back(vpmBase);
+      segments[3] = 1;
+    }
+    createOp(builder, op->getLoc(), kSSAVC4VDWStoreOpName, operands,
              {getSSAVC4VPMWidth(builder, op),
               getSSAVC4VPMSubword(builder, op),
               builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
               builder.getNamedAttr("operandSegmentSizes",
-                                   builder.getDenseI32ArrayAttr({1, 1, 0, 0}))});
+                                   builder.getDenseI32ArrayAttr(segments))});
     return success();
   }
   if (hasName(op, kVPMAllocOpName)) {
-    vpmRows[op->getResult(0)] = 0;
+    vpmRows[op->getResult(0)] = nextVPMRowOffset;
+    if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
+      nextVPMRowOffset += rows.getInt();
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
@@ -852,6 +920,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value value = mapValue(op, op->getOperand(2), valueMap);
     if (!row || !value)
       return failure();
+    row = applyVPMTileBase(op, builder, op->getOperand(0), row, builtinMap,
+                           vpmRows);
     createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
              {getSSAVC4VPMOrientation(builder, op),
               getSSAVC4VPMWidth(builder, op),
@@ -868,6 +938,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value row = mapValue(op, op->getOperand(1), valueMap);
     if (!row)
       return failure();
+    row = applyVPMTileBase(op, builder, op->getOperand(0), row, builtinMap,
+                           vpmRows);
     valueMap[op->getResult(0)] = createOpWithResult(
         builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
         {getSSAVC4VPMOrientation(builder, op),
@@ -891,6 +963,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             builder.getContext(),
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
+    dstRow = applyVPMTileBase(op, builder, op->getOperand(2), dstRow,
+                              builtinMap, vpmRows);
     createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
              {getSSAVC4VPMOrientation(builder, op),
               getSSAVC4VPMWidth(builder, op),
@@ -918,6 +992,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                             builder.getContext(),
                                             mlir::vc4::AddOpcode::add))},
         base.getType());
+    srcRow = applyVPMTileBase(op, builder, op->getOperand(0), srcRow,
+                              builtinMap, vpmRows);
     auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
     Value vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
                                builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
@@ -934,7 +1010,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kBarrierOpName)) {
-    createOp(builder, op->getLoc(), kSSAVC4BarrierOpName, {},
+    Value logicalWarp = builtinMap.lookup("logical_warp_id");
+    Value warpsPerBlock = builtinMap.lookup("warps_per_block");
+    if (!logicalWarp || !warpsPerBlock)
+      return op->emitOpError(
+          "missing launch builtin uniforms for cooperative barrier");
+    createOp(builder, op->getLoc(), kSSAVC4BarrierOpName,
+             {logicalWarp, warpsPerBlock},
              {builder.getNamedAttr("arrive_offset", builder.getI32IntegerAttr(0)),
               builder.getNamedAttr("go_offset", builder.getI32IntegerAttr(1)),
               builder.getNamedAttr("depart_offset", builder.getI32IntegerAttr(2)),
@@ -979,6 +1061,9 @@ static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
   llvm::StringMap<Value> builtinMap;
   llvm::DenseMap<Block *, Block *> blockMap;
   llvm::DenseMap<Value, int64_t> vpmRows;
+  VC4KernelResourceSummary resourceSummary =
+      computeVC4KernelResourceSummary(kernel);
+  int64_t nextVPMRowOffset = 0;
   OpBuilder builder(func->getContext());
 
   for (Block &sourceBlock : source) {
@@ -1001,12 +1086,7 @@ static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
         createUniformRead(builder, kernel->getLoc(), builder.getI32Type(),
                           nextUniform++);
   };
-  if (kernelContains(kernel, kProgramIdOpName)) {
-    materializeBuiltin("logical_request");
-    materializeBuiltin("total_requests");
-  }
-  if (kernelContains(kernel, kWarpIdOpName))
-    materializeBuiltin("logical_warp_id");
+  appendRequiredBuiltins(kernel, resourceSummary, materializeBuiltin);
 
   for (Block &sourceBlock : source) {
     Block *destBlock = blockMap.lookup(&sourceBlock);
@@ -1017,7 +1097,8 @@ static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
           return failure();
         continue;
       }
-      if (failed(lowerBodyOp(&nested, builder, valueMap, builtinMap, vpmRows)))
+      if (failed(lowerBodyOp(&nested, builder, valueMap, builtinMap, vpmRows,
+                             nextVPMRowOffset)))
         return failure();
     }
   }
