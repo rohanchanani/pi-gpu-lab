@@ -217,71 +217,87 @@ static bool isContiguousByteOffsets(Value value) {
          isBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
 }
 
-enum class PredNormalForm { Full, Empty, Tail, RectRow };
+enum class PredicateClass {
+  Full,
+  Empty,
+  TailPrefix,
+  RectRow,
+  GeneralMask,
+  Unknown
+};
 
-static std::optional<PredNormalForm> normalizePredExpression(Value pred) {
+static PredicateClass classifyPredicate(Value pred) {
   Operation *def = pred.getDefiningOp();
   if (!def)
-    return std::nullopt;
+    return PredicateClass::Unknown;
   if (hasName(def, "vc4kernel.pred.full"))
-    return PredNormalForm::Full;
+    return PredicateClass::Full;
   if (hasName(def, "vc4kernel.pred.empty"))
-    return PredNormalForm::Empty;
+    return PredicateClass::Empty;
   if (hasName(def, "vc4kernel.pred.tail"))
-    return PredNormalForm::Tail;
+    return PredicateClass::TailPrefix;
   if (hasName(def, "vc4kernel.pred.rect"))
-    return PredNormalForm::RectRow;
+    return PredicateClass::RectRow;
+  if (hasName(def, "vc4kernel.fragment_cmp"))
+    return PredicateClass::GeneralMask;
   if (hasName(def, "vc4kernel.pred.not")) {
     if (def->getNumOperands() != 1)
-      return std::nullopt;
-    std::optional<PredNormalForm> input =
-        normalizePredExpression(def->getOperand(0));
-    if (!input)
-      return std::nullopt;
-    if (*input == PredNormalForm::Full)
-      return PredNormalForm::Empty;
-    if (*input == PredNormalForm::Empty)
-      return PredNormalForm::Full;
-    return std::nullopt;
+      return PredicateClass::Unknown;
+    PredicateClass input = classifyPredicate(def->getOperand(0));
+    if (input == PredicateClass::Unknown)
+      return PredicateClass::Unknown;
+    if (input == PredicateClass::Full)
+      return PredicateClass::Empty;
+    if (input == PredicateClass::Empty)
+      return PredicateClass::Full;
+    return PredicateClass::GeneralMask;
   }
   if (hasName(def, "vc4kernel.pred.and") ||
       hasName(def, "vc4kernel.pred.or")) {
     if (def->getNumOperands() != 2)
-      return std::nullopt;
+      return PredicateClass::Unknown;
     Value lhs = def->getOperand(0);
     Value rhs = def->getOperand(1);
-    std::optional<PredNormalForm> lhsForm = normalizePredExpression(lhs);
-    std::optional<PredNormalForm> rhsForm = normalizePredExpression(rhs);
-    if (!lhsForm || !rhsForm)
-      return std::nullopt;
+    PredicateClass lhsClass = classifyPredicate(lhs);
+    PredicateClass rhsClass = classifyPredicate(rhs);
+    if (lhsClass == PredicateClass::Unknown ||
+        rhsClass == PredicateClass::Unknown)
+      return PredicateClass::Unknown;
     if (hasName(def, "vc4kernel.pred.and")) {
-      if (*lhsForm == PredNormalForm::Empty ||
-          *rhsForm == PredNormalForm::Empty)
-        return PredNormalForm::Empty;
-      if (*lhsForm == PredNormalForm::Full)
-        return rhsForm;
-      if (*rhsForm == PredNormalForm::Full)
-        return lhsForm;
+      if (lhsClass == PredicateClass::Empty ||
+          rhsClass == PredicateClass::Empty)
+        return PredicateClass::Empty;
+      if (lhsClass == PredicateClass::Full)
+        return rhsClass;
+      if (rhsClass == PredicateClass::Full)
+        return lhsClass;
       if (lhs == rhs)
-        return lhsForm;
-      return std::nullopt;
+        return lhsClass;
+      return PredicateClass::GeneralMask;
     }
-    if (*lhsForm == PredNormalForm::Full ||
-        *rhsForm == PredNormalForm::Full)
-      return PredNormalForm::Full;
-    if (*lhsForm == PredNormalForm::Empty)
-      return rhsForm;
-    if (*rhsForm == PredNormalForm::Empty)
-      return lhsForm;
+    if (lhsClass == PredicateClass::Full ||
+        rhsClass == PredicateClass::Full)
+      return PredicateClass::Full;
+    if (lhsClass == PredicateClass::Empty)
+      return rhsClass;
+    if (rhsClass == PredicateClass::Empty)
+      return lhsClass;
     if (lhs == rhs)
-      return lhsForm;
-    return std::nullopt;
+      return lhsClass;
+    return PredicateClass::GeneralMask;
   }
-  return std::nullopt;
+  return PredicateClass::Unknown;
 }
 
-static bool isNormalizablePredExpression(Value pred) {
-  return normalizePredExpression(pred).has_value();
+static bool isKnownPredicate(Value pred) {
+  return classifyPredicate(pred) != PredicateClass::Unknown;
+}
+
+static LogicalResult verifyKnownPredicate(Operation *op, Value pred) {
+  if (isKnownPredicate(pred))
+    return success();
+  return op->emitOpError(
+      "predicate value must be produced by a known vc4kernel predicate op");
 }
 
 static std::optional<int64_t> getVPMAllocRows(Value tile) {
@@ -648,29 +664,25 @@ LogicalResult PredRectOp::verify() {
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult PredAndOp::verify() {
-  if (!isNormalizablePredExpression(getResult()))
-    return emitOpError("predicate expression is not normalizable");
-  return verifyPred16(getOperation(), getResult().getType(), "result");
+  if (failed(verifyPred16(getOperation(), getResult().getType(), "result")))
+    return failure();
+  return verifyKnownPredicate(getOperation(), getResult());
 }
 LogicalResult PredOrOp::verify() {
-  if (!isNormalizablePredExpression(getResult()))
-    return emitOpError("predicate expression is not normalizable");
-  return verifyPred16(getOperation(), getResult().getType(), "result");
+  if (failed(verifyPred16(getOperation(), getResult().getType(), "result")))
+    return failure();
+  return verifyKnownPredicate(getOperation(), getResult());
 }
 LogicalResult PredNotOp::verify() {
-  if (!isNormalizablePredExpression(getResult()))
-    return emitOpError("predicate expression is not normalizable");
-  return verifyPred16(getOperation(), getResult().getType(), "result");
+  if (failed(verifyPred16(getOperation(), getResult().getType(), "result")))
+    return failure();
+  return verifyKnownPredicate(getOperation(), getResult());
 }
 LogicalResult PredAnyOp::verify() {
-  if (!isNormalizablePredExpression(getInput()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getInput());
 }
 LogicalResult PredAllOp::verify() {
-  if (!isNormalizablePredExpression(getInput()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getInput());
 }
 
 LogicalResult SplatOp::verify() {
@@ -721,8 +733,8 @@ LogicalResult FragmentCmpOp::verify() {
   return verifyPred16(getOperation(), getResult().getType(), "result");
 }
 LogicalResult FragmentSelectOp::verify() {
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
+  if (failed(verifyKnownPredicate(getOperation(), getPred())))
+    return failure();
   if (failed(verifySameType(getOperation(), getTrueValue().getType(),
                             getFalseValue().getType(),
                             "fragment_select value operands")) ||
@@ -742,8 +754,8 @@ LogicalResult FragmentRotateOp::verify() {
 LogicalResult FragmentReduceOp::verify() {
   if (getKind() != ReduceKind::add)
     return emitOpError("only #vc4kernel.reduce<add> is supported");
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
+  if (failed(verifyKnownPredicate(getOperation(), getPred())))
+    return failure();
   if (failed(verifySameType(getOperation(), getInput().getType(),
                             getResult().getType(), "fragment_reduce result")))
     return failure();
@@ -754,9 +766,7 @@ LogicalResult TMULoadFragmentOp::verify() {
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "tmu_load_fragment byte_offsets must be statically 4-byte aligned");
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getPred());
 }
 LogicalResult VDWStoreFragmentOp::verify() {
   if (!isContiguousByteOffsets(getByteOffsets()))
@@ -764,9 +774,7 @@ LogicalResult VDWStoreFragmentOp::verify() {
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getPred());
 }
 LogicalResult VPMAllocOp::verify() {
   if (getRows() < 1 || getRows() > 64)
@@ -779,17 +787,13 @@ LogicalResult VPMWriteFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getPred());
 }
 LogicalResult VPMReadFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
-  return success();
+  return verifyKnownPredicate(getOperation(), getPred());
 }
 LogicalResult VDRLoadToVPMOp::verify() {
   if (getOperation()->getNumOperands() != 4)
@@ -813,8 +817,8 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
     return emitOpError(
         "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
-  if (!isNormalizablePredExpression(getPred()))
-    return emitOpError("predicate expression is not normalizable");
+  if (failed(verifyKnownPredicate(getOperation(), getPred())))
+    return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }
 LogicalResult BarrierOp::verify() {
