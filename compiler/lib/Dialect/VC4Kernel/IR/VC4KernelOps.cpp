@@ -300,6 +300,57 @@ static LogicalResult verifyKnownPredicate(Operation *op, Value pred) {
       "predicate value must be produced by a known vc4kernel predicate op");
 }
 
+static bool acceptsAnyPredicateForZeroFill(PredicateClass predClass) {
+  return predClass != PredicateClass::Unknown;
+}
+
+static bool acceptsAnyPredicateForPreserveStorePlanning(
+    PredicateClass predClass) {
+  return predClass != PredicateClass::Unknown;
+}
+
+static bool acceptsOnlyRowTailPredicate(PredicateClass predClass) {
+  switch (predClass) {
+  case PredicateClass::Full:
+  case PredicateClass::Empty:
+  case PredicateClass::TailPrefix:
+  case PredicateClass::RectRow:
+    return true;
+  case PredicateClass::GeneralMask:
+  case PredicateClass::Unknown:
+    return false;
+  }
+  llvm_unreachable("unknown predicate class");
+}
+
+static LogicalResult verifyPredicateForZeroFill(Operation *op, Value pred) {
+  PredicateClass predClass = classifyPredicate(pred);
+  if (acceptsAnyPredicateForZeroFill(predClass))
+    return success();
+  return op->emitOpError(
+      "predicate value must be produced by a known vc4kernel predicate op");
+}
+
+static LogicalResult verifyPredicateForPreserveStorePlanning(Operation *op,
+                                                            Value pred) {
+  PredicateClass predClass = classifyPredicate(pred);
+  if (acceptsAnyPredicateForPreserveStorePlanning(predClass))
+    return success();
+  return op->emitOpError(
+      "predicate value must be produced by a known vc4kernel predicate op");
+}
+
+static LogicalResult verifyPredicateForRowTailVDW(Operation *op, Value pred) {
+  PredicateClass predClass = classifyPredicate(pred);
+  if (predClass == PredicateClass::GeneralMask)
+    return op->emitOpError(
+        "vdw_store_vpm_fragment does not yet support general-mask predicates");
+  if (acceptsOnlyRowTailPredicate(predClass))
+    return success();
+  return op->emitOpError(
+      "predicate value must be produced by a known vc4kernel predicate op");
+}
+
 static std::optional<int64_t> getVPMAllocRows(Value tile) {
   Operation *def = tile.getDefiningOp();
   if (!hasName(def, "vc4kernel.vpm_alloc"))
@@ -774,15 +825,16 @@ LogicalResult TMULoadFragmentOp::verify() {
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "tmu_load_fragment byte_offsets must be statically 4-byte aligned");
-  return verifyKnownPredicate(getOperation(), getPred());
+  return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDWStoreFragmentOp::verify() {
   if (!isContiguousByteOffsets(getByteOffsets()))
-    return emitOpError("vdw_store_fragment requires contiguous byte offsets");
+    return emitOpError(
+        "vdw_store_fragment requires contiguous 32-bit row fragment byte offsets");
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
-  return verifyKnownPredicate(getOperation(), getPred());
+  return verifyPredicateForPreserveStorePlanning(getOperation(), getPred());
 }
 LogicalResult VPMAllocOp::verify() {
   if (getRows() < 1 || getRows() > 64)
@@ -795,13 +847,13 @@ LogicalResult VPMWriteFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  return verifyKnownPredicate(getOperation(), getPred());
+  return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VPMReadFragmentOp::verify() {
   if (failed(verifyOrientationRowOnly(getOperation())) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
-  return verifyKnownPredicate(getOperation(), getPred());
+  return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDRLoadToVPMOp::verify() {
   if (getOperation()->getNumOperands() != 4)
@@ -825,7 +877,7 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
     return emitOpError(
         "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
-  if (failed(verifyKnownPredicate(getOperation(), getPred())))
+  if (failed(verifyPredicateForRowTailVDW(getOperation(), getPred())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }

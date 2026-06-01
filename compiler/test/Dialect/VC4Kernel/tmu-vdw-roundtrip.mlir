@@ -17,11 +17,14 @@ module {
     %tail = vc4kernel.pred.tail %base, %limit : i32, i32 -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.lane_range
     %lanes = vc4kernel.lane_range : vector<16xi32>
+    %basev = vc4kernel.splat %base : i32 -> vector<16xi32>
     %offs = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    // CHECK: vc4kernel.fragment_cmp
+    %cmp = vc4kernel.fragment_cmp %lanes, %basev {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.tmu_load_fragment
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %cmp : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     // CHECK: vc4kernel.vdw_store_fragment
-    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %cmp : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -15,7 +15,7 @@ module {
     %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
     %offs = vc4kernel.fragment_add %lane_bytes, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
     %v = vc4kernel.splat %c0 : i32 -> vector<16xi32>
-    // CHECK: vdw_store_fragment requires contiguous byte offsets
+    // CHECK: vdw_store_fragment requires contiguous 32-bit row fragment byte offsets
     vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
