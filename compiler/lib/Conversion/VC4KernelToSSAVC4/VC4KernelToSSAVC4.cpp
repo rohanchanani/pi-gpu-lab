@@ -91,6 +91,7 @@ constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
 constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
+constexpr llvm::StringLiteral kSSAVC4CondSelectOpName("ssavc4.cond_select");
 constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
 
 static bool hasName(Operation *op, StringRef name) {
@@ -913,6 +914,11 @@ static Value createI32Sub(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
+static bool isVectorF32(Type type) {
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  return vectorType && vectorType.getElementType().isF32();
+}
+
 static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
                             int64_t constant) {
   if (constant == 0)
@@ -993,18 +999,47 @@ static void createBranch(OpBuilder &builder, Location loc, Block *target) {
   builder.create(state);
 }
 
+static void createBranch(OpBuilder &builder, Location loc, Block *target,
+                         ValueRange operands) {
+  OperationState state(loc, kSSAVC4BranchOpName);
+  state.addOperands(operands);
+  state.addSuccessors(target);
+  builder.create(state);
+}
+
 static void createCondBranch(OpBuilder &builder, Location loc, Value flags,
                              Block *trueDest, Block *falseDest,
-                             mlir::vc4::BranchCond cond) {
+                             mlir::vc4::BranchCond cond,
+                             ValueRange trueOperands = {},
+                             ValueRange falseOperands = {}) {
   OperationState state(loc, kSSAVC4CondBranchOpName);
   state.addOperands(flags);
+  state.addOperands(trueOperands);
+  state.addOperands(falseOperands);
   state.addSuccessors({trueDest, falseDest});
   state.addAttribute("cond",
                      mlir::vc4::BranchCondAttr::get(builder.getContext(),
                                                     cond));
   state.addAttribute("operandSegmentSizes",
-                     builder.getDenseI32ArrayAttr({1, 0, 0}));
+                     builder.getDenseI32ArrayAttr(
+                         {1, static_cast<int32_t>(trueOperands.size()),
+                          static_cast<int32_t>(falseOperands.size())}));
   builder.create(state);
+}
+
+static Value createCondSelect(OpBuilder &builder, Location loc, Value flags,
+                              Value trueValue, Value falseValue,
+                              mlir::vc4::Cond cond) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4CondSelectOpName, {flags, trueValue, falseValue},
+      {builder.getNamedAttr("cond",
+                            mlir::vc4::CondAttr::get(builder.getContext(),
+                                                     cond))},
+      trueValue.getType());
+}
+
+static Value createZeroValue(OpBuilder &builder, Location loc, Type type) {
+  return createLoadImm(builder, loc, type, builder.getI32IntegerAttr(0));
 }
 
 static void emitVDWStore(Operation *op, OpBuilder &builder, Value base,
@@ -1121,9 +1156,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         return failure();
       operands.push_back(mapped);
     }
-    mlir::vc4::AddOpcode opcode = mlir::vc4::AddOpcode::add;
+    mlir::vc4::AddOpcode opcode =
+        isVectorF32(op->getResult(0).getType()) ? mlir::vc4::AddOpcode::fadd
+                                                : mlir::vc4::AddOpcode::add;
     if (hasName(op, kFragmentSubOpName))
-      opcode = mlir::vc4::AddOpcode::sub;
+      opcode = isVectorF32(op->getResult(0).getType())
+                   ? mlir::vc4::AddOpcode::fsub
+                   : mlir::vc4::AddOpcode::sub;
     if (hasName(op, kFragmentShlOpName)) {
       opcode = mlir::vc4::AddOpcode::shl;
       if (operands[1].getType() != op->getResult(0).getType()) {
@@ -1147,11 +1186,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         return failure();
       operands.push_back(mapped);
     }
+    mlir::vc4::MulOpcode opcode =
+        isVectorF32(op->getResult(0).getType()) ? mlir::vc4::MulOpcode::fmul
+                                                : mlir::vc4::MulOpcode::mul24;
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
         {builder.getNamedAttr("opcode", mlir::vc4::MulOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::MulOpcode::mul24))},
+                                            builder.getContext(), opcode))},
         op->getResult(0).getType())};
     return success();
   }
@@ -1249,33 +1290,223 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kTMULoadOpName)) {
-    if (failed(requireFullPredicate(op, op->getOperand(2), state,
-                                    "tmu_load_fragment")))
-      return failure();
+    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(2),
+                                                         state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    if (predicate->kind != PredicatePlan::Class::Full &&
+        predicate->kind != PredicatePlan::Class::Empty &&
+        predicate->kind != PredicatePlan::Class::TailPrefix &&
+        predicate->kind != PredicatePlan::Class::RectRow)
+      return op->emitOpError()
+             << "tmu_load_fragment lowering currently supports only "
+                "pred.full, pred.empty, pred.tail, and pred.rect";
     Value base = mapValue(op, op->getOperand(0), state);
     Value offsets = mapValue(op, op->getOperand(1), state);
     if (!base || !offsets)
       return failure();
-    if (base.getType() != offsets.getType())
-      base = createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
-                                base, {}, offsets.getType());
-    Value address = createOpWithResult(
-        builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, offsets},
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::AddOpcode::add))},
+
+    auto emitLoad = [&](Value loadOffsets) -> Value {
+      Value loadBase = base;
+      if (loadBase.getType() != loadOffsets.getType())
+        loadBase = createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
+                                      loadBase, {}, loadOffsets.getType());
+      Value address = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4ALUAddOpName, {loadBase, loadOffsets},
+          {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                              builder.getContext(),
+                                              mlir::vc4::AddOpcode::add))},
+          loadOffsets.getType());
+      Value token = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4TMURequestOpName, address,
+          {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+           builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
+          mlir::ssavc4::AsyncTokenType::get(builder.getContext()));
+      return createOpWithResult(
+          builder, op->getLoc(), kSSAVC4TMUReadOpName, token,
+          {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+           builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
+          op->getResult(0).getType());
+    };
+
+    if (predicate->kind == PredicatePlan::Class::Full) {
+      state.values[op->getResult(0)] = {emitLoad(offsets)};
+      return success();
+    }
+
+    Value zero = createZeroValue(builder, op->getLoc(), op->getResult(0).getType());
+    if (predicate->kind == PredicatePlan::Class::Empty) {
+      state.values[op->getResult(0)] = {zero};
+      return success();
+    }
+
+    FullRowVDWOffsets sourceOffsets =
+        matchFullRowVDWByteOffsets(op->getOperand(1));
+    if (!sourceOffsets.matched)
+      return op->emitOpError(
+          "tmu_load_fragment predicated lowering currently supports only "
+          "contiguous byte_offsets = base_byte_offset + 4*lane_range so "
+          "inactive lanes can use a proven in-bounds safe address");
+    Value safeScalarOffset =
+        sourceOffsets.scalarBaseByteOffset
+            ? mapValue(op, sourceOffsets.scalarBaseByteOffset, state)
+            : createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                            builder.getI32IntegerAttr(0));
+    if (!safeScalarOffset)
+      return failure();
+
+    Value lane = createOpWithResult(builder, op->getLoc(),
+                                    kSSAVC4ElementNumberOpName, {}, {},
+                                    offsets.getType());
+    Value safeOffsetVec = createOpWithResult(
+        builder, op->getLoc(), kSSAVC4SplatOpName, safeScalarOffset, {},
         offsets.getType());
-    Value token = createOpWithResult(
-        builder, op->getLoc(), kSSAVC4TMURequestOpName, address,
-        {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
-         builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
-        mlir::ssavc4::AsyncTokenType::get(builder.getContext()));
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4TMUReadOpName, token,
-        {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
-         builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
-        op->getResult(0).getType())};
-    return success();
+
+    auto emitTailLoad = [&]() -> LogicalResult {
+      Value baseIndex = predicate->base;
+      Value limit = predicate->limit;
+      if (!baseIndex || !limit)
+        return op->emitOpError("pred.tail plan is missing base or limit values");
+      Value one =
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(1));
+      Value basePlusOne = createI32Add(builder, op->getLoc(), baseIndex, one);
+      Value activeTail = createI32Sub(builder, op->getLoc(), limit, baseIndex);
+      Value nonEmptyFlags =
+          createSubFlags(builder, op->getLoc(), limit, basePlusOne);
+
+      Region *region = builder.getInsertionBlock()->getParent();
+      Block *loadBlock = new Block();
+      Block *doneBlock = new Block();
+      doneBlock->addArgument(op->getResult(0).getType(), op->getLoc());
+      region->push_back(loadBlock);
+      region->push_back(doneBlock);
+
+      createCondBranch(builder, op->getLoc(), nonEmptyFlags, doneBlock,
+                       loadBlock, mlir::vc4::BranchCond::any_c_set, zero);
+
+      builder.setInsertionPointToEnd(loadBlock);
+      Value activeVec = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4SplatOpName, activeTail, {},
+          offsets.getType());
+      Value flags = createSubFlags(builder, op->getLoc(), lane, activeVec);
+      Value safeOffsets =
+          createCondSelect(builder, op->getLoc(), flags, offsets,
+                           safeOffsetVec, mlir::vc4::Cond::cs);
+      Value loaded = emitLoad(safeOffsets);
+      Value resultFlags =
+          createSubFlags(builder, op->getLoc(), lane, activeVec);
+      Value masked =
+          createCondSelect(builder, op->getLoc(), resultFlags, loaded, zero,
+                           mlir::vc4::Cond::cs);
+      createBranch(builder, op->getLoc(), doneBlock, masked);
+
+      builder.setInsertionPointToEnd(doneBlock);
+      state.values[op->getResult(0)] = {doneBlock->getArgument(0)};
+      return success();
+    };
+
+    auto emitRectLoad = [&]() -> LogicalResult {
+      Value row = predicate->row;
+      Value rows = predicate->rows;
+      Value colBase = predicate->colBase;
+      Value cols = predicate->cols;
+      if (!row || !rows || !colBase || !cols)
+        return op->emitOpError(
+            "pred.rect plan is missing row, rows, col_base, or cols values");
+
+      Value one =
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(1));
+      Value two =
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(2));
+      Value sixteen =
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(16));
+      Value rowPlusOne = createI32Add(builder, op->getLoc(), row, one);
+      Value rowActiveFlags =
+          createSubFlags(builder, op->getLoc(), rows, rowPlusOne);
+
+      Region *region = builder.getInsertionBlock()->getParent();
+      Block *colsBlock = new Block();
+      Block *colBaseBlock = new Block();
+      Block *loadBlock = new Block();
+      Block *doneBlock = new Block();
+      doneBlock->addArgument(op->getResult(0).getType(), op->getLoc());
+      region->push_back(colsBlock);
+      region->push_back(colBaseBlock);
+      region->push_back(loadBlock);
+      region->push_back(doneBlock);
+
+      createCondBranch(builder, op->getLoc(), rowActiveFlags, doneBlock,
+                       colsBlock, mlir::vc4::BranchCond::any_c_set, zero);
+
+      builder.setInsertionPointToEnd(colsBlock);
+      Value colsActiveFlags =
+          createSubFlags(builder, op->getLoc(), cols, one);
+      createCondBranch(builder, op->getLoc(), colsActiveFlags, doneBlock,
+                       colBaseBlock, mlir::vc4::BranchCond::any_c_set, zero);
+
+      builder.setInsertionPointToEnd(colBaseBlock);
+      Value colBaseInRangeFlags =
+          createSubFlags(builder, op->getLoc(), colBase, sixteen);
+      createCondBranch(builder, op->getLoc(), colBaseInRangeFlags, doneBlock,
+                       loadBlock, mlir::vc4::BranchCond::any_c_clear, zero);
+
+      builder.setInsertionPointToEnd(loadBlock);
+      Value colBaseBytes =
+          createOpWithResult(builder, op->getLoc(), kSSAVC4ALUAddOpName,
+                             {colBase, two},
+                             {builder.getNamedAttr(
+                                 "opcode", mlir::vc4::AddOpcodeAttr::get(
+                                               builder.getContext(),
+                                               mlir::vc4::AddOpcode::shl))},
+                             colBase.getType());
+      Value rectSafeScalar =
+          createI32Add(builder, op->getLoc(), safeScalarOffset, colBaseBytes);
+      Value rectSafeVec =
+          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
+                             rectSafeScalar, {}, offsets.getType());
+      Value colBaseVec =
+          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
+                             colBase, {}, offsets.getType());
+      Value colEnd = createI32Add(builder, op->getLoc(), colBase, cols);
+      Value colEndVec =
+          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName, colEnd,
+                             {}, offsets.getType());
+      Value upperFlags = createSubFlags(builder, op->getLoc(), lane, colEndVec);
+      Value upperSafe =
+          createCondSelect(builder, op->getLoc(), upperFlags, offsets,
+                           rectSafeVec, mlir::vc4::Cond::cs);
+      Value lowerFlags =
+          createSubFlags(builder, op->getLoc(), lane, colBaseVec);
+      Value safeOffsets =
+          createCondSelect(builder, op->getLoc(), lowerFlags, upperSafe,
+                           rectSafeVec, mlir::vc4::Cond::cc);
+      Value loaded = emitLoad(safeOffsets);
+      Value resultUpperFlags =
+          createSubFlags(builder, op->getLoc(), lane, colEndVec);
+      Value upperMasked =
+          createCondSelect(builder, op->getLoc(), resultUpperFlags, loaded,
+                           zero, mlir::vc4::Cond::cs);
+      Value resultLowerFlags =
+          createSubFlags(builder, op->getLoc(), lane, colBaseVec);
+      Value masked =
+          createCondSelect(builder, op->getLoc(), resultLowerFlags,
+                           upperMasked, zero, mlir::vc4::Cond::cc);
+      createBranch(builder, op->getLoc(), doneBlock, masked);
+
+      builder.setInsertionPointToEnd(doneBlock);
+      state.values[op->getResult(0)] = {doneBlock->getArgument(0)};
+      return success();
+    };
+
+    if (predicate->kind == PredicatePlan::Class::TailPrefix)
+      return emitTailLoad();
+    if (predicate->kind == PredicatePlan::Class::RectRow)
+      return emitRectLoad();
+    return op->emitOpError("unsupported tmu_load_fragment predicate plan");
   }
   if (hasName(op, kVDWStoreOpName)) {
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
