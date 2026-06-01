@@ -5,15 +5,17 @@ foreach(test_file ${VC4KERNEL_CODEGEN_EMIT_TESTS})
   configure_file("${test_file}" "${CMAKE_CURRENT_BINARY_DIR}/${test_name}" COPYONLY)
 endforeach()
 
-set(VC4KERNEL_VECTOR_STORE_FIXTURE
-  "${CMAKE_CURRENT_SOURCE_DIR}/../Hardware/Run/vector_store_smoke_vc4kernel/input.mlir")
-set(VC4KERNEL_VECTOR_STORE_FIXTURE_OUT
-  "${CMAKE_CURRENT_BINARY_DIR}/../Hardware/Run/vector_store_smoke_vc4kernel/input.mlir")
-get_filename_component(VC4KERNEL_VECTOR_STORE_FIXTURE_OUT_DIR
-  "${VC4KERNEL_VECTOR_STORE_FIXTURE_OUT}" DIRECTORY)
-file(MAKE_DIRECTORY "${VC4KERNEL_VECTOR_STORE_FIXTURE_OUT_DIR}")
-configure_file("${VC4KERNEL_VECTOR_STORE_FIXTURE}"
-  "${VC4KERNEL_VECTOR_STORE_FIXTURE_OUT}" COPYONLY)
+file(GLOB VC4KERNEL_HARDWARE_INPUTS CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/../Hardware/Run/*/input.mlir")
+foreach(input_file ${VC4KERNEL_HARDWARE_INPUTS})
+  get_filename_component(fixture_dir "${input_file}" DIRECTORY)
+  get_filename_component(fixture_name "${fixture_dir}" NAME)
+  set(input_out
+    "${CMAKE_CURRENT_BINARY_DIR}/../Hardware/Run/${fixture_name}/input.mlir")
+  get_filename_component(input_out_dir "${input_out}" DIRECTORY)
+  file(MAKE_DIRECTORY "${input_out_dir}")
+  configure_file("${input_file}" "${input_out}" COPYONLY)
+endforeach()
 
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/lit.site.cfg.py.in"

@@ -1,0 +1,23 @@
+module {
+  vc4kernel.kernel @formal_f32_splat_vc4kernel(%out : i32, %alpha : f32, %offset_elems : i32) attributes {
+    public_name = "formal_f32_splat_vc4kernel",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "out", kind = "buffer", direction = "out", elem_type = "f32"},
+      {name = "alpha", kind = "scalar", direction = "by_value", type = "f32"},
+      {name = "offset_elems", kind = "scalar", direction = "by_value", type = "i32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    %c2 = arith.constant 2 : i32
+    %full = vc4kernel.pred.full : !vc4kernel.pred<16>
+    %lanes = vc4kernel.lane_range : vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %offset_bytes = arith.shli %offset_elems, %c2 : i32
+    %offset_vec = vc4kernel.splat %offset_bytes : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_add %offset_vec, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %values = vc4kernel.splat %alpha : f32 -> vector<16xf32>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %values, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.return
+  }
+}

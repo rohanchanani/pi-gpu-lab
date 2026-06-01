@@ -1,0 +1,20 @@
+{
+  "name": "program_id_writeback_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 384,
+    "request0": 1,
+    "request11": 1,
+    "request12": 1,
+    "request23": 1,
+    "checksum_accum": 91872,
+    "runtime_allocations": 1,
+    "runtime_launches": 2
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "formal_f32_splat_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "max_n": 32,
+    "checksum_accum": -20480,
+    "runtime_allocations": 1,
+    "runtime_launches": 2
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}
