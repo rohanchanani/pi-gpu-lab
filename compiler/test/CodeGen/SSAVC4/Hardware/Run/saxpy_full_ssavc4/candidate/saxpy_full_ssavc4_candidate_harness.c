@@ -62,7 +62,6 @@ void notmain(void) {
 
     uint32_t activeQpus = 12u;
     uint32_t laneWidth = 16u;
-    vc4_dim3 grid = vc4_m2_dim3(1, 1, 1);
     vc4_dim3 block = vc4_m2_dim3(activeQpus * laneWidth, 1, 1);
 
     printk("Running VC4 saxpy_full_ssavc4 candidate bundle...\n");
@@ -84,6 +83,9 @@ void notmain(void) {
             launchFailures++;
             continue;
         }
+        uint32_t elementsPerWave = activeQpus * laneWidth;
+        uint32_t waves = n == 0u ? 0u : (n + elementsPerWave - 1u) / elementsPerWave;
+        vc4_dim3 grid = vc4_m2_dim3(waves, 1, 1);
         printk("VC4_KERNEL_LAUNCH name=saxpy_full_ssavc4 case=%u n=%u\n", caseIndex, n);
         if (saxpy_full_ssavc4_launch(program, grid, block, x_dev, y_dev, alpha, n) < 0 ||
             vc4_m2_copy_dtoh(program, y_values, y_dev, bytes) < 0) {
