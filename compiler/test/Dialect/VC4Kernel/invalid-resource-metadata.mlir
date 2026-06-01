@@ -7,7 +7,7 @@ module {
     warps_per_block = 1 : i32
   } {
     %tile0 = vc4kernel.vpm_alloc {rows = 64 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: VPM allocations exceed 64 rows
+    // CHECK: computed VPM row requirement exceeds 64 rows
     %tile1 = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     vc4kernel.return
   }

@@ -13,6 +13,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/StringSet.h"
 
+#include <algorithm>
 #include <optional>
 
 using namespace mlir;
@@ -408,28 +409,100 @@ static LogicalResult verifyScheduleShape(KernelOp kernel) {
   return success();
 }
 
-static bool isVPMUser(Operation *op) {
-  return hasName(op, "vc4kernel.vpm_alloc") ||
-         hasName(op, "vc4kernel.vpm_write_fragment") ||
-         hasName(op, "vc4kernel.vpm_read_fragment") ||
-         hasName(op, "vc4kernel.vdr_load_to_vpm") ||
-         hasName(op, "vc4kernel.vdw_store_vpm_fragment");
-}
+struct VC4KernelResourceSummary {
+  ScheduleMode schedule_mode = ScheduleMode::independent_vector;
+  int64_t warps_per_block = 1;
+  bool uses_tmu = false;
+  bool uses_vpm = false;
+  bool uses_vpm_qpu_read = false;
+  bool uses_vpm_qpu_write = false;
+  bool uses_vdr = false;
+  bool uses_vdw = false;
+  bool uses_barrier = false;
+  int64_t user_vpm_rows_per_block = 0;
+  int64_t compiler_vpm_staging_rows_per_warp = 0;
+  int64_t compiler_vpm_staging_rows_per_block = 0;
+  int64_t total_vpm_rows_per_block = 0;
+  int64_t semaphore_count_per_block = 0;
+  bool requires_vpm_base_row_builtin = false;
+  bool requires_semaphore_base_builtin = false;
+};
 
-static LogicalResult verifyVPMResourceUsage(KernelOp kernel) {
-  int64_t totalRows = 0;
+static VC4KernelResourceSummary computeVC4KernelResourceSummary(KernelOp kernel) {
+  VC4KernelResourceSummary summary;
+  if (ScheduleModeAttr scheduleMode = getKernelScheduleModeAttr(kernel))
+    summary.schedule_mode = scheduleMode.getValue();
+  if (IntegerAttr warps = getKernelWarpsPerBlockAttr(kernel))
+    summary.warps_per_block = warps.getInt();
+
   kernel.getBody().walk([&](Operation *op) {
-    if (!isVPMUser(op))
+    if (hasName(op, "vc4kernel.tmu_load_fragment")) {
+      summary.uses_tmu = true;
       return;
-    if (!hasName(op, "vc4kernel.vpm_alloc"))
+    }
+    if (hasName(op, "vc4kernel.vpm_alloc")) {
+      summary.uses_vpm = true;
+      if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
+        summary.user_vpm_rows_per_block += rows.getInt();
       return;
-    auto rows = op->getAttrOfType<IntegerAttr>("rows");
-    if (rows)
-      totalRows += rows.getInt();
+    }
+    if (hasName(op, "vc4kernel.vpm_read_fragment")) {
+      summary.uses_vpm = true;
+      summary.uses_vpm_qpu_read = true;
+      return;
+    }
+    if (hasName(op, "vc4kernel.vpm_write_fragment")) {
+      summary.uses_vpm = true;
+      summary.uses_vpm_qpu_write = true;
+      return;
+    }
+    if (hasName(op, "vc4kernel.vdr_load_to_vpm")) {
+      summary.uses_vdr = true;
+      summary.uses_vpm = true;
+      return;
+    }
+    if (hasName(op, "vc4kernel.vdw_store_vpm_fragment")) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
+      return;
+    }
+    if (hasName(op, "vc4kernel.vdw_store_fragment")) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
+      summary.compiler_vpm_staging_rows_per_warp =
+          std::max<int64_t>(summary.compiler_vpm_staging_rows_per_warp, 1);
+      return;
+    }
+    if (hasName(op, "vc4kernel.barrier")) {
+      summary.uses_barrier = true;
+      summary.semaphore_count_per_block = 4;
+      summary.requires_semaphore_base_builtin = true;
+      return;
+    }
   });
 
-  if (totalRows > 64)
-    return kernel.emitOpError("VPM allocations exceed 64 rows");
+  summary.total_vpm_rows_per_block =
+      summary.user_vpm_rows_per_block +
+      summary.compiler_vpm_staging_rows_per_block +
+      summary.warps_per_block * summary.compiler_vpm_staging_rows_per_warp;
+  summary.requires_vpm_base_row_builtin =
+      summary.total_vpm_rows_per_block > 0;
+  return summary;
+}
+
+static LogicalResult verifyComputedResourceSummary(KernelOp kernel) {
+  VC4KernelResourceSummary summary = computeVC4KernelResourceSummary(kernel);
+  if (summary.user_vpm_rows_per_block > 64 ||
+      summary.total_vpm_rows_per_block > 64)
+    return kernel.emitOpError("computed VPM row requirement exceeds 64 rows");
+  if (summary.uses_barrier &&
+      summary.schedule_mode != ScheduleMode::cooperative_block)
+    return kernel.emitOpError(
+        "vc4kernel.barrier requires schedule_mode = cooperative_block");
+  if (summary.uses_barrier && summary.semaphore_count_per_block != 4)
+    return kernel.emitOpError("vc4kernel.barrier requires 4 semaphores per block");
+  if (summary.semaphore_count_per_block > 16)
+    return kernel.emitOpError("computed semaphore requirement exceeds 16");
   return success();
 }
 
@@ -541,7 +614,7 @@ LogicalResult KernelOp::verify() {
     return failure();
   if (failed(verifyScheduleShape(*this)))
     return failure();
-  return verifyVPMResourceUsage(*this);
+  return verifyComputedResourceSummary(*this);
 }
 
 LogicalResult ReturnOp::verify() {
@@ -752,7 +825,8 @@ LogicalResult BarrierOp::verify() {
   if (!scheduleMode)
     return emitOpError("requires verified kernel schedule metadata");
   if (scheduleMode.getValue() != ScheduleMode::cooperative_block)
-    return emitOpError("barrier requires cooperative_block schedule_mode");
+    return emitOpError(
+        "vc4kernel.barrier requires schedule_mode = cooperative_block");
   return success();
 }
 

@@ -452,75 +452,122 @@ static DictionaryAttr buildLaunchABI(Operation *kernel, OpBuilder &builder) {
 }
 
 struct VC4KernelResourceSummary {
-  StringRef scheduleMode;
-  int64_t warpsPerBlock = 1;
-  bool usesVPM = false;
-  bool usesBarrier = false;
-  bool requireFullBlockResidency = false;
-  int64_t vpmRowsPerBlock = 0;
-  int64_t vpmBytesPerBlock = 0;
-  int64_t semaphoresPerBlock = 0;
+  StringRef schedule_mode;
+  int64_t warps_per_block = 1;
+  bool uses_tmu = false;
+  bool uses_vpm = false;
+  bool uses_vpm_qpu_read = false;
+  bool uses_vpm_qpu_write = false;
+  bool uses_vdr = false;
+  bool uses_vdw = false;
+  bool uses_barrier = false;
+  int64_t user_vpm_rows_per_block = 0;
+  int64_t compiler_vpm_staging_rows_per_warp = 0;
+  int64_t compiler_vpm_staging_rows_per_block = 0;
+  int64_t total_vpm_rows_per_block = 0;
+  int64_t total_vpm_bytes_per_block = 0;
+  int64_t semaphore_count_per_block = 0;
+  bool requires_vpm_base_row_builtin = false;
+  bool requires_semaphore_base_builtin = false;
 };
 
 static VC4KernelResourceSummary
 computeVC4KernelResourceSummary(Operation *kernel) {
   VC4KernelResourceSummary summary;
-  summary.scheduleMode = "independent_vector";
+  summary.schedule_mode = "independent_vector";
   if (auto mode = llvm::dyn_cast_if_present<mlir::vc4kernel::ScheduleModeAttr>(
           kernel->getAttr("schedule_mode"))) {
     if (mode.getValue() == mlir::vc4kernel::ScheduleMode::cooperative_block)
-      summary.scheduleMode = "cooperative_block";
+      summary.schedule_mode = "cooperative_block";
   }
   if (auto warps = asIntegerAttr(kernel->getAttr("warps_per_block")))
-    summary.warpsPerBlock = warps.getInt();
+    summary.warps_per_block = warps.getInt();
 
   kernel->walk([&](Operation *op) {
-    if (hasName(op, kVPMAllocOpName)) {
-      summary.usesVPM = true;
-      if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
-        summary.vpmRowsPerBlock += rows.getInt();
+    if (hasName(op, kTMULoadOpName)) {
+      summary.uses_tmu = true;
       return;
     }
-    if (hasName(op, kVPMWriteOpName) || hasName(op, kVPMReadOpName) ||
-        hasName(op, kVDRLoadOpName) || hasName(op, kVDWStoreVPMOpName))
-      summary.usesVPM = true;
-    if (hasName(op, kBarrierOpName))
-      summary.usesBarrier = true;
+    if (hasName(op, kVPMAllocOpName)) {
+      summary.uses_vpm = true;
+      if (auto rows = op->getAttrOfType<IntegerAttr>("rows"))
+        summary.user_vpm_rows_per_block += rows.getInt();
+      return;
+    }
+    if (hasName(op, kVPMReadOpName)) {
+      summary.uses_vpm = true;
+      summary.uses_vpm_qpu_read = true;
+      return;
+    }
+    if (hasName(op, kVPMWriteOpName)) {
+      summary.uses_vpm = true;
+      summary.uses_vpm_qpu_write = true;
+      return;
+    }
+    if (hasName(op, kVDRLoadOpName)) {
+      summary.uses_vdr = true;
+      summary.uses_vpm = true;
+      return;
+    }
+    if (hasName(op, kVDWStoreVPMOpName)) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
+      return;
+    }
+    if (hasName(op, kVDWStoreOpName)) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
+      summary.compiler_vpm_staging_rows_per_warp =
+          std::max<int64_t>(summary.compiler_vpm_staging_rows_per_warp, 1);
+      return;
+    }
+    if (hasName(op, kBarrierOpName)) {
+      summary.uses_barrier = true;
+      summary.semaphore_count_per_block = 4;
+      summary.requires_semaphore_base_builtin = true;
+      return;
+    }
   });
 
-  summary.vpmBytesPerBlock = summary.vpmRowsPerBlock * 16 * 4;
-  summary.requireFullBlockResidency = summary.usesBarrier;
-  summary.semaphoresPerBlock = summary.usesBarrier ? 4 : 0;
+  summary.total_vpm_rows_per_block =
+      summary.user_vpm_rows_per_block +
+      summary.compiler_vpm_staging_rows_per_block +
+      summary.warps_per_block * summary.compiler_vpm_staging_rows_per_warp;
+  summary.total_vpm_bytes_per_block = summary.total_vpm_rows_per_block * 16 * 4;
+  summary.requires_vpm_base_row_builtin =
+      summary.total_vpm_rows_per_block > 0;
   return summary;
 }
 
 static DictionaryAttr buildSSAVC4ResourceMetadataFromVC4KernelSummary(
     const VC4KernelResourceSummary &summary, OpBuilder &builder) {
   StringRef scheduleMode = "independent_vector";
-  if (summary.scheduleMode == "cooperative_block")
+  if (summary.schedule_mode == "cooperative_block")
     scheduleMode = "cooperative_block";
+  // P2 will replace these lower-half field names with the corrected semantic
+  // resource schema. Keep the mapping here so vc4kernel source stays clean.
   return builder.getDictionaryAttr({
       builder.getNamedAttr("schedule_mode", builder.getStringAttr(scheduleMode)),
       builder.getNamedAttr(
           "warps_per_block_max",
-          builder.getI32IntegerAttr(summary.warpsPerBlock)),
+          builder.getI32IntegerAttr(summary.warps_per_block)),
       builder.getNamedAttr(
           "uses_shared_vpm",
-          builder.getBoolAttr(summary.usesVPM)),
+          builder.getBoolAttr(summary.uses_vpm)),
       builder.getNamedAttr(
-          "uses_barrier", builder.getBoolAttr(summary.usesBarrier)),
+          "uses_barrier", builder.getBoolAttr(summary.uses_barrier)),
       builder.getNamedAttr(
           "require_full_block_residency",
-          builder.getBoolAttr(summary.requireFullBlockResidency)),
+          builder.getBoolAttr(summary.uses_barrier)),
       builder.getNamedAttr(
           "vpm_rows_per_block",
-          builder.getI32IntegerAttr(summary.vpmRowsPerBlock)),
+          builder.getI32IntegerAttr(summary.total_vpm_rows_per_block)),
       builder.getNamedAttr(
           "vpm_bytes_per_block",
-          builder.getI32IntegerAttr(summary.vpmBytesPerBlock)),
+          builder.getI32IntegerAttr(summary.total_vpm_bytes_per_block)),
       builder.getNamedAttr(
           "semaphores_per_block",
-          builder.getI32IntegerAttr(summary.semaphoresPerBlock)),
+          builder.getI32IntegerAttr(summary.semaphore_count_per_block)),
   });
 }
 

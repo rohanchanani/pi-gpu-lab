@@ -6,7 +6,7 @@ module {
     arg_attrs = [],
     warps_per_block = 1 : i32
   } {
-    // CHECK: barrier requires cooperative_block schedule_mode
+    // CHECK: vc4kernel.barrier requires schedule_mode = cooperative_block
     vc4kernel.barrier
     vc4kernel.return
   }
