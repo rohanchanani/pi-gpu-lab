@@ -11,20 +11,20 @@
 // LOWERED-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // LOWERED-SAME: spill_frame_base
 // LOWERED-SAME: spill_vpm_row
-// LOWERED-SAME: spill_vpm_rows_per_block = 4 : i32
-// SOURCE: #define KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK 16u
-// SOURCE: #define KERNEL_0_VDW_STAGING_VPM_ROWS_PER_BLOCK 0u
+// LOWERED-DAG: spill_vpm_rows_per_block = 4 : i32
+// SOURCE: #define KERNEL_0_USER_VPM_ROWS_PER_BLOCK 16u
+// SOURCE: #define KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK 0u
 // SOURCE: #define KERNEL_0_SPILL_VPM_ROWS_PER_BLOCK 4u
-// SOURCE: #define KERNEL_0_VPM_ROWS_PER_BLOCK 20u
+// SOURCE: #define KERNEL_0_TOTAL_VPM_ROWS_PER_BLOCK 20u
 // SOURCE: spill_vpm_row=vpm_base_row+16+logical_warp_id
 // SOURCE: uniformWords[5] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
-// SOURCE: uniformWords[6] = requestInfo->vpm_base_row + KERNEL_0_USER_SHARED_VPM_ROWS_PER_BLOCK + KERNEL_0_VDW_STAGING_VPM_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[6] = requestInfo->vpm_base_row + KERNEL_0_USER_VPM_ROWS_PER_BLOCK + KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
 // SOURCE-NOT: __vc4_spill_arg
 // SOURCE: int spill_cooperative_vpm_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}
 // MANIFEST: "spill_vpm_row"
 // MANIFEST: "spill_vpm_rows_per_block": 4
-// MANIFEST: "vpm_rows_per_block": 20
+// MANIFEST: "total_vpm_rows_per_block": 20
 ssavc4.module @spill_cooperative_vpm {
   ssavc4.func @spill_cooperative_vpm_kernel() attributes {
     kernel,
@@ -46,12 +46,21 @@ args = [
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
-      warps_per_block_max = 4 : i32,
-      uses_shared_vpm = true,
-      shared_vpm_bytes = 1024 : i32,
+      warps_per_block = 4 : i32,
+      user_vpm_rows_per_block = 16 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 16 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = true,
+      uses_vpm_qpu_write = true,
+      uses_vdr = false,
+      uses_vdw = true,
       uses_barrier = true,
-      semaphores_per_block = 4 : i32,
-      require_full_block_residency = true
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
     }
   } {
     %out = ssavc4.uniform.read 0 : i32

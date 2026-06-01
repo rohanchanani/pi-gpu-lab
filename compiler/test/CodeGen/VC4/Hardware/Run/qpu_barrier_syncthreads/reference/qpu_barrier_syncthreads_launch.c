@@ -40,7 +40,7 @@ struct qpu_barrier_run_config
     uint32_t warps_per_block;
     uint32_t iterations;
     uint32_t allowed_qpu_mask;
-    uint32_t vpm_rows_per_block;
+    uint32_t vpm_rows;
 };
 
 static uint32_t gpu_addr(const volatile void *ptr)
@@ -175,7 +175,7 @@ static void prepare_run_result(
     run->vpm_base_row[1] = 16;
     run->vpm_base_row[2] = 32;
     run->vpm_base_row[3] = 48;
-    run->vpm_rows_per_block = cfg->vpm_rows_per_block;
+    run->vpm_rows = cfg->vpm_rows;
     run->qpu_set_mask = cfg->allowed_qpu_mask;
     run->expected_qpu_mask = cfg->allowed_qpu_mask;
     run->observed_qpu_mask = 0;
@@ -227,7 +227,7 @@ static int launch_run(
             state->unif[request][4] = cfg->warps_per_block;
             state->unif[request][5] = cfg->iterations;
             state->unif[request][6] = run->vpm_base_row[block];
-            state->unif[request][7] = cfg->vpm_rows_per_block;
+            state->unif[request][7] = cfg->vpm_rows;
             state->unif[request][8] = sem_base + 0u;
             state->unif[request][9] = sem_base + 1u;
             state->unif[request][10] = sem_base + 2u;

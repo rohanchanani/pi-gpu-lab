@@ -11,7 +11,7 @@
 #   ra4  warps_per_block
 #   ra5  iterations
 #   ra6  vpm_base_row
-#   ra7  vpm_rows_per_block
+#   ra7  vpm_rows
 #   ra8  arrive_sem      (documented ABI; semaphore IDs are immediate in VC4)
 #   ra9  release_sem     (documented ABI; not dynamically encoded)
 #   ra10 depart_sem      (documented ABI; overwritten after uniforms)

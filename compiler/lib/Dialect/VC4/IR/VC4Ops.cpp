@@ -8,6 +8,7 @@
 
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4/IR/VC4SideEffects.h"
+#include "vc4/Support/VC4ResourceMetadata.h"
 
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/SymbolTable.h"
@@ -304,13 +305,6 @@ static LogicalResult verifyLaunchAbi(mlir::vc4::FuncOp op) {
   return verifyLaunchAbiUniformLayout(op, *uniformWordsPerQPU, uniformIndices);
 }
 
-static std::optional<bool> getBoolAttrValue(DictionaryAttr dict, StringRef name) {
-  auto attr = dyn_cast_or_null<BoolAttr>(dict.get(name));
-  if (!attr)
-    return std::nullopt;
-  return attr.getValue();
-}
-
 static LogicalResult emitResourceError(mlir::vc4::FuncOp op, Twine message) {
   return op.emitOpError() << "\"vc4.resource\" " << message;
 }
@@ -323,52 +317,38 @@ static LogicalResult verifyResourceMetadata(mlir::vc4::FuncOp op) {
   if (!op.getKernelAttr()) return emitResourceError(op, "may appear only on vc4.func with 'kernel'");
   if (!op.getDomain() || *op.getDomain() != mlir::vc4::ExecutionDomain::qpu)
     return emitResourceError(op, "requires domain = #vc4.execution_domain<qpu>");
-  auto scheduleModeAttr = dyn_cast_or_null<StringAttr>(resource.get("schedule_mode"));
-  StringRef scheduleMode = scheduleModeAttr ? scheduleModeAttr.getValue() : StringRef("independent_vector");
-  if (!isStringOneOf(scheduleMode, {"independent_vector", "cooperative_block"}))
-    return emitResourceError(op, "requires schedule_mode = \"independent_vector\" or \"cooperative_block\"");
-  bool usesBarrier = getBoolAttrValue(resource, "uses_barrier").value_or(false);
-  bool usesSharedVPM = getBoolAttrValue(resource, "uses_shared_vpm").value_or(false);
-  bool requireFullResidency = getBoolAttrValue(resource, "require_full_block_residency").value_or(usesBarrier || usesSharedVPM || scheduleMode == "cooperative_block");
-  auto getI32 = [&](StringRef name) -> std::optional<int64_t> { return getSignlessI32AttrValue(resource, name); };
-  int64_t warpsPerBlockMax = getI32("warps_per_block_max").value_or(scheduleMode == "cooperative_block" ? 12 : 1);
-  int64_t semaphoresPerBlock = getI32("semaphores_per_block").value_or(usesBarrier ? 4 : 0);
-  int64_t vpmBytesPerBlock = 0;
-  if (auto bytes = getI32("vpm_bytes_per_block")) vpmBytesPerBlock = *bytes;
-  if (auto bytes = getI32("shared_vpm_bytes")) vpmBytesPerBlock = *bytes;
-  int64_t userSharedVPMRowsPerBlock = getI32("user_shared_vpm_rows_per_block").value_or((vpmBytesPerBlock <= 0) ? 0 : (1 + (vpmBytesPerBlock - 1) / 64));
-  int64_t vdwStagingVPMRowsPerBlock = getI32("vdw_staging_vpm_rows_per_block").value_or(0);
-  int64_t spillVPMRowsPerBlock = getI32("spill_vpm_rows_per_block").value_or(0);
-  int64_t vpmRowsPerBlock = getI32("vpm_rows_per_block").value_or(userSharedVPMRowsPerBlock + vdwStagingVPMRowsPerBlock + spillVPMRowsPerBlock);
-  if (warpsPerBlockMax <= 0) return emitResourceError(op, "warps_per_block_max must be greater than zero");
-  if (semaphoresPerBlock < 0) return emitResourceError(op, "semaphores_per_block must be non-negative");
-  if (vpmBytesPerBlock < 0 || userSharedVPMRowsPerBlock < 0 ||
-      vdwStagingVPMRowsPerBlock < 0 || spillVPMRowsPerBlock < 0 ||
-      vpmRowsPerBlock < 0) return emitResourceError(op, "vpm_bytes_per_block/shared_vpm_bytes must be non-negative");
-  if (vpmRowsPerBlock < userSharedVPMRowsPerBlock + vdwStagingVPMRowsPerBlock + spillVPMRowsPerBlock)
-    return emitResourceError(op, "vpm_rows_per_block must include user shared rows plus compiler scratch rows");
-  if (scheduleMode == "independent_vector") {
-    if (usesBarrier || usesSharedVPM || requireFullResidency || semaphoresPerBlock != 0 || vpmBytesPerBlock != 0 || vpmRowsPerBlock != 0)
-      return emitResourceError(op, "independent_vector kernels must not request barrier/shared cooperative resources");
-    return success();
+  static constexpr llvm::StringLiteral requiredFields[] = {
+      "schedule_mode",
+      "warps_per_block",
+      "user_vpm_rows_per_block",
+      "compiler_vpm_staging_rows_per_warp",
+      "compiler_vpm_staging_rows_per_block",
+      "total_vpm_rows_per_block",
+      "uses_tmu",
+      "uses_vpm",
+      "uses_vpm_qpu_read",
+      "uses_vpm_qpu_write",
+      "uses_vdr",
+      "uses_vdw",
+      "uses_barrier",
+      "semaphore_count_per_block",
+      "requires_vpm_base_row_builtin",
+      "requires_semaphore_base_builtin",
+  };
+  for (llvm::StringLiteral field : requiredFields) {
+    if (!resource.get(field))
+      return emitResourceError(op, Twine("requires semantic field '") +
+                                      field + Twine("'"));
   }
-  if ((usesBarrier || usesSharedVPM) && !requireFullResidency)
-    return emitResourceError(op, "cooperative barrier/shared kernels require require_full_block_residency = true");
-  if (warpsPerBlockMax > 12)
-    return emitResourceError(op, Twine("warps_per_block_max must fit the target active QPU limit 12; got ") + Twine(warpsPerBlockMax));
-  if (semaphoresPerBlock > 16)
-    return emitResourceError(op, Twine("semaphores_per_block must fit the target hardware semaphore limit 16; got ") + Twine(semaphoresPerBlock));
-  if (usesBarrier && semaphoresPerBlock <= 0)
-    return emitResourceError(op, "barrier cooperative kernels require semaphores_per_block > 0");
-  if (vpmBytesPerBlock > 4096)
-    return emitResourceError(op, Twine("vpm_bytes_per_block/shared_vpm_bytes must fit the 4096 byte user-visible VPM window; got ") + Twine(vpmBytesPerBlock));
-  if (vpmRowsPerBlock > 64)
-    return emitResourceError(op, Twine("vpm_rows_per_block must fit the 64 row VPM; got ") + Twine(vpmRowsPerBlock));
-  int64_t byQPU = 12 / warpsPerBlockMax;
-  int64_t bySem = semaphoresPerBlock <= 0 ? 12 : 16 / semaphoresPerBlock;
-  int64_t byVPM = vpmRowsPerBlock > 0 ? 64 / vpmRowsPerBlock : (vpmBytesPerBlock <= 0 ? 12 : 4096 / vpmBytesPerBlock);
-  if (std::min(byQPU, std::min(bySem, byVPM)) <= 0)
-    return emitResourceError(op, "cooperative_block resource request leaves zero resident_blocks; check warps_per_block_max, vpm_bytes_per_block, and semaphores_per_block");
+  mlir::vc4::SemanticResourceInfo info;
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(
+          op.getOperation(), resource, info, /*allowAbsent=*/false)))
+    return failure();
+  if (mlir::vc4::getMaxResidentBlocksForSemanticResource(info) <= 0)
+    return emitResourceError(
+        op, "resource request leaves zero resident_blocks; check "
+            "warps_per_block, total_vpm_rows_per_block, and "
+            "semaphore_count_per_block");
   return success();
 }
 

@@ -1,0 +1,24 @@
+{
+  "name": "resource_limited_vpm_residency_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 257,
+    "max_coverage_n": 384,
+    "buffer_n": 416,
+    "checksum_accum": 51424,
+    "runtime_allocations": 1,
+    "runtime_launches": 2
+  },
+  "launch_required": {
+    "name": "resource_limited_vpm_residency_ssavc4",
+    "schedule_mode": "independent_vector",
+    "resident_blocks": 3,
+    "warps_per_block": 1
+  }
+}

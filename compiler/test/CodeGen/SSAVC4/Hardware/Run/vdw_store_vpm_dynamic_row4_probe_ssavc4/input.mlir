@@ -15,12 +15,21 @@ ssavc4.module @vdw_store_vpm_dynamic_row4_probe_ssavc4 {
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 4 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 4 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = true,
+      uses_vdw = true,
       uses_barrier = true,
-      uses_shared_vpm = true,
-      shared_vpm_bytes = 256 : i32,
-      require_full_block_residency = true,
-      semaphores_per_block = 4 : i32,
-      warps_per_block_max = 1 : i32
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
     }
   } {
     %in = ssavc4.uniform.read 0 : i32

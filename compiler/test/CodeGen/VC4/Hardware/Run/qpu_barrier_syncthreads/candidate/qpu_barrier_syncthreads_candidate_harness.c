@@ -57,7 +57,7 @@ struct qpu_barrier_run_result {
     uint32_t iterations;
     uint32_t sem_base;
     uint32_t vpm_base_row[4];
-    uint32_t vpm_rows_per_block;
+    uint32_t vpm_rows;
     uint32_t qpu_set_mask;
     uint32_t expected_qpu_mask;
     uint32_t observed_qpu_mask;
@@ -208,7 +208,7 @@ static void prepare_run_result(volatile struct qpu_barrier_run_result *run,
     run->vpm_base_row[1] = 16;
     run->vpm_base_row[2] = 32;
     run->vpm_base_row[3] = 48;
-    run->vpm_rows_per_block = 16;
+    run->vpm_rows = 16;
     run->qpu_set_mask = cfg->allowed_qpu_mask;
     run->expected_qpu_mask = cfg->allowed_qpu_mask;
     run->first_bad_iter = 0xffffffffu;

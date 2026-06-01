@@ -6,10 +6,10 @@
 // CHECK-SAME: spill_frame_base
 // CHECK-SAME: spill_vpm_row
 // CHECK-SAME: public_name = "spill_cooperative_vpm"
-// CHECK-SAME: schedule_mode = "cooperative_block"
-// CHECK-SAME: spill_vpm_rows_per_block = 4 : i32
-// CHECK-SAME: user_shared_vpm_rows_per_block = 16 : i32
-// CHECK-SAME: vpm_rows_per_block = 20 : i32
+// CHECK-DAG: schedule_mode = "cooperative_block"
+// CHECK-DAG: spill_vpm_rows_per_block = 4 : i32
+// CHECK-DAG: user_vpm_rows_per_block = 16 : i32
+// CHECK-DAG: total_vpm_rows_per_block = 20 : i32
 // CHECK-NOT: __vc4_spill_arg
 // CHECK: vc4.qpu.sema <release>
 // CHECK: vc4.qpu.vpmvcd_addr
@@ -36,12 +36,21 @@ args = [
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
-      warps_per_block_max = 4 : i32,
-      uses_shared_vpm = true,
-      shared_vpm_bytes = 1024 : i32,
+      warps_per_block = 4 : i32,
+      user_vpm_rows_per_block = 16 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 16 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = true,
+      uses_vpm_qpu_write = true,
+      uses_vdr = false,
+      uses_vdw = true,
       uses_barrier = true,
-      semaphores_per_block = 4 : i32,
-      require_full_block_residency = true
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
     }
   } {
     %out = ssavc4.uniform.read 0 : i32

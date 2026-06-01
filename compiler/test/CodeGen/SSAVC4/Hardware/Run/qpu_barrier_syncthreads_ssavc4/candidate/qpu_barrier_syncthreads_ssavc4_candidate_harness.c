@@ -7,6 +7,8 @@
 
 void notmain(void) {
     struct vc4_program *program = 0;
+    int total_mismatches = 0;
+    int sentinel_mismatches = 0;
     int launch_failures = 0;
     int start = timer_get_usec();
 
@@ -23,9 +25,11 @@ void notmain(void) {
     }
 
     int elapsed = timer_get_usec() - start;
-    const char *status = (launch_failures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads_ssavc4 status=%s runs=%d launch_failures=%d active_qpus=%d lanes=%d runtime_launches=%d elapsed_usec=%d\n",
-           status, 1, launch_failures,
+    const char *status =
+        (total_mismatches == 0 && sentinel_mismatches == 0 &&
+         launch_failures == 0) ? "PASS" : "FAIL";
+    printk("VC4_TEST_RESULT name=qpu_barrier_syncthreads_ssavc4 status=%s runs=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d runtime_launches=%d elapsed_usec=%d\n",
+           status, 1, total_mismatches, sentinel_mismatches, launch_failures,
            (int)QPU_BARRIER_SYNCTHREADS_SSAVC4_ACTIVE_QPUS,
            (int)QPU_BARRIER_SYNCTHREADS_SSAVC4_LANE_WIDTH, 1, elapsed);
 

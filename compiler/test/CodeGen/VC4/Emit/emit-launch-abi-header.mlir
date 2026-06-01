@@ -6,7 +6,7 @@
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=HEADER --input-file=%t.bundle/kernel_launch.h --implicit-check-not='"mailbox.h"' --implicit-check-not='typedef uint32_t vc4_deviceptr_t'
-// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS' --implicit-check-not='VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR'
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c --implicit-check-not='struct vc4_program {' --implicit-check-not='struct vc4_codegen_heap_block' --implicit-check-not='int vc4Malloc' --implicit-check-not='int vc4Memcpy' --implicit-check-not='qpu_enable(' --implicit-check-not='mem_alloc(' --implicit-check-not='mem_lock(' --implicit-check-not='mem_free(' --implicit-check-not='gpu_fft_base_exec_direct' --implicit-check-not='V3D_' --implicit-check-not='PUT32(' --implicit-check-not='GET32(' --implicit-check-not='VC4_HEAP_STATS' --implicit-check-not='VC4_SCHEDULE_COOPERATIVE_BLOCK VC4_SCHEDULE_INDEPENDENT_VECTOR'
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // HEADER: #include <stdint.h>
@@ -25,8 +25,9 @@
 // SOURCE: #include "kernel_launch.h"
 // SOURCE: static uint32_t vc4_codegen_pack_f32(float value) {
 // SOURCE: static const struct vc4_kernel_image vc4_codegen_kernels[] = {
-// SOURCE: { "launch_abi_header", launch_abi_header_shader,
-// SOURCE: VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR
+// SOURCE: .name = "launch_abi_header"
+// SOURCE: .code = launch_abi_header_shader
+// SOURCE: .schedule_mode = VC4_SCHEDULE_INDEPENDENT_VECTOR
 // SOURCE: static const struct vc4_module_image vc4_codegen_module = {
 // SOURCE: int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes) {
 // SOURCE: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);

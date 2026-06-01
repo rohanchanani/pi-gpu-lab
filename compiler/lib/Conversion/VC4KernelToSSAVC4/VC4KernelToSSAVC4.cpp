@@ -544,30 +544,46 @@ static DictionaryAttr buildSSAVC4ResourceMetadataFromVC4KernelSummary(
   StringRef scheduleMode = "independent_vector";
   if (summary.schedule_mode == "cooperative_block")
     scheduleMode = "cooperative_block";
-  // P2 will replace these lower-half field names with the corrected semantic
-  // resource schema. Keep the mapping here so vc4kernel source stays clean.
   return builder.getDictionaryAttr({
       builder.getNamedAttr("schedule_mode", builder.getStringAttr(scheduleMode)),
       builder.getNamedAttr(
-          "warps_per_block_max",
+          "warps_per_block",
           builder.getI32IntegerAttr(summary.warps_per_block)),
       builder.getNamedAttr(
-          "uses_shared_vpm",
-          builder.getBoolAttr(summary.uses_vpm)),
+          "user_vpm_rows_per_block",
+          builder.getI32IntegerAttr(summary.user_vpm_rows_per_block)),
+      builder.getNamedAttr(
+          "compiler_vpm_staging_rows_per_warp",
+          builder.getI32IntegerAttr(
+              summary.compiler_vpm_staging_rows_per_warp)),
+      builder.getNamedAttr(
+          "compiler_vpm_staging_rows_per_block",
+          builder.getI32IntegerAttr(
+              summary.compiler_vpm_staging_rows_per_block)),
+      builder.getNamedAttr(
+          "total_vpm_rows_per_block",
+          builder.getI32IntegerAttr(summary.total_vpm_rows_per_block)),
+      builder.getNamedAttr("uses_tmu", builder.getBoolAttr(summary.uses_tmu)),
+      builder.getNamedAttr("uses_vpm", builder.getBoolAttr(summary.uses_vpm)),
+      builder.getNamedAttr(
+          "uses_vpm_qpu_read",
+          builder.getBoolAttr(summary.uses_vpm_qpu_read)),
+      builder.getNamedAttr(
+          "uses_vpm_qpu_write",
+          builder.getBoolAttr(summary.uses_vpm_qpu_write)),
+      builder.getNamedAttr("uses_vdr", builder.getBoolAttr(summary.uses_vdr)),
+      builder.getNamedAttr("uses_vdw", builder.getBoolAttr(summary.uses_vdw)),
       builder.getNamedAttr(
           "uses_barrier", builder.getBoolAttr(summary.uses_barrier)),
       builder.getNamedAttr(
-          "require_full_block_residency",
-          builder.getBoolAttr(summary.uses_barrier)),
-      builder.getNamedAttr(
-          "vpm_rows_per_block",
-          builder.getI32IntegerAttr(summary.total_vpm_rows_per_block)),
-      builder.getNamedAttr(
-          "vpm_bytes_per_block",
-          builder.getI32IntegerAttr(summary.total_vpm_bytes_per_block)),
-      builder.getNamedAttr(
-          "semaphores_per_block",
+          "semaphore_count_per_block",
           builder.getI32IntegerAttr(summary.semaphore_count_per_block)),
+      builder.getNamedAttr(
+          "requires_vpm_base_row_builtin",
+          builder.getBoolAttr(summary.requires_vpm_base_row_builtin)),
+      builder.getNamedAttr(
+          "requires_semaphore_base_builtin",
+          builder.getBoolAttr(summary.requires_semaphore_base_builtin)),
   });
 }
 

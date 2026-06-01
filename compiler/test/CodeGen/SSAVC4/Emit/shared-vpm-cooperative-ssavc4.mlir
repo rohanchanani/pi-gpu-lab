@@ -9,7 +9,7 @@
 
 // CHECK: public_name = "shared_transpose_16x16_ssavc4"
 // CHECK: schedule_mode = "cooperative_block"
-// CHECK: uses_shared_vpm = true
+// CHECK: uses_vpm = true
 // CHECK: value = 1055232 : i32
 // CHECK: waddr_add = 48 : i32
 // CHECK: vc4.qpu.sema <release>
@@ -33,12 +33,21 @@ ssavc4.module @shared_transpose_16x16_ssavc4 {
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
+      warps_per_block = 2 : i32,
+      user_vpm_rows_per_block = 16 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 16 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = true,
+      uses_vpm_qpu_write = true,
+      uses_vdr = false,
+      uses_vdw = false,
       uses_barrier = true,
-      uses_shared_vpm = true,
-      shared_vpm_bytes = 1024 : i32,
-      require_full_block_residency = true,
-      warps_per_block_max = 2 : i32,
-      semaphores_per_block = 4 : i32
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
     }
   } {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32

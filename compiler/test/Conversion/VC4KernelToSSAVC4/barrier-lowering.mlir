@@ -1,6 +1,6 @@
 // RUN: vc4-opt %s --verify-vc4kernel --convert-vc4kernel-to-ssavc4 | FileCheck %s
 // CHECK-LABEL: ssavc4.func @bar
-// CHECK-SAME: schedule_mode = "cooperative_block"
+// CHECK-DAG: schedule_mode = "cooperative_block"
 // CHECK: ssavc4.barrier
 // CHECK-NOT: vc4kernel.
 module {

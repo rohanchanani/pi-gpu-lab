@@ -1,10 +1,19 @@
 // RUN: rm -rf %t.bundle
 // RUN: vc4-codegen %s --emit-bundle %t.bundle
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
+// RUN: python3 %S/../Support/check_resource_runtime_descriptor.py %t.bundle/manifest.json %t.bundle/kernel_launch.c --public-name independent_vector_smoke --schedule-mode independent_vector --semantic-total-vpm-rows 1 --semantic-compiler-vpm-staging-rows-per-warp 1 --semantic-user-vpm-rows 0 --semantic-semaphore-count 0
 
 // MANIFEST-DAG: "schedule_mode": "independent_vector"
 // MANIFEST-DAG: "uses_barrier": false
-// MANIFEST-DAG: "uses_shared_vpm": false
+// MANIFEST-DAG: "uses_vpm": true
+// MANIFEST-DAG: "compiler_vpm_staging_rows_per_warp": 1
+// MANIFEST-DAG: "total_vpm_rows_per_block": 1
+// SOURCE-DAG: #define KERNEL_0_TOTAL_VPM_ROWS_PER_BLOCK 1u
+// SOURCE-DAG: .resource = {
+// SOURCE-DAG: .schedule_mode = VC4_SCHEDULE_INDEPENDENT_VECTOR
+// SOURCE-DAG: .compiler_vpm_staging_rows_per_warp = KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_WARP
+// SOURCE-DAG: .total_vpm_rows_per_block = KERNEL_0_TOTAL_VPM_ROWS_PER_BLOCK
 
 vc4.module @resource_independent_vector {
 
@@ -28,7 +37,24 @@ vc4.module @resource_independent_vector {
         {name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", uniform_index = 5 : i32}
       ]
     },
-    "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false}
+    "vc4.resource" = {
+      schedule_mode = "independent_vector",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 1 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 1 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = true,
+      uses_barrier = false,
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = false
+    }
   } {
     // Thread end plus two non-branch scheduled delay-slot instructions.
     // The two trailing bundles are hardware nops: both ALU pipes are inactive.

@@ -7,6 +7,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Ops.h"
+#include "vc4/Support/VC4ResourceMetadata.h"
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Builders.h"
@@ -116,35 +117,15 @@ static DictionaryAttr getEnclosingResourceMetadata(Operation *op) {
 
 static LogicalResult verifyVDRResourceMetadata(Operation *op) {
   DictionaryAttr resource = getEnclosingResourceMetadata(op);
-  if (!resource)
+  mlir::vc4::SemanticResourceInfo info;
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(
+          op, resource, info, /*allowAbsent=*/false)))
+    return failure();
+
+  if (!info.usesVPM || !info.usesVDR || info.totalVPMRowsPerBlock <= 0 ||
+      !info.requiresVPMBaseRowBuiltin)
     return op->emitOpError()
-           << "requires vc4.resource schedule_mode = cooperative_block";
-
-  auto scheduleMode = dyn_cast_or_null<StringAttr>(resource.get("schedule_mode"));
-  if (!scheduleMode || scheduleMode.getValue() != "cooperative_block")
-    return op->emitOpError()
-           << "requires vc4.resource schedule_mode = cooperative_block";
-
-  auto usesSharedVPM = dyn_cast_or_null<BoolAttr>(resource.get("uses_shared_vpm"));
-  if (!usesSharedVPM || !usesSharedVPM.getValue())
-    return op->emitOpError() << "requires vc4.resource uses_shared_vpm = true";
-
-  auto fullResidency = dyn_cast_or_null<BoolAttr>(
-      resource.get("require_full_block_residency"));
-  if (!fullResidency || !fullResidency.getValue())
-    return op->emitOpError()
-           << "requires vc4.resource require_full_block_residency = true";
-
-  auto sharedBytes = dyn_cast_or_null<IntegerAttr>(
-      resource.get("shared_vpm_bytes"));
-  if (!sharedBytes || sharedBytes.getInt() <= 0)
-    return op->emitOpError() << "requires positive vc4.resource shared_vpm_bytes";
-
-  auto semaphores = dyn_cast_or_null<IntegerAttr>(
-      resource.get("semaphores_per_block"));
-  if (!semaphores || semaphores.getInt() < 4)
-    return op->emitOpError()
-           << "requires vc4.resource semaphores_per_block >= 4";
+           << "requires semantic vc4.resource VDR/VPM rows and vpm_base_row";
 
   return success();
 }

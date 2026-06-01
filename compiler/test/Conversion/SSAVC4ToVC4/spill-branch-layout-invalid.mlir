@@ -6,11 +6,21 @@ ssavc4.module @spill_branch_layout_invalid {
     threading = #vc4.threading_mode<single>,
     "vc4.resource" = {
       schedule_mode = "independent_vector",
-      warps_per_block_max = 1 : i32,
-      uses_shared_vpm = false,
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = false,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
       uses_barrier = false,
-      semaphores_per_block = 0 : i32,
-      require_full_block_residency = false
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = false
     }
   } {
     %v01 = ssavc4.load_imm <splat32> {value = 1 : i32} : vector<16xi32>

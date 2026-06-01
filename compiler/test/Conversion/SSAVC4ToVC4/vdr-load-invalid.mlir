@@ -14,16 +14,26 @@ ssavc4.module @bad_vdr_load_lowering {
     },
     "vc4.resource" = {
       schedule_mode = "independent_vector",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = true,
+      uses_vdw = false,
       uses_barrier = false,
-      uses_shared_vpm = false,
-      require_full_block_residency = false,
-      semaphores_per_block = 0 : i32,
-      warps_per_block_max = 1 : i32
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = false
     }
   } {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
-    // CHECK: requires vc4.resource schedule_mode = cooperative_block
+    // CHECK: requires semantic vc4.resource VDR/VPM rows and vpm_base_row
     ssavc4.vdr.load %addr, %row {
       elem_bytes = 4 : i32,
       row_len = 16 : i32,

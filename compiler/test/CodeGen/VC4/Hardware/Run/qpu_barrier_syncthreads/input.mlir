@@ -30,14 +30,23 @@ builtins = [
 ]
 },
 "vc4.resource" = {
-schedule_mode = "cooperative_block",
-uses_barrier = true,
-uses_shared_vpm = true,
-require_full_block_residency = true,
-warps_per_block_max = 12 : i32,
-semaphores_per_block = 4 : i32,
-shared_vpm_bytes = 1024 : i32
-}
+      schedule_mode = "cooperative_block",
+      warps_per_block = 12 : i32,
+      user_vpm_rows_per_block = 16 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 16 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
+      uses_barrier = true,
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
+    }
 } {
 vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 0 : i32, waddr_mul = 32 : i32, op_add = #vc4.add_opcode<or>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 32 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}
 vc4.qpu.bundle {sig = #vc4.qpu_signal<none>, pm = false, cond_add = #vc4.cond<always>, cond_mul = #vc4.cond<never>, waddr_add = 1 : i32, waddr_mul = 32 : i32, op_add = #vc4.add_opcode<or>, op_mul = #vc4.mul_opcode<nop>, raddr_a = 32 : i32, raddr_b = 1 : i32, add_a = #vc4.qpu_mux<a>, add_b = #vc4.qpu_mux<a>, mul_a = #vc4.qpu_mux<r0>, mul_b = #vc4.qpu_mux<r1>}

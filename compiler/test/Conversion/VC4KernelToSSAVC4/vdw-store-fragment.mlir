@@ -1,8 +1,7 @@
 // RUN: vc4-opt %s --verify-vc4kernel --convert-vc4kernel-to-ssavc4 | FileCheck %s
 // CHECK-LABEL: ssavc4.func @store
-// CHECK-SAME: uses_shared_vpm = true
-// CHECK-SAME: vpm_bytes_per_block = 64
-// CHECK-SAME: vpm_rows_per_block = 1
+// CHECK-DAG: uses_vpm = true
+// CHECK-DAG: total_vpm_rows_per_block = 1
 // CHECK: ssavc4.vdw.store
 // CHECK-NOT: vc4kernel.
 module {

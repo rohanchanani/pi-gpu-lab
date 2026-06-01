@@ -44,7 +44,7 @@ struct qpu_barrier_run_result {
 
     uint32_t sem_base;
     uint32_t vpm_base_row[4];
-    uint32_t vpm_rows_per_block;
+    uint32_t vpm_rows;
 
     uint32_t qpu_set_mask;
     uint32_t expected_qpu_mask;

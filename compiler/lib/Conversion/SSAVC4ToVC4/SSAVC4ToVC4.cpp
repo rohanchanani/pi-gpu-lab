@@ -9,6 +9,7 @@
 #include "vc4/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Ops.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
+#include "vc4/Support/VC4ResourceMetadata.h"
 
 #include "mlir/IR/Attributes.h"
 #include "mlir/IR/Block.h"
@@ -544,8 +545,6 @@ static bool hasSuccessorOperandsForEdge(Operation *op, unsigned successorIndex) 
 }
 
 static DictionaryAttr getResourceMetadata(Operation *func);
-static std::optional<llvm::StringRef> getResourceString(DictionaryAttr resource,
-                                                        llvm::StringRef name);
 
 class SpillAwareAllocator {
 public:
@@ -1529,35 +1528,6 @@ static DictionaryAttr getResourceMetadata(Operation *func) {
   return llvm::dyn_cast_or_null<DictionaryAttr>(func->getAttr("vc4.resource"));
 }
 
-static std::optional<int64_t> getResourceI32(DictionaryAttr resource,
-                                            llvm::StringRef name) {
-  if (!resource)
-    return std::nullopt;
-  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(resource.get(name));
-  if (!attr)
-    return std::nullopt;
-  return attr.getInt();
-}
-
-static std::optional<bool> getResourceBool(DictionaryAttr resource,
-                                           llvm::StringRef name) {
-  if (!resource)
-    return std::nullopt;
-  if (auto attr = llvm::dyn_cast_or_null<BoolAttr>(resource.get(name)))
-    return attr.getValue();
-  return std::nullopt;
-}
-
-static std::optional<llvm::StringRef> getResourceString(DictionaryAttr resource,
-                                                        llvm::StringRef name) {
-  if (!resource)
-    return std::nullopt;
-  auto attr = llvm::dyn_cast_or_null<StringAttr>(resource.get(name));
-  if (!attr)
-    return std::nullopt;
-  return attr.getValue();
-}
-
 static std::optional<int64_t> getConstantI32FromLoadImm(Value value) {
   Operation *def = value.getDefiningOp();
   if (!hasName(def, kSSAVC4LoadImmOpName))
@@ -1649,83 +1619,51 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
   }
 
   DictionaryAttr resource = getResourceMetadata(func);
+  mlir::vc4::SemanticResourceInfo resourceInfo;
+  if (resource &&
+      failed(mlir::vc4::parseSemanticResourceMetadata(
+          func, resource, resourceInfo, /*allowAbsent=*/false)))
+    return failure();
   if (sawBarrier) {
     if (!resource)
       return func->emitOpError()
              << "uses ssavc4.barrier but lacks vc4.resource metadata";
 
-    std::optional<llvm::StringRef> scheduleMode =
-        getResourceString(resource, "schedule_mode");
-    if (!scheduleMode || *scheduleMode != "cooperative_block")
+    if (resourceInfo.scheduleMode != "cooperative_block")
       return func->emitOpError()
              << "uses ssavc4.barrier and requires vc4.resource schedule_mode = \"cooperative_block\"";
 
-    std::optional<bool> usesBarrier = getResourceBool(resource, "uses_barrier");
-    if (!usesBarrier || !*usesBarrier)
+    if (!resourceInfo.usesBarrier)
       return func->emitOpError()
              << "uses ssavc4.barrier but vc4.resource uses_barrier is not true";
-
-    std::optional<bool> fullResidency =
-        getResourceBool(resource, "require_full_block_residency");
-    if (!fullResidency || !*fullResidency)
-      return func->emitOpError()
-             << "uses ssavc4.barrier but vc4.resource require_full_block_residency is not true";
-
-    std::optional<int64_t> warpsPerBlockMax =
-        getResourceI32(resource, "warps_per_block_max");
-    if (!warpsPerBlockMax || *warpsPerBlockMax <= 0 || *warpsPerBlockMax > 12)
-      return func->emitOpError()
-             << "uses ssavc4.barrier but vc4.resource warps_per_block_max is not in [1, 12]";
 
     requiredSemaphores = std::max<int64_t>(requiredSemaphores, 4);
   }
 
   if (resource && requiredSemaphores > 0) {
-    std::optional<int64_t> semaphoresPerBlock =
-        getResourceI32(resource, "semaphores_per_block");
-    if (!semaphoresPerBlock || *semaphoresPerBlock < requiredSemaphores)
+    if (resourceInfo.semaphoreCountPerBlock < requiredSemaphores)
       return func->emitOpError()
-             << "vc4.resource semaphores_per_block is too small for SSAVC4 semaphore/barrier use";
+             << "vc4.resource semaphore_count_per_block is too small for SSAVC4 semaphore/barrier use";
   }
 
   return success();
 }
 
 
-static LogicalResult verifyCooperativeVPMResource(Operation *func,
-                                                  Operation *vpmOp) {
+static LogicalResult verifyVPMResource(Operation *func, Operation *vpmOp) {
   DictionaryAttr resource = getResourceMetadata(func);
   if (!resource)
     return vpmOp->emitOpError()
-           << "requires vc4.resource metadata with schedule_mode = cooperative_block";
+           << "requires semantic vc4.resource metadata with VPM usage";
 
-  std::optional<llvm::StringRef> scheduleMode =
-      getResourceString(resource, "schedule_mode");
-  if (!scheduleMode || *scheduleMode != "cooperative_block")
+  mlir::vc4::SemanticResourceInfo resourceInfo;
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(
+          vpmOp, resource, resourceInfo, /*allowAbsent=*/false)))
+    return failure();
+  if (!resourceInfo.usesVPM || resourceInfo.totalVPMRowsPerBlock <= 0 ||
+      !resourceInfo.requiresVPMBaseRowBuiltin)
     return vpmOp->emitOpError()
-           << "requires vc4.resource schedule_mode = cooperative_block";
-
-  std::optional<bool> usesSharedVPM = getResourceBool(resource, "uses_shared_vpm");
-  if (!usesSharedVPM || !*usesSharedVPM)
-    return vpmOp->emitOpError()
-           << "requires vc4.resource uses_shared_vpm = true";
-
-  std::optional<bool> fullResidency =
-      getResourceBool(resource, "require_full_block_residency");
-  if (!fullResidency || !*fullResidency)
-    return vpmOp->emitOpError()
-           << "requires vc4.resource require_full_block_residency = true";
-
-  std::optional<int64_t> sharedVPMBytes = getResourceI32(resource, "shared_vpm_bytes");
-  if (!sharedVPMBytes || *sharedVPMBytes <= 0)
-    return vpmOp->emitOpError()
-           << "requires positive vc4.resource shared_vpm_bytes";
-
-  std::optional<int64_t> warpsPerBlockMax =
-      getResourceI32(resource, "warps_per_block_max");
-  if (!warpsPerBlockMax || *warpsPerBlockMax <= 0 || *warpsPerBlockMax > 12)
-    return vpmOp->emitOpError()
-           << "requires vc4.resource warps_per_block_max in [1, 12]";
+           << "requires semantic vc4.resource VPM rows and vpm_base_row";
   return success();
 }
 
@@ -2408,7 +2346,7 @@ static LogicalResult selectInstructionTemplates(
 
 
       if (hasName(&op, kSSAVC4VPMWriteOpName)) {
-        if (failed(verifyCooperativeVPMResource(func, &op)))
+        if (failed(verifyVPMResource(func, &op)))
           return failure();
         if (op.getNumOperands() != 2)
           return op.emitOpError("requires row and vector value operands");
@@ -2427,7 +2365,7 @@ static LogicalResult selectInstructionTemplates(
       }
 
       if (hasName(&op, kSSAVC4VPMReadOpName)) {
-        if (failed(verifyCooperativeVPMResource(func, &op)))
+        if (failed(verifyVPMResource(func, &op)))
           return failure();
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
           return op.emitOpError("requires one row operand and one vector result");
@@ -2450,7 +2388,7 @@ static LogicalResult selectInstructionTemplates(
 
 
       if (hasName(&op, kSSAVC4VDRLoadOpName)) {
-        if (failed(verifyCooperativeVPMResource(func, &op)))
+        if (failed(verifyVPMResource(func, &op)))
           return failure();
         if (op.getNumOperands() != 2)
           return op.emitOpError("requires i32 global base address and VPM base row operands");
@@ -4306,34 +4244,23 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
   return builder.getDictionaryAttr(attrs);
 }
 
-static int64_t ceilDivPositiveI64(int64_t value, int64_t divisor) {
-  if (value <= 0)
-    return 0;
-  return 1 + (value - 1) / divisor;
-}
-
-static DictionaryAttr attachCooperativeSpillVPMRows(OpBuilder &builder,
-                                                    DictionaryAttr resource) {
+static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
+                                         DictionaryAttr resource) {
   if (!resource)
     return resource;
 
-  std::optional<llvm::StringRef> scheduleMode =
-      getResourceString(resource, "schedule_mode");
-  if (!scheduleMode || *scheduleMode != "cooperative_block")
+  mlir::vc4::SemanticResourceInfo info;
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(
+          func, resource, info, /*allowAbsent=*/false)))
+    return resource;
+  if (info.scheduleMode != "cooperative_block")
     return resource;
 
-  int64_t warpsPerBlock =
-      getResourceI32(resource, "warps_per_block_max").value_or(12);
-  int64_t sharedBytes = getResourceI32(resource, "shared_vpm_bytes")
-                            .value_or(getResourceI32(resource,
-                                                     "vpm_bytes_per_block")
-                                          .value_or(0));
-  int64_t userRows = getResourceI32(resource, "user_shared_vpm_rows_per_block")
-                         .value_or(ceilDivPositiveI64(sharedBytes, 64));
-  int64_t vdwRows = getResourceI32(resource, "vdw_staging_vpm_rows_per_block")
-                        .value_or(0);
-  int64_t spillRows = warpsPerBlock;
-  int64_t totalRows = userRows + vdwRows + spillRows;
+  int64_t spillRows = info.warpsPerBlock;
+  int64_t totalRows = info.userVPMRowsPerBlock +
+                      info.compilerVPMStagingRowsPerBlock +
+                      info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
+                      spillRows;
 
   SmallVector<NamedAttribute, 12> attrs;
   for (NamedAttribute attr : resource)
@@ -4350,13 +4277,12 @@ static DictionaryAttr attachCooperativeSpillVPMRows(OpBuilder &builder,
     attrs.push_back(builder.getNamedAttr(name, value));
   };
 
-  replaceAttr("user_shared_vpm_rows_per_block",
-              builder.getI32IntegerAttr(userRows));
-  replaceAttr("vdw_staging_vpm_rows_per_block",
-              builder.getI32IntegerAttr(vdwRows));
   replaceAttr("spill_vpm_rows_per_block",
               builder.getI32IntegerAttr(spillRows));
-  replaceAttr("vpm_rows_per_block", builder.getI32IntegerAttr(totalRows));
+  replaceAttr("total_vpm_rows_per_block", builder.getI32IntegerAttr(totalRows));
+  replaceAttr("uses_vpm", builder.getBoolAttr(totalRows > 0 || info.usesVPM));
+  replaceAttr("requires_vpm_base_row_builtin",
+              builder.getBoolAttr(totalRows > 0));
   return builder.getDictionaryAttr(attrs);
 }
 
@@ -4380,7 +4306,7 @@ static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
       llvm::dyn_cast_or_null<DictionaryAttr>(vc4Func->getAttr("vc4.resource"));
   if (resource)
     vc4Func->setAttr("vc4.resource",
-                     attachCooperativeSpillVPMRows(builder, resource));
+                     attachSpillVPMRows(vc4Func, builder, resource));
 }
 
 static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,

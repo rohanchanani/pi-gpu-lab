@@ -1,0 +1,17 @@
+{
+  "name": "resource_cooperative_vpm_rows_and_barrier_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "warps_per_block": 4,
+    "runtime_allocations": 1,
+    "runtime_launches": 4,
+    "timeouts": 0,
+    "errstat_relevant_changed": 0
+  }
+}

@@ -10,7 +10,7 @@ from pathlib import Path
 
 REQ_TOP = {"schema_version", "kind", "program_name", "target", "kernels"}
 REQ_KERNEL = {"kernel_id", "symbol_name", "public_name", "qasm_path", "code_symbol", "scheduled_sink_ops", "uniform_words_per_request", "tail_policy", "schedule_mode", "args", "builtins", "resources"}
-REQ_TARGET = {"name", "warp_size", "max_active_qpus", "shared_vpm_bytes", "semaphores"}
+REQ_TARGET = {"name", "warp_size", "max_active_qpus", "total_vpm_bytes", "semaphores"}
 
 
 def fail(msg: str) -> None:

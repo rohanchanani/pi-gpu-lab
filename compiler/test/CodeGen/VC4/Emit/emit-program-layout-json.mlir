@@ -24,15 +24,17 @@
 
 // SOURCE: VC4_RUNTIME_LAYOUT
 // SOURCE-DAG: static const struct vc4_kernel_image vc4_codegen_kernels[] = {
-// SOURCE-DAG: { "first_layout", first_layout_shader
-// SOURCE-DAG: { "second_layout", second_layout_shader
+// SOURCE-DAG: .name = "first_layout"
+// SOURCE-DAG: .code = first_layout_shader
+// SOURCE-DAG: .name = "second_layout"
+// SOURCE-DAG: .code = second_layout_shader
 // SOURCE-DAG: static const struct vc4_module_image vc4_codegen_module = {
 // SOURCE-DAG: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
 // SOURCE-DAG: static int first_layout_pack_uniforms
 // SOURCE-DAG: static int second_layout_pack_uniforms
 // SOURCE-DAG: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, first_layout_pack_uniforms, &ctx);
 // SOURCE-DAG: return vc4LaunchKernel(program, 1u, totalRequests, warpsPerBlock, second_layout_pack_uniforms, &ctx);
-// SOURCE-NOT: VC4_KERNEL_SCHEDULE_COOPERATIVE_BLOCK VC4_KERNEL_SCHEDULE_INDEPENDENT_VECTOR
+// SOURCE-NOT: VC4_SCHEDULE_COOPERATIVE_BLOCK VC4_SCHEDULE_INDEPENDENT_VECTOR
 // SOURCE-NOT: struct vc4_codegen_kernel_desc
 // SOURCE-NOT: kernel_descs[VC4_CODEGEN_PROGRAM_KERNELS]
 // SOURCE-NOT: memcpy((void *)state->kernel_0_code
@@ -43,7 +45,24 @@ vc4.module @program_layout_json {
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
-    "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false},
+    "vc4.resource" = {
+      schedule_mode = "independent_vector",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = false,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
+      uses_barrier = false,
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = false
+    },
     "vc4.launch_abi" = {
       public_name = "first_layout",
       code_symbol = "first_layout_shader",
@@ -113,7 +132,24 @@ vc4.module @program_layout_json {
     form = #vc4.function_form<scheduled>,
     kernel,
     threading = #vc4.threading_mode<single>,
-    "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false},
+    "vc4.resource" = {
+      schedule_mode = "independent_vector",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = false,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
+      uses_barrier = false,
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = false
+    },
     "vc4.launch_abi" = {
       public_name = "second_layout",
       code_symbol = "second_layout_shader",

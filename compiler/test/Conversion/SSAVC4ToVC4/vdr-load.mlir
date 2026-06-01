@@ -2,7 +2,7 @@
 
 // CHECK-LABEL: vc4.module @vdr_load_lowering
 // CHECK: vc4.func @vdr_load_kernel
-// CHECK: uses_shared_vpm = true
+// CHECK: uses_vpm = true
 // CHECK: vc4.qpu.vpmvcd_setup
 // CHECK-SAME: side = #vc4.vpmvcd_side<read>
 // CHECK: vc4.qpu.vpmvcd_addr
@@ -27,12 +27,21 @@ ssavc4.module @vdr_load_lowering {
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
+      warps_per_block = 4 : i32,
+      user_vpm_rows_per_block = 16 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 16 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = true,
+      uses_vdw = false,
       uses_barrier = true,
-      uses_shared_vpm = true,
-      shared_vpm_bytes = 1024 : i32,
-      require_full_block_residency = true,
-      semaphores_per_block = 4 : i32,
-      warps_per_block_max = 4 : i32
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = true
     }
   } {
     %addr = ssavc4.uniform.read 0 : i32

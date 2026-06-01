@@ -242,7 +242,7 @@ def SSAVC4_BarrierOp : SSAVC4_Op<"barrier"> {
     Models a block-scoped cooperative barrier backed by the M2 scheduled
     semaphore resource contract.  The operation is legal only with
     vc4.resource metadata declaring cooperative_block scheduling, barrier use,
-    full-block residency, a positive warps_per_block_max, and enough hardware
+    a positive warps_per_block, and enough hardware
     semaphores for the four offset attributes.
   }];
   let arguments = (ins

@@ -32,7 +32,24 @@ vc4.module @cuda_like_launch_abi {
         {name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", uniform_index = 5 : i32}
       ]
     },
-    "vc4.resource" = {schedule_mode = "independent_vector", uses_barrier = false, uses_shared_vpm = false}
+    "vc4.resource" = {
+      schedule_mode = "independent_vector",
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = false,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
+      uses_barrier = false,
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = false
+    }
   } {
     // Thread end plus two non-branch scheduled delay-slot instructions.
     // The two trailing bundles are hardware nops: both ALU pipes are inactive.

@@ -28,11 +28,21 @@ ssavc4.module @pressure_spill_boundary {
     },
     "vc4.resource" = {
       schedule_mode = "independent_vector",
-      warps_per_block_max = 1 : i32,
-      uses_shared_vpm = false,
+      warps_per_block = 1 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 1 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 1 : i32,
+      uses_tmu = false,
+      uses_vpm = true,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = true,
       uses_barrier = false,
-      semaphores_per_block = 0 : i32,
-      require_full_block_residency = false
+      semaphore_count_per_block = 0 : i32,
+      requires_vpm_base_row_builtin = true,
+      requires_semaphore_base_builtin = false
     }
   } {
     %out = ssavc4.uniform.read 0 : i32

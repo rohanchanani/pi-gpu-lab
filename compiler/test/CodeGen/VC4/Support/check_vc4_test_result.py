@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 PREFIX = "VC4_TEST_RESULT "
+LAUNCH_PREFIX = "VC4_KERNEL_LAUNCH "
 
 
 def fail(message: str) -> None:
@@ -40,6 +41,28 @@ def load_last_result(log_path: Path) -> Dict[str, str]:
     if last is None:
         fail(f"no VC4_TEST_RESULT line found in {log_path}")
     return parse_result_line(last)
+
+
+def parse_key_value_line(line: str, prefix: str) -> Dict[str, str]:
+    if not line.startswith(prefix):
+        fail("internal error: line missing expected prefix")
+    fields: Dict[str, str] = {}
+    for token in line[len(prefix) :].strip().split():
+        if "=" not in token:
+            continue
+        key, value = token.split("=", 1)
+        if not key or key in fields:
+            fail(f"malformed or duplicate key in {prefix.strip()} line: {key!r}")
+        fields[key] = value
+    return fields
+
+
+def load_launch_lines(log_path: Path) -> list[Dict[str, str]]:
+    launches: list[Dict[str, str]] = []
+    for line in log_path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith(LAUNCH_PREFIX):
+            launches.append(parse_key_value_line(line, LAUNCH_PREFIX))
+    return launches
 
 
 def coerce_exact(actual: str, expected: Any) -> bool:
@@ -84,6 +107,28 @@ def check_expected(expected_path: Path, log_path: Path) -> None:
         if not coerce_exact(result[key], value):
             fail(f"field {key!r} mismatch: expected {value!r}, got {result[key]!r}")
 
+    launch_required = expected.get("launch_required", {})
+    if launch_required is None:
+        launch_required = {}
+    if not isinstance(launch_required, dict):
+        fail("expected.json 'launch_required' must be an object when present")
+    if launch_required:
+        launches = load_launch_lines(log_path)
+        if not launches:
+            fail(f"no VC4_KERNEL_LAUNCH line found in {log_path}")
+        matched = False
+        for launch in launches:
+            ok = True
+            for key, value in launch_required.items():
+                if key not in launch or not coerce_exact(launch[key], value):
+                    ok = False
+                    break
+            if ok:
+                matched = True
+                break
+        if not matched:
+            fail(f"no VC4_KERNEL_LAUNCH line matched launch_required={launch_required!r}")
+
     float_max = expected.get("float_max", {})
     if float_max is None:
         float_max = {}
@@ -114,6 +159,7 @@ def self_test() -> None:
                     "name": "runner_self_test",
                     "status": "PASS",
                     "required": {"mismatches": 0, "count": 1},
+                    "launch_required": {"resident_blocks": 3, "warps_per_block": 1},
                     "float_max": {"max_abs_diff": 0.001},
                 }
             ),
@@ -121,6 +167,7 @@ def self_test() -> None:
         )
         log.write_text(
             "noise\n"
+            "VC4_KERNEL_LAUNCH name=runner_self_test kernel_id=0 schedule_mode=independent_vector requests=4 waves=2 resident_blocks=3 warps_per_block=1 runtime_launches=1 launch_failures=0\n"
             "VC4_TEST_RESULT name=runner_self_test status=PASS mismatches=0 count=1 max_abs_diff=0.0005\n",
             encoding="utf-8",
         )

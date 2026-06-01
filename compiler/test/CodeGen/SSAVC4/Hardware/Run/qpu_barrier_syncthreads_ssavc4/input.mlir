@@ -15,11 +15,21 @@ ssavc4.module @qpu_barrier_syncthreads_ssavc4 {
     },
     "vc4.resource" = {
       schedule_mode = "cooperative_block",
-      warps_per_block_max = 12 : i32,
-      uses_shared_vpm = false,
+      warps_per_block = 12 : i32,
+      user_vpm_rows_per_block = 0 : i32,
+      compiler_vpm_staging_rows_per_warp = 0 : i32,
+      compiler_vpm_staging_rows_per_block = 0 : i32,
+      total_vpm_rows_per_block = 0 : i32,
+      uses_tmu = false,
+      uses_vpm = false,
+      uses_vpm_qpu_read = false,
+      uses_vpm_qpu_write = false,
+      uses_vdr = false,
+      uses_vdw = false,
       uses_barrier = true,
-      semaphores_per_block = 4 : i32,
-      require_full_block_residency = true
+      semaphore_count_per_block = 4 : i32,
+      requires_vpm_base_row_builtin = false,
+      requires_semaphore_base_builtin = true
     }
   } {
     ssavc4.barrier {arrive_offset = 0 : i32, go_offset = 1 : i32, depart_offset = 2 : i32, reset_offset = 3 : i32}
