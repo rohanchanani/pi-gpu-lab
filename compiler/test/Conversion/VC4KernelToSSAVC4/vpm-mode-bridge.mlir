@@ -14,8 +14,8 @@
 // CHECK-SAME: vpm_x = 0 : i32
 // CHECK: ssavc4.vdw.store_vpm
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
-// CHECK-NOT: orientation = "horizontal"
-// CHECK-NOT: orientation = "vertical"
+// CHECK-NOT: orientation = {{["]}}horizontal{{["]}}
+// CHECK-NOT: orientation = {{["]}}vertical{{["]}}
 // CHECK-NOT: vc4kernel.
 module {
   vc4kernel.kernel @vpm_modes(%in : i32, %out : i32) attributes {
