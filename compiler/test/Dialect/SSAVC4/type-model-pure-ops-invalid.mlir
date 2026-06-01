@@ -23,6 +23,22 @@ module {
 // ----
 
 module {
+  %x = ssavc4.load_imm <splat32> {value = 1.000000e+00 : f32} : f32
+  // expected-error@+1 {{input and result must have the same SSAVC4 element domain}}
+  %bad = ssavc4.splat %x : f32 -> vector<16xi32>
+}
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  // expected-error@+1 {{input and result must have the same SSAVC4 element domain}}
+  %bad = ssavc4.splat %x : i32 -> vector<16xf32>
+}
+
+// ----
+
+module {
   %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
   // expected-error@+1 {{input and result types must match}}
   %bad = ssavc4.mov %x : i32 -> f32

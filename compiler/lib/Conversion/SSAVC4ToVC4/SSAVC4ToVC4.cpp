@@ -2093,9 +2093,10 @@ static LogicalResult selectInstructionTemplates(
         if (op.getNumOperands() != 0 || op.getNumResults() != 1)
           return op.emitOpError("requires exactly one result for M3 lowering");
         Type resultType = op.getResult(0).getType();
-        if (!resultType.isSignlessInteger(32) && !isVector16I32Type(resultType) &&
+        if (!resultType.isSignlessInteger(32) && !resultType.isF32() &&
+            !isVector16I32Type(resultType) &&
             !isVector16F32Type(resultType))
-          return op.emitOpError("supports only i32, vector<16xi32>, or vector<16xf32> uniform reads in M3 lowering");
+          return op.emitOpError("supports only i32, f32, vector<16xi32>, or vector<16xf32> uniform reads in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2111,11 +2112,17 @@ static LogicalResult selectInstructionTemplates(
       if (hasName(&op, kSSAVC4SplatOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
           return op.emitOpError("requires one input operand and one result for M3 lowering");
-        if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 scalar input for M3 lowering");
-        if (!isVector16I32Type(op.getResult(0).getType()) &&
-            !isVector16F32Type(op.getResult(0).getType()))
+        Type inputType = op.getOperand(0).getType();
+        Type resultType = op.getResult(0).getType();
+        bool inputI32 = inputType.isSignlessInteger(32);
+        bool inputF32 = inputType.isF32();
+        if (!inputI32 && !inputF32)
+          return op.emitOpError("requires an i32 or f32 scalar input for M3 lowering");
+        if (!isVector16I32Type(resultType) && !isVector16F32Type(resultType))
           return op.emitOpError("supports only vector<16xi32> or vector<16xf32> splat results in M3 lowering");
+        if ((inputI32 && !isVector16I32Type(resultType)) ||
+            (inputF32 && !isVector16F32Type(resultType)))
+          return op.emitOpError("requires input and result to have the same SSAVC4 element domain in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
