@@ -38,6 +38,7 @@ REPO_ROOT="$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)
 if [[ -z "$REPO_ROOT" ]]; then
   REPO_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
 fi
+CHECKER="$REPO_ROOT/compiler/test/CodeGen/VC4/Support/check_vc4_test_result.py"
 
 TEST_ROOT="$REPO_ROOT/compiler/test/CodeGen/SSAVC4/Hardware/Run/$TEST_NAME"
 INPUT_MLIR="$TEST_ROOT/input.mlir"
@@ -337,7 +338,7 @@ select_harness_path() {
     fail "SSAVC4 candidate fixture $TEST_NAME needs $(relpath "$candidate") using kernel_launch.h and vc4Malloc/vc4Memcpy APIs; reference harness fallback is disabled"
   fi
 
-  log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and forbidden for normal SSAVC4 candidate verification."
+  log "WARNING: VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1; using legacy harness fallback for $TEST_NAME. This is debug-only and FORBIDDEN for Checkpoint 2 or normal SSAVC4 candidate verification."
 
   local named="$CANDIDATE_DIR/${TEST_NAME}_harness.c"
   if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
@@ -711,7 +712,11 @@ run_candidate() {
   local attempt=1
   local run_rc=0
   local attempt_log="$WORK_DIR/.vc4_candidate_run_attempt.log"
+  local attempt_timeout="${VC4_HW_ATTEMPT_TIMEOUT_SEC:-60}"
   local retry_reason=""
+  if ! [[ "$attempt_timeout" =~ ^[0-9]+$ ]] || [[ "$attempt_timeout" -lt 1 ]]; then
+    fail "VC4_HW_ATTEMPT_TIMEOUT_SEC must be a positive integer, got: $attempt_timeout"
+  fi
   while true; do
     if [[ "$attempt" -eq 1 ]]; then
       vc4_candidate_power_cycle_if_needed "power cycling Pi before candidate run"
@@ -722,12 +727,14 @@ run_candidate() {
 
     rm -f "$attempt_log"
     set +e
-    (
-      cd "$WORK_DIR"
-      bash run.sh
-    ) 2>&1 | tee "$attempt_log"
+    vc4_candidate_run_sh_with_timeout "$WORK_DIR" "$attempt_timeout" 2>&1 | tee "$attempt_log"
     run_rc=${PIPESTATUS[0]}
     set -e
+
+    if [[ "$run_rc" -eq 0 ]]; then
+      python3 "$CHECKER" "$EXPECTED_JSON" "$attempt_log"
+      return 0
+    fi
 
     if [[ "$run_rc" -ne 0 ]] && retry_reason="$(vc4_candidate_transient_preboot_failure_reason "$attempt_log")" && [[ "$attempt" -lt "$max_attempts" ]]; then
       log "transient pre-boot failure matched in attempt log: ${retry_reason}"
@@ -740,6 +747,45 @@ run_candidate() {
   done
 
   return "$run_rc"
+}
+
+vc4_candidate_run_sh_with_timeout() {
+  local work_dir="$1"
+  local timeout_sec="$2"
+  python3 - "$work_dir" "$timeout_sec" <<'PY_RUN_TIMEOUT'
+import os
+import signal
+import subprocess
+import sys
+
+work_dir, timeout_s = sys.argv[1:]
+timeout = float(timeout_s)
+process = subprocess.Popen(["bash", "run.sh"], cwd=work_dir, start_new_session=True)
+try:
+    sys.exit(process.wait(timeout=timeout))
+except subprocess.TimeoutExpired:
+    print(
+        f"[ssavc4-candidate] ERROR: bash run.sh timed out after {int(timeout)} seconds; terminating hardware process group",
+        file=sys.stderr,
+    )
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        print(
+            "[ssavc4-candidate] ERROR: bash run.sh did not exit after SIGTERM; sending SIGKILL",
+            file=sys.stderr,
+        )
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+    sys.exit(124)
+PY_RUN_TIMEOUT
 }
 
 vc4_candidate_self_test_assert_true() {
@@ -789,6 +835,38 @@ vc4_candidate_self_test() {
     printf '%s\n' 'PANIC:pi-boot failed'
   } > "$tmp/runtime-layout-crash.log"
   vc4_candidate_self_test_assert_false "runtime layout then crash log" "$tmp/runtime-layout-crash.log"
+
+  cat > "$tmp/expected.json" <<'EOF'
+{"name":"runner_self_test","status":"PASS","required":{"mismatches":0,"count":1},"float_max":{"max_abs_diff":0.001}}
+EOF
+  printf '%s\n' \
+    'noise before result' \
+    'VC4_TEST_RESULT name=runner_self_test status=PASS mismatches=0 count=1 max_abs_diff=0.0005' > "$tmp/pass.log"
+  python3 "$CHECKER" "$tmp/expected.json" "$tmp/pass.log"
+  log "self-test checker pass: synthetic PASS log"
+
+  printf '%s\n' 'VC4_TEST_RESULT name=runner_self_test status=FAIL mismatches=0 count=1 max_abs_diff=0.0005' > "$tmp/fail.log"
+  if python3 "$CHECKER" "$tmp/expected.json" "$tmp/fail.log" >/dev/null 2>&1; then
+    fail "self-test expected checker failure for synthetic FAIL log"
+  fi
+  log "self-test checker fail: synthetic FAIL log"
+
+  printf '%s\n' 'noise without result' > "$tmp/missing-result.log"
+  if python3 "$CHECKER" "$tmp/expected.json" "$tmp/missing-result.log" >/dev/null 2>&1; then
+    fail "self-test expected checker failure for missing VC4_TEST_RESULT log"
+  fi
+  log "self-test checker fail: missing result log"
+
+  mkdir -p "$tmp/timeout-workdir"
+  cat > "$tmp/timeout-workdir/run.sh" <<'EOF'
+#!/usr/bin/env bash
+sleep 5
+EOF
+  chmod +x "$tmp/timeout-workdir/run.sh"
+  if vc4_candidate_run_sh_with_timeout "$tmp/timeout-workdir" 1 >/dev/null 2>&1; then
+    fail "self-test expected timeout wrapper to fail"
+  fi
+  log "self-test timeout wrapper returned nonzero"
 
   echo "run_ssavc4_candidate_codegen_test.sh self-test PASS"
 }
