@@ -42,8 +42,8 @@ The implementation order is bottom-up:
 This document deliberately supersedes the previous strict spec in the following important ways:
 
 ```text
-- remove vc4kernel.lane_id
-- remove vc4kernel.block_id
+- remove the lane-id operation
+- remove the block-id operation
 - remove user-authored vc4kernel resource summary dictionaries
 - keep vc4kernel.fragment_cmp
 - broaden !vc4kernel.pred<16> from only normalizable tails to a true 16-lane predicate/mask with structured and general classes
@@ -581,10 +581,10 @@ uses_vdr:                              bool
 uses_vdw:                              bool
 uses_barrier:                          bool
 
-user_vpm_rows_per_block:               i32
+user_vpm_rows_per_block                i32
 compiler_vpm_staging_rows_per_warp:    i32
 compiler_vpm_staging_rows_per_block:   i32
-total_vpm_rows_per_block:              i32
+total_vpm_rows_per_block               i32
 total_vpm_bytes_per_block:             i32, derived = total_vpm_rows_per_block * 16 * 4
 
 semaphore_count_per_block:             i32
@@ -597,7 +597,7 @@ No old compatibility-only fields may be preserved unless they have a real semant
 ### 6.6 Resource computation rules
 
 ```text
-user_vpm_rows_per_block:
+user_vpm_rows_per_block
   sum of explicit vc4kernel.vpm_alloc rows after deterministic allocation planning.
 
 compiler_vpm_staging_rows_per_warp:
@@ -606,7 +606,7 @@ compiler_vpm_staging_rows_per_warp:
 compiler_vpm_staging_rows_per_block:
   rows needed for block-level hidden staging not owned by a single warp.
 
-total_vpm_rows_per_block:
+total_vpm_rows_per_block
   user_vpm_rows_per_block
   + warps_per_block * compiler_vpm_staging_rows_per_warp
   + compiler_vpm_staging_rows_per_block
@@ -737,8 +737,8 @@ Lowers from SSAVC4 element_number / hardware ELEMENT_NUMBER.
 These operations are not part of corrected `vc4kernel`:
 
 ```text
-vc4kernel.block_id
-vc4kernel.lane_id
+block-id operation
+lane-id operation
 vc4kernel.thread_id
 ```
 
@@ -1566,8 +1566,8 @@ vc4kernel.lane_range
 Explicitly removed:
 
 ```text
-vc4kernel.block_id
-vc4kernel.lane_id
+block-id operation
+lane-id operation
 vc4kernel.thread_id
 ```
 
@@ -1622,8 +1622,8 @@ vc4kernel.barrier
 
 ```text
 vc4kernel.thread_id
-vc4kernel.block_id
-vc4kernel.lane_id
+block-id operation
+lane-id operation
 vc4kernel.tile_load
 vc4kernel.tile_store
 vc4kernel.copy_tile
@@ -2091,7 +2091,7 @@ The suite must scan for and reject:
 3. FunctionOpInterface and function_type behavior are coherent.
 4. The verifier rejects every forbidden dialect/type/op class listed here.
 5. No producer-facing surface op exists in vc4kernel.
-6. No vc4kernel.thread_id, vc4kernel.block_id, or vc4kernel.lane_id exists.
+6. No thread-id, block-id, or lane-id operation exists.
 7. No vector dialect op is legal in vc4kernel.
 8. No memref/tensor/scf/tt/gpu/linalg/producers are legal in vc4kernel.
 9. Raw vector<16xi1> masks are replaced by !vc4kernel.pred<16>.
