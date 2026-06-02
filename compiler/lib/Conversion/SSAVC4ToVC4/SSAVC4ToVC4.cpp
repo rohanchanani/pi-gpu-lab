@@ -4325,16 +4325,28 @@ static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
                         /*raddrB=*/0, mlir::vc4::QPUMux::r2,
                         mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/31, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::sub,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/static_cast<int32_t>(row + 1),
-                        /*setFlags=*/true);
+  if (row + 1 == maxRows) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/std::nullopt, /*setFlags=*/true);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/static_cast<int32_t>(row + 1),
+                          /*setFlags=*/true);
+  }
   createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
                         static_cast<int64_t>(7 + guardedPayloadSlots) * 8,
                         /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
