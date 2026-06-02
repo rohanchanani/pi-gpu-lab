@@ -27,7 +27,8 @@ P11 Implement explicit VPM/VDR/VDW paths, horizontal and vertical 32-bit, with h
 P12 Implement full i32 multiply semantics with mul24 fast path and software fallback.
 P13 Implement cooperative barrier using semaphore_base and hardware-test it.
 P14 Run final Stage 1 acceptance audit.
-P15 Only after P14, start the upstream standard vector surface specification.
+P14.5 Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint.
+P15 Only after P14.5, start the upstream standard vector surface specification.
 ```
 
 The plan intentionally updates the lower half where needed. Existing SSAVC4/scheduled-VC4 compatibility is not a design constraint.
@@ -1028,9 +1029,30 @@ vc4kernel_qpu_barrier_syncthreads
 
 ---
 
+## Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint
+
+This checkpoint is required before vector-surface lock if blocked GEMM/GEMV and future `vector.contract` are expected to use VPM reuse with runtime M/N/K. It implements dynamic VDR/VDW rectangular movement, 3D logical launch identity, and hardware fixtures for blocked runtime GEMM/GEMV.
+
+Acceptance requires:
+
+```text
+- 3D program_id(axis) and num_programs(axis) lowering and hardware proof.
+- Dynamic VDR rect load zero-fill hardware proof.
+- Dynamic VDW rect store preserve hardware proof.
+- Runtime-pitch/stride variants including non-multiple dimensions.
+- Row-by-row fallback when pitch/stride cannot be encoded as one hardware setup word.
+- Naive and blocked GEMV with runtime m,n.
+- Naive and blocked GEMM with runtime m,n,k.
+- Natural row-major contiguous layouts using runtime leading dimensions, not padded fixture-specific strides.
+```
+
+The blocked GEMM/GEMV fixtures must use compile-time tile/block maximum sizes but runtime problem sizes and leading dimensions. Static rectangular VDR/VDW ops remain legal for fixed-shape fixtures and fully specialized kernels, but they are not the permanent representation for runtime M/N/K shared-memory blocking.
+
+---
+
 ## P15 — Begin upstream standard vector surface only after P14
 
-After P14, begin a new design/implementation stage for the standard vector surface.
+After P14 and the dynamic rectangular transfer / runtime GEMM-GEMV checkpoint, begin a new design/implementation stage for the standard vector surface.
 
 Initial vector surface should likely be:
 

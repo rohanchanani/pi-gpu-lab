@@ -636,8 +636,11 @@ Resource validity:
 `vc4kernel` source does not contain these as formal args. They are inserted into `vc4.launch_abi.builtins[]` only when needed:
 
 ```text
-program_id:
-  logical program/request index. Required when vc4kernel.program_id is used.
+program_id(axis):
+  logical program/request index for launch-grid axis 0, 1, or 2. Required when vc4kernel.program_id is used.
+
+num_programs(axis):
+  logical launch-grid extent for axis 0, 1, or 2. Required when vc4kernel.num_programs is used.
 
 warp_id:
   logical warp id within the cooperative block. Required when vc4kernel.warp_id is used or when barrier/lowering needs it.
@@ -687,19 +690,40 @@ Independent-vector kernels are treated as one-warp logical blocks for residency 
 Signature:
 
 ```mlir
-%pid = vc4kernel.program_id : i32
+%pid = vc4kernel.program_id {axis = 0 : i32} : i32
 ```
 
 Semantics:
 
 ```text
-Logical program/request index for the current launch.
-For Triton axis-0 v1 lowering, tt.get_program_id(axis=0) maps here.
+Logical program/request index for launch-grid axis 0, 1, or 2.
+program_id {axis = 0|1|2}
 It is not physical QPU_NUMBER.
 It is not a formal argument.
 ```
 
-### 7.2 `vc4kernel.warp_id`
+Axis values other than 0, 1, or 2 are invalid.
+
+### 7.2 `vc4kernel.num_programs`
+
+Signature:
+
+```mlir
+%n = vc4kernel.num_programs {axis = 0 : i32} : i32
+```
+
+Semantics:
+
+```text
+Logical launch-grid extent for launch-grid axis 0, 1, or 2.
+num_programs {axis = 0|1|2}
+It is not physical QPU identity.
+It is not a formal argument.
+```
+
+Axis values other than 0, 1, or 2 are invalid.
+
+### 7.3 `vc4kernel.warp_id`
 
 Signature:
 
@@ -716,7 +740,7 @@ It is not physical QPU_NUMBER.
 Legal only in cooperative_block kernels or inside lowering-generated internal paths that need a constant/logical warp slot.
 ```
 
-### 7.3 `vc4kernel.lane_range`
+### 7.4 `vc4kernel.lane_range`
 
 Signature:
 
@@ -732,7 +756,7 @@ Used to form fragment offsets and lane-wise values.
 Lowers from SSAVC4 element_number / hardware ELEMENT_NUMBER.
 ```
 
-### 7.4 Removed identity operations
+### 7.5 Removed identity operations
 
 These operations are not part of corrected `vc4kernel`:
 
@@ -835,10 +859,10 @@ vdw_store_fragment:
   accepts all classes for contiguous 32-bit row offsets; full/tail may use direct active-prefix path; general_mask must preserve inactive destination memory through fallback such as TMU old-row load + fragment_select + VPM staging + full-row VDW store
 
 vdr_load_to_vpm:
-  accepts only full rectangular DMA semantics; tail/general masks must be decomposed above into TMU + VPM writes or rejected by verifier/planner
+  accepts only full static rectangular DMA semantics; runtime rectangular tails and leading dimensions use vdr_load_rect_to_vpm
 
 vdw_store_vpm and vdw_store_vpm_fragment:
-  direct DMA accepts full rectangular or full/tail row semantics; general_mask requires a preserve-destination fallback or deterministic rejection until that fallback is implemented
+  direct DMA accepts full static rectangular or full/tail row semantics; runtime rectangular preserve-destination stores use vdw_store_rect_from_vpm
 ```
 
 ### 8.5 Forbidden predicate representations
@@ -1344,7 +1368,7 @@ Rules:
 - vpm_pitch is a hardware VPM pitch value; v1 supports 32-bit legal pitch modes.
 - dst_y/dst_x plus rectangle dimensions must fit the allocation.
 - no predicate operand is accepted.
-- partial/tail loads must decompose into TMU + VPM writes above this op.
+- runtime rectangular/tail loads use `vc4kernel.vdr_load_rect_to_vpm`; the static op remains for full fixed-size rectangles.
 ```
 
 ### 12.8 `vc4kernel.vdw_store_vpm`
@@ -1406,6 +1430,97 @@ Rules:
 ```
 
 This op is for shared/VPM-to-global fragment paths. Register-to-global convenience paths use `vdw_store_fragment` and compiler-managed staging.
+
+---
+
+## Dynamic rectangular global<->VPM transfer planning
+
+VC4Kernel supports two classes of VDR/VDW movement.
+
+### Static rectangular movement
+
+`vc4kernel.vdr_load_to_vpm` and `vc4kernel.vdw_store_vpm_fragment` continue to represent fully static, hardware-shaped 32-bit rectangular movement. Their row/column shape and memory pitch are known as attributes. They are useful for fixed-size fixtures and fully specialized kernels.
+
+### Dynamic rectangular movement
+
+Blocked kernels such as GEMV and GEMM require runtime problem sizes and runtime leading dimensions. The correct VC4Kernel representation is not padded input matrices and not TMU-to-register-to-VPM as the primary shared-memory path. The correct representation is a dynamic rectangular transfer plan:
+
+- Tile/block maximum shape is compile-time.
+- Active rows and columns are runtime scalar `i32` values.
+- Memory pitch/stride in bytes is a runtime scalar `i32` value.
+- Global-to-VPM loads zero-fill inactive or out-of-bounds elements inside the destination VPM tile.
+- VPM-to-global stores preserve destination memory outside active rows/columns.
+- The lowering may choose a fast one-DMA VDR/VDW path, a dynamic setup-word path, row-by-row fallback, or TMU/merge fallback as long as the semantic contract is preserved.
+- The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature.
+
+### `vc4kernel.vdr_load_rect_to_vpm`
+
+```mlir
+vc4kernel.vdr_load_rect_to_vpm
+  %base, %byte_offset, %tile, %dst_row,
+  %active_rows, %active_cols, %memory_pitch_bytes
+  {
+    max_rows = 16 : i32,
+    max_cols = 16 : i32,
+    elem_bytes = 4 : i32,
+    orientation = #vc4kernel.vpm_orientation<horizontal>,
+    width = #vc4kernel.vpm_width<w32>,
+    subword = #vc4kernel.vpm_subword<none>,
+    dst_x = 0 : i32,
+    vpm_pitch = 1 : i32
+  }
+  : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
+```
+
+Semantics:
+
+For `0 <= r < max_rows` and `0 <= c < max_cols`, if `r < clamp(active_rows,0,max_rows)` and `c < clamp(active_cols,0,max_cols)`, load the 32-bit element at:
+
+```text
+base + byte_offset + r * memory_pitch_bytes + c * 4
+```
+
+into the destination VPM rectangle. Otherwise write zero into that destination VPM element. `memory_pitch_bytes` must be 4-byte aligned at runtime.
+
+### `vc4kernel.vdw_store_rect_from_vpm`
+
+```mlir
+vc4kernel.vdw_store_rect_from_vpm
+  %tile, %src_row, %base, %byte_offset,
+  %active_rows, %active_cols, %memory_stride_bytes
+  {
+    max_rows = 16 : i32,
+    max_cols = 16 : i32,
+    elem_bytes = 4 : i32,
+    orientation = #vc4kernel.vpm_orientation<horizontal>,
+    width = #vc4kernel.vpm_width<w32>,
+    subword = #vc4kernel.vpm_subword<none>,
+    src_x = 0 : i32,
+    vpm_pitch = 1 : i32
+  }
+  : !vc4kernel.vpm_tile, i32, i32, i32, i32, i32, i32
+```
+
+Semantics:
+
+For active rows/columns, store VPM elements to global memory at:
+
+```text
+base + byte_offset + r * memory_stride_bytes + c * 4
+```
+
+For inactive rows/columns, preserve destination memory. `memory_stride_bytes` must be 4-byte aligned at runtime.
+
+Verifier requirements:
+
+- `max_rows` and `max_cols` are positive attrs and each is <= 16 for v1.
+- `elem_bytes = 4`, `width = w32`, `subword = none`.
+- `dst_row/src_row` must be a scalar i32 constant within the VPM allocation for v1.
+- `dst_x/src_x` must be in hardware-valid range.
+- `vpm_pitch` must be positive.
+- `active_rows`, `active_cols`, and pitch/stride operands are scalar i32.
+- Static memory-pitch attrs remain legal only on static ops.
+- Dynamic rect ops are the preferred form for runtime problem sizes and leading dimensions.
 
 ---
 
@@ -1559,6 +1674,7 @@ Sub-32 hardware mode attrs may exist in the lower half but must be rejected for 
 vc4kernel.kernel
 vc4kernel.return
 vc4kernel.program_id
+vc4kernel.num_programs
 vc4kernel.warp_id
 vc4kernel.lane_range
 ```
@@ -1608,8 +1724,10 @@ vc4kernel.vpm_alloc
 vc4kernel.vpm_write_fragment
 vc4kernel.vpm_read_fragment
 vc4kernel.vdr_load_to_vpm
+vc4kernel.vdr_load_rect_to_vpm
 vc4kernel.vdw_store_vpm
 vc4kernel.vdw_store_vpm_fragment
+vc4kernel.vdw_store_rect_from_vpm
 ```
 
 ### 16.5 Synchronization
@@ -1925,7 +2043,8 @@ scf                         -> cf before verified vc4kernel
 Triton lowering responsibilities after vector is locked:
 
 ```text
-tt.get_program_id(axis=0)   -> program_id
+tt.get_program_id(axis=0..2) -> program_id {axis = 0|1|2}
+tt.num_programs(axis=0..2)  -> num_programs {axis = 0|1|2}
 tt.make_range / arange      -> vector.step -> lane_range
 tt.load mask/other          -> vector.transfer_read -> vc4kernel predicate + TMU/VDR plan
 tt.store mask               -> vector.transfer_write -> vc4kernel predicate + VDW plan
@@ -2124,7 +2243,6 @@ Outside the current executable spec:
 - packed/laned executable VPM movement
 - arbitrary global scatter stores
 - fragment_contract / matmul-specific planned op
-- multi-axis program_id beyond axis 0
 ```
 
 These may be added only by separate design documents and vertical hardware-proven implementation slices.
