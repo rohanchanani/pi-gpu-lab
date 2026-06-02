@@ -4546,10 +4546,6 @@ static LogicalResult emitVDRLoadRectDynamic(
                            *vpmBaseRowReg, setupWordWithoutNRows, useMutex);
     return success();
   }
-  if (!pitchBytes)
-    return source->emitOpError()
-           << "dynamic rectangular VDR runtime pitch currently requires "
-              "runtime active_rows with full static active_cols";
   if (!activeCols) {
     if (maxRows != 1 || clampedRows != 1)
       return source->emitOpError()
@@ -4610,13 +4606,20 @@ static LogicalResult emitVDRLoadRectDynamic(
     createNopBundle(builder, source->getLoc());
     createNopBundle(builder, source->getLoc());
     int64_t setupWord = 0;
+    int64_t setupPitchBytes = pitchBytes ? *pitchBytes : maxCols * 4;
     if (failed(buildVDRLoadSetupWordFromParts(
-            source, 16, 1, *pitchBytes, dstX, vpmPitch, vertical, setupWord)))
+            source, 16, 1, setupPitchBytes, dstX, vpmPitch, vertical,
+            setupWord)))
       return failure();
     emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
                              *vpmBaseRowReg, setupWord, useMutex);
     return success();
   }
+
+  if (!pitchBytes)
+    return source->emitOpError()
+           << "dynamic rectangular VDR runtime pitch currently requires "
+              "runtime active_rows with full static active_cols";
 
   if (clampedRows != maxRows || clampedCols != maxCols) {
     if (maxRows != 1)
@@ -4995,11 +4998,6 @@ static LogicalResult emitVDWStoreRectDynamic(
     return success();
   }
 
-  if (!strideBytes)
-    return source->emitOpError()
-           << "dynamic rectangular VDW runtime stride currently requires "
-              "runtime active_rows with full static active_cols";
-
   int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
   if (clampedRows == 0)
     return success();
@@ -5020,6 +5018,11 @@ static LogicalResult emitVDWStoreRectDynamic(
                 "lowerable SSAVC4 op";
   }
 
+  if (!strideBytes && !dynamicActiveColsReg)
+    return source->emitOpError()
+           << "dynamic rectangular VDW runtime stride currently requires "
+              "runtime active_rows with full static active_cols";
+
   auto orientation =
       llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
           source->getAttr("orientation"));
@@ -5030,7 +5033,7 @@ static LogicalResult emitVDWStoreRectDynamic(
       *vpmSourceRowReg, dynamicActiveColsReg,
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols,
       /*nrows=*/clampedRows,
-      /*memoryPitchBytes=*/*strideBytes, vertical,
+      /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * 4, vertical,
       hasStringAttr(source, "serialize", "mutex"));
   return success();
 }
