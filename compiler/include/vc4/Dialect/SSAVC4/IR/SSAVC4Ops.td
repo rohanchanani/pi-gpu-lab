@@ -362,6 +362,37 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
   let hasVerifier = 1;
 }
 
+def SSAVC4_VDRLoadRectDynamicOp : SSAVC4_Op<"vdr.load_rect.dynamic", [
+    MemoryEffects<[MemRead, MemWrite]>
+  ]> {
+  let summary = "SSAVC4 dynamic rectangular global-to-VPM load";
+  let description = [{
+    Represents a semantic dynamic rectangular VDR/VCD transfer from global
+    memory to VPM.  The maximum tile shape is static, while active rows,
+    active columns, and memory pitch are scalar SSA operands.  Inactive or
+    out-of-rectangle destination VPM elements are zero-filled.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    AnyType:$vpm_base_row,
+    AnyType:$active_rows,
+    AnyType:$active_cols,
+    AnyType:$memory_pitch_bytes,
+    I32Attr:$max_rows,
+    I32Attr:$max_cols,
+    I32Attr:$elem_bytes,
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
+    I32Attr:$dst_x,
+    I32Attr:$vpm_pitch,
+    BoolAttr:$zero_fill,
+    OptionalAttr<StrAttr>:$serialize
+  );
+  let assemblyFormat = "$address `,` $vpm_base_row `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($address) `,` type($vpm_base_row) `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
+  let hasVerifier = 1;
+}
+
 def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
   let summary = "SSAVC4 effectful global vector store through VPM/VDW";
   let description = [{
@@ -411,6 +442,37 @@ def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
     OptionalAttr<StrAttr>:$serialize
   );
   let assemblyFormat = "$address `,` $vpm_y `,` $vpm_x (`,` $active_lanes_value^)? attr-dict `:` type($address) `,` type($vpm_y) `,` type($vpm_x) (`,` type($active_lanes_value)^)?";
+  let hasVerifier = 1;
+}
+
+def SSAVC4_VDWStoreRectDynamicOp : SSAVC4_Op<"vdw.store_rect.dynamic", [
+    MemoryEffects<[MemRead, MemWrite]>
+  ]> {
+  let summary = "SSAVC4 dynamic rectangular VPM-to-global store";
+  let description = [{
+    Represents a semantic dynamic rectangular VDW transfer from VPM to global
+    memory.  The maximum tile shape is static, while active rows, active
+    columns, and memory stride are scalar SSA operands.  Inactive or
+    out-of-rectangle destination global memory is preserved.
+  }];
+  let arguments = (ins
+    AnyType:$address,
+    AnyType:$vpm_source_row,
+    AnyType:$active_rows,
+    AnyType:$active_cols,
+    AnyType:$memory_stride_bytes,
+    I32Attr:$max_rows,
+    I32Attr:$max_cols,
+    I32Attr:$elem_bytes,
+    SSAVC4_VPMOrientationAttr:$orientation,
+    SSAVC4_VPMElemWidthAttr:$width,
+    SSAVC4_VPMSubwordAttr:$subword,
+    I32Attr:$src_x,
+    I32Attr:$vpm_pitch,
+    BoolAttr:$preserve_inactive,
+    OptionalAttr<StrAttr>:$serialize
+  );
+  let assemblyFormat = "$address `,` $vpm_source_row `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($address) `,` type($vpm_source_row) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }
 

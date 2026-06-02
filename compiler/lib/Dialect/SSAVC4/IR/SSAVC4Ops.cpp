@@ -16,6 +16,8 @@
 #include "mlir/IR/Diagnostics.h"
 #include "llvm/ADT/StringSwitch.h"
 
+#include <optional>
+
 using namespace mlir;
 using namespace mlir::ssavc4;
 
@@ -103,6 +105,17 @@ static LogicalResult verifyIntegerAttr32(Operation *op, Attribute attr,
   return success();
 }
 
+static std::optional<int64_t> getSplatI32Constant(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!def || def->getName().getStringRef() != "ssavc4.load_imm" ||
+      !value.getType().isSignlessInteger(32))
+    return std::nullopt;
+  auto attr = dyn_cast_or_null<IntegerAttr>(def->getAttr("value"));
+  if (!attr)
+    return std::nullopt;
+  return attr.getInt();
+}
+
 
 
 static DictionaryAttr getEnclosingResourceMetadata(Operation *op) {
@@ -164,6 +177,38 @@ static LogicalResult verifyVPMQPUCoordinates(Operation *op,
     return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0 in executable v1");
   if (stride <= 0)
     return op->emitOpError("requires positive VPM stride");
+  return success();
+}
+
+static LogicalResult verifyDynamicRectShape(Operation *op, int64_t maxRows,
+                                            int64_t maxCols,
+                                            int64_t elemBytes) {
+  if (maxRows < 1 || maxRows > 16)
+    return op->emitOpError("requires max_rows in range [1, 16]");
+  if (maxCols < 1 || maxCols > 16)
+    return op->emitOpError("requires max_cols in range [1, 16]");
+  if (elemBytes != 4)
+    return op->emitOpError("requires elem_bytes = 4");
+  return success();
+}
+
+static LogicalResult verifyScalarI32Operand(Operation *op, Value value,
+                                            StringRef role) {
+  if (value.getType().isSignlessInteger(32))
+    return success();
+  return op->emitOpError() << "requires an i32 " << role << " operand";
+}
+
+static LogicalResult verifyDynamicPitchOrStride(Operation *op, Value value,
+                                                StringRef role) {
+  if (failed(verifyScalarI32Operand(op, value, role)))
+    return failure();
+  std::optional<int64_t> constant = getSplatI32Constant(value);
+  if (!constant)
+    return success();
+  if (*constant <= 0 || *constant % 4 != 0)
+    return op->emitOpError()
+           << role << " constant must be positive and 4-byte aligned";
   return success();
 }
 
@@ -608,6 +653,32 @@ LogicalResult VDRLoadOp::verify() {
   return verifyVDRResourceMetadata(op);
 }
 
+LogicalResult VDRLoadRectDynamicOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyScalarI32Operand(op, getAddress(), "global address")) ||
+      failed(verifyScalarI32Operand(op, getVpmBaseRow(), "VPM base row")) ||
+      failed(verifyScalarI32Operand(op, getActiveRows(), "active_rows")) ||
+      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")) ||
+      failed(verifyDynamicPitchOrStride(op, getMemoryPitchBytes(),
+                                        "memory_pitch_bytes")))
+    return failure();
+
+  if (failed(verifyDynamicRectShape(op, getMaxRows(), getMaxCols(),
+                                    getElemBytes())))
+    return failure();
+  if (!getZeroFill())
+    return emitOpError("requires zero_fill = true");
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
+  if (failed(verifyVPMQPUCoordinates(op, getOrientation(), getDstX(),
+                                     getVpmPitch())))
+    return failure();
+  if (getVpmPitch() > 16)
+    return emitOpError("requires vpm_pitch in range [1, 16]");
+  return verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
+                                        "serialize");
+}
+
 LogicalResult VDWStoreVPMOp::verify() {
   Operation *op = getOperation();
   if (!getAddress().getType().isSignlessInteger(32))
@@ -644,6 +715,32 @@ LogicalResult VDWStoreVPMOp::verify() {
                                            "serialize")))
     return failure();
   return success();
+}
+
+LogicalResult VDWStoreRectDynamicOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyScalarI32Operand(op, getAddress(), "global address")) ||
+      failed(verifyScalarI32Operand(op, getVpmSourceRow(), "VPM source row")) ||
+      failed(verifyScalarI32Operand(op, getActiveRows(), "active_rows")) ||
+      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")) ||
+      failed(verifyDynamicPitchOrStride(op, getMemoryStrideBytes(),
+                                        "memory_stride_bytes")))
+    return failure();
+
+  if (failed(verifyDynamicRectShape(op, getMaxRows(), getMaxCols(),
+                                    getElemBytes())))
+    return failure();
+  if (!getPreserveInactive())
+    return emitOpError("requires preserve_inactive = true");
+  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+    return failure();
+  if (failed(verifyVPMQPUCoordinates(op, getOrientation(), getSrcX(),
+                                     getVpmPitch())))
+    return failure();
+  if (getVpmPitch() > 16)
+    return emitOpError("requires vpm_pitch in range [1, 16]");
+  return verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
+                                        "serialize");
 }
 
 #define GET_OP_CLASSES
