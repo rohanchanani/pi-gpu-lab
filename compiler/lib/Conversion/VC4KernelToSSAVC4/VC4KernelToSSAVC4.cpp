@@ -781,6 +781,8 @@ struct ConditionPlan {
   Value predicateSource;
   Value flags;
   Attribute predicate;
+  mlir::vc4::BranchCond branchCond = mlir::vc4::BranchCond::any_z_clear;
+  mlir::vc4::Cond selectCond = mlir::vc4::Cond::zc;
 
   static ConditionPlan constant(bool value) {
     ConditionPlan plan;
@@ -808,10 +810,13 @@ struct ConditionPlan {
     plan.predicateSource = source;
     return plan;
   }
-  static ConditionPlan flagsValue(Value flags) {
+  static ConditionPlan flagsValue(Value flags, mlir::vc4::BranchCond branchCond,
+                                  mlir::vc4::Cond selectCond) {
     ConditionPlan plan;
     plan.kind = Class::FlagsValue;
     plan.flags = flags;
+    plan.branchCond = branchCond;
+    plan.selectCond = selectCond;
     return plan;
   }
 };
@@ -1041,8 +1046,10 @@ static Value emitI32Mul32Fallback(Operation *op, OpBuilder &builder, Value lhs,
                              builder.getI32IntegerAttr(0xffff));
   Value shiftScalar = createLoadImm(builder, loc, builder.getI32Type(),
                                     builder.getI32IntegerAttr(16));
-  Value shift = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
-                                   shiftScalar, {}, lhs.getType());
+  Value shift = shiftScalar;
+  if (llvm::isa<VectorType>(lhs.getType()))
+    shift = createOpWithResult(builder, loc, kSSAVC4SplatOpName, shiftScalar,
+                               {}, lhs.getType());
 
   Value lhsLo = createI32BinaryAddPipe(builder, loc, lhs, mask,
                                        mlir::vc4::AddOpcode::bit_and);
@@ -1137,6 +1144,15 @@ static Value createSubFlags(OpBuilder &builder, Location loc, Value lhs,
       mlir::ssavc4::FlagsType::get(builder.getContext()));
 }
 
+static Value createZeroTestFlags(OpBuilder &builder, Location loc, Value input) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4MakeFlagsOpName, input,
+      {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
+                                        builder.getContext(),
+                                        mlir::ssavc4::FlagKind::zero_test))},
+      mlir::ssavc4::FlagsType::get(builder.getContext()));
+}
+
 static void createBranch(OpBuilder &builder, Location loc, Block *target) {
   OperationState state(loc, kSSAVC4BranchOpName);
   state.addSuccessors(target);
@@ -1222,6 +1238,310 @@ mapFragmentCmpPredicate(Operation *op, Value lhs, Value rhs) {
 
 static Value createZeroValue(OpBuilder &builder, Location loc, Type type) {
   return createLoadImm(builder, loc, type, builder.getI32IntegerAttr(0));
+}
+
+struct EmittedCondition {
+  bool isConstant = false;
+  bool constantValue = false;
+  Value flags;
+  mlir::vc4::BranchCond branchCond = mlir::vc4::BranchCond::any_z_clear;
+  mlir::vc4::Cond selectCond = mlir::vc4::Cond::zc;
+};
+
+static EmittedCondition constantCondition(bool value) {
+  EmittedCondition emitted;
+  emitted.isConstant = true;
+  emitted.constantValue = value;
+  return emitted;
+}
+
+static FailureOr<EmittedCondition>
+emitConditionPlan(Operation *op, OpBuilder &builder,
+                  const ConditionPlan &condition, LoweringState &state);
+
+static FailureOr<Value>
+materializeConditionAsI32(Operation *op, OpBuilder &builder,
+                          const ConditionPlan &condition,
+                          LoweringState &state);
+
+static FailureOr<EmittedCondition>
+emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
+                           Value rhs, Attribute predicate) {
+  auto pred = llvm::dyn_cast_or_null<arith::CmpIPredicateAttr>(predicate);
+  if (!pred)
+    return op->emitOpError("arith.cmpi condition plan is missing predicate");
+
+  EmittedCondition emitted;
+  Value flagsLhs = lhs;
+  Value flagsRhs = rhs;
+  switch (pred.getValue()) {
+  case arith::CmpIPredicate::eq:
+    emitted.branchCond = mlir::vc4::BranchCond::any_z_set;
+    emitted.selectCond = mlir::vc4::Cond::zs;
+    break;
+  case arith::CmpIPredicate::ne:
+    emitted.branchCond = mlir::vc4::BranchCond::any_z_clear;
+    emitted.selectCond = mlir::vc4::Cond::zc;
+    break;
+  case arith::CmpIPredicate::ult:
+    emitted.branchCond = mlir::vc4::BranchCond::any_c_set;
+    emitted.selectCond = mlir::vc4::Cond::cs;
+    break;
+  case arith::CmpIPredicate::uge:
+    emitted.branchCond = mlir::vc4::BranchCond::any_c_clear;
+    emitted.selectCond = mlir::vc4::Cond::cc;
+    break;
+  case arith::CmpIPredicate::ugt:
+    flagsLhs = rhs;
+    flagsRhs = lhs;
+    emitted.branchCond = mlir::vc4::BranchCond::any_c_set;
+    emitted.selectCond = mlir::vc4::Cond::cs;
+    break;
+  case arith::CmpIPredicate::ule:
+    flagsLhs = rhs;
+    flagsRhs = lhs;
+    emitted.branchCond = mlir::vc4::BranchCond::any_c_clear;
+    emitted.selectCond = mlir::vc4::Cond::cc;
+    break;
+  default:
+    return op->emitOpError(
+        "arith.cmpi lowering supports only eq, ne, ult, ule, ugt, and uge");
+  }
+  emitted.flags = createSubFlags(builder, op->getLoc(), flagsLhs, flagsRhs);
+  return emitted;
+}
+
+static FailureOr<mlir::vc4::BranchCond>
+mapLaneCondToBranchCond(Operation *op, mlir::vc4::Cond cond, bool requireAll) {
+  switch (cond) {
+  case mlir::vc4::Cond::zs:
+    return requireAll ? mlir::vc4::BranchCond::all_z_set
+                      : mlir::vc4::BranchCond::any_z_set;
+  case mlir::vc4::Cond::zc:
+    return requireAll ? mlir::vc4::BranchCond::all_z_clear
+                      : mlir::vc4::BranchCond::any_z_clear;
+  case mlir::vc4::Cond::ns:
+    return requireAll ? mlir::vc4::BranchCond::all_n_set
+                      : mlir::vc4::BranchCond::any_n_set;
+  case mlir::vc4::Cond::nc:
+    return requireAll ? mlir::vc4::BranchCond::all_n_clear
+                      : mlir::vc4::BranchCond::any_n_clear;
+  case mlir::vc4::Cond::cs:
+    return requireAll ? mlir::vc4::BranchCond::all_c_set
+                      : mlir::vc4::BranchCond::any_c_set;
+  case mlir::vc4::Cond::cc:
+    return requireAll ? mlir::vc4::BranchCond::all_c_clear
+                      : mlir::vc4::BranchCond::any_c_clear;
+  case mlir::vc4::Cond::never:
+  case mlir::vc4::Cond::always:
+    break;
+  }
+  return op->emitOpError("predicate condition cannot use never/always");
+}
+
+static FailureOr<Value>
+materializeAllConditionsAsI32(Operation *op, OpBuilder &builder,
+                              ArrayRef<ConditionPlan> conditions,
+                              LoweringState &state) {
+  Location loc = op->getLoc();
+  if (conditions.empty())
+    return createLoadImm(builder, loc, builder.getI32Type(),
+                         builder.getI32IntegerAttr(1));
+
+  Region *region = builder.getInsertionBlock()->getParent();
+  Block *doneBlock = new Block();
+  doneBlock->addArgument(builder.getI32Type(), loc);
+  Block *falseBlock = new Block();
+  SmallVector<Block *, 4> testBlocks;
+  for (size_t i = 1; i < conditions.size(); ++i)
+    testBlocks.push_back(new Block());
+  Block *trueBlock = new Block();
+
+  for (Block *block : testBlocks)
+    region->push_back(block);
+  region->push_back(trueBlock);
+  region->push_back(falseBlock);
+  region->push_back(doneBlock);
+
+  auto emitTest = [&](const ConditionPlan &condition, Block *trueDest,
+                      Block *falseDest) -> LogicalResult {
+    FailureOr<EmittedCondition> emitted =
+        emitConditionPlan(op, builder, condition, state);
+    if (failed(emitted))
+      return failure();
+    if (emitted->isConstant) {
+      createBranch(builder, loc, emitted->constantValue ? trueDest : falseDest);
+      return success();
+    }
+    createCondBranch(builder, loc, emitted->flags, trueDest, falseDest,
+                     emitted->branchCond);
+    return success();
+  };
+
+  Block *firstTrueDest = conditions.size() == 1 ? trueBlock : testBlocks[0];
+  if (failed(emitTest(conditions.front(), firstTrueDest, falseBlock)))
+    return failure();
+
+  for (size_t i = 1; i < conditions.size(); ++i) {
+    builder.setInsertionPointToEnd(testBlocks[i - 1]);
+    Block *nextTrueDest =
+        i + 1 == conditions.size() ? trueBlock : testBlocks[i];
+    if (failed(emitTest(conditions[i], nextTrueDest, falseBlock)))
+      return failure();
+  }
+
+  builder.setInsertionPointToEnd(trueBlock);
+  Value one = createLoadImm(builder, loc, builder.getI32Type(),
+                            builder.getI32IntegerAttr(1));
+  createBranch(builder, loc, doneBlock, one);
+
+  builder.setInsertionPointToEnd(falseBlock);
+  Value zero = createLoadImm(builder, loc, builder.getI32Type(),
+                             builder.getI32IntegerAttr(0));
+  createBranch(builder, loc, doneBlock, zero);
+
+  builder.setInsertionPointToEnd(doneBlock);
+  return doneBlock->getArgument(0);
+}
+
+static FailureOr<EmittedCondition>
+emitPredicateCondition(Operation *op, OpBuilder &builder,
+                       const PredicatePlan &predicate, bool requireAll,
+                       LoweringState &state) {
+  Location loc = op->getLoc();
+  if (predicate.kind == PredicatePlan::Class::Full)
+    return constantCondition(true);
+  if (predicate.kind == PredicatePlan::Class::Empty)
+    return constantCondition(false);
+
+  if (predicate.kind == PredicatePlan::Class::GeneralMask) {
+    if (!predicate.compareLhs || !predicate.compareRhs)
+      return op->emitOpError(
+          "general predicate plan has no lowered compare operands");
+    FailureOr<mlir::vc4::BranchCond> branchCond =
+        mapLaneCondToBranchCond(op, predicate.compareCond, requireAll);
+    if (failed(branchCond))
+      return failure();
+    EmittedCondition emitted;
+    emitted.flags =
+        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    emitted.branchCond = *branchCond;
+    emitted.selectCond = predicate.compareCond;
+    return emitted;
+  }
+
+  if (predicate.kind == PredicatePlan::Class::TailPrefix) {
+    if (!predicate.base || !predicate.limit)
+      return op->emitOpError("pred.tail plan is missing base or limit values");
+    Value threshold =
+        addI32Constant(builder, loc, predicate.base, requireAll ? 16 : 1);
+    EmittedCondition emitted;
+    emitted.flags = createSubFlags(builder, loc, predicate.limit, threshold);
+    emitted.branchCond = mlir::vc4::BranchCond::any_c_clear;
+    emitted.selectCond = mlir::vc4::Cond::cc;
+    return emitted;
+  }
+
+  if (predicate.kind == PredicatePlan::Class::RectRow) {
+    if (!predicate.row || !predicate.rows || !predicate.colBase ||
+        !predicate.cols)
+      return op->emitOpError(
+          "pred.rect plan is missing row, rows, col_base, or cols values");
+    Value zero = createLoadImm(builder, loc, builder.getI32Type(),
+                               builder.getI32IntegerAttr(0));
+    Value sixteen = createLoadImm(builder, loc, builder.getI32Type(),
+                                  builder.getI32IntegerAttr(16));
+    SmallVector<ConditionPlan, 4> conditions;
+    conditions.push_back(ConditionPlan::scalarI32Compare(
+        predicate.row, predicate.rows,
+        arith::CmpIPredicateAttr::get(builder.getContext(),
+                                      arith::CmpIPredicate::ult)));
+    if (requireAll) {
+      conditions.push_back(ConditionPlan::scalarI32Compare(
+          predicate.colBase, zero,
+          arith::CmpIPredicateAttr::get(builder.getContext(),
+                                        arith::CmpIPredicate::eq)));
+      conditions.push_back(ConditionPlan::scalarI32Compare(
+          predicate.cols, sixteen,
+          arith::CmpIPredicateAttr::get(builder.getContext(),
+                                        arith::CmpIPredicate::uge)));
+    } else {
+      conditions.push_back(ConditionPlan::scalarI32Compare(
+          zero, predicate.cols,
+          arith::CmpIPredicateAttr::get(builder.getContext(),
+                                        arith::CmpIPredicate::ult)));
+      conditions.push_back(ConditionPlan::scalarI32Compare(
+          predicate.colBase, sixteen,
+          arith::CmpIPredicateAttr::get(builder.getContext(),
+                                        arith::CmpIPredicate::ult)));
+    }
+    FailureOr<Value> value =
+        materializeAllConditionsAsI32(op, builder, conditions, state);
+    if (failed(value))
+      return failure();
+    EmittedCondition emitted;
+    emitted.flags = createZeroTestFlags(builder, loc, *value);
+    emitted.branchCond = mlir::vc4::BranchCond::any_z_clear;
+    emitted.selectCond = mlir::vc4::Cond::zc;
+    return emitted;
+  }
+
+  return op->emitOpError("unsupported predicate condition plan");
+}
+
+static FailureOr<EmittedCondition>
+emitConditionPlan(Operation *op, OpBuilder &builder,
+                  const ConditionPlan &condition, LoweringState &state) {
+  switch (condition.kind) {
+  case ConditionPlan::Class::ConstantTrue:
+    return constantCondition(true);
+  case ConditionPlan::Class::ConstantFalse:
+    return constantCondition(false);
+  case ConditionPlan::Class::ScalarI32Compare:
+    return emitScalarCompareCondition(op, builder, condition.lhs, condition.rhs,
+                                      condition.predicate);
+  case ConditionPlan::Class::PredicateAny:
+  case ConditionPlan::Class::PredicateAll: {
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(condition.predicateSource, state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    return emitPredicateCondition(
+        op, builder, *predicate,
+        condition.kind == ConditionPlan::Class::PredicateAll, state);
+  }
+  case ConditionPlan::Class::FlagsValue:
+    if (!condition.flags)
+      return op->emitOpError("condition flags plan is missing flags value");
+    return EmittedCondition{/*isConstant=*/false,
+                            /*constantValue=*/false,
+                            condition.flags,
+                            condition.branchCond,
+                            condition.selectCond};
+  }
+  return op->emitOpError("unsupported condition plan");
+}
+
+static FailureOr<Value>
+materializeConditionAsI32(Operation *op, OpBuilder &builder,
+                          const ConditionPlan &condition,
+                          LoweringState &state) {
+  Location loc = op->getLoc();
+  FailureOr<EmittedCondition> emitted =
+      emitConditionPlan(op, builder, condition, state);
+  if (failed(emitted))
+    return failure();
+  if (emitted->isConstant)
+    return createLoadImm(builder, loc, builder.getI32Type(),
+                         builder.getI32IntegerAttr(emitted->constantValue ? 1
+                                                                          : 0));
+
+  Value one = createLoadImm(builder, loc, builder.getI32Type(),
+                            builder.getI32IntegerAttr(1));
+  Value zero = createLoadImm(builder, loc, builder.getI32Type(),
+                             builder.getI32IntegerAttr(0));
+  return createCondSelect(builder, loc, emitted->flags, one, zero,
+                          emitted->selectCond);
 }
 
 static FailureOr<Value>
@@ -1382,12 +1702,19 @@ static FailureOr<Value> applyVPMTileBase(Operation *op, OpBuilder &builder,
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  LoweringState &state) {
   if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
-    state.values[cst.getResult()] = {createLoadImm(
-        builder, op->getLoc(), cst.getType(), cst.getValue())};
     if (cst.getType().isInteger(1)) {
+      int64_t intValue = 0;
+      if (auto value = llvm::dyn_cast<IntegerAttr>(cst.getValue()))
+        intValue = value.getValue().isZero() ? 0 : 1;
       if (auto value = llvm::dyn_cast<IntegerAttr>(cst.getValue()))
         state.conditions[cst.getResult()] =
             ConditionPlan::constant(!value.getValue().isZero());
+      state.values[cst.getResult()] = {
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(intValue))};
+    } else {
+      state.values[cst.getResult()] = {createLoadImm(
+          builder, op->getLoc(), cst.getType(), cst.getValue())};
     }
     return success();
   }
@@ -1407,13 +1734,18 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, "arith.addi") || hasName(op, "arith.subi") ||
-      hasName(op, "arith.shli")) {
+      hasName(op, "arith.muli") || hasName(op, "arith.shli")) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
       Value mapped = mapValue(op, operand, state);
       if (!mapped)
         return failure();
       operands.push_back(mapped);
+    }
+    if (hasName(op, "arith.muli")) {
+      state.values[op->getResult(0)] = {
+          emitI32Mul32Fallback(op, builder, operands[0], operands[1])};
+      return success();
     }
     mlir::vc4::AddOpcode opcode = mlir::vc4::AddOpcode::add;
     if (hasName(op, "arith.subi"))
@@ -1436,9 +1768,56 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         ConditionPlan::scalarI32Compare(lhs, rhs, cmp.getPredicateAttr());
     return success();
   }
-  if (isa<arith::SelectOp>(op))
-    return op->emitOpError(
-        "arith.select lowering requires condition plan emission, which is not implemented in this Stage 1 slice");
+  if (auto select = dyn_cast<arith::SelectOp>(op)) {
+    auto conditionIt = state.conditions.find(select.getCondition());
+    if (conditionIt == state.conditions.end())
+      return op->emitOpError("condition operand has no lowering plan");
+    Type resultType = select.getResult().getType();
+    if (resultType.isInteger(1)) {
+      auto trueIt = state.conditions.find(select.getTrueValue());
+      auto falseIt = state.conditions.find(select.getFalseValue());
+      if (trueIt == state.conditions.end() ||
+          falseIt == state.conditions.end())
+        return op->emitOpError(
+            "arith.select i1 operands require condition plans");
+      FailureOr<Value> trueValue =
+          materializeConditionAsI32(op, builder, trueIt->second, state);
+      if (failed(trueValue))
+        return failure();
+      FailureOr<Value> falseValue =
+          materializeConditionAsI32(op, builder, falseIt->second, state);
+      if (failed(falseValue))
+        return failure();
+      FailureOr<EmittedCondition> emitted =
+          emitConditionPlan(op, builder, conditionIt->second, state);
+      if (failed(emitted))
+        return failure();
+      Value selected = emitted->isConstant
+                           ? (emitted->constantValue ? *trueValue : *falseValue)
+                           : createCondSelect(builder, op->getLoc(),
+                                              emitted->flags, *trueValue,
+                                              *falseValue, emitted->selectCond);
+      Value flags = createZeroTestFlags(builder, op->getLoc(), selected);
+      state.values[select.getResult()] = {selected};
+      state.conditions[select.getResult()] = ConditionPlan::flagsValue(
+          flags, mlir::vc4::BranchCond::any_z_clear, mlir::vc4::Cond::zc);
+      return success();
+    }
+    Value trueValue = mapValue(op, select.getTrueValue(), state);
+    Value falseValue = mapValue(op, select.getFalseValue(), state);
+    if (!trueValue || !falseValue)
+      return failure();
+    FailureOr<EmittedCondition> emitted =
+        emitConditionPlan(op, builder, conditionIt->second, state);
+    if (failed(emitted))
+      return failure();
+    state.values[select.getResult()] = {
+        emitted->isConstant
+            ? (emitted->constantValue ? trueValue : falseValue)
+            : createCondSelect(builder, op->getLoc(), emitted->flags, trueValue,
+                               falseValue, emitted->selectCond)};
+    return success();
+  }
   if (hasName(op, kSplatOpName)) {
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
@@ -2135,9 +2514,36 @@ static LogicalResult lowerTerminator(Operation *op, OpBuilder &builder,
     auto conditionIt = state.conditions.find(cond.getCondition());
     if (conditionIt == state.conditions.end())
       return op->emitOpError("condition operand has no lowering plan");
-    return op->emitOpError(
-        "cf.cond_br lowering requires condition plan emission, "
-        "which is not implemented in this Stage 1 slice");
+    SmallVector<Value, 4> trueOperands;
+    for (Value operand : cond.getTrueDestOperands()) {
+      Value mapped = mapValue(op, operand, state);
+      if (!mapped)
+        return failure();
+      trueOperands.push_back(mapped);
+    }
+    SmallVector<Value, 4> falseOperands;
+    for (Value operand : cond.getFalseDestOperands()) {
+      Value mapped = mapValue(op, operand, state);
+      if (!mapped)
+        return failure();
+      falseOperands.push_back(mapped);
+    }
+    Block *trueDest = state.blockMap.lookup(cond.getTrueDest());
+    Block *falseDest = state.blockMap.lookup(cond.getFalseDest());
+    FailureOr<EmittedCondition> emitted =
+        emitConditionPlan(op, builder, conditionIt->second, state);
+    if (failed(emitted))
+      return failure();
+    if (emitted->isConstant) {
+      createBranch(builder, op->getLoc(),
+                   emitted->constantValue ? trueDest : falseDest,
+                   emitted->constantValue ? ValueRange(trueOperands)
+                                          : ValueRange(falseOperands));
+      return success();
+    }
+    createCondBranch(builder, op->getLoc(), emitted->flags, trueDest, falseDest,
+                     emitted->branchCond, trueOperands, falseOperands);
+    return success();
   }
   return op->emitOpError("unsupported terminator");
 }

@@ -1,0 +1,16 @@
+{
+  "name": "cond_branch_scalar_gate_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 3,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "max_n": 48,
+    "checksum_accum": 24816,
+    "runtime_allocations": 1,
+    "runtime_launches": 3
+  }
+}
