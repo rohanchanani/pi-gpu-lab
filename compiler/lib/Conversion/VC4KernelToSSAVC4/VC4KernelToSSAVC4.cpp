@@ -934,6 +934,30 @@ static bool isVectorF32(Type type) {
   return vectorType && vectorType.getElementType().isF32();
 }
 
+static bool isVectorI32(Type type) {
+  auto vectorType = llvm::dyn_cast<VectorType>(type);
+  return vectorType && vectorType.getElementType().isSignlessInteger(32);
+}
+
+static Value createI32BinaryAddPipe(OpBuilder &builder, Location loc, Value lhs,
+                                    Value rhs, mlir::vc4::AddOpcode opcode) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(), opcode))},
+      lhs.getType());
+}
+
+static Value createMul24(OpBuilder &builder, Location loc, Value lhs,
+                         Value rhs) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUMulOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::MulOpcodeAttr::get(
+                                          builder.getContext(),
+                                          mlir::vc4::MulOpcode::mul24))},
+      lhs.getType());
+}
+
 static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
                                Value rhs) {
   mlir::vc4::AddOpcode opcode =
@@ -944,6 +968,99 @@ static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
       {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
                                           builder.getContext(), opcode))},
       lhs.getType());
+}
+
+static std::optional<uint64_t> getUnsignedI32Constant(Value value) {
+  auto constant = value.getDefiningOp<arith::ConstantOp>();
+  if (!constant)
+    return std::nullopt;
+  auto attr = llvm::dyn_cast<IntegerAttr>(constant.getValue());
+  if (!attr)
+    return std::nullopt;
+  return static_cast<uint64_t>(attr.getValue().getZExtValue());
+}
+
+static std::optional<int64_t> getI32ConstantValue(Value value);
+
+static std::optional<uint64_t> getUnsigned24UpperBound(Value value,
+                                                       unsigned depth = 0) {
+  constexpr uint64_t kMaxUnsigned24 = (1u << 24) - 1u;
+  if (depth > 8)
+    return std::nullopt;
+  if (hasName(value.getDefiningOp(), kLaneRangeOpName))
+    return 15;
+
+  Operation *def = value.getDefiningOp();
+  if (!def)
+    return std::nullopt;
+  if (hasName(def, kSplatOpName) && def->getNumOperands() == 1) {
+    std::optional<uint64_t> constant =
+        getUnsignedI32Constant(def->getOperand(0));
+    if (constant && *constant <= kMaxUnsigned24)
+      return *constant;
+    return std::nullopt;
+  }
+  if (hasName(def, kFragmentAddOpName) && def->getNumOperands() == 2) {
+    std::optional<uint64_t> lhs =
+        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
+    std::optional<uint64_t> rhs =
+        getUnsigned24UpperBound(def->getOperand(1), depth + 1);
+    if (lhs && rhs && *lhs + *rhs <= kMaxUnsigned24)
+      return *lhs + *rhs;
+    return std::nullopt;
+  }
+  if (hasName(def, kFragmentShlOpName) && def->getNumOperands() == 2) {
+    std::optional<uint64_t> input =
+        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
+    std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
+    if (input && shift && *shift >= 0 && *shift < 24 &&
+        (*input << *shift) <= kMaxUnsigned24)
+      return *input << *shift;
+    return std::nullopt;
+  }
+  if (hasName(def, kFragmentMulOpName) && def->getNumOperands() == 2) {
+    std::optional<uint64_t> lhs =
+        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
+    std::optional<uint64_t> rhs =
+        getUnsigned24UpperBound(def->getOperand(1), depth + 1);
+    if (lhs && rhs && *lhs * *rhs <= kMaxUnsigned24)
+      return *lhs * *rhs;
+  }
+  return std::nullopt;
+}
+
+static bool isMul24FastPathProven(Value lhs, Value rhs) {
+  return getUnsigned24UpperBound(lhs).has_value() &&
+         getUnsigned24UpperBound(rhs).has_value();
+}
+
+static Value emitI32Mul32Fallback(Operation *op, OpBuilder &builder, Value lhs,
+                                  Value rhs) {
+  Location loc = op->getLoc();
+  Value mask = createLoadImm(builder, loc, lhs.getType(),
+                             builder.getI32IntegerAttr(0xffff));
+  Value shiftScalar = createLoadImm(builder, loc, builder.getI32Type(),
+                                    builder.getI32IntegerAttr(16));
+  Value shift = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                   shiftScalar, {}, lhs.getType());
+
+  Value lhsLo = createI32BinaryAddPipe(builder, loc, lhs, mask,
+                                       mlir::vc4::AddOpcode::bit_and);
+  Value rhsLo = createI32BinaryAddPipe(builder, loc, rhs, mask,
+                                       mlir::vc4::AddOpcode::bit_and);
+  Value lhsHi = createI32BinaryAddPipe(builder, loc, lhs, shift,
+                                       mlir::vc4::AddOpcode::shr);
+  Value rhsHi = createI32BinaryAddPipe(builder, loc, rhs, shift,
+                                       mlir::vc4::AddOpcode::shr);
+  Value loLo = createMul24(builder, loc, lhsLo, rhsLo);
+  Value loHi = createMul24(builder, loc, lhsLo, rhsHi);
+  Value hiLo = createMul24(builder, loc, lhsHi, rhsLo);
+  Value cross = createI32BinaryAddPipe(builder, loc, loHi, hiLo,
+                                       mlir::vc4::AddOpcode::add);
+  Value crossShifted = createI32BinaryAddPipe(builder, loc, cross, shift,
+                                              mlir::vc4::AddOpcode::shl);
+  return createI32BinaryAddPipe(builder, loc, loLo, crossShifted,
+                                mlir::vc4::AddOpcode::add);
 }
 
 static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
@@ -1370,14 +1487,27 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         return failure();
       operands.push_back(mapped);
     }
-    mlir::vc4::MulOpcode opcode =
-        isVectorF32(op->getResult(0).getType()) ? mlir::vc4::MulOpcode::fmul
-                                                : mlir::vc4::MulOpcode::mul24;
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
-        {builder.getNamedAttr("opcode", mlir::vc4::MulOpcodeAttr::get(
-                                            builder.getContext(), opcode))},
-        op->getResult(0).getType())};
+    Type resultType = op->getResult(0).getType();
+    if (isVectorF32(resultType)) {
+      state.values[op->getResult(0)] = {createOpWithResult(
+          builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
+          {builder.getNamedAttr(
+              "opcode", mlir::vc4::MulOpcodeAttr::get(
+                            builder.getContext(), mlir::vc4::MulOpcode::fmul))},
+          resultType)};
+      return success();
+    }
+    if (!isVectorI32(resultType))
+      return op->emitOpError(
+          "fragment_mul lowering supports only vector<16xi32> and "
+          "vector<16xf32>");
+    if (isMul24FastPathProven(op->getOperand(0), op->getOperand(1))) {
+      state.values[op->getResult(0)] = {
+          createMul24(builder, op->getLoc(), operands[0], operands[1])};
+      return success();
+    }
+    state.values[op->getResult(0)] = {
+        emitI32Mul32Fallback(op, builder, operands[0], operands[1])};
     return success();
   }
   if (hasName(op, kFragmentRotateOpName)) {
