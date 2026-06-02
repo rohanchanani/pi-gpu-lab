@@ -373,8 +373,11 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
     return op->emitOpError(
         "VPM tile operand must be produced by vc4kernel.vpm_alloc");
   std::optional<int64_t> rowCst = getConstantI32(row);
-  if (!rowCst)
-    return op->emitOpError("VPM row must be a scalar i32 constant in Stage 1");
+  if (!rowCst) {
+    if (!row.getType().isSignlessInteger(32))
+      return op->emitOpError("VPM row must be a scalar i32 value");
+    return success();
+  }
   if (*rowCst < 0 || *rowCst + span > *rows)
     return op->emitOpError("VPM row access is out of bounds for allocation");
   return success();

@@ -2343,10 +2343,12 @@ static LogicalResult selectInstructionTemplates(
         templ.source = &op;
         templ.sourceBlock = block;
         templ.layoutBlockId = blockIds[block];
-        if (op.getNumOperands() != 0 && op.getNumOperands() != 2)
+        if (op.getNumOperands() != 0 && op.getNumOperands() != 2 &&
+            op.getNumOperands() != 3)
           return op.emitOpError()
-                 << "requires either no operands or logical_warp_id and "
-                    "warps_per_block operands";
+                 << "requires either no operands, logical_warp_id and "
+                    "warps_per_block operands, or logical_warp_id, "
+                    "warps_per_block, and semaphore_base operands";
         templ.operands.append(op.operand_begin(), op.operand_end());
         if (templ.operands.empty()) {
           auto logicalIndex =
@@ -3086,13 +3088,19 @@ static LogicalResult emitBarrier(OpBuilder &builder,
     return success();
   }
 
-  if (templ.operands.size() != 2)
+  if (templ.operands.size() != 2 && templ.operands.size() != 3)
     return source->emitError("internal lowering error: barrier has wrong operand count");
   std::optional<int64_t> logicalWarpReg = allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> warpsPerBlockReg = allocator.lookup(templ, templ.operands[1]);
+  std::optional<int64_t> semaphoreBaseReg;
+  if (templ.operands.size() == 3)
+    semaphoreBaseReg = allocator.lookup(templ, templ.operands[2]);
   if (!logicalWarpReg || !warpsPerBlockReg)
     return source->emitOpError()
            << "uses barrier metadata values that are not defined by lowerable SSAVC4 ops";
+  if (templ.operands.size() == 3 && !semaphoreBaseReg)
+    return source->emitOpError()
+           << "uses a semaphore_base value that is not defined by lowerable SSAVC4 ops";
 
   auto subSetFlagsSmallImm = [&](mlir::vc4::QPUMux lhs, int64_t raddrA,
                                  int64_t smallImm) {

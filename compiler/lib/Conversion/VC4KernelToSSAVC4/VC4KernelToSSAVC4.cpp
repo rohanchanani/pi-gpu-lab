@@ -499,7 +499,11 @@ static void appendRequiredBuiltins(Operation *kernel,
     append("logical_request");
     append("total_requests");
   }
-  if (kernelContains(kernel, kWarpIdOpName) || summary.uses_barrier)
+  bool needsLogicalWarp =
+      kernelContains(kernel, kWarpIdOpName) || summary.uses_barrier ||
+      (summary.schedule_mode == "cooperative_block" &&
+       summary.compiler_vpm_staging_rows_per_warp > 0);
+  if (needsLogicalWarp)
     append("logical_warp_id");
   if (summary.uses_barrier)
     append("warps_per_block");
@@ -1662,8 +1666,27 @@ static void emitVDWStore(Operation *op, OpBuilder &builder, Value base,
                          std::optional<int64_t> staticActiveLanes) {
   SmallVector<Value, 4> operands{base, value, activeLanes};
   SmallVector<int32_t, 4> segments{1, 1, 1, 0};
-  if (Value vpmBase = state.launchABI.lookupBuiltin("vpm_base_row")) {
-    operands.push_back(vpmBase);
+  Value stagingRow = state.launchABI.lookupBuiltin("vpm_base_row");
+  if (stagingRow) {
+    int64_t userRows = state.resourcePlan.summary.user_vpm_rows_per_block;
+    int64_t perWarpRows =
+        state.resourcePlan.summary.compiler_vpm_staging_rows_per_warp;
+    stagingRow = addI32Constant(builder, op->getLoc(), stagingRow, userRows);
+    if (state.resourcePlan.summary.schedule_mode == "cooperative_block" &&
+        perWarpRows > 0) {
+      Value logicalWarp = state.launchABI.lookupBuiltin("logical_warp_id");
+      if (logicalWarp) {
+        Value warpOffset = logicalWarp;
+        if (perWarpRows != 1) {
+          Value perWarp = createLoadImm(
+              builder, op->getLoc(), builder.getI32Type(),
+              builder.getI32IntegerAttr(perWarpRows));
+          warpOffset = createMul24(builder, op->getLoc(), logicalWarp, perWarp);
+        }
+        stagingRow = createI32Add(builder, op->getLoc(), stagingRow, warpOffset);
+      }
+    }
+    operands.push_back(stagingRow);
     segments[3] = 1;
   }
   SmallVector<NamedAttribute, 8> attrs{
@@ -2524,11 +2547,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
   if (hasName(op, kBarrierOpName)) {
     Value logicalWarp = state.launchABI.lookupBuiltin("logical_warp_id");
     Value warpsPerBlock = state.launchABI.lookupBuiltin("warps_per_block");
-    if (!logicalWarp || !warpsPerBlock)
+    Value semaphoreBase = state.launchABI.lookupBuiltin("semaphore_base");
+    if (!logicalWarp || !warpsPerBlock || !semaphoreBase)
       return op->emitOpError(
           "missing launch builtin uniforms for cooperative barrier");
     createOp(builder, op->getLoc(), kSSAVC4BarrierOpName,
-             {logicalWarp, warpsPerBlock},
+             {logicalWarp, warpsPerBlock, semaphoreBase},
              {builder.getNamedAttr("arrive_offset", builder.getI32IntegerAttr(0)),
               builder.getNamedAttr("go_offset", builder.getI32IntegerAttr(1)),
               builder.getNamedAttr("depart_offset", builder.getI32IntegerAttr(2)),

@@ -1,0 +1,19 @@
+{
+  "name": "resource_limited_semaphore_residency_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "runs": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 4,
+    "lanes": 16,
+    "runtime_launches": 1
+  },
+  "launch_required": {
+    "name": "resource_limited_semaphore_residency_vc4kernel",
+    "schedule_mode": "cooperative_block",
+    "resident_blocks": 3,
+    "warps_per_block": 4
+  }
+}
