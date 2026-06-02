@@ -1699,6 +1699,20 @@ static FailureOr<Value> applyVPMTileBase(Operation *op, OpBuilder &builder,
   return result;
 }
 
+static FailureOr<Value>
+applyVPMPredicateZeroFill(Operation *op, OpBuilder &builder, Value predicate,
+                          Value value, LoweringState &state) {
+  const PredicatePlan *plan = lookupPredicatePlan(predicate, state);
+  if (!plan)
+    return op->emitOpError("predicate operand has no lowering plan");
+  Value zero = createZeroValue(builder, op->getLoc(), value.getType());
+  FailureOr<Value> selected = emitPredicateSelect(op, builder, *plan, value,
+                                                  zero);
+  if (failed(selected))
+    return failure();
+  return *selected;
+}
+
 static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                  LoweringState &state) {
   if (auto cst = dyn_cast<arith::ConstantOp>(op)) {
@@ -2365,13 +2379,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
-    if (failed(requireFullPredicate(op, op->getOperand(3), state,
-                                    "vpm_write_fragment")))
-      return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     Value value = mapValue(op, op->getOperand(2), state);
     if (!row || !value)
       return failure();
+    FailureOr<Value> zeroFilled =
+        applyVPMPredicateZeroFill(op, builder, op->getOperand(3), value, state);
+    if (failed(zeroFilled))
+      return failure();
+    value = *zeroFilled;
     FailureOr<Value> plannedRow =
         applyVPMTileBase(op, builder, op->getOperand(0), row, state);
     if (failed(plannedRow))
@@ -2387,9 +2403,6 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
-    if (failed(requireFullPredicate(op, op->getOperand(2), state,
-                                    "vpm_read_fragment")))
-      return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     if (!row)
       return failure();
@@ -2398,7 +2411,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedRow))
       return failure();
     row = *plannedRow;
-    state.values[op->getResult(0)] = {createOpWithResult(
+    Value read = createOpWithResult(
         builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
         {getSSAVC4VPMOrientation(builder, op),
          getSSAVC4VPMWidth(builder, op),
@@ -2406,7 +2419,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
          builder.getNamedAttr("x", op->getAttr("x")),
          builder.getNamedAttr("stride", op->getAttr("stride")),
          builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
-        op->getResult(0).getType())};
+        op->getResult(0).getType());
+    FailureOr<Value> zeroFilled =
+        applyVPMPredicateZeroFill(op, builder, op->getOperand(2), read, state);
+    if (failed(zeroFilled))
+      return failure();
+    state.values[op->getResult(0)] = {*zeroFilled};
     return success();
   }
   if (hasName(op, kVDRLoadOpName)) {
