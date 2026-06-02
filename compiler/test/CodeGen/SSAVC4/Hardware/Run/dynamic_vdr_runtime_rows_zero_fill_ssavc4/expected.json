@@ -1,0 +1,11 @@
+{
+  "name": "dynamic_vdr_runtime_rows_zero_fill_ssavc4",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "zero_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "runtime_launches": 3
+  }
+}

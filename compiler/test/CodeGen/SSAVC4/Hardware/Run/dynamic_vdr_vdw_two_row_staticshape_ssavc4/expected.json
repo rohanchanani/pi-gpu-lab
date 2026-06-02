@@ -1,0 +1,10 @@
+{
+  "name": "dynamic_vdr_vdw_two_row_staticshape_ssavc4",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "runtime_launches": 1
+  }
+}
