@@ -70,8 +70,12 @@ constexpr llvm::StringLiteral kVPMAllocOpName("vc4kernel.vpm_alloc");
 constexpr llvm::StringLiteral kVPMWriteOpName("vc4kernel.vpm_write_fragment");
 constexpr llvm::StringLiteral kVPMReadOpName("vc4kernel.vpm_read_fragment");
 constexpr llvm::StringLiteral kVDRLoadOpName("vc4kernel.vdr_load_to_vpm");
+constexpr llvm::StringLiteral kVDRLoadRectOpName(
+    "vc4kernel.vdr_load_rect_to_vpm");
 constexpr llvm::StringLiteral kVDWStoreVPMOpName(
     "vc4kernel.vdw_store_vpm_fragment");
+constexpr llvm::StringLiteral kVDWStoreRectOpName(
+    "vc4kernel.vdw_store_rect_from_vpm");
 constexpr llvm::StringLiteral kBarrierOpName("vc4kernel.barrier");
 
 constexpr llvm::StringLiteral kSSAVC4ModuleOpName("ssavc4.module");
@@ -196,7 +200,9 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.vpm_write_fragment",
       "vc4kernel.vpm_read_fragment",
       "vc4kernel.vdr_load_to_vpm",
+      "vc4kernel.vdr_load_rect_to_vpm",
       "vc4kernel.vdw_store_vpm_fragment",
+      "vc4kernel.vdw_store_rect_from_vpm",
       "vc4kernel.barrier"};
   return llvm::is_contained(names, op->getName().getStringRef());
 }
@@ -2801,6 +2807,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
              operands, attrs);
     return success();
   }
+  if (hasName(op, kVDRLoadRectOpName) ||
+      hasName(op, kVDWStoreRectOpName))
+    return op->emitOpError(
+        "dynamic rectangular VDR/VDW lowering is not implemented yet");
   if (hasName(op, kBarrierOpName)) {
     Value logicalWarp = state.launchABI.lookupBuiltin("logical_warp_id");
     Value warpsPerBlock = state.launchABI.lookupBuiltin("warps_per_block");

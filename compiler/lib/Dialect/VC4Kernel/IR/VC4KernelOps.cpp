@@ -383,6 +383,17 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
   return success();
 }
 
+static LogicalResult verifyVPMConstantRowInBounds(Operation *op, Value tile,
+                                                  Value row, int64_t span) {
+  if (!row.getType().isSignlessInteger(32))
+    return op->emitOpError("VPM row must be a scalar i32 value");
+  std::optional<int64_t> rowCst = getConstantI32(row);
+  if (!rowCst)
+    return op->emitOpError(
+        "dynamic rectangular VPM row must be a scalar i32 constant in vc4kernel v1");
+  return verifyVPMRowInBounds(op, tile, row, span);
+}
+
 static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
                                              StringRef strideAttrName) {
   auto orientation =
@@ -419,6 +430,41 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
     return op->emitOpError() << strideAttrName << " attribute is required";
   if (strideAttr.getInt() <= 0)
     return op->emitOpError() << strideAttrName << " must be positive";
+  return success();
+}
+
+static LogicalResult verifyDynamicRectShape(Operation *op) {
+  auto maxRows = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_rows"));
+  if (!maxRows)
+    return op->emitOpError("max_rows attribute is required");
+  if (maxRows.getInt() < 1 || maxRows.getInt() > 16)
+    return op->emitOpError("max_rows must be in range [1, 16]");
+
+  auto maxCols = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_cols"));
+  if (!maxCols)
+    return op->emitOpError("max_cols attribute is required");
+  if (maxCols.getInt() < 1 || maxCols.getInt() > 16)
+    return op->emitOpError("max_cols must be in range [1, 16]");
+
+  auto elemBytes =
+      llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("elem_bytes"));
+  if (!elemBytes)
+    return op->emitOpError("elem_bytes attribute is required");
+  if (elemBytes.getInt() != 4)
+    return op->emitOpError("elem_bytes must be 4");
+  return success();
+}
+
+static LogicalResult verifyRuntimePitchOrStride(Operation *op, Value value,
+                                                StringRef name) {
+  if (!value.getType().isSignlessInteger(32))
+    return op->emitOpError() << name << " must be a scalar i32 value";
+  std::optional<int64_t> constant = getConstantI32(value);
+  if (!constant)
+    return success();
+  if (*constant <= 0 || *constant % 4 != 0)
+    return op->emitOpError()
+           << name << " constant must be positive and 4-byte aligned";
   return success();
 }
 
@@ -559,7 +605,17 @@ static VC4KernelResourceSummary computeVC4KernelResourceSummary(KernelOp kernel)
       summary.uses_vpm = true;
       return;
     }
+    if (hasName(op, "vc4kernel.vdr_load_rect_to_vpm")) {
+      summary.uses_vdr = true;
+      summary.uses_vpm = true;
+      return;
+    }
     if (hasName(op, "vc4kernel.vdw_store_vpm_fragment")) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
+      return;
+    }
+    if (hasName(op, "vc4kernel.vdw_store_rect_from_vpm")) {
       summary.uses_vdw = true;
       summary.uses_vpm = true;
       return;
@@ -917,6 +973,17 @@ LogicalResult VDRLoadToVPMOp::verify() {
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
 }
+LogicalResult VDRLoadRectToVPMOp::verify() {
+  if (failed(verifyDynamicRectShape(getOperation())))
+    return failure();
+  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch")))
+    return failure();
+  if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryPitchBytes(),
+                                        "memory_pitch_bytes")))
+    return failure();
+  return verifyVPMConstantRowInBounds(getOperation(), getTile(), getDstRow(),
+                                      getMaxRows());
+}
 LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (getElemBytes() != 4)
     return emitOpError("elem_bytes must be 4");
@@ -928,6 +995,17 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (failed(verifyPredicateForRowTailVDW(getOperation(), getPred())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
+}
+LogicalResult VDWStoreRectFromVPMOp::verify() {
+  if (failed(verifyDynamicRectShape(getOperation())))
+    return failure();
+  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
+    return failure();
+  if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryStrideBytes(),
+                                        "memory_stride_bytes")))
+    return failure();
+  return verifyVPMConstantRowInBounds(getOperation(), getTile(), getSrcRow(),
+                                      getMaxRows());
 }
 LogicalResult BarrierOp::verify() {
   KernelOp kernel = getOperation()->getParentOfType<KernelOp>();
