@@ -14,10 +14,17 @@
 // CHECK: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<write>
 // CHECK-LABEL: vc4.func @dynamic_rect_runtime_pitch_rows_cols_kernel
 // CHECK: vc4.qpu.vpmvcd_addr {{.*}}op_add = #vc4.add_opcode<add>{{.*}}side = #vc4.vpmvcd_side<read>
+// CHECK: value = 3 : i32
+// CHECK: raddr_a = 4 : i32
+// CHECK: vc4.qpu.vpmvcd_addr {{.*}}op_add = #vc4.add_opcode<add>{{.*}}side = #vc4.vpmvcd_side<read>
 // CHECK-LABEL: vc4.func @dynamic_rect_runtime_stride_rows_cols_store_kernel
 // CHECK: value = 1 : i32
 // CHECK: raddr_a = 4 : i32
 // CHECK: vc4.qpu.vpmvcd_setup {{.*}}op_add = #vc4.add_opcode<add>{{.*}}side = #vc4.vpmvcd_side<write>
+// CHECK: raddr_a = 3 : i32
+// CHECK: vc4.qpu.vpmvcd_addr {{.*}}op_add = #vc4.add_opcode<add>{{.*}}side = #vc4.vpmvcd_side<write>
+// CHECK: value = 3 : i32
+// CHECK: raddr_a = 3 : i32
 // CHECK: raddr_a = 3 : i32
 // CHECK: vc4.qpu.vpmvcd_addr {{.*}}op_add = #vc4.add_opcode<add>{{.*}}side = #vc4.vpmvcd_side<write>
 // CHECK-NOT: ssavc4.
@@ -207,7 +214,7 @@ ssavc4.module @dynamic_rect_runtime_pitch {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
 
     ssavc4.vdr.load_rect.dynamic %in, %row0, %active_rows, %active_cols, %pitch {
-      max_rows = 2 : i32,
+      max_rows = 4 : i32,
       max_cols = 16 : i32,
       elem_bytes = 4 : i32,
       orientation = #ssavc4.vpm_orientation<horizontal>,
@@ -264,7 +271,7 @@ ssavc4.module @dynamic_rect_runtime_pitch {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
 
     ssavc4.vdw.store_rect.dynamic %out, %row0, %active_rows, %active_cols, %stride {
-      max_rows = 2 : i32,
+      max_rows = 4 : i32,
       max_cols = 16 : i32,
       elem_bytes = 4 : i32,
       orientation = #ssavc4.vpm_orientation<horizontal>,

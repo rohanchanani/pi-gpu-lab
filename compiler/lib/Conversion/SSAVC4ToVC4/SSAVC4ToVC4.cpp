@@ -1561,14 +1561,14 @@ static unsigned getRowOffsetScratchSlotCount(int64_t row) {
 
 static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row) {
   unsigned rawVDRSlots = useMutex ? 9 : 7;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : 1;
+  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
   return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots + rawVDRSlots;
 }
 
 static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row) {
   unsigned dynamicVDRSlots = useMutex ? 18 : 16;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : 1;
+  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
   return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots +
          dynamicVDRSlots;
 }
@@ -1583,7 +1583,7 @@ static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row) {
   unsigned dynamicVDWSlots = useMutex ? 20 : 18;
   unsigned vpmRowOffsetSlots = row == 0 ? 0 : 1;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : 1;
+  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
   return vpmRowOffsetSlots + dynamicAddressSlots + dynamicVDWSlots;
 }
 
@@ -1602,7 +1602,7 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
   int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
   if (!activeRows && activeCols && *activeCols == maxCols && maxRows >= 1 &&
-      maxRows <= 2) {
+      maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 7 : 4;
     unsigned guardSlots = 8;
     unsigned total = 0;
@@ -1618,7 +1618,7 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     unsigned dynamicRowsVDRSlots = useMutex ? 16 : 14;
     return total + clampSlots + guardSlots + dynamicRowsVDRSlots;
   }
-  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 2) {
+  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 7 : 4;
     unsigned clampSlots = 4;
     unsigned guardSlots = 8;
@@ -1666,7 +1666,7 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
   if (!activeRows && activeCols &&
       std::clamp(*activeCols, int64_t(0), maxCols) == maxCols &&
-      maxRows >= 1 && maxRows <= 2) {
+      maxRows >= 1 && maxRows <= 16) {
     unsigned clampSlots = 4;
     unsigned guardSlots = 8;
     std::optional<int64_t> strideBytes =
@@ -1675,7 +1675,7 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
         getDynamicVDWStoreRowsSlotCount(useMutex, !strideBytes);
     return clampSlots + guardSlots + dynamicRowsVDWSlots;
   }
-  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 2) {
+  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
     unsigned guardSlots = 8;
     unsigned total = 0;
     for (int64_t row = 0; row < maxRows; ++row)
@@ -3883,6 +3883,7 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                                        mlir::vc4::QPUMux::a,
                                    std::optional<int64_t> addressAddReg =
                                        std::nullopt,
+                                   int64_t addressAddMultiplier = 1,
                                    int64_t vpmRowOffset = 0) {
   (void)activeLanes;
   if (useMutex) {
@@ -4055,6 +4056,16 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                           *addressAddReg, mlir::vc4::QPUMux::a,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
+    for (int64_t i = 1; i < addressAddMultiplier; ++i) {
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/33, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::add,
+                            mlir::vc4::MulOpcode::nop, *addressAddReg,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::a,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    }
     createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                      mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -4386,6 +4397,7 @@ static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
                                          mlir::vc4::QPUMux::a,
                                      std::optional<int64_t> addressAddReg =
                                          std::nullopt,
+                                     int64_t addressAddMultiplier = 1,
                                      int64_t vpmRowOffset = 0) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
@@ -4487,6 +4499,16 @@ static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
                           *addressAddReg, mlir::vc4::QPUMux::a,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
+    for (int64_t i = 1; i < addressAddMultiplier; ++i) {
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/33, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::add,
+                            mlir::vc4::MulOpcode::nop, *addressAddReg,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::a,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    }
     createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                      mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -4619,10 +4641,10 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    : maxCols;
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
   if (!activeRows) {
-    if (maxRows < 1 || maxRows > 2)
+    if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
              << "dynamic rectangular VDR runtime active_rows currently "
-                "supports only up to two-row rectangles";
+                "supports only up to sixteen-row rectangles";
     std::optional<int64_t> activeRowsReg =
         allocator.lookup(templ, templ.operands[2]);
     if (!activeRowsReg)
@@ -4670,6 +4692,7 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    mlir::vc4::QPUMux::a,
                                    mlir::vc4::QPUMux::a,
                                    /*addressAddReg=*/*pitchReg,
+                                   /*addressAddMultiplier=*/row,
                                    /*vpmRowOffset=*/row * vpmPitch);
         }
       }
@@ -5122,10 +5145,10 @@ static LogicalResult emitVDWStoreRectDynamic(
            << "dynamic rectangular VDW lowering currently supports only "
               "source row 0 and src_x = 0";
   if (!activeRows) {
-    if (maxRows < 1 || maxRows > 2)
+    if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
              << "dynamic rectangular VDW runtime active_rows currently "
-                "supports only up to two-row rectangles";
+                "supports only up to sixteen-row rectangles";
     std::optional<int64_t> activeRowsReg =
         allocator.lookup(templ, templ.operands[2]);
     if (!activeRowsReg)
@@ -5157,6 +5180,7 @@ static LogicalResult emitVDWStoreRectDynamic(
             mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
             mlir::vc4::QPUMux::a,
             /*addressAddReg=*/row == 0 ? std::optional<int64_t>() : strideReg,
+            /*addressAddMultiplier=*/row,
             /*vpmRowOffset=*/row);
       }
       return success();
