@@ -1555,21 +1555,76 @@ static std::optional<int64_t> getConstantI32FromLoadImm(Value value) {
   return attr.getInt();
 }
 
-static unsigned getRowOffsetScratchSlotCount(int64_t row) {
-  return row == 0 ? 0 : 2;
+static bool isVerticalVPMOp(Operation *op) {
+  auto orientation =
+      llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
+          op->getAttr("orientation"));
+  return orientation &&
+         orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
 }
 
-static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row) {
+struct DMARectPlan {
+  int64_t maxRows = -1;
+  int64_t maxCols = -1;
+  int64_t baseX = -1;
+  int64_t vpmPitch = -1;
+  bool vertical = false;
+  bool useMutex = false;
+
+  int64_t logicalXForRow(int64_t row) const {
+    return vertical ? baseX + row : baseX;
+  }
+
+  int64_t logicalYOffsetForRow(int64_t row) const {
+    return vertical ? int64_t(0) : row * vpmPitch;
+  }
+
+  bool usesVPMRowOffsetForRows() const { return !vertical; }
+};
+
+static DMARectPlan getDMARectPlan(Operation *op, llvm::StringRef xAttrName) {
+  DMARectPlan plan;
+  plan.maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
+  plan.maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
+  plan.baseX = getI32IntegerAttrOr(op, xAttrName, -1);
+  plan.vpmPitch = getI32IntegerAttrOr(op, "vpm_pitch", -1);
+  plan.vertical = isVerticalVPMOp(op);
+  plan.useMutex = hasStringAttr(op, "serialize", "mutex");
+  return plan;
+}
+
+static LogicalResult verifyDMARectXSpan(Operation *op,
+                                        const DMARectPlan &plan,
+                                        llvm::StringRef opName,
+                                        llvm::StringRef xAttrName) {
+  if (plan.vertical && plan.baseX + plan.maxRows > 16)
+    return op->emitOpError()
+           << "vertical dynamic rectangular " << opName << " requires "
+           << xAttrName << " + max_rows <= 16";
+  return success();
+}
+
+static unsigned getRowOffsetScratchSlotCount(int64_t row,
+                                             bool usesVPMRowOffset = true) {
+  return (usesVPMRowOffset && row != 0) ? 2 : 0;
+}
+
+static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row,
+                                               bool usesVPMRowOffset = true) {
   unsigned rawVDRSlots = useMutex ? 9 : 7;
   unsigned dynamicAddressSlots = row == 0 ? 0 : row;
-  return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots + rawVDRSlots;
+  return getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
+         dynamicAddressSlots + rawVDRSlots;
 }
 
 static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
-                                                     int64_t row) {
+                                                     int64_t row,
+                                                     bool dynamicPitch,
+                                                     bool usesVPMRowOffset =
+                                                         true) {
   unsigned dynamicVDRSlots = useMutex ? 18 : 16;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
-  return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots +
+  unsigned addressSlots = row == 0 ? 0 : (dynamicPitch ? row : 2);
+  return getRowOffsetScratchSlotCount(row, usesVPMRowOffset) + addressSlots +
          dynamicVDRSlots;
 }
 
@@ -1580,11 +1635,23 @@ static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
 }
 
 static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
-                                                     int64_t row) {
-  unsigned dynamicVDWSlots = useMutex ? 20 : 18;
-  unsigned vpmRowOffsetSlots = row == 0 ? 0 : 1;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
-  return vpmRowOffsetSlots + dynamicAddressSlots + dynamicVDWSlots;
+                                                     int64_t row,
+                                                     bool dynamicStride,
+                                                     bool usesVPMRowOffset =
+                                                         true) {
+  unsigned dynamicVDWSlots = useMutex ? 19 : 17;
+  unsigned vpmRowOffsetSlots = (usesVPMRowOffset && row != 0) ? 1 : 0;
+  unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
+  return vpmRowOffsetSlots + addressSlots + dynamicVDWSlots;
+}
+
+static unsigned getStaticVDWRowBodySlotCount(bool useMutex, int64_t row,
+                                             bool dynamicStride,
+                                             bool usesVPMRowOffset = true) {
+  unsigned rawStaticSlots = useMutex ? 17 : 15;
+  unsigned vpmRowOffsetSlots = (usesVPMRowOffset && row != 0) ? 1 : 0;
+  unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
+  return vpmRowOffsetSlots + addressSlots + rawStaticSlots;
 }
 
 static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
@@ -1601,17 +1668,20 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
                                 : std::nullopt;
   int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
+  bool usesVPMRowOffset = !isVerticalVPMOp(op);
   if (!activeRows && activeCols && *activeCols == maxCols && maxRows >= 1 &&
       maxRows <= 16) {
-    unsigned zeroFillSlots = useMutex ? 7 : 4;
+    unsigned zeroFillSlots = useMutex ? 6 : 3;
     unsigned guardSlots = 8;
     unsigned total = 0;
     for (int64_t row = 0; row < maxRows; ++row)
-      total += getRowOffsetScratchSlotCount(row) + zeroFillSlots;
+      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
+               zeroFillSlots;
     if (!pitch) {
       for (int64_t row = 0; row < maxRows; ++row)
         total += guardSlots +
-                 getDynamicVDRPitchRowSlotCount(useMutex, row);
+                 getDynamicVDRPitchRowSlotCount(useMutex, row,
+                                                usesVPMRowOffset);
       return total;
     }
     unsigned clampSlots = 4;
@@ -1619,15 +1689,18 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     return total + clampSlots + guardSlots + dynamicRowsVDRSlots;
   }
   if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
-    unsigned zeroFillSlots = useMutex ? 7 : 4;
+    unsigned zeroFillSlots = useMutex ? 6 : 3;
     unsigned clampSlots = 4;
     unsigned guardSlots = 8;
     unsigned total = 0;
     for (int64_t row = 0; row < maxRows; ++row)
-      total += getRowOffsetScratchSlotCount(row) + zeroFillSlots;
+      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
+               zeroFillSlots;
     for (int64_t row = 0; row < maxRows; ++row)
       total += guardSlots + clampSlots + guardSlots +
-               getDynamicVDRActiveColsBodySlotCount(useMutex, row);
+               getDynamicVDRActiveColsBodySlotCount(useMutex, row,
+                                                    /*dynamicPitch=*/true,
+                                                    usesVPMRowOffset);
     return total;
   }
   if (!pitch)
@@ -1636,15 +1709,26 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     return rawVDRSlots;
   if (activeCols && *activeRows == maxRows && *activeCols == maxCols)
     return rawVDRSlots;
-  if (!activeCols && activeRows && *activeRows == maxRows && maxRows == 1) {
-    unsigned zeroFillSlots = useMutex ? 7 : 4;
-    unsigned clampSlots = 4;
+  if (!activeCols && activeRows && maxRows >= 1 && maxRows <= 16) {
+    unsigned zeroFillSlots = useMutex ? 6 : 3;
     unsigned guardSlots = 8;
-    unsigned dynamicVDRSlots = useMutex ? 18 : 16;
-    return zeroFillSlots + clampSlots + guardSlots + dynamicVDRSlots;
+    std::optional<int64_t> pitch =
+        op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(4))
+                                  : std::nullopt;
+    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
+    unsigned total = 0;
+    for (int64_t row = 0; row < maxRows; ++row)
+      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
+               zeroFillSlots;
+    for (int64_t row = 0; row < clampedRows; ++row)
+      total += guardSlots +
+               getDynamicVDRActiveColsBodySlotCount(useMutex, row,
+                                                    /*dynamicPitch=*/!pitch,
+                                                    usesVPMRowOffset);
+    return total;
   }
   if (maxRows == 1) {
-    unsigned zeroFillSlots = useMutex ? 7 : 4;
+    unsigned zeroFillSlots = useMutex ? 6 : 3;
     int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
     int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
     return zeroFillSlots + (clampedRows == 0 || clampedCols == 0 ? 0
@@ -1664,6 +1748,7 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
       getConstantI32FromLoadImm(op->getOperand(3));
   int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
+  bool usesVPMRowOffset = !isVerticalVPMOp(op);
   if (!activeRows && activeCols &&
       std::clamp(*activeCols, int64_t(0), maxCols) == maxCols &&
       maxRows >= 1 && maxRows <= 16) {
@@ -1678,10 +1763,44 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
   if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
     unsigned guardSlots = 8;
     unsigned total = 0;
-    for (int64_t row = 0; row < maxRows; ++row)
-      total += guardSlots +
-               getDynamicVDWActiveColsBodySlotCount(useMutex, row);
+    for (int64_t row = 0; row < maxRows; ++row) {
+      unsigned vdwBodySlots =
+          getDynamicVDWActiveColsBodySlotCount(useMutex, row,
+                                               /*dynamicStride=*/true,
+                                               usesVPMRowOffset);
+      unsigned activeColsPayloadSlots = 4 + 8 + vdwBodySlots;
+      total += guardSlots + activeColsPayloadSlots;
+    }
     return total;
+  }
+  if (activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
+    unsigned guardSlots = 8;
+    std::optional<int64_t> strideBytes =
+        getConstantI32FromLoadImm(op->getOperand(4));
+    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
+    unsigned total = 0;
+    for (int64_t row = 0; row < clampedRows; ++row)
+      total += guardSlots + getDynamicVDWActiveColsBodySlotCount(
+                                useMutex, row, /*dynamicStride=*/!strideBytes,
+                                usesVPMRowOffset);
+    return total;
+  }
+  if (activeRows && activeCols && maxRows >= 1 && maxRows <= 16) {
+    std::optional<int64_t> strideBytes =
+        getConstantI32FromLoadImm(op->getOperand(4));
+    int64_t vpmPitch = getI32IntegerAttrOr(op, "vpm_pitch", 1);
+    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
+    int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
+    if (clampedRows == 0 || clampedCols == 0)
+      return 0;
+    if (clampedRows > 1 && (vpmPitch != 1 || !strideBytes)) {
+      unsigned total = 0;
+      for (int64_t row = 0; row < clampedRows; ++row)
+        total += getStaticVDWRowBodySlotCount(useMutex, row,
+                                              /*dynamicStride=*/!strideBytes,
+                                              usesVPMRowOffset);
+      return total;
+    }
   }
   if (activeCols)
     return rawStaticSlots;
@@ -3884,7 +4003,9 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                                    std::optional<int64_t> addressAddReg =
                                        std::nullopt,
                                    int64_t addressAddMultiplier = 1,
-                                   int64_t vpmRowOffset = 0) {
+                                   int64_t vpmRowOffset = 0,
+                                   std::optional<int64_t> staticVpmX =
+                                       std::nullopt) {
   (void)activeLanes;
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
@@ -4004,13 +4125,17 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                         mlir::vc4::QPUMux::b,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                         /*smallImm=*/7);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/35, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
-                        vpmXMux, vpmXMux,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  if (staticVpmX) {
+    createSplat32LDI(builder, loc, *staticVpmX, 35);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
+                          vpmXMux, vpmXMux, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/35, /*waddrMul=*/32,
@@ -4166,7 +4291,9 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
                            mlir::vc4::QPUMux vpmBaseRowMux =
                                mlir::vc4::QPUMux::a,
                            std::optional<int64_t> addressAddReg =
-                               std::nullopt) {
+                               std::nullopt,
+                           int64_t addressAddMultiplier = 1,
+                           int64_t vpmRowOffset = 0) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -4178,14 +4305,34 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, setupWord, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
-                        /*raddrB=*/0, vpmBaseRowMux,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  if (vpmRowOffset != 0) {
+    createSplat32LDI(builder, loc, vpmRowOffset, 33);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::add,
+                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                          /*raddrB=*/0, vpmBaseRowMux,
+                          mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::shl,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::shl,
+                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                          /*raddrB=*/0, vpmBaseRowMux,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  }
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
@@ -4203,6 +4350,16 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
                           *addressAddReg, mlir::vc4::QPUMux::a,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
+    for (int64_t i = 1; i < addressAddMultiplier; ++i) {
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/33, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::add,
+                            mlir::vc4::MulOpcode::nop, *addressAddReg,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::a,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    }
     createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                      mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -4267,15 +4424,14 @@ static void emitVPMZeroWriteRow(OpBuilder &builder, Location loc,
                     rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                     rowMux, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
-  createSplat32LDI(builder, loc, 0, 34);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/48, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/34,
-                        /*raddrB=*/34, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
   if (useMutex) {
     createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
     emitMutexRelease(builder, loc);
@@ -4294,6 +4450,53 @@ static void emitAddConstantToScratch(OpBuilder &builder, Location loc,
                         mlir::vc4::MulOpcode::nop, baseReg, /*raddrB=*/0,
                         baseMux, mlir::vc4::QPUMux::r3,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+}
+
+struct DMARowAddress {
+  int64_t addressReg = 0;
+  mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a;
+  std::optional<int64_t> dynamicPitchReg;
+  int64_t dynamicPitchMultiplier = 1;
+};
+
+static DMARowAddress materializeDMARowAddress(
+    OpBuilder &builder, Location loc, int64_t baseAddressReg, int64_t row,
+    std::optional<int64_t> constantPitchBytes,
+    std::optional<int64_t> dynamicPitchReg) {
+  if (row == 0)
+    return {/*addressReg=*/baseAddressReg, /*addressMux=*/mlir::vc4::QPUMux::a,
+            /*dynamicPitchReg=*/std::nullopt,
+            /*dynamicPitchMultiplier=*/1};
+
+  if (constantPitchBytes) {
+    emitAddConstantToScratch(builder, loc, baseAddressReg,
+                             mlir::vc4::QPUMux::a,
+                             row * *constantPitchBytes,
+                             /*scratchWaddr=*/32);
+    return {/*addressReg=*/0, /*addressMux=*/mlir::vc4::QPUMux::r0,
+            /*dynamicPitchReg=*/std::nullopt,
+            /*dynamicPitchMultiplier=*/1};
+  }
+
+  return {/*addressReg=*/baseAddressReg, /*addressMux=*/mlir::vc4::QPUMux::a,
+          /*dynamicPitchReg=*/dynamicPitchReg,
+          /*dynamicPitchMultiplier=*/row};
+}
+
+static void emitDMARectZeroFillRow(OpBuilder &builder, Location loc,
+                                   const DMARectPlan &plan, int64_t rowReg,
+                                   int64_t row) {
+  int64_t yOffset = plan.logicalYOffsetForRow(row);
+  int64_t x = plan.logicalXForRow(row);
+  if (yOffset == 0) {
+    emitVPMZeroWriteRow(builder, loc, rowReg, x, plan.vertical, plan.useMutex);
+    return;
+  }
+
+  emitAddConstantToScratch(builder, loc, rowReg, mlir::vc4::QPUMux::a, yOffset,
+                           /*scratchWaddr=*/32);
+  emitVPMZeroWriteRow(builder, loc, /*rowReg=*/0, x, plan.vertical,
+                      plan.useMutex, mlir::vc4::QPUMux::r0);
 }
 
 static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
@@ -4629,6 +4832,7 @@ static LogicalResult emitVDRLoadRectDynamic(
   int64_t maxCols = getI32IntegerAttrOr(source, "max_cols", -1);
   int64_t dstX = getI32IntegerAttrOr(source, "dst_x", -1);
   int64_t vpmPitch = getI32IntegerAttrOr(source, "vpm_pitch", -1);
+  DMARectPlan plan = getDMARectPlan(source, "dst_x");
   std::optional<int64_t> activeRows =
       getConstantI32FromLoadImm(templ.operands[2]);
   std::optional<int64_t> activeCols =
@@ -4642,16 +4846,18 @@ static LogicalResult emitVDRLoadRectDynamic(
            << "uses a dynamic pitch value that is not defined by a lowerable "
               "SSAVC4 op";
 
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  bool vertical =
-      orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
   int64_t clampedRows =
       activeRows ? std::clamp(*activeRows, int64_t(0), maxRows) : maxRows;
   int64_t clampedCols = activeCols ? std::clamp(*activeCols, int64_t(0), maxCols)
                                    : maxCols;
-  bool useMutex = hasStringAttr(source, "serialize", "mutex");
+  if (failed(verifyDMARectXSpan(source, plan, "VDR", "dst_x")))
+    return failure();
+  auto buildOneRowSetup = [&](int64_t row,
+                              int64_t &setupWord) -> LogicalResult {
+    return buildVDRLoadSetupWordFromParts(
+        source, maxCols, /*nrows=*/1, maxCols * 4,
+        plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord);
+  };
   if (!activeRows) {
     if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
@@ -4670,43 +4876,29 @@ static LogicalResult emitVDRLoadRectDynamic(
         return source->emitOpError()
                << "uses a dynamic active column value that is not defined by "
                   "a lowerable SSAVC4 op";
-      int64_t oneRowSetup = 0;
-      if (failed(buildVDRLoadSetupWordFromParts(
-              source, maxCols, /*nrows=*/1, maxCols * 4, dstX, vpmPitch,
-              vertical, oneRowSetup)))
-        return failure();
+      for (int64_t row = 0; row < maxRows; ++row)
+        emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
+                               row);
       for (int64_t row = 0; row < maxRows; ++row) {
-        if (row == 0) {
-          emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
-                              vertical, useMutex);
-        } else {
-          emitAddConstantToScratch(builder, source->getLoc(), *vpmBaseRowReg,
-                                   mlir::vc4::QPUMux::a, row * vpmPitch,
-                                   /*scratchWaddr=*/32);
-          emitVPMZeroWriteRow(builder, source->getLoc(), /*rowReg=*/0, dstX,
-                              vertical, useMutex, mlir::vc4::QPUMux::r0);
-        }
-      }
-      for (int64_t row = 0; row < maxRows; ++row) {
-        unsigned vdrBodySlots =
-            getDynamicVDRActiveColsBodySlotCount(useMutex, row);
+        int64_t oneRowSetup = 0;
+        if (failed(buildOneRowSetup(row, oneRowSetup)))
+          return failure();
+        unsigned vdrBodySlots = getDynamicVDRActiveColsBodySlotCount(
+            plan.useMutex, row, /*dynamicPitch=*/!pitchBytes,
+            plan.usesVPMRowOffsetForRows());
         unsigned activeColsPayloadSlots = 4 + 8 + vdrBodySlots;
         emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
                                    maxRows, row, activeColsPayloadSlots);
         emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
                                    maxCols, vdrBodySlots);
-        if (row == 0) {
-          emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
-                                   *vpmBaseRowReg, oneRowSetup, useMutex);
-        } else {
-          emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
-                                   *vpmBaseRowReg, oneRowSetup, useMutex,
-                                   mlir::vc4::QPUMux::a,
-                                   mlir::vc4::QPUMux::a,
-                                   /*addressAddReg=*/*pitchReg,
-                                   /*addressAddMultiplier=*/row,
-                                   /*vpmRowOffset=*/row * vpmPitch);
-        }
+        DMARowAddress rowAddress = materializeDMARowAddress(
+            builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
+        emitDynamicVDRLoadOneRow(
+            builder, source->getLoc(), rowAddress.addressReg, *vpmBaseRowReg,
+            oneRowSetup, plan.useMutex, rowAddress.addressMux,
+            mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+            rowAddress.dynamicPitchMultiplier,
+            /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
       }
       return success();
     }
@@ -4715,94 +4907,77 @@ static LogicalResult emitVDRLoadRectDynamic(
              << "dynamic rectangular VDR runtime active_rows currently "
                 "requires full static active_cols";
     if (!pitchBytes) {
-      if (maxRows < 1 || maxRows > 2)
+      if (maxRows < 1 || maxRows > 16)
         return source->emitOpError()
                << "dynamic rectangular VDR runtime pitch currently supports "
-                  "only up to two-row rectangles";
-      int64_t oneRowSetup = 0;
-      if (failed(buildVDRLoadSetupWordFromParts(
-              source, maxCols, /*nrows=*/1, maxCols * 4, dstX, vpmPitch,
-              vertical, oneRowSetup)))
-        return failure();
+                  "only up to sixteen-row rectangles";
+      for (int64_t row = 0; row < maxRows; ++row)
+        emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
+                               row);
       for (int64_t row = 0; row < maxRows; ++row) {
-        if (row == 0) {
-          emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
-                              vertical, useMutex);
-        } else {
-          emitAddConstantToScratch(builder, source->getLoc(), *vpmBaseRowReg,
-                                   mlir::vc4::QPUMux::a, row * vpmPitch,
-                                   /*scratchWaddr=*/32);
-          emitVPMZeroWriteRow(builder, source->getLoc(), /*rowReg=*/0, dstX,
-                              vertical, useMutex, mlir::vc4::QPUMux::r0);
-        }
-      }
-      for (int64_t row = 0; row < maxRows; ++row) {
-        unsigned bodySlots = getDynamicVDRPitchRowSlotCount(useMutex, row);
+        int64_t oneRowSetup = 0;
+        if (failed(buildOneRowSetup(row, oneRowSetup)))
+          return failure();
+        unsigned bodySlots =
+            getDynamicVDRPitchRowSlotCount(plan.useMutex, row,
+                                           plan.usesVPMRowOffsetForRows());
         emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
                                    maxRows, row, bodySlots);
-        if (row == 0) {
-          emitRawVDRLoad(builder, source->getLoc(), *addressReg, oneRowSetup,
-                         *vpmBaseRowReg, useMutex);
-        } else {
-          emitAddConstantToScratch(builder, source->getLoc(), *vpmBaseRowReg,
-                                   mlir::vc4::QPUMux::a, row * vpmPitch,
-                                   /*scratchWaddr=*/32);
-          emitRawVDRLoad(builder, source->getLoc(), *addressReg, oneRowSetup,
-                         /*vpmBaseRowReg=*/0, useMutex,
-                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                         /*addressAddReg=*/*pitchReg);
-        }
+        DMARowAddress rowAddress = materializeDMARowAddress(
+            builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
+        emitRawVDRLoad(builder, source->getLoc(), rowAddress.addressReg,
+                       oneRowSetup, *vpmBaseRowReg, plan.useMutex,
+                       rowAddress.addressMux, mlir::vc4::QPUMux::a,
+                       rowAddress.dynamicPitchReg,
+                       rowAddress.dynamicPitchMultiplier,
+                       /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
       }
       return success();
     }
     int64_t setupWordWithoutNRows = 0;
     if (failed(buildVDRLoadSetupWordFromParts(
-            source, maxCols, 16, *pitchBytes, dstX, vpmPitch, vertical,
+            source, maxCols, 16, *pitchBytes, dstX, vpmPitch, plan.vertical,
             setupWordWithoutNRows)))
       return failure();
-    for (int64_t row = 0; row < maxRows; ++row) {
-      if (row == 0) {
-        emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
-                            vertical, useMutex);
-      } else {
-        emitAddConstantToScratch(builder, source->getLoc(), *vpmBaseRowReg,
-                                 mlir::vc4::QPUMux::a, row * vpmPitch,
-                                 /*scratchWaddr=*/32);
-        emitVPMZeroWriteRow(builder, source->getLoc(), /*rowReg=*/0, dstX,
-                            vertical, useMutex, mlir::vc4::QPUMux::r0);
-      }
-    }
-    unsigned bodySlots = useMutex ? 16 : 14;
+    for (int64_t row = 0; row < maxRows; ++row)
+      emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
+                             row);
+    unsigned bodySlots = plan.useMutex ? 16 : 14;
     emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
                                maxRows, /*row=*/0, bodySlots);
     emitDynamicVDRLoadRows(builder, source->getLoc(), *addressReg,
-                           *vpmBaseRowReg, setupWordWithoutNRows, useMutex);
+                           *vpmBaseRowReg, setupWordWithoutNRows,
+                           plan.useMutex);
     return success();
   }
   if (!activeCols) {
-    if (maxRows != 1 || clampedRows != 1)
-      return source->emitOpError()
-             << "dynamic rectangular VDR runtime active_cols currently "
-                "supports only one active row";
     std::optional<int64_t> activeColsReg =
         allocator.lookup(templ, templ.operands[3]);
     if (!activeColsReg)
       return source->emitOpError()
              << "uses a dynamic active column value that is not defined by a "
                 "lowerable SSAVC4 op";
-    emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
-                        vertical, useMutex);
-    unsigned bodySlots = useMutex ? 18 : 16;
-    emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
-                               maxCols, bodySlots);
-    int64_t setupWord = 0;
-    int64_t setupPitchBytes = pitchBytes ? *pitchBytes : maxCols * 4;
-    if (failed(buildVDRLoadSetupWordFromParts(
-            source, 16, 1, setupPitchBytes, dstX, vpmPitch, vertical,
-            setupWord)))
-      return failure();
-    emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
-                             *vpmBaseRowReg, setupWord, useMutex);
+    for (int64_t row = 0; row < maxRows; ++row)
+      emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
+                             row);
+    for (int64_t row = 0; row < clampedRows; ++row) {
+      int64_t setupWord = 0;
+      if (failed(buildOneRowSetup(row, setupWord)))
+        return failure();
+      unsigned bodySlots = getDynamicVDRActiveColsBodySlotCount(
+          plan.useMutex, row, /*dynamicPitch=*/!pitchBytes,
+          plan.usesVPMRowOffsetForRows());
+      emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
+                                 maxCols, bodySlots);
+      DMARowAddress rowAddress = materializeDMARowAddress(
+          builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
+      emitDynamicVDRLoadOneRow(
+          builder, source->getLoc(), rowAddress.addressReg, *vpmBaseRowReg,
+          setupWord, plan.useMutex, rowAddress.addressMux,
+          mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+          rowAddress.dynamicPitchMultiplier,
+          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+    }
     return success();
   }
 
@@ -4817,7 +4992,7 @@ static LogicalResult emitVDRLoadRectDynamic(
              << "dynamic rectangular VDR partial zero-fill currently "
                 "supports only one-row rectangles";
     emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
-                        vertical, useMutex);
+                        plan.vertical, plan.useMutex);
     if (clampedRows == 0 || clampedCols == 0)
       return success();
   }
@@ -4825,10 +5000,10 @@ static LogicalResult emitVDRLoadRectDynamic(
   int64_t setupWord = 0;
   if (failed(buildVDRLoadSetupWordFromParts(
           source, clampedCols, clampedRows, *pitchBytes, dstX, vpmPitch,
-          vertical, setupWord)))
+          plan.vertical, setupWord)))
     return failure();
   emitRawVDRLoad(builder, source->getLoc(), *addressReg, setupWord,
-                 *vpmBaseRowReg, useMutex);
+                 *vpmBaseRowReg, plan.useMutex);
   return success();
 }
 
@@ -4945,7 +5120,7 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
 
 static void emitDynamicVDWStoreRowsFromVPM(OpBuilder &builder, Location loc,
                                            int64_t addressReg,
-                                           int64_t vpmYReg, int64_t vpmXReg,
+                                           int64_t vpmYReg, int64_t staticVpmX,
                                            int64_t rowLen,
                                            std::optional<int64_t> memoryPitchBytes,
                                            std::optional<int64_t> memoryPitchReg,
@@ -5043,13 +5218,7 @@ static void emitDynamicVDWStoreRowsFromVPM(OpBuilder &builder, Location loc,
                         mlir::vc4::QPUMux::b,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                         /*smallImm=*/7);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/35, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createSplat32LDI(builder, loc, staticVpmX, 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/35, /*waddrMul=*/32,
@@ -5133,7 +5302,7 @@ static LogicalResult emitVDWStoreRectDynamic(
 
   int64_t maxRows = getI32IntegerAttrOr(source, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(source, "max_cols", -1);
-  int64_t srcX = getI32IntegerAttrOr(source, "src_x", -1);
+  DMARectPlan plan = getDMARectPlan(source, "src_x");
   std::optional<int64_t> srcRow =
       getConstantI32FromLoadImm(templ.operands[1]);
   std::optional<int64_t> activeRows =
@@ -5152,10 +5321,6 @@ static LogicalResult emitVDWStoreRectDynamic(
     return source->emitOpError()
            << "uses a dynamic stride value that is not defined by a lowerable "
               "SSAVC4 op";
-  if (*srcRow != 0 || srcX != 0)
-    return source->emitOpError()
-           << "dynamic rectangular VDW lowering currently supports only "
-              "source row 0 and src_x = 0";
   if (!activeRows) {
     if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
@@ -5167,11 +5332,8 @@ static LogicalResult emitVDWStoreRectDynamic(
       return source->emitOpError()
              << "uses a dynamic active row value that is not defined by a "
                 "lowerable SSAVC4 op";
-    auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-        source->getAttr("orientation"));
-    bool vertical =
-        orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
-    bool useMutex = hasStringAttr(source, "serialize", "mutex");
+    if (failed(verifyDMARectXSpan(source, plan, "VDW", "src_x")))
+      return failure();
     if (!activeCols) {
       std::optional<int64_t> activeColsReg =
           allocator.lookup(templ, templ.operands[3]);
@@ -5180,20 +5342,28 @@ static LogicalResult emitVDWStoreRectDynamic(
                << "uses a dynamic active column value that is not defined by "
                   "a lowerable SSAVC4 op";
       for (int64_t row = 0; row < maxRows; ++row) {
-        unsigned bodySlots =
-            getDynamicVDWActiveColsBodySlotCount(useMutex, row);
+        unsigned vdwBodySlots =
+            getDynamicVDWActiveColsBodySlotCount(plan.useMutex, row,
+                                                 /*dynamicStride=*/!strideBytes,
+                                                 plan.usesVPMRowOffsetForRows());
+        unsigned activeColsPayloadSlots = 4 + 8 + vdwBodySlots;
         emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                                   maxRows, row, bodySlots);
+                                   maxRows, row, activeColsPayloadSlots);
+        emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
+                                   maxCols, vdwBodySlots);
+        DMARowAddress rowAddress = materializeDMARowAddress(
+            builder, source->getLoc(), *addressReg, row, strideBytes,
+            strideReg);
         emitRawVDWStoreFromVPM(
-            builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
+            builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
             *vpmSourceRowReg, activeColsReg,
             /*activeLanes=*/maxCols, /*rowLen=*/maxCols, /*nrows=*/1,
-            /*memoryPitchBytes=*/maxCols * 4, vertical, useMutex,
-            mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-            mlir::vc4::QPUMux::a,
-            /*addressAddReg=*/row == 0 ? std::optional<int64_t>() : strideReg,
-            /*addressAddMultiplier=*/row,
-            /*vpmRowOffset=*/row);
+            /*memoryPitchBytes=*/maxCols * 4, plan.vertical, plan.useMutex,
+            rowAddress.addressMux, mlir::vc4::QPUMux::a,
+            mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+            rowAddress.dynamicPitchMultiplier,
+            /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+            /*staticVpmX=*/plan.logicalXForRow(row));
       }
       return success();
     }
@@ -5202,14 +5372,13 @@ static LogicalResult emitVDWStoreRectDynamic(
              << "dynamic rectangular VDW runtime active_rows currently "
                 "requires full static active_cols";
     unsigned bodySlots =
-        getDynamicVDWStoreRowsSlotCount(useMutex, !strideBytes);
+        getDynamicVDWStoreRowsSlotCount(plan.useMutex, !strideBytes);
     emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
                                maxRows, /*row=*/0, bodySlots);
     emitDynamicVDWStoreRowsFromVPM(
-        builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
-        *vpmSourceRowReg,
+        builder, source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
         /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
-        /*memoryPitchReg=*/strideReg, vertical, useMutex);
+        /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex);
     return success();
   }
 
@@ -5222,10 +5391,6 @@ static LogicalResult emitVDWStoreRectDynamic(
     return success();
   std::optional<int64_t> dynamicActiveColsReg;
   if (!activeCols) {
-    if (clampedRows != 1)
-      return source->emitOpError()
-             << "dynamic rectangular VDW runtime active_cols currently "
-                "supports only one active row";
     dynamicActiveColsReg = allocator.lookup(templ, templ.operands[3]);
     if (!dynamicActiveColsReg)
       return source->emitOpError()
@@ -5233,23 +5398,56 @@ static LogicalResult emitVDWStoreRectDynamic(
                 "lowerable SSAVC4 op";
   }
 
-  if (!strideBytes && !dynamicActiveColsReg)
-    return source->emitOpError()
-           << "dynamic rectangular VDW runtime stride currently requires "
-              "runtime active_rows with full static active_cols";
-
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  bool vertical =
-      orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
+  if (failed(verifyDMARectXSpan(source, plan, "VDW", "src_x")))
+    return failure();
+  if (dynamicActiveColsReg) {
+    for (int64_t row = 0; row < clampedRows; ++row) {
+      unsigned bodySlots = getDynamicVDWActiveColsBodySlotCount(
+          plan.useMutex, row, /*dynamicStride=*/!strideBytes,
+          plan.usesVPMRowOffsetForRows());
+      emitRuntimeActiveColsGuard(builder, source->getLoc(),
+                                 *dynamicActiveColsReg, maxCols, bodySlots);
+      DMARowAddress rowAddress = materializeDMARowAddress(
+          builder, source->getLoc(), *addressReg, row, strideBytes, strideReg);
+      emitRawVDWStoreFromVPM(
+          builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
+          *vpmSourceRowReg, dynamicActiveColsReg,
+          /*activeLanes=*/maxCols, /*rowLen=*/maxCols, /*nrows=*/1,
+          /*memoryPitchBytes=*/maxCols * 4, plan.vertical, plan.useMutex,
+          rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
+          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+          /*staticVpmX=*/plan.logicalXForRow(row));
+    }
+    return success();
+  }
+  if (clampedRows > 1 && (plan.vpmPitch != 1 || !strideBytes)) {
+    for (int64_t row = 0; row < clampedRows; ++row) {
+      DMARowAddress rowAddress = materializeDMARowAddress(
+          builder, source->getLoc(), *addressReg, row, strideBytes, strideReg);
+      emitRawVDWStoreFromVPM(
+          builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
+          *vpmSourceRowReg,
+          /*dynamicActiveLanesReg=*/std::nullopt,
+          /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
+          /*memoryPitchBytes=*/staticCols * 4, plan.vertical, plan.useMutex,
+          rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
+          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+          /*staticVpmX=*/plan.logicalXForRow(row));
+    }
+    return success();
+  }
   emitRawVDWStoreFromVPM(
       builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
       *vpmSourceRowReg, dynamicActiveColsReg,
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols,
       /*nrows=*/clampedRows,
-      /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * 4, vertical,
-      hasStringAttr(source, "serialize", "mutex"));
+      /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * 4,
+      plan.vertical, plan.useMutex,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      /*addressAddReg=*/std::nullopt, /*addressAddMultiplier=*/1,
+      /*vpmRowOffset=*/0, /*staticVpmX=*/plan.baseX);
   return success();
 }
 

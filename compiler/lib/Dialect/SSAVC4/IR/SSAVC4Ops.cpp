@@ -180,6 +180,15 @@ static LogicalResult verifyVPMQPUCoordinates(Operation *op,
   return success();
 }
 
+static LogicalResult verifyVPMDMACoordinates(Operation *op, int64_t x,
+                                             int64_t stride) {
+  if (x < 0 || x > 15)
+    return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+  if (stride <= 0)
+    return op->emitOpError("requires positive VPM stride");
+  return success();
+}
+
 static LogicalResult verifyDynamicRectShape(Operation *op, int64_t maxRows,
                                             int64_t maxCols,
                                             int64_t elemBytes) {
@@ -670,8 +679,7 @@ LogicalResult VDRLoadRectDynamicOp::verify() {
     return emitOpError("requires zero_fill = true");
   if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
     return failure();
-  if (failed(verifyVPMQPUCoordinates(op, getOrientation(), getDstX(),
-                                     getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(op, getDstX(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
@@ -734,8 +742,7 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
     return emitOpError("requires preserve_inactive = true");
   if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
     return failure();
-  if (failed(verifyVPMQPUCoordinates(op, getOrientation(), getSrcX(),
-                                     getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(op, getSrcX(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
