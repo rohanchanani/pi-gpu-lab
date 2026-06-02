@@ -406,6 +406,7 @@ struct InstructionTemplate {
   std::optional<Value> result;
   Operation *flagSource = nullptr;
   unsigned flagOperandCount = 0;
+  bool syntheticThreadEndBranch = false;
 };
 
 struct LivenessSummary {
@@ -699,6 +700,10 @@ private:
       switch (templ.kind) {
       case InstructionTemplate::Kind::Branch:
       case InstructionTemplate::Kind::CondBranch:
+        if (templ.syntheticThreadEndBranch) {
+          sawNonUniform = true;
+          break;
+        }
         if (!templ.source || !templ.sourceBlock ||
             templ.source->getNumSuccessors() == 0)
           return diagnosticAnchor->emitError()
@@ -816,7 +821,7 @@ private:
     for (const InstructionTemplate &templ : templates) {
       if ((templ.kind != InstructionTemplate::Kind::Branch &&
            templ.kind != InstructionTemplate::Kind::CondBranch) ||
-          !templ.sourceBlock || !templ.source)
+          !templ.sourceBlock || !templ.source || templ.syntheticThreadEndBranch)
         continue;
       for (Block *successor : templ.source->getSuccessors()) {
         SmallVectorImpl<Block *> &preds = predecessors[successor];
@@ -1938,6 +1943,13 @@ static LogicalResult selectInstructionTemplates(
   DenseMap<Block *, BitVector> dominators =
       computeDominance(blocks, predecessors);
 
+  unsigned threadEndOpCount = 0;
+  for (Block *block : blocks)
+    for (Operation &op : *block)
+      if (hasName(&op, kSSAVC4ThreadEndOpName))
+        ++threadEndOpCount;
+  bool needsThreadEndEpilogue = threadEndOpCount > 1;
+
   DenseMap<int64_t, Value> uniformReadByIndex;
   unsigned nextVirtualOrdinal = 0;
   for (Block *block : blocks) {
@@ -1951,6 +1963,9 @@ static LogicalResult selectInstructionTemplates(
   }
 
   unsigned nextLayoutBlockId = blocks.size();
+  unsigned threadEndEpilogueBlockId = nextLayoutBlockId++;
+  Operation *firstThreadEndOp = nullptr;
+  bool sawThreadEnd = false;
   auto appendTemplate = [&](InstructionTemplate templ) {
     templ.ordinal = templates.size();
     templates.push_back(std::move(templ));
@@ -1994,11 +2009,31 @@ static LogicalResult selectInstructionTemplates(
   for (Block *block : blocks) {
     for (Operation &op : *block) {
       if (hasName(&op, kSSAVC4ThreadEndOpName)) {
+        if (!needsThreadEndEpilogue) {
+          InstructionTemplate templ;
+          templ.kind = InstructionTemplate::Kind::ThreadEnd;
+          templ.source = &op;
+          templ.sourceBlock = block;
+          templ.layoutBlockId = blockIds[block];
+          appendTemplate(std::move(templ));
+          continue;
+        }
+
+        if (!firstThreadEndOp)
+          firstThreadEndOp = &op;
+        sawThreadEnd = true;
+
+        // A QPU shader has one physical thread-end epilogue: a single thrend
+        // signal followed by two delay slots at the end of the flattened
+        // scheduled stream.  Multiple SSA CFG exits branch to that epilogue
+        // instead of each emitting their own inline thrend.
         InstructionTemplate templ;
-        templ.kind = InstructionTemplate::Kind::ThreadEnd;
+        templ.kind = InstructionTemplate::Kind::Branch;
         templ.source = &op;
         templ.sourceBlock = block;
         templ.layoutBlockId = blockIds[block];
+        templ.branchTargetBlockId = threadEndEpilogueBlockId;
+        templ.syntheticThreadEndBranch = true;
         appendTemplate(std::move(templ));
         continue;
       }
@@ -2037,12 +2072,18 @@ static LogicalResult selectInstructionTemplates(
           return failure();
         if (!hasSuccessorOperands) {
           auto nextIt = nextBlock.find(block);
-          if (nextIt == nextBlock.end() || op.getSuccessor(1) != nextIt->second)
-            return op.emitOpError()
-                   << "requires the false successor to be the next linear block in M3 v1";
-          templ.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
-          appendTemplate(std::move(templ));
-          continue;
+          if (nextIt != nextBlock.end() &&
+              op.getSuccessor(1) == nextIt->second) {
+            templ.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
+            appendTemplate(std::move(templ));
+            continue;
+          }
+          // VC4 conditional branches still fall through on the false path, but
+          // valid SSAVC4 CFGs are not required to place the false successor as
+          // the next source-layout block.  Reuse the successor-operand lowering
+          // shape with empty edge-copy lists: a synthetic false fallthrough
+          // block branches to the real false destination, and a synthetic true
+          // block branches to the real true destination.
         }
 
         unsigned falseCopyBlockId = nextLayoutBlockId++;
@@ -2576,6 +2617,14 @@ static LogicalResult selectInstructionTemplates(
                 "ssavc4.barrier, ssavc4.vpm.write, ssavc4.vpm.read, "
                 "ssavc4.vdr.load, ssavc4.vdw.store, and ssavc4.thread_end";
     }
+  }
+
+  if (sawThreadEnd) {
+    InstructionTemplate templ;
+    templ.kind = InstructionTemplate::Kind::ThreadEnd;
+    templ.source = firstThreadEndOp;
+    templ.layoutBlockId = threadEndEpilogueBlockId;
+    appendTemplate(std::move(templ));
   }
 
   return success();
