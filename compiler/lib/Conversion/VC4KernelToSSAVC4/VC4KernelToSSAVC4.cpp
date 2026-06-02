@@ -726,6 +726,7 @@ struct PredicatePlan {
   Value rows;
   Value colBase;
   Value cols;
+  Value maskValue;
   Value compareLhs;
   Value compareRhs;
   mlir::vc4::Cond compareCond = mlir::vc4::Cond::zs;
@@ -760,6 +761,12 @@ struct PredicatePlan {
   static PredicatePlan generalMask() {
     PredicatePlan plan;
     plan.kind = Class::GeneralMask;
+    return plan;
+  }
+  static PredicatePlan generalMaskValue(Value mask) {
+    PredicatePlan plan;
+    plan.kind = Class::GeneralMask;
+    plan.maskValue = mask;
     return plan;
   }
   static PredicatePlan generalMask(Value lhs, Value rhs,
@@ -1196,6 +1203,102 @@ static Value createCondSelect(OpBuilder &builder, Location loc, Value flags,
       trueValue.getType());
 }
 
+static Value createMaskConstant(OpBuilder &builder, Location loc,
+                                int64_t value) {
+  return createLoadImm(builder, loc, VectorType::get({16}, builder.getI32Type()),
+                       builder.getI32IntegerAttr(value));
+}
+
+static bool isSameSSAValue(Value lhs, Value rhs) { return lhs && lhs == rhs; }
+
+static Value createI32Min(OpBuilder &builder, Location loc, Value lhs,
+                          Value rhs) {
+  Value flags = createSubFlags(builder, loc, lhs, rhs);
+  return createCondSelect(builder, loc, flags, lhs, rhs,
+                          mlir::vc4::Cond::cs);
+}
+
+static Value createI32Max(OpBuilder &builder, Location loc, Value lhs,
+                          Value rhs) {
+  Value flags = createSubFlags(builder, loc, lhs, rhs);
+  return createCondSelect(builder, loc, flags, rhs, lhs,
+                          mlir::vc4::Cond::cs);
+}
+
+static FailureOr<Value>
+materializePredicateMask(Operation *op, OpBuilder &builder,
+                         const PredicatePlan &predicate,
+                         LoweringState &state) {
+  Location loc = op->getLoc();
+  Value one = createMaskConstant(builder, loc, 1);
+  Value zero = createMaskConstant(builder, loc, 0);
+
+  if (predicate.kind == PredicatePlan::Class::Full)
+    return one;
+  if (predicate.kind == PredicatePlan::Class::Empty)
+    return zero;
+  if (predicate.kind == PredicatePlan::Class::GeneralMask) {
+    if (predicate.maskValue)
+      return predicate.maskValue;
+    if (!predicate.compareLhs || !predicate.compareRhs)
+      return op->emitOpError(
+          "general predicate plan has no materialized mask or lowered compare "
+          "operands");
+    Value flags =
+        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    return createCondSelect(builder, loc, flags, one, zero,
+                            predicate.compareCond);
+  }
+
+  Value lane =
+      createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
+                         one.getType());
+
+  if (predicate.kind == PredicatePlan::Class::TailPrefix) {
+    if (!predicate.base || !predicate.limit)
+      return op->emitOpError("pred.tail plan is missing base or limit values");
+    Value baseVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.base, {},
+                           one.getType());
+    Value limitVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.limit,
+                           {}, one.getType());
+    Value index = createI32Add(builder, loc, baseVec, lane);
+    Value flags = createSubFlags(builder, loc, index, limitVec);
+    return createCondSelect(builder, loc, flags, one, zero,
+                            mlir::vc4::Cond::cs);
+  }
+
+  if (predicate.kind == PredicatePlan::Class::RectRow) {
+    if (!predicate.row || !predicate.rows || !predicate.colBase ||
+        !predicate.cols)
+      return op->emitOpError(
+          "pred.rect plan is missing row, rows, col_base, or cols values");
+    Value colBaseVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                           predicate.colBase, {}, one.getType());
+    Value colEnd = createI32Add(builder, loc, predicate.colBase,
+                                predicate.cols);
+    Value colEndVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, colEnd, {},
+                           one.getType());
+    Value upperFlags = createSubFlags(builder, loc, lane, colEndVec);
+    Value upperMasked =
+        createCondSelect(builder, loc, upperFlags, one, zero,
+                         mlir::vc4::Cond::cs);
+    Value lowerFlags = createSubFlags(builder, loc, lane, colBaseVec);
+    Value colMasked =
+        createCondSelect(builder, loc, lowerFlags, upperMasked, zero,
+                         mlir::vc4::Cond::cc);
+    Value rowFlags =
+        createSubFlags(builder, loc, predicate.row, predicate.rows);
+    return createCondSelect(builder, loc, rowFlags, colMasked, zero,
+                            mlir::vc4::Cond::cs);
+  }
+
+  return op->emitOpError("unsupported predicate plan for mask materialization");
+}
+
 struct CompareMaskLowering {
   Value lhs;
   Value rhs;
@@ -1413,6 +1516,15 @@ emitPredicateCondition(Operation *op, OpBuilder &builder,
     return constantCondition(false);
 
   if (predicate.kind == PredicatePlan::Class::GeneralMask) {
+    if (predicate.maskValue) {
+      EmittedCondition emitted;
+      emitted.flags = createZeroTestFlags(builder, loc, predicate.maskValue);
+      emitted.branchCond = requireAll
+                               ? mlir::vc4::BranchCond::all_z_clear
+                               : mlir::vc4::BranchCond::any_z_clear;
+      emitted.selectCond = mlir::vc4::Cond::zc;
+      return emitted;
+    }
     if (!predicate.compareLhs || !predicate.compareRhs)
       return op->emitOpError(
           "general predicate plan has no lowered compare operands");
@@ -1556,6 +1668,11 @@ emitPredicateSelect(Operation *op, OpBuilder &builder,
   if (predicate.kind == PredicatePlan::Class::Empty)
     return falseValue;
   if (predicate.kind == PredicatePlan::Class::GeneralMask) {
+    if (predicate.maskValue) {
+      Value flags = createZeroTestFlags(builder, loc, predicate.maskValue);
+      return createCondSelect(builder, loc, flags, trueValue, falseValue,
+                              mlir::vc4::Cond::zc);
+    }
     if (!predicate.compareLhs || !predicate.compareRhs)
       return op->emitOpError(
           "general predicate plan has no lowered compare operands");
@@ -1972,8 +2089,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         mapFragmentCmpPredicate(op, lhs, rhs);
     if (failed(compare))
       return failure();
-    state.predicates[op->getResult(0)] =
-        PredicatePlan::generalMask(compare->lhs, compare->rhs, compare->cond);
+    Value one = createMaskConstant(builder, op->getLoc(), 1);
+    Value zero = createMaskConstant(builder, op->getLoc(), 0);
+    Value flags = createSubFlags(builder, op->getLoc(), compare->lhs,
+                                 compare->rhs);
+    Value mask = createCondSelect(builder, op->getLoc(), flags, one, zero,
+                                  compare->cond);
+    state.predicates[op->getResult(0)] = PredicatePlan::generalMaskValue(mask);
     return success();
   }
   if (hasName(op, kFragmentSelectOpName)) {
@@ -2034,6 +2156,25 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         result = *rhs;
       else if (rhs->kind == PredicatePlan::Class::Full)
         result = *lhs;
+      else if (lhs->kind == PredicatePlan::Class::TailPrefix &&
+               rhs->kind == PredicatePlan::Class::TailPrefix &&
+               isSameSSAValue(lhs->base, rhs->base)) {
+        Value limit = createI32Min(builder, op->getLoc(), lhs->limit,
+                                   rhs->limit);
+        result = PredicatePlan::tailPrefix(lhs->base, limit);
+      }
+      else {
+        FailureOr<Value> lhsMask =
+            materializePredicateMask(op, builder, *lhs, state);
+        FailureOr<Value> rhsMask =
+            materializePredicateMask(op, builder, *rhs, state);
+        if (failed(lhsMask) || failed(rhsMask))
+          return failure();
+        Value mask = createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask,
+                                            *rhsMask,
+                                            mlir::vc4::AddOpcode::bit_and);
+        result = PredicatePlan::generalMaskValue(mask);
+      }
     } else {
       if (lhs->kind == PredicatePlan::Class::Full ||
           rhs->kind == PredicatePlan::Class::Full)
@@ -2042,6 +2183,25 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         result = *rhs;
       else if (rhs->kind == PredicatePlan::Class::Empty)
         result = *lhs;
+      else if (lhs->kind == PredicatePlan::Class::TailPrefix &&
+               rhs->kind == PredicatePlan::Class::TailPrefix &&
+               isSameSSAValue(lhs->base, rhs->base)) {
+        Value limit = createI32Max(builder, op->getLoc(), lhs->limit,
+                                   rhs->limit);
+        result = PredicatePlan::tailPrefix(lhs->base, limit);
+      }
+      else {
+        FailureOr<Value> lhsMask =
+            materializePredicateMask(op, builder, *lhs, state);
+        FailureOr<Value> rhsMask =
+            materializePredicateMask(op, builder, *rhs, state);
+        if (failed(lhsMask) || failed(rhsMask))
+          return failure();
+        Value mask = createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask,
+                                            *rhsMask,
+                                            mlir::vc4::AddOpcode::bit_or);
+        result = PredicatePlan::generalMaskValue(mask);
+      }
     }
     state.predicates[op->getResult(0)] = result;
     return success();
@@ -2055,6 +2215,18 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       result = PredicatePlan::empty();
     else if (input->kind == PredicatePlan::Class::Empty)
       result = PredicatePlan::full();
+    else {
+      FailureOr<Value> inputMask =
+          materializePredicateMask(op, builder, *input, state);
+      if (failed(inputMask))
+        return failure();
+      Value one = createMaskConstant(builder, op->getLoc(), 1);
+      Value zero = createMaskConstant(builder, op->getLoc(), 0);
+      Value flags = createZeroTestFlags(builder, op->getLoc(), *inputMask);
+      Value mask = createCondSelect(builder, op->getLoc(), flags, one, zero,
+                                    mlir::vc4::Cond::zs);
+      result = PredicatePlan::generalMaskValue(mask);
+    }
     state.predicates[op->getResult(0)] = result;
     return success();
   }

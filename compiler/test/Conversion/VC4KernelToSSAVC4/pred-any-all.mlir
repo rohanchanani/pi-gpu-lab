@@ -2,11 +2,13 @@
 
 // CHECK-LABEL: ssavc4.func @pred_any_all
 // CHECK: ssavc4.make_flags
-// CHECK: ssavc4.cond_br
-// CHECK-SAME: cond = #vc4.branch_cond<any_c_set>
+// CHECK: ssavc4.cond_select {{.*}} {cond = #vc4.cond<cs>}
+// CHECK: ssavc4.make_flags {{.*}} {kind = #ssavc4.flag_kind<zero_test>}
+// CHECK: ssavc4.cond_br {{.*}} {cond = #vc4.branch_cond<any_z_clear>}
+// CHECK: ssavc4.make_flags {{.*}} {kind = #ssavc4.flag_kind<zero_test>}
+// CHECK: ssavc4.cond_br {{.*}} {cond = #vc4.branch_cond<all_z_clear>}
 // CHECK: ssavc4.make_flags
-// CHECK: ssavc4.cond_br
-// CHECK-SAME: cond = #vc4.branch_cond<all_c_set>
+// CHECK: ssavc4.cond_br {{.*}} {cond = #vc4.branch_cond<any_c_set>}
 // CHECK: ssavc4.cond_br
 // CHECK: ssavc4.cond_br
 // CHECK-NOT: vc4kernel.
