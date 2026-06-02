@@ -1565,6 +1565,14 @@ static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row) {
   return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots + rawVDRSlots;
 }
 
+static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
+                                                     int64_t row) {
+  unsigned dynamicVDRSlots = useMutex ? 18 : 16;
+  unsigned dynamicAddressSlots = row == 0 ? 0 : 1;
+  return getRowOffsetScratchSlotCount(row) + dynamicAddressSlots +
+         dynamicVDRSlots;
+}
+
 static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
                                                 bool dynamicPitch) {
   unsigned slots = useMutex ? 21 : 19;
@@ -1601,6 +1609,18 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     unsigned clampSlots = 4;
     unsigned dynamicRowsVDRSlots = useMutex ? 16 : 14;
     return total + clampSlots + guardSlots + dynamicRowsVDRSlots;
+  }
+  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 2) {
+    unsigned zeroFillSlots = useMutex ? 7 : 4;
+    unsigned clampSlots = 4;
+    unsigned guardSlots = 8;
+    unsigned total = 0;
+    for (int64_t row = 0; row < maxRows; ++row)
+      total += getRowOffsetScratchSlotCount(row) + zeroFillSlots;
+    for (int64_t row = 0; row < maxRows; ++row)
+      total += guardSlots + clampSlots + guardSlots +
+               getDynamicVDRActiveColsBodySlotCount(useMutex, row);
+    return total;
   }
   if (!pitch)
     return rawVDRSlots;
@@ -4265,13 +4285,61 @@ static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
   createNopBundle(builder, loc);
 }
 
+static void emitRuntimeActiveColsGuard(OpBuilder &builder, Location loc,
+                                       int64_t activeColsReg, int64_t maxCols,
+                                       unsigned guardedPayloadSlots) {
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, activeColsReg,
+                        activeColsReg, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::max,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+  createSplat32LDI(builder, loc, maxCols, 35);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::min,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/31, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::sub,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/1,
+                        /*setFlags=*/true);
+  createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
+                        static_cast<int64_t>(7 + guardedPayloadSlots) * 8,
+                        /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+}
+
 static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
                                      int64_t addressReg, int64_t vpmBaseRowReg,
                                      int64_t setupWord, bool useMutex,
                                      mlir::vc4::QPUMux addressMux =
                                          mlir::vc4::QPUMux::a,
                                      mlir::vc4::QPUMux vpmBaseRowMux =
-                                         mlir::vc4::QPUMux::a) {
+                                         mlir::vc4::QPUMux::a,
+                                     std::optional<int64_t> addressAddReg =
+                                         std::nullopt,
+                                     int64_t vpmRowOffset = 0) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -4327,14 +4395,34 @@ static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
-                        /*raddrB=*/0, vpmBaseRowMux,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  if (vpmRowOffset != 0) {
+    createSplat32LDI(builder, loc, vpmRowOffset, 33);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::add,
+                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                          /*raddrB=*/0, vpmBaseRowMux,
+                          mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::shl,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::shl,
+                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                          /*raddrB=*/0, vpmBaseRowMux,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  }
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
@@ -4343,12 +4431,29 @@ static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
                     mlir::vc4::QPUMux::r1);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
-  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
-                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-                   addressReg, addressReg, addressMux,
-                   addressMux, mlir::vc4::QPUMux::r0,
-                   mlir::vc4::QPUMux::r1);
+  if (addressAddReg) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *addressAddReg,
+                          *addressAddReg, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
+                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                     addressReg, /*raddrB=*/0, addressMux,
+                     mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                     mlir::vc4::QPUMux::r1);
+  } else {
+    createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
+                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                     mlir::vc4::AddOpcode::bit_or,
+                     mlir::vc4::MulOpcode::nop, addressReg, addressReg,
+                     addressMux, addressMux, mlir::vc4::QPUMux::r0,
+                     mlir::vc4::QPUMux::r1);
+  }
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
   if (useMutex)
     emitMutexRelease(builder, loc);
@@ -4471,16 +4576,62 @@ static LogicalResult emitVDRLoadRectDynamic(
       return source->emitOpError()
              << "dynamic rectangular VDR runtime active_rows currently "
                 "supports only up to two-row rectangles";
-    if (!activeCols || clampedCols != maxCols)
-      return source->emitOpError()
-             << "dynamic rectangular VDR runtime active_rows currently "
-                "requires full static active_cols";
     std::optional<int64_t> activeRowsReg =
         allocator.lookup(templ, templ.operands[2]);
     if (!activeRowsReg)
       return source->emitOpError()
              << "uses a dynamic active row value that is not defined by a "
                 "lowerable SSAVC4 op";
+    if (!activeCols) {
+      std::optional<int64_t> activeColsReg =
+          allocator.lookup(templ, templ.operands[3]);
+      if (!activeColsReg)
+        return source->emitOpError()
+               << "uses a dynamic active column value that is not defined by "
+                  "a lowerable SSAVC4 op";
+      int64_t oneRowSetup = 0;
+      if (failed(buildVDRLoadSetupWordFromParts(
+              source, maxCols, /*nrows=*/1, maxCols * 4, dstX, vpmPitch,
+              vertical, oneRowSetup)))
+        return failure();
+      for (int64_t row = 0; row < maxRows; ++row) {
+        if (row == 0) {
+          emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
+                              vertical, useMutex);
+        } else {
+          emitAddConstantToScratch(builder, source->getLoc(), *vpmBaseRowReg,
+                                   mlir::vc4::QPUMux::a, row * vpmPitch,
+                                   /*scratchWaddr=*/32);
+          emitVPMZeroWriteRow(builder, source->getLoc(), /*rowReg=*/0, dstX,
+                              vertical, useMutex, mlir::vc4::QPUMux::r0);
+        }
+      }
+      for (int64_t row = 0; row < maxRows; ++row) {
+        unsigned vdrBodySlots =
+            getDynamicVDRActiveColsBodySlotCount(useMutex, row);
+        unsigned activeColsPayloadSlots = 4 + 8 + vdrBodySlots;
+        emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
+                                   maxRows, row, activeColsPayloadSlots);
+        emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
+                                   maxCols, vdrBodySlots);
+        if (row == 0) {
+          emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
+                                   *vpmBaseRowReg, oneRowSetup, useMutex);
+        } else {
+          emitDynamicVDRLoadOneRow(builder, source->getLoc(), *addressReg,
+                                   *vpmBaseRowReg, oneRowSetup, useMutex,
+                                   mlir::vc4::QPUMux::a,
+                                   mlir::vc4::QPUMux::a,
+                                   /*addressAddReg=*/*pitchReg,
+                                   /*vpmRowOffset=*/row * vpmPitch);
+        }
+      }
+      return success();
+    }
+    if (clampedCols != maxCols)
+      return source->emitOpError()
+             << "dynamic rectangular VDR runtime active_rows currently "
+                "requires full static active_cols";
     if (!pitchBytes) {
       if (maxRows < 1 || maxRows > 2)
         return source->emitOpError()
@@ -4559,52 +4710,9 @@ static LogicalResult emitVDRLoadRectDynamic(
                 "lowerable SSAVC4 op";
     emitVPMZeroWriteRow(builder, source->getLoc(), *vpmBaseRowReg, dstX,
                         vertical, useMutex);
-    createScheduledBundle(builder, source->getLoc(),
-                          mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/34, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *activeColsReg,
-                          *activeColsReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
-    createScheduledBundle(builder, source->getLoc(),
-                          mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/34, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::max,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1, /*smallImm=*/0);
-    createSplat32LDI(builder, source->getLoc(), maxCols, 35);
-    createScheduledBundle(builder, source->getLoc(),
-                          mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/34, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::min,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
-    createScheduledBundle(builder, source->getLoc(),
-                          mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::sub,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1, /*smallImm=*/1,
-                          /*setFlags=*/true);
-	    unsigned bodySlots = useMutex ? 18 : 16;
-	    createScheduledBranch(builder, source->getLoc(),
-	                          mlir::vc4::BranchCond::any_c_set,
-	                          static_cast<int64_t>(7 + bodySlots) * 8,
-	                          /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
-    createNopBundle(builder, source->getLoc());
-    createNopBundle(builder, source->getLoc());
-    createNopBundle(builder, source->getLoc());
+    unsigned bodySlots = useMutex ? 18 : 16;
+    emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
+                               maxCols, bodySlots);
     int64_t setupWord = 0;
     int64_t setupPitchBytes = pitchBytes ? *pitchBytes : maxCols * 4;
     if (failed(buildVDRLoadSetupWordFromParts(
