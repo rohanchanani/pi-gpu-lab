@@ -18,7 +18,7 @@ module {
     %tag_b = arith.constant 1627389952 : i32
     %use_a = arith.cmpi ne, %control, %c0 : i32
     %tag = arith.select %use_a, %tag_a, %tag_b : i32
-    %request = vc4kernel.program_id : i32
+    %request = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %base_index = arith.shli %request, %c4 : i32
     %base_bytes = arith.shli %request, %c6 : i32

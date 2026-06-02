@@ -1,0 +1,26 @@
+{
+  "name": "program_id_3d_num_programs_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "grid_x": 3,
+    "grid_y": 4,
+    "grid_z": 2,
+    "requests": 24,
+    "waves": 2,
+    "buffer_n": 416,
+    "saw_pid_0_0_0": 1,
+    "saw_pid_2_3_1": 1,
+    "saw_request_0": 1,
+    "saw_request_11": 1,
+    "saw_request_12": 1,
+    "saw_request_23": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 1
+  }
+}

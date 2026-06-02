@@ -259,6 +259,9 @@ static bool hasLaunchABIArgumentName(const LaunchABIModel &launchABI,
 static bool isRuntimeLaunchABIName(llvm::StringRef name) {
   return name == "logical_request" || name == "total_requests" ||
          name == "logical_block_id" || name == "logical_warp_id" ||
+         name == "program_id_x" || name == "program_id_y" ||
+         name == "program_id_z" || name == "num_programs_x" ||
+         name == "num_programs_y" || name == "num_programs_z" ||
          name == "warps_per_block" || name == "vpm_base_row" ||
          name == "vpm_rows" || name == "semaphore_base" ||
          name == "barrier_arrive_sem" || name == "barrier_go_sem" ||
@@ -410,6 +413,18 @@ static const char *getBuiltinKindName(mlir::vc4::BuiltinKind kind) {
     return "spill_frame_stride_bytes";
   case mlir::vc4::BuiltinKind::spill_vpm_row:
     return "spill_vpm_row";
+  case mlir::vc4::BuiltinKind::program_id_x:
+    return "program_id_x";
+  case mlir::vc4::BuiltinKind::program_id_y:
+    return "program_id_y";
+  case mlir::vc4::BuiltinKind::program_id_z:
+    return "program_id_z";
+  case mlir::vc4::BuiltinKind::num_programs_x:
+    return "num_programs_x";
+  case mlir::vc4::BuiltinKind::num_programs_y:
+    return "num_programs_y";
+  case mlir::vc4::BuiltinKind::num_programs_z:
+    return "num_programs_z";
   }
   return "unknown";
 }
@@ -2843,6 +2858,18 @@ getRuntimeBuiltinRequestInfoField(llvm::StringRef kind) {
     return llvm::StringRef("total_requests");
   if (kind == "logical_block_id")
     return llvm::StringRef("logical_block_id");
+  if (kind == "program_id_x")
+    return llvm::StringRef("program_id_x");
+  if (kind == "program_id_y")
+    return llvm::StringRef("program_id_y");
+  if (kind == "program_id_z")
+    return llvm::StringRef("program_id_z");
+  if (kind == "num_programs_x")
+    return llvm::StringRef("num_programs_x");
+  if (kind == "num_programs_y")
+    return llvm::StringRef("num_programs_y");
+  if (kind == "num_programs_z")
+    return llvm::StringRef("num_programs_z");
   if (kind == "logical_warp_id")
     return llvm::StringRef("logical_warp_id");
   if (kind == "warps_per_block")
@@ -3064,7 +3091,9 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
      << " hidden_arena_before_public_heap="
      << (programLayout.spillArenaBytes ? 1 : 0)
      << " request_info_fields=resident_request_id,spill_frame_base,"
-        "spill_frame_bytes,spill_frame_stride_bytes,spill_vpm_row */\n";
+        "spill_frame_bytes,spill_frame_stride_bytes,spill_vpm_row,"
+        "program_id_x,program_id_y,program_id_z,num_programs_x,"
+        "num_programs_y,num_programs_z */\n";
   os << "/* Generated launches pack kernel-specific uniforms; libpi owns "
         "allocation, code residency, queueing, and heap/copy APIs. */\n\n";
 
@@ -3361,7 +3390,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     for (const LaunchABIArgumentModel &arg : kernelABI.arguments)
       os << "  ctx." << arg.name << " = " << arg.name << ";\n";
     os << "  return vc4LaunchKernel(program, " << launchKernel.kernelId
-       << "u, totalRequests, warpsPerBlock, " << kernelBase
+       << "u, grid, block, totalRequests, warpsPerBlock, " << kernelBase
        << "_pack_uniforms, &ctx);\n";
     os << "}\n\n";
   }

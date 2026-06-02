@@ -57,7 +57,13 @@ def VC4_BuiltinKind : VC4_DialectI32Enum<"BuiltinKind",
       I32EnumAttrCase<"spill_frame_base", 13>,
       I32EnumAttrCase<"spill_frame_bytes", 14>,
       I32EnumAttrCase<"spill_frame_stride_bytes", 15>,
-      I32EnumAttrCase<"spill_vpm_row", 16>
+      I32EnumAttrCase<"spill_vpm_row", 16>,
+      I32EnumAttrCase<"program_id_x", 17>,
+      I32EnumAttrCase<"program_id_y", 18>,
+      I32EnumAttrCase<"program_id_z", 19>,
+      I32EnumAttrCase<"num_programs_x", 20>,
+      I32EnumAttrCase<"num_programs_y", 21>,
+      I32EnumAttrCase<"num_programs_z", 22>
     ]>;
 
 // Encodings match the VideoCore IV 3D Architecture Reference Guide QPU

@@ -32,8 +32,8 @@
 // SOURCE-DAG: return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);
 // SOURCE-DAG: static int first_layout_pack_uniforms
 // SOURCE-DAG: static int second_layout_pack_uniforms
-// SOURCE-DAG: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, first_layout_pack_uniforms, &ctx);
-// SOURCE-DAG: return vc4LaunchKernel(program, 1u, totalRequests, warpsPerBlock, second_layout_pack_uniforms, &ctx);
+// SOURCE-DAG: return vc4LaunchKernel(program, 0u, grid, block, totalRequests, warpsPerBlock, first_layout_pack_uniforms, &ctx);
+// SOURCE-DAG: return vc4LaunchKernel(program, 1u, grid, block, totalRequests, warpsPerBlock, second_layout_pack_uniforms, &ctx);
 // SOURCE-NOT: VC4_SCHEDULE_COOPERATIVE_BLOCK VC4_SCHEDULE_INDEPENDENT_VECTOR
 // SOURCE-NOT: struct vc4_codegen_kernel_desc
 // SOURCE-NOT: kernel_descs[VC4_CODEGEN_PROGRAM_KERNELS]

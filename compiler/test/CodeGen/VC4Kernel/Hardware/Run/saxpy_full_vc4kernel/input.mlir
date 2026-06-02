@@ -13,7 +13,7 @@ module {
     %c2 = arith.constant 2 : i32
     %c4 = arith.constant 4 : i32
     %c6 = arith.constant 6 : i32
-    %request = vc4kernel.program_id : i32
+    %request = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %base_index = arith.shli %request, %c4 : i32
     %base_bytes = arith.shli %request, %c6 : i32

@@ -51,7 +51,7 @@
 // SOURCE-NOT: uint32_t logicalN = (uint32_t)n;
 // SOURCE: vc4DeviceRangeIsAllocated(program, out,
 // SOURCE: vc4DeviceRangeIsAllocated(program, input,
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, uniform_packing_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, grid, block, totalRequests, warpsPerBlock, uniform_packing_pack_uniforms, &ctx);
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "program_name": "uniform_packing"

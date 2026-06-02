@@ -97,6 +97,14 @@ def VC4Kernel_ReturnOp : VC4Kernel_Op<"return", [Terminator]> {
 }
 
 def VC4Kernel_ProgramIdOp : VC4Kernel_PureOp<"program_id"> {
+  let arguments = (ins I32Attr:$axis);
+  let results = (outs VC4Kernel_I32:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Kernel_NumProgramsOp : VC4Kernel_PureOp<"num_programs"> {
+  let arguments = (ins I32Attr:$axis);
   let results = (outs VC4Kernel_I32:$result);
   let assemblyFormat = "attr-dict `:` type($result)";
   let hasVerifier = 1;

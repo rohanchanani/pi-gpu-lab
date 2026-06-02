@@ -13,7 +13,7 @@ module {
     arg_attrs = [],
     warps_per_block = 1 : i32
   } {
-    %p = vc4kernel.program_id : i32
+    %p = vc4kernel.program_id {axis = 0 : i32} : i32
     %w = vc4kernel.warp_id : i32
     vc4kernel.return
   }

@@ -32,7 +32,7 @@ module {
     %c6 = arith.constant 6 : i32
     %tag = arith.constant 1644167168 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
-    %pid = vc4kernel.program_id : i32
+    %pid = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %request_bytes = arith.shli %pid, %c6 : i32
     %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>

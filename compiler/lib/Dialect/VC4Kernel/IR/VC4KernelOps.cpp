@@ -724,7 +724,20 @@ LogicalResult ReturnOp::verify() {
 }
 
 LogicalResult ProgramIdOp::verify() {
-  return verifyNoUniformIndex(getOperation(), "program_id");
+  if (failed(verifyNoUniformIndex(getOperation(), "program_id")))
+    return failure();
+  int64_t axis = getAxis();
+  if (axis < 0 || axis > 2)
+    return emitOpError("axis must be 0, 1, or 2");
+  return success();
+}
+LogicalResult NumProgramsOp::verify() {
+  if (failed(verifyNoUniformIndex(getOperation(), "num_programs")))
+    return failure();
+  int64_t axis = getAxis();
+  if (axis < 0 || axis > 2)
+    return emitOpError("axis must be 0, 1, or 2");
+  return success();
 }
 LogicalResult WarpIdOp::verify() {
   return verifyNoUniformIndex(getOperation(), "warp_id");

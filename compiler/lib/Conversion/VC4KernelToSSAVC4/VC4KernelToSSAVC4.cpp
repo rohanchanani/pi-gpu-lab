@@ -42,6 +42,7 @@ namespace {
 constexpr llvm::StringLiteral kKernelOpName("vc4kernel.kernel");
 constexpr llvm::StringLiteral kReturnOpName("vc4kernel.return");
 constexpr llvm::StringLiteral kProgramIdOpName("vc4kernel.program_id");
+constexpr llvm::StringLiteral kNumProgramsOpName("vc4kernel.num_programs");
 constexpr llvm::StringLiteral kWarpIdOpName("vc4kernel.warp_id");
 constexpr llvm::StringLiteral kLaneRangeOpName("vc4kernel.lane_range");
 constexpr llvm::StringLiteral kPredFullOpName("vc4kernel.pred.full");
@@ -168,6 +169,7 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.kernel",
       "vc4kernel.return",
       "vc4kernel.program_id",
+      "vc4kernel.num_programs",
       "vc4kernel.warp_id",
       "vc4kernel.lane_range",
       "vc4kernel.pred.full",
@@ -431,7 +433,52 @@ static Attribute getBuiltinKindAttr(OpBuilder &builder, StringRef name) {
   if (name == "semaphore_base")
     return mlir::vc4::BuiltinKindAttr::get(
         ctx, mlir::vc4::BuiltinKind::semaphore_base);
+  if (name == "program_id_x")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::program_id_x);
+  if (name == "program_id_y")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::program_id_y);
+  if (name == "program_id_z")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::program_id_z);
+  if (name == "num_programs_x")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::num_programs_x);
+  if (name == "num_programs_y")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::num_programs_y);
+  if (name == "num_programs_z")
+    return mlir::vc4::BuiltinKindAttr::get(
+        ctx, mlir::vc4::BuiltinKind::num_programs_z);
   return {};
+}
+
+static int64_t getAxisAttrValue(Operation *op) {
+  if (auto axis = op->getAttrOfType<IntegerAttr>("axis"))
+    return axis.getInt();
+  return 0;
+}
+
+static StringRef getAxisSuffix(int64_t axis) {
+  switch (axis) {
+  case 0:
+    return "x";
+  case 1:
+    return "y";
+  case 2:
+    return "z";
+  default:
+    return "x";
+  }
+}
+
+static std::string getProgramIdBuiltinName(int64_t axis) {
+  return (Twine("program_id_") + getAxisSuffix(axis)).str();
+}
+
+static std::string getNumProgramsBuiltinName(int64_t axis) {
+  return (Twine("num_programs_") + getAxisSuffix(axis)).str();
 }
 
 static DictionaryAttr buildBuiltinABIEntry(OpBuilder &builder, StringRef name,
@@ -495,7 +542,34 @@ struct VC4KernelResourceSummary {
 static void appendRequiredBuiltins(Operation *kernel,
                                    const VC4KernelResourceSummary &summary,
                                    llvm::function_ref<void(StringRef)> append) {
-  if (kernelContains(kernel, kProgramIdOpName)) {
+  SmallVector<std::string, 8> identityBuiltins;
+  auto appendIdentityBuiltin = [&](std::string name) {
+    if (!llvm::is_contained(identityBuiltins, name))
+      identityBuiltins.push_back(std::move(name));
+  };
+  bool hasLegacyAxis0ProgramId = false;
+  bool needs3DGridIdentity = false;
+  kernel->walk([&](Operation *op) {
+    if (hasName(op, kProgramIdOpName)) {
+      int64_t axis = getAxisAttrValue(op);
+      if (axis == 0)
+        hasLegacyAxis0ProgramId = true;
+      else
+        needs3DGridIdentity = true;
+    } else if (hasName(op, kNumProgramsOpName)) {
+      needs3DGridIdentity = true;
+    }
+  });
+  if (needs3DGridIdentity) {
+    kernel->walk([&](Operation *op) {
+      if (hasName(op, kProgramIdOpName))
+        appendIdentityBuiltin(getProgramIdBuiltinName(getAxisAttrValue(op)));
+      else if (hasName(op, kNumProgramsOpName))
+        appendIdentityBuiltin(getNumProgramsBuiltinName(getAxisAttrValue(op)));
+    });
+    for (const std::string &name : identityBuiltins)
+      append(name);
+  } else if (hasLegacyAxis0ProgramId) {
     append("logical_request");
     append("total_requests");
   }
@@ -1866,9 +1940,20 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     }
     return success();
   }
-  if (hasName(op, kProgramIdOpName) || hasName(op, kWarpIdOpName)) {
-    StringRef name = hasName(op, kProgramIdOpName)   ? "logical_request"
-                                                    : "logical_warp_id";
+  if (hasName(op, kProgramIdOpName) || hasName(op, kNumProgramsOpName) ||
+      hasName(op, kWarpIdOpName)) {
+    std::string ownedName;
+    StringRef name;
+    if (hasName(op, kProgramIdOpName)) {
+      ownedName = getProgramIdBuiltinName(getAxisAttrValue(op));
+      name = state.launchABI.lookupBuiltin(ownedName) ? StringRef(ownedName)
+                                                      : StringRef("logical_request");
+    } else if (hasName(op, kNumProgramsOpName)) {
+      ownedName = getNumProgramsBuiltinName(getAxisAttrValue(op));
+      name = ownedName;
+    } else {
+      name = "logical_warp_id";
+    }
     Value builtin = state.launchABI.lookupBuiltin(name);
     if (!builtin)
       return op->emitOpError("missing launch builtin uniform for identity op");

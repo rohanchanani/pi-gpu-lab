@@ -83,9 +83,10 @@ static int expect_u32(const char *label, uint32_t actual, uint32_t expected) {
 
 static int test_zero_requests(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   if (create_program(&program) < 0)
     return 0;
-  int ok = vc4LaunchKernel(program, 0u, 0u, 1u, 0, 0) == 0;
+  int ok = vc4LaunchKernel(program, 0u, dim, dim, 0u, 1u, 0, 0) == 0;
   ok &= expect_u32("zero_launches", vc4ProgramLaunches(program), 1u);
   ok &= expect_u32("zero_failures", vc4ProgramLaunchFailures(program), 0u);
   ok &= expect_u32("zero_srqpc", vc4_mailbox_stub_srqpc_writes(), 0u);
@@ -95,10 +96,12 @@ static int test_zero_requests(void) {
 
 static int test_one_request(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   struct pack_state state = {0u, 0xffffffffu, 0u, 0u};
   if (create_program(&program) < 0)
     return 0;
-  int ok = vc4LaunchKernel(program, 0u, 1u, 1u, pack_uniforms, &state) == 0;
+  int ok =
+      vc4LaunchKernel(program, 0u, dim, dim, 1u, 1u, pack_uniforms, &state) == 0;
   ok &= expect_u32("one_pack_calls", state.calls, 1u);
   ok &= expect_u32("one_srqpc", vc4_mailbox_stub_srqpc_writes(), 1u);
   ok &= expect_u32("one_srqua", vc4_mailbox_stub_srqua_writes(), 1u);
@@ -110,12 +113,14 @@ static int test_one_request(void) {
 
 static int test_two_waves(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   struct pack_state state = {0u, 0xffffffffu, 0u, 0u};
   if (create_program(&program) < 0)
     return 0;
   uint32_t requests = VC4_RUNTIME_MAX_QPUS + 1u;
   int ok =
-      vc4LaunchKernel(program, 0u, requests, 1u, pack_uniforms, &state) == 0;
+      vc4LaunchKernel(program, 0u, dim, dim, requests, 1u, pack_uniforms,
+                      &state) == 0;
   ok &= expect_u32("two_waves_pack_calls", state.calls, requests);
   ok &= expect_u32("two_waves_srqpc", vc4_mailbox_stub_srqpc_writes(),
                    requests);
@@ -129,10 +134,12 @@ static int test_two_waves(void) {
 
 static int test_pack_failure(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   struct pack_state state = {0u, 1u, 0u, 0u};
   if (create_program(&program) < 0)
     return 0;
-  int ok = vc4LaunchKernel(program, 0u, 2u, 1u, pack_uniforms, &state) < 0;
+  int ok =
+      vc4LaunchKernel(program, 0u, dim, dim, 2u, 1u, pack_uniforms, &state) < 0;
   ok &= expect_u32("pack_failure_calls", state.calls, 1u);
   ok &= expect_u32("pack_failure_srqpc", vc4_mailbox_stub_srqpc_writes(), 0u);
   ok &= expect_u32("pack_failure_launches", vc4ProgramLaunches(program), 0u);
@@ -144,12 +151,14 @@ static int test_pack_failure(void) {
 
 static int test_timeout(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   struct pack_state state = {0u, 0xffffffffu, 0u, 0u};
   if (create_program(&program) < 0)
     return 0;
   vc4_mailbox_stub_set_complete_on_launch(0u);
   vc4_mailbox_stub_set_time_step_usec(2000001u);
-  int ok = vc4LaunchKernel(program, 0u, 1u, 1u, pack_uniforms, &state) < 0;
+  int ok =
+      vc4LaunchKernel(program, 0u, dim, dim, 1u, 1u, pack_uniforms, &state) < 0;
   ok &= expect_u32("timeout_pack_calls", state.calls, 1u);
   ok &= expect_u32("timeout_srqpc", vc4_mailbox_stub_srqpc_writes(), 1u);
   ok &= expect_u32("timeout_launches", vc4ProgramLaunches(program), 0u);
@@ -160,15 +169,18 @@ static int test_timeout(void) {
 
 static int test_active_qpu_bounds(void) {
   struct vc4_program *program = 0;
+  vc4_dim3 dim = {1u, 1u, 1u};
   struct pack_state state = {0u, 0xffffffffu, 0u, 0u};
   if (create_program(&program) < 0)
     return 0;
   vc4_runtime_test_set_active_qpus(program, 0u);
-  int ok = vc4LaunchKernel(program, 0u, 1u, 1u, pack_uniforms, &state) < 0;
+  int ok =
+      vc4LaunchKernel(program, 0u, dim, dim, 1u, 1u, pack_uniforms, &state) < 0;
   ok &= expect_u32("active_zero_failures", vc4ProgramLaunchFailures(program),
                    1u);
   vc4_runtime_test_set_active_qpus(program, VC4_RUNTIME_MAX_QPUS + 1u);
-  ok &= vc4LaunchKernel(program, 0u, 1u, 1u, pack_uniforms, &state) < 0;
+  ok &= vc4LaunchKernel(program, 0u, dim, dim, 1u, 1u, pack_uniforms,
+                        &state) < 0;
   ok &= expect_u32("active_too_many_failures",
                    vc4ProgramLaunchFailures(program), 2u);
   ok &= expect_u32("active_bounds_launches", vc4ProgramLaunches(program), 0u);

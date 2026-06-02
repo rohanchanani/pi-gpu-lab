@@ -73,4 +73,4 @@
 // SOURCE-LABEL: int saxpy_full_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t x, vc4_deviceptr_t y, float alpha, uint32_t n) {
 // SOURCE: vc4DeviceRangeIsAllocated(program, x,
 // SOURCE: vc4DeviceRangeIsAllocated(program, y,
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, saxpy_full_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, grid, block, totalRequests, warpsPerBlock, saxpy_full_pack_uniforms, &ctx);

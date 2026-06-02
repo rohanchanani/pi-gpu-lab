@@ -29,7 +29,7 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %pid = vc4kernel.program_id : i32
+    %pid = vc4kernel.program_id {axis = 0 : i32} : i32
     %alpha_v = vc4kernel.splat %alpha : f32 -> vector<16xf32>
     %pid_v = vc4kernel.splat %pid : i32 -> vector<16xi32>
     vc4kernel.return

@@ -8,7 +8,7 @@
 // SOURCE-LABEL: static int spill_cooperative_request_info_pack_uniforms
 // SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
 // SOURCE: uniformWords[1] = requestInfo->resident_request_id; /* builtin resident_request_id */
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, spill_cooperative_request_info_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, grid, block, totalRequests, warpsPerBlock, spill_cooperative_request_info_pack_uniforms, &ctx);
 
 vc4.module @spill_cooperative_request_info {
   vc4.func @kernel() attributes {

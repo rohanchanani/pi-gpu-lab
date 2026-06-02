@@ -6,8 +6,12 @@ module {
     arg_attrs = [],
     warps_per_block = 1 : i32
   } {
-    // CHECK: vc4kernel.program_id
-    %p = vc4kernel.program_id : i32
+    // CHECK: vc4kernel.program_id {axis = 0 : i32}
+    %p = vc4kernel.program_id {axis = 0 : i32} : i32
+    // CHECK: vc4kernel.program_id {axis = 1 : i32}
+    %py = vc4kernel.program_id {axis = 1 : i32} : i32
+    // CHECK: vc4kernel.num_programs {axis = 2 : i32}
+    %nz = vc4kernel.num_programs {axis = 2 : i32} : i32
     // CHECK: vc4kernel.warp_id
     %w = vc4kernel.warp_id : i32
     // CHECK: vc4kernel.lane_range

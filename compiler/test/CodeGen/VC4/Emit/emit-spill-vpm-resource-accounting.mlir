@@ -12,7 +12,7 @@
 // SOURCE-LABEL: static int spill_vpm_resource_accounting_pack_uniforms
 // SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
 // SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_VPM_ROWS_PER_BLOCK + KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
-// SOURCE: return vc4LaunchKernel(program, 0u, totalRequests, warpsPerBlock, spill_vpm_resource_accounting_pack_uniforms, &ctx);
+// SOURCE: return vc4LaunchKernel(program, 0u, grid, block, totalRequests, warpsPerBlock, spill_vpm_resource_accounting_pack_uniforms, &ctx);
 // MANIFEST: "user_vpm_rows_per_block": 16
 // MANIFEST: "spill_vpm_rows_per_block": 4
 // MANIFEST: "total_vpm_rows_per_block": 20
