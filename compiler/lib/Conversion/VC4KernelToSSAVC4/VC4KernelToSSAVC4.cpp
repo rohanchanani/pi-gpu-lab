@@ -589,6 +589,12 @@ computeVC4KernelResourceSummary(Operation *kernel) {
     if (hasName(op, kVDWStoreVPMOpName)) {
       summary.uses_vdw = true;
       summary.uses_vpm = true;
+      if (op->getNumOperands() > 4) {
+        Operation *predDef = op->getOperand(4).getDefiningOp();
+        if (!predDef || hasName(predDef, kPredTailOpName))
+          summary.compiler_vpm_staging_rows_per_warp =
+              std::max<int64_t>(summary.compiler_vpm_staging_rows_per_warp, 1);
+      }
       return;
     }
     if (hasName(op, kVDWStoreOpName)) {
@@ -868,18 +874,6 @@ static const PredicatePlan *lookupPredicatePlan(Value value,
                                                 const LoweringState &state) {
   auto it = state.predicates.find(value);
   return it == state.predicates.end() ? nullptr : &it->second;
-}
-
-static LogicalResult requireFullPredicate(Operation *op, Value pred,
-                                          LoweringState &state,
-                                          StringRef consumerName) {
-  const PredicatePlan *plan = lookupPredicatePlan(pred, state);
-  if (!plan)
-    return op->emitOpError("predicate operand has no lowering plan");
-  if (!plan->isFull())
-    return op->emitOpError()
-           << consumerName << " lowering currently supports only pred.full";
-  return success();
 }
 
 static Operation *createSSAVC4Module(Operation *kernel, OpBuilder &builder) {
@@ -2453,13 +2447,24 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
               builder.getNamedAttr("memory_pitch_bytes",
                                    op->getAttr("global_stride_bytes")),
               builder.getNamedAttr("vpm_x", op->getAttr("dst_x")),
-              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch"))});
+              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
-    if (failed(requireFullPredicate(op, op->getOperand(4), state,
-                                    "vdw_store_vpm_fragment")))
-      return failure();
+    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(4),
+                                                         state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    if (predicate->kind == PredicatePlan::Class::Empty)
+      return success();
+    if (predicate->kind != PredicatePlan::Class::Full &&
+        predicate->kind != PredicatePlan::Class::TailPrefix)
+      return op->emitOpError()
+             << "vdw_store_vpm_fragment lowering supports pred.full, "
+                "pred.empty, and pred.tail; general-mask predicates are "
+                "rejected by the vc4kernel verifier until a preserve-"
+                "destination VPM fallback is implemented";
     Value srcRow = mapValue(op, op->getOperand(1), state);
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
@@ -2476,19 +2481,44 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedSrcRow))
       return failure();
     srcRow = *plannedSrcRow;
+    if (predicate->kind == PredicatePlan::Class::TailPrefix) {
+      if (!predicate->base || !predicate->limit)
+        return op->emitOpError("pred.tail plan is missing base or limit values");
+      Type fragmentType = VectorType::get({16}, builder.getI32Type());
+      Value fragment = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4VPMReadOpName, srcRow,
+          {getSSAVC4VPMOrientation(builder, op),
+           getSSAVC4VPMWidth(builder, op),
+           getSSAVC4VPMSubword(builder, op),
+           builder.getNamedAttr("x", op->getAttr("src_x")),
+           builder.getNamedAttr("stride", op->getAttr("vpm_pitch")),
+           builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
+          fragmentType);
+      Value activeTail =
+          createI32Sub(builder, op->getLoc(), predicate->limit, predicate->base);
+      emitVDWStore(op, builder, address, fragment, activeTail, state,
+                   std::nullopt);
+      return success();
+    }
     auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
     Value vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
                                builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+    SmallVector<Value, 4> operands{address, srcRow, vpmX};
+    SmallVector<NamedAttribute, 8> attrs{
+        getSSAVC4VPMOrientation(builder, op),
+        getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
+        builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
+        builder.getNamedAttr("memory_pitch_bytes",
+                             builder.getI32IntegerAttr(64)),
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+    if (predicate->kind == PredicatePlan::Class::Full) {
+      attrs.push_back(builder.getNamedAttr(
+          "active_lanes", builder.getI32IntegerAttr(16)));
+    }
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName,
-             {address, srcRow, vpmX},
-             {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
-              builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
-              builder.getNamedAttr("memory_pitch_bytes",
-                                   builder.getI32IntegerAttr(64)),
-              builder.getNamedAttr("active_lanes", builder.getI32IntegerAttr(16))});
+             operands, attrs);
     return success();
   }
   if (hasName(op, kBarrierOpName)) {
