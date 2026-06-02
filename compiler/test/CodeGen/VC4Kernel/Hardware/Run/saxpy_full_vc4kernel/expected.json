@@ -1,0 +1,20 @@
+{
+  "name": "saxpy_full_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 19,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1184,
+    "runtime_allocations": 2,
+    "runtime_launches": 19
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}
