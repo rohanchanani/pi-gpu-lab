@@ -59,6 +59,8 @@ constexpr llvm::StringLiteral kFragmentSubOpName("vc4kernel.fragment_sub");
 constexpr llvm::StringLiteral kFragmentMulOpName("vc4kernel.fragment_mul");
 constexpr llvm::StringLiteral kFragmentShlOpName("vc4kernel.fragment_shl");
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
+constexpr llvm::StringLiteral kFragmentSelectOpName(
+    "vc4kernel.fragment_select");
 constexpr llvm::StringLiteral kFragmentRotateOpName("vc4kernel.fragment_rotate");
 constexpr llvm::StringLiteral kTMULoadOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreOpName("vc4kernel.vdw_store_fragment");
@@ -713,6 +715,9 @@ struct PredicatePlan {
   Value rows;
   Value colBase;
   Value cols;
+  Value compareLhs;
+  Value compareRhs;
+  mlir::vc4::Cond compareCond = mlir::vc4::Cond::zs;
 
   static PredicatePlan full() {
     PredicatePlan plan;
@@ -744,6 +749,15 @@ struct PredicatePlan {
   static PredicatePlan generalMask() {
     PredicatePlan plan;
     plan.kind = Class::GeneralMask;
+    return plan;
+  }
+  static PredicatePlan generalMask(Value lhs, Value rhs,
+                                   mlir::vc4::Cond cond) {
+    PredicatePlan plan;
+    plan.kind = Class::GeneralMask;
+    plan.compareLhs = lhs;
+    plan.compareRhs = rhs;
+    plan.compareCond = cond;
     return plan;
   }
 
@@ -1038,8 +1052,165 @@ static Value createCondSelect(OpBuilder &builder, Location loc, Value flags,
       trueValue.getType());
 }
 
+struct CompareMaskLowering {
+  Value lhs;
+  Value rhs;
+  mlir::vc4::Cond cond = mlir::vc4::Cond::zs;
+};
+
+static FailureOr<CompareMaskLowering>
+mapFragmentCmpPredicate(Operation *op, Value lhs, Value rhs) {
+  auto attr =
+      llvm::dyn_cast_or_null<mlir::vc4kernel::CmpPredicateAttr>(
+          op->getAttr("predicate"));
+  if (!attr)
+    return op->emitOpError("fragment_cmp is missing predicate attribute");
+
+  CompareMaskLowering result;
+  switch (attr.getValue()) {
+  case mlir::vc4kernel::CmpPredicate::eq:
+    result = {lhs, rhs, mlir::vc4::Cond::zs};
+    break;
+  case mlir::vc4kernel::CmpPredicate::ne:
+    result = {lhs, rhs, mlir::vc4::Cond::zc};
+    break;
+  case mlir::vc4kernel::CmpPredicate::ult:
+    result = {lhs, rhs, mlir::vc4::Cond::cs};
+    break;
+  case mlir::vc4kernel::CmpPredicate::uge:
+    result = {lhs, rhs, mlir::vc4::Cond::cc};
+    break;
+  case mlir::vc4kernel::CmpPredicate::ugt:
+    result = {rhs, lhs, mlir::vc4::Cond::cs};
+    break;
+  case mlir::vc4kernel::CmpPredicate::ule:
+    result = {rhs, lhs, mlir::vc4::Cond::cc};
+    break;
+  }
+  return result;
+}
+
 static Value createZeroValue(OpBuilder &builder, Location loc, Type type) {
   return createLoadImm(builder, loc, type, builder.getI32IntegerAttr(0));
+}
+
+static FailureOr<Value>
+emitPredicateSelect(Operation *op, OpBuilder &builder,
+                    const PredicatePlan &predicate, Value trueValue,
+                    Value falseValue) {
+  Location loc = op->getLoc();
+  Type valueType = trueValue.getType();
+  if (trueValue.getType() != falseValue.getType())
+    return op->emitOpError("predicate select values have mismatched types");
+
+  if (predicate.kind == PredicatePlan::Class::Full)
+    return trueValue;
+  if (predicate.kind == PredicatePlan::Class::Empty)
+    return falseValue;
+  if (predicate.kind == PredicatePlan::Class::GeneralMask) {
+    if (!predicate.compareLhs || !predicate.compareRhs)
+      return op->emitOpError(
+          "general predicate plan has no lowered compare operands");
+    Value flags =
+        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    return createCondSelect(builder, loc, flags, trueValue, falseValue,
+                            predicate.compareCond);
+  }
+
+  auto vectorType = llvm::dyn_cast<VectorType>(valueType);
+  if (!vectorType || vectorType.getRank() != 1 ||
+      vectorType.getDimSize(0) != 16)
+    return op->emitOpError(
+        "structured predicate select currently requires vector<16xT> values");
+  VectorType laneType = VectorType::get({16}, builder.getI32Type());
+  Value lane =
+      createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
+                         laneType);
+
+  if (predicate.kind == PredicatePlan::Class::TailPrefix) {
+    if (!predicate.base || !predicate.limit)
+      return op->emitOpError("pred.tail plan is missing base or limit values");
+    Value baseVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.base, {},
+                           laneType);
+    Value limitVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.limit,
+                           {}, laneType);
+    Value index = createI32Add(builder, loc, baseVec, lane);
+    Value flags = createSubFlags(builder, loc, index, limitVec);
+    return createCondSelect(builder, loc, flags, trueValue, falseValue,
+                            mlir::vc4::Cond::cs);
+  }
+
+  if (predicate.kind == PredicatePlan::Class::RectRow) {
+    if (!predicate.row || !predicate.rows || !predicate.colBase ||
+        !predicate.cols)
+      return op->emitOpError(
+          "pred.rect plan is missing row, rows, col_base, or cols values");
+    Value one =
+        createLoadImm(builder, loc, builder.getI32Type(),
+                      builder.getI32IntegerAttr(1));
+    Value sixteen =
+        createLoadImm(builder, loc, builder.getI32Type(),
+                      builder.getI32IntegerAttr(16));
+    Value colBaseVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                           predicate.colBase, {}, laneType);
+    Value colEnd = createI32Add(builder, loc, predicate.colBase,
+                                predicate.cols);
+    Value colEndVec =
+        createOpWithResult(builder, loc, kSSAVC4SplatOpName, colEnd, {},
+                           laneType);
+
+    Value current = trueValue;
+    Value upperFlags = createSubFlags(builder, loc, lane, colEndVec);
+    current = createCondSelect(builder, loc, upperFlags, current, falseValue,
+                               mlir::vc4::Cond::cs);
+    Value lowerFlags = createSubFlags(builder, loc, lane, colBaseVec);
+    current = createCondSelect(builder, loc, lowerFlags, current, falseValue,
+                               mlir::vc4::Cond::cc);
+    Value rowPlusOne = createI32Add(builder, loc, predicate.row, one);
+    Value rowActiveFlags =
+        createSubFlags(builder, loc, predicate.rows, rowPlusOne);
+    current = createCondSelect(builder, loc, rowActiveFlags, current,
+                               falseValue, mlir::vc4::Cond::cc);
+    Value colsActiveFlags =
+        createSubFlags(builder, loc, predicate.cols, one);
+    current = createCondSelect(builder, loc, colsActiveFlags, current,
+                               falseValue, mlir::vc4::Cond::cc);
+    Value colBaseInRangeFlags =
+        createSubFlags(builder, loc, predicate.colBase, sixteen);
+    current = createCondSelect(builder, loc, colBaseInRangeFlags, current,
+                               falseValue, mlir::vc4::Cond::cs);
+    return current;
+  }
+
+  return op->emitOpError("unsupported predicate plan for select");
+}
+
+static Value emitTMULoadFragment(Operation *op, OpBuilder &builder, Value base,
+                                 Value offsets, Type resultType) {
+  Location loc = op->getLoc();
+  Value loadBase = base;
+  if (loadBase.getType() != offsets.getType())
+    loadBase = createOpWithResult(builder, loc, kSSAVC4SplatOpName, loadBase,
+                                  {}, offsets.getType());
+  Value address = createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {loadBase, offsets},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(),
+                                          mlir::vc4::AddOpcode::add))},
+      offsets.getType());
+  Value token = createOpWithResult(
+      builder, loc, kSSAVC4TMURequestOpName, address,
+      {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+       builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
+      mlir::ssavc4::AsyncTokenType::get(builder.getContext()));
+  return createOpWithResult(
+      builder, loc, kSSAVC4TMUReadOpName, token,
+      {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
+       builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
+      resultType);
 }
 
 static void emitVDWStore(Operation *op, OpBuilder &builder, Value base,
@@ -1211,7 +1382,28 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value rhs = mapValue(op, op->getOperand(1), state);
     if (!lhs || !rhs)
       return failure();
-    state.predicates[op->getResult(0)] = PredicatePlan::generalMask();
+    FailureOr<CompareMaskLowering> compare =
+        mapFragmentCmpPredicate(op, lhs, rhs);
+    if (failed(compare))
+      return failure();
+    state.predicates[op->getResult(0)] =
+        PredicatePlan::generalMask(compare->lhs, compare->rhs, compare->cond);
+    return success();
+  }
+  if (hasName(op, kFragmentSelectOpName)) {
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(op->getOperand(0), state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    Value trueValue = mapValue(op, op->getOperand(1), state);
+    Value falseValue = mapValue(op, op->getOperand(2), state);
+    if (!trueValue || !falseValue)
+      return failure();
+    FailureOr<Value> selected =
+        emitPredicateSelect(op, builder, *predicate, trueValue, falseValue);
+    if (failed(selected))
+      return failure();
+    state.values[op->getResult(0)] = {*selected};
     return success();
   }
   if (hasName(op, kPredFullOpName)) {
@@ -1297,40 +1489,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::Empty &&
         predicate->kind != PredicatePlan::Class::TailPrefix &&
-        predicate->kind != PredicatePlan::Class::RectRow)
+        predicate->kind != PredicatePlan::Class::RectRow &&
+        predicate->kind != PredicatePlan::Class::GeneralMask)
       return op->emitOpError()
              << "tmu_load_fragment lowering currently supports only "
-                "pred.full, pred.empty, pred.tail, and pred.rect";
+                "pred.full, pred.empty, pred.tail, pred.rect, and "
+                "fragment_cmp general masks";
     Value base = mapValue(op, op->getOperand(0), state);
     Value offsets = mapValue(op, op->getOperand(1), state);
     if (!base || !offsets)
       return failure();
 
-    auto emitLoad = [&](Value loadOffsets) -> Value {
-      Value loadBase = base;
-      if (loadBase.getType() != loadOffsets.getType())
-        loadBase = createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
-                                      loadBase, {}, loadOffsets.getType());
-      Value address = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4ALUAddOpName, {loadBase, loadOffsets},
-          {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                              builder.getContext(),
-                                              mlir::vc4::AddOpcode::add))},
-          loadOffsets.getType());
-      Value token = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4TMURequestOpName, address,
-          {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
-           builder.getNamedAttr("mode", builder.getStringAttr("direct"))},
-          mlir::ssavc4::AsyncTokenType::get(builder.getContext()));
-      return createOpWithResult(
-          builder, op->getLoc(), kSSAVC4TMUReadOpName, token,
-          {builder.getNamedAttr("unit", builder.getStringAttr("tmu0")),
-           builder.getNamedAttr("part", builder.getStringAttr("raw32"))},
-          op->getResult(0).getType());
-    };
-
     if (predicate->kind == PredicatePlan::Class::Full) {
-      state.values[op->getResult(0)] = {emitLoad(offsets)};
+      state.values[op->getResult(0)] = {
+          emitTMULoadFragment(op, builder, base, offsets,
+                              op->getResult(0).getType())};
       return success();
     }
 
@@ -1393,7 +1566,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       Value safeOffsets =
           createCondSelect(builder, op->getLoc(), flags, offsets,
                            safeOffsetVec, mlir::vc4::Cond::cs);
-      Value loaded = emitLoad(safeOffsets);
+      Value loaded = emitTMULoadFragment(op, builder, base, safeOffsets,
+                                         op->getResult(0).getType());
       Value resultFlags =
           createSubFlags(builder, op->getLoc(), lane, activeVec);
       Value masked =
@@ -1484,7 +1658,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       Value safeOffsets =
           createCondSelect(builder, op->getLoc(), lowerFlags, upperSafe,
                            rectSafeVec, mlir::vc4::Cond::cc);
-      Value loaded = emitLoad(safeOffsets);
+      Value loaded = emitTMULoadFragment(op, builder, base, safeOffsets,
+                                         op->getResult(0).getType());
       Value resultUpperFlags =
           createSubFlags(builder, op->getLoc(), lane, colEndVec);
       Value upperMasked =
@@ -1506,6 +1681,20 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return emitTailLoad();
     if (predicate->kind == PredicatePlan::Class::RectRow)
       return emitRectLoad();
+    if (predicate->kind == PredicatePlan::Class::GeneralMask) {
+      FailureOr<Value> safeOffsets =
+          emitPredicateSelect(op, builder, *predicate, offsets, safeOffsetVec);
+      if (failed(safeOffsets))
+        return failure();
+      Value loaded = emitTMULoadFragment(op, builder, base, *safeOffsets,
+                                         op->getResult(0).getType());
+      FailureOr<Value> masked =
+          emitPredicateSelect(op, builder, *predicate, loaded, zero);
+      if (failed(masked))
+        return failure();
+      state.values[op->getResult(0)] = {*masked};
+      return success();
+    }
     return op->emitOpError("unsupported tmu_load_fragment predicate plan");
   }
   if (hasName(op, kVDWStoreOpName)) {
@@ -1520,14 +1709,18 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return op->emitOpError("predicate operand has no lowering plan");
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::Empty &&
-        predicate->kind != PredicatePlan::Class::TailPrefix)
+        predicate->kind != PredicatePlan::Class::TailPrefix &&
+        predicate->kind != PredicatePlan::Class::GeneralMask)
       return op->emitOpError()
              << "vdw_store_fragment lowering currently supports only "
-                "pred.full, pred.empty, and pred.tail";
+                "pred.full, pred.empty, pred.tail, and fragment_cmp general "
+                "masks";
     Value base = mapValue(op, op->getOperand(0), state);
+    Value mappedOffsets = mapValue(op, op->getOperand(1), state);
     Value value = mapValue(op, op->getOperand(2), state);
-    if (!base || !value)
+    if (!base || !mappedOffsets || !value)
       return failure();
+    Value memoryBase = base;
     if (offsets.scalarBaseByteOffset) {
       Value mappedOffset =
           mapValue(op, offsets.scalarBaseByteOffset, state);
@@ -1542,6 +1735,17 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                       builder.getI32IntegerAttr(16));
     if (predicate->kind == PredicatePlan::Class::Full) {
       emitVDWStore(op, builder, base, value, sixteen, state,
+                   /*staticActiveLanes=*/16);
+      return success();
+    }
+    if (predicate->kind == PredicatePlan::Class::GeneralMask) {
+      Value oldValue = emitTMULoadFragment(op, builder, memoryBase,
+                                           mappedOffsets, value.getType());
+      FailureOr<Value> merged =
+          emitPredicateSelect(op, builder, *predicate, value, oldValue);
+      if (failed(merged))
+        return failure();
+      emitVDWStore(op, builder, base, *merged, sixteen, state,
                    /*staticActiveLanes=*/16);
       return success();
     }
