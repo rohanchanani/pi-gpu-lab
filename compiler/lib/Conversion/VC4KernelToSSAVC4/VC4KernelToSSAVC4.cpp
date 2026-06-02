@@ -62,6 +62,7 @@ constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentSelectOpName(
     "vc4kernel.fragment_select");
 constexpr llvm::StringLiteral kFragmentRotateOpName("vc4kernel.fragment_rotate");
+constexpr llvm::StringLiteral kFragmentReduceOpName("vc4kernel.fragment_reduce");
 constexpr llvm::StringLiteral kTMULoadOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreOpName("vc4kernel.vdw_store_fragment");
 constexpr llvm::StringLiteral kVPMAllocOpName("vc4kernel.vpm_alloc");
@@ -933,6 +934,18 @@ static bool isVectorF32(Type type) {
   return vectorType && vectorType.getElementType().isF32();
 }
 
+static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
+                               Value rhs) {
+  mlir::vc4::AddOpcode opcode =
+      isVectorF32(lhs.getType()) ? mlir::vc4::AddOpcode::fadd
+                                 : mlir::vc4::AddOpcode::add;
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(), opcode))},
+      lhs.getType());
+}
+
 static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
                             int64_t constant) {
   if (constant == 0)
@@ -1371,10 +1384,43 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
+    // VC4Kernel uses the SSAVC4/VC4 fixed horizontal vector-rotate direction:
+    // amount N lowers to vc4asm's `accumulator << N` lane rotate.
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4RotateOpName, input,
         {builder.getNamedAttr("amount", op->getAttr("amount"))},
         op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentReduceOpName)) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(op->getOperand(1), state);
+    if (!predicate)
+      return op->emitOpError("predicate operand has no lowering plan");
+    auto kind =
+        llvm::dyn_cast_or_null<mlir::vc4kernel::ReduceKindAttr>(
+            op->getAttr("kind"));
+    if (!kind || kind.getValue() != mlir::vc4kernel::ReduceKind::add)
+      return op->emitOpError("fragment_reduce lowering supports only add");
+
+    Value zero = createZeroValue(builder, op->getLoc(), op->getResult(0).getType());
+    FailureOr<Value> masked =
+        emitPredicateSelect(op, builder, *predicate, input, zero);
+    if (failed(masked))
+      return failure();
+
+    Value sum = *masked;
+    for (int64_t amount : {8, 4, 2, 1}) {
+      Value rotated = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4RotateOpName, sum,
+          {builder.getNamedAttr("amount", builder.getI32IntegerAttr(amount))},
+          op->getResult(0).getType());
+      sum = createFragmentAdd(builder, op->getLoc(), sum, rotated);
+    }
+    state.values[op->getResult(0)] = {sum};
     return success();
   }
   if (hasName(op, kFragmentCmpOpName)) {
