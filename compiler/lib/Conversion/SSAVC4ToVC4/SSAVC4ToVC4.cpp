@@ -36,7 +36,9 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <utility>
 
 using namespace mlir;
 
@@ -4497,6 +4499,124 @@ static void emitDMARectZeroFillRow(OpBuilder &builder, Location loc,
                            /*scratchWaddr=*/32);
   emitVPMZeroWriteRow(builder, loc, /*rowReg=*/0, x, plan.vertical,
                       plan.useMutex, mlir::vc4::QPUMux::r0);
+}
+
+static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
+                                       int64_t activeRowsReg, int64_t maxRows,
+                                       int64_t row,
+                                       unsigned guardedPayloadSlots);
+static void emitRuntimeActiveColsGuard(OpBuilder &builder, Location loc,
+                                       int64_t activeColsReg, int64_t maxCols,
+                                       unsigned guardedPayloadSlots);
+
+struct PlannedRegion {
+  unsigned slots = 0;
+  SmallVector<std::function<LogicalResult(OpBuilder &)>, 8> emitters;
+
+  void append(unsigned slotCount,
+              std::function<LogicalResult(OpBuilder &)> emitter) {
+    slots += slotCount;
+    emitters.push_back(std::move(emitter));
+  }
+
+  void appendRegion(PlannedRegion region) {
+    slots += region.slots;
+    for (auto &emitter : region.emitters)
+      emitters.push_back(std::move(emitter));
+  }
+
+  void append(PlannedRegion region) { appendRegion(std::move(region)); }
+
+  LogicalResult emit(OpBuilder &builder) const {
+    for (const auto &emitter : emitters) {
+      if (failed(emitter(builder)))
+        return failure();
+    }
+    return success();
+  }
+
+  bool empty() const { return slots == 0 && emitters.empty(); }
+};
+
+[[maybe_unused]] static void
+appendOneSlot(PlannedRegion &region,
+              std::function<LogicalResult(OpBuilder &)> emitter) {
+  region.append(/*slotCount=*/1, std::move(emitter));
+}
+
+// Branch slots include the vc4.qpu.branch op and its three delay slots. Dynamic
+// DMA branch windows must use payload.slots, not a separately rederived body
+// size. Raw hardware setup emitters are not changed in this prompt.
+[[maybe_unused]] static void appendBranchWithDelaySlots(
+    PlannedRegion &region, Location loc, mlir::vc4::BranchCond cond,
+    int64_t immediateBytes, int64_t raddrA = 0, int64_t waddrAdd = 31,
+    int64_t waddrMul = 30) {
+  region.append(/*slotCount=*/4,
+                [loc, cond, immediateBytes, raddrA, waddrAdd,
+                 waddrMul](OpBuilder &builder) -> LogicalResult {
+                  createScheduledBranch(builder, loc, cond, immediateBytes,
+                                        raddrA, waddrAdd, waddrMul);
+                  createNopBundle(builder, loc);
+                  createNopBundle(builder, loc);
+                  createNopBundle(builder, loc);
+                  return success();
+                });
+}
+
+[[maybe_unused]] static PlannedRegion
+planBranchAroundRegion(Location loc, mlir::vc4::BranchCond cond,
+                       PlannedRegion payload, int64_t raddrA = 0,
+                       int64_t waddrAdd = 31, int64_t waddrMul = 30) {
+  PlannedRegion region;
+  appendBranchWithDelaySlots(
+      region, loc, cond, static_cast<int64_t>(4 + payload.slots) * 8, raddrA,
+      waddrAdd, waddrMul);
+  region.appendRegion(std::move(payload));
+  return region;
+}
+
+[[maybe_unused]] static PlannedRegion
+planActiveRowsGuardedRegion(Location loc, int64_t activeRowsReg,
+                            int64_t maxRows, int64_t row,
+                            PlannedRegion payload) {
+  PlannedRegion region;
+  unsigned payloadSlots = payload.slots;
+  region.append(/*slotCount=*/8,
+                [loc, activeRowsReg, maxRows, row,
+                 payloadSlots](OpBuilder &builder) -> LogicalResult {
+                  emitRuntimeActiveRowsGuard(builder, loc, activeRowsReg,
+                                             maxRows, row, payloadSlots);
+                  return success();
+                });
+  region.appendRegion(std::move(payload));
+  return region;
+}
+
+[[maybe_unused]] static PlannedRegion
+planActiveColsGuardedRegion(Location loc, int64_t activeColsReg,
+                            int64_t maxCols, PlannedRegion payload) {
+  PlannedRegion region;
+  unsigned payloadSlots = payload.slots;
+  region.append(/*slotCount=*/8,
+                [loc, activeColsReg, maxCols,
+                 payloadSlots](OpBuilder &builder) -> LogicalResult {
+                  emitRuntimeActiveColsGuard(builder, loc, activeColsReg,
+                                             maxCols, payloadSlots);
+                  return success();
+                });
+  region.appendRegion(std::move(payload));
+  return region;
+}
+
+[[maybe_unused]] static PlannedRegion
+planPitchOverflowGuardedRegion(Location loc, mlir::vc4::BranchCond branchIfSkip,
+                               PlannedRegion payload) {
+  return planBranchAroundRegion(loc, branchIfSkip, std::move(payload));
+}
+
+[[maybe_unused]] static PlannedRegion planVDWStrideGapOverflowGuardedRegion(
+    Location loc, mlir::vc4::BranchCond branchIfSkip, PlannedRegion payload) {
+  return planBranchAroundRegion(loc, branchIfSkip, std::move(payload));
 }
 
 static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
