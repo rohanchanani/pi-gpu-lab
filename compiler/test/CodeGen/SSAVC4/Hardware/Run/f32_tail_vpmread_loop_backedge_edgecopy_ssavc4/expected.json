@@ -1,0 +1,14 @@
+{
+  "name": "f32_tail_vpmread_loop_backedge_edgecopy_ssavc4",
+  "status": "PASS",
+  "cases": 3,
+  "total_mismatches": 0,
+  "sentinel_mismatches": 0,
+  "launch_failures": 0,
+  "active_qpus": 1,
+  "lanes": 16,
+  "iters": 4,
+  "backedge_edgecopy": 1,
+  "runtime_allocations": 2,
+  "runtime_launches": 3
+}
