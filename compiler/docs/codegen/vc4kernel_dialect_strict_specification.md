@@ -1458,18 +1458,22 @@ VC4Kernel supports two classes of VDR/VDW movement.
 
 ### Dynamic rectangular movement
 
-Blocked kernels such as GEMV and GEMM require runtime problem sizes and runtime leading dimensions. The correct VC4Kernel representation is not padded input matrices and not TMU-to-register-to-VPM as the primary shared-memory path. The correct representation is a dynamic rectangular transfer plan:
+Blocked kernels such as GEMV and GEMM require runtime problem sizes and runtime leading dimensions. The correct VC4Kernel representation is not padded input matrices and not TMU-to-register-to-VPM as the primary shared-memory path. The correct representation is a dynamic rectangular transfer plan.
 
-- Runtime problem sizes and leading dimensions are supported below VC4Kernel via dynamic rectangular transfer primitives; tile/block maximum shape remains compile-time.
-- Active rows and columns are runtime scalar `i32` values.
-- Memory pitch/stride in bytes is a runtime scalar `i32` value.
-- VDR global-to-VPM loads support runtime `active_rows`, runtime `active_cols`, runtime `memory_pitch_bytes`, and device-side zero-fill for inactive or out-of-bounds VPM cells.
-- VDW VPM-to-global stores support runtime `active_rows`, runtime `active_cols`, runtime `memory_stride_bytes`, dynamic/nonzero VPM source row where the lower half supports it, and preserve-destination semantics outside active rows/columns.
-- VDW `memory_stride_bytes` is a high-level row pitch. The lower half must translate it to hardware row_bytes/gap semantics and use row-by-row fallback only for true hardware-unencodable overflow cases.
-- Row-by-row fallback is allowed only for true hardware-unencodable overflow cases, and each fallback class must be explicit and hardware-tested.
-- Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads or destination-merge fallback when that is the documented VDW preserve path.
-- Dynamic VDR/VDW branch-critical regions in the lower half must be self-counted by planned emission. Any remaining manual helper must be documented as non-branch-critical.
-- The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature.
+The architecture-backed dynamic rectangular contract is:
+
+1. Runtime problem sizes and leading dimensions are supported below VC4Kernel via dynamic rectangular transfer primitives; tile sizes remain compile-time.
+2. VDR global-to-VPM loads support runtime `active_rows`, runtime `active_cols`, runtime `memory_pitch_bytes`, and device-side zero-fill for inactive or out-of-bounds VPM cells.
+3. VDW VPM-to-global stores support runtime `active_rows`, runtime `active_cols`, runtime `memory_stride_bytes`, dynamic/nonzero VPM source row where supported, and preserve-destination semantics outside active rows/columns.
+4. VDW STRIDE is the hardware 13-bit gap from the last byte of one row to the start of the next row. `memory_stride_bytes` is a high-level row pitch and must be translated to row_bytes/gap semantics; no 0xffff/65535 VDW stride model is allowed.
+5. VPM/VDR/VDW setup semantics are defined by the VideoCore IV Architecture Reference Guide, Section 7 / Tables 31-37. The architecture reference is normative for hardware field meanings.
+6. Full 64-row VPM capacity must be usable through multiple 16x16 tiles, such as rows 0, 16, 32, and 48; per-op max shape remains <=16x16 w32/none for v1.
+7. Row-by-row fallback is allowed only for true hardware-unencodable overflow cases, and each fallback class must be explicit and hardware-tested.
+8. Static exact rectangular paths and dynamic rectangular paths both remain part of the final design. Static/full interior tiles keep compile-time information; dynamic/tail/runtime tiles use dynamic rect ops.
+9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads or destination-merge fallback when that is the documented VDW preserve path.
+10. Planned-emission branch-count invariant: dynamic VDR/VDW branch-critical regions must be self-counted by planned emission or documented as non-branch-critical.
+
+The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature. Active rows and columns are runtime scalar `i32` values. Memory pitch/stride in bytes is a runtime scalar `i32` value.
 
 ### `vc4kernel.vdr_load_rect_to_vpm`
 

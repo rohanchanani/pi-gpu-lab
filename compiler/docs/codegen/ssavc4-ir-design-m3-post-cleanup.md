@@ -386,7 +386,7 @@ Optional/deferred:
 !ssavc4.dma.desc
 ```
 
-Do not implement `!ssavc4.dma.desc` until a slice truly needs generic DMA descriptor modeling. `ssavc4.vdw.store` should be the first practical global-store abstraction.
+Do not introduce a broad public `!ssavc4.dma.desc` surface unless a slice needs a reusable descriptor abstraction. The lower half already supports dynamic rectangular VDR/VDW planning below VC4Kernel, so any future public SSAVC4 DMA surface must preserve the architecture-backed dynamic rectangular contract instead of replacing it with padding, TMU-to-VPM staging, or fixture-specific layouts.
 
 Meanings:
 
@@ -853,9 +853,20 @@ cooperative barrier/shared VPM fixtures
 
 If descriptor types are added, they are SSAVC4 descriptor types, not old `vc4.vpm.desc`.
 
-### 13.6 Generic DMA descriptors
+### 13.6 VDR/VDW DMA descriptors
 
-Defer `ssavc4.dma.desc`, `ssavc4.dma.start`, and `ssavc4.dma.wait` until M3 has a specific fixture that needs generic VDR/VDW DMA modeling beyond `ssavc4.vdw.store`.
+Dynamic rectangular VDR/VDW lowering is the accepted lower-half contract for runtime shared-memory tiles. A future `ssavc4.dma.desc`, `ssavc4.dma.start`, or `ssavc4.dma.wait` surface is optional and must be a structured way to express the same contract:
+
+1. Runtime problem sizes and leading dimensions are represented by dynamic rectangular transfer primitives while tile sizes remain compile-time.
+2. VDR global-to-VPM supports runtime active rows/cols, runtime memory pitch in bytes, and device-side zero-fill for inactive/OOB VPM cells.
+3. VDW VPM-to-global supports runtime active rows/cols, runtime memory stride in bytes, dynamic/nonzero VPM source rows where supported, and destination preservation outside active rows/cols.
+4. VDW STRIDE uses the VideoCore IV hardware meaning: a 13-bit byte gap from the last byte of one row to the start of the next row. High-level row pitch must be translated to row_bytes/gap semantics; no 0xffff/65535 VDW stride model is allowed.
+5. VPM/VDR/VDW setup fields are defined by the VideoCore IV Architecture Reference Guide, Section 7 / Tables 31-37; that architecture reference is normative for hardware field meanings.
+6. The full 64-row VPM capacity remains available through multiple 16x16 tiles, for example rows 0, 16, 32, and 48, while each v1 operation remains <=16x16 w32/none.
+7. Row-by-row fallback is allowed only for true hardware-unencodable overflow cases and must be explicit and hardware-tested.
+8. Static exact rectangular paths and dynamic rectangular paths both stay in the design: static/full interior tiles keep compile-time information, dynamic/tail/runtime tiles use dynamic rect ops.
+9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround.
+10. Dynamic VDR/VDW branch-critical regions must be self-counted by planned emission or documented as non-branch-critical.
 
 ---
 
