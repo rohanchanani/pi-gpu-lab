@@ -1,0 +1,22 @@
+{
+  "name": "program_id_2d_grid_mapping_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 3,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "natural_cases": 2,
+    "diagnostic_cases": 1,
+    "accepted_block_x": 16,
+    "natural_1x1_requests": 1,
+    "natural_2x3_requests": 6,
+    "old_suspect_block_x": 192,
+    "old_suspect_runtime_requests": 72,
+    "old_suspect_gemm_expected_requests": 6,
+    "old_suspect_overlaunch_factor": 12,
+    "old_suspect_diagnostic_only": 1,
+    "gemm_fixture_launch_geometry_bug": 1,
+    "runtime_launches": 3
+  }
+}
