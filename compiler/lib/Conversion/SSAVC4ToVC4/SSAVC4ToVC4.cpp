@@ -2213,6 +2213,30 @@ computeDominance(ArrayRef<Block *> blocks,
   return dominators;
 }
 
+static BitVector computeReachableBlocks(ArrayRef<Block *> blocks,
+                                        const DenseMap<Block *, unsigned> &blockOrder) {
+  BitVector reachable(blocks.size(), false);
+  if (blocks.empty())
+    return reachable;
+
+  SmallVector<Block *, 8> worklist;
+  worklist.push_back(blocks.front());
+  while (!worklist.empty()) {
+    Block *block = worklist.pop_back_val();
+    auto blockIt = blockOrder.find(block);
+    if (blockIt == blockOrder.end() || reachable.test(blockIt->second))
+      continue;
+    reachable.set(blockIt->second);
+
+    Operation *terminator = block->getTerminator();
+    if (!terminator)
+      continue;
+    for (Block *successor : terminator->getSuccessors())
+      worklist.push_back(successor);
+  }
+  return reachable;
+}
+
 static bool isBackedge(Block *sourceBlock, Block *targetBlock,
                        const DenseMap<Block *, unsigned> &blockOrder) {
   auto sourceIt = blockOrder.find(sourceBlock);
@@ -2325,13 +2349,32 @@ static LogicalResult selectInstructionTemplates(
   }
   DenseMap<Block *, BitVector> dominators =
       computeDominance(blocks, predecessors);
+  BitVector reachableBlocks = computeReachableBlocks(blocks, blockOrder);
+
+  std::optional<unsigned> maxReachableBlockOrder;
+  for (auto [index, block] : llvm::enumerate(blocks)) {
+    (void)block;
+    if (!reachableBlocks.test(index))
+      continue;
+    unsigned blockIndex = static_cast<unsigned>(index);
+    maxReachableBlockOrder =
+        maxReachableBlockOrder ? std::max(*maxReachableBlockOrder, blockIndex)
+                               : blockIndex;
+  }
 
   unsigned threadEndOpCount = 0;
-  for (Block *block : blocks)
+  bool reachableThreadEndWouldNotBePhysicalFinal = false;
+  for (auto [index, block] : llvm::enumerate(blocks)) {
     for (Operation &op : *block)
-      if (hasName(&op, kSSAVC4ThreadEndOpName))
+      if (hasName(&op, kSSAVC4ThreadEndOpName)) {
         ++threadEndOpCount;
-  bool needsThreadEndEpilogue = threadEndOpCount > 1;
+        if (reachableBlocks.test(index) && maxReachableBlockOrder &&
+            index < *maxReachableBlockOrder)
+          reachableThreadEndWouldNotBePhysicalFinal = true;
+      }
+  }
+  bool needsThreadEndEpilogue =
+      threadEndOpCount > 1 || reachableThreadEndWouldNotBePhysicalFinal;
 
   DenseMap<int64_t, Value> uniformReadByIndex;
   unsigned nextVirtualOrdinal = 0;

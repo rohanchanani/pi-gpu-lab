@@ -1,0 +1,14 @@
+{
+  "name": "natural_loop_thread_end_layout_ssavc4",
+  "status": "PASS",
+  "cases": 4,
+  "total_mismatches": 0,
+  "sentinel_mismatches": 0,
+  "launch_failures": 0,
+  "active_qpus": 4,
+  "lanes": 16,
+  "max_n": 64,
+  "checksum_accum": 183616,
+  "runtime_allocations": 1,
+  "runtime_launches": 4
+}
