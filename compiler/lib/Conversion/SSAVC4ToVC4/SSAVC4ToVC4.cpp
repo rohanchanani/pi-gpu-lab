@@ -1651,6 +1651,18 @@ static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
   return dynamicPitch ? slots + 2 : slots;
 }
 
+static unsigned getDynamicVDWStoreColsSlotCount(bool useMutex,
+                                                bool dynamicStride) {
+  unsigned slots = useMutex ? 23 : 21;
+  return dynamicStride ? slots - 1 : slots;
+}
+
+static unsigned getDynamicVDWStoreRowsColsSlotCount(bool useMutex,
+                                                    bool dynamicStride) {
+  unsigned slots = useMutex ? 27 : 25;
+  return dynamicStride ? slots - 1 : slots;
+}
+
 // flattened layout only: not branch-target-critical.
 static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row,
@@ -6214,6 +6226,267 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
   return region;
 }
 
+static PlannedRegion planStaticRowsCountInR2(Location loc, int64_t rows) {
+  PlannedRegion region;
+  region.append(/*slotCount=*/1, [loc, rows](OpBuilder &builder) -> LogicalResult {
+    createSplat32LDI(builder, loc, rows, 34);
+    return success();
+  });
+  return region;
+}
+
+static void emitVDWRuntimeStrideGapSetup(OpBuilder &builder, Location loc,
+                                         int64_t activeColsReg,
+                                         int64_t maxCols,
+                                         std::optional<int64_t> memoryStrideBytes,
+                                         std::optional<int64_t> memoryStrideReg) {
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        activeColsReg, activeColsReg, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::max, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+  createSplat32LDI(builder, loc, maxCols, 33);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::min, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/2);
+  if (memoryStrideBytes) {
+    createSplat32LDI(builder, loc, *memoryStrideBytes, 33);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, *memoryStrideReg,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  createSplat32LDI(builder, loc, static_cast<int32_t>(0xc0000000u), 32);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+}
+
+static void emitDynamicVDWStoreColsFromVPM(
+    OpBuilder &builder, Location loc, int64_t addressReg, int64_t vpmYReg,
+    int64_t staticVpmX, int64_t nrows, int64_t activeColsReg, int64_t maxCols,
+    std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  uint32_t setupBase = 0x80000000u |
+                       ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
+                       (vertical ? 0u : 0x4000u);
+  createSplat32LDI(builder, loc, static_cast<int32_t>(setupBase), 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  emitVDWVPMBase(builder, loc, vpmYReg, vpmYReg, mlir::vc4::QPUMux::a,
+                 mlir::vc4::QPUMux::a, /*vpmRowOffset=*/0, staticVpmX);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  emitVDWRuntimeStrideGapSetup(builder, loc, activeColsReg, maxCols,
+                               memoryStrideBytes, memoryStrideReg);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
+}
+
+static void emitDynamicVDWStoreRowsColsFromVPM(
+    OpBuilder &builder, Location loc, int64_t addressReg, int64_t vpmYReg,
+    int64_t staticVpmX, int64_t activeColsReg, int64_t maxCols,
+    std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/7);
+  uint32_t setupBase = 0x80000000u | (vertical ? 0u : 0x4000u);
+  createSplat32LDI(builder, loc, static_cast<int32_t>(setupBase), 32);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  emitVDWVPMBase(builder, loc, vpmYReg, vpmYReg, mlir::vc4::QPUMux::a,
+                 mlir::vc4::QPUMux::a, /*vpmRowOffset=*/0, staticVpmX);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  emitVDWRuntimeStrideGapSetup(builder, loc, activeColsReg, maxCols,
+                               memoryStrideBytes, memoryStrideReg);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
+}
+
+static PlannedRegion planDynamicVDWStoreColsFromVPM(
+    Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
+    int64_t nrows, int64_t activeColsReg, int64_t maxCols,
+    std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+  PlannedRegion region;
+  unsigned slots =
+      getDynamicVDWStoreColsSlotCount(useMutex, /*dynamicStride=*/!memoryStrideBytes);
+  region.append(slots, [loc, addressReg, vpmYReg, staticVpmX, nrows,
+                        activeColsReg, maxCols, memoryStrideBytes,
+                        memoryStrideReg, vertical, useMutex](
+                           OpBuilder &builder) -> LogicalResult {
+    emitDynamicVDWStoreColsFromVPM(builder, loc, addressReg, vpmYReg,
+                                   staticVpmX, nrows, activeColsReg, maxCols,
+                                   memoryStrideBytes, memoryStrideReg, vertical,
+                                   useMutex);
+    return success();
+  });
+  return region;
+}
+
+static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
+    Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
+    int64_t activeColsReg, int64_t maxCols,
+    std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+  PlannedRegion region;
+  unsigned slots = getDynamicVDWStoreRowsColsSlotCount(
+      useMutex, /*dynamicStride=*/!memoryStrideBytes);
+  region.append(slots, [loc, addressReg, vpmYReg, staticVpmX, activeColsReg,
+                        maxCols, memoryStrideBytes, memoryStrideReg, vertical,
+                        useMutex](OpBuilder &builder) -> LogicalResult {
+    emitDynamicVDWStoreRowsColsFromVPM(builder, loc, addressReg, vpmYReg,
+                                       staticVpmX, activeColsReg, maxCols,
+                                       memoryStrideBytes, memoryStrideReg,
+                                       vertical, useMutex);
+    return success();
+  });
+  return region;
+}
+
 static std::optional<int64_t>
 getStaticVDWStrideGapBytes(std::optional<int64_t> memoryStrideBytes,
                            int64_t activeCols) {
@@ -6224,6 +6497,12 @@ getStaticVDWStrideGapBytes(std::optional<int64_t> memoryStrideBytes,
 
 static bool isEncodableVDWStrideGap(int64_t strideGapBytes) {
   return strideGapBytes >= 0 && strideGapBytes <= kMaxVDWStrideGapBytes;
+}
+
+static bool isVDWStrideGapAlwaysEncodableForDynamicCols(int64_t strideBytes,
+                                                        int64_t maxCols) {
+  return isEncodableVDWStrideGap(strideBytes - maxCols * 4) &&
+         isEncodableVDWStrideGap(strideBytes - 4);
 }
 
 static void appendCompareRuntimeVDWStrideGapNegative(PlannedRegion &region,
@@ -6249,16 +6528,56 @@ static void appendCompareRuntimeVDWStrideGapNegative(PlannedRegion &region,
 static void appendCompareRuntimeVDWStrideGapOverflow(PlannedRegion &region,
                                                      Location loc) {
   region.append(/*slotCount=*/2, [loc](OpBuilder &builder) -> LogicalResult {
-    createSplat32LDI(builder, loc, kMaxVDWStrideGapBytes, 32);
+    createSplat32LDI(builder, loc, kMaxVDWStrideGapBytes, 33);
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/31, /*waddrMul=*/32,
                           mlir::vc4::AddOpcode::sub,
                           mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
                           mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1,
                           /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    return success();
+  });
+}
+
+static void appendCompareVDWStrideGapNegativeDynamicCols(
+    PlannedRegion &region, Location loc, std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg) {
+  unsigned slots = memoryStrideBytes ? 3 : 2;
+  region.append(slots, [loc, memoryStrideBytes,
+                        memoryStrideReg](OpBuilder &builder) -> LogicalResult {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::shl,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1, /*smallImm=*/2);
+    if (memoryStrideBytes) {
+      createSplat32LDI(builder, loc, *memoryStrideBytes, 33);
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/35, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::sub,
+                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                            mlir::vc4::QPUMux::r3,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                            /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    } else {
+      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                            /*waddrAdd=*/35, /*waddrMul=*/32,
+                            mlir::vc4::AddOpcode::sub,
+                            mlir::vc4::MulOpcode::nop, *memoryStrideReg,
+                            /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                            mlir::vc4::QPUMux::r3,
+                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                            /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    }
     return success();
   });
 }
@@ -6269,6 +6588,33 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
   PlannedRegion region;
   appendCompareRuntimeVDWStrideGapNegative(region, loc, memoryStrideReg,
                                            activeCols);
+
+  PlannedRegion nonNegativePath;
+  appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
+
+  PlannedRegion encodablePath;
+  encodablePath.appendRegion(std::move(rectangular));
+  appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
+                             static_cast<int64_t>(7 + fallback.slots) * 8);
+
+  PlannedRegion overflowGuarded = planBranchAroundRegion(
+      loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
+  nonNegativePath.appendRegion(std::move(overflowGuarded));
+
+  PlannedRegion negativeGuarded = planBranchAroundRegion(
+      loc, mlir::vc4::BranchCond::any_c_set, std::move(nonNegativePath));
+  region.appendRegion(std::move(negativeGuarded));
+  region.appendRegion(std::move(fallback));
+  return region;
+}
+
+static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
+    Location loc, std::optional<int64_t> memoryStrideBytes,
+    std::optional<int64_t> memoryStrideReg, PlannedRegion rectangular,
+    PlannedRegion fallback) {
+  PlannedRegion region;
+  appendCompareVDWStrideGapNegativeDynamicCols(region, loc, memoryStrideBytes,
+                                               memoryStrideReg);
 
   PlannedRegion nonNegativePath;
   appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
@@ -6379,6 +6725,42 @@ static PlannedRegion planVDWDynamicActiveRowsFallback(
   return region;
 }
 
+static PlannedRegion planVDWStaticRowsDynamicColsFallback(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t activeColsReg, int64_t maxCols, int64_t rows,
+    std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
+    const DMARectPlan &plan) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < rows; ++row) {
+    PlannedRegion body =
+        planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
+                                     activeColsReg, maxCols, row, strideBytes,
+                                     strideReg, plan);
+    region.appendRegion(planActiveColsGuardedRegion(
+        loc, activeColsReg, maxCols, std::move(body)));
+  }
+  return region;
+}
+
+static PlannedRegion planVDWRowsColsFallback(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t activeRowsReg, int64_t activeColsReg, int64_t maxRows,
+    int64_t maxCols, std::optional<int64_t> strideBytes,
+    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    PlannedRegion body =
+        planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
+                                     activeColsReg, maxCols, row, strideBytes,
+                                     strideReg, plan);
+    PlannedRegion colsGuarded = planActiveColsGuardedRegion(
+        loc, activeColsReg, maxCols, std::move(body));
+    region.appendRegion(planActiveRowsGuardedRegion(
+        loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
+  }
+  return region;
+}
+
 static LogicalResult emitVDWStoreRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -6412,8 +6794,8 @@ static LogicalResult emitVDWStoreRectDynamic(
   if (!activeRows) {
     if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
-             << "dynamic rectangular VDW runtime active_rows currently "
-                "supports only up to sixteen-row rectangles";
+             << "dynamic rectangular VDW active_rows supports only up to "
+                "sixteen-row rectangles";
     std::optional<int64_t> activeRowsReg =
         allocator.lookup(templ, templ.operands[2]);
     if (!activeRowsReg)
@@ -6429,44 +6811,55 @@ static LogicalResult emitVDWStoreRectDynamic(
         return source->emitOpError()
                << "uses a dynamic active column value that is not defined by "
                   "a lowerable SSAVC4 op";
-      for (int64_t row = 0; row < maxRows; ++row) {
-        PlannedRegion body = planDynamicVDWActiveColsBody(
-            source->getLoc(), *addressReg, *vpmSourceRowReg, *activeColsReg,
-            maxCols, row, strideBytes, strideReg, plan);
-        PlannedRegion activeColsGuarded = planActiveColsGuardedRegion(
-            source->getLoc(), *activeColsReg, maxCols, std::move(body));
-        PlannedRegion activeRowsGuarded = planActiveRowsGuardedRegion(
-            source->getLoc(), *activeRowsReg, maxRows, row,
-            std::move(activeColsGuarded));
-        if (failed(activeRowsGuarded.emit(builder)))
-          return failure();
+
+      PlannedRegion rectangular = planDynamicVDWStoreRowsColsFromVPM(
+          source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+          *activeColsReg, maxCols, strideBytes, strideReg, plan.vertical,
+          plan.useMutex);
+      PlannedRegion payload;
+      if (strideBytes &&
+          isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols)) {
+        payload = std::move(rectangular);
+      } else {
+        PlannedRegion fallback = planVDWRowsColsFallback(
+            source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
+            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan);
+        payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
+            source->getLoc(), strideBytes, strideReg, std::move(rectangular),
+            std::move(fallback));
       }
-      return success();
+      PlannedRegion activeColsGuarded = planActiveColsGuardedRegion(
+          source->getLoc(), *activeColsReg, maxCols, std::move(payload));
+      PlannedRegion rowsPayload = planPreserveClampedRowsInR0(source->getLoc());
+      rowsPayload.appendRegion(std::move(activeColsGuarded));
+      return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
+                                         maxRows, /*row=*/0,
+                                         std::move(rowsPayload))
+          .emit(builder);
     }
-    if (std::clamp(*activeCols, int64_t(0), maxCols) != maxCols)
-      return source->emitOpError()
-             << "dynamic rectangular VDW runtime active_rows currently "
-                "requires full static active_cols";
+    int64_t staticCols = std::clamp(*activeCols, int64_t(0), maxCols);
+    if (staticCols == 0)
+      return success();
     PlannedRegion rectangular = planActiveRowsGuardedRegion(
         source->getLoc(), *activeRowsReg, maxRows, /*row=*/0,
         planDynamicVDWStoreRowsFromVPM(
             source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
-            /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
+            /*rowLen=*/staticCols, /*memoryPitchBytes=*/strideBytes,
             /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
     PlannedRegion payload;
     std::optional<int64_t> strideGapBytes =
-        getStaticVDWStrideGapBytes(strideBytes, maxCols);
+        getStaticVDWStrideGapBytes(strideBytes, staticCols);
     if (strideGapBytes && isEncodableVDWStrideGap(*strideGapBytes)) {
       payload = std::move(rectangular);
     } else {
       PlannedRegion fallback = planVDWDynamicActiveRowsFallback(
           source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-          maxRows, maxCols, strideBytes, strideReg, plan);
+          maxRows, staticCols, strideBytes, strideReg, plan);
       if (strideGapBytes) {
         payload = std::move(fallback);
       } else {
         payload = planDynamicVDWStrideGapFallbackDispatch(
-            source->getLoc(), *strideReg, maxCols, std::move(rectangular),
+            source->getLoc(), *strideReg, staticCols, std::move(rectangular),
             std::move(fallback));
       }
     }
@@ -6492,22 +6885,47 @@ static LogicalResult emitVDWStoreRectDynamic(
   if (failed(verifyDMARectXSpan(source, plan, "VDW", "src_x")))
     return failure();
   if (dynamicActiveColsReg) {
-    for (int64_t row = 0; row < clampedRows; ++row) {
-      PlannedRegion body = planDynamicVDWActiveColsBody(
+    PlannedRegion rectangular = planDynamicVDWStoreColsFromVPM(
+        source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+        clampedRows, *dynamicActiveColsReg, maxCols, strideBytes, strideReg,
+        plan.vertical, plan.useMutex);
+    PlannedRegion payload;
+    if (strideBytes &&
+        isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols)) {
+      payload = std::move(rectangular);
+    } else {
+      PlannedRegion fallback = planVDWStaticRowsDynamicColsFallback(
           source->getLoc(), *addressReg, *vpmSourceRowReg,
-          *dynamicActiveColsReg, maxCols, row, strideBytes, strideReg, plan);
-      PlannedRegion guarded = planActiveColsGuardedRegion(
-          source->getLoc(), *dynamicActiveColsReg, maxCols, std::move(body));
-      if (failed(guarded.emit(builder)))
-        return failure();
+          *dynamicActiveColsReg, maxCols, clampedRows, strideBytes, strideReg,
+          plan);
+      payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
+          source->getLoc(), strideBytes, strideReg, std::move(rectangular),
+          std::move(fallback));
     }
-    return success();
+    return planActiveColsGuardedRegion(source->getLoc(), *dynamicActiveColsReg,
+                                       maxCols, std::move(payload))
+        .emit(builder);
   }
   std::optional<int64_t> strideGapBytes =
       getStaticVDWStrideGapBytes(strideBytes, staticCols);
+  if (clampedRows > 1 && plan.vpmPitch == 1 && !strideBytes) {
+    PlannedRegion rectangular = planStaticRowsCountInR2(source->getLoc(),
+                                                        clampedRows);
+    rectangular.appendRegion(planDynamicVDWStoreRowsFromVPM(
+        source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+        /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
+        /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
+    PlannedRegion fallback = planVDWStaticRowsFallback(
+        source->getLoc(), *addressReg, *vpmSourceRowReg, staticCols,
+        clampedRows, strideBytes, strideReg, plan);
+    return planDynamicVDWStrideGapFallbackDispatch(
+               source->getLoc(), *strideReg, staticCols,
+               std::move(rectangular), std::move(fallback))
+        .emit(builder);
+  }
   bool useStaticRowsFallback =
       clampedRows > 1 &&
-      (plan.vpmPitch != 1 || !strideBytes ||
+      (plan.vpmPitch != 1 ||
        (strideGapBytes && !isEncodableVDWStrideGap(*strideGapBytes)));
   if (useStaticRowsFallback)
     return planVDWStaticRowsFallback(source->getLoc(), *addressReg,

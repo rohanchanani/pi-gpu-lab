@@ -3,7 +3,7 @@
 // CHECK-LABEL: vc4.func @vdw_zero_cols_prior_dma_kernel
 // CHECK: value = 13 : i32
 // CHECK: vc4.qpu.vpmvcd_addr {{.*}}side = #vc4.vpmvcd_side<write>
-// CHECK: vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_c_set>, immediate = 216 : i32
+// CHECK: vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_c_set>, immediate = 240 : i32
 // CHECK: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<write>
 // CHECK: vc4.qpu.vpmvcd_addr {{.*}}side = #vc4.vpmvcd_side<write>
 
