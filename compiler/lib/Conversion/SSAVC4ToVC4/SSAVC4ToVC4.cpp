@@ -1501,9 +1501,9 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
   case InstructionTemplate::Kind::VPMRead:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 8 : 6) +
+      return spillActionSlots + (serialize.getValue() == "mutex" ? 9 : 7) +
              resultSpacer;
-    return spillActionSlots + 6 + resultSpacer;
+    return spillActionSlots + 7 + resultSpacer;
   case InstructionTemplate::Kind::VDRLoad:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
@@ -1767,6 +1767,16 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
   int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
   bool usesVPMRowOffset = !isVerticalVPMOp(op);
+  auto runtimePitchDispatchSlots = [&](int64_t rows) {
+    unsigned rectangularSlots = rawVDRSlots + 2;
+    unsigned fallbackSlots = 0;
+    for (int64_t row = 0; row < rows; ++row)
+      fallbackSlots += getDynamicVDRPitchRowSlotCount(useMutex, row,
+                                                      usesVPMRowOffset);
+    return /*pitch overflow compare=*/2 + /*outer branch window=*/7 +
+           rectangularSlots + /*rectangular-to-exit branch window=*/7 +
+           fallbackSlots;
+  };
   if (!activeRows && activeCols && *activeCols == maxCols && maxRows >= 1 &&
       maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
@@ -1801,12 +1811,13 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
                                                 /*extendedPitch=*/true);
     return total;
   }
-  if (!pitch)
-    return rawVDRSlots;
   if (!activeRows)
     return rawVDRSlots;
-  if (activeCols && *activeRows == maxRows && *activeCols == maxCols)
-    return rawVDRSlots;
+  if (activeCols && *activeRows == maxRows && *activeCols == maxCols) {
+    if (!pitch)
+      return runtimePitchDispatchSlots(maxRows);
+    return encodeVDRMemoryPitchBytes(*pitch) ? rawVDRSlots : rawVDRSlots + 2;
+  }
   if (!activeCols && activeRows && maxRows >= 1 && maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
     std::optional<int64_t> pitch =
@@ -1828,8 +1839,24 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
     int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
     int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
-    return zeroFillSlots + (clampedRows == 0 || clampedCols == 0 ? 0
-                                                                 : rawVDRSlots);
+    if (clampedRows == 0 || clampedCols == 0)
+      return zeroFillSlots;
+    return zeroFillSlots +
+           (!pitch ? runtimePitchDispatchSlots(clampedRows) : rawVDRSlots);
+  }
+  if (!pitch) {
+    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
+    int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
+    unsigned total = 0;
+    if (clampedRows != maxRows || clampedCols != maxCols) {
+      unsigned zeroFillSlots = useMutex ? 6 : 3;
+      for (int64_t row = 0; row < maxRows; ++row)
+        total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
+                 zeroFillSlots;
+      if (clampedRows == 0 || clampedCols == 0)
+        return total;
+    }
+    return total + runtimePitchDispatchSlots(clampedRows);
   }
   return rawVDRSlots;
 }
@@ -3930,6 +3957,7 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                         /*raddrB=*/48, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
   emitRegfileResultSpacer(builder, loc, templ, allocator);
   if (useMutex)
     emitMutexRelease(builder, loc);
