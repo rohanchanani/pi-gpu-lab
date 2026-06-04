@@ -5405,6 +5405,25 @@ static void emitDynamicVDWStoreRowsFromVPM(OpBuilder &builder, Location loc,
     emitMutexRelease(builder, loc);
 }
 
+static PlannedRegion planDynamicVDWStoreRowsFromVPM(
+    Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
+    int64_t rowLen, std::optional<int64_t> memoryPitchBytes,
+    std::optional<int64_t> memoryPitchReg, bool vertical, bool useMutex) {
+  PlannedRegion region;
+  unsigned slots = useMutex ? 21 : 19;
+  if (memoryPitchReg)
+    slots += 2;
+  region.append(slots, [loc, addressReg, vpmYReg, staticVpmX, rowLen,
+                        memoryPitchBytes, memoryPitchReg, vertical,
+                        useMutex](OpBuilder &builder) -> LogicalResult {
+    emitDynamicVDWStoreRowsFromVPM(builder, loc, addressReg, vpmYReg,
+                                   staticVpmX, rowLen, memoryPitchBytes,
+                                   memoryPitchReg, vertical, useMutex);
+    return success();
+  });
+  return region;
+}
+
 static LogicalResult emitVDWStoreRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5491,15 +5510,13 @@ static LogicalResult emitVDWStoreRectDynamic(
       return source->emitOpError()
              << "dynamic rectangular VDW runtime active_rows currently "
                 "requires full static active_cols";
-    unsigned bodySlots =
-        getDynamicVDWStoreRowsSlotCount(plan.useMutex, !strideBytes);
-    emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                               maxRows, /*row=*/0, bodySlots);
-    emitDynamicVDWStoreRowsFromVPM(
-        builder, source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+    PlannedRegion payload = planDynamicVDWStoreRowsFromVPM(
+        source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
         /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
         /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex);
-    return success();
+    emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
+                               maxRows, /*row=*/0, payload.slots);
+    return payload.emit(builder);
   }
 
   int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
