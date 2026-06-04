@@ -200,6 +200,10 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
     return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) &&
            isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
 
+  if (hasName(def, "vc4kernel.fragment_mul") && def->getNumOperands() == 2)
+    return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) ||
+           isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
+
   return false;
 }
 
