@@ -4988,6 +4988,63 @@ planDynamicVDRRectFastPath(Location loc, int64_t addressReg,
   return region;
 }
 
+static unsigned getDMARowAddressSlotCount(
+    int64_t row, std::optional<int64_t> constantPitchBytes) {
+  if (row == 0)
+    return 0;
+  return constantPitchBytes ? 2 : static_cast<unsigned>(row);
+}
+
+static PlannedRegion planDynamicVDRActiveColsBody(
+    Location loc, const DMARectPlan &plan, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t row, int64_t setupWord,
+    std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  unsigned dynamicVDRSlots = plan.useMutex ? 18 : 16;
+  unsigned rowSlots =
+      getRowOffsetScratchSlotCount(row, plan.usesVPMRowOffsetForRows()) +
+      getDMARowAddressSlotCount(row, pitchBytes) + dynamicVDRSlots;
+  region.append(rowSlots,
+                [loc, plan, addressReg, vpmBaseRowReg, row, setupWord,
+                 pitchBytes, pitchReg](OpBuilder &builder) -> LogicalResult {
+                  DMARowAddress rowAddress = materializeDMARowAddress(
+                      builder, loc, addressReg, row, pitchBytes, pitchReg);
+                  emitDynamicVDRLoadOneRow(
+                      builder, loc, rowAddress.addressReg, vpmBaseRowReg,
+                      setupWord, plan.useMutex, rowAddress.addressMux,
+                      mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+                      rowAddress.dynamicPitchMultiplier,
+                      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+                  return success();
+                });
+  return region;
+}
+
+static PlannedRegion planDynamicVDRPitchRowBody(
+    Location loc, const DMARectPlan &plan, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t row, int64_t setupWord,
+    std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  unsigned rawVDRSlots = plan.useMutex ? 9 : 7;
+  unsigned rowSlots =
+      getRowOffsetScratchSlotCount(row, plan.usesVPMRowOffsetForRows()) +
+      getDMARowAddressSlotCount(row, pitchBytes) + rawVDRSlots;
+  region.append(rowSlots,
+                [loc, plan, addressReg, vpmBaseRowReg, row, setupWord,
+                 pitchBytes, pitchReg](OpBuilder &builder) -> LogicalResult {
+                  DMARowAddress rowAddress = materializeDMARowAddress(
+                      builder, loc, addressReg, row, pitchBytes, pitchReg);
+                  emitRawVDRLoad(builder, loc, rowAddress.addressReg, setupWord,
+                                 vpmBaseRowReg, plan.useMutex,
+                                 rowAddress.addressMux, mlir::vc4::QPUMux::a,
+                                 rowAddress.dynamicPitchReg,
+                                 rowAddress.dynamicPitchMultiplier,
+                                 /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+                  return success();
+                });
+  return region;
+}
+
 static LogicalResult emitVDRLoadRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5059,22 +5116,16 @@ static LogicalResult emitVDRLoadRectDynamic(
         int64_t oneRowSetup = 0;
         if (failed(buildOneRowSetup(row, oneRowSetup)))
           return failure();
-        unsigned vdrBodySlots = getDynamicVDRActiveColsBodySlotCount(
-            plan.useMutex, row, /*dynamicPitch=*/!pitchBytes,
-            plan.usesVPMRowOffsetForRows());
-        unsigned activeColsPayloadSlots = 4 + 8 + vdrBodySlots;
-        emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                                   maxRows, row, activeColsPayloadSlots);
-        emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
-                                   maxCols, vdrBodySlots);
-        DMARowAddress rowAddress = materializeDMARowAddress(
-            builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
-        emitDynamicVDRLoadOneRow(
-            builder, source->getLoc(), rowAddress.addressReg, *vpmBaseRowReg,
-            oneRowSetup, plan.useMutex, rowAddress.addressMux,
-            mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-            rowAddress.dynamicPitchMultiplier,
-            /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+        PlannedRegion rowBody = planDynamicVDRActiveColsBody(
+            source->getLoc(), plan, *addressReg, *vpmBaseRowReg, row,
+            oneRowSetup, pitchBytes, pitchReg);
+        PlannedRegion colsGuarded = planActiveColsGuardedRegion(
+            source->getLoc(), *activeColsReg, maxCols, std::move(rowBody));
+        if (failed(planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
+                                              maxRows, row,
+                                              std::move(colsGuarded))
+                       .emit(builder)))
+          return failure();
       }
       return success();
     }
@@ -5095,19 +5146,14 @@ static LogicalResult emitVDRLoadRectDynamic(
         int64_t oneRowSetup = 0;
         if (failed(buildOneRowSetup(row, oneRowSetup)))
           return failure();
-        unsigned bodySlots =
-            getDynamicVDRPitchRowSlotCount(plan.useMutex, row,
-                                           plan.usesVPMRowOffsetForRows());
-        emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                                   maxRows, row, bodySlots);
-        DMARowAddress rowAddress = materializeDMARowAddress(
-            builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
-        emitRawVDRLoad(builder, source->getLoc(), rowAddress.addressReg,
-                       oneRowSetup, *vpmBaseRowReg, plan.useMutex,
-                       rowAddress.addressMux, mlir::vc4::QPUMux::a,
-                       rowAddress.dynamicPitchReg,
-                       rowAddress.dynamicPitchMultiplier,
-                       /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+        if (failed(planActiveRowsGuardedRegion(
+                       source->getLoc(), *activeRowsReg, maxRows, row,
+                       planDynamicVDRPitchRowBody(source->getLoc(), plan,
+                                                  *addressReg, *vpmBaseRowReg,
+                                                  row, oneRowSetup, pitchBytes,
+                                                  pitchReg))
+                       .emit(builder)))
+          return failure();
       }
       return success();
     }
@@ -5123,9 +5169,9 @@ static LogicalResult emitVDRLoadRectDynamic(
     PlannedRegion fastPath = planDynamicVDRRectFastPath(
         source->getLoc(), *addressReg, *vpmBaseRowReg, setupWordWithoutNRows,
         plan.useMutex);
-    emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                               maxRows, /*row=*/0, fastPath.slots);
-    return fastPath.emit(builder);
+    return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
+                                       maxRows, /*row=*/0, std::move(fastPath))
+        .emit(builder);
   }
   if (!activeCols) {
     std::optional<int64_t> activeColsReg =
@@ -5142,19 +5188,13 @@ static LogicalResult emitVDRLoadRectDynamic(
       int64_t setupWord = 0;
       if (failed(buildOneRowSetup(row, setupWord)))
         return failure();
-      unsigned bodySlots = getDynamicVDRActiveColsBodySlotCount(
-          plan.useMutex, row, /*dynamicPitch=*/!pitchBytes,
-          plan.usesVPMRowOffsetForRows());
-      emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
-                                 maxCols, bodySlots);
-      DMARowAddress rowAddress = materializeDMARowAddress(
-          builder, source->getLoc(), *addressReg, row, pitchBytes, pitchReg);
-      emitDynamicVDRLoadOneRow(
-          builder, source->getLoc(), rowAddress.addressReg, *vpmBaseRowReg,
-          setupWord, plan.useMutex, rowAddress.addressMux,
-          mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-          rowAddress.dynamicPitchMultiplier,
-          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row));
+      if (failed(planActiveColsGuardedRegion(
+                     source->getLoc(), *activeColsReg, maxCols,
+                     planDynamicVDRActiveColsBody(
+                         source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+                         row, setupWord, pitchBytes, pitchReg))
+                     .emit(builder)))
+        return failure();
     }
     return success();
   }
