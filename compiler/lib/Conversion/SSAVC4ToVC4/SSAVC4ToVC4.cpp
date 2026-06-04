@@ -369,6 +369,14 @@ static bool isMirroredLoadImm(Value value) {
   return hasName(value.getDefiningOp(), kSSAVC4LoadImmOpName);
 }
 
+static constexpr llvm::StringLiteral kP3UnsupportedLoopDiagnostic(
+    "SSAVC4 block-argument lowering supports only natural loops with "
+    "conservative loop-carried data values");
+
+static constexpr llvm::StringLiteral kP3CyclicLoopCopyDiagnostic(
+    "SSAVC4 block-argument lowering does not yet support cyclic parallel "
+    "copies involving spilled values");
+
 // Lowering-private representation seams.  Slice 3 uses deliberately small
 // implementations, but keeps the explicit phase boundaries needed by later
 // instruction selection/templates, virtual values, liveness, allocation and
@@ -707,6 +715,43 @@ private:
       if (templ.sourceBlock && !blockOrder.count(templ.sourceBlock))
         blockOrder[templ.sourceBlock] = blockOrder.size();
     }
+    auto dominates = [&](Block *dominator, Block *block) {
+      auto dominatorIt = blockOrder.find(dominator);
+      auto blockIt = blockOrder.find(block);
+      if (dominatorIt == blockOrder.end() || blockIt == blockOrder.end())
+        return false;
+      unsigned dominatorIndex = dominatorIt->second;
+      unsigned blockIndex = blockIt->second;
+      SmallVector<Block *, 8> worklist;
+      if (!blockOrder.empty()) {
+        Block *entry = nullptr;
+        for (auto &entryPair : blockOrder)
+          if (entryPair.second == 0) {
+            entry = entryPair.first;
+            break;
+          }
+        if (entry)
+          worklist.push_back(entry);
+      }
+      BitVector reachableWithoutDominator(blockOrder.size());
+      while (!worklist.empty()) {
+        Block *current = worklist.pop_back_val();
+        auto currentIt = blockOrder.find(current);
+        if (currentIt == blockOrder.end())
+          continue;
+        if (currentIt->second == dominatorIndex)
+          continue;
+        if (reachableWithoutDominator.test(currentIt->second))
+          continue;
+        reachableWithoutDominator.set(currentIt->second);
+        Operation *terminator = current->getTerminator();
+        if (!terminator)
+          continue;
+        for (Block *successor : terminator->getSuccessors())
+          worklist.push_back(successor);
+      }
+      return !reachableWithoutDominator.test(blockIndex);
+    };
 
     for (const InstructionTemplate &templ : templates) {
       switch (templ.kind) {
@@ -729,10 +774,14 @@ private:
                    << "S3 spilling requires branch successors to remain in "
                       "the current function layout";
           if (successorIt->second <= sourceIt->second &&
-              !hasSuccessorOperandsForEdge(templ.source, successorIndex))
-            return templ.source->emitOpError()
-                   << "S3 spilling does not support loop/backedge branch "
-                      "layouts requiring path-sensitive liveness";
+              !hasSuccessorOperandsForEdge(templ.source, successorIndex)) {
+            if (successor->getNumArguments() != 0)
+              return templ.source->emitOpError()
+                     << "S3 spilling requires explicit successor operands for "
+                        "loop/backedge branches to block arguments";
+            if (!dominates(successor, templ.sourceBlock))
+              return templ.source->emitOpError() << kP3UnsupportedLoopDiagnostic;
+          }
         }
         sawNonUniform = true;
         break;
@@ -2177,14 +2226,6 @@ static LogicalResult verifyP2BlockArgumentType(Operation *op, Value value,
             "vector<16xi32>, or vector<16xf32> "
          << role << " values";
 }
-
-static constexpr llvm::StringLiteral kP3UnsupportedLoopDiagnostic(
-    "SSAVC4 block-argument lowering supports only natural loops with "
-    "conservative loop-carried data values");
-
-static constexpr llvm::StringLiteral kP3CyclicLoopCopyDiagnostic(
-    "SSAVC4 block-argument lowering does not yet support cyclic parallel "
-    "copies involving spilled values");
 
 static DenseMap<Block *, BitVector>
 computeDominance(ArrayRef<Block *> blocks,

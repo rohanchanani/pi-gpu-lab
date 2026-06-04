@@ -1,7 +1,12 @@
-// RUN: not vc4-opt %s --convert-ssavc4-to-vc4 -o /dev/null 2>&1 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
 
-ssavc4.module @spill_branch_layout_invalid {
-  ssavc4.func @spill_branch_layout_invalid_kernel() attributes {
+// CHECK-LABEL: vc4.func @spill_branch_layout_natural_kernel
+// CHECK-SAME: spill_frame_bytes =
+// CHECK: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<always>{{.*}}immediate = -{{[0-9]+}} : i32
+// CHECK-NOT: S3 spilling does not support loop/backedge branch layouts requiring path-sensitive liveness
+
+ssavc4.module @spill_branch_layout_natural {
+  ssavc4.func @spill_branch_layout_natural_kernel() attributes {
     kernel,
     threading = #vc4.threading_mode<single>,
     "vc4.resource" = {
@@ -96,7 +101,6 @@ ssavc4.module @spill_branch_layout_invalid {
     %s33 = ssavc4.alu.add %s32, %v34 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %s34 = ssavc4.alu.add %s33, %v35 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %s35 = ssavc4.alu.add %s34, %v36 {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    // CHECK: S3 spilling does not support loop/backedge branch layouts requiring path-sensitive liveness
     ssavc4.br ^loop
   }
 }
