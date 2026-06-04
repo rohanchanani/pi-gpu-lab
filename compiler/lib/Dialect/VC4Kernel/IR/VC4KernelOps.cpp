@@ -376,6 +376,10 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
   if (!rows)
     return op->emitOpError(
         "VPM tile operand must be produced by vc4kernel.vpm_alloc");
+  if (span < 1)
+    return op->emitOpError("VPM row access span must be positive");
+  if (span > *rows)
+    return op->emitOpError("VPM row access span exceeds allocation");
   std::optional<int64_t> rowCst = getConstantI32(row);
   if (!rowCst) {
     if (!row.getType().isSignlessInteger(32))
@@ -385,17 +389,6 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
   if (*rowCst < 0 || *rowCst + span > *rows)
     return op->emitOpError("VPM row access is out of bounds for allocation");
   return success();
-}
-
-static LogicalResult verifyVPMConstantRowInBounds(Operation *op, Value tile,
-                                                  Value row, int64_t span) {
-  if (!row.getType().isSignlessInteger(32))
-    return op->emitOpError("VPM row must be a scalar i32 value");
-  std::optional<int64_t> rowCst = getConstantI32(row);
-  if (!rowCst)
-    return op->emitOpError(
-        "dynamic rectangular VPM row must be a scalar i32 constant in vc4kernel v1");
-  return verifyVPMRowInBounds(op, tile, row, span);
 }
 
 static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
@@ -985,8 +978,8 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryPitchBytes(),
                                         "memory_pitch_bytes")))
     return failure();
-  return verifyVPMConstantRowInBounds(getOperation(), getTile(), getDstRow(),
-                                      getMaxRows());
+  return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(),
+                              getMaxRows());
 }
 LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (getElemBytes() != 4)
@@ -1008,8 +1001,8 @@ LogicalResult VDWStoreRectFromVPMOp::verify() {
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryStrideBytes(),
                                         "memory_stride_bytes")))
     return failure();
-  return verifyVPMConstantRowInBounds(getOperation(), getTile(), getSrcRow(),
-                                      getMaxRows());
+  return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow(),
+                              getMaxRows());
 }
 LogicalResult BarrierOp::verify() {
   KernelOp kernel = getOperation()->getParentOfType<KernelOp>();
