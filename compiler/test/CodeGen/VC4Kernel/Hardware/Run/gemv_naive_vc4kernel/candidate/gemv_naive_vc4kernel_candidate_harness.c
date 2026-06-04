@@ -27,11 +27,11 @@ struct gemv_naive_vc4kernel_case {
 };
 
 static const struct gemv_naive_vc4kernel_case test_cases[] = {
-    {0u, 0u, 1u},   {0u, 17u, 19u}, {1u, 0u, 3u},
-    {1u, 1u, 1u},   {15u, 17u, 19u}, {16u, 15u, 16u},
-    {17u, 31u, 33u}, {31u, 32u, 35u}, {32u, 33u, 40u},
-    {33u, 1u, 5u},  {65u, 17u, 24u}, {7u, 65u, 70u},
-    {65u, 65u, 72u},
+    {0u, 0u, 1u},    {1u, 1u, 1u},    {15u, 15u, 16u},
+    {16u, 16u, 23u}, {17u, 17u, 17u}, {31u, 31u, 32u},
+    {32u, 32u, 39u}, {33u, 33u, 33u}, {65u, 65u, 66u},
+    {1u, 65u, 72u},  {65u, 17u, 24u}, {7u, 65u, 65u},
+    {33u, 1u, 2u},
 };
 
 static float a_values[GEMV_NAIVE_VC4KERNEL_A_WORDS];
@@ -50,9 +50,11 @@ static uint32_t rounded_waves(uint32_t m) {
 }
 
 static void fill_inputs(uint32_t m, uint32_t n, uint32_t lda) {
+  for (uint32_t i = 0; i < GEMV_NAIVE_VC4KERNEL_A_WORDS; i++)
+    a_values[i] = 99.0f;
   for (uint32_t row = 0; row < GEMV_NAIVE_VC4KERNEL_MAX_ROW_COVERAGE; row++) {
-    for (uint32_t col = 0; col < GEMV_NAIVE_VC4KERNEL_MAX_LDA; col++) {
-      uint32_t idx = row * GEMV_NAIVE_VC4KERNEL_MAX_LDA + col;
+    for (uint32_t col = 0; col < lda; col++) {
+      uint32_t idx = row * lda + col;
       a_values[idx] = ((float)((row * 17u + col * 5u + 13u) % 41u) - 20.0f) *
                       0.03125f;
     }
@@ -148,7 +150,7 @@ void notmain(void) {
         vc4_m2_copy_htod(program, x_dev, x_values, x_bytes) < 0 ||
         vc4_m2_copy_htod(program, y_dev, y_values, y_bytes) < 0 ||
         gemv_naive_vc4kernel_launch(program, grid, block, a_dev, x_dev, y_dev,
-                                    m, n, lda, 0.0f) < 0 ||
+                                    m, n, lda) < 0 ||
         vc4_m2_copy_dtoh(program, y_values, y_dev, y_bytes) < 0) {
       printk("ERROR: gemv_naive_vc4kernel launch/copy failed case=%d m=%d n=%d lda=%d\n",
              (int)case_id, (int)m, (int)n, (int)lda);

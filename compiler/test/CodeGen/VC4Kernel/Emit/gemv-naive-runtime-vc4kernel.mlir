@@ -14,7 +14,6 @@
 
 // VERIFY: vc4kernel.kernel @gemv_naive_vc4kernel
 // VERIFY-SAME: {direction = "by_value", kind = "scalar", name = "lda", type = "i32"}
-// VERIFY-SAME: {direction = "by_value", kind = "scalar", name = "zero_scalar", type = "f32"}
 // VERIFY: vc4kernel.fragment_mul
 // VERIFY: vc4kernel.tmu_load_fragment
 // VERIFY: vc4kernel.vdw_store_fragment
@@ -27,9 +26,7 @@
 // SSAVC4-SAME: {direction = "by_value", kind = "scalar", name = "m", type = "i32", uniform_index = 3 : i32}
 // SSAVC4-SAME: {direction = "by_value", kind = "scalar", name = "n", type = "i32", uniform_index = 4 : i32}
 // SSAVC4-SAME: {direction = "by_value", kind = "scalar", name = "lda", type = "i32", uniform_index = 5 : i32}
-// SSAVC4-SAME: {direction = "by_value", kind = "scalar", name = "zero_scalar", type = "f32", uniform_index = 6 : i32}
 // SSAVC4: ssavc4.uniform.read 5 : i32
-// SSAVC4: ssavc4.uniform.read 6 : f32
 // SSAVC4-DAG: ssavc4.tmu.request
 // SSAVC4-DAG: ssavc4.alu.mul
 // SSAVC4-DAG: ssavc4.vdw.store
@@ -43,7 +40,6 @@
 // SOURCE: .uses_tmu = 1u
 // SOURCE: .uses_vdw = 1u
 // SOURCE: [5] arg lda
-// SOURCE: [6] arg zero_scalar
 
 // MANIFEST: "public_name": "gemv_naive_vc4kernel"
 // MANIFEST: "uniform_words_per_request":

@@ -1,5 +1,5 @@
 module {
-  vc4kernel.kernel @gemv_naive_vc4kernel(%a : i32, %x : i32, %y : i32, %m : i32, %n : i32, %lda : i32, %zero_scalar : f32) attributes {
+  vc4kernel.kernel @gemv_naive_vc4kernel(%a : i32, %x : i32, %y : i32, %m : i32, %n : i32, %lda : i32) attributes {
     public_name = "gemv_naive_vc4kernel",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
     arg_attrs = [
@@ -8,8 +8,7 @@ module {
       {name = "y", kind = "buffer", direction = "inout", elem_type = "f32"},
       {name = "m", kind = "scalar", direction = "by_value", type = "i32"},
       {name = "n", kind = "scalar", direction = "by_value", type = "i32"},
-      {name = "lda", kind = "scalar", direction = "by_value", type = "i32"},
-      {name = "zero_scalar", kind = "scalar", direction = "by_value", type = "f32"}
+      {name = "lda", kind = "scalar", direction = "by_value", type = "i32"}
     ],
     warps_per_block = 1 : i32
   } {
@@ -18,6 +17,7 @@ module {
     %c2 = arith.constant 2 : i32
     %c4 = arith.constant 4 : i32
     %c16 = arith.constant 16 : i32
+    %zero_scalar = arith.constant 0.000000e+00 : f32
     %request = vc4kernel.program_id {axis = 0 : i32} : i32
     %row_base = arith.shli %request, %c4 : i32
     %has_rows = arith.cmpi ult, %row_base, %m : i32

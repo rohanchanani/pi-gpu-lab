@@ -3199,6 +3199,9 @@ static LogicalResult emitLoadImm(OpBuilder &builder,
   Attribute value = source->getAttr("value");
   if (!value)
     value = builder.getI32IntegerAttr(0);
+  if (auto floatValue = dyn_cast<FloatAttr>(value))
+    value = builder.getIntegerAttr(
+        builder.getI32Type(), floatValue.getValue().bitcastToAPInt());
 
   state.addAttribute("mode", mode);
   if (Attribute values = source->getAttr("values"))
