@@ -95,7 +95,11 @@ constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
+constexpr llvm::StringLiteral kSSAVC4VDRLoadRectDynamicOpName(
+    "ssavc4.vdr.load_rect.dynamic");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
+constexpr llvm::StringLiteral kSSAVC4VDWStoreRectDynamicOpName(
+    "ssavc4.vdw.store_rect.dynamic");
 constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
@@ -670,6 +674,11 @@ computeVC4KernelResourceSummary(Operation *kernel) {
       summary.uses_vpm = true;
       return;
     }
+    if (hasName(op, kVDRLoadRectOpName)) {
+      summary.uses_vdr = true;
+      summary.uses_vpm = true;
+      return;
+    }
     if (hasName(op, kVDWStoreVPMOpName)) {
       summary.uses_vdw = true;
       summary.uses_vpm = true;
@@ -679,6 +688,11 @@ computeVC4KernelResourceSummary(Operation *kernel) {
           summary.compiler_vpm_staging_rows_per_warp =
               std::max<int64_t>(summary.compiler_vpm_staging_rows_per_warp, 1);
       }
+      return;
+    }
+    if (hasName(op, kVDWStoreRectOpName)) {
+      summary.uses_vdw = true;
+      summary.uses_vpm = true;
       return;
     }
     if (hasName(op, kVDWStoreOpName)) {
@@ -2737,6 +2751,41 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
               builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
     return success();
   }
+  if (hasName(op, kVDRLoadRectOpName)) {
+    Value base = mapValue(op, op->getOperand(0), state);
+    Value byteOffset = mapValue(op, op->getOperand(1), state);
+    Value dstRow = mapValue(op, op->getOperand(3), state);
+    Value activeRows = mapValue(op, op->getOperand(4), state);
+    Value activeCols = mapValue(op, op->getOperand(5), state);
+    Value memoryPitchBytes = mapValue(op, op->getOperand(6), state);
+    if (!base || !byteOffset || !dstRow || !activeRows || !activeCols ||
+        !memoryPitchBytes)
+      return failure();
+    Value address = createOpWithResult(
+        builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
+        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                            builder.getContext(),
+                                            mlir::vc4::AddOpcode::add))},
+        base.getType());
+    FailureOr<Value> plannedDstRow =
+        applyVPMTileBase(op, builder, op->getOperand(2), dstRow, state);
+    if (failed(plannedDstRow))
+      return failure();
+    dstRow = *plannedDstRow;
+    createOp(builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName,
+             {address, dstRow, activeRows, activeCols, memoryPitchBytes},
+             {getSSAVC4VPMOrientation(builder, op),
+              getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
+              builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+              builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+              builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+              builder.getNamedAttr("dst_x", op->getAttr("dst_x")),
+              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+              builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
+              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    return success();
+  }
   if (hasName(op, kVDWStoreVPMOpName)) {
     const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(4),
                                                          state);
@@ -2807,10 +2856,42 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
              operands, attrs);
     return success();
   }
-  if (hasName(op, kVDRLoadRectOpName) ||
-      hasName(op, kVDWStoreRectOpName))
-    return op->emitOpError(
-        "dynamic rectangular VDR/VDW lowering is not implemented yet");
+  if (hasName(op, kVDWStoreRectOpName)) {
+    Value srcRow = mapValue(op, op->getOperand(1), state);
+    Value base = mapValue(op, op->getOperand(2), state);
+    Value byteOffset = mapValue(op, op->getOperand(3), state);
+    Value activeRows = mapValue(op, op->getOperand(4), state);
+    Value activeCols = mapValue(op, op->getOperand(5), state);
+    Value memoryStrideBytes = mapValue(op, op->getOperand(6), state);
+    if (!srcRow || !base || !byteOffset || !activeRows || !activeCols ||
+        !memoryStrideBytes)
+      return failure();
+    Value address = createOpWithResult(
+        builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
+        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                            builder.getContext(),
+                                            mlir::vc4::AddOpcode::add))},
+        base.getType());
+    FailureOr<Value> plannedSrcRow =
+        applyVPMTileBase(op, builder, op->getOperand(0), srcRow, state);
+    if (failed(plannedSrcRow))
+      return failure();
+    srcRow = *plannedSrcRow;
+    createOp(builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName,
+             {address, srcRow, activeRows, activeCols, memoryStrideBytes},
+             {getSSAVC4VPMOrientation(builder, op),
+              getSSAVC4VPMWidth(builder, op),
+              getSSAVC4VPMSubword(builder, op),
+              builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+              builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+              builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+              builder.getNamedAttr("src_x", op->getAttr("src_x")),
+              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+              builder.getNamedAttr("preserve_inactive",
+                                   builder.getBoolAttr(true)),
+              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    return success();
+  }
   if (hasName(op, kBarrierOpName)) {
     Value logicalWarp = state.launchABI.lookupBuiltin("logical_warp_id");
     Value warpsPerBlock = state.launchABI.lookupBuiltin("warps_per_block");
