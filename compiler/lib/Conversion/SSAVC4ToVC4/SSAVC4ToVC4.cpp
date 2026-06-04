@@ -1638,22 +1638,25 @@ static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
 
 static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row,
+                                                     int64_t rowLen,
                                                      bool dynamicStride,
                                                      bool usesVPMRowOffset =
                                                          true) {
-  unsigned dynamicVDWSlots = useMutex ? 19 : 17;
-  unsigned vpmRowOffsetSlots = (usesVPMRowOffset && row != 0) ? 1 : 0;
+  unsigned commonVDWSlots = useMutex ? 15 : 13;
+  unsigned activeColsSlots = rowLen == 16 ? 4 : 3;
+  unsigned vpmSourceRowSlots = (usesVPMRowOffset && row != 0) ? 2 : 1;
   unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
-  return vpmRowOffsetSlots + addressSlots + dynamicVDWSlots;
+  return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
 }
 
 static unsigned getStaticVDWRowBodySlotCount(bool useMutex, int64_t row,
                                              bool dynamicStride,
                                              bool usesVPMRowOffset = true) {
-  unsigned rawStaticSlots = useMutex ? 17 : 15;
-  unsigned vpmRowOffsetSlots = (usesVPMRowOffset && row != 0) ? 1 : 0;
+  unsigned commonVDWSlots = useMutex ? 15 : 13;
+  unsigned activeColsSlots = 1;
+  unsigned vpmSourceRowSlots = (usesVPMRowOffset && row != 0) ? 2 : 1;
   unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
-  return vpmRowOffsetSlots + addressSlots + rawStaticSlots;
+  return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
 }
 
 static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
@@ -1767,7 +1770,7 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
     unsigned total = 0;
     for (int64_t row = 0; row < maxRows; ++row) {
       unsigned vdwBodySlots =
-          getDynamicVDWActiveColsBodySlotCount(useMutex, row,
+          getDynamicVDWActiveColsBodySlotCount(useMutex, row, maxCols,
                                                /*dynamicStride=*/true,
                                                usesVPMRowOffset);
       unsigned activeColsPayloadSlots = 4 + 8 + vdwBodySlots;
@@ -1783,7 +1786,8 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
     unsigned total = 0;
     for (int64_t row = 0; row < clampedRows; ++row)
       total += guardSlots + getDynamicVDWActiveColsBodySlotCount(
-                                useMutex, row, /*dynamicStride=*/!strideBytes,
+                                useMutex, row, maxCols,
+                                /*dynamicStride=*/!strideBytes,
                                 usesVPMRowOffset);
     return total;
   }
@@ -5430,9 +5434,9 @@ static PlannedRegion planDynamicVDWActiveColsBody(
     std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
     const DMARectPlan &plan) {
   PlannedRegion region;
-  unsigned slots = plan.useMutex ? 19 : 17;
-  if (plan.usesVPMRowOffsetForRows() && row != 0)
-    slots += 1;
+  unsigned slots = plan.useMutex ? 15 : 13;
+  slots += maxCols == 16 ? 4 : 3;
+  slots += (plan.usesVPMRowOffsetForRows() && row != 0) ? 2 : 1;
   if (row != 0)
     slots += strideBytes ? 2 : static_cast<unsigned>(row);
   region.append(slots, [loc, addressReg, vpmSourceRowReg, activeColsReg,
@@ -5448,6 +5452,36 @@ static PlannedRegion planDynamicVDWActiveColsBody(
         plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
         mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
         rowAddress.dynamicPitchMultiplier,
+        /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+        /*staticVpmX=*/plan.logicalXForRow(row));
+    return success();
+  });
+  return region;
+}
+
+static PlannedRegion planStaticVDWRowBody(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t staticCols, int64_t row, std::optional<int64_t> strideBytes,
+    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+  PlannedRegion region;
+  unsigned slots = plan.useMutex ? 15 : 13;
+  slots += 1;
+  slots += (plan.usesVPMRowOffsetForRows() && row != 0) ? 2 : 1;
+  if (row != 0)
+    slots += strideBytes ? 2 : static_cast<unsigned>(row);
+  region.append(slots, [loc, addressReg, vpmSourceRowReg, staticCols, row,
+                        strideBytes, strideReg,
+                        plan](OpBuilder &builder) -> LogicalResult {
+    DMARowAddress rowAddress =
+        materializeDMARowAddress(builder, loc, addressReg, row, strideBytes,
+                                 strideReg);
+    emitRawVDWStoreFromVPM(
+        builder, loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
+        /*dynamicActiveLanesReg=*/std::nullopt,
+        /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
+        /*memoryPitchBytes=*/staticCols * 4, plan.vertical, plan.useMutex,
+        rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
         /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
         /*staticVpmX=*/plan.logicalXForRow(row));
     return success();
@@ -5571,18 +5605,12 @@ static LogicalResult emitVDWStoreRectDynamic(
   }
   if (clampedRows > 1 && (plan.vpmPitch != 1 || !strideBytes)) {
     for (int64_t row = 0; row < clampedRows; ++row) {
-      DMARowAddress rowAddress = materializeDMARowAddress(
-          builder, source->getLoc(), *addressReg, row, strideBytes, strideReg);
-      emitRawVDWStoreFromVPM(
-          builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
-          *vpmSourceRowReg,
-          /*dynamicActiveLanesReg=*/std::nullopt,
-          /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
-          /*memoryPitchBytes=*/staticCols * 4, plan.vertical, plan.useMutex,
-          rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
-          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
-          /*staticVpmX=*/plan.logicalXForRow(row));
+      PlannedRegion body =
+          planStaticVDWRowBody(source->getLoc(), *addressReg,
+                               *vpmSourceRowReg, staticCols, row, strideBytes,
+                               strideReg, plan);
+      if (failed(body.emit(builder)))
+        return failure();
     }
     return success();
   }
