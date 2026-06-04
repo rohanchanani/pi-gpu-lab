@@ -4955,6 +4955,39 @@ static void emitDynamicVDRLoadRows(OpBuilder &builder, Location loc,
     emitMutexRelease(builder, loc);
 }
 
+static PlannedRegion planRawVDRLoadToVPM(Location loc, int64_t addressReg,
+                                         int64_t setupWord,
+                                         int64_t vpmBaseRowReg,
+                                         bool useMutex) {
+  PlannedRegion region;
+  unsigned rawVDRSlots = useMutex ? 9 : 7;
+  region.append(rawVDRSlots,
+                [loc, addressReg, setupWord, vpmBaseRowReg,
+                 useMutex](OpBuilder &builder) -> LogicalResult {
+                  emitRawVDRLoad(builder, loc, addressReg, setupWord,
+                                 vpmBaseRowReg, useMutex);
+                  return success();
+                });
+  return region;
+}
+
+static PlannedRegion
+planDynamicVDRRectFastPath(Location loc, int64_t addressReg,
+                           int64_t vpmBaseRowReg,
+                           int64_t setupWordWithoutNRows, bool useMutex) {
+  PlannedRegion region;
+  unsigned fastPathSlots = useMutex ? 16 : 14;
+  region.append(fastPathSlots,
+                [loc, addressReg, vpmBaseRowReg, setupWordWithoutNRows,
+                 useMutex](OpBuilder &builder) -> LogicalResult {
+                  emitDynamicVDRLoadRows(builder, loc, addressReg,
+                                         vpmBaseRowReg, setupWordWithoutNRows,
+                                         useMutex);
+                  return success();
+                });
+  return region;
+}
+
 static LogicalResult emitVDRLoadRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5087,13 +5120,12 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    maxRows)
                    .emit(builder)))
       return failure();
-    unsigned bodySlots = plan.useMutex ? 16 : 14;
+    PlannedRegion fastPath = planDynamicVDRRectFastPath(
+        source->getLoc(), *addressReg, *vpmBaseRowReg, setupWordWithoutNRows,
+        plan.useMutex);
     emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                               maxRows, /*row=*/0, bodySlots);
-    emitDynamicVDRLoadRows(builder, source->getLoc(), *addressReg,
-                           *vpmBaseRowReg, setupWordWithoutNRows,
-                           plan.useMutex);
-    return success();
+                               maxRows, /*row=*/0, fastPath.slots);
+    return fastPath.emit(builder);
   }
   if (!activeCols) {
     std::optional<int64_t> activeColsReg =
@@ -5148,9 +5180,9 @@ static LogicalResult emitVDRLoadRectDynamic(
           source, clampedCols, clampedRows, *pitchBytes, dstX, vpmPitch,
           plan.vertical, setupWord)))
     return failure();
-  emitRawVDRLoad(builder, source->getLoc(), *addressReg, setupWord,
-                 *vpmBaseRowReg, plan.useMutex);
-  return success();
+  return planRawVDRLoadToVPM(source->getLoc(), *addressReg, setupWord,
+                             *vpmBaseRowReg, plan.useMutex)
+      .emit(builder);
 }
 
 static LogicalResult emitVDWStore(OpBuilder &builder,
