@@ -175,6 +175,7 @@ static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
   branch->getRegion(0).push_back(new Block());
   OpBuilder delayBuilder(ctx);
   delayBuilder.setInsertionPointToEnd(&branch->getRegion(0).front());
+  // VC4 branches carry exactly three hardware delay slots in the branch region.
   createNopBundle(delayBuilder, loc);
   createNopBundle(delayBuilder, loc);
   createNopBundle(delayBuilder, loc);
@@ -1283,75 +1284,142 @@ static bool emitsPhysicalRegFileResultWrite(
   return resultReg && isPhysicalRegFileWriteAddress(*resultReg);
 }
 
-static unsigned getRegfileResultSpacerSlotCount(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
-  return emitsPhysicalRegFileResultWrite(templ, allocator) ? 1 : 0;
-}
+struct ResultSpacerSequence {
+  bool needed = false;
 
-static unsigned getSpillSlotBaseSlotCount(const SpillSlot &slot) {
-  return slot.offsetBytes == 0 ? 2 : 4;
-}
+  unsigned slotCount() const { return needed ? 1 : 0; }
 
-static unsigned getRawVDWStoreSlotCount(bool useMutex,
-                                        bool hasDynamicActiveLanes,
-                                        bool hasDynamicVPMRow,
-                                        int64_t vpmRow) {
-  (void)hasDynamicActiveLanes;
-  unsigned count = 17;
-  if (useMutex)
-    count += 2;
-  if (hasDynamicVPMRow && vpmRow != 0)
-    count += 4;
-  return count;
-}
+  void emit(OpBuilder &builder, Location loc) const {
+    if (needed)
+      createNopLDISlot(builder, loc);
+  }
 
-static unsigned getSpillActionSlotCount(const SpillAction &action) {
-  if (action.kind == SpillAction::Kind::Store)
-    return getSpillSlotBaseSlotCount(action.slot) +
-           getRawVDWStoreSlotCount(/*useMutex=*/true,
-                                   /*hasDynamicActiveLanes=*/false,
-                                   /*hasDynamicVPMRow=*/true,
-                                   /*vpmRow=*/0);
-  return getSpillSlotBaseSlotCount(action.slot) + 13;
-}
+  static ResultSpacerSequence forTemplate(
+      const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+    return ResultSpacerSequence{
+        emitsPhysicalRegFileResultWrite(templ, allocator)};
+  }
+};
 
-static unsigned
-getEdgeCopySlotCount(const InstructionTemplate &templ,
-                     const SpillAwareAllocator &allocator) {
-  std::optional<EdgeCopyAllocation> edgeCopy =
-      allocator.getEdgeCopyAllocation(templ);
-  if (!edgeCopy)
-    return 1;
+struct SpillSlotBaseSequence {
+  SpillSlot slot;
 
-  bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
-  bool destReg = edgeCopy->destination.kind == LocationKind::Register;
-  if (sourceReg && destReg)
-    return 1;
-  if (sourceReg && !destReg)
-    return getSpillActionSlotCount(SpillAction{
-        SpillAction::Kind::Store, templ.operands.front(),
-        edgeCopy->destination.slot, edgeCopy->source.physicalReg});
-  if (!sourceReg && destReg)
-    return getSpillActionSlotCount(SpillAction{
+  unsigned slotCount() const { return slot.offsetBytes == 0 ? 2 : 4; }
+  void emit(OpBuilder &builder, Location loc) const;
+};
+
+struct RawVDWSpillStoreSequence {
+  static constexpr bool kUseMutex = true;
+  static constexpr bool kHasDynamicActiveLanes = false;
+  static constexpr bool kHasDynamicVPMRow = true;
+  static constexpr int64_t kVPMRow = 0;
+
+  int64_t valueReg = -1;
+
+  unsigned slotCount() const {
+    (void)kHasDynamicActiveLanes;
+    unsigned count = 17;
+    if (kUseMutex)
+      count += 2;
+    if (kHasDynamicVPMRow && kVPMRow != 0)
+      count += 4;
+    return count;
+  }
+
+  void emit(OpBuilder &builder, Location loc) const;
+};
+
+struct SpillActionSequence {
+  SpillAction action;
+
+  unsigned slotCount() const {
+    SpillSlotBaseSequence base{action.slot};
+    if (action.kind == SpillAction::Kind::Store)
+      return base.slotCount() +
+             RawVDWSpillStoreSequence{action.physicalReg}.slotCount();
+    return base.slotCount() + 13;
+  }
+
+  void emit(OpBuilder &builder, Location loc) const;
+};
+
+struct EdgeCopySequence {
+  std::optional<std::pair<int64_t, int64_t>> registerMove;
+  SmallVector<SpillAction, 2> spillActions;
+
+  unsigned slotCount() const {
+    unsigned count = registerMove ? 1 : 0;
+    for (const SpillAction &action : spillActions)
+      count += SpillActionSequence{action}.slotCount();
+    return count;
+  }
+
+  void emit(OpBuilder &builder, Location loc) const;
+
+  static EdgeCopySequence forLayout(const InstructionTemplate &templ,
+                                    const SpillAwareAllocator &allocator) {
+    EdgeCopySequence sequence;
+    std::optional<EdgeCopyAllocation> edgeCopy =
+        allocator.getEdgeCopyAllocation(templ);
+    if (!edgeCopy) {
+      sequence.registerMove = std::make_pair(-1, -1);
+      return sequence;
+    }
+
+    bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
+    bool destReg = edgeCopy->destination.kind == LocationKind::Register;
+    if (sourceReg && destReg) {
+      sequence.registerMove =
+          std::make_pair(edgeCopy->destination.physicalReg,
+                         edgeCopy->source.physicalReg);
+      return sequence;
+    }
+    if (sourceReg && !destReg) {
+      sequence.spillActions.push_back(SpillAction{
+          SpillAction::Kind::Store, *templ.result, edgeCopy->destination.slot,
+          edgeCopy->source.physicalReg});
+      return sequence;
+    }
+    if (!sourceReg && destReg) {
+      sequence.spillActions.push_back(SpillAction{
+          SpillAction::Kind::Reload, templ.operands.front(),
+          edgeCopy->source.slot, edgeCopy->destination.physicalReg});
+      return sequence;
+    }
+    if (edgeCopy->source.slot.index == edgeCopy->destination.slot.index)
+      return sequence;
+    sequence.spillActions.push_back(SpillAction{
         SpillAction::Kind::Reload, templ.operands.front(),
-        edgeCopy->source.slot, edgeCopy->destination.physicalReg});
-  if (edgeCopy->source.slot.index == edgeCopy->destination.slot.index)
-    return 0;
-  return getSpillActionSlotCount(SpillAction{
-             SpillAction::Kind::Reload, templ.operands.front(),
-             edgeCopy->source.slot,
-             SpillAwareAllocator::edgeCopyScratchReg()}) +
-         getSpillActionSlotCount(SpillAction{
-             SpillAction::Kind::Store, *templ.result,
-             edgeCopy->destination.slot,
-             SpillAwareAllocator::edgeCopyScratchReg()});
-}
+        edgeCopy->source.slot, SpillAwareAllocator::edgeCopyScratchReg()});
+    sequence.spillActions.push_back(SpillAction{
+        SpillAction::Kind::Store, *templ.result, edgeCopy->destination.slot,
+        SpillAwareAllocator::edgeCopyScratchReg()});
+    return sequence;
+  }
+
+  static FailureOr<EdgeCopySequence>
+  forEmission(Operation *source, const InstructionTemplate &templ,
+              const SpillAwareAllocator &allocator) {
+    EdgeCopySequence sequence = forLayout(templ, allocator);
+    if (allocator.getEdgeCopyAllocation(templ))
+      return sequence;
+
+    std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+    std::optional<int64_t> inputReg =
+        allocator.lookup(templ, templ.operands.front());
+    if (!resultReg || !inputReg)
+      return source->emitOpError()
+             << "SSAVC4 block-argument lowering uses a value that is not "
+                "available in a QPU register";
+    sequence.registerMove = std::make_pair(*resultReg, *inputReg);
+    return sequence;
+  }
+};
 
 static void emitRegfileResultSpacer(OpBuilder &builder, Location loc,
                                     const InstructionTemplate &templ,
                                     const SpillAwareAllocator &allocator) {
-  if (emitsPhysicalRegFileResultWrite(templ, allocator))
-    createNopLDISlot(builder, loc);
+  ResultSpacerSequence::forTemplate(templ, allocator).emit(builder, loc);
 }
 
 struct ScheduledTemplate {
@@ -1393,15 +1461,21 @@ static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes);
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
                                       const SpillAwareAllocator &allocator) {
+  // Central flattened layout accounting: branch block placement and branch
+  // immediates are computed before emission, so this function sums the same
+  // self-counting sequence objects used by the emitters.
   unsigned spillActionSlots = 0;
   for (const SpillAction &action : allocator.getPreActions(templ))
-    spillActionSlots += getSpillActionSlotCount(action);
+    spillActionSlots += SpillActionSequence{action}.slotCount();
 
-  unsigned resultSpacer = getRegfileResultSpacerSlotCount(templ, allocator);
+  unsigned resultSpacer =
+      ResultSpacerSequence::forTemplate(templ, allocator).slotCount();
   switch (templ.kind) {
   case InstructionTemplate::Kind::EdgeCopy:
-    return spillActionSlots + getEdgeCopySlotCount(templ, allocator);
+    return spillActionSlots +
+           EdgeCopySequence::forLayout(templ, allocator).slotCount();
   case InstructionTemplate::Kind::Branch:
+    // One branch plus the three hardware delay slots owned by the branch op.
     return spillActionSlots + 4;
   case InstructionTemplate::Kind::CondBranch:
     return spillActionSlots +
@@ -1409,6 +1483,7 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
                                                                          : 1) +
            4;
   case InstructionTemplate::Kind::ThreadEnd:
+    // thread_end emits thrend plus two scheduler hazard slots.
     return spillActionSlots + 3;
   case InstructionTemplate::Kind::TMURequest:
     return spillActionSlots + 3;
@@ -1499,7 +1574,7 @@ public:
       layout.blockStartSlots.try_emplace(templ.layoutBlockId, slot);
       unsigned preActionSlots = 0;
       for (const SpillAction &action : allocator.getPreActions(templ))
-        preActionSlots += getSpillActionSlotCount(action);
+        preActionSlots += SpillActionSequence{action}.slotCount();
       unsigned instructionPreludeSlots = 0;
       if (templ.kind == InstructionTemplate::Kind::CondBranch) {
         instructionPreludeSlots =
@@ -3206,11 +3281,6 @@ static LogicalResult emitCondSelect(OpBuilder &builder,
   return success();
 }
 
-static void emitSpillStoreAction(OpBuilder &builder, Location loc,
-                                 const SpillAction &action);
-static void emitSpillReloadAction(OpBuilder &builder, Location loc,
-                                  const SpillAction &action);
-
 static LogicalResult emitEdgeCopy(OpBuilder &builder,
                                   const InstructionTemplate &templ,
                                   const SpillAwareAllocator &allocator) {
@@ -3218,68 +3288,11 @@ static LogicalResult emitEdgeCopy(OpBuilder &builder,
   if (!templ.result || templ.operands.size() != 1)
     return source->emitError("internal lowering error: malformed edge copy");
 
-  std::optional<EdgeCopyAllocation> edgeCopy =
-      allocator.getEdgeCopyAllocation(templ);
-  if (edgeCopy) {
-    bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
-    bool destReg = edgeCopy->destination.kind == LocationKind::Register;
-    if (sourceReg && destReg) {
-      createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            edgeCopy->destination.physicalReg,
-                            /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
-                            mlir::vc4::MulOpcode::nop,
-                            edgeCopy->source.physicalReg,
-                            edgeCopy->source.physicalReg,
-                            mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-      return success();
-    }
-    if (sourceReg && !destReg) {
-      emitSpillStoreAction(
-          builder, source->getLoc(),
-          SpillAction{SpillAction::Kind::Store, *templ.result,
-                      edgeCopy->destination.slot,
-                      edgeCopy->source.physicalReg});
-      return success();
-    }
-    if (!sourceReg && destReg) {
-      emitSpillReloadAction(
-          builder, source->getLoc(),
-          SpillAction{SpillAction::Kind::Reload, templ.operands.front(),
-                      edgeCopy->source.slot,
-                      edgeCopy->destination.physicalReg});
-      return success();
-    }
-    if (edgeCopy->source.slot.index == edgeCopy->destination.slot.index)
-      return success();
-    emitSpillReloadAction(
-        builder, source->getLoc(),
-        SpillAction{SpillAction::Kind::Reload, templ.operands.front(),
-                    edgeCopy->source.slot,
-                    SpillAwareAllocator::edgeCopyScratchReg()});
-    emitSpillStoreAction(
-        builder, source->getLoc(),
-        SpillAction{SpillAction::Kind::Store, *templ.result,
-                    edgeCopy->destination.slot,
-                    SpillAwareAllocator::edgeCopyScratchReg()});
-    return success();
-  }
-
-  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
-  if (!resultReg || !inputReg)
-    return source->emitOpError()
-           << "SSAVC4 block-argument lowering uses a value that is not available "
-              "in a QPU register";
-
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  FailureOr<EdgeCopySequence> sequence =
+      EdgeCopySequence::forEmission(source, templ, allocator);
+  if (failed(sequence))
+    return failure();
+  sequence->emit(builder, source->getLoc());
   return success();
 }
 
@@ -6896,8 +6909,7 @@ static void emitUniformReadToReg(OpBuilder &builder, Location loc,
   createNopLDISlot(builder, loc);
 }
 
-static void emitSpillSlotBase(OpBuilder &builder, Location loc,
-                              const SpillSlot &slot) {
+void SpillSlotBaseSequence::emit(OpBuilder &builder, Location loc) const {
   if (slot.offsetBytes == 0) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -6927,18 +6939,20 @@ static void emitSpillSlotBase(OpBuilder &builder, Location loc,
   createNopLDISlot(builder, loc);
 }
 
-static void emitSpillStoreAction(OpBuilder &builder, Location loc,
-                                 const SpillAction &action) {
-  emitSpillSlotBase(builder, loc, action.slot);
+void RawVDWSpillStoreSequence::emit(OpBuilder &builder, Location loc) const {
   emitRawVDWStore(builder, loc, SpillAwareAllocator::spillAddrReg(),
-                  action.physicalReg, std::nullopt,
-                  SpillAwareAllocator::spillRowReg(),
-                  /*activeLanes=*/16, /*vpmRow=*/0, /*useMutex=*/true);
+                  valueReg, std::nullopt, SpillAwareAllocator::spillRowReg(),
+                  /*activeLanes=*/16, /*vpmRow=*/kVPMRow,
+                  /*useMutex=*/kUseMutex);
 }
 
-static void emitSpillReloadAction(OpBuilder &builder, Location loc,
-                                  const SpillAction &action) {
-  emitSpillSlotBase(builder, loc, action.slot);
+void SpillActionSequence::emit(OpBuilder &builder, Location loc) const {
+  SpillSlotBaseSequence{action.slot}.emit(builder, loc);
+  if (action.kind == SpillAction::Kind::Store) {
+    RawVDWSpillStoreSequence{action.physicalReg}.emit(builder, loc);
+    return;
+  }
+
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         SpillAwareAllocator::spillLaneReg(), /*waddrMul=*/32,
@@ -7015,12 +7029,25 @@ static void emitSpillReloadAction(OpBuilder &builder, Location loc,
   createNopLDISlot(builder, loc);
 }
 
+void EdgeCopySequence::emit(OpBuilder &builder, Location loc) const {
+  if (registerMove) {
+    int64_t dstReg = registerMove->first;
+    int64_t srcReg = registerMove->second;
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          dstReg, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, srcReg, srcReg,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  }
+  for (const SpillAction &action : spillActions)
+    SpillActionSequence{action}.emit(builder, loc);
+}
+
 static void emitSpillAction(OpBuilder &builder, Location loc,
                             const SpillAction &action) {
-  if (action.kind == SpillAction::Kind::Store)
-    emitSpillStoreAction(builder, loc, action);
-  else
-    emitSpillReloadAction(builder, loc, action);
+  SpillActionSequence{action}.emit(builder, loc);
 }
 
 static LogicalResult emitScheduledFunctionBody(
