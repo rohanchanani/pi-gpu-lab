@@ -4623,6 +4623,24 @@ planPitchOverflowGuardedRegion(Location loc, mlir::vc4::BranchCond branchIfSkip,
   return planBranchAroundRegion(loc, branchIfSkip, std::move(payload));
 }
 
+static PlannedRegion planDMARectZeroFill(Location loc, const DMARectPlan &plan,
+                                         int64_t vpmBaseRowReg,
+                                         int64_t rows) {
+  PlannedRegion region;
+  unsigned zeroFillSlots = plan.useMutex ? 6 : 3;
+  for (int64_t row = 0; row < rows; ++row) {
+    unsigned rowSlots =
+        getRowOffsetScratchSlotCount(row, plan.usesVPMRowOffsetForRows()) +
+        zeroFillSlots;
+    region.append(rowSlots, [loc, plan, vpmBaseRowReg,
+                             row](OpBuilder &builder) -> LogicalResult {
+      emitDMARectZeroFillRow(builder, loc, plan, vpmBaseRowReg, row);
+      return success();
+    });
+  }
+  return region;
+}
+
 static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
                                        int64_t activeRowsReg, int64_t maxRows,
                                        int64_t row,
@@ -5000,9 +5018,10 @@ static LogicalResult emitVDRLoadRectDynamic(
         return source->emitOpError()
                << "uses a dynamic active column value that is not defined by "
                   "a lowerable SSAVC4 op";
-      for (int64_t row = 0; row < maxRows; ++row)
-        emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
-                               row);
+      if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
+                                     maxRows)
+                     .emit(builder)))
+        return failure();
       for (int64_t row = 0; row < maxRows; ++row) {
         int64_t oneRowSetup = 0;
         if (failed(buildOneRowSetup(row, oneRowSetup)))
@@ -5035,9 +5054,10 @@ static LogicalResult emitVDRLoadRectDynamic(
         return source->emitOpError()
                << "dynamic rectangular VDR runtime pitch currently supports "
                   "only up to sixteen-row rectangles";
-      for (int64_t row = 0; row < maxRows; ++row)
-        emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
-                               row);
+      if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
+                                     maxRows)
+                     .emit(builder)))
+        return failure();
       for (int64_t row = 0; row < maxRows; ++row) {
         int64_t oneRowSetup = 0;
         if (failed(buildOneRowSetup(row, oneRowSetup)))
@@ -5063,9 +5083,10 @@ static LogicalResult emitVDRLoadRectDynamic(
             source, maxCols, 16, *pitchBytes, dstX, vpmPitch, plan.vertical,
             setupWordWithoutNRows)))
       return failure();
-    for (int64_t row = 0; row < maxRows; ++row)
-      emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
-                             row);
+    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
+                                   maxRows)
+                   .emit(builder)))
+      return failure();
     unsigned bodySlots = plan.useMutex ? 16 : 14;
     emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
                                maxRows, /*row=*/0, bodySlots);
@@ -5081,9 +5102,10 @@ static LogicalResult emitVDRLoadRectDynamic(
       return source->emitOpError()
              << "uses a dynamic active column value that is not defined by a "
                 "lowerable SSAVC4 op";
-    for (int64_t row = 0; row < maxRows; ++row)
-      emitDMARectZeroFillRow(builder, source->getLoc(), plan, *vpmBaseRowReg,
-                             row);
+    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
+                                   maxRows)
+                   .emit(builder)))
+      return failure();
     for (int64_t row = 0; row < clampedRows; ++row) {
       int64_t setupWord = 0;
       if (failed(buildOneRowSetup(row, setupWord)))
