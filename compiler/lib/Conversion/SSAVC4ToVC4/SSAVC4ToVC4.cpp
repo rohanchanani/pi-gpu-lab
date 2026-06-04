@@ -4020,6 +4020,67 @@ static void emitRawVDWStore(OpBuilder &builder, Location loc,
     emitMutexRelease(builder, loc);
 }
 
+static void emitVDWVPMBase(OpBuilder &builder, Location loc, int64_t vpmYReg,
+                           int64_t vpmXReg, mlir::vc4::QPUMux vpmYMux,
+                           mlir::vc4::QPUMux vpmXMux, int64_t vpmRowOffset,
+                           std::optional<int64_t> staticVpmX) {
+  if (vpmRowOffset != 0) {
+    createSplat32LDI(builder, loc, vpmRowOffset, 33);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::add,
+                          mlir::vc4::MulOpcode::nop, vpmYReg, /*raddrB=*/0,
+                          vpmYMux, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/33, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, vpmYReg, vpmYReg,
+                          vpmYMux, vpmYMux,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  }
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/7);
+  if (staticVpmX) {
+    createSplat32LDI(builder, loc, *staticVpmX, 35);
+  } else {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
+                          vpmXMux, vpmXMux, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/3);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::add,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+}
+
 static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                                    int64_t addressReg,
                                    int64_t vpmYReg,
@@ -4135,61 +4196,8 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                         /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                         mlir::vc4::QPUMux::r1,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  if (vpmRowOffset != 0) {
-    createSplat32LDI(builder, loc, vpmRowOffset, 33);
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::add,
-                          mlir::vc4::MulOpcode::nop, vpmYReg, /*raddrB=*/0,
-                          vpmYMux, mlir::vc4::QPUMux::r1,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, vpmYReg, vpmYReg,
-                          vpmYMux, vpmYMux,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/7);
-  if (staticVpmX) {
-    createSplat32LDI(builder, loc, *staticVpmX, 35);
-  } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/35, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
-                          vpmXMux, vpmXMux, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
-  }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/35, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/3);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  emitVDWVPMBase(builder, loc, vpmYReg, vpmXReg, vpmYMux, vpmXMux,
+                 vpmRowOffset, staticVpmX);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -5781,8 +5789,6 @@ static LogicalResult emitVDWStoreRectDynamic(
   int64_t maxRows = getI32IntegerAttrOr(source, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(source, "max_cols", -1);
   DMARectPlan plan = getDMARectPlan(source, "src_x");
-  std::optional<int64_t> srcRow =
-      getConstantI32FromLoadImm(templ.operands[1]);
   std::optional<int64_t> activeRows =
       getConstantI32FromLoadImm(templ.operands[2]);
   std::optional<int64_t> activeCols =
@@ -5791,10 +5797,6 @@ static LogicalResult emitVDWStoreRectDynamic(
       getConstantI32FromLoadImm(templ.operands[4]);
   std::optional<int64_t> strideReg =
       strideBytes ? std::nullopt : allocator.lookup(templ, templ.operands[4]);
-  if (!srcRow)
-    return source->emitOpError()
-           << "dynamic rectangular VDW lowering currently requires constant "
-              "source row";
   if (!strideBytes && !strideReg)
     return source->emitOpError()
            << "uses a dynamic stride value that is not defined by a lowerable "
