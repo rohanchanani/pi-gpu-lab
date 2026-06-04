@@ -46,6 +46,12 @@ OLD_DYNAMIC_DMA_DIAGNOSTICS = (
     "dynamic rectangular VDW runtime active_rows currently requires full static active_cols",
     "dynamic rectangular VDR partial zero-fill currently supports only one-row rectangles",
 )
+VPM_DMA_ROW_16_CAP_PATTERNS = (
+    re.compile(r"\b(?:vpmBaseRow|vpmSourceRow)\w*\s*(?:<|<=|>|>=)\s*15\b"),
+    re.compile(r"\b(?:vpmBaseRow|vpmSourceRow)\w*\s*&\s*(?:0xf|15)\b", re.I),
+    re.compile(r"\b(?:vpmBaseRow|vpmSourceRow)\w*\s*%\s*16\b"),
+    re.compile(r"VPM (?:base|source) row.*\[(?:0,\s*)?15\]", re.I),
+)
 
 
 def strip_line_comment(line: str) -> str:
@@ -110,6 +116,11 @@ def main() -> int:
           failures.append(
               f"{source}:{idx}: forbidden VDW stride mask/limit token in code"
           )
+      for pattern in VPM_DMA_ROW_16_CAP_PATTERNS:
+          if pattern.search(code):
+              failures.append(
+                  f"{source}:{idx}: forbidden 0..15 cap on dynamic VPM DMA row operand"
+              )
 
     functions_by_line = find_enclosing_functions(text, lines)
     helper_res = [re.compile(pattern) for pattern in BRANCH_CRITICAL_HELPERS]
