@@ -158,7 +158,7 @@ static Operation *createThreadEndBundle(OpBuilder &builder, Location loc) {
 static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
                                         mlir::vc4::BranchCond cond,
                                         int64_t immediate,
-                                        int64_t raddrA = 0,
+                                        int64_t raddrA = 14,
                                         int64_t waddrAdd = 31,
                                         int64_t waddrMul = 30) {
   MLIRContext *ctx = builder.getContext();
@@ -3765,8 +3765,12 @@ static LogicalResult emitScheduledBranch(OpBuilder &builder,
     cond = condAttr.getValue();
   }
 
+  // Relative-immediate branches do not semantically consume raddr_a, but the
+  // scheduled hardware verifier still observes the physical read.  Use the
+  // allocator-forbidden thread-end hazard register so edge-copy writes cannot
+  // create a false adjacent read-after-write hazard on the branch.
   createScheduledBranch(builder, source->getLoc(), cond, immediateIt->second,
-                        /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+                        /*raddrA=*/14, /*waddrAdd=*/31, /*waddrMul=*/30);
   return success();
 }
 
