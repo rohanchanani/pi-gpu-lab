@@ -39,12 +39,30 @@ BRANCH_PAYLOAD_FUNCTION_RE = re.compile(
 FLATTENED_HELPER_RE = re.compile(
     r"\bget(?:VDRLoadRectDynamic|VDWStoreRectDynamic)FlattenedSlotCount\s*\("
 )
-OLD_DYNAMIC_DMA_DIAGNOSTICS = (
-    "dynamic rectangular VDW lowering currently requires constant source row",
-    "dynamic rectangular VDR runtime pitch currently requires",
-    "dynamic rectangular VDR runtime active_rows currently requires full static active_cols",
-    "dynamic rectangular VDW runtime active_rows currently requires full static active_cols",
-    "dynamic rectangular VDR partial zero-fill currently supports only one-row rectangles",
+OLD_DYNAMIC_DMA_DIAGNOSTIC_FRAGMENTS = (
+    (
+        "dynamic rectangular VDW lowering",
+        "currently requires",
+        "constant source row",
+    ),
+    (
+        "dynamic rectangular VDR runtime pitch",
+        "currently requires",
+    ),
+    (
+        "dynamic rectangular VDR runtime active_rows",
+        "currently requires",
+        "full static active_cols",
+    ),
+    (
+        "dynamic rectangular VDW runtime active_rows",
+        "currently requires",
+        "full static active_cols",
+    ),
+    (
+        "dynamic rectangular VDR partial zero-fill",
+        "currently supports only one-row rectangles",
+    ),
 )
 VPM_DMA_ROW_16_CAP_PATTERNS = (
     re.compile(r"\b(?:vpmBaseRow|vpmSourceRow)\w*\s*(?:<|<=|>|>=)\s*15\b"),
@@ -52,6 +70,8 @@ VPM_DMA_ROW_16_CAP_PATTERNS = (
     re.compile(r"\b(?:vpmBaseRow|vpmSourceRow)\w*\s*%\s*16\b"),
     re.compile(r"VPM (?:base|source) row.*\[(?:0,\s*)?15\]", re.I),
 )
+VDR_ROW_BY_ROW_FALLBACK_RE = re.compile(r"\bplanVDRRowByRow\w*Fallback\s*\(")
+VDW_FALLBACK_RE = re.compile(r"\bplanVDW\w*Fallback\s*\(")
 
 
 def strip_line_comment(line: str) -> str:
@@ -111,16 +131,37 @@ def main() -> int:
     failures = []
 
     for idx, line in enumerate(lines, start=1):
-      code = strip_line_comment(line)
-      if "0xffff" in code or "65535" in code:
-          failures.append(
-              f"{source}:{idx}: forbidden VDW stride mask/limit token in code"
-          )
-      for pattern in VPM_DMA_ROW_16_CAP_PATTERNS:
-          if pattern.search(code):
-              failures.append(
-                  f"{source}:{idx}: forbidden 0..15 cap on dynamic VPM DMA row operand"
-              )
+        code = strip_line_comment(line)
+        if "0xffff" in code or "65535" in code:
+            failures.append(
+                f"{source}:{idx}: forbidden VDW stride mask/limit token in code"
+            )
+        for pattern in VPM_DMA_ROW_16_CAP_PATTERNS:
+            if pattern.search(code):
+                failures.append(
+                    f"{source}:{idx}: forbidden 0..15 cap on dynamic VPM DMA row operand"
+                )
+        if re.search(
+            r"\bVDW\b.*constant source row|constant source row.*\bVDW\b",
+            code,
+        ):
+            failures.append(
+                f"{source}:{idx}: forbidden VDW constant-source-row limitation"
+            )
+        if re.search(
+            r"VDR.*runtime pitch.*active_rows|runtime pitch.*VDR.*active_rows",
+            code,
+        ):
+            failures.append(
+                f"{source}:{idx}: forbidden VDR runtime-pitch active_rows limitation"
+            )
+        if re.search(
+            r"VDR.*partial zero-fill.*one-row|partial zero-fill.*VDR.*one-row",
+            code,
+        ):
+            failures.append(
+                f"{source}:{idx}: forbidden one-row VDR partial zero-fill limitation"
+            )
 
     functions_by_line = find_enclosing_functions(text, lines)
     helper_res = [re.compile(pattern) for pattern in BRANCH_CRITICAL_HELPERS]
@@ -179,6 +220,32 @@ def main() -> int:
                     f"{source}:{idx}: {fn} uses planStaticRegion near dynamic DMA payload"
                 )
 
+    for idx, line in enumerate(lines, start=1):
+        code = strip_line_comment(line)
+        fn = functions_by_line.get(idx, "")
+        if re.search(r"\bstatic\s+FailureOr<PlannedRegion>\s+planVDRRowByRow", code):
+            continue
+        if VDR_ROW_BY_ROW_FALLBACK_RE.search(code):
+            window = "\n".join(lines[max(0, idx - 25):idx + 25])
+            if not re.search(
+                r"encodeVDRMemoryPitchBytes|kMaxVDRMPITCHBBytes|planDynamicVDRPitchFallbackDispatch",
+                window,
+            ):
+                failures.append(
+                    f"{source}:{idx}: VDR row-by-row fallback lacks pitch overflow/unencodable guard"
+                )
+        if re.search(r"\bstatic\s+PlannedRegion\s+planVDW\w*Fallback", code):
+            continue
+        if VDW_FALLBACK_RE.search(code):
+            window = "\n".join(lines[max(0, idx - 25):idx + 25])
+            if not re.search(
+                r"vpmSourceLayoutEncodable|isVDWRectangularVPMSourceLayoutEncodable|strideGap|isEncodableVDWStrideGap|planDynamicVDWStrideGapFallbackDispatch",
+                window,
+            ):
+                failures.append(
+                    f"{source}:{idx}: VDW fallback lacks stride-gap or VPM-source-layout guard"
+                )
+
     for idx, line in enumerate(lines):
         match = MANUAL_DMA_HELPER_RE.search(line)
         if match and "{" not in line:
@@ -208,11 +275,27 @@ def main() -> int:
         )
 
     for idx, line in enumerate(lines, start=1):
-        for diagnostic in OLD_DYNAMIC_DMA_DIAGNOSTICS:
-            if diagnostic in line:
+        for diagnostic in OLD_DYNAMIC_DMA_DIAGNOSTIC_FRAGMENTS:
+            if all(fragment in line for fragment in diagnostic):
                 failures.append(
                     f"{source}:{idx}: old artificial dynamic DMA diagnostic is present"
                 )
+        code = strip_line_comment(line)
+        fn = functions_by_line.get(idx, "")
+        if (
+            fn.startswith("plan")
+            and "VDW" in fn
+            and "nrows" in code
+            and "& 0x0f" in code
+        ):
+            failures.append(
+                f"{source}:{idx}: VDW dynamic count path appears to use VDR 0=>16 encoding"
+            )
+
+    if "appendSplat32LDISlot(region, loc, 16, 32)" not in text:
+        failures.append(
+            f"{source}: VDW active-lane clamp must preserve count 16 instead of encoding it as zero"
+        )
 
     forbidden_source_tokens = (
         "VC4KernelToVC4",
