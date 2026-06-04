@@ -23,11 +23,24 @@ BRANCH_CRITICAL_HELPERS = (
 
 MANUAL_DMA_HELPER_RE = re.compile(
     r"\bstatic\s+unsigned\s+"
-    r"(get(?:RowOffsetScratch|DMARowAddress|VDRLoadRectDynamic|VDWStoreRectDynamic|"
+    r"(get(?:RowOffsetScratch|DMARowAddress|VDRLoadRectDynamic(?:Flattened)?|VDWStoreRectDynamic(?:Flattened)?|"
     r"DynamicVDR\w*|DynamicVDW\w*|StaticVDW\w*|VDWRowByRow\w*)SlotCount)\s*\("
 )
 
 FUNCTION_RE = re.compile(r"\b(?:static\s+)?(?:unsigned|LogicalResult|PlannedRegion|FailureOr<PlannedRegion>)\s+(\w+)\s*\(")
+BRANCH_PAYLOAD_FUNCTION_RE = re.compile(
+    r"^(?:planDynamicVDR\w*|planDynamicVDW\w*|planVDRRowByRow\w*|planVDW\w*Fallback)$"
+)
+FLATTENED_HELPER_RE = re.compile(
+    r"\bget(?:VDRLoadRectDynamic|VDWStoreRectDynamic)FlattenedSlotCount\s*\("
+)
+OLD_DYNAMIC_DMA_DIAGNOSTICS = (
+    "dynamic rectangular VDW lowering currently requires constant source row",
+    "dynamic rectangular VDR runtime pitch currently requires",
+    "dynamic rectangular VDR runtime active_rows currently requires full static active_cols",
+    "dynamic rectangular VDW runtime active_rows currently requires full static active_cols",
+    "dynamic rectangular VDR partial zero-fill currently supports only one-row rectangles",
+)
 
 
 def strip_line_comment(line: str) -> str:
@@ -88,8 +101,8 @@ def main() -> int:
     functions_by_line = find_enclosing_functions(lines)
     helper_res = [re.compile(pattern) for pattern in BRANCH_CRITICAL_HELPERS]
     allowed_flattening_functions = {
-        "getVDRLoadRectDynamicSlotCount",
-        "getVDWStoreRectDynamicSlotCount",
+        "getVDRLoadRectDynamicFlattenedSlotCount",
+        "getVDWStoreRectDynamicFlattenedSlotCount",
     }
     for idx, line in enumerate(lines, start=1):
         code = strip_line_comment(line)
@@ -106,6 +119,35 @@ def main() -> int:
             failures.append(
                 f"{source}:{idx}: {helper} used outside flattened-layout-only accounting"
             )
+
+    for idx, line in enumerate(lines, start=1):
+        code = strip_line_comment(line)
+        fn = functions_by_line.get(idx, "")
+        if FLATTENED_HELPER_RE.search(code) and fn != "getFlattenedSlotCount":
+            if not re.search(r"\bstatic\s+unsigned\s+\w+\s*\(", code):
+                failures.append(
+                    f"{source}:{idx}: flattened layout helper used outside top-level layout sizing"
+                )
+
+    for idx, line in enumerate(lines, start=1):
+        code = strip_line_comment(line)
+        fn = functions_by_line.get(idx, "")
+        if not BRANCH_PAYLOAD_FUNCTION_RE.match(fn):
+            continue
+        if re.search(r"region\.append\s*\(\s*(?:slots|rowSlots|fastPathSlots)", code):
+            failures.append(
+                f"{source}:{idx}: {fn} uses a manual counted PlannedRegion payload"
+            )
+        if re.search(r"get(?:DynamicVDR|DynamicVDW|StaticVDW)\w*SlotCount\s*\(", code):
+            failures.append(
+                f"{source}:{idx}: {fn} uses a branch-critical slot-count mirror"
+            )
+        if "planStaticRegion" in code:
+            window = "\n".join(lines[max(0, idx - 8):idx + 8])
+            if re.search(r"Dynamic|VDR|VDW|activeRows|activeCols|stride|pitch", window):
+                failures.append(
+                    f"{source}:{idx}: {fn} uses planStaticRegion near dynamic DMA payload"
+                )
 
     for idx, line in enumerate(lines):
         match = MANUAL_DMA_HELPER_RE.search(line)
@@ -125,6 +167,13 @@ def main() -> int:
             failures.append(
                 f"{source}:{idx}: planStaticRegion used near dynamic DMA branch body"
             )
+
+    for idx, line in enumerate(lines, start=1):
+        for diagnostic in OLD_DYNAMIC_DMA_DIAGNOSTICS:
+            if diagnostic in line:
+                failures.append(
+                    f"{source}:{idx}: old artificial dynamic DMA diagnostic is present"
+                )
 
     forbidden_source_tokens = (
         "VC4KernelToVC4",
