@@ -1389,6 +1389,7 @@ static bool makeFlagsNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static unsigned getVDRLoadRectDynamicSlotCount(Operation *op);
 static unsigned getVDWStoreRectDynamicSlotCount(Operation *op);
+static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes);
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
                                       const SpillAwareAllocator &allocator) {
@@ -1625,16 +1626,22 @@ static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row,
          dynamicAddressSlots + rawVDRSlots;
 }
 
-// flattened layout only: not branch-target-critical.
-static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
-                                                     int64_t row,
-                                                     bool dynamicPitch,
-                                                     bool usesVPMRowOffset =
-                                                         true) {
-  unsigned dynamicVDRSlots = useMutex ? 18 : 16;
-  unsigned addressSlots = row == 0 ? 0 : (dynamicPitch ? row : 2);
-  return getRowOffsetScratchSlotCount(row, usesVPMRowOffset) + addressSlots +
-         dynamicVDRSlots;
+static unsigned getDynamicVDRRectRowsSlotCount(bool useMutex,
+                                               bool extendedPitch = false) {
+  unsigned slots = useMutex ? 17 : 15;
+  return extendedPitch ? slots + 2 : slots;
+}
+
+static unsigned getDynamicVDRRectColsSlotCount(bool useMutex,
+                                               bool extendedPitch = false) {
+  unsigned slots = useMutex ? 18 : 16;
+  return extendedPitch ? slots + 2 : slots;
+}
+
+static unsigned getDynamicVDRRectRowsColsSlotCount(bool useMutex,
+                                                   bool extendedPitch = false) {
+  unsigned slots = useMutex ? 22 : 20;
+  return extendedPitch ? slots + 2 : slots;
 }
 
 // flattened layout only: not branch-target-critical.
@@ -1701,22 +1708,22 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
       return total;
     }
     unsigned clampSlots = 4;
-    unsigned dynamicRowsVDRSlots = useMutex ? 16 : 14;
+    unsigned dynamicRowsVDRSlots =
+        getDynamicVDRRectRowsSlotCount(useMutex, /*extendedPitch=*/false);
     return total + clampSlots + guardSlots + dynamicRowsVDRSlots;
   }
   if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
-    unsigned clampSlots = 4;
-    unsigned guardSlots = 8;
     unsigned total = 0;
     for (int64_t row = 0; row < maxRows; ++row)
       total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
                zeroFillSlots;
-    for (int64_t row = 0; row < maxRows; ++row)
-      total += guardSlots + clampSlots + guardSlots +
-               getDynamicVDRActiveColsBodySlotCount(useMutex, row,
-                                                    /*dynamicPitch=*/true,
-                                                    usesVPMRowOffset);
+    unsigned activeRowsGuardSlots = 12;
+    unsigned preserveRowsSlots = 1;
+    unsigned activeColsGuardSlots = 12;
+    total += activeRowsGuardSlots + preserveRowsSlots + activeColsGuardSlots +
+             getDynamicVDRRectRowsColsSlotCount(useMutex,
+                                                /*extendedPitch=*/true);
     return total;
   }
   if (!pitch)
@@ -1727,7 +1734,6 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     return rawVDRSlots;
   if (!activeCols && activeRows && maxRows >= 1 && maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
-    unsigned guardSlots = 8;
     std::optional<int64_t> pitch =
         op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(4))
                                   : std::nullopt;
@@ -1736,12 +1742,12 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
     for (int64_t row = 0; row < maxRows; ++row)
       total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
                zeroFillSlots;
-    for (int64_t row = 0; row < clampedRows; ++row)
-      total += guardSlots +
-               getDynamicVDRActiveColsBodySlotCount(useMutex, row,
-                                                    /*dynamicPitch=*/!pitch,
-                                                    usesVPMRowOffset);
-    return total;
+    if (clampedRows == 0)
+      return total;
+    unsigned activeColsGuardSlots = 12;
+    bool extendedPitch = !pitch || !encodeVDRMemoryPitchBytes(*pitch);
+    return total + activeColsGuardSlots +
+           getDynamicVDRRectColsSlotCount(useMutex, extendedPitch);
   }
   if (maxRows == 1) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
@@ -4631,14 +4637,15 @@ appendOneSlot(PlannedRegion &region,
   region.append(/*slotCount=*/1, std::move(emitter));
 }
 
-// Branch slots include the vc4.qpu.branch op and its three delay slots. Dynamic
-// DMA branch windows must use payload.slots, not a separately rederived body
-// size. Raw hardware setup emitters are not changed in this prompt.
+// Branch windows include the vc4.qpu.branch op, its explicit delay slots, and
+// the backend branch-window padding visible in emitted QPU slots. Dynamic DMA
+// branch windows must use payload.slots, not a separately rederived body size.
+// Raw hardware setup emitters are not changed in this prompt.
 [[maybe_unused]] static void appendBranchWithDelaySlots(
     PlannedRegion &region, Location loc, mlir::vc4::BranchCond cond,
     int64_t immediateBytes, int64_t raddrA = 0, int64_t waddrAdd = 31,
     int64_t waddrMul = 30) {
-  region.append(/*slotCount=*/4,
+  region.append(/*slotCount=*/7,
                 [loc, cond, immediateBytes, raddrA, waddrAdd,
                  waddrMul](OpBuilder &builder) -> LogicalResult {
                   createScheduledBranch(builder, loc, cond, immediateBytes,
@@ -4656,7 +4663,7 @@ planBranchAroundRegion(Location loc, mlir::vc4::BranchCond cond,
                        int64_t waddrAdd = 31, int64_t waddrMul = 30) {
   PlannedRegion region;
   appendBranchWithDelaySlots(
-      region, loc, cond, static_cast<int64_t>(4 + payload.slots) * 8, raddrA,
+      region, loc, cond, static_cast<int64_t>(7 + payload.slots) * 8, raddrA,
       waddrAdd, waddrMul);
   region.appendRegion(std::move(payload));
   return region;
@@ -4968,10 +4975,42 @@ static void emitDynamicVDRLoadOneRow(OpBuilder &builder, Location loc,
     emitMutexRelease(builder, loc);
 }
 
+static void emitVDRLoadExtendedPitchSetup(OpBuilder &builder, Location loc,
+                                          std::optional<int64_t> pitchBytes,
+                                          std::optional<int64_t> pitchReg) {
+  if (pitchBytes) {
+    createSplat32LDI(
+        builder, loc,
+        static_cast<int32_t>(0x90000000u |
+                             static_cast<uint32_t>(*pitchBytes)),
+        35);
+    createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                      mlir::vc4::QPUMux::r1);
+    return;
+  }
+  if (pitchReg) {
+    createSplat32LDI(builder, loc, static_cast<int32_t>(0x90000000u), 35);
+    createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                      *pitchReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                      mlir::vc4::QPUMux::r1);
+  }
+}
+
 static void emitDynamicVDRLoadRows(OpBuilder &builder, Location loc,
                                    int64_t addressReg, int64_t vpmBaseRowReg,
                                    int64_t setupWordWithoutNRows,
-                                   bool useMutex) {
+                                   bool useMutex,
+                                   std::optional<int64_t> extendedPitchBytes =
+                                       std::nullopt,
+                                   std::optional<int64_t> extendedPitchReg =
+                                       std::nullopt) {
   if (useMutex) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -4982,12 +5021,22 @@ static void emitDynamicVDRLoadRows(OpBuilder &builder, Location loc,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
   }
+  emitVDRLoadExtendedPitchSetup(builder, loc, extendedPitchBytes,
+                                extendedPitchReg);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_and,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/35, /*waddrMul=*/32,
                         mlir::vc4::AddOpcode::shl,
                         mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                         mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
@@ -5007,6 +5056,219 @@ static void emitDynamicVDRLoadRows(OpBuilder &builder, Location loc,
                         mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
                         /*raddrB=*/0, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
+}
+
+static void emitDynamicVDRLoadCols(OpBuilder &builder, Location loc,
+                                   int64_t addressReg, int64_t vpmBaseRowReg,
+                                   int64_t setupWordWithoutRowLen,
+                                   bool useMutex,
+                                   std::optional<int64_t> extendedPitchBytes =
+                                       std::nullopt,
+                                   std::optional<int64_t> extendedPitchReg =
+                                       std::nullopt) {
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  emitVDRLoadExtendedPitchSetup(builder, loc, extendedPitchBytes,
+                                extendedPitchReg);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_and,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/15);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  createSplat32LDI(builder, loc, setupWordWithoutRowLen, 32);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                    /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                    mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                    mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
+                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                   addressReg, addressReg, mlir::vc4::QPUMux::a,
+                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                   mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
+  if (useMutex)
+    emitMutexRelease(builder, loc);
+}
+
+static void emitDynamicVDRLoadRowsCols(
+    OpBuilder &builder, Location loc, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t setupWordWithoutRowsCols, bool useMutex,
+    std::optional<int64_t> extendedPitchBytes = std::nullopt,
+    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+  if (useMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+  emitVDRLoadExtendedPitchSetup(builder, loc, extendedPitchBytes,
+                                extendedPitchReg);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_and,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/15);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/35, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_and,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/15);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1, /*smallImm=*/8);
+  createSplat32LDI(builder, loc, setupWordWithoutRowsCols, 32);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/34, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -5096,15 +5358,79 @@ static PlannedRegion planRawVDRLoadToVPMWithExtendedPitch(
 static PlannedRegion
 planDynamicVDRRectFastPath(Location loc, int64_t addressReg,
                            int64_t vpmBaseRowReg,
-                           int64_t setupWordWithoutNRows, bool useMutex) {
+                           int64_t setupWordWithoutNRows, bool useMutex,
+                           std::optional<int64_t> extendedPitchBytes =
+                               std::nullopt,
+                           std::optional<int64_t> extendedPitchReg =
+                               std::nullopt) {
   PlannedRegion region;
-  unsigned fastPathSlots = useMutex ? 16 : 14;
+  unsigned fastPathSlots = getDynamicVDRRectRowsSlotCount(
+      useMutex, extendedPitchBytes || extendedPitchReg);
   region.append(fastPathSlots,
                 [loc, addressReg, vpmBaseRowReg, setupWordWithoutNRows,
-                 useMutex](OpBuilder &builder) -> LogicalResult {
+                 useMutex, extendedPitchBytes,
+                 extendedPitchReg](OpBuilder &builder) -> LogicalResult {
                   emitDynamicVDRLoadRows(builder, loc, addressReg,
                                          vpmBaseRowReg, setupWordWithoutNRows,
-                                         useMutex);
+                                         useMutex, extendedPitchBytes,
+                                         extendedPitchReg);
+                  return success();
+                });
+  return region;
+}
+
+static PlannedRegion planDynamicVDRRectColsFastPath(
+    Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
+    int64_t setupWordWithoutRowLen, bool useMutex,
+    std::optional<int64_t> extendedPitchBytes = std::nullopt,
+    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+  PlannedRegion region;
+  unsigned slots = getDynamicVDRRectColsSlotCount(
+      useMutex, extendedPitchBytes || extendedPitchReg);
+  region.append(slots,
+                [loc, addressReg, vpmBaseRowReg, setupWordWithoutRowLen,
+                 useMutex, extendedPitchBytes,
+                 extendedPitchReg](OpBuilder &builder) -> LogicalResult {
+                  emitDynamicVDRLoadCols(builder, loc, addressReg, vpmBaseRowReg,
+                                         setupWordWithoutRowLen, useMutex,
+                                         extendedPitchBytes, extendedPitchReg);
+                  return success();
+                });
+  return region;
+}
+
+static PlannedRegion planPreserveClampedRowsInR0(Location loc) {
+  PlannedRegion region;
+  region.append(/*slotCount=*/1, [loc](OpBuilder &builder) -> LogicalResult {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/32, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                          mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+    return success();
+  });
+  return region;
+}
+
+static PlannedRegion planDynamicVDRRectRowsColsFastPath(
+    Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
+    int64_t setupWordWithoutRowsCols, bool useMutex,
+    std::optional<int64_t> extendedPitchBytes = std::nullopt,
+    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+  PlannedRegion region;
+  unsigned slots = getDynamicVDRRectRowsColsSlotCount(
+      useMutex, extendedPitchBytes || extendedPitchReg);
+  region.append(slots,
+                [loc, addressReg, vpmBaseRowReg, setupWordWithoutRowsCols,
+                 useMutex, extendedPitchBytes,
+                 extendedPitchReg](OpBuilder &builder) -> LogicalResult {
+                  emitDynamicVDRLoadRowsCols(
+                      builder, loc, addressReg, vpmBaseRowReg,
+                      setupWordWithoutRowsCols, useMutex, extendedPitchBytes,
+                      extendedPitchReg);
                   return success();
                 });
   return region;
@@ -5268,13 +5594,13 @@ static void appendCompareRuntimeVDRPitchOverflow(PlannedRegion &region,
                                                  int64_t pitchReg) {
   region.append(/*slotCount=*/2,
                 [loc, pitchReg](OpBuilder &builder) -> LogicalResult {
-                  createSplat32LDI(builder, loc, kMaxVDRMPITCHBBytes, 32);
+                  createSplat32LDI(builder, loc, kMaxVDRMPITCHBBytes, 35);
                   createScheduledBundle(
                       builder, loc, mlir::vc4::QPUSignal::none,
                       mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                       /*waddrAdd=*/31, /*waddrMul=*/32,
                       mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop,
-                      pitchReg, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                      pitchReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                       mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                       mlir::vc4::QPUMux::r1, /*smallImm=*/std::nullopt,
                       /*setFlags=*/true);
@@ -5291,7 +5617,7 @@ static PlannedRegion planDynamicVDRPitchFallbackDispatch(
   PlannedRegion encodablePath;
   encodablePath.appendRegion(std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(4 + fallback.slots) * 8);
+                             static_cast<int64_t>(7 + fallback.slots) * 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -5339,11 +5665,56 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    : maxCols;
   if (failed(verifyDMARectXSpan(source, plan, "VDR", "dst_x")))
     return failure();
+
+  auto planRowsRect = [&](int64_t staticCols) -> FailureOr<PlannedRegion> {
+    int64_t setupWord = 0;
+    if (pitchBytes) {
+      if (encodeVDRMemoryPitchBytes(*pitchBytes)) {
+        if (failed(buildVDRLoadSetupWordFromParts(
+                source, staticCols, /*nrows=*/16, *pitchBytes, dstX, vpmPitch,
+                plan.vertical, setupWord)))
+          return failure();
+        return planDynamicVDRRectFastPath(source->getLoc(), *addressReg,
+                                          *vpmBaseRowReg, setupWord,
+                                          plan.useMutex);
+      }
+      if (*pitchBytes >= 0 && *pitchBytes <= kMaxVDRMPITCHBBytes) {
+        if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+                source, staticCols, /*nrows=*/16, dstX, vpmPitch,
+                plan.vertical, setupWord)))
+          return failure();
+        return planDynamicVDRRectFastPath(
+            source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+            plan.useMutex, /*extendedPitchBytes=*/*pitchBytes);
+      }
+      return planVDRRowByRowActiveRowsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *allocator.lookup(templ, templ.operands[2]), maxRows, staticCols,
+          vpmPitch, pitchBytes, pitchReg);
+    }
+    if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+            source, staticCols, /*nrows=*/16, dstX, vpmPitch, plan.vertical,
+            setupWord)))
+      return failure();
+    PlannedRegion rectangular = planDynamicVDRRectFastPath(
+        source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord, plan.useMutex,
+        /*extendedPitchBytes=*/std::nullopt, /*extendedPitchReg=*/*pitchReg);
+    FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveRowsFallback(
+        source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+        *allocator.lookup(templ, templ.operands[2]), maxRows, staticCols, vpmPitch,
+        pitchBytes, pitchReg);
+    if (failed(fallback))
+      return failure();
+    return planDynamicVDRPitchFallbackDispatch(source->getLoc(), *pitchReg,
+                                               std::move(rectangular),
+                                               std::move(*fallback));
+  };
+
   if (!activeRows) {
     if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
-             << "dynamic rectangular VDR runtime active_rows currently "
-                "supports only up to sixteen-row rectangles";
+             << "dynamic rectangular VDR runtime active_rows supports only "
+                "up to sixteen-row rectangles";
     std::optional<int64_t> activeRowsReg =
         allocator.lookup(templ, templ.operands[2]);
     if (!activeRowsReg)
@@ -5361,48 +5732,71 @@ static LogicalResult emitVDRLoadRectDynamic(
                                      maxRows)
                      .emit(builder)))
         return failure();
-      FailureOr<PlannedRegion> fallback = planVDRRowByRowRowsColsFallback(
-          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
-          *activeRowsReg, *activeColsReg, maxRows, maxCols, vpmPitch,
-          pitchBytes, pitchReg);
-      if (failed(fallback))
+      auto planRowsColsRect = [&]() -> FailureOr<PlannedRegion> {
+        int64_t setupWord = 0;
+        if (pitchBytes) {
+          if (encodeVDRMemoryPitchBytes(*pitchBytes)) {
+            if (failed(buildVDRLoadSetupWordFromParts(
+                    source, /*rowLen=*/16, /*nrows=*/16, *pitchBytes, dstX,
+                    vpmPitch, plan.vertical, setupWord)))
+              return failure();
+            return planDynamicVDRRectRowsColsFastPath(
+                source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+                plan.useMutex);
+          }
+          if (*pitchBytes >= 0 && *pitchBytes <= kMaxVDRMPITCHBBytes) {
+            if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+                    source, /*rowLen=*/16, /*nrows=*/16, dstX, vpmPitch,
+                    plan.vertical, setupWord)))
+              return failure();
+            return planDynamicVDRRectRowsColsFastPath(
+                source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+                plan.useMutex, /*extendedPitchBytes=*/*pitchBytes);
+          }
+          return planVDRRowByRowRowsColsFallback(
+              source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+              *activeRowsReg, *activeColsReg, maxRows, maxCols, vpmPitch,
+              pitchBytes, pitchReg);
+        }
+        if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+                source, /*rowLen=*/16, /*nrows=*/16, dstX, vpmPitch,
+                plan.vertical, setupWord)))
+          return failure();
+        PlannedRegion rectangular = planDynamicVDRRectRowsColsFastPath(
+            source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+            plan.useMutex, /*extendedPitchBytes=*/std::nullopt,
+            /*extendedPitchReg=*/*pitchReg);
+        FailureOr<PlannedRegion> fallback = planVDRRowByRowRowsColsFallback(
+            source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+            *activeRowsReg, *activeColsReg, maxRows, maxCols, vpmPitch,
+            pitchBytes, pitchReg);
+        if (failed(fallback))
+          return failure();
+        return planDynamicVDRPitchFallbackDispatch(source->getLoc(), *pitchReg,
+                                                   std::move(rectangular),
+                                                   std::move(*fallback));
+      };
+      FailureOr<PlannedRegion> rectangular = planRowsColsRect();
+      if (failed(rectangular))
         return failure();
-      return fallback->emit(builder);
+      PlannedRegion payload = planPreserveClampedRowsInR0(source->getLoc());
+      payload.appendRegion(planActiveColsGuardedRegion(
+          source->getLoc(), *activeColsReg, maxCols, std::move(*rectangular)));
+      return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
+                                         maxRows, /*row=*/0, std::move(payload))
+          .emit(builder);
     }
-    if (clampedCols != maxCols)
-      return source->emitOpError()
-             << "dynamic rectangular VDR runtime active_rows currently "
-                "requires full static active_cols";
-    if (!pitchBytes) {
-      if (maxRows < 1 || maxRows > 16)
-        return source->emitOpError()
-               << "dynamic rectangular VDR runtime pitch currently supports "
-                  "only up to sixteen-row rectangles";
-      if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
-                                     maxRows)
-                     .emit(builder)))
-        return failure();
-      FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveRowsFallback(
-          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
-          *activeRowsReg, maxRows, maxCols, vpmPitch, pitchBytes, pitchReg);
-      if (failed(fallback))
-        return failure();
-      return fallback->emit(builder);
-    }
-    int64_t setupWordWithoutNRows = 0;
-    if (failed(buildVDRLoadSetupWordFromParts(
-            source, maxCols, 16, *pitchBytes, dstX, vpmPitch, plan.vertical,
-            setupWordWithoutNRows)))
-      return failure();
     if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
                                    maxRows)
                    .emit(builder)))
       return failure();
-    PlannedRegion fastPath = planDynamicVDRRectFastPath(
-        source->getLoc(), *addressReg, *vpmBaseRowReg, setupWordWithoutNRows,
-        plan.useMutex);
+    if (clampedCols == 0)
+      return success();
+    FailureOr<PlannedRegion> fastPath = planRowsRect(clampedCols);
+    if (failed(fastPath))
+      return failure();
     return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
-                                       maxRows, /*row=*/0, std::move(fastPath))
+                                       maxRows, /*row=*/0, std::move(*fastPath))
         .emit(builder);
   }
   if (!activeCols) {
@@ -5416,13 +5810,58 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    maxRows)
                    .emit(builder)))
       return failure();
-    FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveColsFallback(
-        source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
-        *activeColsReg, *activeRows, maxRows, maxCols, vpmPitch, pitchBytes,
-        pitchReg);
-    if (failed(fallback))
+    if (clampedRows == 0)
+      return success();
+    auto planColsRect = [&]() -> FailureOr<PlannedRegion> {
+      int64_t setupWord = 0;
+      if (pitchBytes) {
+        if (encodeVDRMemoryPitchBytes(*pitchBytes)) {
+          if (failed(buildVDRLoadSetupWordFromParts(
+                  source, /*rowLen=*/16, clampedRows, *pitchBytes, dstX,
+                  vpmPitch, plan.vertical, setupWord)))
+            return failure();
+          return planDynamicVDRRectColsFastPath(
+              source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+              plan.useMutex);
+        }
+        if (*pitchBytes >= 0 && *pitchBytes <= kMaxVDRMPITCHBBytes) {
+          if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+                  source, /*rowLen=*/16, clampedRows, dstX, vpmPitch,
+                  plan.vertical, setupWord)))
+            return failure();
+          return planDynamicVDRRectColsFastPath(
+              source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+              plan.useMutex, /*extendedPitchBytes=*/*pitchBytes);
+        }
+        return planVDRRowByRowActiveColsFallback(
+            source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+            *activeColsReg, *activeRows, maxRows, maxCols, vpmPitch, pitchBytes,
+            pitchReg);
+      }
+      if (failed(buildVDRLoadSetupWordWithExtendedPitch(
+              source, /*rowLen=*/16, clampedRows, dstX, vpmPitch, plan.vertical,
+              setupWord)))
+        return failure();
+      PlannedRegion rectangular = planDynamicVDRRectColsFastPath(
+          source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
+          plan.useMutex, /*extendedPitchBytes=*/std::nullopt,
+          /*extendedPitchReg=*/*pitchReg);
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveColsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeColsReg, *activeRows, maxRows, maxCols, vpmPitch, pitchBytes,
+          pitchReg);
+      if (failed(fallback))
+        return failure();
+      return planDynamicVDRPitchFallbackDispatch(source->getLoc(), *pitchReg,
+                                                 std::move(rectangular),
+                                                 std::move(*fallback));
+    };
+    FailureOr<PlannedRegion> rectangular = planColsRect();
+    if (failed(rectangular))
       return failure();
-    return fallback->emit(builder);
+    return planActiveColsGuardedRegion(source->getLoc(), *activeColsReg,
+                                       maxCols, std::move(*rectangular))
+        .emit(builder);
   }
 
   if (clampedRows != maxRows || clampedCols != maxCols) {
@@ -5837,7 +6276,7 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
   PlannedRegion encodablePath;
   encodablePath.appendRegion(std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(4 + fallback.slots) * 8);
+                             static_cast<int64_t>(7 + fallback.slots) * 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
