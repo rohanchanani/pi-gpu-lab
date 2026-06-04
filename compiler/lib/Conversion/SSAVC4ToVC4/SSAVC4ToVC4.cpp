@@ -5045,6 +5045,78 @@ static PlannedRegion planDynamicVDRPitchRowBody(
   return region;
 }
 
+static LogicalResult buildVDRLoadOneRowSetup(Operation *source,
+                                             const DMARectPlan &plan,
+                                             int64_t maxCols, int64_t vpmPitch,
+                                             int64_t row,
+                                             int64_t &setupWord) {
+  return buildVDRLoadSetupWordFromParts(
+      source, maxCols, /*nrows=*/1, maxCols * 4, plan.logicalXForRow(row),
+      vpmPitch, plan.vertical, setupWord);
+}
+
+static FailureOr<PlannedRegion> planVDRRowByRowRowsColsFallback(
+    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t activeRowsReg, int64_t activeColsReg,
+    int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
+    std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    int64_t setupWord = 0;
+    if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
+                                       setupWord)))
+      return failure();
+    PlannedRegion rowBody = planDynamicVDRActiveColsBody(
+        loc, plan, addressReg, vpmBaseRowReg, row, setupWord, pitchBytes,
+        pitchReg);
+    PlannedRegion colsGuarded =
+        planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
+                                    std::move(rowBody));
+    region.appendRegion(planActiveRowsGuardedRegion(
+        loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
+  }
+  return region;
+}
+
+static FailureOr<PlannedRegion> planVDRRowByRowActiveRowsFallback(
+    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t activeRowsReg, int64_t maxRows,
+    int64_t maxCols, int64_t vpmPitch, std::optional<int64_t> pitchBytes,
+    std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    int64_t setupWord = 0;
+    if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
+                                       setupWord)))
+      return failure();
+    region.appendRegion(planActiveRowsGuardedRegion(
+        loc, activeRowsReg, maxRows, row,
+        planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg, row,
+                                   setupWord, pitchBytes, pitchReg)));
+  }
+  return region;
+}
+
+static FailureOr<PlannedRegion> planVDRRowByRowActiveColsFallback(
+    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
+    int64_t vpmBaseRowReg, int64_t activeColsReg, int64_t activeRows,
+    int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
+    std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
+  for (int64_t row = 0; row < clampedRows; ++row) {
+    int64_t setupWord = 0;
+    if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
+                                       setupWord)))
+      return failure();
+    region.appendRegion(planActiveColsGuardedRegion(
+        loc, activeColsReg, maxCols,
+        planDynamicVDRActiveColsBody(loc, plan, addressReg, vpmBaseRowReg, row,
+                                     setupWord, pitchBytes, pitchReg)));
+  }
+  return region;
+}
+
 static LogicalResult emitVDRLoadRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5084,12 +5156,6 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    : maxCols;
   if (failed(verifyDMARectXSpan(source, plan, "VDR", "dst_x")))
     return failure();
-  auto buildOneRowSetup = [&](int64_t row,
-                              int64_t &setupWord) -> LogicalResult {
-    return buildVDRLoadSetupWordFromParts(
-        source, maxCols, /*nrows=*/1, maxCols * 4,
-        plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord);
-  };
   if (!activeRows) {
     if (maxRows < 1 || maxRows > 16)
       return source->emitOpError()
@@ -5112,22 +5178,13 @@ static LogicalResult emitVDRLoadRectDynamic(
                                      maxRows)
                      .emit(builder)))
         return failure();
-      for (int64_t row = 0; row < maxRows; ++row) {
-        int64_t oneRowSetup = 0;
-        if (failed(buildOneRowSetup(row, oneRowSetup)))
-          return failure();
-        PlannedRegion rowBody = planDynamicVDRActiveColsBody(
-            source->getLoc(), plan, *addressReg, *vpmBaseRowReg, row,
-            oneRowSetup, pitchBytes, pitchReg);
-        PlannedRegion colsGuarded = planActiveColsGuardedRegion(
-            source->getLoc(), *activeColsReg, maxCols, std::move(rowBody));
-        if (failed(planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
-                                              maxRows, row,
-                                              std::move(colsGuarded))
-                       .emit(builder)))
-          return failure();
-      }
-      return success();
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowRowsColsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeRowsReg, *activeColsReg, maxRows, maxCols, vpmPitch,
+          pitchBytes, pitchReg);
+      if (failed(fallback))
+        return failure();
+      return fallback->emit(builder);
     }
     if (clampedCols != maxCols)
       return source->emitOpError()
@@ -5142,20 +5199,12 @@ static LogicalResult emitVDRLoadRectDynamic(
                                      maxRows)
                      .emit(builder)))
         return failure();
-      for (int64_t row = 0; row < maxRows; ++row) {
-        int64_t oneRowSetup = 0;
-        if (failed(buildOneRowSetup(row, oneRowSetup)))
-          return failure();
-        if (failed(planActiveRowsGuardedRegion(
-                       source->getLoc(), *activeRowsReg, maxRows, row,
-                       planDynamicVDRPitchRowBody(source->getLoc(), plan,
-                                                  *addressReg, *vpmBaseRowReg,
-                                                  row, oneRowSetup, pitchBytes,
-                                                  pitchReg))
-                       .emit(builder)))
-          return failure();
-      }
-      return success();
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveRowsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeRowsReg, maxRows, maxCols, vpmPitch, pitchBytes, pitchReg);
+      if (failed(fallback))
+        return failure();
+      return fallback->emit(builder);
     }
     int64_t setupWordWithoutNRows = 0;
     if (failed(buildVDRLoadSetupWordFromParts(
@@ -5184,19 +5233,13 @@ static LogicalResult emitVDRLoadRectDynamic(
                                    maxRows)
                    .emit(builder)))
       return failure();
-    for (int64_t row = 0; row < clampedRows; ++row) {
-      int64_t setupWord = 0;
-      if (failed(buildOneRowSetup(row, setupWord)))
-        return failure();
-      if (failed(planActiveColsGuardedRegion(
-                     source->getLoc(), *activeColsReg, maxCols,
-                     planDynamicVDRActiveColsBody(
-                         source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
-                         row, setupWord, pitchBytes, pitchReg))
-                     .emit(builder)))
-        return failure();
-    }
-    return success();
+    FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveColsFallback(
+        source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+        *activeColsReg, *activeRows, maxRows, maxCols, vpmPitch, pitchBytes,
+        pitchReg);
+    if (failed(fallback))
+      return failure();
+    return fallback->emit(builder);
   }
 
   if (!pitchBytes)
