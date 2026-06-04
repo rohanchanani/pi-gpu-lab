@@ -1077,6 +1077,11 @@ Rules:
 
 ## 11. VPM/VDR/VDW hardware mode model
 
+VPM/VDR/VDW setup semantics are defined by the VideoCore IV Architecture
+Reference Guide, Section 7 / Tables 31-37. That architecture reference is
+normative for hardware field meanings; dialect docs describe the compiler
+contract and must not invent alternate field semantics.
+
 ### 11.1 Hardware-derived lower-half schema
 
 SSAVC4 and scheduled VC4 must model VPM/VDR/VDW using hardware-derived attrs/enums rather than old string compatibility names.
@@ -1133,6 +1138,11 @@ VDW fields:
   block_mode
 ```
 
+For VDW, the hardware STRIDE field is the 13-bit byte gap from the last byte
+of one stored row to the first byte of the next stored row. High-level row pitch
+must be translated through row_bytes/gap semantics before encoding. No
+0xffff/65535 VDW stride model is allowed.
+
 ### 11.2 Executable v1 precision policy for modes
 
 The schema must include `w8`, `w16`, `packed`, and `laned` to avoid an artificial lower-half shape, but executable `vc4kernel` v1 may use only:
@@ -1161,6 +1171,11 @@ vertical 32-bit:
 ```
 
 All row/coordinate accesses are relative to the runtime-assigned `vpm_base_row` plus planned allocation offsets.
+
+Full 64-row VPM capacity is available to a block when the resource plan allows
+it. Per-operation executable v1 shape is still bounded to at most one 16x16
+w32/none rectangle, so larger VPM use is expressed as multiple hardware-shaped
+tiles, for example row bases 0, 16, 32, and 48.
 
 ---
 
@@ -1439,18 +1454,21 @@ VC4Kernel supports two classes of VDR/VDW movement.
 
 ### Static rectangular movement
 
-`vc4kernel.vdr_load_to_vpm` and `vc4kernel.vdw_store_vpm_fragment` continue to represent fully static, hardware-shaped 32-bit rectangular movement. Their row/column shape and memory pitch are known as attributes. They are useful for fixed-size fixtures and fully specialized kernels.
+`vc4kernel.vdr_load_to_vpm` and `vc4kernel.vdw_store_vpm_fragment` continue to represent fully static, hardware-shaped 32-bit rectangular movement. Their row/column shape and memory pitch are known as attributes. They are useful for fixed-size fixtures, static/full interior tiles, and fully specialized kernels. Static exact rectangular paths and dynamic rectangular paths both remain part of the final design.
 
 ### Dynamic rectangular movement
 
 Blocked kernels such as GEMV and GEMM require runtime problem sizes and runtime leading dimensions. The correct VC4Kernel representation is not padded input matrices and not TMU-to-register-to-VPM as the primary shared-memory path. The correct representation is a dynamic rectangular transfer plan:
 
-- Tile/block maximum shape is compile-time.
+- Runtime problem sizes and leading dimensions are supported below VC4Kernel via dynamic rectangular transfer primitives; tile/block maximum shape remains compile-time.
 - Active rows and columns are runtime scalar `i32` values.
 - Memory pitch/stride in bytes is a runtime scalar `i32` value.
-- Global-to-VPM loads zero-fill inactive or out-of-bounds elements inside the destination VPM tile.
-- VPM-to-global stores preserve destination memory outside active rows/columns.
-- The lowering may choose a fast one-DMA VDR/VDW path, a dynamic setup-word path, row-by-row fallback, or TMU/merge fallback as long as the semantic contract is preserved.
+- VDR global-to-VPM loads support runtime `active_rows`, runtime `active_cols`, runtime `memory_pitch_bytes`, and device-side zero-fill for inactive or out-of-bounds VPM cells.
+- VDW VPM-to-global stores support runtime `active_rows`, runtime `active_cols`, runtime `memory_stride_bytes`, dynamic/nonzero VPM source row where the lower half supports it, and preserve-destination semantics outside active rows/columns.
+- VDW `memory_stride_bytes` is a high-level row pitch. The lower half must translate it to hardware row_bytes/gap semantics and use row-by-row fallback only for true hardware-unencodable overflow cases.
+- Row-by-row fallback is allowed only for true hardware-unencodable overflow cases, and each fallback class must be explicit and hardware-tested.
+- Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads or destination-merge fallback when that is the documented VDW preserve path.
+- Dynamic VDR/VDW branch-critical regions in the lower half must be self-counted by planned emission. Any remaining manual helper must be documented as non-branch-critical.
 - The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature.
 
 ### `vc4kernel.vdr_load_rect_to_vpm`

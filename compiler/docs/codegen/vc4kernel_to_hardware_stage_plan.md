@@ -580,6 +580,12 @@ General masks are represented and lowered honestly; old non-normalizable-predica
 
 Update SSAVC4/scheduled VC4/QASM emission to support horizontal/vertical/strided 32-bit VPM/VDR/VDW modes and schema for future sub-32.
 
+The VideoCore IV Architecture Reference Guide, Section 7 / Tables 31-37, is
+normative for VPM/VDR/VDW setup field meanings. In particular, VDW STRIDE is
+the hardware 13-bit gap from the last byte of one row to the start of the next
+row. High-level row pitch must be translated to row_bytes/gap semantics; no
+0xffff/65535 VDW stride model is allowed.
+
 ### Required implementation
 
 Add lower-half mode attrs/enums:
@@ -1033,6 +1039,36 @@ vc4kernel_qpu_barrier_syncthreads
 
 This checkpoint is required before vector-surface lock if blocked GEMM/GEMV and future `vector.contract` are expected to use VPM reuse with runtime M/N/K. It implements dynamic VDR/VDW rectangular movement, 3D logical launch identity, and hardware fixtures for blocked runtime GEMM/GEMV.
 
+Architecture-backed dynamic rectangular contract:
+
+```text
+1. Runtime problem sizes and leading dimensions are supported below VC4Kernel
+   via dynamic rectangular transfer primitives; tile sizes remain compile-time.
+2. VDR global->VPM supports runtime active_rows, active_cols, runtime
+   memory_pitch_bytes, and device-side zero-fill for inactive/OOB VPM cells.
+3. VDW VPM->global supports runtime active_rows, active_cols, runtime
+   memory_stride_bytes, dynamic/nonzero VPM source row where supported, and
+   preserve-destination semantics outside active rows/cols.
+4. VDW STRIDE is the hardware 13-bit gap from the last byte of one row to the
+   start of the next row. High-level row pitch must be translated to
+   row_bytes/gap semantics; no 0xffff/65535 VDW stride model is allowed.
+5. VPM/VDR/VDW setup semantics are defined by the VideoCore IV Architecture
+   Reference Guide, Section 7 / Tables 31-37. The architecture reference is
+   normative for hardware field meanings.
+6. Full 64-row VPM capacity must be usable through multiple 16x16 tiles, such
+   as rows 0, 16, 32, and 48; per-op max shape remains <=16x16 w32/none for v1.
+7. Row-by-row fallback is allowed only for true hardware-unencodable overflow
+   cases, and must be explicit and hardware-tested.
+8. Static exact rectangular paths and dynamic rectangular paths both remain
+   part of the final design. Static/full interior tiles keep compile-time
+   information; dynamic/tail/runtime tiles use dynamic rect ops.
+9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads,
+   not TMU-to-VPM as a workaround.
+10. Planned-emission branch-count invariant: dynamic VDR/VDW branch-critical
+    regions must be self-counted by planned emission or documented as
+    non-branch-critical.
+```
+
 Acceptance requires:
 
 ```text
@@ -1040,13 +1076,13 @@ Acceptance requires:
 - Dynamic VDR rect load zero-fill hardware proof.
 - Dynamic VDW rect store preserve hardware proof.
 - Runtime-pitch/stride variants including non-multiple dimensions.
-- Row-by-row fallback when pitch/stride cannot be encoded as one hardware setup word.
+- Row-by-row fallback only when pitch/stride cannot be encoded as one hardware setup word because of a true hardware-unencodable overflow case.
 - Naive and blocked GEMV with runtime m,n.
 - Naive and blocked GEMM with runtime m,n,k.
 - Natural row-major contiguous layouts using runtime leading dimensions, not padded fixture-specific strides.
 ```
 
-The blocked GEMM/GEMV fixtures must use compile-time tile/block maximum sizes but runtime problem sizes and leading dimensions. Static rectangular VDR/VDW ops remain legal for fixed-shape fixtures and fully specialized kernels, but they are not the permanent representation for runtime M/N/K shared-memory blocking.
+The blocked GEMM/GEMV fixtures must use compile-time tile/block maximum sizes but runtime problem sizes and leading dimensions. Their shared-memory loads must use natural VDR global-to-VPM rectangular movement, not TMU-to-VPM as a workaround. Static rectangular VDR/VDW ops remain legal for fixed-shape fixtures, static/full interior tiles, and fully specialized kernels; dynamic/tail/runtime tiles use dynamic rectangular ops.
 
 ---
 

@@ -1242,7 +1242,8 @@ early return before a later barrier unless the compiler proves all block warps r
 
 ### 12.1 Loads
 
-The natural path for global memory loads is TMU direct memory lookup. For direct memory lookup:
+The natural path for per-lane global memory loads into QPU registers is TMU
+direct memory lookup. For direct memory lookup:
 
 ```text
 write address to TMU s register
@@ -1251,6 +1252,13 @@ consume result from r4
 ```
 
 Use this for per-lane 32-bit loads. Optimize coalescing and uniform address patterns later.
+
+The natural path for shared-memory tile fills is different: use VDR/VCD
+global-to-VPM rectangular DMA. Blocked GEMV/GEMM must use VDR global-to-VPM
+loads for shared-memory reuse, not TMU-to-VPM as a workaround. Runtime problem
+sizes and leading dimensions are represented below VC4Kernel by dynamic
+rectangular transfers with compile-time tile sizes, runtime active rows/cols,
+runtime memory pitch, and device-side zero-fill for inactive/OOB VPM cells.
 
 ### 12.2 Stores
 
@@ -1267,6 +1275,13 @@ coalesced contiguous vector stores
 affine strided stores
 row/column stores through VPM
 ```
+
+For dynamic rectangular VPM-to-global stores, VDW uses runtime active rows/cols
+and runtime memory stride while preserving destination memory outside the active
+rectangle. Its hardware STRIDE field is a 13-bit byte gap from the last byte of
+one row to the start of the next row, so high-level row pitch must be translated
+through row_bytes/gap semantics. Row-by-row fallback is only for true
+hardware-unencodable overflow cases and must be explicit and hardware-tested.
 
 Initially reject or slow-path:
 
