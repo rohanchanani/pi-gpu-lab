@@ -1768,13 +1768,25 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
   if (!activeRows && activeCols &&
       std::clamp(*activeCols, int64_t(0), maxCols) == maxCols &&
       maxRows >= 1 && maxRows <= 16) {
-    unsigned clampSlots = 4;
-    unsigned guardSlots = 8;
+    unsigned activeRowsGuardSlots = 12;
     std::optional<int64_t> strideBytes =
         getConstantI32FromLoadImm(op->getOperand(4));
     unsigned dynamicRowsVDWSlots =
         getDynamicVDWStoreRowsSlotCount(useMutex, !strideBytes);
-    return clampSlots + guardSlots + dynamicRowsVDWSlots;
+    unsigned rectangularSlots = activeRowsGuardSlots + dynamicRowsVDWSlots;
+    unsigned fallbackSlots = 0;
+    for (int64_t row = 0; row < maxRows; ++row)
+      fallbackSlots +=
+          activeRowsGuardSlots +
+          getStaticVDWRowBodySlotCount(useMutex, row,
+                                       /*dynamicStride=*/!strideBytes,
+                                       usesVPMRowOffset);
+    if (!strideBytes)
+      return 16 + rectangularSlots + fallbackSlots;
+    int64_t strideGapBytes = *strideBytes - maxCols * 4;
+    if (strideGapBytes < 0 || strideGapBytes > kMaxVDWStrideGapBytes)
+      return fallbackSlots;
+    return rectangularSlots;
   }
   if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
     unsigned guardSlots = 8;
@@ -1810,7 +1822,15 @@ static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
     int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
     if (clampedRows == 0 || clampedCols == 0)
       return 0;
-    if (clampedRows > 1 && (vpmPitch != 1 || !strideBytes)) {
+    std::optional<int64_t> strideGapBytes =
+        strideBytes ? std::optional<int64_t>(*strideBytes - clampedCols * 4)
+                    : std::nullopt;
+    bool useStaticRowsFallback =
+        clampedRows > 1 &&
+        (vpmPitch != 1 || !strideBytes ||
+         (strideGapBytes &&
+          (*strideGapBytes < 0 || *strideGapBytes > kMaxVDWStrideGapBytes)));
+    if (useStaticRowsFallback) {
       unsigned total = 0;
       for (int64_t row = 0; row < clampedRows; ++row)
         total += getStaticVDWRowBodySlotCount(useMutex, row,
@@ -5372,7 +5392,9 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
   int64_t strideBytes = memoryPitchBytes - rowLen * 4;
   if (strideBytes < 0 || strideBytes > kMaxVDWStrideGapBytes ||
       memoryPitchBytes % 4 != 0)
-    return source->emitOpError("requires memory_pitch_bytes to produce an encodable VDW stride");
+    return source->emitOpError(
+        "requires memory_pitch_bytes to produce an encodable 13-bit VDW "
+        "stride gap");
   if (dynamicActiveLanesReg && nrows != 1)
     return source->emitOpError("supports dynamic active_lanes only for single-row VDW stores");
   if (!dynamicActiveLanesReg && activeLanes != -1 && activeLanes != rowLen)
@@ -5576,6 +5598,81 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
   return region;
 }
 
+static std::optional<int64_t>
+getStaticVDWStrideGapBytes(std::optional<int64_t> memoryStrideBytes,
+                           int64_t activeCols) {
+  if (!memoryStrideBytes)
+    return std::nullopt;
+  return *memoryStrideBytes - activeCols * 4;
+}
+
+static bool isEncodableVDWStrideGap(int64_t strideGapBytes) {
+  return strideGapBytes >= 0 && strideGapBytes <= kMaxVDWStrideGapBytes;
+}
+
+static void appendCompareRuntimeVDWStrideGapNegative(PlannedRegion &region,
+                                                     Location loc,
+                                                     int64_t memoryStrideReg,
+                                                     int64_t activeCols) {
+  region.append(/*slotCount=*/2, [loc, memoryStrideReg,
+                                  activeCols](OpBuilder &builder) -> LogicalResult {
+    createSplat32LDI(builder, loc, activeCols * 4, 32);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/35, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, memoryStrideReg,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    return success();
+  });
+}
+
+static void appendCompareRuntimeVDWStrideGapOverflow(PlannedRegion &region,
+                                                     Location loc) {
+  region.append(/*slotCount=*/2, [loc](OpBuilder &builder) -> LogicalResult {
+    createSplat32LDI(builder, loc, kMaxVDWStrideGapBytes, 32);
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::sub,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+                          /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1,
+                          /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    return success();
+  });
+}
+
+static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
+    Location loc, int64_t memoryStrideReg, int64_t activeCols,
+    PlannedRegion rectangular, PlannedRegion fallback) {
+  PlannedRegion region;
+  appendCompareRuntimeVDWStrideGapNegative(region, loc, memoryStrideReg,
+                                           activeCols);
+
+  PlannedRegion nonNegativePath;
+  appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
+
+  PlannedRegion encodablePath;
+  encodablePath.appendRegion(std::move(rectangular));
+  appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
+                             static_cast<int64_t>(4 + fallback.slots) * 8);
+
+  PlannedRegion overflowGuarded = planBranchAroundRegion(
+      loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
+  nonNegativePath.appendRegion(std::move(overflowGuarded));
+
+  PlannedRegion negativeGuarded = planBranchAroundRegion(
+      loc, mlir::vc4::BranchCond::any_c_set, std::move(nonNegativePath));
+  region.appendRegion(std::move(negativeGuarded));
+  region.appendRegion(std::move(fallback));
+  return region;
+}
+
 static PlannedRegion planDynamicVDWActiveColsBody(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t activeColsReg, int64_t maxCols, int64_t row,
@@ -5637,6 +5734,35 @@ static PlannedRegion planStaticVDWRowBody(
   return region;
 }
 
+static PlannedRegion planVDWStaticRowsFallback(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t staticCols, int64_t rows, std::optional<int64_t> strideBytes,
+    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < rows; ++row) {
+    region.appendRegion(planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg,
+                                             staticCols, row, strideBytes,
+                                             strideReg, plan));
+  }
+  return region;
+}
+
+static PlannedRegion planVDWDynamicActiveRowsFallback(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t activeRowsReg, int64_t maxRows, int64_t staticCols,
+    std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
+    const DMARectPlan &plan) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    PlannedRegion body =
+        planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
+                             strideBytes, strideReg, plan);
+    region.appendRegion(planActiveRowsGuardedRegion(
+        loc, activeRowsReg, maxRows, row, std::move(body)));
+  }
+  return region;
+}
+
 static LogicalResult emitVDWStoreRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5669,13 +5795,6 @@ static LogicalResult emitVDWStoreRectDynamic(
     return source->emitOpError()
            << "dynamic rectangular VDW lowering currently requires constant "
               "source row";
-  if (strideBytes) {
-    int64_t strideGapBytes = *strideBytes - maxCols * 4;
-    if (strideGapBytes < 0 || strideGapBytes > kMaxVDWStrideGapBytes)
-      return source->emitOpError()
-             << "requires constant memory stride to produce an encodable VDW "
-                "stride gap";
-  }
   if (!strideBytes && !strideReg)
     return source->emitOpError()
            << "uses a dynamic stride value that is not defined by a lowerable "
@@ -5718,14 +5837,30 @@ static LogicalResult emitVDWStoreRectDynamic(
       return source->emitOpError()
              << "dynamic rectangular VDW runtime active_rows currently "
                 "requires full static active_cols";
-    PlannedRegion payload = planDynamicVDWStoreRowsFromVPM(
-        source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
-        /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
-        /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex);
-    PlannedRegion guarded = planActiveRowsGuardedRegion(
+    PlannedRegion rectangular = planActiveRowsGuardedRegion(
         source->getLoc(), *activeRowsReg, maxRows, /*row=*/0,
-        std::move(payload));
-    return guarded.emit(builder);
+        planDynamicVDWStoreRowsFromVPM(
+            source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+            /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
+            /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
+    PlannedRegion payload;
+    std::optional<int64_t> strideGapBytes =
+        getStaticVDWStrideGapBytes(strideBytes, maxCols);
+    if (strideGapBytes && isEncodableVDWStrideGap(*strideGapBytes)) {
+      payload = std::move(rectangular);
+    } else {
+      PlannedRegion fallback = planVDWDynamicActiveRowsFallback(
+          source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
+          maxRows, maxCols, strideBytes, strideReg, plan);
+      if (strideGapBytes) {
+        payload = std::move(fallback);
+      } else {
+        payload = planDynamicVDWStrideGapFallbackDispatch(
+            source->getLoc(), *strideReg, maxCols, std::move(rectangular),
+            std::move(fallback));
+      }
+    }
+    return payload.emit(builder);
   }
 
   int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
@@ -5758,17 +5893,17 @@ static LogicalResult emitVDWStoreRectDynamic(
     }
     return success();
   }
-  if (clampedRows > 1 && (plan.vpmPitch != 1 || !strideBytes)) {
-    for (int64_t row = 0; row < clampedRows; ++row) {
-      PlannedRegion body =
-          planStaticVDWRowBody(source->getLoc(), *addressReg,
-                               *vpmSourceRowReg, staticCols, row, strideBytes,
-                               strideReg, plan);
-      if (failed(body.emit(builder)))
-        return failure();
-    }
-    return success();
-  }
+  std::optional<int64_t> strideGapBytes =
+      getStaticVDWStrideGapBytes(strideBytes, staticCols);
+  bool useStaticRowsFallback =
+      clampedRows > 1 &&
+      (plan.vpmPitch != 1 || !strideBytes ||
+       (strideGapBytes && !isEncodableVDWStrideGap(*strideGapBytes)));
+  if (useStaticRowsFallback)
+    return planVDWStaticRowsFallback(source->getLoc(), *addressReg,
+                                     *vpmSourceRowReg, staticCols, clampedRows,
+                                     strideBytes, strideReg, plan)
+        .emit(builder);
   emitRawVDWStoreFromVPM(
       builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
       *vpmSourceRowReg, dynamicActiveColsReg,
