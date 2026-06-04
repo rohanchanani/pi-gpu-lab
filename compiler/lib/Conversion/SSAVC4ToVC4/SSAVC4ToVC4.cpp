@@ -4581,7 +4581,7 @@ planActiveRowsGuardedRegion(Location loc, int64_t activeRowsReg,
                             PlannedRegion payload) {
   PlannedRegion region;
   unsigned payloadSlots = payload.slots;
-  region.append(/*slotCount=*/8,
+  region.append(/*slotCount=*/12,
                 [loc, activeRowsReg, maxRows, row,
                  payloadSlots](OpBuilder &builder) -> LogicalResult {
                   emitRuntimeActiveRowsGuard(builder, loc, activeRowsReg,
@@ -4597,7 +4597,7 @@ planActiveColsGuardedRegion(Location loc, int64_t activeColsReg,
                             int64_t maxCols, PlannedRegion payload) {
   PlannedRegion region;
   unsigned payloadSlots = payload.slots;
-  region.append(/*slotCount=*/8,
+  region.append(/*slotCount=*/12,
                 [loc, activeColsReg, maxCols,
                  payloadSlots](OpBuilder &builder) -> LogicalResult {
                   emitRuntimeActiveColsGuard(builder, loc, activeColsReg,
@@ -5424,6 +5424,37 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
   return region;
 }
 
+static PlannedRegion planDynamicVDWActiveColsBody(
+    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
+    int64_t activeColsReg, int64_t maxCols, int64_t row,
+    std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
+    const DMARectPlan &plan) {
+  PlannedRegion region;
+  unsigned slots = plan.useMutex ? 19 : 17;
+  if (plan.usesVPMRowOffsetForRows() && row != 0)
+    slots += 1;
+  if (row != 0)
+    slots += strideBytes ? 2 : static_cast<unsigned>(row);
+  region.append(slots, [loc, addressReg, vpmSourceRowReg, activeColsReg,
+                        maxCols, row, strideBytes, strideReg,
+                        plan](OpBuilder &builder) -> LogicalResult {
+    DMARowAddress rowAddress =
+        materializeDMARowAddress(builder, loc, addressReg, row, strideBytes,
+                                 strideReg);
+    emitRawVDWStoreFromVPM(
+        builder, loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
+        activeColsReg, /*activeLanes=*/maxCols, /*rowLen=*/maxCols,
+        /*nrows=*/1, /*memoryPitchBytes=*/maxCols * 4, plan.vertical,
+        plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+        rowAddress.dynamicPitchMultiplier,
+        /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+        /*staticVpmX=*/plan.logicalXForRow(row));
+    return success();
+  });
+  return region;
+}
+
 static LogicalResult emitVDWStoreRectDynamic(
     OpBuilder &builder, const InstructionTemplate &templ,
     const SpillAwareAllocator &allocator) {
@@ -5481,28 +5512,16 @@ static LogicalResult emitVDWStoreRectDynamic(
                << "uses a dynamic active column value that is not defined by "
                   "a lowerable SSAVC4 op";
       for (int64_t row = 0; row < maxRows; ++row) {
-        unsigned vdwBodySlots =
-            getDynamicVDWActiveColsBodySlotCount(plan.useMutex, row,
-                                                 /*dynamicStride=*/!strideBytes,
-                                                 plan.usesVPMRowOffsetForRows());
-        unsigned activeColsPayloadSlots = 4 + 8 + vdwBodySlots;
-        emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                                   maxRows, row, activeColsPayloadSlots);
-        emitRuntimeActiveColsGuard(builder, source->getLoc(), *activeColsReg,
-                                   maxCols, vdwBodySlots);
-        DMARowAddress rowAddress = materializeDMARowAddress(
-            builder, source->getLoc(), *addressReg, row, strideBytes,
-            strideReg);
-        emitRawVDWStoreFromVPM(
-            builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
-            *vpmSourceRowReg, activeColsReg,
-            /*activeLanes=*/maxCols, /*rowLen=*/maxCols, /*nrows=*/1,
-            /*memoryPitchBytes=*/maxCols * 4, plan.vertical, plan.useMutex,
-            rowAddress.addressMux, mlir::vc4::QPUMux::a,
-            mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-            rowAddress.dynamicPitchMultiplier,
-            /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
-            /*staticVpmX=*/plan.logicalXForRow(row));
+        PlannedRegion body = planDynamicVDWActiveColsBody(
+            source->getLoc(), *addressReg, *vpmSourceRowReg, *activeColsReg,
+            maxCols, row, strideBytes, strideReg, plan);
+        PlannedRegion activeColsGuarded = planActiveColsGuardedRegion(
+            source->getLoc(), *activeColsReg, maxCols, std::move(body));
+        PlannedRegion activeRowsGuarded = planActiveRowsGuardedRegion(
+            source->getLoc(), *activeRowsReg, maxRows, row,
+            std::move(activeColsGuarded));
+        if (failed(activeRowsGuarded.emit(builder)))
+          return failure();
       }
       return success();
     }
@@ -5514,9 +5533,10 @@ static LogicalResult emitVDWStoreRectDynamic(
         source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
         /*rowLen=*/maxCols, /*memoryPitchBytes=*/strideBytes,
         /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex);
-    emitRuntimeActiveRowsGuard(builder, source->getLoc(), *activeRowsReg,
-                               maxRows, /*row=*/0, payload.slots);
-    return payload.emit(builder);
+    PlannedRegion guarded = planActiveRowsGuardedRegion(
+        source->getLoc(), *activeRowsReg, maxRows, /*row=*/0,
+        std::move(payload));
+    return guarded.emit(builder);
   }
 
   int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
@@ -5539,22 +5559,13 @@ static LogicalResult emitVDWStoreRectDynamic(
     return failure();
   if (dynamicActiveColsReg) {
     for (int64_t row = 0; row < clampedRows; ++row) {
-      unsigned bodySlots = getDynamicVDWActiveColsBodySlotCount(
-          plan.useMutex, row, /*dynamicStride=*/!strideBytes,
-          plan.usesVPMRowOffsetForRows());
-      emitRuntimeActiveColsGuard(builder, source->getLoc(),
-                                 *dynamicActiveColsReg, maxCols, bodySlots);
-      DMARowAddress rowAddress = materializeDMARowAddress(
-          builder, source->getLoc(), *addressReg, row, strideBytes, strideReg);
-      emitRawVDWStoreFromVPM(
-          builder, source->getLoc(), rowAddress.addressReg, *vpmSourceRowReg,
-          *vpmSourceRowReg, dynamicActiveColsReg,
-          /*activeLanes=*/maxCols, /*rowLen=*/maxCols, /*nrows=*/1,
-          /*memoryPitchBytes=*/maxCols * 4, plan.vertical, plan.useMutex,
-          rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
-          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
-          /*staticVpmX=*/plan.logicalXForRow(row));
+      PlannedRegion body = planDynamicVDWActiveColsBody(
+          source->getLoc(), *addressReg, *vpmSourceRowReg,
+          *dynamicActiveColsReg, maxCols, row, strideBytes, strideReg, plan);
+      PlannedRegion guarded = planActiveColsGuardedRegion(
+          source->getLoc(), *dynamicActiveColsReg, maxCols, std::move(body));
+      if (failed(guarded.emit(builder)))
+        return failure();
     }
     return success();
   }

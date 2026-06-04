@@ -1,0 +1,10 @@
+{
+  "name": "vdw_active_cols_zero_with_prior_dma_probe_ssavc4",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "runtime_launches": 1
+  }
+}
