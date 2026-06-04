@@ -76,6 +76,8 @@ constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 
+constexpr int64_t kMaxVDWStrideGapBytes = 0x1fff;
+
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
@@ -1606,6 +1608,9 @@ static LogicalResult verifyDMARectXSpan(Operation *op,
   return success();
 }
 
+// flattened layout only: these legacy slot-count mirrors size instruction
+// templates before lowering. Dynamic DMA branch targets are derived from
+// PlannedRegion payloads below, not from these helpers.
 static unsigned getRowOffsetScratchSlotCount(int64_t row,
                                              bool usesVPMRowOffset = true) {
   return (usesVPMRowOffset && row != 0) ? 2 : 0;
@@ -1619,6 +1624,7 @@ static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row,
          dynamicAddressSlots + rawVDRSlots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row,
                                                      bool dynamicPitch,
@@ -1630,12 +1636,14 @@ static unsigned getDynamicVDRActiveColsBodySlotCount(bool useMutex,
          dynamicVDRSlots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
                                                 bool dynamicPitch) {
   unsigned slots = useMutex ? 21 : 19;
   return dynamicPitch ? slots + 2 : slots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
                                                      int64_t row,
                                                      int64_t rowLen,
@@ -1649,6 +1657,7 @@ static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
   return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getStaticVDWRowBodySlotCount(bool useMutex, int64_t row,
                                              bool dynamicStride,
                                              bool usesVPMRowOffset = true) {
@@ -1659,6 +1668,7 @@ static unsigned getStaticVDWRowBodySlotCount(bool useMutex, int64_t row,
   return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
   bool useMutex = hasStringAttr(op, "serialize", "mutex");
   unsigned rawVDRSlots = useMutex ? 9 : 7;
@@ -1742,6 +1752,7 @@ static unsigned getVDRLoadRectDynamicSlotCount(Operation *op) {
   return rawVDRSlots;
 }
 
+// flattened layout only: not branch-target-critical.
 static unsigned getVDWStoreRectDynamicSlotCount(Operation *op) {
   bool useMutex = hasStringAttr(op, "serialize", "mutex");
   unsigned rawStaticSlots = useMutex ? 17 : 15;
@@ -4167,11 +4178,10 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                     mlir::vc4::QPUMux::r1);
   // Program the extended memory stride after the basic DMA setup.  This is
   // the order used by the handwritten VC4 examples and by VC4C's VPM writer.
-  createSplat32LDI(builder, loc,
-                   static_cast<int32_t>(0xc0000000u |
-                                        (static_cast<uint32_t>(strideBytes) &
-                                         0xffffu)),
-                   35);
+  createSplat32LDI(
+      builder, loc,
+      static_cast<int32_t>(0xc0000000u | static_cast<uint32_t>(strideBytes)),
+      35);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
@@ -4988,6 +4998,8 @@ planDynamicVDRRectFastPath(Location loc, int64_t addressReg,
   return region;
 }
 
+// derived from planned emission: callers append this count with the emitter
+// that materializes the same row address.
 static unsigned getDMARowAddressSlotCount(
     int64_t row, std::optional<int64_t> constantPitchBytes) {
   if (row == 0)
@@ -5358,7 +5370,7 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
   if (nrows < 1 || nrows > 16)
     return source->emitOpError("requires nrows in range [1, 16] for M3 lowering");
   int64_t strideBytes = memoryPitchBytes - rowLen * 4;
-  if (strideBytes < 0 || strideBytes > 65535 ||
+  if (strideBytes < 0 || strideBytes > kMaxVDWStrideGapBytes ||
       memoryPitchBytes % 4 != 0)
     return source->emitOpError("requires memory_pitch_bytes to produce an encodable VDW stride");
   if (dynamicActiveLanesReg && nrows != 1)
@@ -5522,11 +5534,10 @@ static void emitDynamicVDWStoreRowsFromVPM(OpBuilder &builder, Location loc,
                       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
                       mlir::vc4::QPUMux::r1);
   } else {
-    createSplat32LDI(builder, loc,
-                     static_cast<int32_t>(0xc0000000u |
-                                          (static_cast<uint32_t>(strideBytes) &
-                                           0xffffu)),
-                     35);
+    createSplat32LDI(
+        builder, loc,
+        static_cast<int32_t>(0xc0000000u | static_cast<uint32_t>(strideBytes)),
+        35);
     createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                       mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                       mlir::vc4::AddOpcode::bit_or,
@@ -5658,6 +5669,13 @@ static LogicalResult emitVDWStoreRectDynamic(
     return source->emitOpError()
            << "dynamic rectangular VDW lowering currently requires constant "
               "source row";
+  if (strideBytes) {
+    int64_t strideGapBytes = *strideBytes - maxCols * 4;
+    if (strideGapBytes < 0 || strideGapBytes > kMaxVDWStrideGapBytes)
+      return source->emitOpError()
+             << "requires constant memory stride to produce an encodable VDW "
+                "stride gap";
+  }
   if (!strideBytes && !strideReg)
     return source->emitOpError()
            << "uses a dynamic stride value that is not defined by a lowerable "
