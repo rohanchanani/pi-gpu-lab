@@ -1,0 +1,19 @@
+{
+  "name": "f32_vector_loop_arg_spill_tail_n17_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 17,
+    "checksum_accum": 4146816,
+    "runtime_allocations": 1,
+    "runtime_launches": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}
