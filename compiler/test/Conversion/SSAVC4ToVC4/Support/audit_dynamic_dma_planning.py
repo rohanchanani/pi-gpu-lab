@@ -27,9 +27,14 @@ MANUAL_DMA_HELPER_RE = re.compile(
     r"DynamicVDR\w*|DynamicVDW\w*|StaticVDW\w*|VDWRowByRow\w*)SlotCount)\s*\("
 )
 
-FUNCTION_RE = re.compile(r"\b(?:static\s+)?(?:unsigned|LogicalResult|PlannedRegion|FailureOr<PlannedRegion>)\s+(\w+)\s*\(")
+FUNCTION_RE = re.compile(
+    r"\b(?:static\s+)?"
+    r"(?:unsigned|LogicalResult|PlannedRegion|FailureOr<PlannedRegion>)"
+    r"\s+(\w+)\s*\([^;{}]*\)\s*\{",
+    re.S,
+)
 BRANCH_PAYLOAD_FUNCTION_RE = re.compile(
-    r"^(?:planDynamicVDR\w*|planDynamicVDW\w*|planVDRRowByRow\w*|planVDW\w*Fallback)$"
+    r"^(?:planDynamicVDR\w*|planDynamicVDW\w*|planVDRRowByRow\w*|planVDW\w*Fallback|planDMARectZeroFill\w*)$"
 )
 FLATTENED_HELPER_RE = re.compile(
     r"\bget(?:VDRLoadRectDynamic|VDWStoreRectDynamic)FlattenedSlotCount\s*\("
@@ -47,31 +52,39 @@ def strip_line_comment(line: str) -> str:
     return line.split("//", 1)[0]
 
 
-def find_enclosing_functions(lines):
-    current = None
-    brace_depth = 0
+def find_enclosing_functions(text, lines):
     functions = {}
-    pending = None
-    pending_line = 0
-    for idx, line in enumerate(lines, start=1):
-        if current is None:
-            match = FUNCTION_RE.search(line)
-            if match:
-                pending = match.group(1)
-                pending_line = idx
-        if pending and "{" in line:
-            current = pending
-            functions[idx] = current
-            brace_depth = 0
-            pending = None
-        if current is not None:
-            brace_depth += line.count("{") - line.count("}")
-            functions[idx] = current
-            if brace_depth <= 0:
-                current = None
-                brace_depth = 0
-        elif pending and idx - pending_line > 4:
-            pending = None
+    line_starts = [0]
+    for match in re.finditer(r"\n", text):
+        line_starts.append(match.end())
+
+    def line_for_pos(pos):
+        lo, hi = 0, len(line_starts)
+        while lo + 1 < hi:
+            mid = (lo + hi) // 2
+            if line_starts[mid] <= pos:
+                lo = mid
+            else:
+                hi = mid
+        return lo + 1
+
+    for match in FUNCTION_RE.finditer(text):
+        name = match.group(1)
+        brace_pos = text.rfind("{", match.start(), match.end())
+        if brace_pos < 0:
+            continue
+        depth = 0
+        end_pos = brace_pos
+        for pos in range(brace_pos, len(text)):
+            if text[pos] == "{":
+                depth += 1
+            elif text[pos] == "}":
+                depth -= 1
+                if depth == 0:
+                    end_pos = pos
+                    break
+        for line_no in range(line_for_pos(match.start()), line_for_pos(end_pos) + 1):
+            functions[line_no] = name
     return functions
 
 
@@ -98,7 +111,7 @@ def main() -> int:
               f"{source}:{idx}: forbidden VDW stride mask/limit token in code"
           )
 
-    functions_by_line = find_enclosing_functions(lines)
+    functions_by_line = find_enclosing_functions(text, lines)
     helper_res = [re.compile(pattern) for pattern in BRANCH_CRITICAL_HELPERS]
     allowed_flattening_functions = {
         "getVDRLoadRectDynamicFlattenedSlotCount",
@@ -138,9 +151,15 @@ def main() -> int:
             failures.append(
                 f"{source}:{idx}: {fn} uses a manual counted PlannedRegion payload"
             )
-        if re.search(r"get(?:DynamicVDR|DynamicVDW|StaticVDW)\w*SlotCount\s*\(", code):
+        if re.search(r"get\w*SlotCount\s*\(", code):
             failures.append(
                 f"{source}:{idx}: {fn} uses a branch-critical slot-count mirror"
+            )
+        if fn.startswith("planDMARectZeroFill") and re.search(
+            r"\b(?:rowSlots|zeroFillSlots|getRowOffsetScratchSlotCount)\b", code
+        ):
+            failures.append(
+                f"{source}:{idx}: {fn} uses legacy zero-fill slot-count accounting"
             )
         if "planStaticRegion" in code:
             window = "\n".join(lines[max(0, idx - 8):idx + 8])
@@ -167,6 +186,15 @@ def main() -> int:
             failures.append(
                 f"{source}:{idx}: planStaticRegion used near dynamic DMA branch body"
             )
+
+    for match in re.finditer(
+        r"\[\[maybe_unused\]\]\s+static\s+void\s+emitDynamic(?:VDR|VDW)\w*",
+        text,
+    ):
+        line_no = text.count("\n", 0, match.start()) + 1
+        failures.append(
+            f"{source}:{line_no}: unused legacy dynamic DMA raw emitter remains"
+        )
 
     for idx, line in enumerate(lines, start=1):
         for diagnostic in OLD_DYNAMIC_DMA_DIAGNOSTICS:
