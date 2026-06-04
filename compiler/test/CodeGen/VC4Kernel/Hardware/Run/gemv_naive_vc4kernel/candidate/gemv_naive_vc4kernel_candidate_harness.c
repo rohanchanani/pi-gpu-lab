@@ -4,9 +4,9 @@
 
 #define GEMV_NAIVE_VC4KERNEL_EPSILON 0.0001f
 #define GEMV_NAIVE_VC4KERNEL_CHECKSUM_SCALE 1024.0f
-#define GEMV_NAIVE_VC4KERNEL_MAX_M 65u
-#define GEMV_NAIVE_VC4KERNEL_MAX_N 65u
-#define GEMV_NAIVE_VC4KERNEL_MAX_LDA 72u
+#define GEMV_NAIVE_VC4KERNEL_MAX_M 1024u
+#define GEMV_NAIVE_VC4KERNEL_MAX_N 1024u
+#define GEMV_NAIVE_VC4KERNEL_MAX_LDA 1031u
 #define GEMV_NAIVE_VC4KERNEL_ACTIVE_QPUS 12u
 #define GEMV_NAIVE_VC4KERNEL_LANES 16u
 #define GEMV_NAIVE_VC4KERNEL_MAX_ROW_COVERAGE                                  \
@@ -18,6 +18,11 @@
   (GEMV_NAIVE_VC4KERNEL_MAX_ROW_COVERAGE * GEMV_NAIVE_VC4KERNEL_MAX_LDA)
 #define GEMV_NAIVE_VC4KERNEL_Y_WORDS                                            \
   (GEMV_NAIVE_VC4KERNEL_MAX_M + GEMV_NAIVE_VC4KERNEL_GUARD)
+#define GEMV_NAIVE_VC4KERNEL_PROGRAM_HEAP_BYTES                                 \
+  ((GEMV_NAIVE_VC4KERNEL_A_WORDS + GEMV_NAIVE_VC4KERNEL_MAX_N +                 \
+    GEMV_NAIVE_VC4KERNEL_Y_WORDS) *                                             \
+       (uint32_t)sizeof(float) +                                                \
+   65536u)
 #define GEMV_NAIVE_VC4KERNEL_SENTINEL (-4321.25f)
 
 struct gemv_naive_vc4kernel_case {
@@ -27,11 +32,16 @@ struct gemv_naive_vc4kernel_case {
 };
 
 static const struct gemv_naive_vc4kernel_case test_cases[] = {
-    {0u, 0u, 1u},    {1u, 1u, 1u},    {15u, 15u, 16u},
-    {16u, 16u, 23u}, {17u, 17u, 17u}, {31u, 31u, 32u},
-    {32u, 32u, 39u}, {33u, 33u, 33u}, {65u, 65u, 66u},
-    {1u, 65u, 72u},  {65u, 17u, 24u}, {7u, 65u, 65u},
-    {33u, 1u, 2u},
+    {0u, 0u, 1u},    {1u, 1u, 1u},    {15u, 15u, 15u},
+    {16u, 16u, 17u}, {17u, 17u, 24u}, {31u, 31u, 31u},
+    {32u, 32u, 33u}, {33u, 33u, 40u}, {65u, 65u, 65u},
+    {1u, 65u, 66u},  {65u, 17u, 24u}, {7u, 65u, 72u},
+    {33u, 1u, 8u},   {15u, 33u, 96u}, {96u, 96u, 103u},
+    {112u, 112u, 119u}, {128u, 120u, 120u}, {192u, 192u, 199u},
+    {256u, 256u, 263u}, {384u, 384u, 391u}, {512u, 512u, 512u},
+    {512u, 505u, 512u}, {65u, 512u, 519u}, {768u, 768u, 775u},
+    {1024u, 1024u, 1024u}, {1024u, 1017u, 1024u},
+    {129u, 1024u, 1031u}, {1024u, 17u, 24u},
 };
 
 static float a_values[GEMV_NAIVE_VC4KERNEL_A_WORDS];
@@ -113,7 +123,9 @@ static int verify_sentinel_region(uint32_t m) {
 
 void notmain(void) {
   struct vc4_program *program = 0;
-  if (vc4_program_create(&program, 0) < 0 || !program)
+  if (vc4_program_create(&program, GEMV_NAIVE_VC4KERNEL_PROGRAM_HEAP_BYTES) <
+          0 ||
+      !program)
     panic("vc4_program_create failed");
 
   uint32_t a_bytes = GEMV_NAIVE_VC4KERNEL_A_WORDS * sizeof(float);
@@ -132,6 +144,8 @@ void notmain(void) {
   int launch_failures = 0;
   int checksum_accum = 0;
   float max_abs_diff_overall = 0.0f;
+  int largest_case_elapsed_usec = 0;
+  int largest_case_ops = 0;
   int start = timer_get_usec();
   vc4_dim3 block = vc4_m2_dim3(GEMV_NAIVE_VC4KERNEL_ACTIVE_QPUS *
                                    GEMV_NAIVE_VC4KERNEL_LANES,
@@ -148,8 +162,15 @@ void notmain(void) {
     fill_inputs(m, n, lda);
     if (vc4_m2_copy_htod(program, a_dev, a_values, a_bytes) < 0 ||
         vc4_m2_copy_htod(program, x_dev, x_values, x_bytes) < 0 ||
-        vc4_m2_copy_htod(program, y_dev, y_values, y_bytes) < 0 ||
-        gemv_naive_vc4kernel_launch(program, grid, block, a_dev, x_dev, y_dev,
+        vc4_m2_copy_htod(program, y_dev, y_values, y_bytes) < 0) {
+      printk("ERROR: gemv_naive_vc4kernel copy-in failed case=%d m=%d n=%d lda=%d\n",
+             (int)case_id, (int)m, (int)n, (int)lda);
+      launch_failures++;
+      continue;
+    }
+
+    int case_start = timer_get_usec();
+    if (gemv_naive_vc4kernel_launch(program, grid, block, a_dev, x_dev, y_dev,
                                     m, n, lda) < 0 ||
         vc4_m2_copy_dtoh(program, y_values, y_dev, y_bytes) < 0) {
       printk("ERROR: gemv_naive_vc4kernel launch/copy failed case=%d m=%d n=%d lda=%d\n",
@@ -157,6 +178,7 @@ void notmain(void) {
       launch_failures++;
       continue;
     }
+    int case_elapsed = timer_get_usec() - case_start;
 
     int mismatches = 0;
     float max_abs_diff = 0.0f;
@@ -171,12 +193,17 @@ void notmain(void) {
     }
     if (max_abs_diff > max_abs_diff_overall)
       max_abs_diff_overall = max_abs_diff;
+    int case_ops = (int)(m * n);
+    if (case_ops > largest_case_ops) {
+      largest_case_ops = case_ops;
+      largest_case_elapsed_usec = case_elapsed;
+    }
     total_mismatches += mismatches;
     sentinel_mismatches += case_sentinels;
     checksum_accum += checksum;
-    printk("GEMV_NAIVE_VC4KERNEL_CASE case=%d m=%d n=%d lda=%d waves=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f\n",
+    printk("GEMV_NAIVE_VC4KERNEL_CASE case=%d m=%d n=%d lda=%d waves=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f elapsed_usec=%d ops=%d\n",
            (int)case_id, (int)m, (int)n, (int)lda, (int)waves, mismatches,
-           case_sentinels, checksum, max_abs_diff);
+           case_sentinels, checksum, max_abs_diff, case_elapsed, case_ops);
   }
 
   int elapsed = timer_get_usec() - start;
@@ -184,13 +211,14 @@ void notmain(void) {
                         launch_failures == 0)
                            ? "PASS"
                            : "FAIL";
-  printk("VC4_TEST_RESULT name=gemv_naive_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_m=%d max_n=%d max_lda=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+  printk("VC4_TEST_RESULT name=gemv_naive_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_m=%d max_n=%d max_lda=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d largest_case_ops=%d largest_case_elapsed_usec=%d\n",
          status, (int)(sizeof(test_cases) / sizeof(test_cases[0])),
          total_mismatches, sentinel_mismatches, launch_failures,
          GEMV_NAIVE_VC4KERNEL_ACTIVE_QPUS, GEMV_NAIVE_VC4KERNEL_LANES,
          GEMV_NAIVE_VC4KERNEL_MAX_M, GEMV_NAIVE_VC4KERNEL_MAX_N,
          GEMV_NAIVE_VC4KERNEL_MAX_LDA, checksum_accum, max_abs_diff_overall, 3,
-         (int)(sizeof(test_cases) / sizeof(test_cases[0])), elapsed);
+         (int)(sizeof(test_cases) / sizeof(test_cases[0])), elapsed,
+         largest_case_ops, largest_case_elapsed_usec);
 
   vc4Free(program, a_dev);
   vc4Free(program, x_dev);

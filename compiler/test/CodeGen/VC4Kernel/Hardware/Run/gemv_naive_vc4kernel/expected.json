@@ -2,17 +2,17 @@
   "name": "gemv_naive_vc4kernel",
   "status": "PASS",
   "required": {
-    "cases": 13,
+    "cases": 28,
     "total_mismatches": 0,
     "sentinel_mismatches": 0,
     "launch_failures": 0,
     "active_qpus": 12,
     "lanes": 16,
-    "max_m": 65,
-    "max_n": 65,
-    "max_lda": 72,
+    "max_m": 1024,
+    "max_n": 1024,
+    "max_lda": 1031,
     "runtime_allocations": 3,
-    "runtime_launches": 13
+    "runtime_launches": 28
   },
   "float_max": {
     "max_abs_diff": 0.0001

@@ -4,9 +4,9 @@
 
 #define GEMV_BLOCKED_VPM_VC4KERNEL_EPSILON 0.0001f
 #define GEMV_BLOCKED_VPM_VC4KERNEL_CHECKSUM_SCALE 1024.0f
-#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_M 65u
-#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_N 65u
-#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_LDA 96u
+#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_M 1024u
+#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_N 1024u
+#define GEMV_BLOCKED_VPM_VC4KERNEL_MAX_LDA 1031u
 #define GEMV_BLOCKED_VPM_VC4KERNEL_LANES 16u
 #define GEMV_BLOCKED_VPM_VC4KERNEL_BLOCK_ROWS 16u
 #define GEMV_BLOCKED_VPM_VC4KERNEL_BLOCK_K 4u
@@ -21,6 +21,12 @@
    GEMV_BLOCKED_VPM_VC4KERNEL_MAX_LDA)
 #define GEMV_BLOCKED_VPM_VC4KERNEL_Y_WORDS \
   (GEMV_BLOCKED_VPM_VC4KERNEL_MAX_M + GEMV_BLOCKED_VPM_VC4KERNEL_GUARD)
+#define GEMV_BLOCKED_VPM_VC4KERNEL_PROGRAM_HEAP_BYTES \
+  ((GEMV_BLOCKED_VPM_VC4KERNEL_A_WORDS + \
+    GEMV_BLOCKED_VPM_VC4KERNEL_MAX_N + \
+    GEMV_BLOCKED_VPM_VC4KERNEL_Y_WORDS) * \
+       (uint32_t)sizeof(float) + \
+   65536u)
 #define GEMV_BLOCKED_VPM_VC4KERNEL_SENTINEL (-9876.5f)
 
 struct gemv_blocked_vpm_vc4kernel_case {
@@ -34,7 +40,12 @@ static const struct gemv_blocked_vpm_vc4kernel_case test_cases[] = {
     {16u, 16u, 17u}, {17u, 17u, 24u}, {31u, 31u, 31u},
     {32u, 32u, 33u}, {33u, 33u, 40u}, {65u, 65u, 65u},
     {1u, 65u, 66u},  {65u, 17u, 24u}, {7u, 65u, 72u},
-    {33u, 1u, 8u},   {15u, 33u, 96u},
+    {33u, 1u, 8u},   {15u, 33u, 96u}, {96u, 96u, 103u},
+    {112u, 112u, 119u}, {128u, 120u, 120u}, {192u, 192u, 199u},
+    {256u, 256u, 263u}, {384u, 384u, 391u}, {512u, 512u, 512u},
+    {512u, 505u, 512u}, {65u, 512u, 519u}, {768u, 768u, 775u},
+    {1024u, 1024u, 1024u}, {1024u, 1017u, 1024u},
+    {129u, 1024u, 1031u}, {1024u, 17u, 24u},
 };
 
 static float a_values[GEMV_BLOCKED_VPM_VC4KERNEL_A_WORDS];
@@ -115,7 +126,9 @@ static int verify_sentinel_region(uint32_t m) {
 
 void notmain(void) {
   struct vc4_program *program = 0;
-  if (vc4_program_create(&program, 0) < 0 || !program)
+  if (vc4_program_create(&program,
+                         GEMV_BLOCKED_VPM_VC4KERNEL_PROGRAM_HEAP_BYTES) < 0 ||
+      !program)
     panic("vc4_program_create failed");
 
   uint32_t a_bytes = GEMV_BLOCKED_VPM_VC4KERNEL_A_WORDS * sizeof(float);
@@ -137,6 +150,8 @@ void notmain(void) {
   int launch_failures = 0;
   int checksum_accum = 0;
   float global_max_abs_diff = 0.0f;
+  int largest_case_elapsed_usec = 0;
+  int largest_case_ops = 0;
   int saw_lda_exact = 0;
   int saw_lda_plus1 = 0;
   int saw_lda_plus7 = 0;
@@ -161,8 +176,15 @@ void notmain(void) {
     vc4_dim3 grid = vc4_m2_dim3(waves, 1u, 1u);
     if (vc4MemcpyHtoD(program, a_dev, a_values, a_bytes) < 0 ||
         vc4MemcpyHtoD(program, x_dev, x_values, x_bytes) < 0 ||
-        vc4MemcpyHtoD(program, y_dev, y_values, y_bytes) < 0 ||
-        gemv_blocked_vpm_vc4kernel_launch(program, grid, block, a_dev, x_dev,
+        vc4MemcpyHtoD(program, y_dev, y_values, y_bytes) < 0) {
+      printk("ERROR: gemv_blocked_vpm_vc4kernel copy-in failed case=%d m=%d n=%d lda=%d\n",
+             (int)case_id, (int)m, (int)n, (int)lda);
+      launch_failures++;
+      continue;
+    }
+
+    int case_start = timer_get_usec();
+    if (gemv_blocked_vpm_vc4kernel_launch(program, grid, block, a_dev, x_dev,
                                           y_dev, (int32_t)m, (int32_t)n,
                                           (int32_t)lda) < 0 ||
         vc4MemcpyDtoH(program, y_values, y_dev, y_bytes) < 0) {
@@ -171,6 +193,7 @@ void notmain(void) {
       launch_failures++;
       continue;
     }
+    int case_elapsed = timer_get_usec() - case_start;
 
     int mismatches = 0;
     float max_abs_diff = 0.0f;
@@ -180,11 +203,16 @@ void notmain(void) {
       global_max_abs_diff = max_abs_diff;
     int checksum = scaled_checksum(y_values, m);
     checksum_accum ^= checksum + (int)(case_id * 131u);
+    int case_ops = (int)(m * n);
+    if (case_ops > largest_case_ops) {
+      largest_case_ops = case_ops;
+      largest_case_elapsed_usec = case_elapsed;
+    }
     total_mismatches += mismatches;
     sentinel_mismatches += guard_mismatches;
-    printk("GEMV_BLOCKED_VPM_VC4KERNEL_CASE case=%d m=%d n=%d lda=%d waves=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f\n",
+    printk("GEMV_BLOCKED_VPM_VC4KERNEL_CASE case=%d m=%d n=%d lda=%d waves=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f elapsed_usec=%d ops=%d\n",
            (int)case_id, (int)m, (int)n, (int)lda, (int)waves, mismatches,
-           guard_mismatches, checksum, max_abs_diff);
+           guard_mismatches, checksum, max_abs_diff, case_elapsed, case_ops);
   }
 
   launch_failures += (int)gemv_blocked_vpm_vc4kernel_runtime_launch_failures();
@@ -193,7 +221,7 @@ void notmain(void) {
                         launch_failures == 0)
                            ? "PASS"
                            : "FAIL";
-  printk("VC4_TEST_RESULT name=gemv_blocked_vpm_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d lanes=%d max_m=%d max_n=%d max_lda=%d block_rows=%d block_k=%d saw_lda_exact=%d saw_lda_plus1=%d saw_lda_plus7=%d saw_large_lda=%d dynamic_shape_args=1 vdr_rect_path=1 blocked_vpm_path=1 no_fixed_padded_stride=1 checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+  printk("VC4_TEST_RESULT name=gemv_blocked_vpm_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d lanes=%d max_m=%d max_n=%d max_lda=%d block_rows=%d block_k=%d saw_lda_exact=%d saw_lda_plus1=%d saw_lda_plus7=%d saw_large_lda=%d dynamic_shape_args=1 vdr_rect_path=1 blocked_vpm_path=1 no_fixed_padded_stride=1 checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d largest_case_ops=%d largest_case_elapsed_usec=%d\n",
          status, (int)(sizeof(test_cases) / sizeof(test_cases[0])),
          total_mismatches, sentinel_mismatches, launch_failures,
          GEMV_BLOCKED_VPM_VC4KERNEL_LANES,
@@ -203,7 +231,8 @@ void notmain(void) {
          GEMV_BLOCKED_VPM_VC4KERNEL_BLOCK_ROWS,
          GEMV_BLOCKED_VPM_VC4KERNEL_BLOCK_K, saw_lda_exact, saw_lda_plus1,
          saw_lda_plus7, saw_large_lda, checksum_accum, global_max_abs_diff, 3,
-         (int)gemv_blocked_vpm_vc4kernel_runtime_launches(), elapsed);
+         (int)gemv_blocked_vpm_vc4kernel_runtime_launches(), elapsed,
+         largest_case_ops, largest_case_elapsed_usec);
 
   vc4Free(program, a_dev);
   vc4Free(program, x_dev);
