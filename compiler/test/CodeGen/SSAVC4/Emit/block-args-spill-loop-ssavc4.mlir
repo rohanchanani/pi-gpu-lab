@@ -11,15 +11,21 @@
 // LOWERED-LABEL: vc4.func @block_args_spill_smoke_ssavc4_kernel
 // LOWERED-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // LOWERED-SAME: spill_frame_base
+// LOWERED-SAME: uses_vdr = true
+// LOWERED-SAME: uses_vpm_qpu_read = true
 // LOWERED-NOT: ssavc4.phi
 // LOWERED-DAG: vc4.qpu.branch attributes {{.*}}immediate = -{{[0-9]+}} : i32
 // LOWERED-DAG: vc4.qpu.vpmvcd_addr
-// LOWERED-DAG: sig = #vc4.qpu_signal<ldtmu0>
+// LOWERED-DAG: vc4.qpu.vpmvcd_setup
+// LOWERED-DAG: vc4.qpu.vpm
+// LOWERED-NOT: sig = #vc4.qpu_signal<ldtmu0>
 // QASM: brr.any
 // QASM-SAME: delay_slots=3
 // QASM: brr
 // QASM-SAME: delay_slots=3
-// QASM: ldtmu0
+// QASM: vr_setup
+// QASM: mov {{r[a-b][0-9]+}}, vpm
+// QASM-NOT: ldtmu0
 // SOURCE: uniformWords[5] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
 // SOURCE-LABEL: int block_args_spill_smoke_ssavc4_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}

@@ -1,13 +1,15 @@
-// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not="#vc4.qpu_signal<ldtmu0>" %s
 
 // CHECK-LABEL: vc4.func @spill_pressure_independent_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_stride_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_base
 // CHECK-SAME: public_name = "spill_pressure_independent"
+// CHECK-DAG: uses_vdr = true
+// CHECK-DAG: uses_vpm_qpu_read = true
 // CHECK: vc4.qpu.vpmvcd_addr
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
-// CHECK: sig = #vc4.qpu_signal<ldtmu0>
+// CHECK: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<read>
 ssavc4.module @spill_pressure_independent {
   ssavc4.func @spill_pressure_independent_kernel() attributes {
     kernel,

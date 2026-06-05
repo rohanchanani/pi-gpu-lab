@@ -1,4 +1,4 @@
-// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not="#vc4.qpu_signal<ldtmu0>" %s
 
 // CHECK-LABEL: vc4.func @block_args_spill_merge_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
@@ -8,7 +8,7 @@
 // CHECK-DAG: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<any_c_clear>
 // CHECK-DAG: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<always>
 // CHECK-DAG: vc4.qpu.vpmvcd_addr
-// CHECK-DAG: sig = #vc4.qpu_signal<ldtmu0>
+// CHECK-DAG: side = #vc4.vpmvcd_side<read>
 ssavc4.module @block_args_spill_merge {
   ssavc4.func @block_args_spill_merge_kernel() attributes {
     kernel,

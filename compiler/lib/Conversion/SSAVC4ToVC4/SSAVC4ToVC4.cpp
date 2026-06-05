@@ -894,7 +894,6 @@ private:
           preds.push_back(templ.sourceBlock);
       }
     }
-
     DenseMap<Block *, bool> loopRegisterHomeBlocks;
     for (const InstructionTemplate &templ : templates) {
       if ((templ.kind != InstructionTemplate::Kind::Branch &&
@@ -1378,6 +1377,25 @@ struct RawVDWSpillStoreSequence {
   void emit(OpBuilder &builder, Location loc) const;
 };
 
+struct RawVDRSpillReloadSequence {
+  static constexpr bool kUseMutex = true;
+  static constexpr int64_t kVPMReadSetup = (1 << 20) | 0xa00;
+  static constexpr int64_t kVDRSetup =
+      static_cast<int32_t>(0x80000000u | (3u << 24) | (1u << 16) |
+                           (1u << 12));
+
+  int64_t valueReg = -1;
+
+  unsigned slotCount() const {
+    unsigned count = 15;
+    if (kUseMutex)
+      count += 2;
+    return count;
+  }
+
+  void emit(OpBuilder &builder, Location loc) const;
+};
+
 struct SpillActionSequence {
   SpillAction action;
 
@@ -1386,7 +1404,8 @@ struct SpillActionSequence {
     if (action.kind == SpillAction::Kind::Store)
       return base.slotCount() +
              RawVDWSpillStoreSequence{action.physicalReg}.slotCount();
-    return base.slotCount() + 13;
+    return base.slotCount() +
+           RawVDRSpillReloadSequence{action.physicalReg}.slotCount();
   }
 
   void emit(OpBuilder &builder, Location loc) const;
@@ -7065,6 +7084,46 @@ void RawVDWSpillStoreSequence::emit(OpBuilder &builder, Location loc) const {
                   /*useMutex=*/kUseMutex);
 }
 
+void RawVDRSpillReloadSequence::emit(OpBuilder &builder, Location loc) const {
+  if (kUseMutex) {
+    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/31, /*waddrMul=*/32,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                          mlir::vc4::QPUMux::r1);
+  }
+
+  emitRawVDRLoad(builder, loc, SpillAwareAllocator::spillAddrReg(), kVDRSetup,
+                 SpillAwareAllocator::spillRowReg(), /*useMutex=*/false);
+
+  createSplat32LDI(builder, loc, kVPMReadSetup, 35);
+  createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
+                    mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                    mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                    SpillAwareAllocator::spillRowReg(), /*raddrB=*/0,
+                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r3,
+                    mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createNopBundle(builder, loc);
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        valueReg, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::bit_or,
+                        mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
+                        /*raddrB=*/48, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
+  createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
+  createNopLDISlot(builder, loc);
+
+  if (kUseMutex)
+    emitMutexRelease(builder, loc);
+}
+
 void SpillActionSequence::emit(OpBuilder &builder, Location loc) const {
   SpillSlotBaseSequence{action.slot}.emit(builder, loc);
   if (action.kind == SpillAction::Kind::Store) {
@@ -7072,80 +7131,7 @@ void SpillActionSequence::emit(OpBuilder &builder, Location loc) const {
     return;
   }
 
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        SpillAwareAllocator::spillLaneReg(), /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/38,
-                        /*raddrB=*/38, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
-  createNopLDISlot(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        SpillAwareAllocator::spillLaneReg(), /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
-                        SpillAwareAllocator::spillLaneReg(), /*raddrB=*/0,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/2);
-  createNopLDISlot(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop,
-                        SpillAwareAllocator::spillLaneReg(),
-                        SpillAwareAllocator::spillLaneReg(),
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                        SpillAwareAllocator::spillAddrReg(), /*raddrB=*/0,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createNopLDISlot(builder, loc);
-
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/56, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop,
-                        SpillAwareAllocator::spillAddrReg(), /*raddrB=*/0,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/39, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
-                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r3);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/39, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
-                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r3);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::ldtmu0,
-                        mlir::vc4::Cond::never, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/39, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::nop, mlir::vc4::MulOpcode::nop,
-                        /*raddrA=*/0, /*raddrB=*/1, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r3);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        action.physicalReg, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/1, mlir::vc4::QPUMux::r4,
-                        mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
-  createNopLDISlot(builder, loc);
+  RawVDRSpillReloadSequence{action.physicalReg}.emit(builder, loc);
 }
 
 void EdgeCopySequence::emit(OpBuilder &builder, Location loc) const {
@@ -7414,15 +7400,6 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
   if (failed(mlir::vc4::parseSemanticResourceMetadata(
           func, resource, info, /*allowAbsent=*/false)))
     return resource;
-  if (info.scheduleMode != "cooperative_block")
-    return resource;
-
-  int64_t spillRows = info.warpsPerBlock;
-  int64_t totalRows = info.userVPMRowsPerBlock +
-                      info.compilerVPMStagingRowsPerBlock +
-                      info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
-                      spillRows;
-
   SmallVector<NamedAttribute, 12> attrs;
   for (NamedAttribute attr : resource)
     attrs.push_back(attr);
@@ -7438,10 +7415,22 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
     attrs.push_back(builder.getNamedAttr(name, value));
   };
 
-  replaceAttr("spill_vpm_rows_per_block",
-              builder.getI32IntegerAttr(spillRows));
-  replaceAttr("total_vpm_rows_per_block", builder.getI32IntegerAttr(totalRows));
-  replaceAttr("uses_vpm", builder.getBoolAttr(totalRows > 0 || info.usesVPM));
+  int64_t totalRows = info.totalVPMRowsPerBlock;
+  if (info.scheduleMode == "cooperative_block") {
+    int64_t spillRows = info.warpsPerBlock;
+    totalRows = info.userVPMRowsPerBlock +
+                info.compilerVPMStagingRowsPerBlock +
+                info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
+                spillRows;
+    replaceAttr("spill_vpm_rows_per_block",
+                builder.getI32IntegerAttr(spillRows));
+    replaceAttr("total_vpm_rows_per_block",
+                builder.getI32IntegerAttr(totalRows));
+  }
+
+  replaceAttr("uses_vpm", builder.getBoolAttr(true));
+  replaceAttr("uses_vpm_qpu_read", builder.getBoolAttr(true));
+  replaceAttr("uses_vdr", builder.getBoolAttr(true));
   replaceAttr("requires_vpm_base_row_builtin",
               builder.getBoolAttr(totalRows > 0));
   return builder.getDictionaryAttr(attrs);

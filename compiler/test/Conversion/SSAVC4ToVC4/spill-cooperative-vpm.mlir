@@ -12,8 +12,7 @@
 // CHECK-DAG: total_vpm_rows_per_block = 20 : i32
 // CHECK-NOT: __vc4_spill_arg
 // CHECK: vc4.qpu.sema <release>
-// CHECK: vc4.qpu.vpmvcd_addr
-// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_addr {{.*}}side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @spill_cooperative_vpm {
   ssavc4.func @spill_cooperative_vpm_kernel() attributes {

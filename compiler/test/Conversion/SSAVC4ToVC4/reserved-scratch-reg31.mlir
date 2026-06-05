@@ -1,9 +1,10 @@
-// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not="#vc4.qpu_signal<ldtmu0>" %s
 
 // CHECK-LABEL: vc4.module @reserved_scratch_reg31
 // CHECK: spill_frame_bytes = 384 : i32
+// CHECK-DAG: uses_vdr = true
+// CHECK-DAG: uses_vpm_qpu_read = true
 // CHECK: value = 28 : i32, waddr_add = 25 : i32
-// CHECK: sig = #vc4.qpu_signal<ldtmu0>
 
 // This keeps enough vector values live across a cooperative barrier to force
 // the allocator to confront ra31. The barrier lowering uses ra31 as fixed

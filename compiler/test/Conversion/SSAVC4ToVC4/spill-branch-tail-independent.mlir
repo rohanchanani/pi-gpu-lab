@@ -1,4 +1,4 @@
-// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not="#vc4.qpu_signal<ldtmu0>" %s
 
 // CHECK-LABEL: vc4.func @spill_branch_tail_independent_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
@@ -7,6 +7,8 @@
 // CHECK-NOT: spill_frame_base
 // CHECK: builtins = [
 // CHECK: spill_frame_base
+// CHECK-DAG: uses_vdr = true
+// CHECK-DAG: uses_vpm_qpu_read = true
 // CHECK: vc4.qpu.vpmvcd_addr
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: vc4.qpu.branch attributes
@@ -16,7 +18,6 @@
 // CHECK: vc4.qpu.bundle
 // CHECK: vc4.qpu.bundle
 // CHECK: vc4.qpu.bundle
-// CHECK: sig = #vc4.qpu_signal<ldtmu0>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 // CHECK: vc4.qpu.bundle
 // CHECK: vc4.qpu.bundle

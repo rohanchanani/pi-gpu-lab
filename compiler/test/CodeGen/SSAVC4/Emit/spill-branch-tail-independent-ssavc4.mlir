@@ -11,14 +11,20 @@
 // LOWERED-LABEL: vc4.func @spill_branch_tail_independent_kernel
 // LOWERED-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // LOWERED-SAME: spill_frame_base
+// LOWERED-SAME: uses_vdr = true
+// LOWERED-SAME: uses_vpm_qpu_read = true
 // LOWERED: vc4.qpu.vpmvcd_addr
 // LOWERED: vc4.qpu.branch
-// LOWERED: sig = #vc4.qpu_signal<ldtmu0>
+// LOWERED: vc4.qpu.vpmvcd_setup
+// LOWERED: vc4.qpu.vpm
+// LOWERED-NOT: sig = #vc4.qpu_signal<ldtmu0>
 // QASM: brr.anyc
 // QASM-SAME: delay_slots=3
 // QASM: brr
 // QASM-SAME: delay_slots=3
-// QASM: ldtmu0
+// QASM: vr_setup
+// QASM: mov {{r[a-b][0-9]+}}, vpm
+// QASM-NOT: ldtmu0
 // QASM: thrend
 // SOURCE: uniformWords[2] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
 // SOURCE-LABEL: int spill_branch_tail_independent_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out)

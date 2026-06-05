@@ -1,14 +1,15 @@
-// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck %s
+// RUN: vc4-opt %s --convert-ssavc4-to-vc4 | FileCheck --implicit-check-not="#vc4.qpu_signal<ldtmu0>" %s
 
 // CHECK-LABEL: vc4.func @pressure_spill_boundary_kernel
 // CHECK-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_stride_bytes = {{[1-9][0-9]*}} : i32
 // CHECK-SAME: spill_frame_base
 // CHECK-SAME: public_name = "pressure_spill_boundary"
+// CHECK-DAG: uses_vdr = true
+// CHECK-DAG: uses_vpm_qpu_read = true
 // CHECK: value = 28 : i32
-// CHECK: sig = #vc4.qpu_signal<ldtmu0>
-// CHECK: vc4.qpu.vpmvcd_addr
-// CHECK-SAME: side = #vc4.vpmvcd_side<write>
+// CHECK: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<read>
+// CHECK: vc4.qpu.vpmvcd_addr {{.*}}side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>
 ssavc4.module @pressure_spill_boundary {
   ssavc4.func @pressure_spill_boundary_kernel() attributes {
