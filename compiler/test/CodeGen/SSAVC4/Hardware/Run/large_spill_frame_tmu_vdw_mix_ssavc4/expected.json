@@ -1,0 +1,19 @@
+{
+  "name": "large_spill_frame_tmu_vdw_mix_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 3,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "requests": 12,
+    "waves": 1,
+    "lanes": 16,
+    "forced_spill_terms": 24,
+    "runtime_allocations": 3,
+    "runtime_launches": 3
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}
