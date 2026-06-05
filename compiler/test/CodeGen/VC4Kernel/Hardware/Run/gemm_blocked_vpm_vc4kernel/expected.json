@@ -1,0 +1,35 @@
+{
+  "name": "gemm_blocked_vpm_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 20,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "lanes": 16,
+    "block_m": 1,
+    "block_n": 16,
+    "block_k": 4,
+    "max_m": 33,
+    "max_n": 33,
+    "max_k": 33,
+    "max_ld": 96,
+    "saw_zero": 1,
+    "saw_non_square": 1,
+    "saw_k_tail": 1,
+    "saw_n_tail": 1,
+    "saw_runtime_ld": 1,
+    "saw_contiguous_ld": 1,
+    "saw_plus1_ld": 1,
+    "saw_plus7_ld": 1,
+    "saw_large_ld": 1,
+    "dynamic_shape_args": 1,
+    "vdr_rect_path": 1,
+    "blocked_vpm_path": 1,
+    "no_tmu_ab_path": 1,
+    "no_fixed_padded_stride": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}
