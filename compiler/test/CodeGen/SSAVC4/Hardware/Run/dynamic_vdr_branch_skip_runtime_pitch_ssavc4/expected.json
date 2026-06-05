@@ -1,0 +1,10 @@
+{
+  "name": "dynamic_vdr_branch_skip_runtime_pitch_ssavc4",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "runtime_launches": 6
+  }
+}

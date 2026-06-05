@@ -1761,30 +1761,115 @@ static unsigned getRowOffsetScratchSlotCount(int64_t row,
   return (usesVPMRowOffset && row != 0) ? 2 : 0;
 }
 
-static unsigned getDynamicVDRPitchRowSlotCount(bool useMutex, int64_t row,
+static unsigned getVDRVPMBaseRowSetupSlotCount(int64_t row,
                                                bool usesVPMRowOffset = true) {
-  unsigned rawVDRSlots = useMutex ? 9 : 7;
-  unsigned dynamicAddressSlots = row == 0 ? 0 : row;
-  return getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
-         dynamicAddressSlots + rawVDRSlots;
+  return (usesVPMRowOffset && row != 0) ? 3 : 1;
+}
+
+static unsigned getVCDAddressWithOptionalAddSlotCount(
+    std::optional<int64_t> addressAddMultiplier = std::nullopt) {
+  if (!addressAddMultiplier)
+    return 1;
+  return static_cast<unsigned>(*addressAddMultiplier + 1);
+}
+
+static unsigned countDynamicVDRCommonTailSlots(bool useMutex) {
+  return /*nops before row setup=*/3 + /*vpm base row setup=*/1 +
+         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
+         /*vcd address=*/1 + /*wait=*/1 + (useMutex ? 1 : 0);
+}
+
+static unsigned countDynamicVDRLoadOneRowPlannedSlots(
+    bool useMutex, int64_t row, bool usesVPMRowOffset = true) {
+  std::optional<int64_t> addressAddMultiplier =
+      row == 0 ? std::nullopt : std::optional<int64_t>(row);
+  return (useMutex ? 1 : 0) + /*row length setup=*/4 + /*setup ldi=*/1 +
+         /*setup nop=*/1 + /*setup merge=*/1 + /*setup nops=*/3 +
+         getVDRVPMBaseRowSetupSlotCount(row, usesVPMRowOffset) +
+         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
+         getVCDAddressWithOptionalAddSlotCount(addressAddMultiplier) +
+         /*wait=*/1 + (useMutex ? 1 : 0);
+}
+
+static unsigned countDynamicVDRPitchRowPlannedSlots(
+    bool useMutex, int64_t row, bool usesVPMRowOffset = true) {
+  std::optional<int64_t> addressAddMultiplier =
+      row == 0 ? std::nullopt : std::optional<int64_t>(row);
+  return (useMutex ? 1 : 0) + /*extended pitch setup=*/0 + /*setup ldi=*/1 +
+         getVDRVPMBaseRowSetupSlotCount(row, usesVPMRowOffset) +
+         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
+         getVCDAddressWithOptionalAddSlotCount(addressAddMultiplier) +
+         /*wait=*/1 + (useMutex ? 1 : 0);
 }
 
 static unsigned getDynamicVDRRectRowsSlotCount(bool useMutex,
                                                bool extendedPitch = false) {
-  unsigned slots = useMutex ? 17 : 15;
-  return extendedPitch ? slots + 2 : slots;
+  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
+         /*rows setup=*/3 + /*setup ldi/nop/merge=*/3 +
+         countDynamicVDRCommonTailSlots(useMutex);
 }
 
 static unsigned getDynamicVDRRectColsSlotCount(bool useMutex,
                                                bool extendedPitch = false) {
-  unsigned slots = useMutex ? 18 : 16;
-  return extendedPitch ? slots + 2 : slots;
+  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
+         /*cols setup=*/4 + /*setup ldi/nop/merge=*/3 +
+         countDynamicVDRCommonTailSlots(useMutex);
 }
 
 static unsigned getDynamicVDRRectRowsColsSlotCount(bool useMutex,
                                                    bool extendedPitch = false) {
-  unsigned slots = useMutex ? 22 : 20;
-  return extendedPitch ? slots + 2 : slots;
+  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
+         /*rows/cols setup=*/7 + /*setup ldi/nop/merge/merge=*/4 +
+         countDynamicVDRCommonTailSlots(useMutex);
+}
+
+static unsigned getRuntimePitchDispatchSlotCount(unsigned rectangularSlots,
+                                                 unsigned fallbackSlots) {
+  return /*pitch overflow compare=*/2 + /*outer branch window=*/7 +
+         rectangularSlots + /*rectangular-to-exit branch window=*/7 +
+         fallbackSlots;
+}
+
+static unsigned getVDRRowsColsFallbackSlotCount(bool useMutex, int64_t maxRows,
+                                                int64_t maxCols,
+                                                bool usesVPMRowOffset = true) {
+  (void)maxCols;
+  unsigned total = 0;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    total += /*active rows guard=*/12 + /*active cols guard=*/12 +
+             countDynamicVDRLoadOneRowPlannedSlots(useMutex, row,
+                                                   usesVPMRowOffset);
+  }
+  return total;
+}
+
+static unsigned getVDRActiveColsFallbackSlotCount(
+    bool useMutex, int64_t activeRows, int64_t maxRows,
+    bool usesVPMRowOffset = true) {
+  int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
+  unsigned total = 0;
+  for (int64_t row = 0; row < clampedRows; ++row)
+    total += /*active cols guard=*/12 +
+             countDynamicVDRLoadOneRowPlannedSlots(useMutex, row,
+                                                   usesVPMRowOffset);
+  return total;
+}
+
+static unsigned getVDRStaticFallbackSlotCount(bool useMutex, int64_t activeRows,
+                                              int64_t activeCols,
+                                              int64_t maxRows,
+                                              int64_t maxCols,
+                                              bool usesVPMRowOffset = true) {
+  (void)maxCols;
+  int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
+  int64_t clampedCols = std::clamp(activeCols, int64_t(0), maxCols);
+  if (clampedRows == 0 || clampedCols == 0)
+    return 0;
+  unsigned total = 0;
+  for (int64_t row = 0; row < clampedRows; ++row)
+    total += countDynamicVDRPitchRowPlannedSlots(useMutex, row,
+                                                 usesVPMRowOffset);
+  return total;
 }
 
 // flattened layout only: not branch-target-critical.
@@ -1835,16 +1920,6 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
   int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
   bool usesVPMRowOffset = !isVerticalVPMOp(op);
-  auto runtimePitchDispatchSlots = [&](int64_t rows) {
-    unsigned rectangularSlots = rawVDRSlots + 2;
-    unsigned fallbackSlots = 0;
-    for (int64_t row = 0; row < rows; ++row)
-      fallbackSlots += getDynamicVDRPitchRowSlotCount(useMutex, row,
-                                                      usesVPMRowOffset);
-    return /*pitch overflow compare=*/2 + /*outer branch window=*/7 +
-           rectangularSlots + /*rectangular-to-exit branch window=*/7 +
-           fallbackSlots;
-  };
   if (!activeRows && activeCols && *activeCols == maxCols && maxRows >= 1 &&
       maxRows <= 16) {
     unsigned zeroFillSlots = useMutex ? 6 : 3;
@@ -1854,10 +1929,15 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
       total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
                zeroFillSlots;
     if (!pitch) {
-      for (int64_t row = 0; row < maxRows; ++row)
+      for (int64_t row = 0; row < maxRows; ++row) {
+        unsigned rectangularSlots =
+            getDynamicVDRRectRowsSlotCount(useMutex, /*extendedPitch=*/true);
+        unsigned fallbackSlots = countDynamicVDRPitchRowPlannedSlots(
+            useMutex, row, usesVPMRowOffset);
         total += guardSlots +
-                 getDynamicVDRPitchRowSlotCount(useMutex, row,
-                                                usesVPMRowOffset);
+                 getRuntimePitchDispatchSlotCount(rectangularSlots,
+                                                  fallbackSlots);
+      }
       return total;
     }
     unsigned clampSlots = 4;
@@ -1874,16 +1954,25 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
     unsigned activeRowsGuardSlots = 12;
     unsigned preserveRowsSlots = 1;
     unsigned activeColsGuardSlots = 12;
+    unsigned rectangularSlots =
+        getDynamicVDRRectRowsColsSlotCount(useMutex, /*extendedPitch=*/true);
+    unsigned fallbackSlots =
+        getVDRRowsColsFallbackSlotCount(useMutex, maxRows, maxCols,
+                                        usesVPMRowOffset);
     total += activeRowsGuardSlots + preserveRowsSlots + activeColsGuardSlots +
-             getDynamicVDRRectRowsColsSlotCount(useMutex,
-                                                /*extendedPitch=*/true);
+             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
     return total;
   }
   if (!activeRows)
     return rawVDRSlots;
   if (activeCols && *activeRows == maxRows && *activeCols == maxCols) {
-    if (!pitch)
-      return runtimePitchDispatchSlots(maxRows);
+    if (!pitch) {
+      unsigned rectangularSlots = rawVDRSlots + 2;
+      unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
+          useMutex, *activeRows, *activeCols, maxRows, maxCols,
+          usesVPMRowOffset);
+      return getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
+    }
     return encodeVDRMemoryPitchBytes(*pitch) ? rawVDRSlots : rawVDRSlots + 2;
   }
   if (!activeCols && activeRows && maxRows >= 1 && maxRows <= 16) {
@@ -1899,7 +1988,15 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
     if (clampedRows == 0)
       return total;
     unsigned activeColsGuardSlots = 12;
-    bool extendedPitch = !pitch || !encodeVDRMemoryPitchBytes(*pitch);
+    if (!pitch) {
+      unsigned rectangularSlots =
+          getDynamicVDRRectColsSlotCount(useMutex, /*extendedPitch=*/true);
+      unsigned fallbackSlots = getVDRActiveColsFallbackSlotCount(
+          useMutex, *activeRows, maxRows, usesVPMRowOffset);
+      return total + activeColsGuardSlots +
+             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
+    }
+    bool extendedPitch = !encodeVDRMemoryPitchBytes(*pitch);
     return total + activeColsGuardSlots +
            getDynamicVDRRectColsSlotCount(useMutex, extendedPitch);
   }
@@ -1909,8 +2006,15 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
     int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
     if (clampedRows == 0 || clampedCols == 0)
       return zeroFillSlots;
-    return zeroFillSlots +
-           (!pitch ? runtimePitchDispatchSlots(clampedRows) : rawVDRSlots);
+    if (!pitch) {
+      unsigned rectangularSlots = rawVDRSlots + 2;
+      unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
+          useMutex, clampedRows, clampedCols, maxRows, maxCols,
+          usesVPMRowOffset);
+      return zeroFillSlots +
+             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
+    }
+    return zeroFillSlots + rawVDRSlots;
   }
   if (!pitch) {
     int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
@@ -1924,7 +2028,12 @@ static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
       if (clampedRows == 0 || clampedCols == 0)
         return total;
     }
-    return total + runtimePitchDispatchSlots(clampedRows);
+    unsigned rectangularSlots = rawVDRSlots + 2;
+    unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
+        useMutex, clampedRows, clampedCols, maxRows, maxCols,
+        usesVPMRowOffset);
+    return total + getRuntimePitchDispatchSlotCount(rectangularSlots,
+                                                    fallbackSlots);
   }
   return rawVDRSlots;
 }
