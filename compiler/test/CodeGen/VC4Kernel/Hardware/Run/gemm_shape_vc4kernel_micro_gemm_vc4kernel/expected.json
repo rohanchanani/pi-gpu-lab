@@ -1,0 +1,26 @@
+{
+  "name": "gemm_shape_vc4kernel_micro_gemm_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "block_x": 16,
+    "lanes": 16,
+    "max_m": 33,
+    "max_n": 33,
+    "max_k": 33,
+    "max_ld": 96,
+    "saw_tail_n": 1,
+    "saw_contiguous_ld": 1,
+    "contiguous_layout_only": 0,
+    "launch_geometry_2d_block16": 1,
+    "checksum_accum": 3299,
+    "runtime_allocations": 3,
+    "runtime_launches": 2
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}

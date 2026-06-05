@@ -2,12 +2,20 @@
 
 // CHECK-LABEL: ssavc4.func @tmu_tail
 // CHECK: ssavc4.make_flags
-// CHECK: ssavc4.cond_br
+// CHECK-NOT: ssavc4.cond_br
+// CHECK-NOT: ssavc4.br
 // CHECK: ssavc4.cond_select
+// CHECK-NOT: ssavc4.cond_br
+// CHECK-NOT: ssavc4.br
 // CHECK: ssavc4.tmu.request
+// CHECK-NOT: ssavc4.cond_br
+// CHECK-NOT: ssavc4.br
 // CHECK: ssavc4.tmu.read
+// CHECK-NOT: ssavc4.cond_br
+// CHECK-NOT: ssavc4.br
 // CHECK: ssavc4.cond_select
-// CHECK: ssavc4.br
+// CHECK-NOT: ssavc4.cond_br
+// CHECK-NOT: ssavc4.br
 // CHECK-NOT: vc4kernel.
 module {
   vc4kernel.kernel @tmu_tail(%ptr : i32, %base_index : i32, %limit : i32) attributes {

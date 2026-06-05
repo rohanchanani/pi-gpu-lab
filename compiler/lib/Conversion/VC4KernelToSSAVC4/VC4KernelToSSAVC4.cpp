@@ -2383,13 +2383,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           "tmu_load_fragment predicated lowering currently supports only "
           "contiguous byte_offsets = base_byte_offset + 4*lane_range so "
           "inactive lanes can use a proven in-bounds safe address");
-    Value safeScalarOffset =
-        sourceOffsets.scalarBaseByteOffset
-            ? mapValue(op, sourceOffsets.scalarBaseByteOffset, state)
-            : createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                            builder.getI32IntegerAttr(0));
-    if (!safeScalarOffset)
-      return failure();
+    Value zeroOffset = createLoadImm(builder, op->getLoc(),
+                                     builder.getI32Type(),
+                                     builder.getI32IntegerAttr(0));
+    Value safeScalarOffset = zeroOffset;
+    if (sourceOffsets.scalarBaseByteOffset) {
+      safeScalarOffset = mapValue(op, sourceOffsets.scalarBaseByteOffset, state);
+      if (!safeScalarOffset)
+        return failure();
+    }
 
     Value lane = createOpWithResult(builder, op->getLoc(),
                                     kSSAVC4ElementNumberOpName, {}, {},
@@ -2399,47 +2401,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         offsets.getType());
 
     auto emitTailLoad = [&]() -> LogicalResult {
-      Value baseIndex = predicate->base;
-      Value limit = predicate->limit;
-      if (!baseIndex || !limit)
-        return op->emitOpError("pred.tail plan is missing base or limit values");
-      Value one =
-          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                        builder.getI32IntegerAttr(1));
-      Value basePlusOne = createI32Add(builder, op->getLoc(), baseIndex, one);
-      Value activeTail = createI32Sub(builder, op->getLoc(), limit, baseIndex);
-      Value nonEmptyFlags =
-          createSubFlags(builder, op->getLoc(), limit, basePlusOne);
-
-      Region *region = builder.getInsertionBlock()->getParent();
-      Block *loadBlock = new Block();
-      Block *doneBlock = new Block();
-      doneBlock->addArgument(op->getResult(0).getType(), op->getLoc());
-      region->push_back(loadBlock);
-      region->push_back(doneBlock);
-
-      createCondBranch(builder, op->getLoc(), nonEmptyFlags, doneBlock,
-                       loadBlock, mlir::vc4::BranchCond::any_c_set, zero);
-
-      builder.setInsertionPointToEnd(loadBlock);
-      Value activeVec = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4SplatOpName, activeTail, {},
+      Value tailSafeOffsetVec = createOpWithResult(
+          builder, op->getLoc(), kSSAVC4SplatOpName, zeroOffset, {},
           offsets.getType());
-      Value flags = createSubFlags(builder, op->getLoc(), lane, activeVec);
-      Value safeOffsets =
-          createCondSelect(builder, op->getLoc(), flags, offsets,
-                           safeOffsetVec, mlir::vc4::Cond::cs);
-      Value loaded = emitTMULoadFragment(op, builder, base, safeOffsets,
+      FailureOr<Value> safeOffsets =
+          emitPredicateSelect(op, builder, *predicate, offsets,
+                              tailSafeOffsetVec);
+      if (failed(safeOffsets))
+        return failure();
+      Value loaded = emitTMULoadFragment(op, builder, base, *safeOffsets,
                                          op->getResult(0).getType());
-      Value resultFlags =
-          createSubFlags(builder, op->getLoc(), lane, activeVec);
-      Value masked =
-          createCondSelect(builder, op->getLoc(), resultFlags, loaded, zero,
-                           mlir::vc4::Cond::cs);
-      createBranch(builder, op->getLoc(), doneBlock, masked);
-
-      builder.setInsertionPointToEnd(doneBlock);
-      state.values[op->getResult(0)] = {doneBlock->getArgument(0)};
+      FailureOr<Value> masked =
+          emitPredicateSelect(op, builder, *predicate, loaded, zero);
+      if (failed(masked))
+        return failure();
+      state.values[op->getResult(0)] = {*masked};
       return success();
     };
 
