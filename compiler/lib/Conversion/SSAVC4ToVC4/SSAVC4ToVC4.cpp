@@ -5466,6 +5466,76 @@ static LogicalResult emitVDRLoadRectDynamic(
   if (failed(verifyDMARectXSpan(source, plan, "VDR", "dst_x")))
     return failure();
 
+  if (plan.vertical) {
+    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
+                                   maxRows)
+                   .emit(builder)))
+      return failure();
+    if (pitchBytes && *pitchBytes < 0 &&
+        (!encodeVDRMemoryPitchBytes(*pitchBytes) ||
+         *pitchBytes > kMaxVDRMPITCHBBytes))
+      return source->emitOpError()
+             << "requires non-negative memory_pitch_bytes for vertical "
+                "dynamic rectangular VDR row fallback";
+    if (activeRows && activeCols) {
+      if (clampedRows == 0 || clampedCols == 0)
+        return success();
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowStaticFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeRows, *activeCols, maxRows, maxCols, vpmPitch, pitchBytes,
+          pitchReg);
+      if (failed(fallback))
+        return failure();
+      return fallback->emit(builder);
+    }
+    if (activeRows) {
+      std::optional<int64_t> activeColsReg =
+          allocator.lookup(templ, templ.operands[3]);
+      if (!activeColsReg)
+        return source->emitOpError()
+               << "uses a dynamic active column value that is not defined by "
+                  "a lowerable SSAVC4 op";
+      if (clampedRows == 0)
+        return success();
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveColsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeColsReg, *activeRows, maxRows, maxCols, vpmPitch, pitchBytes,
+          pitchReg);
+      if (failed(fallback))
+        return failure();
+      return fallback->emit(builder);
+    }
+    std::optional<int64_t> activeRowsReg =
+        allocator.lookup(templ, templ.operands[2]);
+    if (!activeRowsReg)
+      return source->emitOpError()
+             << "uses a dynamic active row value that is not defined by a "
+                "lowerable SSAVC4 op";
+    if (activeCols) {
+      if (clampedCols == 0)
+        return success();
+      FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveRowsFallback(
+          source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+          *activeRowsReg, maxRows, clampedCols, vpmPitch, pitchBytes, pitchReg);
+      if (failed(fallback))
+        return failure();
+      return fallback->emit(builder);
+    }
+    std::optional<int64_t> activeColsReg =
+        allocator.lookup(templ, templ.operands[3]);
+    if (!activeColsReg)
+      return source->emitOpError()
+             << "uses a dynamic active column value that is not defined by a "
+                "lowerable SSAVC4 op";
+    FailureOr<PlannedRegion> fallback = planVDRRowByRowRowsColsFallback(
+        source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
+        *activeRowsReg, *activeColsReg, maxRows, maxCols, vpmPitch, pitchBytes,
+        pitchReg);
+    if (failed(fallback))
+      return failure();
+    return fallback->emit(builder);
+  }
+
   auto planRowsRect = [&](int64_t staticCols) -> FailureOr<PlannedRegion> {
     int64_t setupWord = 0;
     if (pitchBytes) {
