@@ -1,0 +1,18 @@
+{
+  "name": "spill_reload_between_user_tmu_reads_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "forced_spill_terms": 48,
+    "runtime_allocations": 3,
+    "runtime_launches": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}
