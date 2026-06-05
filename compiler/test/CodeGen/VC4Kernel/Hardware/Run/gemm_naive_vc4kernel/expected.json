@@ -1,0 +1,33 @@
+{
+  "name": "gemm_naive_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 19,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "block_x": 16,
+    "lanes": 16,
+    "max_m": 33,
+    "max_n": 33,
+    "max_k": 33,
+    "max_ld": 96,
+    "saw_zero": 1,
+    "saw_non_square": 1,
+    "saw_k_diff": 1,
+    "saw_tail_n": 1,
+    "saw_runtime_ld": 1,
+    "saw_contiguous_ld": 1,
+    "saw_plus1_ld": 1,
+    "saw_plus7_ld": 1,
+    "saw_large_ld": 1,
+    "saw_old_timeout_shape": 1,
+    "contiguous_layout_only": 0,
+    "launch_geometry_2d_block16": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 19
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}
