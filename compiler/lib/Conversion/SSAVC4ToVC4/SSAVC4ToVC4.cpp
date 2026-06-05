@@ -82,11 +82,11 @@ constexpr int64_t kMaxVDWStrideGapBytes = 0x1fff;
 constexpr int64_t kMaxVDRMPITCHBBytes = 0x1fff;
 constexpr unsigned kSingleScheduledSlot = 1;
 constexpr unsigned kBranchDelaySlots = 3;
-constexpr unsigned kScheduledBranchSlots = 1 + kBranchDelaySlots;
-constexpr unsigned kPlannedBranchWindowSlots = 7;
+constexpr unsigned kBranchWindowPaddingSlots = 3;
+constexpr unsigned kPlannedBranchWindowSlots =
+    1 + kBranchDelaySlots + kBranchWindowPaddingSlots;
 constexpr unsigned kActiveGuardSlots = 12;
 constexpr unsigned kThreadEndTrailingNops = 2;
-constexpr unsigned kThreadEndSlots = 1 + kThreadEndTrailingNops;
 
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -164,6 +164,12 @@ static Operation *createThreadEndBundle(OpBuilder &builder, Location loc) {
   return builder.create(state);
 }
 
+static void createThreadEndSequence(OpBuilder &builder, Location loc) {
+  createThreadEndBundle(builder, loc);
+  for (unsigned i = 0; i < kThreadEndTrailingNops; ++i)
+    createNopBundle(builder, loc);
+}
+
 static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
                                         mlir::vc4::BranchCond cond,
                                         int64_t immediate,
@@ -185,9 +191,8 @@ static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
   OpBuilder delayBuilder(ctx);
   delayBuilder.setInsertionPointToEnd(&branch->getRegion(0).front());
   // VC4 branches carry exactly three hardware delay slots in the branch region.
-  createNopBundle(delayBuilder, loc);
-  createNopBundle(delayBuilder, loc);
-  createNopBundle(delayBuilder, loc);
+  for (unsigned i = 0; i < kBranchDelaySlots; ++i)
+    createNopBundle(delayBuilder, loc);
   return branch;
 }
 
@@ -633,7 +638,6 @@ public:
 
   bool hasSpills() const { return spillPlan.spillSlotCount != 0; }
 
-  uint32_t getSpillSlotCount() const { return spillPlan.spillSlotCount; }
   uint32_t getSpillFrameBytes() const { return spillPlan.spillFrameBytes; }
   static constexpr int64_t spillBaseReg() { return kSpillBaseReg; }
   static constexpr int64_t spillOffsetReg() { return kSpillOffsetReg; }
@@ -1344,8 +1348,6 @@ static bool emitsPhysicalRegFileResultWrite(
 struct ResultSpacerSequence {
   bool needed = false;
 
-  unsigned slotCount() const { return needed ? 1 : 0; }
-
   void emit(OpBuilder &builder, Location loc) const {
     if (needed)
       createNopLDISlot(builder, loc);
@@ -1361,27 +1363,14 @@ struct ResultSpacerSequence {
 struct SpillSlotBaseSequence {
   SpillSlot slot;
 
-  unsigned slotCount() const { return slot.offsetBytes == 0 ? 2 : 4; }
   void emit(OpBuilder &builder, Location loc) const;
 };
 
 struct RawVDWSpillStoreSequence {
   static constexpr bool kUseMutex = true;
-  static constexpr bool kHasDynamicActiveLanes = false;
-  static constexpr bool kHasDynamicVPMRow = true;
   static constexpr int64_t kVPMRow = 0;
 
   int64_t valueReg = -1;
-
-  unsigned slotCount() const {
-    (void)kHasDynamicActiveLanes;
-    unsigned count = 17;
-    if (kUseMutex)
-      count += 2;
-    if (kHasDynamicVPMRow && kVPMRow != 0)
-      count += 4;
-    return count;
-  }
 
   void emit(OpBuilder &builder, Location loc) const;
 };
@@ -1395,27 +1384,11 @@ struct RawVDRSpillReloadSequence {
 
   int64_t valueReg = -1;
 
-  unsigned slotCount() const {
-    unsigned count = 15;
-    if (kUseMutex)
-      count += 2;
-    return count;
-  }
-
   void emit(OpBuilder &builder, Location loc) const;
 };
 
 struct SpillActionSequence {
   SpillAction action;
-
-  unsigned slotCount() const {
-    SpillSlotBaseSequence base{action.slot};
-    if (action.kind == SpillAction::Kind::Store)
-      return base.slotCount() +
-             RawVDWSpillStoreSequence{action.physicalReg}.slotCount();
-    return base.slotCount() +
-           RawVDRSpillReloadSequence{action.physicalReg}.slotCount();
-  }
 
   void emit(OpBuilder &builder, Location loc) const;
 };
@@ -1423,13 +1396,6 @@ struct SpillActionSequence {
 struct EdgeCopySequence {
   std::optional<std::pair<int64_t, int64_t>> registerMove;
   SmallVector<SpillAction, 2> spillActions;
-
-  unsigned slotCount() const {
-    unsigned count = registerMove ? 1 : 0;
-    for (const SpillAction &action : spillActions)
-      count += SpillActionSequence{action}.slotCount();
-    return count;
-  }
 
   void emit(OpBuilder &builder, Location loc) const;
 
@@ -1532,118 +1498,13 @@ static bool canUseMirroredSecondOperandForMakeFlags(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static bool makeFlagsNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
-static unsigned
-getVDRLoadRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
-                                      const SpillAwareAllocator &allocator);
-static unsigned
-getVDWStoreRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
-                                       const SpillAwareAllocator &allocator);
+static FailureOr<unsigned>
+countTemplateSlotsByEmission(const InstructionTemplate &templ,
+                             const SpillAwareAllocator &allocator);
+static FailureOr<unsigned>
+countTemplateBranchPreludeSlotsByEmission(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes);
-
-static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
-                                      const SpillAwareAllocator &allocator) {
-  // Central flattened layout accounting: branch block placement and branch
-  // immediates are computed before emission, so this function sums the same
-  // self-counting sequence objects used by the emitters.
-  unsigned spillActionSlots = 0;
-  for (const SpillAction &action : allocator.getPreActions(templ))
-    spillActionSlots += SpillActionSequence{action}.slotCount();
-
-  unsigned resultSpacer =
-      ResultSpacerSequence::forTemplate(templ, allocator).slotCount();
-  switch (templ.kind) {
-  case InstructionTemplate::Kind::EdgeCopy:
-    return spillActionSlots +
-           EdgeCopySequence::forLayout(templ, allocator).slotCount();
-  case InstructionTemplate::Kind::Branch:
-    // One branch plus the three hardware delay slots owned by the branch op.
-    return spillActionSlots + kScheduledBranchSlots;
-  case InstructionTemplate::Kind::CondBranch:
-    return spillActionSlots +
-           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
-                                                                         : 1) +
-           kScheduledBranchSlots;
-  case InstructionTemplate::Kind::ThreadEnd:
-    // thread_end emits thrend plus two scheduler hazard slots.
-    return spillActionSlots + kThreadEndSlots;
-  case InstructionTemplate::Kind::TMURequest:
-    return spillActionSlots + 3;
-  case InstructionTemplate::Kind::TMURead:
-    return spillActionSlots + 2 + resultSpacer;
-  case InstructionTemplate::Kind::Barrier:
-    if (templ.operands.size() == 2)
-      return spillActionSlots + 65;
-    return spillActionSlots + 8;
-  case InstructionTemplate::Kind::VPMWrite:
-    if (auto serialize =
-            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 6 : 3);
-    return spillActionSlots + 3;
-  case InstructionTemplate::Kind::VPMRead:
-    if (auto serialize =
-            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 9 : 7) +
-             resultSpacer;
-    return spillActionSlots + 7 + resultSpacer;
-  case InstructionTemplate::Kind::VDRLoad:
-    if (auto serialize =
-            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 9 : 7);
-    return spillActionSlots + 7;
-  case InstructionTemplate::Kind::VDRLoadRectDynamic:
-    return spillActionSlots +
-           getVDRLoadRectDynamicPlannedSlotCount(templ, allocator);
-  case InstructionTemplate::Kind::VDWStore:
-    if (auto serialize =
-            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex" ? 19 : 17);
-    return spillActionSlots + 17;
-  case InstructionTemplate::Kind::VDWStoreVPM:
-  {
-    if (auto serialize =
-            llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
-      return spillActionSlots + (serialize.getValue() == "mutex"
-                                     ? 19
-                                     : 17);
-    return spillActionSlots + 17;
-  }
-  case InstructionTemplate::Kind::VDWStoreRectDynamic:
-    return spillActionSlots +
-           getVDWStoreRectDynamicPlannedSlotCount(templ, allocator);
-  case InstructionTemplate::Kind::Rotate:
-    return spillActionSlots + 3 + resultSpacer;
-  case InstructionTemplate::Kind::LoadImm:
-  case InstructionTemplate::Kind::ElementNumber:
-  case InstructionTemplate::Kind::UniformRead:
-  case InstructionTemplate::Kind::Pack:
-  case InstructionTemplate::Kind::Unpack:
-    return spillActionSlots + 1 + resultSpacer;
-  case InstructionTemplate::Kind::SemaAcquire:
-  case InstructionTemplate::Kind::SemaRelease:
-    return spillActionSlots + 1;
-  case InstructionTemplate::Kind::Splat:
-  case InstructionTemplate::Kind::Mov:
-    return spillActionSlots + 1 + resultSpacer;
-  case InstructionTemplate::Kind::CondSelect:
-    return spillActionSlots +
-           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
-                                                                         : 1) +
-           2 + resultSpacer;
-  case InstructionTemplate::Kind::ALUAdd:
-    return spillActionSlots +
-           (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
-           1 + resultSpacer;
-  case InstructionTemplate::Kind::ALUMul:
-    return spillActionSlots +
-           (aluNeedsSecondOperandAccumulatorMove(templ, allocator) ? 1 : 0) +
-           2 + (2 * resultSpacer);
-  case InstructionTemplate::Kind::MakeFlags:
-    return spillActionSlots +
-           (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
-                                                                         : 1);
-  }
-  return spillActionSlots + 1;
-}
 
 class BranchLayoutPlanner {
 public:
@@ -1655,22 +1516,24 @@ public:
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
       const InstructionTemplate &templ = scheduledTemplate.templ;
       layout.blockStartSlots.try_emplace(templ.layoutBlockId, slot);
-      unsigned preActionSlots = 0;
-      for (const SpillAction &action : allocator.getPreActions(templ))
-        preActionSlots += SpillActionSequence{action}.slotCount();
-      unsigned instructionPreludeSlots = 0;
-      if (templ.kind == InstructionTemplate::Kind::CondBranch) {
-        instructionPreludeSlots =
-            makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
-                                                                         : 1;
-      }
+      FailureOr<unsigned> instructionPreludeSlots =
+          countTemplateBranchPreludeSlotsByEmission(templ, allocator);
+      if (failed(instructionPreludeSlots))
+        return diagnosticAnchor->emitError()
+               << "internal lowering error: failed to derive branch layout "
+                  "prelude by scheduled emission";
       if (templ.source)
         layout.opStartSlots.try_emplace(
-            templ.source, slot + preActionSlots + instructionPreludeSlots);
+            templ.source, slot + *instructionPreludeSlots);
       layout.templateStartSlots.try_emplace(templ.ordinal,
-                                            slot + preActionSlots +
-                                                instructionPreludeSlots);
-      slot += getFlattenedSlotCount(templ, allocator);
+                                            slot + *instructionPreludeSlots);
+      FailureOr<unsigned> templateSlots =
+          countTemplateSlotsByEmission(templ, allocator);
+      if (failed(templateSlots))
+        return diagnosticAnchor->emitError()
+               << "internal lowering error: failed to derive branch layout "
+                  "size by scheduled emission";
+      slot += *templateSlots;
     }
 
     for (const ScheduledTemplate &scheduledTemplate : scheduled) {
@@ -4468,11 +4331,6 @@ struct PlannedRegion {
     emitters.push_back(std::move(emitter));
   }
 
-  void append(unsigned slotCount,
-              std::function<LogicalResult(OpBuilder &)> emitter) {
-    append("legacy-untagged", slotCount, std::move(emitter));
-  }
-
   void appendRegion(llvm::StringRef tag, PlannedRegion region) {
     slotTotal += region.slots();
     tags.push_back(tag.str());
@@ -4482,17 +4340,11 @@ struct PlannedRegion {
       tags.push_back(std::move(childTag));
   }
 
-  void appendRegion(PlannedRegion region) {
-    appendRegion("region", std::move(region));
-  }
-
   void appendFixedSequence(
       llvm::StringRef tag, FixedHardwareSequence kind,
       std::function<LogicalResult(OpBuilder &)> emitter) {
     append(tag, getFixedHardwareSequenceSlots(kind), std::move(emitter));
   }
-
-  void append(PlannedRegion region) { appendRegion(std::move(region)); }
 
   LogicalResult emit(OpBuilder &builder) const {
     for (const auto &emitter : emitters) {
@@ -4674,9 +4526,11 @@ static PlannedRegion planDMARectZeroFillRow(Location loc,
   int64_t x = plan.logicalXForRow(row);
   if (yOffset == 0)
     return planVPMZeroWriteRow(loc, rowReg, x, plan.vertical, plan.useMutex);
-  region.appendRegion(planAddConstantToScratch(
-      loc, rowReg, mlir::vc4::QPUMux::a, yOffset, /*scratchWaddr=*/32));
-  region.appendRegion(planVPMZeroWriteRow(
+  region.appendRegion("dma-zero-fill-row-offset",
+                      planAddConstantToScratch(
+                          loc, rowReg, mlir::vc4::QPUMux::a, yOffset,
+                          /*scratchWaddr=*/32));
+  region.appendRegion("dma-zero-fill-row-write", planVPMZeroWriteRow(
       loc, /*rowReg=*/0, x, plan.vertical, plan.useMutex,
       mlir::vc4::QPUMux::r0));
   return region;
@@ -4695,9 +4549,8 @@ static PlannedRegion planDMARectZeroFillRow(Location loc,
        waddrMul](OpBuilder &builder) -> LogicalResult {
         createScheduledBranch(builder, loc, cond, immediateBytes, raddrA,
                               waddrAdd, waddrMul);
-        createNopBundle(builder, loc);
-        createNopBundle(builder, loc);
-        createNopBundle(builder, loc);
+        for (unsigned i = 0; i < kBranchDelaySlots; ++i)
+          createNopBundle(builder, loc);
         return success();
       });
 }
@@ -4770,8 +4623,8 @@ static PlannedRegion planDMARectZeroFill(Location loc, const DMARectPlan &plan,
                                          int64_t rows) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
-    region.appendRegion(
-        planDMARectZeroFillRow(loc, plan, vpmBaseRowReg, row));
+    region.appendRegion("dma-rect-zero-fill-row",
+                        planDMARectZeroFillRow(loc, plan, vpmBaseRowReg, row));
   }
   return region;
 }
@@ -5403,7 +5256,7 @@ static PlannedRegion planDynamicVDRActiveColsBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, pitchBytes, pitchReg);
-  region.appendRegion(planDynamicVDRLoadOneRow(
+  region.appendRegion("vdr-row-load", planDynamicVDRLoadOneRow(
       loc, rowAddress.addressReg, vpmBaseRowReg, setupWord, plan.useMutex,
       rowAddress.addressMux, mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
       rowAddress.dynamicPitchMultiplier,
@@ -5418,7 +5271,7 @@ static PlannedRegion planDynamicVDRPitchRowBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, pitchBytes, pitchReg);
-  region.appendRegion(planRawVDRLoad(
+  region.appendRegion("vdr-raw-row-load", planRawVDRLoad(
       loc, rowAddress.addressReg, setupWord, vpmBaseRowReg, plan.useMutex,
       rowAddress.addressMux, mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
       rowAddress.dynamicPitchMultiplier,
@@ -5454,7 +5307,8 @@ static FailureOr<PlannedRegion> planVDRRowByRowRowsColsFallback(
     PlannedRegion colsGuarded =
         planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
                                     std::move(rowBody));
-    region.appendRegion(planActiveRowsGuardedRegion(
+    region.appendRegion("vdr-row-active-rows-guard",
+                        planActiveRowsGuardedRegion(
         loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
   }
   return region;
@@ -5471,7 +5325,8 @@ static FailureOr<PlannedRegion> planVDRRowByRowActiveRowsFallback(
     if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
                                        setupWord)))
       return failure();
-    region.appendRegion(planActiveRowsGuardedRegion(
+    region.appendRegion("vdr-pitch-row-active-rows-guard",
+                        planActiveRowsGuardedRegion(
         loc, activeRowsReg, maxRows, row,
         planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg, row,
                                    setupWord, pitchBytes, pitchReg)));
@@ -5491,7 +5346,8 @@ static FailureOr<PlannedRegion> planVDRRowByRowActiveColsFallback(
     if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
                                        setupWord)))
       return failure();
-    region.appendRegion(planActiveColsGuardedRegion(
+    region.appendRegion("vdr-row-active-cols-guard",
+                        planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols,
         planDynamicVDRActiveColsBody(loc, plan, addressReg, vpmBaseRowReg, row,
                                      setupWord, pitchBytes, pitchReg)));
@@ -5513,7 +5369,7 @@ static FailureOr<PlannedRegion> planVDRRowByRowStaticFallback(
             source, clampedCols, /*nrows=*/1, /*memoryPitchBytes=*/64,
             plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord)))
       return failure();
-    region.appendRegion(planDynamicVDRPitchRowBody(
+    region.appendRegion("vdr-pitch-row-body", planDynamicVDRPitchRowBody(
         loc, plan, addressReg, vpmBaseRowReg, row, setupWord, pitchBytes,
         pitchReg));
   }
@@ -5540,7 +5396,7 @@ static PlannedRegion planDynamicVDRPitchFallbackDispatch(
   appendCompareRuntimeVDRPitchOverflow(region, loc, pitchReg);
 
   PlannedRegion encodablePath;
-  encodablePath.appendRegion(std::move(rectangular));
+  encodablePath.appendRegion("vdr-rectangular-path", std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
                              static_cast<int64_t>(kPlannedBranchWindowSlots +
                                                   fallback.slots()) *
@@ -5548,8 +5404,8 @@ static PlannedRegion planDynamicVDRPitchFallbackDispatch(
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
-  region.appendRegion(std::move(overflowGuarded));
-  region.appendRegion(std::move(fallback));
+  region.appendRegion("vdr-encodable-pitch-guard", std::move(overflowGuarded));
+  region.appendRegion("vdr-pitch-fallback", std::move(fallback));
   return region;
 }
 
@@ -5707,7 +5563,8 @@ static LogicalResult emitVDRLoadRectDynamic(
       if (failed(rectangular))
         return failure();
       PlannedRegion payload = planPreserveClampedRowsInR0(source->getLoc());
-      payload.appendRegion(planActiveColsGuardedRegion(
+      payload.appendRegion("vdr-active-cols-guarded-rect",
+                           planActiveColsGuardedRegion(
           source->getLoc(), *activeColsReg, maxCols, std::move(*rectangular)));
       return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
                                          maxRows, /*row=*/0, std::move(payload))
@@ -6509,7 +6366,7 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
   appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
 
   PlannedRegion encodablePath;
-  encodablePath.appendRegion(std::move(rectangular));
+  encodablePath.appendRegion("vdw-rectangular-path", std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
                              static_cast<int64_t>(kPlannedBranchWindowSlots +
                                                   fallback.slots()) *
@@ -6517,12 +6374,13 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
-  nonNegativePath.appendRegion(std::move(overflowGuarded));
+  nonNegativePath.appendRegion("vdw-stride-overflow-guard",
+                               std::move(overflowGuarded));
 
   PlannedRegion negativeGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(nonNegativePath));
-  region.appendRegion(std::move(negativeGuarded));
-  region.appendRegion(std::move(fallback));
+  region.appendRegion("vdw-stride-negative-guard", std::move(negativeGuarded));
+  region.appendRegion("vdw-stride-fallback", std::move(fallback));
   return region;
 }
 
@@ -6538,7 +6396,8 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
   appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
 
   PlannedRegion encodablePath;
-  encodablePath.appendRegion(std::move(rectangular));
+  encodablePath.appendRegion("vdw-dynamic-cols-rectangular-path",
+                             std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
                              static_cast<int64_t>(kPlannedBranchWindowSlots +
                                                   fallback.slots()) *
@@ -6546,12 +6405,15 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
-  nonNegativePath.appendRegion(std::move(overflowGuarded));
+  nonNegativePath.appendRegion("vdw-dynamic-cols-stride-overflow-guard",
+                               std::move(overflowGuarded));
 
   PlannedRegion negativeGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(nonNegativePath));
-  region.appendRegion(std::move(negativeGuarded));
-  region.appendRegion(std::move(fallback));
+  region.appendRegion("vdw-dynamic-cols-stride-negative-guard",
+                      std::move(negativeGuarded));
+  region.appendRegion("vdw-dynamic-cols-stride-fallback",
+                      std::move(fallback));
   return region;
 }
 
@@ -6563,7 +6425,7 @@ static PlannedRegion planDynamicVDWActiveColsBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
-  region.appendRegion(planRawVDWStoreFromVPM(
+  region.appendRegion("vdw-row-store-from-vpm", planRawVDWStoreFromVPM(
       loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
       activeColsReg, /*activeLanes=*/maxCols, /*rowLen=*/maxCols,
       /*nrows=*/1, /*memoryPitchBytes=*/maxCols * 4, plan.vertical,
@@ -6582,7 +6444,8 @@ static PlannedRegion planStaticVDWRowBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
-  region.appendRegion(planRawVDWStoreFromVPM(
+  region.appendRegion("vdw-static-cols-row-store-from-vpm",
+                      planRawVDWStoreFromVPM(
       loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
       /*dynamicActiveLanesReg=*/std::nullopt,
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
@@ -6600,7 +6463,8 @@ static PlannedRegion planVDWStaticRowsFallback(
     std::optional<int64_t> strideReg, const DMARectPlan &plan) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
-    region.appendRegion(planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg,
+    region.appendRegion("vdw-static-row-body",
+                        planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg,
                                              staticCols, row, strideBytes,
                                              strideReg, plan));
   }
@@ -6617,7 +6481,8 @@ static PlannedRegion planVDWDynamicActiveRowsFallback(
     PlannedRegion body =
         planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
                              strideBytes, strideReg, plan);
-    region.appendRegion(planActiveRowsGuardedRegion(
+    region.appendRegion("vdw-row-active-rows-guard",
+                        planActiveRowsGuardedRegion(
         loc, activeRowsReg, maxRows, row, std::move(body)));
   }
   return region;
@@ -6634,7 +6499,8 @@ static PlannedRegion planVDWStaticRowsDynamicColsFallback(
         planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
                                      activeColsReg, maxCols, row, strideBytes,
                                      strideReg, plan);
-    region.appendRegion(planActiveColsGuardedRegion(
+    region.appendRegion("vdw-row-active-cols-guard",
+                        planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols, std::move(body)));
   }
   return region;
@@ -6653,7 +6519,8 @@ static PlannedRegion planVDWRowsColsFallback(
                                      strideReg, plan);
     PlannedRegion colsGuarded = planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols, std::move(body));
-    region.appendRegion(planActiveRowsGuardedRegion(
+    region.appendRegion("vdw-row-cols-active-rows-guard",
+                        planActiveRowsGuardedRegion(
         loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
   }
   return region;
@@ -6737,7 +6604,8 @@ static LogicalResult emitVDWStoreRectDynamic(
       PlannedRegion activeColsGuarded = planActiveColsGuardedRegion(
           source->getLoc(), *activeColsReg, maxCols, std::move(payload));
       PlannedRegion rowsPayload = planPreserveClampedRowsInR0(source->getLoc());
-      rowsPayload.appendRegion(std::move(activeColsGuarded));
+      rowsPayload.appendRegion("vdw-active-cols-guarded",
+                               std::move(activeColsGuarded));
       return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
                                          maxRows, /*row=*/0,
                                          std::move(rowsPayload))
@@ -6832,7 +6700,8 @@ static LogicalResult emitVDWStoreRectDynamic(
   if (clampedRows > 1 && vpmSourceLayoutEncodable && !strideBytes) {
     PlannedRegion rectangular = planStaticRowsCountInR2(source->getLoc(),
                                                         clampedRows);
-    rectangular.appendRegion(planDynamicVDWStoreRowsFromVPM(
+    rectangular.appendRegion("vdw-dynamic-rows-rectangular",
+                             planDynamicVDWStoreRowsFromVPM(
         source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
         /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
         /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
@@ -6866,46 +6735,63 @@ static LogicalResult emitVDWStoreRectDynamic(
   return success();
 }
 
-static unsigned getEmittedScheduledVC4SlotCount(Operation *op) {
+static void emitSpillAction(OpBuilder &builder, Location loc,
+                            const SpillAction &action);
+static LogicalResult
+emitScheduledTemplateBody(OpBuilder &builder, const InstructionTemplate &templ,
+                          const SpillAwareAllocator &allocator,
+                          const LayoutSummary &layout);
+
+static unsigned countScheduledVC4Slots(Operation *op) {
   unsigned slots = kSingleScheduledSlot;
   if (hasName(op, "vc4.qpu.branch")) {
     for (Region &region : op->getRegions())
       for (Block &block : region)
         for (Operation &nested : block)
-          slots += getEmittedScheduledVC4SlotCount(&nested);
+          slots += countScheduledVC4Slots(&nested);
   }
   return slots;
 }
 
-static unsigned getEmittedScheduledVC4SlotCount(Block &block) {
+static unsigned countScheduledVC4Slots(Block &block) {
   unsigned slots = 0;
   for (Operation &op : block)
-    slots += getEmittedScheduledVC4SlotCount(&op);
+    slots += countScheduledVC4Slots(&op);
   return slots;
 }
 
-static unsigned
-getVDRLoadRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
-                                      const SpillAwareAllocator &allocator) {
+static FailureOr<unsigned>
+countTemplateBranchPreludeSlotsByEmission(
+    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
   Block scratch;
   OpBuilder builder(templ.source->getContext());
   builder.setInsertionPointToEnd(&scratch);
-  if (failed(emitVDRLoadRectDynamic(builder, templ, allocator)))
-    llvm::report_fatal_error(
-        "failed to derive dynamic VDR slot count from planned emission");
-  return getEmittedScheduledVC4SlotCount(scratch);
+  for (const SpillAction &action : allocator.getPreActions(templ))
+    emitSpillAction(builder, templ.source->getLoc(), action);
+  if (templ.kind == InstructionTemplate::Kind::CondBranch &&
+      failed(emitMakeFlags(builder, templ, allocator)))
+    return failure();
+  return countScheduledVC4Slots(scratch);
 }
 
-static unsigned
-getVDWStoreRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
-                                       const SpillAwareAllocator &allocator) {
+static FailureOr<unsigned>
+countTemplateSlotsByEmission(const InstructionTemplate &templ,
+                             const SpillAwareAllocator &allocator) {
   Block scratch;
   OpBuilder builder(templ.source->getContext());
   builder.setInsertionPointToEnd(&scratch);
-  if (failed(emitVDWStoreRectDynamic(builder, templ, allocator)))
-    llvm::report_fatal_error(
-        "failed to derive dynamic VDW slot count from planned emission");
-  return getEmittedScheduledVC4SlotCount(scratch);
+  for (const SpillAction &action : allocator.getPreActions(templ))
+    emitSpillAction(builder, templ.source->getLoc(), action);
+
+  LayoutSummary scratchLayout;
+  if (templ.kind == InstructionTemplate::Kind::Branch ||
+      templ.kind == InstructionTemplate::Kind::CondBranch)
+    scratchLayout.branchImmediates[templ.ordinal] = 0;
+
+  if (failed(emitScheduledTemplateBody(builder, templ, allocator,
+                                       scratchLayout)))
+    return failure();
+  return countScheduledVC4Slots(scratch);
 }
 
 static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {
@@ -7042,34 +6928,11 @@ static void emitSpillAction(OpBuilder &builder, Location loc,
   SpillActionSequence{action}.emit(builder, loc);
 }
 
-static LogicalResult emitScheduledFunctionBody(
-    Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
-    const SpillAwareAllocator &allocator, const LayoutSummary &layout) {
-  bool emittedThreadEnd = false;
-  bool emittedSpillBaseUniform = !allocator.hasSpills();
-  unsigned consumedPublicUniforms = 0;
-  unsigned sourceUniformWords = getSourceUniformWordsPerQPU(sourceFunc);
-  for (const ScheduledTemplate &scheduledTemplate : scheduled) {
-    const InstructionTemplate &templ = scheduledTemplate.templ;
-    if (templ.kind == InstructionTemplate::Kind::UniformRead)
-      ++consumedPublicUniforms;
-    if (!emittedSpillBaseUniform &&
-        templ.kind != InstructionTemplate::Kind::UniformRead) {
-      while (consumedPublicUniforms < sourceUniformWords) {
-        emitUniformReadToReg(builder, templ.source->getLoc(),
-                             SpillAwareAllocator::spillOffsetReg());
-        ++consumedPublicUniforms;
-      }
-      emitUniformReadToReg(builder, templ.source->getLoc(),
-                           SpillAwareAllocator::spillBaseReg());
-      emitUniformReadToReg(builder, templ.source->getLoc(),
-                           SpillAwareAllocator::spillRowReg());
-      emittedSpillBaseUniform = true;
-    }
-    for (const SpillAction &action : allocator.getPreActions(templ))
-      emitSpillAction(builder, templ.source->getLoc(), action);
-
-    switch (templ.kind) {
+static LogicalResult
+emitScheduledTemplateBody(OpBuilder &builder, const InstructionTemplate &templ,
+                          const SpillAwareAllocator &allocator,
+                          const LayoutSummary &layout) {
+  switch (templ.kind) {
     case InstructionTemplate::Kind::LoadImm:
       if (failed(emitLoadImm(builder, templ, allocator)))
         return failure();
@@ -7167,19 +7030,48 @@ static LogicalResult emitScheduledFunctionBody(
         return failure();
       break;
     case InstructionTemplate::Kind::ThreadEnd:
-      createThreadEndBundle(builder, templ.source->getLoc());
-      createNopBundle(builder, templ.source->getLoc());
-      createNopBundle(builder, templ.source->getLoc());
-      emittedThreadEnd = true;
+      createThreadEndSequence(builder, templ.source->getLoc());
       break;
+  }
+  return success();
+}
+
+static LogicalResult emitScheduledFunctionBody(
+    Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
+    const SpillAwareAllocator &allocator, const LayoutSummary &layout) {
+  bool emittedThreadEnd = false;
+  bool emittedSpillBaseUniform = !allocator.hasSpills();
+  unsigned consumedPublicUniforms = 0;
+  unsigned sourceUniformWords = getSourceUniformWordsPerQPU(sourceFunc);
+  for (const ScheduledTemplate &scheduledTemplate : scheduled) {
+    const InstructionTemplate &templ = scheduledTemplate.templ;
+    if (templ.kind == InstructionTemplate::Kind::UniformRead)
+      ++consumedPublicUniforms;
+    if (!emittedSpillBaseUniform &&
+        templ.kind != InstructionTemplate::Kind::UniformRead) {
+      while (consumedPublicUniforms < sourceUniformWords) {
+        emitUniformReadToReg(builder, templ.source->getLoc(),
+                             SpillAwareAllocator::spillOffsetReg());
+        ++consumedPublicUniforms;
+      }
+      emitUniformReadToReg(builder, templ.source->getLoc(),
+                           SpillAwareAllocator::spillBaseReg());
+      emitUniformReadToReg(builder, templ.source->getLoc(),
+                           SpillAwareAllocator::spillRowReg());
+      emittedSpillBaseUniform = true;
     }
+    for (const SpillAction &action : allocator.getPreActions(templ))
+      emitSpillAction(builder, templ.source->getLoc(), action);
+
+    if (failed(emitScheduledTemplateBody(builder, templ, allocator, layout)))
+      return failure();
+    if (templ.kind == InstructionTemplate::Kind::ThreadEnd)
+      emittedThreadEnd = true;
   }
 
   if (!emittedThreadEnd) {
     Location loc = sourceFunc->getLoc();
-    createThreadEndBundle(builder, loc);
-    createNopBundle(builder, loc);
-    createNopBundle(builder, loc);
+    createThreadEndSequence(builder, loc);
   }
   return success();
 }

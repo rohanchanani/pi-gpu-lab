@@ -4,7 +4,7 @@
 // CHECK-LABEL: vc4.func @kernel
 // The first conditional branch skips over the dynamic VDR runtime-pitch body.
 // Its immediate must include guarded fallback/planned-region slots.
-// CHECK: vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, immediate = 2416 : i32
+// CHECK: vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>, immediate = 2400 : i32
 // CHECK: vc4.qpu.vpmvcd_setup {{.*}}side = #vc4.vpmvcd_side<read>
 // CHECK: vc4.qpu.vpmvcd_addr {{.*}}side = #vc4.vpmvcd_side<read>
 // CHECK: vc4.qpu.vpmvcd_wait {side = #vc4.vpmvcd_side<read>}
