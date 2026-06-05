@@ -33,6 +33,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #include <algorithm>
 #include <cstdint>
@@ -1531,8 +1532,12 @@ static bool canUseMirroredSecondOperandForMakeFlags(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static bool makeFlagsNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
-static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op);
-static unsigned getVDWStoreRectDynamicFlattenedSlotCount(Operation *op);
+static unsigned
+getVDRLoadRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
+                                      const SpillAwareAllocator &allocator);
+static unsigned
+getVDWStoreRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
+                                       const SpillAwareAllocator &allocator);
 static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes);
 
 static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
@@ -1586,7 +1591,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
       return spillActionSlots + (serialize.getValue() == "mutex" ? 9 : 7);
     return spillActionSlots + 7;
   case InstructionTemplate::Kind::VDRLoadRectDynamic:
-    return spillActionSlots + getVDRLoadRectDynamicFlattenedSlotCount(templ.source);
+    return spillActionSlots +
+           getVDRLoadRectDynamicPlannedSlotCount(templ, allocator);
   case InstructionTemplate::Kind::VDWStore:
     if (auto serialize =
             llvm::dyn_cast_or_null<StringAttr>(templ.source->getAttr("serialize")))
@@ -1602,7 +1608,8 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
     return spillActionSlots + 17;
   }
   case InstructionTemplate::Kind::VDWStoreRectDynamic:
-    return spillActionSlots + getVDWStoreRectDynamicFlattenedSlotCount(templ.source);
+    return spillActionSlots +
+           getVDWStoreRectDynamicPlannedSlotCount(templ, allocator);
   case InstructionTemplate::Kind::Rotate:
     return spillActionSlots + 3 + resultSpacer;
   case InstructionTemplate::Kind::LoadImm:
@@ -1759,383 +1766,6 @@ static LogicalResult verifyDMARectXSpan(Operation *op,
            << "vertical dynamic rectangular " << opName << " requires "
            << xAttrName << " + max_rows <= 16";
   return success();
-}
-
-// flattened layout only: these legacy slot-count mirrors size instruction
-// templates before lowering. Dynamic DMA branch targets are derived from
-// PlannedRegion payloads below, not from these helpers.
-static unsigned getRowOffsetScratchSlotCount(int64_t row,
-                                             bool usesVPMRowOffset = true) {
-  return (usesVPMRowOffset && row != 0) ? 2 : 0;
-}
-
-static unsigned getVDRVPMBaseRowSetupSlotCount(int64_t row,
-                                               bool usesVPMRowOffset = true) {
-  return (usesVPMRowOffset && row != 0) ? 3 : 1;
-}
-
-static unsigned getVCDAddressWithOptionalAddSlotCount(
-    std::optional<int64_t> addressAddMultiplier = std::nullopt) {
-  if (!addressAddMultiplier)
-    return 1;
-  return static_cast<unsigned>(*addressAddMultiplier + 1);
-}
-
-static unsigned countDynamicVDRCommonTailSlots(bool useMutex) {
-  return /*nops before row setup=*/3 + /*vpm base row setup=*/1 +
-         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
-         /*vcd address=*/1 + /*wait=*/1 + (useMutex ? 1 : 0);
-}
-
-static unsigned countDynamicVDRLoadOneRowPlannedSlots(
-    bool useMutex, int64_t row, bool usesVPMRowOffset = true) {
-  std::optional<int64_t> addressAddMultiplier =
-      row == 0 ? std::nullopt : std::optional<int64_t>(row);
-  return (useMutex ? 1 : 0) + /*row length setup=*/4 + /*setup ldi=*/1 +
-         /*setup nop=*/1 + /*setup merge=*/1 + /*setup nops=*/3 +
-         getVDRVPMBaseRowSetupSlotCount(row, usesVPMRowOffset) +
-         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
-         getVCDAddressWithOptionalAddSlotCount(addressAddMultiplier) +
-         /*wait=*/1 + (useMutex ? 1 : 0);
-}
-
-static unsigned countDynamicVDRPitchRowPlannedSlots(
-    bool useMutex, int64_t row, bool usesVPMRowOffset = true) {
-  std::optional<int64_t> addressAddMultiplier =
-      row == 0 ? std::nullopt : std::optional<int64_t>(row);
-  return (useMutex ? 1 : 0) + /*extended pitch setup=*/0 + /*setup ldi=*/1 +
-         getVDRVPMBaseRowSetupSlotCount(row, usesVPMRowOffset) +
-         /*vpmvcd setup=*/1 + /*nops before address=*/2 +
-         getVCDAddressWithOptionalAddSlotCount(addressAddMultiplier) +
-         /*wait=*/1 + (useMutex ? 1 : 0);
-}
-
-static unsigned getDynamicVDRRectRowsSlotCount(bool useMutex,
-                                               bool extendedPitch = false) {
-  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
-         /*rows setup=*/3 + /*setup ldi/nop/merge=*/3 +
-         countDynamicVDRCommonTailSlots(useMutex);
-}
-
-static unsigned getDynamicVDRRectColsSlotCount(bool useMutex,
-                                               bool extendedPitch = false) {
-  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
-         /*cols setup=*/4 + /*setup ldi/nop/merge=*/3 +
-         countDynamicVDRCommonTailSlots(useMutex);
-}
-
-static unsigned getDynamicVDRRectRowsColsSlotCount(bool useMutex,
-                                                   bool extendedPitch = false) {
-  return (useMutex ? 1 : 0) + (extendedPitch ? 2 : 0) +
-         /*rows/cols setup=*/7 + /*setup ldi/nop/merge/merge=*/4 +
-         countDynamicVDRCommonTailSlots(useMutex);
-}
-
-static unsigned getRuntimePitchDispatchSlotCount(unsigned rectangularSlots,
-                                                 unsigned fallbackSlots) {
-  return /*pitch overflow compare=*/2 + /*outer branch window=*/7 +
-         rectangularSlots + /*rectangular-to-exit branch window=*/7 +
-         fallbackSlots;
-}
-
-static unsigned getVDRRowsColsFallbackSlotCount(bool useMutex, int64_t maxRows,
-                                                int64_t maxCols,
-                                                bool usesVPMRowOffset = true) {
-  (void)maxCols;
-  unsigned total = 0;
-  for (int64_t row = 0; row < maxRows; ++row) {
-    total += /*active rows guard=*/12 + /*active cols guard=*/12 +
-             countDynamicVDRLoadOneRowPlannedSlots(useMutex, row,
-                                                   usesVPMRowOffset);
-  }
-  return total;
-}
-
-static unsigned getVDRActiveColsFallbackSlotCount(
-    bool useMutex, int64_t activeRows, int64_t maxRows,
-    bool usesVPMRowOffset = true) {
-  int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
-  unsigned total = 0;
-  for (int64_t row = 0; row < clampedRows; ++row)
-    total += /*active cols guard=*/12 +
-             countDynamicVDRLoadOneRowPlannedSlots(useMutex, row,
-                                                   usesVPMRowOffset);
-  return total;
-}
-
-static unsigned getVDRStaticFallbackSlotCount(bool useMutex, int64_t activeRows,
-                                              int64_t activeCols,
-                                              int64_t maxRows,
-                                              int64_t maxCols,
-                                              bool usesVPMRowOffset = true) {
-  (void)maxCols;
-  int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
-  int64_t clampedCols = std::clamp(activeCols, int64_t(0), maxCols);
-  if (clampedRows == 0 || clampedCols == 0)
-    return 0;
-  unsigned total = 0;
-  for (int64_t row = 0; row < clampedRows; ++row)
-    total += countDynamicVDRPitchRowPlannedSlots(useMutex, row,
-                                                 usesVPMRowOffset);
-  return total;
-}
-
-// flattened layout only: not branch-target-critical.
-static unsigned getDynamicVDWStoreRowsSlotCount(bool useMutex,
-                                                bool dynamicPitch) {
-  unsigned slots = useMutex ? 21 : 19;
-  return dynamicPitch ? slots + 2 : slots;
-}
-
-// flattened layout only: not branch-target-critical.
-static unsigned getDynamicVDWActiveColsBodySlotCount(bool useMutex,
-                                                     int64_t row,
-                                                     int64_t rowLen,
-                                                     bool dynamicStride,
-                                                     bool usesVPMRowOffset =
-                                                         true) {
-  unsigned commonVDWSlots = useMutex ? 15 : 13;
-  unsigned activeColsSlots = rowLen == 16 ? 4 : 3;
-  unsigned vpmSourceRowSlots = (usesVPMRowOffset && row != 0) ? 2 : 1;
-  unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
-  return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
-}
-
-// flattened layout only: not branch-target-critical.
-static unsigned getStaticVDWRowBodySlotCount(bool useMutex, int64_t row,
-                                             bool dynamicStride,
-                                             bool usesVPMRowOffset = true) {
-  unsigned commonVDWSlots = useMutex ? 15 : 13;
-  unsigned activeColsSlots = 1;
-  unsigned vpmSourceRowSlots = (usesVPMRowOffset && row != 0) ? 2 : 1;
-  unsigned addressSlots = row == 0 ? 0 : (dynamicStride ? row : 2);
-  return commonVDWSlots + activeColsSlots + vpmSourceRowSlots + addressSlots;
-}
-
-// flattened layout only: not branch-target-critical.
-static unsigned getVDRLoadRectDynamicFlattenedSlotCount(Operation *op) {
-  bool useMutex = hasStringAttr(op, "serialize", "mutex");
-  unsigned rawVDRSlots = useMutex ? 9 : 7;
-  std::optional<int64_t> activeRows =
-      op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(2))
-                                : std::nullopt;
-  std::optional<int64_t> activeCols =
-      op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(3))
-                                : std::nullopt;
-  std::optional<int64_t> pitch =
-      op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(4))
-                                : std::nullopt;
-  int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
-  int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
-  bool usesVPMRowOffset = !isVerticalVPMOp(op);
-  if (!activeRows && activeCols && *activeCols == maxCols && maxRows >= 1 &&
-      maxRows <= 16) {
-    unsigned zeroFillSlots = useMutex ? 6 : 3;
-    unsigned guardSlots = 8;
-    unsigned total = 0;
-    for (int64_t row = 0; row < maxRows; ++row)
-      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
-               zeroFillSlots;
-    if (!pitch) {
-      for (int64_t row = 0; row < maxRows; ++row) {
-        unsigned rectangularSlots =
-            getDynamicVDRRectRowsSlotCount(useMutex, /*extendedPitch=*/true);
-        unsigned fallbackSlots = countDynamicVDRPitchRowPlannedSlots(
-            useMutex, row, usesVPMRowOffset);
-        total += guardSlots +
-                 getRuntimePitchDispatchSlotCount(rectangularSlots,
-                                                  fallbackSlots);
-      }
-      return total;
-    }
-    unsigned clampSlots = 4;
-    unsigned dynamicRowsVDRSlots =
-        getDynamicVDRRectRowsSlotCount(useMutex, /*extendedPitch=*/false);
-    return total + clampSlots + guardSlots + dynamicRowsVDRSlots;
-  }
-  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
-    unsigned zeroFillSlots = useMutex ? 6 : 3;
-    unsigned total = 0;
-    for (int64_t row = 0; row < maxRows; ++row)
-      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
-               zeroFillSlots;
-    unsigned activeRowsGuardSlots = 12;
-    unsigned preserveRowsSlots = 1;
-    unsigned activeColsGuardSlots = 12;
-    unsigned rectangularSlots =
-        getDynamicVDRRectRowsColsSlotCount(useMutex, /*extendedPitch=*/true);
-    unsigned fallbackSlots =
-        getVDRRowsColsFallbackSlotCount(useMutex, maxRows, maxCols,
-                                        usesVPMRowOffset);
-    total += activeRowsGuardSlots + preserveRowsSlots + activeColsGuardSlots +
-             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
-    return total;
-  }
-  if (!activeRows)
-    return rawVDRSlots;
-  if (activeCols && *activeRows == maxRows && *activeCols == maxCols) {
-    if (!pitch) {
-      unsigned rectangularSlots = rawVDRSlots + 2;
-      unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
-          useMutex, *activeRows, *activeCols, maxRows, maxCols,
-          usesVPMRowOffset);
-      return getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
-    }
-    return encodeVDRMemoryPitchBytes(*pitch) ? rawVDRSlots : rawVDRSlots + 2;
-  }
-  if (!activeCols && activeRows && maxRows >= 1 && maxRows <= 16) {
-    unsigned zeroFillSlots = useMutex ? 6 : 3;
-    std::optional<int64_t> pitch =
-        op->getNumOperands() == 5 ? getConstantI32FromLoadImm(op->getOperand(4))
-                                  : std::nullopt;
-    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
-    unsigned total = 0;
-    for (int64_t row = 0; row < maxRows; ++row)
-      total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
-               zeroFillSlots;
-    if (clampedRows == 0)
-      return total;
-    unsigned activeColsGuardSlots = 12;
-    if (!pitch) {
-      unsigned rectangularSlots =
-          getDynamicVDRRectColsSlotCount(useMutex, /*extendedPitch=*/true);
-      unsigned fallbackSlots = getVDRActiveColsFallbackSlotCount(
-          useMutex, *activeRows, maxRows, usesVPMRowOffset);
-      return total + activeColsGuardSlots +
-             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
-    }
-    bool extendedPitch = !encodeVDRMemoryPitchBytes(*pitch);
-    return total + activeColsGuardSlots +
-           getDynamicVDRRectColsSlotCount(useMutex, extendedPitch);
-  }
-  if (maxRows == 1) {
-    unsigned zeroFillSlots = useMutex ? 6 : 3;
-    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
-    int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
-    if (clampedRows == 0 || clampedCols == 0)
-      return zeroFillSlots;
-    if (!pitch) {
-      unsigned rectangularSlots = rawVDRSlots + 2;
-      unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
-          useMutex, clampedRows, clampedCols, maxRows, maxCols,
-          usesVPMRowOffset);
-      return zeroFillSlots +
-             getRuntimePitchDispatchSlotCount(rectangularSlots, fallbackSlots);
-    }
-    return zeroFillSlots + rawVDRSlots;
-  }
-  if (!pitch) {
-    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
-    int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
-    unsigned total = 0;
-    if (clampedRows != maxRows || clampedCols != maxCols) {
-      unsigned zeroFillSlots = useMutex ? 6 : 3;
-      for (int64_t row = 0; row < maxRows; ++row)
-        total += getRowOffsetScratchSlotCount(row, usesVPMRowOffset) +
-                 zeroFillSlots;
-      if (clampedRows == 0 || clampedCols == 0)
-        return total;
-    }
-    unsigned rectangularSlots = rawVDRSlots + 2;
-    unsigned fallbackSlots = getVDRStaticFallbackSlotCount(
-        useMutex, clampedRows, clampedCols, maxRows, maxCols,
-        usesVPMRowOffset);
-    return total + getRuntimePitchDispatchSlotCount(rectangularSlots,
-                                                    fallbackSlots);
-  }
-  return rawVDRSlots;
-}
-
-// flattened layout only: not branch-target-critical.
-static unsigned getVDWStoreRectDynamicFlattenedSlotCount(Operation *op) {
-  bool useMutex = hasStringAttr(op, "serialize", "mutex");
-  unsigned rawStaticSlots = useMutex ? 17 : 15;
-  if (op->getNumOperands() != 5)
-    return rawStaticSlots;
-  std::optional<int64_t> activeRows =
-      getConstantI32FromLoadImm(op->getOperand(2));
-  std::optional<int64_t> activeCols =
-      getConstantI32FromLoadImm(op->getOperand(3));
-  int64_t maxRows = getI32IntegerAttrOr(op, "max_rows", -1);
-  int64_t maxCols = getI32IntegerAttrOr(op, "max_cols", -1);
-  bool usesVPMRowOffset = !isVerticalVPMOp(op);
-  if (!activeRows && activeCols &&
-      std::clamp(*activeCols, int64_t(0), maxCols) == maxCols &&
-      maxRows >= 1 && maxRows <= 16) {
-    unsigned activeRowsGuardSlots = 12;
-    std::optional<int64_t> strideBytes =
-        getConstantI32FromLoadImm(op->getOperand(4));
-    unsigned dynamicRowsVDWSlots =
-        getDynamicVDWStoreRowsSlotCount(useMutex, !strideBytes);
-    unsigned rectangularSlots = activeRowsGuardSlots + dynamicRowsVDWSlots;
-    unsigned fallbackSlots = 0;
-    for (int64_t row = 0; row < maxRows; ++row)
-      fallbackSlots +=
-          activeRowsGuardSlots +
-          getStaticVDWRowBodySlotCount(useMutex, row,
-                                       /*dynamicStride=*/!strideBytes,
-                                       usesVPMRowOffset);
-    if (!strideBytes)
-      return 16 + rectangularSlots + fallbackSlots;
-    int64_t strideGapBytes = *strideBytes - maxCols * 4;
-    if (strideGapBytes < 0 || strideGapBytes > kMaxVDWStrideGapBytes)
-      return fallbackSlots;
-    return rectangularSlots;
-  }
-  if (!activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
-    unsigned guardSlots = 8;
-    unsigned total = 0;
-    for (int64_t row = 0; row < maxRows; ++row) {
-      unsigned vdwBodySlots =
-          getDynamicVDWActiveColsBodySlotCount(useMutex, row, maxCols,
-                                               /*dynamicStride=*/true,
-                                               usesVPMRowOffset);
-      unsigned activeColsPayloadSlots = 4 + 8 + vdwBodySlots;
-      total += guardSlots + activeColsPayloadSlots;
-    }
-    return total;
-  }
-  if (activeRows && !activeCols && maxRows >= 1 && maxRows <= 16) {
-    unsigned guardSlots = 8;
-    std::optional<int64_t> strideBytes =
-        getConstantI32FromLoadImm(op->getOperand(4));
-    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
-    unsigned total = 0;
-    for (int64_t row = 0; row < clampedRows; ++row)
-      total += guardSlots + getDynamicVDWActiveColsBodySlotCount(
-                                useMutex, row, maxCols,
-                                /*dynamicStride=*/!strideBytes,
-                                usesVPMRowOffset);
-    return total;
-  }
-  if (activeRows && activeCols && maxRows >= 1 && maxRows <= 16) {
-    std::optional<int64_t> strideBytes =
-        getConstantI32FromLoadImm(op->getOperand(4));
-    int64_t vpmPitch = getI32IntegerAttrOr(op, "vpm_pitch", 1);
-    int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
-    int64_t clampedCols = std::clamp(*activeCols, int64_t(0), maxCols);
-    if (clampedRows == 0 || clampedCols == 0)
-      return 0;
-    std::optional<int64_t> strideGapBytes =
-        strideBytes ? std::optional<int64_t>(*strideBytes - clampedCols * 4)
-                    : std::nullopt;
-    bool useStaticRowsFallback =
-        clampedRows > 1 &&
-        (vpmPitch != 1 || !strideBytes ||
-         (strideGapBytes &&
-          (*strideGapBytes < 0 || *strideGapBytes > kMaxVDWStrideGapBytes)));
-    if (useStaticRowsFallback) {
-      unsigned total = 0;
-      for (int64_t row = 0; row < clampedRows; ++row)
-        total += getStaticVDWRowBodySlotCount(useMutex, row,
-                                              /*dynamicStride=*/!strideBytes,
-                                              usesVPMRowOffset);
-      return total;
-    }
-  }
-  if (activeCols)
-    return rawStaticSlots;
-  return rawStaticSlots + (maxCols == 16 ? 3 : 2);
 }
 
 static std::optional<int64_t> getSmallImmLiteralSelector(Value value) {
@@ -7234,6 +6864,48 @@ static LogicalResult emitVDWStoreRectDynamic(
       /*addressAddReg=*/std::nullopt, /*addressAddMultiplier=*/1,
       /*vpmRowOffset=*/0, /*staticVpmX=*/plan.baseX);
   return success();
+}
+
+static unsigned getEmittedScheduledVC4SlotCount(Operation *op) {
+  unsigned slots = kSingleScheduledSlot;
+  if (hasName(op, "vc4.qpu.branch")) {
+    for (Region &region : op->getRegions())
+      for (Block &block : region)
+        for (Operation &nested : block)
+          slots += getEmittedScheduledVC4SlotCount(&nested);
+  }
+  return slots;
+}
+
+static unsigned getEmittedScheduledVC4SlotCount(Block &block) {
+  unsigned slots = 0;
+  for (Operation &op : block)
+    slots += getEmittedScheduledVC4SlotCount(&op);
+  return slots;
+}
+
+static unsigned
+getVDRLoadRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
+                                      const SpillAwareAllocator &allocator) {
+  Block scratch;
+  OpBuilder builder(templ.source->getContext());
+  builder.setInsertionPointToEnd(&scratch);
+  if (failed(emitVDRLoadRectDynamic(builder, templ, allocator)))
+    llvm::report_fatal_error(
+        "failed to derive dynamic VDR slot count from planned emission");
+  return getEmittedScheduledVC4SlotCount(scratch);
+}
+
+static unsigned
+getVDWStoreRectDynamicPlannedSlotCount(const InstructionTemplate &templ,
+                                       const SpillAwareAllocator &allocator) {
+  Block scratch;
+  OpBuilder builder(templ.source->getContext());
+  builder.setInsertionPointToEnd(&scratch);
+  if (failed(emitVDWStoreRectDynamic(builder, templ, allocator)))
+    llvm::report_fatal_error(
+        "failed to derive dynamic VDW slot count from planned emission");
+  return getEmittedScheduledVC4SlotCount(scratch);
 }
 
 static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {

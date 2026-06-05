@@ -7,12 +7,6 @@ import sys
 from pathlib import Path
 
 
-COMMENT_MARKERS = (
-    "not branch-target-critical",
-    "derived from planned emission",
-    "flattened layout only",
-)
-
 BRANCH_CRITICAL_HELPERS = (
     r"getDynamicVDW\w*SlotCount",
     r"getStaticVDW\w*SlotCount",
@@ -38,6 +32,10 @@ BRANCH_PAYLOAD_FUNCTION_RE = re.compile(
 )
 FLATTENED_HELPER_RE = re.compile(
     r"\bget(?:VDRLoadRectDynamic|VDWStoreRectDynamic)FlattenedSlotCount\s*\("
+)
+FORBIDDEN_LEGACY_COMMENTS = (
+    "flattened layout only",
+    "not branch-target-critical",
 )
 OLD_DYNAMIC_DMA_DIAGNOSTIC_FRAGMENTS = (
     (
@@ -114,12 +112,6 @@ def find_enclosing_functions(text, lines):
     return functions
 
 
-def has_marker_before(lines, line_index):
-    start = max(0, line_index - 8)
-    window = "\n".join(lines[start:line_index])
-    return any(marker in window for marker in COMMENT_MARKERS)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("source", type=Path)
@@ -132,6 +124,11 @@ def main() -> int:
 
     for idx, line in enumerate(lines, start=1):
         code = strip_line_comment(line)
+        for marker in FORBIDDEN_LEGACY_COMMENTS:
+            if marker in line:
+                failures.append(
+                    f"{source}:{idx}: forbidden legacy dynamic-DMA accounting comment {marker!r}"
+                )
         if "0xffff" in code or "65535" in code:
             failures.append(
                 f"{source}:{idx}: forbidden VDW stride mask/limit token in code"
@@ -165,10 +162,6 @@ def main() -> int:
 
     functions_by_line = find_enclosing_functions(text, lines)
     helper_res = [re.compile(pattern) for pattern in BRANCH_CRITICAL_HELPERS]
-    allowed_flattening_functions = {
-        "getVDRLoadRectDynamicFlattenedSlotCount",
-        "getVDWStoreRectDynamicFlattenedSlotCount",
-    }
     for idx, line in enumerate(lines, start=1):
         code = strip_line_comment(line)
         for helper_re in helper_res:
@@ -177,12 +170,13 @@ def main() -> int:
                 continue
             helper = match.group(0)
             if re.search(rf"\bstatic\s+unsigned\s+{helper}\s*\(", code):
+                failures.append(
+                    f"{source}:{idx}: forbidden branch-critical slot-count mirror {helper}"
+                )
                 continue
             fn = functions_by_line.get(idx, "")
-            if fn in allowed_flattening_functions:
-                continue
             failures.append(
-                f"{source}:{idx}: {helper} used outside flattened-layout-only accounting"
+                f"{source}:{idx}: forbidden branch-critical slot-count mirror use {helper} in {fn or '<unknown>'}"
             )
 
     for idx, line in enumerate(lines, start=1):
@@ -193,6 +187,10 @@ def main() -> int:
                 failures.append(
                     f"{source}:{idx}: flattened layout helper used outside top-level layout sizing"
                 )
+        elif FLATTENED_HELPER_RE.search(code):
+            failures.append(
+                f"{source}:{idx}: forbidden flattened dynamic-DMA slot-count helper"
+            )
 
     for idx, line in enumerate(lines, start=1):
         code = strip_line_comment(line)
@@ -250,9 +248,9 @@ def main() -> int:
         match = MANUAL_DMA_HELPER_RE.search(line)
         if match and "{" not in line:
             continue
-        if match and not has_marker_before(lines, idx):
+        if match:
             failures.append(
-                f"{source}:{idx + 1}: {match.group(1)} lacks a non-critical comment"
+                f"{source}:{idx + 1}: forbidden manual dynamic-DMA slot-count helper {match.group(1)}"
             )
 
     for idx, line in enumerate(lines, start=1):
