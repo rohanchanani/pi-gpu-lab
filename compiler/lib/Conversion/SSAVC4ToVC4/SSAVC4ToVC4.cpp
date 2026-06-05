@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <functional>
 #include <optional>
+#include <string>
 #include <utility>
 
 using namespace mlir;
@@ -78,6 +79,13 @@ constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 
 constexpr int64_t kMaxVDWStrideGapBytes = 0x1fff;
 constexpr int64_t kMaxVDRMPITCHBBytes = 0x1fff;
+constexpr unsigned kSingleScheduledSlot = 1;
+constexpr unsigned kBranchDelaySlots = 3;
+constexpr unsigned kScheduledBranchSlots = 1 + kBranchDelaySlots;
+constexpr unsigned kPlannedBranchWindowSlots = 7;
+constexpr unsigned kActiveGuardSlots = 12;
+constexpr unsigned kThreadEndTrailingNops = 2;
+constexpr unsigned kThreadEndSlots = 1 + kThreadEndTrailingNops;
 
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -1544,15 +1552,15 @@ static unsigned getFlattenedSlotCount(const InstructionTemplate &templ,
            EdgeCopySequence::forLayout(templ, allocator).slotCount();
   case InstructionTemplate::Kind::Branch:
     // One branch plus the three hardware delay slots owned by the branch op.
-    return spillActionSlots + 4;
+    return spillActionSlots + kScheduledBranchSlots;
   case InstructionTemplate::Kind::CondBranch:
     return spillActionSlots +
            (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator) ? 2
                                                                          : 1) +
-           4;
+           kScheduledBranchSlots;
   case InstructionTemplate::Kind::ThreadEnd:
     // thread_end emits thrend plus two scheduler hazard slots.
-    return spillActionSlots + 3;
+    return spillActionSlots + kThreadEndSlots;
   case InstructionTemplate::Kind::TMURequest:
     return spillActionSlots + 3;
   case InstructionTemplate::Kind::TMURead:
@@ -4789,20 +4797,69 @@ static void emitRuntimeActiveColsGuard(OpBuilder &builder, Location loc,
                                        int64_t activeColsReg, int64_t maxCols,
                                        unsigned guardedPayloadSlots);
 
-struct PlannedRegion {
-  unsigned slots = 0;
-  SmallVector<std::function<LogicalResult(OpBuilder &)>, 8> emitters;
+enum class FixedHardwareSequence {
+  SingleScheduledBundle,
+  SingleLDI,
+  SingleSema,
+  ScheduledBranchWithDelayAndPadding,
+  ActiveRowsGuard,
+  ActiveColsGuard
+};
 
-  void append(unsigned slotCount,
+static unsigned getFixedHardwareSequenceSlots(FixedHardwareSequence kind) {
+  switch (kind) {
+  case FixedHardwareSequence::SingleScheduledBundle:
+  case FixedHardwareSequence::SingleLDI:
+  case FixedHardwareSequence::SingleSema:
+    return kSingleScheduledSlot;
+  case FixedHardwareSequence::ScheduledBranchWithDelayAndPadding:
+    // Dynamic-DMA planned branches include the VC4 branch op, its explicit
+    // hardware delay slots, and backend branch-window padding visible in the
+    // emitted QPU stream.
+    return kPlannedBranchWindowSlots;
+  case FixedHardwareSequence::ActiveRowsGuard:
+  case FixedHardwareSequence::ActiveColsGuard:
+    return kActiveGuardSlots;
+  }
+  return 0;
+}
+
+struct PlannedRegion {
+  unsigned slotTotal = 0;
+  SmallVector<std::function<LogicalResult(OpBuilder &)>, 8> emitters;
+  SmallVector<std::string, 8> tags;
+
+  unsigned slots() const { return slotTotal; }
+
+  void append(llvm::StringRef tag, unsigned slotCount,
               std::function<LogicalResult(OpBuilder &)> emitter) {
-    slots += slotCount;
+    slotTotal += slotCount;
+    tags.push_back(tag.str());
     emitters.push_back(std::move(emitter));
   }
 
-  void appendRegion(PlannedRegion region) {
-    slots += region.slots;
+  void append(unsigned slotCount,
+              std::function<LogicalResult(OpBuilder &)> emitter) {
+    append("legacy-untagged", slotCount, std::move(emitter));
+  }
+
+  void appendRegion(llvm::StringRef tag, PlannedRegion region) {
+    slotTotal += region.slots();
+    tags.push_back(tag.str());
     for (auto &emitter : region.emitters)
       emitters.push_back(std::move(emitter));
+    for (auto &childTag : region.tags)
+      tags.push_back(std::move(childTag));
+  }
+
+  void appendRegion(PlannedRegion region) {
+    appendRegion("region", std::move(region));
+  }
+
+  void appendFixedSequence(
+      llvm::StringRef tag, FixedHardwareSequence kind,
+      std::function<LogicalResult(OpBuilder &)> emitter) {
+    append(tag, getFixedHardwareSequenceSlots(kind), std::move(emitter));
   }
 
   void append(PlannedRegion region) { appendRegion(std::move(region)); }
@@ -4815,13 +4872,23 @@ struct PlannedRegion {
     return success();
   }
 
-  bool empty() const { return slots == 0 && emitters.empty(); }
+  LogicalResult emit(OpBuilder &builder, Location) const {
+    return emit(builder);
+  }
+
+  bool empty() const { return slotTotal == 0 && emitters.empty(); }
 };
+
+[[maybe_unused]] static void
+appendOneSlot(PlannedRegion &region, llvm::StringRef tag,
+              std::function<LogicalResult(OpBuilder &)> emitter) {
+  region.append(tag, kSingleScheduledSlot, std::move(emitter));
+}
 
 [[maybe_unused]] static void
 appendOneSlot(PlannedRegion &region,
               std::function<LogicalResult(OpBuilder &)> emitter) {
-  region.append(/*slotCount=*/1, std::move(emitter));
+  appendOneSlot(region, "single-slot", std::move(emitter));
 }
 
 static void appendScheduledBundleSlot(
@@ -4833,7 +4900,7 @@ static void appendScheduledBundleSlot(
     mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
     std::optional<int64_t> smallImm = std::nullopt, bool setFlags = false,
     bool writeSwap = false) {
-  appendOneSlot(region,
+  appendOneSlot(region, "scheduled-bundle",
                 [loc, signal, condAdd, condMul, waddrAdd, waddrMul, addOpcode,
                  mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm,
                  setFlags, writeSwap](OpBuilder &builder) -> LogicalResult {
@@ -4848,7 +4915,7 @@ static void appendScheduledBundleSlot(
 
 static void appendSplat32LDISlot(PlannedRegion &region, Location loc,
                                  int64_t value, int64_t waddrAdd) {
-  appendOneSlot(region,
+  appendOneSlot(region, "ldi",
                 [loc, value, waddrAdd](OpBuilder &builder) -> LogicalResult {
                   createSplat32LDI(builder, loc, value, waddrAdd);
                   return success();
@@ -4856,7 +4923,7 @@ static void appendSplat32LDISlot(PlannedRegion &region, Location loc,
 }
 
 static void appendNopSlot(PlannedRegion &region, Location loc) {
-  appendOneSlot(region, [loc](OpBuilder &builder) -> LogicalResult {
+  appendOneSlot(region, "nop", [loc](OpBuilder &builder) -> LogicalResult {
     createNopBundle(builder, loc);
     return success();
   });
@@ -4869,7 +4936,7 @@ static void appendVPMVCDSetupSlot(
     int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
     mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
     mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt) {
-  appendOneSlot(region,
+  appendOneSlot(region, "vpmvcd-setup",
                 [loc, side, condAdd, condMul, addOpcode, mulOpcode, raddrA,
                  raddrB, addA, addB, mulA, mulB,
                  smallImm](OpBuilder &builder) -> LogicalResult {
@@ -4887,7 +4954,7 @@ static void appendVPMVCDAddrSlot(
     int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
     mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
     mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt) {
-  appendOneSlot(region,
+  appendOneSlot(region, "vpmvcd-addr",
                 [loc, side, condAdd, condMul, addOpcode, mulOpcode, raddrA,
                  raddrB, addA, addB, mulA, mulB,
                  smallImm](OpBuilder &builder) -> LogicalResult {
@@ -4900,7 +4967,8 @@ static void appendVPMVCDAddrSlot(
 
 static void appendVPMVCDWaitSlot(PlannedRegion &region, Location loc,
                                  mlir::vc4::VPMVCDSide side) {
-  appendOneSlot(region, [loc, side](OpBuilder &builder) -> LogicalResult {
+  appendOneSlot(region, "vpmvcd-wait",
+                [loc, side](OpBuilder &builder) -> LogicalResult {
     createVPMVCDWait(builder, loc, side);
     return success();
   });
@@ -4918,7 +4986,8 @@ static void appendMutexAcquireSlot(PlannedRegion &region, Location loc) {
 }
 
 static void appendMutexReleaseSlot(PlannedRegion &region, Location loc) {
-  appendOneSlot(region, [loc](OpBuilder &builder) -> LogicalResult {
+  appendOneSlot(region, "mutex-release",
+                [loc](OpBuilder &builder) -> LogicalResult {
     emitMutexRelease(builder, loc);
     return success();
   });
@@ -4985,21 +5054,22 @@ static PlannedRegion planDMARectZeroFillRow(Location loc,
 
 // Branch windows include the vc4.qpu.branch op, its explicit delay slots, and
 // the backend branch-window padding visible in emitted QPU slots. Dynamic DMA
-// branch windows must use payload.slots, not a separately rederived body size.
+// branch windows must use payload.slots(), not a separately rederived body size.
 [[maybe_unused]] static void appendBranchWithDelaySlots(
     PlannedRegion &region, Location loc, mlir::vc4::BranchCond cond,
     int64_t immediateBytes, int64_t raddrA = 0, int64_t waddrAdd = 31,
     int64_t waddrMul = 30) {
-  region.append(/*slotCount=*/7,
-                [loc, cond, immediateBytes, raddrA, waddrAdd,
-                 waddrMul](OpBuilder &builder) -> LogicalResult {
-                  createScheduledBranch(builder, loc, cond, immediateBytes,
-                                        raddrA, waddrAdd, waddrMul);
-                  createNopBundle(builder, loc);
-                  createNopBundle(builder, loc);
-                  createNopBundle(builder, loc);
-                  return success();
-                });
+  region.appendFixedSequence(
+      "branch-window", FixedHardwareSequence::ScheduledBranchWithDelayAndPadding,
+      [loc, cond, immediateBytes, raddrA, waddrAdd,
+       waddrMul](OpBuilder &builder) -> LogicalResult {
+        createScheduledBranch(builder, loc, cond, immediateBytes, raddrA,
+                              waddrAdd, waddrMul);
+        createNopBundle(builder, loc);
+        createNopBundle(builder, loc);
+        createNopBundle(builder, loc);
+        return success();
+      });
 }
 
 [[maybe_unused]] static PlannedRegion
@@ -5008,9 +5078,14 @@ planBranchAroundRegion(Location loc, mlir::vc4::BranchCond cond,
                        int64_t waddrAdd = 31, int64_t waddrMul = 30) {
   PlannedRegion region;
   appendBranchWithDelaySlots(
-      region, loc, cond, static_cast<int64_t>(7 + payload.slots) * 8, raddrA,
-      waddrAdd, waddrMul);
-  region.appendRegion(std::move(payload));
+      region, loc, cond,
+      static_cast<int64_t>(
+          getFixedHardwareSequenceSlots(
+              FixedHardwareSequence::ScheduledBranchWithDelayAndPadding) +
+          payload.slots()) *
+          8,
+      raddrA, waddrAdd, waddrMul);
+  region.appendRegion("branch-payload", std::move(payload));
   return region;
 }
 
@@ -5019,15 +5094,16 @@ planActiveRowsGuardedRegion(Location loc, int64_t activeRowsReg,
                             int64_t maxRows, int64_t row,
                             PlannedRegion payload) {
   PlannedRegion region;
-  unsigned payloadSlots = payload.slots;
-  region.append(/*slotCount=*/12,
-                [loc, activeRowsReg, maxRows, row,
-                 payloadSlots](OpBuilder &builder) -> LogicalResult {
-                  emitRuntimeActiveRowsGuard(builder, loc, activeRowsReg,
-                                             maxRows, row, payloadSlots);
-                  return success();
-                });
-  region.appendRegion(std::move(payload));
+  unsigned payloadSlots = payload.slots();
+  region.appendFixedSequence(
+      "active-rows-guard", FixedHardwareSequence::ActiveRowsGuard,
+      [loc, activeRowsReg, maxRows, row,
+       payloadSlots](OpBuilder &builder) -> LogicalResult {
+        emitRuntimeActiveRowsGuard(builder, loc, activeRowsReg, maxRows, row,
+                                   payloadSlots);
+        return success();
+      });
+  region.appendRegion("active-rows-payload", std::move(payload));
   return region;
 }
 
@@ -5035,15 +5111,16 @@ planActiveRowsGuardedRegion(Location loc, int64_t activeRowsReg,
 planActiveColsGuardedRegion(Location loc, int64_t activeColsReg,
                             int64_t maxCols, PlannedRegion payload) {
   PlannedRegion region;
-  unsigned payloadSlots = payload.slots;
-  region.append(/*slotCount=*/12,
-                [loc, activeColsReg, maxCols,
-                 payloadSlots](OpBuilder &builder) -> LogicalResult {
-                  emitRuntimeActiveColsGuard(builder, loc, activeColsReg,
-                                             maxCols, payloadSlots);
-                  return success();
-                });
-  region.appendRegion(std::move(payload));
+  unsigned payloadSlots = payload.slots();
+  region.appendFixedSequence(
+      "active-cols-guard", FixedHardwareSequence::ActiveColsGuard,
+      [loc, activeColsReg, maxCols,
+       payloadSlots](OpBuilder &builder) -> LogicalResult {
+        emitRuntimeActiveColsGuard(builder, loc, activeColsReg, maxCols,
+                                   payloadSlots);
+        return success();
+      });
+  region.appendRegion("active-cols-payload", std::move(payload));
   return region;
 }
 
@@ -5121,7 +5198,9 @@ static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
                           /*setFlags=*/true);
   }
   createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
-                        static_cast<int64_t>(7 + guardedPayloadSlots) * 8,
+                        static_cast<int64_t>(kPlannedBranchWindowSlots +
+                                             guardedPayloadSlots) *
+                            8,
                         /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -5166,7 +5245,9 @@ static void emitRuntimeActiveColsGuard(OpBuilder &builder, Location loc,
                         mlir::vc4::QPUMux::r1, /*smallImm=*/1,
                         /*setFlags=*/true);
   createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
-                        static_cast<int64_t>(7 + guardedPayloadSlots) * 8,
+                        static_cast<int64_t>(kPlannedBranchWindowSlots +
+                                             guardedPayloadSlots) *
+                            8,
                         /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -5831,7 +5912,9 @@ static PlannedRegion planDynamicVDRPitchFallbackDispatch(
   PlannedRegion encodablePath;
   encodablePath.appendRegion(std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(7 + fallback.slots) * 8);
+                             static_cast<int64_t>(kPlannedBranchWindowSlots +
+                                                  fallback.slots()) *
+                                 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -6798,7 +6881,9 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
   PlannedRegion encodablePath;
   encodablePath.appendRegion(std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(7 + fallback.slots) * 8);
+                             static_cast<int64_t>(kPlannedBranchWindowSlots +
+                                                  fallback.slots()) *
+                                 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -6825,7 +6910,9 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
   PlannedRegion encodablePath;
   encodablePath.appendRegion(std::move(rectangular));
   appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(7 + fallback.slots) * 8);
+                             static_cast<int64_t>(kPlannedBranchWindowSlots +
+                                                  fallback.slots()) *
+                                 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
