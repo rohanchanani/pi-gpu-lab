@@ -1,0 +1,21 @@
+{
+  "name": "blocked_gemm_vpm_tile_compute_tail_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 6,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_cols1": 1,
+    "saw_cols7": 1,
+    "saw_cols15": 1,
+    "saw_k1": 1,
+    "saw_k3": 1,
+    "uses_vdr_vpm": 1,
+    "uses_fragment_reduce": 1,
+    "runtime_launches": 6
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}

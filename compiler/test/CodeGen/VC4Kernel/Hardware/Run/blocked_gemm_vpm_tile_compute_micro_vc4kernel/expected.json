@@ -1,0 +1,19 @@
+{
+  "name": "blocked_gemm_vpm_tile_compute_micro_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "bm": 1,
+    "bn": 16,
+    "bk": 4,
+    "uses_vdr_vpm": 1,
+    "uses_fragment_reduce": 1,
+    "runtime_launches": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}
