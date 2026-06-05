@@ -87,6 +87,10 @@ constexpr unsigned kPlannedBranchWindowSlots =
     1 + kBranchDelaySlots + kBranchWindowPaddingSlots;
 constexpr unsigned kActiveGuardSlots = 12;
 constexpr unsigned kThreadEndTrailingNops = 2;
+constexpr int64_t kBarrierLeaderEntrySkipSlots = 12;
+constexpr int64_t kBarrierOtherWarpExitSkipSlots = 56;
+constexpr int64_t kBarrierLoopExitSkipSlots = 10;
+constexpr int64_t kBarrierLoopBackedgeSlots = -7;
 
 static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
@@ -3405,48 +3409,58 @@ static LogicalResult emitBarrier(OpBuilder &builder,
   // block, waits for departure tokens, then resets the final semaphore. Other
   // warps signal arrival, wait for release, signal departure, and wait reset.
   subSetFlagsSmallImm(mlir::vc4::QPUMux::a, *logicalWarpReg, /*smallImm=*/0);
-  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/12);
+  branch(mlir::vc4::BranchCond::all_z_set,
+         /*slotDelta=*/kBarrierLeaderEntrySkipSlots);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, arrive);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, go);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, depart);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, reset);
-  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/56);
+  branch(mlir::vc4::BranchCond::always,
+         /*slotDelta=*/kBarrierOtherWarpExitSkipSlots);
 
   moveRegToR3(*warpsPerBlockReg);
   decrementR3();
 
   testR3Zero();
-  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  branch(mlir::vc4::BranchCond::all_z_set,
+         /*slotDelta=*/kBarrierLoopExitSkipSlots);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
   decrementR3();
-  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+  branch(mlir::vc4::BranchCond::always,
+         /*slotDelta=*/kBarrierLoopBackedgeSlots);
 
   moveRegToR3(*warpsPerBlockReg);
   decrementR3();
 
   testR3Zero();
-  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  branch(mlir::vc4::BranchCond::all_z_set,
+         /*slotDelta=*/kBarrierLoopExitSkipSlots);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
   decrementR3();
-  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+  branch(mlir::vc4::BranchCond::always,
+         /*slotDelta=*/kBarrierLoopBackedgeSlots);
 
   moveRegToR3(*warpsPerBlockReg);
   decrementR3();
 
   testR3Zero();
-  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  branch(mlir::vc4::BranchCond::all_z_set,
+         /*slotDelta=*/kBarrierLoopExitSkipSlots);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
   decrementR3();
-  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+  branch(mlir::vc4::BranchCond::always,
+         /*slotDelta=*/kBarrierLoopBackedgeSlots);
 
   moveRegToR3(*warpsPerBlockReg);
   decrementR3();
 
   testR3Zero();
-  branch(mlir::vc4::BranchCond::all_z_set, /*slotDelta=*/10);
+  branch(mlir::vc4::BranchCond::all_z_set,
+         /*slotDelta=*/kBarrierLoopExitSkipSlots);
   createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
   decrementR3();
-  branch(mlir::vc4::BranchCond::always, /*slotDelta=*/-7);
+  branch(mlir::vc4::BranchCond::always,
+         /*slotDelta=*/kBarrierLoopBackedgeSlots);
   return success();
 }
 
@@ -4318,6 +4332,9 @@ static unsigned getFixedHardwareSequenceSlots(FixedHardwareSequence kind) {
 }
 
 struct PlannedRegion {
+  // No branch immediate may depend on a count mirrored separately from the
+  // emitter. Branch-relevant layout must use this planned region, final block
+  // labels, or centralized fixed hardware constants.
   unsigned slotTotal = 0;
   SmallVector<std::function<LogicalResult(OpBuilder &)>, 8> emitters;
   SmallVector<std::string, 8> tags;

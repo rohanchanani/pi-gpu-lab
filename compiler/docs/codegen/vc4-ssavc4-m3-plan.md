@@ -32,6 +32,12 @@ M3 originally planned a conservative no-spill allocator, but the current SSAVC4 
 
 Spilling remains a lowering-private allocator feature, not public SSAVC4 syntax. Do not add public push/pop/stack operations. Spill loads/stores use private per-logical-request spill frames in global GPU memory allocated from the existing VC4 program heap. Shared/VPM spilling remains a later optimization because it consumes block-scoped on-chip resources and affects cooperative residency.
 
+## Branch layout accounting policy
+
+The scheduled VC4 output is still a flattened instruction layout, but SSAVC4 lowering must not maintain independent legacy mirrors of branch-relevant sequence lengths. Any branch-relevant sequence is emitted from the same planned region object that reports its length, or the final branch target is resolved from scheduled block labels. Fixed hardware widths such as one scheduled slot, branch delay slots, branch-window padding, active guard windows, and thread-end trailing nops are centralized in the SSAVC4-to-VC4 lowering constants.
+
+This keeps branch immediates tied to the emitter instead of to separately maintained flattened-layout counts.
+
 
 ---
 
