@@ -1,0 +1,22 @@
+{
+  "name": "two_tmu_f32_loop_tail_b_ssavc4",
+  "status": "PASS",
+  "required": {
+    "cases": 18,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "saw_k0": 1,
+    "saw_k17": 1,
+    "saw_active_cols1": 1,
+    "saw_active_cols15": 1,
+    "saw_active_cols16": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 18
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}
