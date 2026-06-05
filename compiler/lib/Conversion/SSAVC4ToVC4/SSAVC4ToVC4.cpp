@@ -2479,9 +2479,24 @@ static LogicalResult selectInstructionTemplates(
   unsigned threadEndEpilogueBlockId = nextLayoutBlockId++;
   Operation *firstThreadEndOp = nullptr;
   bool sawThreadEnd = false;
+  DenseSet<Block *> threadEndOnlyBlocks;
+  if (needsThreadEndEpilogue) {
+    for (Block *block : blocks) {
+      if (llvm::hasSingleElement(*block) &&
+          hasName(&block->front(), kSSAVC4ThreadEndOpName))
+        threadEndOnlyBlocks.insert(block);
+    }
+  }
   auto appendTemplate = [&](InstructionTemplate templ) {
     templ.ordinal = templates.size();
     templates.push_back(std::move(templ));
+  };
+  auto resolveBranchTargetBlockId = [&](Block *target,
+                                        ValueRange successorOperands) {
+    if (needsThreadEndEpilogue && successorOperands.empty() &&
+        threadEndOnlyBlocks.contains(target))
+      return threadEndEpilogueBlockId;
+    return blockIds[target];
   };
   auto attachFlagProducer = [&](Operation *consumer, Value flags,
                                 InstructionTemplate &templ) -> LogicalResult {
@@ -2564,7 +2579,8 @@ static LogicalResult selectInstructionTemplates(
         templ.source = &op;
         templ.sourceBlock = block;
         templ.layoutBlockId = blockIds[block];
-        templ.branchTargetBlockId = blockIds[op.getSuccessor(0)];
+        templ.branchTargetBlockId = resolveBranchTargetBlockId(
+            op.getSuccessor(0), branch.getTargetOperands());
         appendTemplate(std::move(templ));
         continue;
       }
@@ -2587,7 +2603,8 @@ static LogicalResult selectInstructionTemplates(
           auto nextIt = nextBlock.find(block);
           if (nextIt != nextBlock.end() &&
               op.getSuccessor(1) == nextIt->second) {
-            templ.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
+            templ.branchTargetBlockId = resolveBranchTargetBlockId(
+                condBranch.getTrueDest(), condBranch.getTrueDestOperands());
             appendTemplate(std::move(templ));
             continue;
           }
@@ -2613,7 +2630,8 @@ static LogicalResult selectInstructionTemplates(
         falseBranch.source = &op;
         falseBranch.sourceBlock = block;
         falseBranch.layoutBlockId = falseCopyBlockId;
-        falseBranch.branchTargetBlockId = blockIds[condBranch.getFalseDest()];
+        falseBranch.branchTargetBlockId = resolveBranchTargetBlockId(
+            condBranch.getFalseDest(), condBranch.getFalseDestOperands());
         appendTemplate(std::move(falseBranch));
 
         if (failed(appendEdgeCopies(&op, block, trueCopyBlockId,
@@ -2625,7 +2643,8 @@ static LogicalResult selectInstructionTemplates(
         trueBranch.source = &op;
         trueBranch.sourceBlock = block;
         trueBranch.layoutBlockId = trueCopyBlockId;
-        trueBranch.branchTargetBlockId = blockIds[condBranch.getTrueDest()];
+        trueBranch.branchTargetBlockId = resolveBranchTargetBlockId(
+            condBranch.getTrueDest(), condBranch.getTrueDestOperands());
         appendTemplate(std::move(trueBranch));
         continue;
       }
@@ -7418,6 +7437,16 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
   int64_t totalRows = info.totalVPMRowsPerBlock;
   if (info.scheduleMode == "cooperative_block") {
     int64_t spillRows = info.warpsPerBlock;
+    totalRows = info.userVPMRowsPerBlock +
+                info.compilerVPMStagingRowsPerBlock +
+                info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
+                spillRows;
+    replaceAttr("spill_vpm_rows_per_block",
+                builder.getI32IntegerAttr(spillRows));
+    replaceAttr("total_vpm_rows_per_block",
+                builder.getI32IntegerAttr(totalRows));
+  } else {
+    int64_t spillRows = 1;
     totalRows = info.userVPMRowsPerBlock +
                 info.compilerVPMStagingRowsPerBlock +
                 info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +

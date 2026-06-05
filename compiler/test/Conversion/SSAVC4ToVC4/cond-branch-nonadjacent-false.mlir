@@ -2,6 +2,7 @@
 
 // CHECK-LABEL: vc4.module @cond_branch_nonadjacent_false
 // CHECK: vc4.func @kernel
+// CHECK: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<any_z_set>{{.*}}immediate = 288 : i32
 // CHECK: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<any_c_set>
 // CHECK: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<always>
 // CHECK: vc4.qpu.branch attributes {{.*}}cond = #vc4.branch_cond<always>

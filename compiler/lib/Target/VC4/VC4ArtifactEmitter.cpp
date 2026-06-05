@@ -3242,13 +3242,19 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       if (spillKernel.resources.spillVPMRowsPerBlock != 0) {
         os << " spill_vpm_row=vpm_base_row+"
            << (spillKernel.resources.userVPMRowsPerBlock +
-               spillKernel.resources.compilerVPMStagingRowsPerBlock)
+               spillKernel.resources.compilerVPMStagingRowsPerBlock +
+               spillKernel.resources.warpsPerBlock *
+                   spillKernel.resources.compilerVPMStagingRowsPerWarp)
            << "+logical_warp_id";
       }
     } else {
       os << " resident_request_id=wave_local_request_index";
       if (spillKernel.spill.frameBytes != 0)
-        os << " spill_vpm_row=resident_request_id";
+        os << " spill_vpm_row=vpm_base_row+"
+           << (spillKernel.resources.userVPMRowsPerBlock +
+               spillKernel.resources.compilerVPMStagingRowsPerBlock +
+               spillKernel.resources.warpsPerBlock *
+                   spillKernel.resources.compilerVPMStagingRowsPerWarp);
     }
     os << " spill_frame_base=spill_arena_base+resident_request_id*"
           "spill_frame_stride_bytes */\n";
@@ -3318,11 +3324,23 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
                << launchKernel.kernelId
                << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
                << launchKernel.kernelId
-               << "_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + requestInfo->logical_warp_id; /* builtin "
+               << "_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId
+               << "_WARPS_PER_BLOCK * KERNEL_"
+               << launchKernel.kernelId
+               << "_COMPILER_VPM_STAGING_ROWS_PER_WARP + requestInfo->logical_warp_id; /* builtin "
                << builtin->name << " */\n";
           } else {
             os << "  uniformWords[" << index
-               << "] = requestInfo->resident_request_id; /* builtin "
+               << "] = requestInfo->vpm_base_row + KERNEL_"
+               << launchKernel.kernelId
+               << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId
+               << "_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId
+               << "_WARPS_PER_BLOCK * KERNEL_"
+               << launchKernel.kernelId
+               << "_COMPILER_VPM_STAGING_ROWS_PER_WARP; /* builtin "
                << builtin->name << " */\n";
           }
           continue;

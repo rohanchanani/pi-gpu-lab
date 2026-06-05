@@ -3,6 +3,7 @@
 // CHECK-LABEL: vc4.module @multiple_thread_end_single_epilogue
 // CHECK: vc4.qpu.branch attributes
 // CHECK-SAME: cond = #vc4.branch_cond<any_z_set>
+// CHECK-SAME: immediate = 104 : i32
 // CHECK: vc4.qpu.branch attributes
 // CHECK-SAME: cond = #vc4.branch_cond<always>
 // CHECK: vc4.qpu.branch attributes
