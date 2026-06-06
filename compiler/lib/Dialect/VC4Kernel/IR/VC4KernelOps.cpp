@@ -151,6 +151,13 @@ static std::optional<int64_t> getConstantI32(Value value) {
   return attr.getInt();
 }
 
+static std::optional<int64_t> getSplatConstantI32(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, "vc4kernel.splat") || def->getNumOperands() != 1)
+    return std::nullopt;
+  return getConstantI32(def->getOperand(0));
+}
+
 static bool isKnownScalarByteOffsetAligned4Impl(Value value,
                                                 unsigned depth);
 static bool isKnownVectorByteOffsetsAligned4Impl(Value value,
@@ -196,24 +203,40 @@ static bool isKnownScalarByteOffsetAligned4Impl(Value value, unsigned depth) {
 
 static bool isLaneBytes(Value value) {
   Operation *def = value.getDefiningOp();
-  if (!hasName(def, "vc4kernel.fragment_shl") || def->getNumOperands() != 2)
+  if (!def || def->getNumOperands() != 2)
     return false;
-  Operation *laneRange = def->getOperand(0).getDefiningOp();
-  if (!hasName(laneRange, "vc4kernel.lane_range"))
+  if (!hasName(def->getOperand(0).getDefiningOp(), "vc4kernel.lane_range"))
     return false;
-  std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
-  return amount && *amount == 2;
+  if (hasName(def, "vc4kernel.fragment_shl")) {
+    std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
+    return amount && *amount == 2;
+  }
+  if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
+    if (alu.getOpcode() != AddALUOpcode::shl)
+      return false;
+    std::optional<int64_t> amount = getSplatConstantI32(def->getOperand(1));
+    return amount && *amount == 2;
+  }
+  return false;
 }
 
 static bool isLaneBytesOrGreater(Value value) {
   Operation *def = value.getDefiningOp();
-  if (!hasName(def, "vc4kernel.fragment_shl") || def->getNumOperands() != 2)
+  if (!def || def->getNumOperands() != 2)
     return false;
-  Operation *laneRange = def->getOperand(0).getDefiningOp();
-  if (!hasName(laneRange, "vc4kernel.lane_range"))
+  if (!hasName(def->getOperand(0).getDefiningOp(), "vc4kernel.lane_range"))
     return false;
-  std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
-  return amount && *amount >= 2;
+  if (hasName(def, "vc4kernel.fragment_shl")) {
+    std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
+    return amount && *amount >= 2;
+  }
+  if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
+    if (alu.getOpcode() != AddALUOpcode::shl)
+      return false;
+    std::optional<int64_t> amount = getSplatConstantI32(def->getOperand(1));
+    return amount && *amount >= 2;
+  }
+  return false;
 }
 
 static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
@@ -235,9 +258,27 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
     return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) &&
            isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
 
+  if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
+    if ((alu.getOpcode() == AddALUOpcode::add ||
+         alu.getOpcode() == AddALUOpcode::sub) &&
+        def->getNumOperands() == 2)
+      return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0),
+                                                  depth + 1) &&
+             isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1),
+                                                  depth + 1);
+  }
+
   if (hasName(def, "vc4kernel.fragment_mul") && def->getNumOperands() == 2)
     return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) ||
            isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
+
+  if (auto alu = dyn_cast<FragmentALUMulOp>(def)) {
+    if (alu.getOpcode() == MulALUOpcode::mul24 && def->getNumOperands() == 2)
+      return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0),
+                                                  depth + 1) ||
+             isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1),
+                                                  depth + 1);
+  }
 
   return false;
 }
@@ -246,7 +287,18 @@ static bool isContiguousByteOffsets(Value value) {
   if (isLaneBytes(value))
     return true;
   Operation *def = value.getDefiningOp();
-  if (!hasName(def, "vc4kernel.fragment_add") || def->getNumOperands() != 2)
+  if (!def || def->getNumOperands() != 2)
+    return false;
+  if (hasName(def, "vc4kernel.fragment_add")) {
+    auto isBasePlusLaneBytes = [](Value lhs, Value rhs) {
+      Operation *splat = lhs.getDefiningOp();
+      return hasName(splat, "vc4kernel.splat") && isLaneBytes(rhs);
+    };
+    return isBasePlusLaneBytes(def->getOperand(0), def->getOperand(1)) ||
+           isBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
+  }
+  auto alu = dyn_cast<FragmentALUAddOp>(def);
+  if (!alu || alu.getOpcode() != AddALUOpcode::add)
     return false;
   auto isBasePlusLaneBytes = [](Value lhs, Value rhs) {
     Operation *splat = lhs.getDefiningOp();

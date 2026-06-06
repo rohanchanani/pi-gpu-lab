@@ -1,0 +1,18 @@
+{
+  "name": "fragment_alu_mul_f32_mul24_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "mul24_24bit_operands": 1,
+    "runtime_allocations": 6,
+    "runtime_launches": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}

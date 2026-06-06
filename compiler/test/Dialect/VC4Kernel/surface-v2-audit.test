@@ -10,5 +10,5 @@
 # CHECK-SAME: forbidden_tile_dsl_hits=0
 # CHECK-SAME: retired_tile_hits=0
 # CHECK: fixture_purity:
-# CHECK-SAME: hardware_inputs=60
+# CHECK-SAME: hardware_inputs=66
 # CHECK-SAME: producer_or_lower_half_hits=0

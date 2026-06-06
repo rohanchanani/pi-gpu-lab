@@ -1274,13 +1274,31 @@ static std::optional<int64_t> getI32ConstantValue(Value value) {
   return attr.getInt();
 }
 
+static std::optional<int64_t> getSplatI32ConstantValue(Value value) {
+  Operation *def = value.getDefiningOp();
+  if (!hasName(def, kSplatOpName) || def->getNumOperands() != 1)
+    return std::nullopt;
+  return getI32ConstantValue(def->getOperand(0));
+}
+
 static bool isLaneByteOffsets(Value value) {
   Operation *def = value.getDefiningOp();
-  if (!hasName(def, kFragmentShlOpName) || def->getNumOperands() != 2)
+  if (!def || def->getNumOperands() != 2)
     return false;
   if (!hasName(def->getOperand(0).getDefiningOp(), kLaneRangeOpName))
     return false;
-  std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
+  if (hasName(def, kFragmentShlOpName)) {
+    std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
+    return shift && *shift == 2;
+  }
+  if (!hasName(def, kFragmentALUAddOpName))
+    return false;
+  auto opcode =
+      llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+          def->getAttr("opcode"));
+  if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::shl)
+    return false;
+  std::optional<int64_t> shift = getSplatI32ConstantValue(def->getOperand(1));
   return shift && *shift == 2;
 }
 
@@ -1301,8 +1319,17 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
     return {/*matched=*/true, /*scalarBaseByteOffset=*/{}};
 
   Operation *def = value.getDefiningOp();
-  if (!hasName(def, kFragmentAddOpName) || def->getNumOperands() != 2)
+  if (!def || def->getNumOperands() != 2)
     return {};
+  if (!hasName(def, kFragmentAddOpName)) {
+    if (!hasName(def, kFragmentALUAddOpName))
+      return {};
+    auto opcode =
+        llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+            def->getAttr("opcode"));
+    if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::add)
+      return {};
+  }
 
   auto matchBasePlusLaneBytes = [](Value lhs,
                                    Value rhs) -> FullRowVDWOffsets {
