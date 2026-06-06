@@ -548,6 +548,15 @@ arith.addi
 arith.subi
 arith.muli
 arith.shli
+arith.shrui
+arith.shrsi
+arith.andi
+arith.ori
+arith.xori
+arith.minsi
+arith.maxsi
+arith.minui
+arith.maxui
 arith.cmpi
 arith.select
 ```
@@ -558,9 +567,14 @@ Restrictions:
 - arith operations may not have vector result types.
 - arith operations may not have vector operands.
 - arith.constant may produce only scalar i1/i32/f32.
-- arith.addi/subi/muli/shli may operate only on scalar i32.
-- arith.cmpi may compare only scalar i32 values and produce scalar i1.
+- arith.addi/subi/muli/shli/shrui/shrsi/andi/ori/xori/minsi/maxsi/minui/maxui may operate only on scalar i32 in P5b.
+- arith.muli is exact modulo 2^32 and lowers through a tested 16x16 partial-product expansion using mul24 only for bounded partial operands.
+- arith.minui/maxui use explicit unsigned semantics; when the lower half exposes signed min/max, lowering must use sign-bias and unbias.
+- arith.cmpi may compare only scalar i32 values and produce scalar i1. All standard i32 predicates eq/ne/slt/sle/sgt/sge/ult/ule/ugt/uge are admitted in P5b.
 - arith.select condition must be scalar i1 and selected values must be scalar i1/i32/f32.
+- integer division and remainder deterministically reject in P5.
+- scalar f32 arithmetic deterministically rejects in P5.
+- vector arith, unsupported integer widths, index values, and unproven numeric casts deterministically reject in P5.
 ```
 
 Scalar `i1` lowers through condition plans. It is not assumed to be a persistent hardware flag value.

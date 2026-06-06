@@ -237,6 +237,11 @@ static bool isAllowedScalarArithType(Type type) {
   return isScalarI1(type) || isScalarI32(type) || isScalarF32(type);
 }
 
+static bool hasAnyName(Operation *op, ArrayRef<StringRef> names) {
+  StringRef name = op->getName().getStringRef();
+  return llvm::is_contained(names, name);
+}
+
 struct LaneAffineConstPlan {
   int64_t base = 0;
   int64_t shift = 0;
@@ -350,9 +355,27 @@ static LogicalResult verifyArithBoundary(Operation *op) {
     return op->emitOpError(
         "arith.constant in vc4kernel requires one scalar i1/i32/f32 result");
   }
-  if (name == "arith.addi" || name == "arith.subi" ||
-      name == "arith.muli" || name == "arith.shli")
+  if (hasAnyName(op, {"arith.divsi", "arith.divui", "arith.remsi",
+                      "arith.remui"}))
+    return op->emitOpError(
+        "integer division and remainder are not supported in vc4kernel scalar arith");
+  if (hasAnyName(op, {"arith.addf", "arith.subf", "arith.mulf",
+                      "arith.divf", "arith.minimumf", "arith.maximumf",
+                      "arith.minnumf", "arith.maxnumf"}))
+    return op->emitOpError(
+        "scalar f32 arithmetic is not supported in vc4kernel scalar arith");
+  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli",
+                      "arith.shli", "arith.shrui", "arith.shrsi",
+                      "arith.minsi", "arith.maxsi", "arith.minui",
+                      "arith.maxui"}))
     return verifyIntegerArithI32(op);
+  if (name == "arith.andi" || name == "arith.ori" || name == "arith.xori") {
+    if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
+        isScalarI32(op->getOperand(0).getType()))
+      return verifyIntegerArithI32(op);
+    return op->emitOpError(
+        "bitwise arith operations in vc4kernel require scalar i32 operands and results");
+  }
   if (name == "arith.cmpi") {
     if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
         isScalarI32(op->getOperand(0).getType()) &&
@@ -1136,6 +1159,16 @@ static Value createI32BinaryAddPipe(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
+static Value createScalarI32SignBias(OpBuilder &builder, Location loc,
+                                     Value value) {
+  Value signBit = createLoadImm(
+      builder, loc, value.getType(),
+      builder.getIntegerAttr(builder.getI32Type(),
+                             llvm::APInt(32, 0x80000000u)));
+  return createI32BinaryAddPipe(builder, loc, value, signBit,
+                                mlir::vc4::AddOpcode::bit_xor);
+}
+
 static FailureOr<Value> emitFragmentConst(Operation *op, OpBuilder &builder) {
   auto valueAttr = llvm::dyn_cast_if_present<DenseElementsAttr>(
       op->getAttr("value"));
@@ -1411,6 +1444,8 @@ static std::optional<int64_t> getI32ConstantValue(Value value);
 static Value emitI32Mul32Fallback(Operation *op, OpBuilder &builder, Value lhs,
                                   Value rhs) {
   Location loc = op->getLoc();
+  // Exact modulo-2^32 multiply: split into 16-bit halves and use mul24 only
+  // for bounded 16x16 partial products.
   Value mask = createLoadImm(builder, loc, lhs.getType(),
                              builder.getI32IntegerAttr(0xffff));
   Value shiftScalar = createLoadImm(builder, loc, builder.getI32Type(),
@@ -1920,7 +1955,33 @@ emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
   EmittedCondition emitted;
   Value flagsLhs = lhs;
   Value flagsRhs = rhs;
+  arith::CmpIPredicate effectivePredicate = pred.getValue();
   switch (pred.getValue()) {
+  case arith::CmpIPredicate::slt:
+    flagsLhs = createScalarI32SignBias(builder, op->getLoc(), lhs);
+    flagsRhs = createScalarI32SignBias(builder, op->getLoc(), rhs);
+    effectivePredicate = arith::CmpIPredicate::ult;
+    break;
+  case arith::CmpIPredicate::sle:
+    flagsLhs = createScalarI32SignBias(builder, op->getLoc(), lhs);
+    flagsRhs = createScalarI32SignBias(builder, op->getLoc(), rhs);
+    effectivePredicate = arith::CmpIPredicate::ule;
+    break;
+  case arith::CmpIPredicate::sgt:
+    flagsLhs = createScalarI32SignBias(builder, op->getLoc(), lhs);
+    flagsRhs = createScalarI32SignBias(builder, op->getLoc(), rhs);
+    effectivePredicate = arith::CmpIPredicate::ugt;
+    break;
+  case arith::CmpIPredicate::sge:
+    flagsLhs = createScalarI32SignBias(builder, op->getLoc(), lhs);
+    flagsRhs = createScalarI32SignBias(builder, op->getLoc(), rhs);
+    effectivePredicate = arith::CmpIPredicate::uge;
+    break;
+  default:
+    break;
+  }
+
+  switch (effectivePredicate) {
   case arith::CmpIPredicate::eq:
     emitted.branchCond = mlir::vc4::BranchCond::any_z_set;
     emitted.selectCond = mlir::vc4::Cond::zs;
@@ -1951,7 +2012,7 @@ emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
     break;
   default:
     return op->emitOpError(
-        "arith.cmpi lowering supports only eq, ne, ult, ule, ugt, and uge");
+        "arith.cmpi lowering supports only eq, ne, slt, sle, sgt, sge, ult, ule, ugt, and uge");
   }
   emitted.flags = createSubFlags(builder, op->getLoc(), flagsLhs, flagsRhs);
   return emitted;
@@ -2437,8 +2498,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         op->getResult(0).getType())};
     return success();
   }
-  if (hasName(op, "arith.addi") || hasName(op, "arith.subi") ||
-      hasName(op, "arith.muli") || hasName(op, "arith.shli")) {
+  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli",
+                      "arith.shli", "arith.shrui", "arith.shrsi",
+                      "arith.andi", "arith.ori", "arith.xori",
+                      "arith.minsi", "arith.maxsi", "arith.minui",
+                      "arith.maxui"})) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
       Value mapped = mapValue(op, operand, state);
@@ -2451,11 +2515,37 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           emitI32Mul32Fallback(op, builder, operands[0], operands[1])};
       return success();
     }
+    if (hasName(op, "arith.minui") || hasName(op, "arith.maxui")) {
+      Value lhs = createScalarI32SignBias(builder, op->getLoc(), operands[0]);
+      Value rhs = createScalarI32SignBias(builder, op->getLoc(), operands[1]);
+      mlir::vc4::AddOpcode opcode =
+          hasName(op, "arith.minui") ? mlir::vc4::AddOpcode::min
+                                     : mlir::vc4::AddOpcode::max;
+      Value biasedResult = createI32BinaryAddPipe(builder, op->getLoc(), lhs,
+                                                  rhs, opcode);
+      state.values[op->getResult(0)] = {
+          createScalarI32SignBias(builder, op->getLoc(), biasedResult)};
+      return success();
+    }
     mlir::vc4::AddOpcode opcode = mlir::vc4::AddOpcode::add;
     if (hasName(op, "arith.subi"))
       opcode = mlir::vc4::AddOpcode::sub;
     if (hasName(op, "arith.shli"))
       opcode = mlir::vc4::AddOpcode::shl;
+    if (hasName(op, "arith.shrui"))
+      opcode = mlir::vc4::AddOpcode::shr;
+    if (hasName(op, "arith.shrsi"))
+      opcode = mlir::vc4::AddOpcode::asr;
+    if (hasName(op, "arith.andi"))
+      opcode = mlir::vc4::AddOpcode::bit_and;
+    if (hasName(op, "arith.ori"))
+      opcode = mlir::vc4::AddOpcode::bit_or;
+    if (hasName(op, "arith.xori"))
+      opcode = mlir::vc4::AddOpcode::bit_xor;
+    if (hasName(op, "arith.minsi"))
+      opcode = mlir::vc4::AddOpcode::min;
+    if (hasName(op, "arith.maxsi"))
+      opcode = mlir::vc4::AddOpcode::max;
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
         {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
