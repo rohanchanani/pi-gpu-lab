@@ -1930,10 +1930,17 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
 
   std::string src0;
   std::string src1;
-  if (failed(formatMuxSource(bundle, bundle.getAddA(), *unpackSuffix, src0)))
+  bool printUnpackOnSecondSource =
+      !unpackSuffix->empty() && !isUnaryAddOpcode(opcode);
+  if (failed(formatMuxSource(bundle, bundle.getAddA(),
+                             printUnpackOnSecondSource ? std::string()
+                                                       : *unpackSuffix,
+                             src0)))
     return failure();
   if (!isUnaryAddOpcode(opcode) &&
-      failed(formatMuxSource(bundle, bundle.getAddB(), std::string(),
+      failed(formatMuxSource(bundle, bundle.getAddB(),
+                             printUnpackOnSecondSource ? *unpackSuffix
+                                                       : std::string(),
                              src1)))
     return failure();
 
@@ -1996,7 +2003,11 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   bool useMovAlias = false;
   std::string movAliasSource = src0;
   if (cond == mlir::vc4::Cond::always && !op->hasAttr("set_flags")) {
-    if (opcode == mlir::vc4::AddOpcode::bit_or && src0 == src1) {
+    if (opcode == mlir::vc4::AddOpcode::bit_or &&
+        !unpackSuffix->empty() && bundle.getAddA() == bundle.getAddB()) {
+      useMovAlias = true;
+      movAliasSource = src1;
+    } else if (opcode == mlir::vc4::AddOpcode::bit_or && src0 == src1) {
       useMovAlias = true;
       movAliasSource = src0;
     } else if (opcode == mlir::vc4::AddOpcode::add && src1 == "0") {

@@ -156,9 +156,11 @@ P3_POST_PHASE_STAGED_STATUSES = {
     },
     "p9_fragment_pack": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
     },
     "p9_fragment_unpack": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
     },
 }
 
@@ -300,9 +302,11 @@ P5_POST_PHASE_STAGED_STATUSES = {
     },
     "p9_fragment_pack": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
     },
     "p9_fragment_unpack": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
     },
 }
 

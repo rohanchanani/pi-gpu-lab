@@ -3175,6 +3175,9 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
 
+  if (templ.kind == InstructionTemplate::Kind::Pack)
+    createSplat32LDI(builder, source->getLoc(), 0, *resultReg);
+
   OperationState state(source->getLoc(), "vc4.qpu.bundle");
   addCommonBundleAttrs(builder, state, mlir::vc4::QPUSignal::none,
                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
