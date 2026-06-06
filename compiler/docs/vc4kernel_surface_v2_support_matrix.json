@@ -404,7 +404,7 @@
       "id": "p7_tmu_load_explicit_safe_inactive_offset",
       "phase": "P7",
       "category": "tmu",
-      "current_status": "implemented_pending_hardware",
+      "current_status": "hardware_proven_pending_migration",
       "final_status_target": "implemented_with_policy_or_rejected",
       "current_surface": "P7b tmu_load_fragment carries explicit scalar safe_offset and inactive_load<zero> policy with P6 memory_path/coherency attrs.",
       "target_surface": "TMU load with explicit safe inactive offset and zero-fill policy.",

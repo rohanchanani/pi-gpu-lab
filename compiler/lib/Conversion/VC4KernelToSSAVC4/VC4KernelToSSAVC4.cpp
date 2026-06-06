@@ -1635,6 +1635,17 @@ struct FullRowVDWOffsets {
 };
 
 static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
+  if (auto values = getFragmentConstI32Values(value)) {
+    if (values->size() != 16)
+      return {};
+    int64_t base = values->front();
+    for (int64_t lane = 0; lane < 16; ++lane)
+      if ((*values)[lane] != base + lane * 4)
+        return {};
+    return {/*matched=*/true, /*scalarBaseByteOffset=*/{},
+            /*constantBaseByteOffset=*/base};
+  }
+
   if (isLaneByteOffsets(value))
     return {/*matched=*/true, /*scalarBaseByteOffset=*/{},
             /*constantBaseByteOffset=*/std::nullopt};

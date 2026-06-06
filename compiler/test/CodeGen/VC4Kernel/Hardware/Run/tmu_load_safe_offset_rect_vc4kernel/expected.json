@@ -1,0 +1,14 @@
+{
+  "name": "tmu_load_safe_offset_rect_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_center_rect": 1,
+    "saw_empty_row": 1,
+    "poison_inactive_offsets": 1,
+    "runtime_launches": 1
+  }
+}

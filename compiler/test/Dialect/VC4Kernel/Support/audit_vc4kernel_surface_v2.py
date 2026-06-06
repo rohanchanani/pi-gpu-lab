@@ -137,6 +137,12 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },
+    "p7_tmu_load_explicit_safe_inactive_offset": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_migration",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -225,6 +231,7 @@ P5_POST_PHASE_STAGED_STATUSES = {
     },
     "p7_tmu_load_explicit_safe_inactive_offset": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },

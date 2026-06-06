@@ -399,10 +399,26 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
                                                   depth + 1);
   }
 
+  if (auto select = dyn_cast<FragmentSelectOp>(def)) {
+    return isKnownVectorByteOffsetsAligned4Impl(select.getTrueValue(),
+                                                depth + 1) &&
+           isKnownVectorByteOffsetsAligned4Impl(select.getFalseValue(),
+                                                depth + 1);
+  }
+
   return false;
 }
 
 static bool isContiguousByteOffsets(Value value) {
+  if (auto values = getFragmentConstI32Values(value)) {
+    if (values->size() != 16)
+      return false;
+    int64_t base = values->front();
+    for (int64_t lane = 0; lane < 16; ++lane)
+      if ((*values)[lane] != base + lane * 4)
+        return false;
+    return true;
+  }
   if (isLaneBytes(value))
     return true;
   Operation *def = value.getDefiningOp();
