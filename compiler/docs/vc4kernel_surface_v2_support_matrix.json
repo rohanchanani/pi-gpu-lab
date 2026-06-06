@@ -290,14 +290,14 @@
       "category": "comparison",
       "current_status": "hardware_proven_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
-      "current_surface": "Current fragment_cmp supports i32 predicates as a special comparison op.",
+      "current_surface": "P3 fragment_cmp supports eq/ne, unsigned i32, and signed i32 predicates with hardware proof pending final P3 acceptance.",
       "target_surface": "General comparison surface for signed i32 where hardware/lowering proof exists.",
       "vc4kernel_verifier_plan": "Verify comparison predicate, signedness, operand types, and predicate result class.",
       "vc4kernel_to_ssavc4_plan": "Lower to condition plans, flags, and mask materialization as required by consumers.",
       "ssavc4_to_vc4_plan": "Use existing flag and branch machinery with explicit compare semantics.",
       "hardware_or_reject_verification_plan": "Hardware proof for representative signed comparisons or deterministic rejects.",
       "upstream_use": "Vector compare masks after pre-vector lock.",
-      "migration_or_removal": "Migrate current fragment_cmp specialness into the P3 comparison family.",
+      "migration_or_removal": "Unsigned-only fragment_cmp specialness has been migrated into the P3 comparison family.",
       "dependencies": [
         "baseline_predicate_algebra"
       ],
@@ -309,14 +309,14 @@
       "category": "comparison",
       "current_status": "hardware_proven_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
-      "current_surface": "f32 fragment comparison is not accepted in current VC4Kernel.",
+      "current_surface": "P3 finite-only ordered f32 fragment_cmp is implemented and hardware-proven pending final P3 acceptance.",
       "target_surface": "Finite-only ordered f32 comparison with explicit policy; unordered and NaN-sensitive predicates deterministically reject.",
       "vc4kernel_verifier_plan": "Verify ordered predicate kind, require finite_only policy for f32 operands, and reject unordered predicates in P3.",
       "vc4kernel_to_ssavc4_plan": "Lower finite-only ordered f32 predicates to tested fsub flag and mask sequences; reject unordered predicates.",
       "ssavc4_to_vc4_plan": "Lower fsub flag production to a flag-setting VC4 fsub add-pipe instruction.",
       "hardware_or_reject_verification_plan": "Hardware tests cover finite normal values for oeq/one/olt/ole/ogt/oge; NaN, Inf, and unordered predicates deterministically reject until a later explicit policy phase.",
       "upstream_use": "Floating vector masks after pre-vector lock.",
-      "migration_or_removal": "New planned surface; current f32 compare reject remains valid until P3 proof.",
+      "migration_or_removal": "Finite-only ordered f32 compare is implemented; unordered and NaN-sensitive forms remain deterministic reject until a later explicit policy phase.",
       "dependencies": [
         "p2_fragment_const_splat_zero_allones_lane_affine"
       ],

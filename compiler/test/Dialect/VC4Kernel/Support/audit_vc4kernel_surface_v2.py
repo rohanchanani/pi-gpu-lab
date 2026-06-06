@@ -75,6 +75,57 @@ PRODUCER_OR_LOWER_HALF_OP_PREFIXES = [
     "vc4.",
 ]
 
+P3_I32_CMP_PREDICATES = {
+    "eq",
+    "ne",
+    "ult",
+    "ule",
+    "ugt",
+    "uge",
+    "slt",
+    "sle",
+    "sgt",
+    "sge",
+}
+
+P3_F32_ORDERED_CMP_PREDICATES = {
+    "oeq",
+    "one",
+    "olt",
+    "ole",
+    "ogt",
+    "oge",
+}
+
+P3_UNORDERED_CMP_PREDICATES = {
+    "uno",
+    "ueq",
+    "une",
+    "ult_unordered",
+    "ule_unordered",
+    "ugt_unordered",
+    "uge_unordered",
+}
+
+P3_POST_PHASES = {
+    "P4",
+    "P5",
+    "P6",
+    "P7",
+    "P8",
+    "P9",
+    "P10",
+    "P11",
+    "P12",
+    "P13",
+}
+
+P3_POST_PHASE_ALLOWED_STATUSES = {
+    "planned",
+    "migration_target",
+    "deterministic_reject",
+}
+
 TEXT_SUFFIXES = {
     ".td",
     ".h",
@@ -193,7 +244,11 @@ def audit_matrix_ownership(matrix, mode):
     required_special_status = None
     if mode == "p1-migrated":
         required_special_status = "migrated_pending_deletion"
-    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
+    if mode in {
+        "p1-general-alu-lock",
+        "p2-bitcast-const-lock",
+        "p3-general-cmp-lock",
+    }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
         if required_special_status:
@@ -202,7 +257,11 @@ def audit_matrix_ownership(matrix, mode):
             require_matrix_feature_status_in(
                 features, feature_id, phase, SPECIAL_CASE_ALLOWED_STATUSES
             )
-    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
+    if mode in {
+        "p1-general-alu-lock",
+        "p2-bitcast-const-lock",
+        "p3-general-cmp-lock",
+    }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
     p2_status_entries = 0
@@ -224,6 +283,51 @@ def audit_matrix_ownership(matrix, mode):
             "P2",
             "accepted",
         )
+    p3_status_entries = 0
+    p3_post_phase_planned_entries = 0
+    if mode == "p3-general-cmp-lock":
+        accepted_or_pending = {
+            "accepted",
+            "hardware_proven_pending_final_acceptance",
+        }
+        signed_i32 = require_matrix_feature_status_in(
+            features,
+            "p3_fragment_cmp_signed_i32",
+            "P3",
+            accepted_or_pending,
+        )
+        ordered_f32 = require_matrix_feature_status_in(
+            features,
+            "p3_fragment_cmp_ordered_f32",
+            "P3",
+            accepted_or_pending,
+        )
+        p3_status_entries = 2
+        ordered_f32_text = json.dumps(ordered_f32).lower()
+        if (
+            "finite_only" not in ordered_f32_text
+            or "unordered" not in ordered_f32_text
+            or "nan" not in ordered_f32_text
+            or "deterministic" not in ordered_f32_text
+        ):
+            fail(
+                "P3 f32 comparison matrix entry must document finite_only and "
+                "unordered/NaN deterministic rejection"
+            )
+        signed_i32_text = json.dumps(signed_i32).lower()
+        if "signed" not in signed_i32_text or "i32" not in signed_i32_text:
+            fail("P3 signed i32 comparison matrix entry must document signed i32")
+        for feature in features.values():
+            phase = feature.get("phase")
+            if phase not in P3_POST_PHASES:
+                continue
+            p3_post_phase_planned_entries += 1
+            status = feature.get("current_status")
+            if status not in P3_POST_PHASE_ALLOWED_STATUSES:
+                fail(
+                    f"P3 lock expected post-P3 feature {feature.get('id')} "
+                    f"to remain planned/migration_target/deterministic_reject"
+                )
     require_matrix_feature(
         features,
         "p4_remove_add_only_reduce_specialness",
@@ -262,6 +366,8 @@ def audit_matrix_ownership(matrix, mode):
         "sparse_vdw_reject_entries": 2,
         "fastmath_opt_in": 1,
         "p2_locked_status_entries": p2_status_entries,
+        "p3_locked_status_entries": p3_status_entries,
+        "p3_post_phase_planned_entries": p3_post_phase_planned_entries,
     }
 
 
@@ -367,7 +473,11 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
             present.append(op_name)
         else:
             missing.append(op_name)
-    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
+    if mode in {
+        "p1-general-alu-lock",
+        "p2-bitcast-const-lock",
+        "p3-general-cmp-lock",
+    }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
         return {"present_special_case_ops": 0, "removed_special_case_ops": len(missing)}
@@ -614,6 +724,197 @@ def audit_p2_bitcast_const_lock(repo_root, matrix):
     return counts
 
 
+def collect_fragment_cmp_ops(text):
+    cmp_ops = []
+    for line in text.splitlines():
+        if "vc4kernel.fragment_cmp" not in line:
+            continue
+        if "// CHECK:" in line:
+            continue
+        predicate_match = re.search(r"#vc4kernel\.cmp<([^>]+)>", line)
+        cmp_ops.append(
+            {
+                "line": line,
+                "predicate": predicate_match.group(1) if predicate_match else None,
+                "has_finite_only_policy": "#vc4kernel.fp_cmp_policy<finite_only>" in line,
+                "has_f32_type": "vector<16xf32>" in line,
+                "has_i32_type": "vector<16xi32>" in line,
+            }
+        )
+    return cmp_ops
+
+
+def audit_p3_general_cmp_lock(repo_root, matrix):
+    features = feature_by_id(matrix)
+    require_matrix_feature_status_in(
+        features,
+        "p3_fragment_cmp_signed_i32",
+        "P3",
+        {"accepted", "hardware_proven_pending_final_acceptance"},
+    )
+    require_matrix_feature_status_in(
+        features,
+        "p3_fragment_cmp_ordered_f32",
+        "P3",
+        {"accepted", "hardware_proven_pending_final_acceptance"},
+    )
+
+    matrix_scalar_claims = []
+    for feature in features.values():
+        if feature.get("phase") != "P3":
+            continue
+        text = json.dumps(feature).lower()
+        status = feature.get("current_status")
+        if "arith.cmpi" in text and status in {
+            "accepted",
+            "hardware_proven_pending_final_acceptance",
+            "implemented_pending_hardware",
+            "implemented_hardware_pending_final_acceptance",
+        }:
+            matrix_scalar_claims.append(feature.get("id"))
+    if matrix_scalar_claims:
+        fail(
+            "P3 lock found scalar arith.cmpi expansion claimed by P3: "
+            + ", ".join(matrix_scalar_claims)
+        )
+
+    roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+        Path("compiler/docs"),
+    ]
+    active_cmp_uses = 0
+    i32_cmp_uses = 0
+    f32_finite_cmp_uses = 0
+    f32_missing_policy_hits = []
+    unordered_active_hits = []
+    fp_policy_on_i32_hits = []
+    unordered_negative_mentions = 0
+    docs_historical_mentions = 0
+    files_scanned = 0
+
+    historical_markers = ("historical", "removed", "old")
+    for root in roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if is_support_audit_text(path):
+                continue
+            files_scanned += 1
+            text = read_text(path)
+            for cmp_op in collect_fragment_cmp_ops(text):
+                predicate = cmp_op["predicate"]
+                if predicate is None and path.suffix not in {".mlir", ".md"}:
+                    continue
+                is_negative = is_negative_test(path)
+                is_doc = "compiler/docs" in str(rel(path, repo_root))
+                if predicate is None and is_doc:
+                    docs_historical_mentions += 1
+                    continue
+                if is_doc and any(
+                    marker in cmp_op["line"].lower() for marker in historical_markers
+                ):
+                    docs_historical_mentions += 1
+                    continue
+                if predicate in P3_UNORDERED_CMP_PREDICATES:
+                    if is_negative:
+                        unordered_negative_mentions += 1
+                    else:
+                        unordered_active_hits.append((path, predicate))
+                    continue
+                if predicate in P3_F32_ORDERED_CMP_PREDICATES:
+                    if not cmp_op["has_finite_only_policy"]:
+                        if is_negative:
+                            continue
+                        f32_missing_policy_hits.append((path, predicate))
+                        continue
+                    if not cmp_op["has_f32_type"]:
+                        if is_negative:
+                            continue
+                        fail(
+                            "P3 lock found f32 comparison predicate without f32 "
+                            f"fragment types: {rel(path, repo_root)}:{predicate}"
+                        )
+                    active_cmp_uses += 1
+                    f32_finite_cmp_uses += 1
+                    continue
+                if predicate in P3_I32_CMP_PREDICATES:
+                    if cmp_op["has_finite_only_policy"]:
+                        if is_negative:
+                            continue
+                        fp_policy_on_i32_hits.append((path, predicate))
+                        continue
+                    if not cmp_op["has_i32_type"]:
+                        if is_negative:
+                            continue
+                        fail(
+                            "P3 lock found integer comparison predicate without i32 "
+                            f"fragment types: {rel(path, repo_root)}:{predicate}"
+                        )
+                    active_cmp_uses += 1
+                    i32_cmp_uses += 1
+                    continue
+                if predicate is None and is_negative:
+                    continue
+                fail(
+                    "P3 lock found unclassified fragment_cmp predicate "
+                    f"{predicate!r} in {rel(path, repo_root)}"
+                )
+
+    if f32_missing_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{predicate}"
+            for path, predicate in f32_missing_policy_hits[:20]
+        )
+        fail(f"P3 lock found f32 fragment_cmp without finite_only policy: {details}")
+    if unordered_active_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{predicate}"
+            for path, predicate in unordered_active_hits[:20]
+        )
+        fail(f"P3 lock found active unordered fragment_cmp predicate: {details}")
+    if fp_policy_on_i32_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{predicate}"
+            for path, predicate in fp_policy_on_i32_hits[:20]
+        )
+        fail(f"P3 lock found fp_policy on active i32 fragment_cmp: {details}")
+
+    fixture_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    p3_f32_nan_inf_hits = []
+    nan_inf_re = re.compile(r"\b(?:nan|inf|infinity|NAN|INF|INFINITY)\b")
+    for path in sorted(fixture_root.glob("fragment_cmp_f32*_vc4kernel/*")):
+        if not path.is_file() or path.suffix not in TEXT_SUFFIXES:
+            continue
+        text = read_text(path)
+        if nan_inf_re.search(text):
+            p3_f32_nan_inf_hits.append(path)
+    if p3_f32_nan_inf_hits:
+        details = "; ".join(
+            str(rel(path, repo_root)) for path in p3_f32_nan_inf_hits[:20]
+        )
+        fail(f"P3 lock found NaN/Inf text in f32 comparison fixture: {details}")
+
+    if i32_cmp_uses == 0 or f32_finite_cmp_uses == 0:
+        fail("P3 lock expected both i32 and finite f32 fragment_cmp uses")
+
+    return {
+        "active_cmp_uses": active_cmp_uses,
+        "cmp_files_scanned": files_scanned,
+        "f32_finite_cmp_uses": f32_finite_cmp_uses,
+        "f32_missing_policy_hits": 0,
+        "fp_policy_on_i32_hits": 0,
+        "i32_cmp_uses": i32_cmp_uses,
+        "matrix_scalar_cmpi_claims": 0,
+        "p3_f32_nan_inf_hits": 0,
+        "unordered_active_hits": 0,
+        "unordered_negative_mentions": unordered_negative_mentions,
+        "docs_historical_mentions": docs_historical_mentions,
+    }
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -634,6 +935,7 @@ def main(argv):
         "p1-migrated",
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
+        "p3-general-cmp-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -646,7 +948,11 @@ def main(argv):
     matrix_summary = run_matrix_checker(repo_root, matrix_path)
     matrix = load_matrix(matrix_path)
     matrix_counts = audit_matrix_ownership(matrix, args.mode)
-    if args.mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
+    if args.mode in {
+        "p1-general-alu-lock",
+        "p2-bitcast-const-lock",
+        "p3-general-cmp-lock",
+    }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
     direct_counts = audit_direct_paths(repo_root)
@@ -660,12 +966,18 @@ def main(argv):
     )
     p1_lock_counts = (
         audit_p1_general_alu_lock(repo_root)
-        if args.mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}
+        if args.mode
+        in {"p1-general-alu-lock", "p2-bitcast-const-lock", "p3-general-cmp-lock"}
         else {}
     )
     p2_lock_counts = (
         audit_p2_bitcast_const_lock(repo_root, matrix)
         if args.mode == "p2-bitcast-const-lock"
+        else {}
+    )
+    p3_lock_counts = (
+        audit_p3_general_cmp_lock(repo_root, matrix)
+        if args.mode == "p3-general-cmp-lock"
         else {}
     )
 
@@ -690,6 +1002,8 @@ def main(argv):
         print(f"p1_general_alu_lock: {format_counts(p1_lock_counts)}")
     if p2_lock_counts:
         print(f"p2_bitcast_const_lock: {format_counts(p2_lock_counts)}")
+    if p3_lock_counts:
+        print(f"p3_general_cmp_lock: {format_counts(p3_lock_counts)}")
     return 0
 
 

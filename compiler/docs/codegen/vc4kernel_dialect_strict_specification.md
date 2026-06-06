@@ -1109,8 +1109,8 @@ f32 add/sub/mul:
 ### 9.4 `vc4kernel.fragment_cmp`
 
 ```mlir
-%p = vc4kernel.fragment_cmp %a, %b {predicate = #vc4kernel.cmp<eq>}
-  : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
+%p = vc4kernel.fragment_cmp %a, %b {predicate = #vc4kernel.cmp<slt>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
+%q = vc4kernel.fragment_cmp %x, %y {predicate = #vc4kernel.cmp<olt>, fp_policy = #vc4kernel.fp_cmp_policy<finite_only>} : vector<16xf32>, vector<16xf32> -> !vc4kernel.pred<16>
 ```
 
 Supported integer predicates:
@@ -1122,13 +1122,29 @@ ult
 ule
 ugt
 uge
+slt
+sle
+sgt
+sge
+```
+
+Supported f32 predicates:
+
+```text
+oeq
+one
+olt
+ole
+ogt
+oge
 ```
 
 Rules:
 
 ```text
-- Initial support is i32 fragments only.
-- f32 fragment compare is forbidden until a later spec revision.
+- Integer predicates require vector<16xi32> operands and must not carry fp_policy.
+- f32 predicates require vector<16xf32> operands and fp_policy = finite_only in P3.
+- f32 support is finite-only ordered comparison. NaN-sensitive and unordered forms deterministically reject until a later explicit policy phase.
 - Result is normally class general_mask unless the planner proves a more structured class.
 ```
 
