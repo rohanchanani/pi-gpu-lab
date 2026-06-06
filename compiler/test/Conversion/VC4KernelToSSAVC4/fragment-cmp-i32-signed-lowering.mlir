@@ -50,7 +50,7 @@ module {
     %sel_sgt = vc4kernel.fragment_select %sgt, %three, %sel_sle : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
     %sge = vc4kernel.fragment_cmp %lhs_v, %rhs_v {predicate = #vc4kernel.cmp<sge>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %sel_sge = vc4kernel.fragment_select %sge, %four, %sel_sgt : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %offsets, %sel_sge, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offsets, %sel_sge, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -11,10 +11,10 @@ module {
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %u2 = vc4kernel.fragment_const {value = dense<[0, 1, 2, 3, 0, 1, 2, 3, 3, 2, 1, 0, 0, 2, 1, 3]> : vector<16xi32>} : vector<16xi32>
     %s2 = vc4kernel.fragment_const {value = dense<[-2, -1, 0, 1, -2, -1, 0, 1, 1, 0, -1, -2, -2, 0, -1, 1]> : vector<16xi32>} : vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %lane_bytes, %u2, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %lane_bytes, %u2, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %b1 = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
     %o1 = vc4kernel.fragment_alu.add %b1, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %o1, %s2, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %o1, %s2, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

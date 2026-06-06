@@ -30,7 +30,7 @@ module {
     %sel_ne = vc4kernel.fragment_select %ne, %sel_ult, %false_v : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
     %ule = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<ule>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %sel_ule = vc4kernel.fragment_select %ule, %sel_ne, %true_v : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %sel_ule, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %sel_ule, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

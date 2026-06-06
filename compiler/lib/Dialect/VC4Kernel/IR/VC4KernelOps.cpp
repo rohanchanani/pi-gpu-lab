@@ -532,25 +532,6 @@ static bool acceptsAnyPredicateForZeroFill(PredicateClass predClass) {
   return predClass != PredicateClass::Unknown;
 }
 
-static bool acceptsAnyPredicateForPreserveStorePlanning(
-    PredicateClass predClass) {
-  return predClass != PredicateClass::Unknown;
-}
-
-static bool acceptsOnlyRowTailPredicate(PredicateClass predClass) {
-  switch (predClass) {
-  case PredicateClass::Full:
-  case PredicateClass::Empty:
-  case PredicateClass::TailPrefix:
-  case PredicateClass::RectRow:
-    return true;
-  case PredicateClass::GeneralMask:
-  case PredicateClass::Unknown:
-    return false;
-  }
-  llvm_unreachable("unknown predicate class");
-}
-
 static LogicalResult verifyPredicateForZeroFill(Operation *op, Value pred) {
   PredicateClass predClass = classifyPredicate(pred);
   if (acceptsAnyPredicateForZeroFill(predClass))
@@ -559,38 +540,15 @@ static LogicalResult verifyPredicateForZeroFill(Operation *op, Value pred) {
       "predicate value must be produced by a known vc4kernel predicate op");
 }
 
-static LogicalResult verifyPredicateForPreserveStorePlanning(Operation *op,
-                                                            Value pred) {
-  PredicateClass predClass = classifyPredicate(pred);
-  if (acceptsAnyPredicateForPreserveStorePlanning(predClass))
-    return success();
-  return op->emitOpError(
-      "predicate value must be produced by a known vc4kernel predicate op");
-}
-
-static LogicalResult verifyPredicateForRowTailVDW(Operation *op, Value pred) {
-  PredicateClass predClass = classifyPredicate(pred);
-  if (predClass == PredicateClass::GeneralMask)
-    return op->emitOpError(
-        "vdw_store_vpm_fragment does not yet support general-mask predicates");
-  if (acceptsOnlyRowTailPredicate(predClass))
-    return success();
-  return op->emitOpError(
-      "predicate value must be produced by a known vc4kernel predicate op");
-}
-
 static LogicalResult verifyVDWInactiveStorePolicy(Operation *op) {
   auto inactiveStore = op->getAttrOfType<InactiveStoreAttr>("inactive_store");
   if (!inactiveStore)
-    return success();
+    return op->emitOpError(
+        "VDW stores require explicit inactive_store<preserve> in Surface v2");
   if (inactiveStore.getValue() == InactiveStore::preserve)
     return success();
   return op->emitOpError(
       "VDW stores support only inactive_store<preserve> in P8");
-}
-
-static bool hasExplicitInactiveStorePolicy(Operation *op) {
-  return op->getAttrOfType<InactiveStoreAttr>("inactive_store") != nullptr;
 }
 
 static LogicalResult verifyExplicitVDWFragmentPredicate(Operation *op,
@@ -1427,15 +1385,11 @@ LogicalResult VDWStoreFragmentOp::verify() {
     return failure();
   if (!isContiguousByteOffsets(getByteOffsets()))
     return emitOpError(
-        hasExplicitInactiveStorePolicy(getOperation())
-            ? "VDW tail store requires contiguous lane byte offsets"
-            : "vdw_store_fragment requires contiguous 32-bit row fragment byte offsets");
+        "VDW preserve store requires dense contiguous/rectangular address mapping");
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
-  if (hasExplicitInactiveStorePolicy(getOperation()))
-    return verifyExplicitVDWFragmentPredicate(getOperation(), getPred());
-  return verifyPredicateForPreserveStorePlanning(getOperation(), getPred());
+  return verifyExplicitVDWFragmentPredicate(getOperation(), getPred());
 }
 LogicalResult VPMAllocOp::verify() {
   if (getRows() < 1 || getRows() > 64)
@@ -1513,12 +1467,7 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
         "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
     return failure();
-  if (hasExplicitInactiveStorePolicy(getOperation())) {
-    if (failed(verifyExplicitVDWVPMPredicate(getOperation(), getPred())))
-      return failure();
-    return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
-  }
-  if (failed(verifyPredicateForRowTailVDW(getOperation(), getPred())))
+  if (failed(verifyExplicitVDWVPMPredicate(getOperation(), getPred())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }

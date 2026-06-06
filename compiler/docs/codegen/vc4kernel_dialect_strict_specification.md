@@ -331,7 +331,13 @@ rectangular store:
   active rows/columns stored, inactive destination region preserved.
 ```
 
-Arbitrary sparse VDW masks deterministic-reject until a later hardware-proven phase. The compiler must not silently decompose sparse stores into read-modify-write stores unless that deferred phase exists and has verifier, lowering, lower-half, and hardware proof.
+VPM-backed rectangular stores use explicit active rows/columns and preserve
+destination memory outside the active rectangle. Arbitrary sparse VDW masks
+deterministic-reject until a later hardware-proven phase. The canonical
+diagnostic is `sparse VDW store masks are not supported in P8`. The compiler
+must not silently decompose sparse stores into read-modify-write stores unless
+that deferred phase exists and has verifier, lowering, lower-half, and hardware
+proof.
 
 ### Memory path and coherency policy
 
@@ -1581,10 +1587,10 @@ Rules:
 
 ```text
 - byte_offsets must describe a contiguous 32-bit row fragment.
-- pred may be full, empty, or tail_prefix in executable P8 v1.
+- pred may be full, empty, and tail/active-prefix in executable P8 v1.
 - full/tail may lower to direct staging plus active-prefix store if hardware path preserves inactive destination.
 - register-fragment rect_row and arbitrary sparse general_mask must deterministic-reject until a later hardware-proven phase exists.
-- P8b permits attr-absent stores only as a migration bridge; new executable examples should use inactive_store<preserve>.
+- VDW stores require explicit inactive_store<preserve> in Surface v2; attr-absent implicit preserve is removed_in_p8.
 - empty predicate skips the store.
 - This op must never lower as if VC4 had a direct register-to-global store instruction.
 ```
@@ -1776,7 +1782,7 @@ Rules:
 - full/empty/tail_prefix are direct classes.
 - arbitrary sparse general_mask deterministic-rejects until the deferred sparse VDW phase is implemented and hardware-proven.
 - byte_offset must be 4-byte aligned.
-- P8b permits attr absence only as a temporary migration bridge; P8e requires inactive_store<preserve>.
+- VDW stores require explicit inactive_store<preserve> in Surface v2; attr absence is removed_in_p8.
 ```
 
 This op is for shared/VPM-to-global fragment paths. Register-to-global convenience paths use `vdw_store_fragment` and compiler-managed staging.

@@ -12,9 +12,9 @@ module {
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     %cmp = vc4kernel.fragment_cmp %lanes, %lanes {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    // CHECK: vdw_store_vpm_fragment does not yet support general-mask predicates
-    // Use vc4kernel.vdw_store_fragment for register-fragment general masked stores.
-    vc4kernel.vdw_store_vpm_fragment %tile, %c0, %ptr, %c0, %cmp {elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, src_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : !vc4kernel.vpm_tile, i32, i32, i32, !vc4kernel.pred<16>
+    // CHECK: sparse VDW store masks are not supported in P8
+    // VPM-backed stores are dense full/tail/rect only in P8.
+    vc4kernel.vdw_store_vpm_fragment %tile, %c0, %ptr, %c0, %cmp {elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, src_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32, i32, i32, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -24,7 +24,7 @@ module {
     %request_offsets = vc4kernel.fragment_select %mask, %store_offsets, %poison_offsets : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
     %safe = arith.constant 0 : i32
     %loaded = vc4kernel.tmu_load_fragment %input, %request_offsets, %mask, %safe {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %store_offsets, %loaded, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %store_offsets, %loaded, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

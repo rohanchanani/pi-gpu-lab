@@ -37,7 +37,7 @@ module {
     %max = vc4kernel.fragment_reduce %values, %full {kind = #vc4kernel.reduce<fmax>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     %selected = vc4kernel.fragment_select %full, %sum, %min : !vc4kernel.pred<16>, vector<16xf32>, vector<16xf32> -> vector<16xf32>
     %outv = vc4kernel.fragment_alu.add %selected, %max {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %outv, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %outv, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

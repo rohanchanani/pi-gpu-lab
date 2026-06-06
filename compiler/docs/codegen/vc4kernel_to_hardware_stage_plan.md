@@ -136,6 +136,12 @@ rect:
 
 Arbitrary sparse VDW masks deterministic-reject until a later hardware-proven phase. Do not silently decompose sparse stores into read-modify-write stores in P8.
 
+Surface v2 final P8 requires `inactive_store =
+#vc4kernel.inactive_store<preserve>` on active VC4Kernel VDW global-store ops.
+The attr-absent implicit preserve form and any sparse read-modify-write
+fallback are removed_in_p8. P9 may extend subword/pack modes later; P8 applies
+to the existing 32-bit/none executable store modes.
+
 ### P9 pack/unpack/subword
 
 Plan pack/unpack and sub-32 VPM modes. Lower-half schema may expose hardware pack/unpack/subword concepts, but executable `vc4kernel` use must remain rejected until hardware proof and verifier/lowering coverage exist.

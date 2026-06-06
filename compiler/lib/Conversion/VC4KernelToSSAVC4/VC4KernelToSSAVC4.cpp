@@ -144,9 +144,17 @@ static LogicalResult verifyRequiredMemoryPolicy(
   return success();
 }
 
-static bool hasExplicitInactiveStorePolicy(Operation *op) {
-  return op->getAttrOfType<mlir::vc4kernel::InactiveStoreAttr>(
-             "inactive_store") != nullptr;
+static LogicalResult verifyRequiredInactiveStorePolicy(Operation *op) {
+  auto inactiveStore =
+      op->getAttrOfType<mlir::vc4kernel::InactiveStoreAttr>("inactive_store");
+  if (!inactiveStore)
+    return op->emitOpError(
+        "VDW stores require explicit inactive_store<preserve> in Surface v2");
+  if (inactiveStore.getValue() ==
+      mlir::vc4kernel::InactiveStore::preserve)
+    return success();
+  return op->emitOpError(
+      "VDW stores support only inactive_store<preserve> in P8");
 }
 
 static StringAttr asStringAttr(Attribute attr) {
@@ -3127,33 +3135,29 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
+    if (failed(verifyRequiredInactiveStorePolicy(op)))
+      return failure();
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
     if (!offsets.matched)
       return op->emitOpError(
-          "vdw_store_fragment lowering currently supports only contiguous "
-          "byte_offsets = base_byte_offset + 4*lane_range");
+          "VDW preserve store requires dense contiguous/rectangular address mapping");
     const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(3),
                                                          state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
-    if (hasExplicitInactiveStorePolicy(op) &&
-        predicate->kind == PredicatePlan::Class::GeneralMask)
+    if (predicate->kind == PredicatePlan::Class::GeneralMask)
       return op->emitOpError(
           "sparse VDW store masks are not supported in P8");
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::Empty &&
-        predicate->kind != PredicatePlan::Class::TailPrefix &&
-        predicate->kind != PredicatePlan::Class::GeneralMask)
+        predicate->kind != PredicatePlan::Class::TailPrefix)
       return op->emitOpError()
              << "vdw_store_fragment lowering currently supports only "
-                "pred.full, pred.empty, pred.tail, and fragment_cmp general "
-                "masks";
+                "pred.full, pred.empty, and pred.tail";
     Value base = mapValue(op, op->getOperand(0), state);
-    Value mappedOffsets = mapValue(op, op->getOperand(1), state);
     Value value = mapValue(op, op->getOperand(2), state);
-    if (!base || !mappedOffsets || !value)
+    if (!base || !value)
       return failure();
-    Value memoryBase = base;
     if (offsets.scalarBaseByteOffset) {
       Value mappedOffset =
           mapValue(op, offsets.scalarBaseByteOffset, state);
@@ -3176,18 +3180,6 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                    /*staticActiveLanes=*/16);
       return success();
     }
-    if (predicate->kind == PredicatePlan::Class::GeneralMask) {
-      Value oldValue = emitTMULoadFragment(op, builder, memoryBase,
-                                           mappedOffsets, value.getType());
-      FailureOr<Value> merged =
-          emitPredicateSelect(op, builder, *predicate, value, oldValue);
-      if (failed(merged))
-        return failure();
-      emitVDWStore(op, builder, base, *merged, sixteen, state,
-                   /*staticActiveLanes=*/16);
-      return success();
-    }
-
     Value baseIndex = predicate->base;
     Value limit = predicate->limit;
     if (!baseIndex || !limit)
@@ -3382,6 +3374,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
+    if (failed(verifyRequiredInactiveStorePolicy(op)))
+      return failure();
     const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(4),
                                                          state);
     if (!predicate)
@@ -3391,10 +3385,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::TailPrefix)
       return op->emitOpError()
-             << "vdw_store_vpm_fragment lowering supports pred.full, "
-                "pred.empty, and pred.tail; general-mask predicates are "
-                "rejected by the vc4kernel verifier until a preserve-"
-                "destination VPM fallback is implemented";
+             << "sparse VDW store masks are not supported in P8";
     Value srcRow = mapValue(op, op->getOperand(1), state);
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
@@ -3455,6 +3446,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
+    if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
     Value srcRow = mapValue(op, op->getOperand(1), state);
     Value base = mapValue(op, op->getOperand(2), state);

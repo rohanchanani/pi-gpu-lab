@@ -338,6 +338,12 @@ P6_TARGETED_MEMORY_FIXTURES = {
     },
 }
 
+P8_VDW_STORE_OPS = {
+    "vc4kernel.vdw_store_fragment": {"full", "empty", "tail"},
+    "vc4kernel.vdw_store_vpm_fragment": {"full", "empty", "tail"},
+    "vc4kernel.vdw_store_rect_from_vpm": {"rect"},
+}
+
 TEXT_SUFFIXES = {
     ".td",
     ".h",
@@ -465,6 +471,7 @@ def audit_matrix_ownership(matrix, mode):
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
+        "p8-vdw-store-policy-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -483,6 +490,7 @@ def audit_matrix_ownership(matrix, mode):
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
+        "p8-vdw-store-policy-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -672,6 +680,33 @@ def audit_matrix_ownership(matrix, mode):
             "P7",
             "removed_in_p7",
         )
+    if mode == "p8-vdw-store-policy-lock":
+        p8_vdw = require_matrix_feature_status_in(
+            features,
+            "p8_vdw_store_inactive_preserve_full_tail_rect",
+            "P8",
+            {"hardware_proven_pending_final_acceptance", "accepted"},
+        )
+        p8_sparse = require_matrix_feature(
+            features,
+            "p8_sparse_vdw_store_deterministic_reject",
+            "P8",
+            "deterministic_reject",
+        )
+        p8_text = json.dumps([p8_vdw, p8_sparse]).lower()
+        for token in [
+            "inactive_store<preserve>",
+            "required",
+            "full",
+            "tail",
+            "rect",
+            "hardware",
+            "sparse",
+            "removed_in_p8",
+            "read-modify-write",
+        ]:
+            if token not in p8_text:
+                fail(f"P8 VDW store matrix entries must document {token}")
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
@@ -679,7 +714,7 @@ def audit_matrix_ownership(matrix, mode):
             "P4",
             {"migration_target", "removed_in_p4"},
         )
-    if mode != "p7-tmu-safe-load-lock":
+    if mode not in {"p7-tmu-safe-load-lock", "p8-vdw-store-policy-lock"}:
         require_matrix_feature_status_in(
             features,
             "p7_remove_old_tmu_load_signature",
@@ -830,6 +865,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
+        "p8-vdw-store-policy-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -2050,6 +2086,259 @@ def audit_p7_tmu_safe_load_lock(repo_root, matrix):
     return counts
 
 
+def classify_vc4kernel_predicates(text):
+    kinds = {}
+    ssa = r"%[A-Za-z0-9_.$-]+"
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        full = re.match(rf"({ssa})\s*=\s*vc4kernel\.pred\.full\b", stripped)
+        if full:
+            kinds[full.group(1)] = "full"
+            continue
+        empty = re.match(rf"({ssa})\s*=\s*vc4kernel\.pred\.empty\b", stripped)
+        if empty:
+            kinds[empty.group(1)] = "empty"
+            continue
+        tail = re.match(rf"({ssa})\s*=\s*vc4kernel\.pred\.tail\b", stripped)
+        if tail:
+            kinds[tail.group(1)] = "tail"
+            continue
+        rect = re.match(rf"({ssa})\s*=\s*vc4kernel\.pred\.rect\b", stripped)
+        if rect:
+            kinds[rect.group(1)] = "rect"
+            continue
+        cmp_match = re.match(rf"({ssa})\s*=\s*vc4kernel\.fragment_cmp\b", stripped)
+        if cmp_match:
+            kinds[cmp_match.group(1)] = "general"
+            continue
+        unary = re.match(
+            rf"({ssa})\s*=\s*vc4kernel\.pred\.not\s+({ssa})\b", stripped
+        )
+        if unary:
+            operand = kinds.get(unary.group(2), "unknown")
+            if operand == "full":
+                result = "empty"
+            elif operand == "empty":
+                result = "full"
+            else:
+                result = "general"
+            kinds[unary.group(1)] = result
+            continue
+        binary = re.match(
+            rf"({ssa})\s*=\s*vc4kernel\.pred\.(and|or)\s+({ssa}),\s*({ssa})\b",
+            stripped,
+        )
+        if binary:
+            lhs = kinds.get(binary.group(3), "unknown")
+            rhs = kinds.get(binary.group(4), "unknown")
+            if binary.group(2) == "and":
+                if lhs == "empty" or rhs == "empty":
+                    result = "empty"
+                elif lhs == "full":
+                    result = rhs
+                elif rhs == "full":
+                    result = lhs
+                elif lhs == rhs:
+                    result = lhs
+                elif lhs == "tail" and rhs == "tail":
+                    result = "tail"
+                else:
+                    result = "general"
+            else:
+                if lhs == "full" or rhs == "full":
+                    result = "full"
+                elif lhs == "empty":
+                    result = rhs
+                elif rhs == "empty":
+                    result = lhs
+                elif lhs == rhs:
+                    result = lhs
+                else:
+                    result = "general"
+            kinds[binary.group(1)] = result
+    return kinds
+
+
+def extract_vdw_store_predicate(line, op_name):
+    before_attrs = line.split("{", 1)[0]
+    if op_name not in before_attrs:
+        return None
+    args = before_attrs.split(op_name, 1)[1].strip()
+    operands = [part.strip() for part in args.split(",")]
+    if op_name == "vc4kernel.vdw_store_fragment":
+        return operands[3] if len(operands) >= 4 else None
+    if op_name == "vc4kernel.vdw_store_vpm_fragment":
+        return operands[4] if len(operands) >= 5 else None
+    return None
+
+
+def audit_p8_vdw_store_policy_lock(repo_root, matrix):
+    counts = audit_p7_tmu_safe_load_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+    require_matrix_feature_status_in(
+        features,
+        "p8_vdw_store_inactive_preserve_full_tail_rect",
+        "P8",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    require_matrix_feature(
+        features,
+        "p8_sparse_vdw_store_deterministic_reject",
+        "P8",
+        "deterministic_reject",
+    )
+
+    scan_roots = [
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+    ]
+    files_scanned = 0
+    active_vdw_stores = Counter()
+    negative_vdw_stores = Counter()
+    missing_policy_hits = []
+    sparse_hits = []
+    for root in scan_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if path.suffix not in {".mlir", ".test"}:
+                continue
+            files_scanned += 1
+            text = read_text(path)
+            predicates = classify_vc4kernel_predicates(text)
+            negative = is_negative_test(path)
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith("//"):
+                    continue
+                for op_name, allowed_kinds in P8_VDW_STORE_OPS.items():
+                    if op_name not in stripped:
+                        continue
+                    if negative:
+                        negative_vdw_stores[op_name] += 1
+                        continue
+                    active_vdw_stores[op_name] += 1
+                    has_inactive = (
+                        "inactive_store = #vc4kernel.inactive_store<preserve>"
+                        in stripped
+                    )
+                    has_memory_path = (
+                        "#vc4kernel.memory_path<vdw_global_store>" in stripped
+                    )
+                    has_coherency = "#vc4kernel.coherency<dma_ordered>" in stripped
+                    if not (has_inactive and has_memory_path and has_coherency):
+                        missing_policy_hits.append((path, line_no, stripped))
+                    if op_name == "vc4kernel.vdw_store_rect_from_vpm":
+                        continue
+                    pred = extract_vdw_store_predicate(stripped, op_name)
+                    pred_kind = predicates.get(pred, "unknown")
+                    if pred_kind not in allowed_kinds:
+                        sparse_hits.append((path, line_no, op_name, pred, pred_kind))
+    if missing_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{line}"
+            for path, line_no, line in missing_policy_hits[:20]
+        )
+        fail(f"P8 lock found VDW store missing inactive_store/P6 attrs: {details}")
+    if sparse_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{op}:{pred}:{kind}"
+            for path, line_no, op, pred, kind in sparse_hits[:20]
+        )
+        fail(f"P8 lock found active sparse/general VDW store: {details}")
+
+    missing_active = sorted(
+        op_name for op_name in P8_VDW_STORE_OPS if active_vdw_stores[op_name] == 0
+    )
+    if missing_active:
+        fail("P8 lock expected active VDW store uses for: " + ", ".join(missing_active))
+    if sum(negative_vdw_stores.values()) == 0:
+        fail("P8 lock expected deterministic-reject VDW store tests")
+
+    conversion = read_text(
+        repo_root / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"
+    )
+    vdw_start = conversion.rfind("if (hasName(op, kVDWStoreOpName))")
+    vdw_end = conversion.find("if (hasName(op, kVPMAllocOpName))", vdw_start)
+    if vdw_start < 0 or vdw_end < 0:
+        fail("P8 lock expected register-fragment VDW lowering block")
+    vdw_block = conversion[vdw_start:vdw_end]
+    for token in [
+        "VDW stores require explicit inactive_store<preserve> in Surface v2",
+        "sparse VDW store masks are not supported in P8",
+        "VDW preserve store requires dense contiguous/rectangular address mapping",
+    ]:
+        if token not in conversion:
+            fail(f"P8 lock expected VDW policy diagnostic token: {token}")
+    for forbidden in [
+        "emitTMULoadFragment",
+        "emitPredicateSelect",
+        "oldValue",
+        "read-modify",
+        "RMW",
+        "hasExplicitInactiveStorePolicy",
+        "attr-absent",
+        "migration-only",
+    ]:
+        if forbidden in vdw_block:
+            fail(f"P8 lock found sparse/RMW fallback token in VDW lowering: {forbidden}")
+
+    source_roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+    ]
+    source_policy_hits = []
+    for root in source_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            text = read_text(path)
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                lowered = line.lower()
+                if "vdw" not in lowered and "inactive_store" not in lowered:
+                    continue
+                if not re.search(
+                    r"\b(?:implicit|attr-absent|migration-only|read-modify|rmw)\b",
+                    lowered,
+                ):
+                    continue
+                source_policy_hits.append((path, line_no, line.strip()))
+    if source_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{line}"
+            for path, line_no, line in source_policy_hits[:20]
+        )
+        fail(f"P8 lock found old VDW inactive-store policy text in source: {details}")
+
+    docs = read_text(
+        repo_root / "compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"
+    )
+    for token in [
+        "inactive_store = #vc4kernel.inactive_store<preserve>",
+        "VDW stores require explicit inactive_store<preserve>",
+        "full, empty, and tail/active-prefix",
+        "VPM-backed rectangular stores",
+        "sparse VDW store masks are not supported in P8",
+        "P9",
+    ]:
+        if token not in docs:
+            fail(f"P8 lock expected strict spec to document {token}")
+
+    counts.update(
+        {
+            "active_vdw_store_families": len(active_vdw_stores),
+            "active_vdw_stores": sum(active_vdw_stores.values()),
+            "files_scanned": files_scanned,
+            "missing_inactive_store_hits": 0,
+            "negative_vdw_store_tests": sum(negative_vdw_stores.values()),
+            "sparse_vdw_active_hits": 0,
+            "vdw_sparse_rmw_fallback_hits": 0,
+            "vdw_source_policy_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -2076,6 +2365,7 @@ def main(argv):
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
+        "p8-vdw-store-policy-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -2096,6 +2386,7 @@ def main(argv):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
+        "p8-vdw-store-policy-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -2120,6 +2411,7 @@ def main(argv):
             "p6-memory-policy-targeted",
             "p6-memory-policy-lock",
             "p7-tmu-safe-load-lock",
+            "p8-vdw-store-policy-lock",
         }
         else {}
     )
@@ -2158,6 +2450,11 @@ def main(argv):
         if args.mode == "p7-tmu-safe-load-lock"
         else {}
     )
+    p8_lock_counts = (
+        audit_p8_vdw_store_policy_lock(repo_root, matrix)
+        if args.mode == "p8-vdw-store-policy-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -2192,6 +2489,8 @@ def main(argv):
         print(f"p6_memory_policy_lock: {format_counts(p6_lock_counts)}")
     if p7_lock_counts:
         print(f"p7_tmu_safe_load_lock: {format_counts(p7_lock_counts)}")
+    if p8_lock_counts:
+        print(f"p8_vdw_store_policy_lock: {format_counts(p8_lock_counts)}")
     return 0
 
 

@@ -98,7 +98,7 @@ module {
     %row0_bytes = arith.shli %row_base, %c2 : i32
     %row0_v = vc4kernel.splat %row0_bytes : i32 -> vector<16xi32>
     %offs = vc4kernel.fragment_alu.add %row0_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %y, %offs, %sum, %row_tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %y, %offs, %sum, %row_tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
 
   ^done:

@@ -65,7 +65,7 @@ module {
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %v = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     // CHECK: coherency attr does not match operation
-    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full {coherency = #vc4kernel.coherency<readonly_tmu>, memory_path = #vc4kernel.memory_path<vdw_global_store>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full {coherency = #vc4kernel.coherency<readonly_tmu>, memory_path = #vc4kernel.memory_path<vdw_global_store>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

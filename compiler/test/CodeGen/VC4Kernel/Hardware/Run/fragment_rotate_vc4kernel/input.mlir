@@ -19,7 +19,7 @@ module {
     %base_vec = vc4kernel.splat %base_value : i32 -> vector<16xi32>
     %value = vc4kernel.fragment_alu.add %base_vec, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %rot = vc4kernel.fragment_rotate %value {amount = 3 : i32} : vector<16xi32> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %rot, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %rot, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

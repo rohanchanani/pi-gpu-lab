@@ -46,7 +46,7 @@ module {
     %32 = arith.shli %31, %c2_i32 : i32
     %33 = vc4kernel.splat %32 : i32 -> vector<16xi32>
     %34 = vc4kernel.fragment_alu.add %33, %6 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %arg2, %34, %29, %7 {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, <16>
+    vc4kernel.vdw_store_fragment %arg2, %34, %29, %7 {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xf32>, <16>
     vc4kernel.return
   ^bb6:  // 2 preds: ^bb0, ^bb1
     vc4kernel.return

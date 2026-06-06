@@ -1,15 +1,6 @@
-// RUN: vc4-opt %s --verify-vc4kernel --convert-vc4kernel-to-ssavc4 | FileCheck %s
+// RUN: not vc4-opt %s --verify-vc4kernel --convert-vc4kernel-to-ssavc4 2>&1 | FileCheck %s
 
-// CHECK-LABEL: ssavc4.func @general_mask_materialized_combinators
-// CHECK: ssavc4.cond_select {{.*}} {cond = #vc4.cond<cs>}
-// CHECK: ssavc4.cond_select {{.*}} {cond = #vc4.cond<zs>}
-// CHECK: ssavc4.alu.add {{.*}} {opcode = #vc4.add_opcode<and>}
-// CHECK: ssavc4.tmu.request
-// CHECK: ssavc4.tmu.read
-// CHECK: ssavc4.make_flags
-// CHECK: ssavc4.cond_select {{.*}} {cond = #vc4.cond<zc>}
-// CHECK: ssavc4.vdw.store
-// CHECK-NOT: vc4kernel.
+// CHECK: sparse VDW store masks are not supported in P8
 module {
   vc4kernel.kernel @general_mask_materialized_combinators(%out : i32, %lo : i32, %hi : i32) attributes {
     public_name = "general_mask_materialized_combinators",
@@ -31,7 +22,7 @@ module {
     %at_or_above_lo = vc4kernel.pred.not %below_lo : !vc4kernel.pred<16> -> !vc4kernel.pred<16>
     %mask = vc4kernel.pred.and %below_hi, %at_or_above_lo : !vc4kernel.pred<16>, !vc4kernel.pred<16> -> !vc4kernel.pred<16>
     %value = vc4kernel.fragment_alu.add %tag_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %mask {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %mask {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }
