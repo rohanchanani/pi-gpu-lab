@@ -59,6 +59,7 @@ SPECIAL_CASE_MATRIX = {
 SPECIAL_CASE_ALLOWED_STATUSES = {
     "migration_target",
     "migrated_pending_deletion",
+    "removed_in_p1",
 }
 
 PRODUCER_OR_LOWER_HALF_OP_PREFIXES = [
@@ -188,9 +189,11 @@ def require_matrix_feature_status_in(features, feature_id, phase, statuses):
 
 def audit_matrix_ownership(matrix, mode):
     features = feature_by_id(matrix)
-    required_special_status = (
-        "migrated_pending_deletion" if mode == "p1-migrated" else None
-    )
+    required_special_status = None
+    if mode == "p1-migrated":
+        required_special_status = "migrated_pending_deletion"
+    if mode == "p1-general-alu-lock":
+        required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
         if required_special_status:
             require_matrix_feature(features, feature_id, phase, required_special_status)
@@ -198,6 +201,9 @@ def audit_matrix_ownership(matrix, mode):
             require_matrix_feature_status_in(
                 features, feature_id, phase, SPECIAL_CASE_ALLOWED_STATUSES
             )
+    if mode == "p1-general-alu-lock":
+        require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
+        require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
     require_matrix_feature(
         features,
         "p4_remove_add_only_reduce_specialness",
@@ -330,7 +336,7 @@ def audit_fixture_purity(repo_root):
     }
 
 
-def audit_special_case_presence(repo_root, matrix_counts):
+def audit_special_case_presence(repo_root, matrix_counts, mode):
     op_root = repo_root / "compiler/include/vc4/Dialect/VC4Kernel/IR"
     text = "\n".join(read_text(path) for path in sorted(op_root.glob("*.td")))
     present = []
@@ -340,7 +346,14 @@ def audit_special_case_presence(repo_root, matrix_counts):
             present.append(op_name)
         else:
             missing.append(op_name)
-    if missing:
+    if mode == "p1-general-alu-lock":
+        if present:
+            fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
+        return {"present_special_case_ops": 0, "removed_special_case_ops": len(missing)}
+    if missing and mode == "p0-baseline":
+        removed = matrix_counts.get("special_case_removed_in_p1", 0)
+        if removed == len(SPECIAL_CASE_MATRIX):
+            return {"present_special_case_ops": 0, "removed_special_case_ops": len(missing)}
         fail(
             "P0 baseline expected special-case migration ops to be present: "
             + ", ".join(missing)
@@ -378,6 +391,70 @@ def audit_no_legacy_user_spellings(repo_root):
     return {"legacy_user_spelling_hits": 0, "legacy_user_files_scanned": scanned}
 
 
+def audit_p1_general_alu_lock(repo_root):
+    active_roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+    ]
+    doc_root = Path("compiler/docs")
+    forbidden_terms = [
+        "vc4kernel." + "fragment_add",
+        "vc4kernel." + "fragment_sub",
+        "vc4kernel." + "fragment_mul",
+        "vc4kernel." + "fragment_shl",
+        "kFragment" + "AddOpName",
+        "kFragment" + "SubOpName",
+        "kFragment" + "MulOpName",
+        "kFragment" + "ShlOpName",
+        "Fragment" + "AddOp",
+        "Fragment" + "SubOp",
+        "Fragment" + "MulOp",
+        "Fragment" + "ShlOp",
+    ]
+    active_hits = []
+    scanned = 0
+    for root in active_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            scanned += 1
+            text = read_text(path)
+            for term in forbidden_terms:
+                if term in text:
+                    active_hits.append((path, term))
+    if active_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{term}" for path, term in active_hits[:20]
+        )
+        fail(f"P1 general ALU lock found removed legacy op text: {details}")
+
+    doc_hits = []
+    allowed_doc_hits = 0
+    allowed_markers = ("historical", "removed_in_p1", "legacy migration")
+    for path in iter_text_files(repo_root / doc_root, repo_root):
+        for lineno, line in enumerate(read_text(path).splitlines(), start=1):
+            for term in forbidden_terms:
+                if term not in line:
+                    continue
+                if any(marker in line.lower() for marker in allowed_markers):
+                    allowed_doc_hits += 1
+                    continue
+                doc_hits.append((path, lineno, term))
+    if doc_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{lineno}:{term}"
+            for path, lineno, term in doc_hits[:20]
+        )
+        fail(f"P1 general ALU lock found non-historical docs legacy text: {details}")
+    return {
+        "active_files_scanned": scanned,
+        "removed_legacy_hits": 0,
+        "allowed_historical_doc_hits": allowed_doc_hits,
+    }
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -393,7 +470,7 @@ def main(argv):
     parser.add_argument("--phase-lock", default=None)
     args = parser.parse_args(argv)
 
-    if args.mode not in {"p0-baseline", "p1-migrated"}:
+    if args.mode not in {"p0-baseline", "p1-migrated", "p1-general-alu-lock"}:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
     matrix_path = Path(args.matrix)
@@ -405,7 +482,9 @@ def main(argv):
     matrix_summary = run_matrix_checker(repo_root, matrix_path)
     matrix = load_matrix(matrix_path)
     matrix_counts = audit_matrix_ownership(matrix, args.mode)
-    special_case_counts = audit_special_case_presence(repo_root, matrix_counts)
+    if args.mode == "p1-general-alu-lock":
+        matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
+    special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
     direct_counts = audit_direct_paths(repo_root)
     vc4tile_counts = audit_vc4tile(repo_root)
     tile_counts = audit_forbidden_tile_dsl(repo_root)
@@ -413,6 +492,11 @@ def main(argv):
     legacy_user_counts = (
         audit_no_legacy_user_spellings(repo_root)
         if args.mode == "p1-migrated"
+        else {}
+    )
+    p1_lock_counts = (
+        audit_p1_general_alu_lock(repo_root)
+        if args.mode == "p1-general-alu-lock"
         else {}
     )
 
@@ -433,6 +517,8 @@ def main(argv):
     print(f"fixture_purity: {format_counts(fixture_counts)}")
     if legacy_user_counts:
         print(f"legacy_user_scan: {format_counts(legacy_user_counts)}")
+    if p1_lock_counts:
+        print(f"p1_general_alu_lock: {format_counts(p1_lock_counts)}")
     return 0
 
 

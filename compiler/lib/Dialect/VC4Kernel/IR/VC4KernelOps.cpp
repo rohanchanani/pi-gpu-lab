@@ -207,10 +207,6 @@ static bool isLaneBytes(Value value) {
     return false;
   if (!hasName(def->getOperand(0).getDefiningOp(), "vc4kernel.lane_range"))
     return false;
-  if (hasName(def, "vc4kernel.fragment_shl")) {
-    std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
-    return amount && *amount == 2;
-  }
   if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
     if (alu.getOpcode() != AddALUOpcode::shl)
       return false;
@@ -226,10 +222,6 @@ static bool isLaneBytesOrGreater(Value value) {
     return false;
   if (!hasName(def->getOperand(0).getDefiningOp(), "vc4kernel.lane_range"))
     return false;
-  if (hasName(def, "vc4kernel.fragment_shl")) {
-    std::optional<int64_t> amount = getConstantI32(def->getOperand(1));
-    return amount && *amount >= 2;
-  }
   if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
     if (alu.getOpcode() != AddALUOpcode::shl)
       return false;
@@ -252,12 +244,6 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
   if (hasName(def, "vc4kernel.splat") && def->getNumOperands() == 1)
     return isKnownScalarByteOffsetAligned4Impl(def->getOperand(0), depth + 1);
 
-  if ((hasName(def, "vc4kernel.fragment_add") ||
-       hasName(def, "vc4kernel.fragment_sub")) &&
-      def->getNumOperands() == 2)
-    return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) &&
-           isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
-
   if (auto alu = dyn_cast<FragmentALUAddOp>(def)) {
     if ((alu.getOpcode() == AddALUOpcode::add ||
          alu.getOpcode() == AddALUOpcode::sub) &&
@@ -267,10 +253,6 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
              isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1),
                                                   depth + 1);
   }
-
-  if (hasName(def, "vc4kernel.fragment_mul") && def->getNumOperands() == 2)
-    return isKnownVectorByteOffsetsAligned4Impl(def->getOperand(0), depth + 1) ||
-           isKnownVectorByteOffsetsAligned4Impl(def->getOperand(1), depth + 1);
 
   if (auto alu = dyn_cast<FragmentALUMulOp>(def)) {
     if (alu.getOpcode() == MulALUOpcode::mul24 && def->getNumOperands() == 2)
@@ -289,14 +271,6 @@ static bool isContiguousByteOffsets(Value value) {
   Operation *def = value.getDefiningOp();
   if (!def || def->getNumOperands() != 2)
     return false;
-  if (hasName(def, "vc4kernel.fragment_add")) {
-    auto isBasePlusLaneBytes = [](Value lhs, Value rhs) {
-      Operation *splat = lhs.getDefiningOp();
-      return hasName(splat, "vc4kernel.splat") && isLaneBytes(rhs);
-    };
-    return isBasePlusLaneBytes(def->getOperand(0), def->getOperand(1)) ||
-           isBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
-  }
   auto alu = dyn_cast<FragmentALUAddOp>(def);
   if (!alu || alu.getOpcode() != AddALUOpcode::add)
     return false;
@@ -930,39 +904,6 @@ LogicalResult SplatOp::verify() {
   if (vectorType.getElementType() != inputType)
     return emitOpError("input scalar type must match result element type");
   return success();
-}
-
-LogicalResult FragmentAddOp::verify() {
-  if (failed(verifySameType(getOperation(), getLhs().getType(), getRhs().getType(),
-                            "fragment_add operands")) ||
-      failed(verifySameType(getOperation(), getLhs().getType(),
-                            getResult().getType(), "fragment_add result")))
-    return failure();
-  return verifyVector16Data(getOperation(), getResult().getType(), "result");
-}
-LogicalResult FragmentSubOp::verify() {
-  if (failed(verifySameType(getOperation(), getLhs().getType(), getRhs().getType(),
-                            "fragment_sub operands")) ||
-      failed(verifySameType(getOperation(), getLhs().getType(),
-                            getResult().getType(), "fragment_sub result")))
-    return failure();
-  return verifyVector16Data(getOperation(), getResult().getType(), "result");
-}
-LogicalResult FragmentMulOp::verify() {
-  if (failed(verifySameType(getOperation(), getLhs().getType(), getRhs().getType(),
-                            "fragment_mul operands")) ||
-      failed(verifySameType(getOperation(), getLhs().getType(),
-                            getResult().getType(), "fragment_mul result")))
-    return failure();
-  return verifyVector16Data(getOperation(), getResult().getType(), "result");
-}
-LogicalResult FragmentShlOp::verify() {
-  if (!getConstantI32(getAmount()))
-    return emitOpError("fragment_shl amount must be a scalar i32 constant");
-  return isVC4KernelVector16I32Type(getResult().getType())
-             ? success()
-             : emitTypeError(getOperation(), getResult().getType(), "result",
-                             "vector<16xi32>");
 }
 
 LogicalResult FragmentALUAddOp::verify() {

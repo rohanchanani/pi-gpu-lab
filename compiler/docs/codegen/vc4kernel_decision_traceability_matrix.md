@@ -43,7 +43,7 @@
 
 | Feature or policy | Current classification | Required Surface v2 outcome | Required proof |
 |---|---|---|---|
-| `fragment_add/sub/mul/shl` | migration target | Replace long-term special cases with P1 general ALU. | Verifier, conversion, lower-half, hardware or deterministic-reject evidence per admitted opcode. |
+| `fragment_add/sub/mul/shl` | removed_in_p1 historical legacy migration | Replace long-term special cases with P1 general ALU. | Verifier, conversion, lower-half, hardware or deterministic-reject evidence per admitted opcode. |
 | Bitcast/constants | planned | P2 target-planning semantics without producer-dialect admission. | Dialect verifier and conversion tests. |
 | Comparisons | planned | P3 general comparison surface. | Predicate verifier/conversion tests and hardware proof where executable. |
 | `fragment_reduce` add-only | migration target | P4 general reductions. | Reduction verifier/conversion/hardware matrix. |

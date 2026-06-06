@@ -184,26 +184,6 @@ def VC4Kernel_SplatOp : VC4Kernel_PureOp<"splat"> {
   let hasVerifier = 1;
 }
 
-class VC4Kernel_FragmentBinaryOp<string mnemonic>
-    : VC4Kernel_PureOp<mnemonic> {
-  let arguments = (ins VC4Kernel_Vector16Data:$lhs,
-                       VC4Kernel_Vector16Data:$rhs);
-  let results = (outs VC4Kernel_Vector16Data:$result);
-  let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
-  let hasVerifier = 1;
-}
-
-def VC4Kernel_FragmentAddOp : VC4Kernel_FragmentBinaryOp<"fragment_add">;
-def VC4Kernel_FragmentSubOp : VC4Kernel_FragmentBinaryOp<"fragment_sub">;
-def VC4Kernel_FragmentMulOp : VC4Kernel_FragmentBinaryOp<"fragment_mul">;
-
-def VC4Kernel_FragmentShlOp : VC4Kernel_PureOp<"fragment_shl"> {
-  let arguments = (ins VC4Kernel_Vector16I32:$input, VC4Kernel_I32:$amount);
-  let results = (outs VC4Kernel_Vector16I32:$result);
-  let assemblyFormat = "$input `,` $amount attr-dict `:` type($input) `,` type($amount) `->` type($result)";
-  let hasVerifier = 1;
-}
-
 def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
   let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
   let arguments = (ins

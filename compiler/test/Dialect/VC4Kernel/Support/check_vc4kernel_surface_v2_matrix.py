@@ -94,6 +94,7 @@ SPECIAL_CASE_FEATURE_IDS = {
 SPECIAL_CASE_ALLOWED_STATUSES = {
     "migration_target",
     "migrated_pending_deletion",
+    "removed_in_p1",
 }
 
 FORBIDDEN_TILE_TERMS = {

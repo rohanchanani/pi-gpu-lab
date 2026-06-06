@@ -138,16 +138,16 @@
       "id": "p1_general_fragment_add_alu",
       "phase": "P1",
       "category": "alu",
-      "current_status": "hardware_proven_pending_legacy_removal",
+      "current_status": "accepted",
       "final_status_target": "implemented_or_rejected_by_opcode",
-      "current_surface": "Current add users have been migrated to the P1 general add-pipe ALU surface.",
+      "current_surface": "P1 general add-pipe ALU surface is implemented, hardware-proven, and accepted.",
       "target_surface": "General hardware-faithful ALU surface for add-pipe addition semantics.",
       "vc4kernel_verifier_plan": "Verify opcode, operand/result types, math policy, and lane carrier width.",
       "vc4kernel_to_ssavc4_plan": "Lower admitted add opcodes to ssavc4.alu.add with explicit VC4 opcode attrs.",
       "ssavc4_to_vc4_plan": "Use existing ADD-pipe scheduling and verifier rules for admitted opcodes.",
       "hardware_or_reject_verification_plan": "Hardware proof for executable opcodes or deterministic-reject tests for unsupported opcodes.",
       "upstream_use": "Vector arithmetic lowering after pre-vector lock.",
-      "migration_or_removal": "Users migrated from the legacy add special case to the P1 ALU surface.",
+      "migration_or_removal": "Legacy add users migrated to the P1 ALU surface; old spelling removed_in_p1.",
       "dependencies": [
         "baseline_predicate_algebra"
       ],
@@ -157,16 +157,16 @@
       "id": "p1_general_fragment_mul_alu",
       "phase": "P1",
       "category": "alu",
-      "current_status": "hardware_proven_pending_legacy_removal",
+      "current_status": "accepted",
       "final_status_target": "implemented_or_rejected_by_opcode",
-      "current_surface": "Current multiply users have been migrated to the P1 general mul-pipe ALU surface or explicit exact expansion.",
+      "current_surface": "P1 general mul-pipe ALU surface is implemented, hardware-proven, and accepted.",
       "target_surface": "General hardware-faithful ALU surface for mul-pipe multiply semantics and safe full-width fallbacks.",
       "vc4kernel_verifier_plan": "Verify opcode, operand/result types, f32 versus i32 semantics, and range-proof requirements.",
       "vc4kernel_to_ssavc4_plan": "Lower admitted multiply opcodes to ssavc4.alu.mul or proven software fallback sequences.",
       "ssavc4_to_vc4_plan": "Use existing MUL-pipe scheduling and fallback sequence coverage.",
       "hardware_or_reject_verification_plan": "Hardware proof for f32/mul24/full-i32 paths or deterministic-reject tests.",
       "upstream_use": "Vector multiply and future numerical kernels.",
-      "migration_or_removal": "Users migrated from the legacy multiply special case to the P1 ALU surface or explicit exact expansion.",
+      "migration_or_removal": "Legacy multiply users migrated to the P1 ALU surface or explicit exact expansion; old spelling removed_in_p1.",
       "dependencies": [
         "p1_general_fragment_add_alu"
       ],
@@ -176,11 +176,11 @@
       "id": "p1_remove_fragment_add",
       "phase": "P1",
       "category": "migration",
-      "current_status": "migrated_pending_deletion",
+      "current_status": "removed_in_p1",
       "final_status_target": "removed_or_alias_rejected",
-      "current_surface": "Legacy add op definition still exists temporarily, but active users are migrated.",
+      "current_surface": "Legacy add op definition removed_in_p1; active users are on the general ALU surface.",
       "target_surface": "General ALU addition surface.",
-      "vc4kernel_verifier_plan": "Reject stale fragment_add in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_verifier_plan": "Removed legacy migration spelling is rejected by parser/verifier lock tests.",
       "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
       "ssavc4_to_vc4_plan": "No lower-half special case for fragment_add remains after migration.",
       "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
@@ -189,17 +189,17 @@
       "dependencies": [
         "p1_general_fragment_add_alu"
       ],
-      "acceptance_line": "fragment_add is not accepted_final; it is gone or rejected after the P1 migration."
+      "acceptance_line": "Legacy add spelling removed_in_p1; it is not accepted_final."
     },
     {
       "id": "p1_remove_fragment_sub",
       "phase": "P1",
       "category": "migration",
-      "current_status": "migrated_pending_deletion",
+      "current_status": "removed_in_p1",
       "final_status_target": "removed_or_alias_rejected",
-      "current_surface": "Legacy sub op definition still exists temporarily, but active users are migrated.",
+      "current_surface": "Legacy sub op definition removed_in_p1; active users are on the general ALU surface.",
       "target_surface": "General ALU subtraction surface.",
-      "vc4kernel_verifier_plan": "Reject stale fragment_sub in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_verifier_plan": "Removed legacy migration spelling is rejected by parser/verifier lock tests.",
       "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
       "ssavc4_to_vc4_plan": "No lower-half special case for fragment_sub remains after migration.",
       "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
@@ -208,17 +208,17 @@
       "dependencies": [
         "p1_general_fragment_add_alu"
       ],
-      "acceptance_line": "fragment_sub is not accepted_final; it is gone or rejected after the P1 migration."
+      "acceptance_line": "Legacy sub spelling removed_in_p1; it is not accepted_final."
     },
     {
       "id": "p1_remove_fragment_mul",
       "phase": "P1",
       "category": "migration",
-      "current_status": "migrated_pending_deletion",
+      "current_status": "removed_in_p1",
       "final_status_target": "removed_or_alias_rejected",
-      "current_surface": "Legacy mul op definition still exists temporarily, but active users are migrated.",
+      "current_surface": "Legacy mul op definition removed_in_p1; active users are on the general ALU surface or explicit exact expansion.",
       "target_surface": "General ALU multiply surface.",
-      "vc4kernel_verifier_plan": "Reject stale fragment_mul in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_verifier_plan": "Removed legacy migration spelling is rejected by parser/verifier lock tests.",
       "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
       "ssavc4_to_vc4_plan": "No lower-half special case for fragment_mul remains after migration.",
       "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
@@ -227,17 +227,17 @@
       "dependencies": [
         "p1_general_fragment_mul_alu"
       ],
-      "acceptance_line": "fragment_mul is not accepted_final; it is gone or rejected after the P1 migration."
+      "acceptance_line": "Legacy mul spelling removed_in_p1; it is not accepted_final."
     },
     {
       "id": "p1_remove_fragment_shl",
       "phase": "P1",
       "category": "migration",
-      "current_status": "migrated_pending_deletion",
+      "current_status": "removed_in_p1",
       "final_status_target": "removed_or_alias_rejected",
-      "current_surface": "Legacy shl op definition still exists temporarily, but active users are migrated.",
+      "current_surface": "Legacy shl op definition removed_in_p1; active users are on the general ALU surface.",
       "target_surface": "General ALU shift surface.",
-      "vc4kernel_verifier_plan": "Reject stale fragment_shl in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_verifier_plan": "Removed legacy migration spelling is rejected by parser/verifier lock tests.",
       "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
       "ssavc4_to_vc4_plan": "No lower-half special case for fragment_shl remains after migration.",
       "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
@@ -246,7 +246,7 @@
       "dependencies": [
         "p1_general_fragment_add_alu"
       ],
-      "acceptance_line": "fragment_shl is not accepted_final; it is gone or rejected after the P1 migration."
+      "acceptance_line": "Legacy shl spelling removed_in_p1; it is not accepted_final."
     },
     {
       "id": "p2_fragment_bitcast",

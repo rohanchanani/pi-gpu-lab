@@ -29,7 +29,7 @@ Current special-case ops are migration targets, not compatibility promises:
 
 ```text
 fragment_add/sub/mul/shl:
-  migration target for P1 general ALU.
+  historical legacy migration target removed_in_p1 after replacement by the P1 general ALU surface.
 
 fragment_reduce add-only:
   migration target for P4 general reductions.
@@ -79,7 +79,7 @@ Inventory the accepted baseline and lock the Surface v2 plan. P0 is docs, spec, 
 
 ### P1 general ALU
 
-Plan a general hardware-faithful ALU surface for VC4 add-pipe and mul-pipe semantics. `fragment_add`, `fragment_sub`, `fragment_mul`, and `fragment_shl` are migration targets. P1 must not preserve one-off fragment ALU ops as the long-term API merely because they exist.
+Plan a general hardware-faithful ALU surface for VC4 add-pipe and mul-pipe semantics. `fragment_add`, `fragment_sub`, `fragment_mul`, and `fragment_shl` are historical legacy migration targets removed_in_p1. P1 must not preserve one-off fragment ALU ops as the long-term API merely because they existed.
 
 ### P2 bitcast/constants
 

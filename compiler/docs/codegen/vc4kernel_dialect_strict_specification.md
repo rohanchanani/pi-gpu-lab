@@ -229,7 +229,7 @@ Current special-case operations are migration targets, not compatibility promise
 
 ```text
 fragment_add / fragment_sub / fragment_mul / fragment_shl:
-  migration target for P1 general hardware-faithful ALU.
+  historical legacy migration target removed_in_p1 after replacement by the P1 general hardware-faithful ALU surface.
 
 fragment_reduce with add only:
   migration target for P4 general reductions.
@@ -241,7 +241,7 @@ vdw_store_fragment implicit inactive-store behavior:
   migration target for P8 explicit inactive-store policy.
 ```
 
-Future agents must not keep `fragment_add`, `fragment_sub`, `fragment_mul`, `fragment_shl`, add-only reduction specialness, or implicit TMU safe-address semantics merely because they already exist.
+Future agents must not keep historical legacy migration ops `fragment_add`, `fragment_sub`, `fragment_mul`, `fragment_shl`, add-only reduction specialness, or implicit TMU safe-address semantics merely because they already existed; the fragment arithmetic spellings are removed_in_p1.
 
 ### Locked P0-P13 phase order
 

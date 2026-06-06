@@ -56,10 +56,6 @@ constexpr llvm::StringLiteral kPredNotOpName("vc4kernel.pred.not");
 constexpr llvm::StringLiteral kPredAnyOpName("vc4kernel.pred.any");
 constexpr llvm::StringLiteral kPredAllOpName("vc4kernel.pred.all");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
-constexpr llvm::StringLiteral kFragmentAddOpName("vc4kernel.fragment_add");
-constexpr llvm::StringLiteral kFragmentSubOpName("vc4kernel.fragment_sub");
-constexpr llvm::StringLiteral kFragmentMulOpName("vc4kernel.fragment_mul");
-constexpr llvm::StringLiteral kFragmentShlOpName("vc4kernel.fragment_shl");
 constexpr llvm::StringLiteral kFragmentALUAddOpName(
     "vc4kernel.fragment_alu.add");
 constexpr llvm::StringLiteral kFragmentALUMulOpName(
@@ -195,10 +191,6 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.pred.any",
       "vc4kernel.pred.all",
       "vc4kernel.splat",
-      "vc4kernel.fragment_add",
-      "vc4kernel.fragment_sub",
-      "vc4kernel.fragment_mul",
-      "vc4kernel.fragment_shl",
       "vc4kernel.fragment_alu.add",
       "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
@@ -1045,11 +1037,6 @@ static bool isVectorF32(Type type) {
   return vectorType && vectorType.getElementType().isF32();
 }
 
-static bool isVectorI32(Type type) {
-  auto vectorType = llvm::dyn_cast<VectorType>(type);
-  return vectorType && vectorType.getElementType().isSignlessInteger(32);
-}
-
 static Value createI32BinaryAddPipe(OpBuilder &builder, Location loc, Value lhs,
                                     Value rhs, mlir::vc4::AddOpcode opcode) {
   return createOpWithResult(
@@ -1159,69 +1146,7 @@ static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
-static std::optional<uint64_t> getUnsignedI32Constant(Value value) {
-  auto constant = value.getDefiningOp<arith::ConstantOp>();
-  if (!constant)
-    return std::nullopt;
-  auto attr = llvm::dyn_cast<IntegerAttr>(constant.getValue());
-  if (!attr)
-    return std::nullopt;
-  return static_cast<uint64_t>(attr.getValue().getZExtValue());
-}
-
 static std::optional<int64_t> getI32ConstantValue(Value value);
-
-static std::optional<uint64_t> getUnsigned24UpperBound(Value value,
-                                                       unsigned depth = 0) {
-  constexpr uint64_t kMaxUnsigned24 = (1u << 24) - 1u;
-  if (depth > 8)
-    return std::nullopt;
-  if (hasName(value.getDefiningOp(), kLaneRangeOpName))
-    return 15;
-
-  Operation *def = value.getDefiningOp();
-  if (!def)
-    return std::nullopt;
-  if (hasName(def, kSplatOpName) && def->getNumOperands() == 1) {
-    std::optional<uint64_t> constant =
-        getUnsignedI32Constant(def->getOperand(0));
-    if (constant && *constant <= kMaxUnsigned24)
-      return *constant;
-    return std::nullopt;
-  }
-  if (hasName(def, kFragmentAddOpName) && def->getNumOperands() == 2) {
-    std::optional<uint64_t> lhs =
-        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
-    std::optional<uint64_t> rhs =
-        getUnsigned24UpperBound(def->getOperand(1), depth + 1);
-    if (lhs && rhs && *lhs + *rhs <= kMaxUnsigned24)
-      return *lhs + *rhs;
-    return std::nullopt;
-  }
-  if (hasName(def, kFragmentShlOpName) && def->getNumOperands() == 2) {
-    std::optional<uint64_t> input =
-        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
-    std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
-    if (input && shift && *shift >= 0 && *shift < 24 &&
-        (*input << *shift) <= kMaxUnsigned24)
-      return *input << *shift;
-    return std::nullopt;
-  }
-  if (hasName(def, kFragmentMulOpName) && def->getNumOperands() == 2) {
-    std::optional<uint64_t> lhs =
-        getUnsigned24UpperBound(def->getOperand(0), depth + 1);
-    std::optional<uint64_t> rhs =
-        getUnsigned24UpperBound(def->getOperand(1), depth + 1);
-    if (lhs && rhs && *lhs * *rhs <= kMaxUnsigned24)
-      return *lhs * *rhs;
-  }
-  return std::nullopt;
-}
-
-static bool isMul24FastPathProven(Value lhs, Value rhs) {
-  return getUnsigned24UpperBound(lhs).has_value() &&
-         getUnsigned24UpperBound(rhs).has_value();
-}
 
 static Value emitI32Mul32Fallback(Operation *op, OpBuilder &builder, Value lhs,
                                   Value rhs) {
@@ -1287,10 +1212,6 @@ static bool isLaneByteOffsets(Value value) {
     return false;
   if (!hasName(def->getOperand(0).getDefiningOp(), kLaneRangeOpName))
     return false;
-  if (hasName(def, kFragmentShlOpName)) {
-    std::optional<int64_t> shift = getI32ConstantValue(def->getOperand(1));
-    return shift && *shift == 2;
-  }
   if (!hasName(def, kFragmentALUAddOpName))
     return false;
   auto opcode =
@@ -1321,15 +1242,13 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
   Operation *def = value.getDefiningOp();
   if (!def || def->getNumOperands() != 2)
     return {};
-  if (!hasName(def, kFragmentAddOpName)) {
-    if (!hasName(def, kFragmentALUAddOpName))
-      return {};
-    auto opcode =
-        llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
-            def->getAttr("opcode"));
-    if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::add)
-      return {};
-  }
+  if (!hasName(def, kFragmentALUAddOpName))
+    return {};
+  auto opcode =
+      llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+          def->getAttr("opcode"));
+  if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::add)
+    return {};
 
   auto matchBasePlusLaneBytes = [](Value lhs,
                                    Value rhs) -> FullRowVDWOffsets {
@@ -2234,68 +2153,6 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             mlir::vc4::MulOpcodeAttr::get(
                 builder.getContext(), mapMulALUOpcode(opcodeAttr.getValue())))},
         op->getResult(0).getType())};
-    return success();
-  }
-  if (hasName(op, kFragmentAddOpName) || hasName(op, kFragmentSubOpName) ||
-      hasName(op, kFragmentShlOpName)) {
-    SmallVector<Value, 2> operands;
-    for (Value operand : op->getOperands()) {
-      Value mapped = mapValue(op, operand, state);
-      if (!mapped)
-        return failure();
-      operands.push_back(mapped);
-    }
-    mlir::vc4::AddOpcode opcode =
-        isVectorF32(op->getResult(0).getType()) ? mlir::vc4::AddOpcode::fadd
-                                                : mlir::vc4::AddOpcode::add;
-    if (hasName(op, kFragmentSubOpName))
-      opcode = isVectorF32(op->getResult(0).getType())
-                   ? mlir::vc4::AddOpcode::fsub
-                   : mlir::vc4::AddOpcode::sub;
-    if (hasName(op, kFragmentShlOpName)) {
-      opcode = mlir::vc4::AddOpcode::shl;
-      if (operands[1].getType() != op->getResult(0).getType()) {
-        operands[1] = createOpWithResult(
-            builder, op->getLoc(), kSSAVC4SplatOpName, operands[1], {},
-            op->getResult(0).getType());
-      }
-    }
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(), opcode))},
-        op->getResult(0).getType())};
-    return success();
-  }
-  if (hasName(op, kFragmentMulOpName)) {
-    SmallVector<Value, 2> operands;
-    for (Value operand : op->getOperands()) {
-      Value mapped = mapValue(op, operand, state);
-      if (!mapped)
-        return failure();
-      operands.push_back(mapped);
-    }
-    Type resultType = op->getResult(0).getType();
-    if (isVectorF32(resultType)) {
-      state.values[op->getResult(0)] = {createOpWithResult(
-          builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
-          {builder.getNamedAttr(
-              "opcode", mlir::vc4::MulOpcodeAttr::get(
-                            builder.getContext(), mlir::vc4::MulOpcode::fmul))},
-          resultType)};
-      return success();
-    }
-    if (!isVectorI32(resultType))
-      return op->emitOpError(
-          "fragment_mul lowering supports only vector<16xi32> and "
-          "vector<16xf32>");
-    if (isMul24FastPathProven(op->getOperand(0), op->getOperand(1))) {
-      state.values[op->getResult(0)] = {
-          createMul24(builder, op->getLoc(), operands[0], operands[1])};
-      return success();
-    }
-    state.values[op->getResult(0)] = {
-        emitI32Mul32Fallback(op, builder, operands[0], operands[1])};
     return success();
   }
   if (hasName(op, kFragmentRotateOpName)) {
