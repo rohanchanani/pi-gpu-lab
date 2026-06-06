@@ -1,0 +1,15 @@
+{
+  "name": "memory_path_explicit_vpm_qpu_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "rows": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 1
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "memory_path_explicit_vdr_vpm_vdw_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "rows": 4,
+    "cols": 16,
+    "active_rows": 3,
+    "active_cols": 10,
+    "runtime_launches": 1
+  }
+}
