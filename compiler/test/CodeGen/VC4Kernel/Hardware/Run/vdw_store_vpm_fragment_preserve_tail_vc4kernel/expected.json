@@ -1,0 +1,18 @@
+{
+  "name": "vdw_store_vpm_fragment_preserve_tail_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "rows": 3,
+    "cols": 16,
+    "saw_n0": 1,
+    "saw_n1": 1,
+    "saw_n15": 1,
+    "saw_n16": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 4
+  }
+}
