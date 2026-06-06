@@ -166,18 +166,6 @@ static LogicalResult verifyOptionalStringAttrChoice(Operation *op,
                            << "\"; got \"" << attr.getValue() << "\"";
 }
 
-static LogicalResult verifyExecutableVPMMode(Operation *op,
-                                             VPMElemWidth width,
-                                             VPMSubword subword) {
-  if (width != VPMElemWidth::w32)
-    return op->emitOpError(
-        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
-  if (subword != VPMSubword::none)
-    return op->emitOpError(
-        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
-  return success();
-}
-
 static LogicalResult verifyExecutableVPMQPUMode(Operation *op,
                                                 VPMElemWidth width,
                                                 VPMSubword subword) {
@@ -187,6 +175,54 @@ static LogicalResult verifyExecutableVPMQPUMode(Operation *op,
   if (width != VPMElemWidth::w32 && subword == VPMSubword::none)
     return op->emitOpError(
         "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
+  return success();
+}
+
+static std::optional<int64_t> getVPMElemBytes(VPMElemWidth width) {
+  switch (width) {
+  case VPMElemWidth::w32:
+    return 4;
+  case VPMElemWidth::w16:
+    return 2;
+  case VPMElemWidth::w8:
+    return 1;
+  }
+  return std::nullopt;
+}
+
+static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
+                                                VPMElemWidth width,
+                                                VPMSubword subword,
+                                                VPMOrientation orientation,
+                                                StringRef role) {
+  if (width == VPMElemWidth::w32 && subword != VPMSubword::none)
+    return op->emitOpError()
+           << "32-bit " << role
+           << " requires subword = #ssavc4.vpm_subword<none>";
+  if (width != VPMElemWidth::w32 && subword == VPMSubword::none)
+    return op->emitOpError()
+           << "sub-32 " << role
+           << " requires subword = #ssavc4.vpm_subword<packed>";
+  if (width != VPMElemWidth::w32 && subword == VPMSubword::laned)
+    return op->emitOpError()
+           << role
+           << " laned subword mode is not supported by VC4 hardware";
+  if (width != VPMElemWidth::w32 && orientation == VPMOrientation::vertical)
+    return op->emitOpError()
+           << "vertical subword " << role << " is not supported in P9";
+  return success();
+}
+
+static LogicalResult verifyElemBytesMatchesWidth(Operation *op,
+                                                 int64_t elemBytes,
+                                                 VPMElemWidth width) {
+  std::optional<int64_t> expected = getVPMElemBytes(width);
+  if (!expected)
+    return op->emitOpError("has unknown VPM element width");
+  if (elemBytes != *expected)
+    return op->emitOpError()
+           << "requires elem_bytes to match width (" << *expected
+           << " for this mode)";
   return success();
 }
 
@@ -212,10 +248,23 @@ static LogicalResult verifyVPMQPUCoordinates(Operation *op,
   return success();
 }
 
-static LogicalResult verifyVPMDMACoordinates(Operation *op, int64_t x,
-                                             int64_t stride) {
+static LogicalResult verifyVPMDMACoordinates(Operation *op,
+                                             VPMElemWidth width,
+                                             VPMOrientation orientation,
+                                             int64_t x, int64_t stride) {
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w32 && x != 0)
+    return op->emitOpError("horizontal 32-bit VPM DMA access requires x = 0");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w16 && x > 1)
+    return op->emitOpError(
+        "horizontal 16-bit VPM DMA access requires halfword selector x in range [0, 1]");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w8 && x > 3)
+    return op->emitOpError(
+        "horizontal 8-bit VPM DMA access requires byte selector x in range [0, 3]");
   if (stride <= 0)
     return op->emitOpError("requires positive VPM stride");
   return success();
@@ -228,8 +277,6 @@ static LogicalResult verifyDynamicRectShape(Operation *op, int64_t maxRows,
     return op->emitOpError("requires max_rows in range [1, 16]");
   if (maxCols < 1 || maxCols > 16)
     return op->emitOpError("requires max_cols in range [1, 16]");
-  if (elemBytes != 4)
-    return op->emitOpError("requires elem_bytes = 4");
   return success();
 }
 
@@ -241,15 +288,16 @@ static LogicalResult verifyScalarI32Operand(Operation *op, Value value,
 }
 
 static LogicalResult verifyDynamicPitchOrStride(Operation *op, Value value,
-                                                StringRef role) {
+                                                StringRef role,
+                                                int64_t elemBytes = 4) {
   if (failed(verifyScalarI32Operand(op, value, role)))
     return failure();
   std::optional<int64_t> constant = getSplatI32Constant(value);
   if (!constant)
     return success();
-  if (*constant <= 0 || *constant % 4 != 0)
+  if (*constant <= 0 || *constant % elemBytes != 0)
     return op->emitOpError()
-           << role << " constant must be positive and 4-byte aligned";
+           << role << " constant must be positive and aligned to elem_bytes";
   return success();
 }
 
@@ -682,8 +730,11 @@ LogicalResult VDRLoadOp::verify() {
   if (!getVpmBaseRow().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM base row operand");
 
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
+                                        getOrientation(),
+                                        "VDR DMA")))
     return failure();
+  int64_t elemBytes = *getVPMElemBytes(getWidth());
 
   int64_t rowLen = getRowLenAttr().getInt();
   if (rowLen <= 0 || rowLen > 16)
@@ -694,18 +745,19 @@ LogicalResult VDRLoadOp::verify() {
     return emitOpError("requires nrows in range [1, 16]");
 
   int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
-  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
-    return emitOpError("requires memory_pitch_bytes to be a positive multiple of 4 bytes");
-  if (memoryPitchBytes < rowLen * 4)
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
+    return emitOpError(
+        "requires memory_pitch_bytes to be positive and aligned to elem_bytes");
+  if (memoryPitchBytes < rowLen * elemBytes)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
 
   int64_t vpmX = getVpmXAttr().getInt();
-  if (vpmX < 0 || vpmX > 15)
-    return emitOpError("requires vpm_x in range [0, 15]");
-
   int64_t vpmPitch = getVpmPitchAttr().getInt();
   if (vpmPitch <= 0 || vpmPitch > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
+  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(), vpmX,
+                                     vpmPitch)))
+    return failure();
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
                                            "serialize")))
@@ -718,19 +770,25 @@ LogicalResult VDRLoadRectDynamicOp::verify() {
   if (failed(verifyScalarI32Operand(op, getAddress(), "global address")) ||
       failed(verifyScalarI32Operand(op, getVpmBaseRow(), "VPM base row")) ||
       failed(verifyScalarI32Operand(op, getActiveRows(), "active_rows")) ||
-      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")) ||
-      failed(verifyDynamicPitchOrStride(op, getMemoryPitchBytes(),
-                                        "memory_pitch_bytes")))
+      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")))
     return failure();
 
   if (failed(verifyDynamicRectShape(op, getMaxRows(), getMaxCols(),
                                     getElemBytes())))
     return failure();
+  if (failed(verifyElemBytesMatchesWidth(op, getElemBytes(), getWidth())) ||
+      failed(verifyDynamicPitchOrStride(op, getMemoryPitchBytes(),
+                                        "memory_pitch_bytes",
+                                        getElemBytes())))
+    return failure();
   if (!getZeroFill())
     return emitOpError("requires zero_fill = true");
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
+                                        getOrientation(),
+                                        "VDR DMA")))
     return failure();
-  if (failed(verifyVPMDMACoordinates(op, getDstX(), getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
+                                     getDstX(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
@@ -747,8 +805,11 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (!getVpmX().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM x-coordinate operand");
 
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
+                                        getOrientation(),
+                                        "VDW DMA")))
     return failure();
+  int64_t elemBytes = *getVPMElemBytes(getWidth());
   int64_t rowLen = getRowLenAttr().getInt();
   if (rowLen < 1 || rowLen > 16)
     return emitOpError("requires row_len in range [1, 16]");
@@ -756,9 +817,10 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (nrows < 1 || nrows > 16)
     return emitOpError("requires nrows in range [1, 16]");
   int64_t memoryPitchBytes = getMemoryPitchBytesAttr().getInt();
-  if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0)
-    return emitOpError("requires memory_pitch_bytes to be a positive multiple of 4 bytes");
-  if (memoryPitchBytes < rowLen * 4)
+  if (memoryPitchBytes <= 0 || memoryPitchBytes % elemBytes != 0)
+    return emitOpError(
+        "requires memory_pitch_bytes to be positive and aligned to elem_bytes");
+  if (memoryPitchBytes < rowLen * elemBytes)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
 
   if (getActiveLanesValue() &&
@@ -781,19 +843,25 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
   if (failed(verifyScalarI32Operand(op, getAddress(), "global address")) ||
       failed(verifyScalarI32Operand(op, getVpmSourceRow(), "VPM source row")) ||
       failed(verifyScalarI32Operand(op, getActiveRows(), "active_rows")) ||
-      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")) ||
-      failed(verifyDynamicPitchOrStride(op, getMemoryStrideBytes(),
-                                        "memory_stride_bytes")))
+      failed(verifyScalarI32Operand(op, getActiveCols(), "active_cols")))
     return failure();
 
   if (failed(verifyDynamicRectShape(op, getMaxRows(), getMaxCols(),
                                     getElemBytes())))
     return failure();
+  if (failed(verifyElemBytesMatchesWidth(op, getElemBytes(), getWidth())) ||
+      failed(verifyDynamicPitchOrStride(op, getMemoryStrideBytes(),
+                                        "memory_stride_bytes",
+                                        getElemBytes())))
+    return failure();
   if (!getPreserveInactive())
     return emitOpError("requires preserve_inactive = true");
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
+                                        getOrientation(),
+                                        "VDW DMA")))
     return failure();
-  if (failed(verifyVPMDMACoordinates(op, getSrcX(), getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
+                                     getSrcX(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");

@@ -1,0 +1,15 @@
+{
+  "name": "vdw_subword_preserve_tail_rect_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdw_w8": 1,
+    "saw_vdw_w16": 1,
+    "saw_byte_halfword_guards": 1,
+    "saw_tail_preserve": 1,
+    "saw_rect_preserve": 1
+  }
+}

@@ -25,7 +25,7 @@ ssavc4.module @bad_vdr_load {
   } {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
-    // CHECK: supports only width = #ssavc4.vpm_elem_width<w32> in executable v1
+    // CHECK: sub-32 VDR DMA requires subword = #ssavc4.vpm_subword<packed>
     ssavc4.vdr.load %addr, %row {
       orientation = #ssavc4.vpm_orientation<horizontal>,
       width = #ssavc4.vpm_elem_width<w16>,

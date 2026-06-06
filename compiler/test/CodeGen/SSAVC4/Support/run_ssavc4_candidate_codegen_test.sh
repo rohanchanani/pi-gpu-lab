@@ -281,8 +281,12 @@ assemble_candidate() {
   ensure_generated
   local vc4asm_tool
   vc4asm_tool="$(find_tool vc4asm)"
-  local records qasm_rel code_symbol public qasm_path out_c out_h out
-  mapfile -t records < <(manifest_kernel_records)
+  local -a records
+  local qasm_rel code_symbol public qasm_path out_c out_h out record
+  records=()
+  while IFS= read -r record; do
+    records+=("$record")
+  done < <(manifest_kernel_records)
   [[ "${#records[@]}" -ge 1 ]] || fail "manifest contains no kernels to assemble"
   for record in "${records[@]}"; do
     IFS=$'\t' read -r qasm_rel code_symbol public <<<"$record"
@@ -344,9 +348,15 @@ select_harness_path() {
   if [[ -f "$named" ]]; then printf '%s\n' "$named"; return 0; fi
   local -a matches
   if [[ -d "$REFERENCE_DIR" ]]; then
-    mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name '3-test-*.c' -print | sort)
+    matches=()
+    while IFS= read -r match; do
+      matches+=("$match")
+    done < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name '3-test-*.c' -print | sort)
     if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
-    mapfile -t matches < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
+    matches=()
+    while IFS= read -r match; do
+      matches+=("$match")
+    done < <(find "$REFERENCE_DIR" -maxdepth 1 -type f -name "${TEST_NAME}_harness.c" -print | sort)
     if [[ "${#matches[@]}" -eq 1 ]]; then printf '%s\n' "${matches[0]}"; return 0; fi
   fi
   fail "VC4_ALLOW_REFERENCE_HARNESS_FALLBACK=1 but no legacy fallback harness was found for $TEST_NAME"

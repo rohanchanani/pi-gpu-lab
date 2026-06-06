@@ -555,6 +555,30 @@
       "acceptance_line": "P9 VPM subword modes are accepted only when each executable mode has hardware proof."
     },
     {
+      "id": "p9_vdr_vdw_subword_dma_modes",
+      "phase": "P9",
+      "category": "pack_unpack",
+      "current_status": "hardware_proven_pending_final_acceptance",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "P9e hardware-proves VC4Kernel and SSAVC4 VDR/VDW DMA horizontal w8/w16 packed modes with explicit width/subword/orientation/x/pitch attrs. w32 requires subword<none>; w8/w16 require subword<packed> and horizontal orientation. DMA laned and vertical subword modes deterministic-reject because VC4 VDR/VDW DMA setup does not expose the QPU VPM laned behavior and vertical subword row-major layout is not hardware-proven in P9.",
+      "target_surface": "Executable VDR/VDW DMA subword modes only after byte/halfword hardware proof and exact verifier coverage.",
+      "vc4kernel_verifier_plan": "Accept exactly w32/none and hardware-proven horizontal w8/w16 packed DMA modes; require elem_bytes to match width; reject vertical subword DMA, laned DMA, w8/w16 none, w32 packed/laned, unaligned offsets, unaligned runtime pitch/stride constants, and sparse VDW masks.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted width/subword/orientation/x/pitch attrs and elem_bytes through SSAVC4 VDR/VDW DMA ops while preserving P6 memory attrs and P8 inactive_store<preserve>.",
+      "ssavc4_to_vc4_plan": "Encode VDR MODEW in VPMVCD read setup bits 30:28 and VDW MODEW in VDW setup bits 2:0; keep VDW LANED bit 15 at zero, translate high-level row pitch to the 13-bit byte gap, and reject unencodable combinations before emission.",
+      "hardware_or_reject_verification_plan": "P9e targeted hardware fixtures prove horizontal byte/halfword VDR to VPM to VDW roundtrips, compute through VPM QPU subword reads, and VDW tail/rect preserve. Deterministic-reject lit tests cover unsupported modes including vertical subword DMA.",
+      "upstream_use": "Sub-32 tile transport after pre-vector lock.",
+      "migration_or_removal": "Old blanket sub-32 DMA executable rejection is replaced by precise P9e accepted/rejected mode rules.",
+      "dependencies": [
+        "baseline_vpm_vdr_vdw_rect_paths",
+        "p9_vpm_subword_w16_w8_modes",
+        "p9_fragment_pack",
+        "p9_fragment_unpack",
+        "p8_vdw_store_inactive_preserve_full_tail_rect",
+        "p8_sparse_vdw_store_deterministic_reject"
+      ],
+      "acceptance_line": "P9 VDR/VDW subword DMA is accepted only when byte/halfword hardware proof passes and unsupported combinations deterministic-reject."
+    },
+    {
       "id": "p10_fragment_sfu_recip",
       "phase": "P10",
       "category": "sfu_fastmath",

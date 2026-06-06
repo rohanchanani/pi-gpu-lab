@@ -166,6 +166,10 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },
+    "p9_vdr_vdw_subword_dma_modes": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -313,6 +317,10 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_final_acceptance",
     },
     "p9_vpm_subword_w16_w8_modes": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p9_vdr_vdw_subword_dma_modes": {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },

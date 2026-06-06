@@ -7,12 +7,10 @@
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK-SAME: row_len = 16 : i32
 // CHECK-SAME: serialize = "mutex"
-// CHECK: ssavc4.vpm.read
+// CHECK: ssavc4.vdw.store_vpm
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
-// CHECK-SAME: x = 5 : i32
-// CHECK: ssavc4.vdw.store
+// CHECK-SAME: row_len = 16 : i32
 // CHECK-SAME: serialize = "mutex"
-// CHECK-NOT: ssavc4.vdw.store_vpm
 // CHECK-NOT: vc4kernel.
 module {
   vc4kernel.kernel @vdw_vpm_horizontal_vertical(%out : i32, %n : i32) attributes {

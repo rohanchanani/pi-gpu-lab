@@ -55,13 +55,17 @@ if [[ -z "${state_root}" ]]; then
   state_root="${repo_root}/.vc4_auto/codegen_mixed_acceptance_${timestamp}"
 fi
 
-fixture_filter_json="$(
-  python3 - "$@" <<'PY' "${fixtures[@]}"
+if [[ ${#fixtures[@]} -eq 0 ]]; then
+  fixture_filter_json="[]"
+else
+  fixture_filter_json="$(
+    python3 - "${fixtures[@]}" <<'PY'
 import json
 import sys
 print(json.dumps(sys.argv[1:]))
 PY
-)"
+  )"
+fi
 
 entries="$(
   python3 - "${manifest}" "${fixture_filter_json}" <<'PY'

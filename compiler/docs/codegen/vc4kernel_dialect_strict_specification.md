@@ -1469,10 +1469,38 @@ width = w16, subword_mode = packed | laned
 width = w8,  subword_mode = packed | laned
 ```
 
-VDR/VDW DMA subword movement is still P9e scope until separately proven. In
-32-bit mode, the hardware ignores the laned bit, so executable 32-bit ops must
-require `subword_mode = none`. Sub-32 QPU VPM ops must use `packed` or `laned`;
-`none` has no accepted P9d meaning for w8/w16 QPU VPM movement.
+After P9e, VDR/VDW DMA accepts:
+
+```text
+width = w32, subword_mode = none
+width = w16, subword_mode = packed, orientation = horizontal
+width = w8,  subword_mode = packed, orientation = horizontal
+```
+
+VDR/VDW DMA does not accept `laned`; the VC4 DMA setup has its own MODEW
+width/offset fields and VDW writes LANED as zero. In 32-bit mode, the hardware
+ignores the laned bit, so executable 32-bit ops must require `subword_mode =
+none`. Sub-32 QPU VPM ops must use `packed` or `laned`; sub-32 DMA ops must use
+`packed` and horizontal orientation. `none` has no accepted P9 meaning for
+w8/w16 movement. Vertical subword VDR/VDW DMA is deterministic-rejected in P9;
+the horizontal path is the hardware-proven subword DMA surface.
+
+For DMA, `elem_bytes` must match width exactly:
+
+```text
+w8  -> 1
+w16 -> 2
+w32 -> 4
+```
+
+VDR encodes subword width and byte/halfword selector through MODEW in the
+VPMVCD read setup. VDW encodes subword width and byte/halfword selector through
+MODEW in the VDW setup word and continues to translate high-level row pitch to
+the 13-bit hardware byte-gap STRIDE field. The compiler must reject
+unencodable combinations instead of widening, masking, or silently changing the
+mode. For horizontal packed subword movement, logical VPM row coordinates are
+translated through the architecture-defined byte/halfword address fields so the
+VC4Kernel row-major tile contract is preserved.
 
 ### 11.3 VPM coordinate rules for QPU modes
 
@@ -1664,8 +1692,11 @@ Rules:
 ```text
 - y/x identify a location inside the planned VPM allocation, relative to that allocation.
 - orientation horizontal or vertical is legal in v1.
-- width must be w32 in executable v1.
-- subword_mode must be none in executable v1.
+- width/subword_mode must be an executable DMA mode:
+  w32/none, w16/packed, or w8/packed.
+- elem_bytes must match width: 4 for w32, 2 for w16, 1 for w8.
+- DMA laned modes deterministic-reject because VC4 VDR/VDW DMA is not the QPU
+  VPM laned path.
 - all predicate classes are legal.
 ```
 
@@ -1765,8 +1796,11 @@ Rules:
 - base is raw i32 device pointer word.
 - byte_offset is scalar byte offset and must be 4-byte aligned.
 - rows/cols describe the full DMA rectangle.
-- width must be w32 in executable v1.
-- subword_mode must be none in executable v1.
+- width/subword_mode must be an executable DMA mode:
+  w32/none, w16/packed, or w8/packed.
+- elem_bytes must match width: 4 for w32, 2 for w16, 1 for w8.
+- DMA laned modes deterministic-reject; unsupported subword stores must not
+  widen to w32 or use TMU-to-VPM as a workaround.
 ```
 
 ### 12.9 `vc4kernel.vdw_store_vpm_fragment`
@@ -1795,7 +1829,10 @@ Rules:
 ```text
 - full/empty/tail_prefix are direct classes.
 - arbitrary sparse general_mask deterministic-rejects until the deferred sparse VDW phase is implemented and hardware-proven.
-- byte_offset must be 4-byte aligned.
+- byte_offset must be aligned to the element size encoded by width.
+- elem_bytes must match width: 4 for w32, 2 for w16, 1 for w8.
+- width/subword_mode must be an executable VDW DMA mode:
+  w32/none, w16/packed, or w8/packed.
 - VDW stores require explicit inactive_store<preserve> in Surface v2; attr absence is removed_in_p8.
 ```
 

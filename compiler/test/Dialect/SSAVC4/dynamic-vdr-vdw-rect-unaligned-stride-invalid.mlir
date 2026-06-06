@@ -7,7 +7,7 @@ ssavc4.module @bad_dynamic_rect_stride {
     %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %cols = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %stride = ssavc4.load_imm <splat32> {value = 6 : i32} : i32
-    // CHECK: memory_stride_bytes constant must be positive and 4-byte aligned
+    // CHECK: memory_stride_bytes constant must be positive and aligned to elem_bytes
     ssavc4.vdw.store_rect.dynamic %addr, %row, %rows, %cols, %stride {max_rows = 4 : i32, max_cols = 4 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, src_x = 0 : i32, vpm_pitch = 1 : i32, preserve_inactive = true} : i32, i32, i32, i32, i32
     ssavc4.thread_end
   }

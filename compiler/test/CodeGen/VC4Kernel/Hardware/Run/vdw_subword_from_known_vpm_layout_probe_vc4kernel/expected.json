@@ -1,0 +1,14 @@
+{
+  "name": "vdw_subword_from_known_vpm_layout_probe_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdw_w8": 1,
+    "saw_vdw_w16": 1,
+    "saw_known_vpm_qpu_writes": 1,
+    "saw_byte_halfword_guards": 1
+  }
+}

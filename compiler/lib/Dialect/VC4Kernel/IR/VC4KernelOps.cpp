@@ -648,7 +648,9 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
 
 static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
                                              StringRef strideAttrName,
-                                             bool qpuSubwordModes = false) {
+                                             bool qpuSubwordModes = false,
+                                             bool dmaSubwordModes = false,
+                                             StringRef dmaRole = "VPM DMA") {
   auto orientation =
       llvm::dyn_cast_if_present<VPMOrientationAttr>(op->getAttr("orientation"));
   if (!orientation)
@@ -660,7 +662,7 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
       llvm::dyn_cast_if_present<VPMSubwordAttr>(op->getAttr("subword"));
   if (!subword)
     return op->emitOpError("subword attribute is required");
-  if (!qpuSubwordModes) {
+  if (!qpuSubwordModes && !dmaSubwordModes) {
     if (width.getValue() != VPMWidth::w32)
       return op->emitOpError(
           "sub-32 VPM width is not executable in vc4kernel v1");
@@ -668,40 +670,61 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
       return op->emitOpError(
           "packed/laned VPM subword modes are not executable in vc4kernel v1");
   }
-  if (width.getValue() == VPMWidth::w32 &&
-      subword.getValue() != VPMSubword::none)
-    return op->emitOpError(
-        "32-bit VPM QPU access requires subword<none>");
-  if (width.getValue() != VPMWidth::w32 &&
-      subword.getValue() == VPMSubword::none)
-    return op->emitOpError(
-        "sub-32 VPM QPU access requires subword<packed> or subword<laned>");
+  if (dmaSubwordModes) {
+    if (width.getValue() == VPMWidth::w32 &&
+        subword.getValue() != VPMSubword::none)
+      return op->emitOpError()
+             << "32-bit " << dmaRole << " requires subword<none>";
+    if (width.getValue() != VPMWidth::w32 &&
+        subword.getValue() == VPMSubword::none)
+      return op->emitOpError()
+             << "sub-32 " << dmaRole << " requires subword<packed>";
+    if (width.getValue() != VPMWidth::w32 &&
+        subword.getValue() == VPMSubword::laned)
+      return op->emitOpError()
+             << dmaRole
+             << " laned subword mode is not supported by VC4 hardware";
+    if (width.getValue() != VPMWidth::w32 &&
+        orientation.getValue() == VPMOrientation::vertical)
+      return op->emitOpError()
+             << "vertical subword " << dmaRole
+             << " is not supported in P9";
+  } else {
+    if (width.getValue() == VPMWidth::w32 &&
+        subword.getValue() != VPMSubword::none)
+      return op->emitOpError(
+          "32-bit VPM QPU access requires subword<none>");
+    if (width.getValue() != VPMWidth::w32 &&
+        subword.getValue() == VPMSubword::none)
+      return op->emitOpError(
+          "sub-32 VPM QPU access requires subword<packed> or subword<laned>");
+  }
 
   auto xAttr = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(xAttrName));
   if (!xAttr)
     return op->emitOpError() << xAttrName << " attribute is required";
   int64_t x = xAttr.getInt();
   if (x < 0 || x > 15)
-    return qpuSubwordModes
+    return qpuSubwordModes || dmaSubwordModes
                ? op->emitOpError() << xAttrName
                                     << " must be in VPM ADDR range [0, 15]"
                : op->emitOpError("vertical VPM x must be in range [0, 15]");
   if (orientation.getValue() == VPMOrientation::horizontal &&
       width.getValue() == VPMWidth::w32 && x != 0)
-    return qpuSubwordModes
+    return qpuSubwordModes || dmaSubwordModes
                ? op->emitOpError(
-                     "horizontal 32-bit VPM QPU access requires x = 0")
+                     "horizontal 32-bit VPM access requires x = 0")
                : op->emitOpError(
                      "horizontal 32-bit VPM access requires x = 0 in vc4kernel v1");
   if (orientation.getValue() == VPMOrientation::horizontal &&
       width.getValue() == VPMWidth::w16 && x > 1)
     return op->emitOpError(
-        "horizontal 16-bit VPM QPU access requires halfword selector x in "
+        "horizontal 16-bit VPM access requires halfword selector x in "
         "range [0, 1]");
   if (orientation.getValue() == VPMOrientation::horizontal &&
       width.getValue() == VPMWidth::w8 && x > 3)
     return op->emitOpError(
-        "horizontal 8-bit VPM QPU access requires byte selector x in range "
+        "horizontal 8-bit VPM access requires byte selector x in range "
         "[0, 3]");
 
   auto strideAttr =
@@ -713,7 +736,48 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
   if (qpuSubwordModes && strideAttr.getInt() > 63)
     return op->emitOpError()
            << strideAttrName << " must fit the 6-bit VPM QPU stride field";
+  if (dmaSubwordModes && strideAttr.getInt() > 16)
+    return op->emitOpError()
+           << strideAttrName << " must be in VPM DMA pitch range [1, 16]";
   return success();
+}
+
+static std::optional<int64_t> getVPMWidthElemBytes(Operation *op) {
+  auto width = llvm::dyn_cast_if_present<VPMWidthAttr>(op->getAttr("width"));
+  if (!width)
+    return std::nullopt;
+  switch (width.getValue()) {
+  case VPMWidth::w32:
+    return 4;
+  case VPMWidth::w16:
+    return 2;
+  case VPMWidth::w8:
+    return 1;
+  }
+  return std::nullopt;
+}
+
+static LogicalResult verifyElemBytesMatchesWidth(Operation *op,
+                                                 int64_t elemBytes) {
+  std::optional<int64_t> expected = getVPMWidthElemBytes(op);
+  if (!expected)
+    return op->emitOpError("width attribute is required");
+  if (elemBytes != *expected)
+    return op->emitOpError()
+           << "elem_bytes must match VPM width (" << *expected
+           << " for this mode)";
+  return success();
+}
+
+static bool isKnownScalarByteOffsetAlignedTo(Value value, int64_t elemBytes) {
+  if (elemBytes <= 1)
+    return value.getType().isSignlessInteger(32);
+  if (elemBytes == 4)
+    return isKnownScalarByteOffsetAligned4(value);
+  std::optional<int64_t> constant = getConstantI32(value);
+  if (constant)
+    return *constant % elemBytes == 0;
+  return isKnownScalarByteOffsetAligned4(value);
 }
 
 static LogicalResult verifyDynamicRectShape(Operation *op) {
@@ -733,21 +797,22 @@ static LogicalResult verifyDynamicRectShape(Operation *op) {
       llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("elem_bytes"));
   if (!elemBytes)
     return op->emitOpError("elem_bytes attribute is required");
-  if (elemBytes.getInt() != 4)
-    return op->emitOpError("elem_bytes must be 4");
+  if (failed(verifyElemBytesMatchesWidth(op, elemBytes.getInt())))
+    return failure();
   return success();
 }
 
 static LogicalResult verifyRuntimePitchOrStride(Operation *op, Value value,
-                                                StringRef name) {
+                                                StringRef name,
+                                                int64_t elemBytes = 4) {
   if (!value.getType().isSignlessInteger(32))
     return op->emitOpError() << name << " must be a scalar i32 value";
   std::optional<int64_t> constant = getConstantI32(value);
   if (!constant)
     return success();
-  if (*constant <= 0 || *constant % 4 != 0)
+  if (*constant <= 0 || *constant % elemBytes != 0)
     return op->emitOpError()
-           << name << " constant must be positive and 4-byte aligned";
+           << name << " constant must be positive and aligned to elem_bytes";
   return success();
 }
 
@@ -1488,18 +1553,22 @@ LogicalResult VDRLoadToVPMOp::verify() {
     return failure();
   if (getOperation()->getNumOperands() != 4)
     return emitOpError("does not accept a predicate operand");
-  if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
+  if (!isKnownScalarByteOffsetAlignedTo(getByteOffset(), getElemBytes()))
     return emitOpError(
-        "vdr_load_to_vpm byte_offset must be statically 4-byte aligned");
+        "vdr_load_to_vpm byte_offset must be statically aligned to elem_bytes");
   if (getRows() <= 0)
     return emitOpError("rows must be positive");
   if (getCols() < 1 || getCols() > 16)
     return emitOpError("cols must be in range [1, 16]");
-  if (getElemBytes() != 4)
-    return emitOpError("elem_bytes must be 4");
-  if (getGlobalStrideBytes() <= 0 || getGlobalStrideBytes() % 4 != 0)
-    return emitOpError("global_stride_bytes must be positive and 4-byte aligned");
-  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch")))
+  if (failed(verifyElemBytesMatchesWidth(getOperation(), getElemBytes())))
+    return failure();
+  if (getGlobalStrideBytes() <= 0 ||
+      getGlobalStrideBytes() % getElemBytes() != 0)
+    return emitOpError(
+        "global_stride_bytes must be positive and aligned to elem_bytes");
+  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch",
+                                     /*qpuSubwordModes=*/false,
+                                     /*dmaSubwordModes=*/true, "VDR DMA")))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
 }
@@ -1510,10 +1579,13 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
     return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();
-  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch")))
+  if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch",
+                                     /*qpuSubwordModes=*/false,
+                                     /*dmaSubwordModes=*/true, "VDR DMA")))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryPitchBytes(),
-                                        "memory_pitch_bytes")))
+                                        "memory_pitch_bytes",
+                                        getElemBytes())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(),
                               getMaxRows());
@@ -1525,12 +1597,14 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
     return failure();
   if (failed(verifyVDWInactiveStorePolicy(getOperation())))
     return failure();
-  if (getElemBytes() != 4)
-    return emitOpError("elem_bytes must be 4");
-  if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
+  if (failed(verifyElemBytesMatchesWidth(getOperation(), getElemBytes())))
+    return failure();
+  if (!isKnownScalarByteOffsetAlignedTo(getByteOffset(), getElemBytes()))
     return emitOpError(
-        "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
-  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
+        "vdw_store_vpm_fragment byte_offset must be statically aligned to elem_bytes");
+  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch",
+                                     /*qpuSubwordModes=*/false,
+                                     /*dmaSubwordModes=*/true, "VDW DMA")))
     return failure();
   if (failed(verifyExplicitVDWVPMPredicate(getOperation(), getPred())))
     return failure();
@@ -1545,10 +1619,13 @@ LogicalResult VDWStoreRectFromVPMOp::verify() {
     return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();
-  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
+  if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch",
+                                     /*qpuSubwordModes=*/false,
+                                     /*dmaSubwordModes=*/true, "VDW DMA")))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryStrideBytes(),
-                                        "memory_stride_bytes")))
+                                        "memory_stride_bytes",
+                                        getElemBytes())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow(),
                               getMaxRows());

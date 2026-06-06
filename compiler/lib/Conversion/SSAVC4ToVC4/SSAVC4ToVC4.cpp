@@ -78,6 +78,9 @@ constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 
+static std::optional<int64_t>
+getDMAElemBytes(mlir::ssavc4::VPMElemWidth width);
+
 constexpr int64_t kMaxVDWStrideGapBytes = 0x1fff;
 constexpr int64_t kMaxVDRMPITCHBBytes = 0x1fff;
 constexpr unsigned kSingleScheduledSlot = 1;
@@ -1855,6 +1858,48 @@ static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
   return (1 << 20) | (stride << 12) | modeBits;
 }
 
+static int64_t getPackedSubwordLogicalRowScale(
+    mlir::ssavc4::VPMElemWidth width, mlir::ssavc4::VPMSubword subword) {
+  if (subword != mlir::ssavc4::VPMSubword::packed)
+    return 1;
+  switch (width) {
+  case mlir::ssavc4::VPMElemWidth::w8:
+    return 4;
+  case mlir::ssavc4::VPMElemWidth::w16:
+    return 2;
+  case mlir::ssavc4::VPMElemWidth::w32:
+    return 1;
+  }
+  return 1;
+}
+
+static std::pair<int64_t, mlir::vc4::QPUMux>
+emitVPMQPUAddressRow(OpBuilder &builder, Location loc, Operation *source,
+                     int64_t rowReg) {
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
+      source->getAttr("width"));
+  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
+      source->getAttr("subword"));
+  int64_t scale = 1;
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal)
+    scale = getPackedSubwordLogicalRowScale(width.getValue(),
+                                            subword.getValue());
+  if (scale == 1)
+    return {rowReg, mlir::vc4::QPUMux::a};
+  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        /*waddrAdd=*/33, /*waddrMul=*/32,
+                        mlir::vc4::AddOpcode::shl,
+                        mlir::vc4::MulOpcode::nop, rowReg, /*raddrB=*/0,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+                        /*smallImm=*/scale == 4 ? 2 : 1);
+  return {0, mlir::vc4::QPUMux::r1};
+}
+
 static LogicalResult verifyRestrictedFlagUses(Operation *func) {
   if (func->getNumRegions() == 0 || func->getRegion(0).empty())
     return success();
@@ -2689,17 +2734,24 @@ static LogicalResult selectInstructionTemplates(
             op.getAttr("subword"));
         if (!width || !subword)
           return op.emitOpError("requires typed VDR width and subword attrs");
-        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
-        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+        if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("32-bit VDR DMA requires subword<none>");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+          return op.emitOpError("sub-32 VDR DMA requires subword<packed>");
+        std::optional<int64_t> elemBytes = getDMAElemBytes(width.getValue());
+        if (!elemBytes)
+          return op.emitOpError("has unknown VDR DMA width");
         if (rowLen <= 0 || rowLen > 16)
           return op.emitOpError("requires row_len in range [1, 16] for M5 lowering");
         if (nrows <= 0 || nrows > 16)
           return op.emitOpError("requires nrows in range [1, 16] for M5 lowering");
-        if (memoryPitchBytes <= 0 || memoryPitchBytes % 4 != 0 ||
-            memoryPitchBytes < rowLen * 4)
-          return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M5 lowering");
+        if (memoryPitchBytes <= 0 ||
+            memoryPitchBytes % *elemBytes != 0 ||
+            memoryPitchBytes < rowLen * *elemBytes)
+          return op.emitOpError(
+              "requires memory_pitch_bytes to cover whole DMA rows");
         if (vpmX < 0 || vpmX > 15)
           return op.emitOpError("requires vpm_x in range [0, 15] for M5 lowering");
         if (vpmPitch <= 0 || vpmPitch > 16)
@@ -2752,14 +2804,20 @@ static LogicalResult selectInstructionTemplates(
               "requires zero_fill = true for executable lowering");
         if (maxRows <= 0 || maxRows > 16 || maxCols <= 0 || maxCols > 16)
           return op.emitOpError("requires max_rows/max_cols in range [1, 16]");
-        if (elemBytes != 4)
-          return op.emitOpError("supports only elem_bytes = 4");
-        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-          return op.emitOpError(
-              "supports only width = #ssavc4.vpm_elem_width<w32>");
-        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-          return op.emitOpError(
-              "supports only subword = #ssavc4.vpm_subword<none>");
+        if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("32-bit VDR DMA requires subword<none>");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+          return op.emitOpError("sub-32 VDR DMA requires subword<packed>");
+        std::optional<int64_t> expectedElemBytes =
+            getDMAElemBytes(width.getValue());
+        if (!expectedElemBytes)
+          return op.emitOpError("has unknown VDR DMA width");
+        if (elemBytes != *expectedElemBytes)
+          return op.emitOpError()
+                 << "requires elem_bytes to match VDR DMA width ("
+                 << *expectedElemBytes << ")";
         if (dstX < 0 || dstX > 15)
           return op.emitOpError("requires dst_x in range [0, 15]");
         if (vpmPitch <= 0 || vpmPitch > 16)
@@ -2845,17 +2903,23 @@ static LogicalResult selectInstructionTemplates(
             op.getAttr("subword"));
         if (!width || !subword)
           return op.emitOpError("requires typed VDW width and subword attrs");
-        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
-        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+        if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("32-bit VDW DMA requires subword<none>");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+          return op.emitOpError("sub-32 VDW DMA requires subword<packed>");
+        std::optional<int64_t> elemBytes = getDMAElemBytes(width.getValue());
+        if (!elemBytes)
+          return op.emitOpError("has unknown VDW DMA width");
         if (rowLen < 1 || rowLen > 16)
           return op.emitOpError("requires row_len in range [1, 16] for M3 lowering");
         if (nrows < 1 || nrows > 16)
           return op.emitOpError("requires nrows in range [1, 16] for M3 lowering");
-        if (memoryPitchBytes < rowLen * 4 ||
-            memoryPitchBytes % 4 != 0)
-          return op.emitOpError("requires memory_pitch_bytes to cover whole 32-bit rows for M3 lowering");
+        if (memoryPitchBytes < rowLen * *elemBytes ||
+            memoryPitchBytes % *elemBytes != 0)
+          return op.emitOpError(
+              "requires memory_pitch_bytes to cover whole DMA rows");
         if (op.getNumOperands() == 4) {
           if (!op.getOperand(3).getType().isSignlessInteger(32))
             return op.emitOpError("requires an i32 dynamic active-lane operand");
@@ -2911,14 +2975,20 @@ static LogicalResult selectInstructionTemplates(
               "requires preserve_inactive = true for executable lowering");
         if (maxRows <= 0 || maxRows > 16 || maxCols <= 0 || maxCols > 16)
           return op.emitOpError("requires max_rows/max_cols in range [1, 16]");
-        if (elemBytes != 4)
-          return op.emitOpError("supports only elem_bytes = 4");
-        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-          return op.emitOpError(
-              "supports only width = #ssavc4.vpm_elem_width<w32>");
-        if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-          return op.emitOpError(
-              "supports only subword = #ssavc4.vpm_subword<none>");
+        if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::none)
+          return op.emitOpError("32-bit VDW DMA requires subword<none>");
+        if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+            subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+          return op.emitOpError("sub-32 VDW DMA requires subword<packed>");
+        std::optional<int64_t> expectedElemBytes =
+            getDMAElemBytes(width.getValue());
+        if (!expectedElemBytes)
+          return op.emitOpError("has unknown VDW DMA width");
+        if (elemBytes != *expectedElemBytes)
+          return op.emitOpError()
+                 << "requires elem_bytes to match VDW DMA width ("
+                 << *expectedElemBytes << ")";
         if (srcX < 0 || srcX > 15)
           return op.emitOpError("requires src_x in range [0, 15]");
         if (vpmPitch <= 0 || vpmPitch > 16)
@@ -3666,11 +3736,13 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
+  auto [addressRowReg, addressRowMux] =
+      emitVPMQPUAddressRow(builder, loc, source, *rowReg);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                    *rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                    addressRowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    addressRowMux, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -3715,11 +3787,13 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                           mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
+  auto [addressRowReg, addressRowMux] =
+      emitVPMQPUAddressRow(builder, loc, source, *rowReg);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                    *rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                    mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                    addressRowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                    addressRowMux, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -3963,6 +4037,8 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                                    int64_t rowLen,
                                    int64_t nrows,
                                    int64_t memoryPitchBytes,
+                                   int64_t elemBytes,
+                                   uint32_t modew,
                                    bool vertical,
                                    bool useMutex,
                                    mlir::vc4::QPUMux addressMux =
@@ -3993,7 +4069,7 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
   // dma_h32/dma_v32(y, x), i.e. y in bits 7.. and x in bits 3...
   // The data is already resident in VPM, so unlike ssavc4.vdw.store there is
   // no register-to-VPM staging write here.
-  int64_t strideBytes = memoryPitchBytes - rowLen * 4;
+  int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
 
   if (dynamicActiveLanesReg) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
@@ -4059,7 +4135,7 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                         /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
-                       (vertical ? 0u : 0x4000u);
+                       (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   createSplat32LDI(builder, loc, static_cast<int32_t>(setupBase), 35);
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -4148,6 +4224,45 @@ static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes) {
   return std::nullopt;
 }
 
+static std::optional<int64_t>
+getDMAElemBytes(mlir::ssavc4::VPMElemWidth width) {
+  switch (width) {
+  case mlir::ssavc4::VPMElemWidth::w32:
+    return 4;
+  case mlir::ssavc4::VPMElemWidth::w16:
+    return 2;
+  case mlir::ssavc4::VPMElemWidth::w8:
+    return 1;
+  }
+  return std::nullopt;
+}
+
+static LogicalResult getDMAModeW(Operation *source, int64_t vpmX,
+                                 uint32_t &modew) {
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
+  switch (width.getValue()) {
+  case mlir::ssavc4::VPMElemWidth::w32:
+    if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+      return source->emitOpError("32-bit DMA mode requires subword<none>");
+    modew = 0;
+    return success();
+  case mlir::ssavc4::VPMElemWidth::w16:
+    if (subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+      return source->emitOpError("16-bit DMA mode requires subword<packed>");
+    modew = 2u | (static_cast<uint32_t>(vpmX) & 0x1u);
+    return success();
+  case mlir::ssavc4::VPMElemWidth::w8:
+    if (subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+      return source->emitOpError("8-bit DMA mode requires subword<packed>");
+    modew = 4u | (static_cast<uint32_t>(vpmX) & 0x3u);
+    return success();
+  }
+  return source->emitOpError("has unknown DMA width");
+}
+
 static LogicalResult buildVDRLoadSetupWordFromParts(
     Operation *source, int64_t rowLen, int64_t nrows,
     int64_t memoryPitchBytes, int64_t vpmX, int64_t vpmPitch, bool vertical,
@@ -4161,21 +4276,33 @@ static LogicalResult buildVDRLoadSetupWordFromParts(
   if (!mpitch)
     return source->emitOpError()
            << "requires memory_pitch_bytes encodable as VDR MPITCH = 8 * 2^n bytes";
+  uint32_t modew = 0;
+  if (failed(getDMAModeW(source, vpmX, modew)))
+    return failure();
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
+  int64_t hardwareVPitch =
+      vpmPitch * getPackedSubwordLogicalRowScale(width.getValue(),
+                                                 subword.getValue());
+  if (hardwareVPitch < 1 || hardwareVPitch > 16)
+    return source->emitOpError()
+           << "VDR logical vpm_pitch " << vpmPitch
+           << " is not encodable as 4-bit hardware VPITCH "
+           << hardwareVPitch;
 
-  // VPMVCD_RD_SETUP basic 32-bit DMA-load setup:
+  // VPMVCD_RD_SETUP basic DMA-load setup:
   //   bit 31 marks the read/DMA setup word, MPITCH encodes 8*2^n byte source
   //   pitch, zero-encoded 16-wide ROWLEN/NROWS fields describe the memory
-  //   transfer, VPITCH advances the destination VPM row between source rows,
-  //   VERT selects orientation, and low bits encode ADDRA X[3:0].  ADDRA
-  //   Y[5:0] is patched in dynamically from the block-local shared tile row
-  //   when emitting the scheduled VC4 setup sequence.
-  //   This is intentionally narrower than the full
-  //   VC4 setup space; M5 only exposes regular 32-bit tile loads.
+  //   transfer, VPITCH advances the hardware VPM subword coordinate between
+  //   source rows, VERT selects orientation, and low bits encode ADDRA X[3:0].
   uint32_t word = 0x80000000u;
+  word |= (modew & 0x7u) << 28;
   word |= (*mpitch & 0x0fu) << 24;
   word |= (encodeVDRCount16(rowLen) & 0x0fu) << 20;
   word |= (encodeVDRCount16(nrows) & 0x0fu) << 16;
-  word |= (encodeVDRCount16(vpmPitch) & 0x0fu) << 12;
+  word |= (encodeVDRCount16(hardwareVPitch) & 0x0fu) << 12;
   if (vertical)
     word |= 1u << 11;
   word |= encodeVDRVPMXY(/*row=*/0, vpmX);
@@ -4190,10 +4317,26 @@ static LogicalResult buildVDRLoadSetupWordWithExtendedPitch(
       vpmX < 0 || vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
     return source->emitOpError("has invalid VDR setup attributes after verification");
 
+  uint32_t modew = 0;
+  if (failed(getDMAModeW(source, vpmX, modew)))
+    return failure();
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
+  int64_t hardwareVPitch =
+      vpmPitch * getPackedSubwordLogicalRowScale(width.getValue(),
+                                                 subword.getValue());
+  if (hardwareVPitch < 1 || hardwareVPitch > 16)
+    return source->emitOpError()
+           << "VDR logical vpm_pitch " << vpmPitch
+           << " is not encodable as 4-bit hardware VPITCH "
+           << hardwareVPitch;
   uint32_t word = 0x80000000u;
+  word |= (modew & 0x7u) << 28;
   word |= (encodeVDRCount16(rowLen) & 0x0fu) << 20;
   word |= (encodeVDRCount16(nrows) & 0x0fu) << 16;
-  word |= (encodeVDRCount16(vpmPitch) & 0x0fu) << 12;
+  word |= (encodeVDRCount16(hardwareVPitch) & 0x0fu) << 12;
   if (vertical)
     word |= 1u << 11;
   word |= encodeVDRVPMXY(/*row=*/0, vpmX);
@@ -5908,6 +6051,17 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
   return success();
 }
 
+static PlannedRegion planRawVDWStoreFromVPM(
+    Location loc, int64_t addressReg, int64_t vpmYReg, int64_t vpmXReg,
+    std::optional<int64_t> dynamicActiveLanesReg, int64_t activeLanes,
+    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes,
+    int64_t elemBytes, uint32_t modew, bool vertical, bool useMutex,
+    mlir::vc4::QPUMux addressMux, mlir::vc4::QPUMux vpmYMux,
+    mlir::vc4::QPUMux vpmXMux,
+    std::optional<int64_t> addressAddReg,
+    int64_t addressAddMultiplier, int64_t vpmRowOffset,
+    std::optional<int64_t> staticVpmX);
+
 static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
                                      const InstructionTemplate &templ,
                                      const SpillAwareAllocator &allocator) {
@@ -5934,23 +6088,33 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
   int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
   int64_t memoryPitchBytes =
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
+  std::optional<int64_t> staticVpmX = getConstantI32FromLoadImm(templ.operands[2]);
   auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
       source->getAttr("width"));
   auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
       source->getAttr("subword"));
-  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
+  if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() != mlir::ssavc4::VPMSubword::none)
+    return source->emitOpError("32-bit VDW DMA requires subword<none>");
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() != mlir::ssavc4::VPMSubword::packed)
+    return source->emitOpError("sub-32 VDW DMA requires subword<packed>");
+  std::optional<int64_t> elemBytes = getDMAElemBytes(width.getValue());
+  if (!elemBytes)
+    return source->emitOpError("has unknown VDW DMA width");
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 && !staticVpmX)
     return source->emitOpError(
-        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
-  if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-    return source->emitOpError(
-        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+        "subword VDW DMA requires a static VPM x byte/halfword selector");
+  uint32_t modew = 0;
+  if (failed(getDMAModeW(source, staticVpmX.value_or(0), modew)))
+    return failure();
   if (rowLen < 1 || rowLen > 16)
     return source->emitOpError("requires row_len in range [1, 16] for M3 lowering");
   if (nrows < 1 || nrows > 16)
     return source->emitOpError("requires nrows in range [1, 16] for M3 lowering");
-  int64_t strideBytes = memoryPitchBytes - rowLen * 4;
+  int64_t strideBytes = memoryPitchBytes - rowLen * *elemBytes;
   if (strideBytes < 0 || strideBytes > kMaxVDWStrideGapBytes ||
-      memoryPitchBytes % 4 != 0)
+      memoryPitchBytes % *elemBytes != 0)
     return source->emitOpError(
         "requires memory_pitch_bytes to produce an encodable 13-bit VDW "
         "stride gap");
@@ -5964,10 +6128,20 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
           source->getAttr("orientation"));
   bool vertical =
       orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
+  if (dynamicActiveLanesReg) {
+    PlannedRegion store = planRawVDWStoreFromVPM(
+        source->getLoc(), *addressReg, *vpmYReg, *vpmXReg,
+        dynamicActiveLanesReg, activeLanes, rowLen, nrows, memoryPitchBytes,
+        *elemBytes, modew, vertical, hasStringAttr(source, "serialize", "mutex"),
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        std::nullopt, 1, 0, std::nullopt);
+    return planActiveColsGuardedRegion(source->getLoc(), *dynamicActiveLanesReg,
+                                       rowLen, std::move(store))
+        .emit(builder);
+  }
   emitRawVDWStoreFromVPM(builder, source->getLoc(), *addressReg, *vpmYReg,
-                         *vpmXReg,
-                         dynamicActiveLanesReg, activeLanes, rowLen, nrows,
-                         memoryPitchBytes, vertical,
+                         *vpmXReg, dynamicActiveLanesReg, activeLanes, rowLen,
+                         nrows, memoryPitchBytes, *elemBytes, modew, vertical,
                          hasStringAttr(source, "serialize", "mutex"));
   return success();
 }
@@ -6071,8 +6245,9 @@ static void appendRawVDWActiveLaneSetup(
 static PlannedRegion planRawVDWStoreFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t vpmXReg,
     std::optional<int64_t> dynamicActiveLanesReg, int64_t activeLanes,
-    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes, bool vertical,
-    bool useMutex, mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
+    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes,
+    int64_t elemBytes, uint32_t modew, bool vertical, bool useMutex,
+    mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
     mlir::vc4::QPUMux vpmYMux = mlir::vc4::QPUMux::a,
     mlir::vc4::QPUMux vpmXMux = mlir::vc4::QPUMux::a,
     std::optional<int64_t> addressAddReg = std::nullopt,
@@ -6082,7 +6257,7 @@ static PlannedRegion planRawVDWStoreFromVPM(
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
-  int64_t strideBytes = memoryPitchBytes - rowLen * 4;
+  int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
   appendRawVDWActiveLaneSetup(region, loc, dynamicActiveLanesReg, rowLen);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::small_imm,
@@ -6100,7 +6275,7 @@ static PlannedRegion planRawVDWStoreFromVPM(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
-                       (vertical ? 0u : 0x4000u);
+                       (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 35);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6138,11 +6313,12 @@ static PlannedRegion planRawVDWStoreFromVPM(
 static PlannedRegion planDynamicVDWStoreRowsFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
     int64_t rowLen, std::optional<int64_t> memoryPitchBytes,
-    std::optional<int64_t> memoryPitchReg, bool vertical, bool useMutex) {
+    std::optional<int64_t> memoryPitchReg, int64_t elemBytes, uint32_t modew,
+    bool vertical, bool useMutex) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
-  int64_t rowBytes = rowLen * 4;
+  int64_t rowBytes = rowLen * elemBytes;
   int64_t strideBytes = memoryPitchBytes ? *memoryPitchBytes - rowBytes : 0;
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::small_imm,
@@ -6180,7 +6356,8 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
       mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
       mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
-  uint32_t setupBase = 0x80000000u | (vertical ? 0u : 0x4000u);
+  uint32_t setupBase =
+      0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6251,7 +6428,7 @@ static PlannedRegion planStaticRowsCountInR2(Location loc, int64_t rows) {
 static void appendVDWRuntimeStrideGapSetup(
     PlannedRegion &region, Location loc, int64_t activeColsReg, int64_t maxCols,
     std::optional<int64_t> memoryStrideBytes,
-    std::optional<int64_t> memoryStrideReg) {
+    std::optional<int64_t> memoryStrideReg, int64_t elemBytes) {
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/35, /*waddrMul=*/32,
@@ -6272,13 +6449,16 @@ static void appendVDWRuntimeStrideGapSetup(
       mlir::vc4::AddOpcode::min, mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
       /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/2);
+  if (elemBytes != 1) {
+    appendScheduledBundleSlot(
+        region, loc, mlir::vc4::QPUSignal::small_imm,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
+        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/elemBytes == 2 ? 1 : 2);
+  }
   if (memoryStrideBytes) {
     appendSplat32LDISlot(region, loc, *memoryStrideBytes, 33);
     appendScheduledBundleSlot(
@@ -6309,7 +6489,8 @@ static PlannedRegion planDynamicVDWStoreColsFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
     int64_t nrows, int64_t activeColsReg, int64_t maxCols,
     std::optional<int64_t> memoryStrideBytes,
-    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+    std::optional<int64_t> memoryStrideReg, int64_t elemBytes, uint32_t modew,
+    bool vertical, bool useMutex) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
@@ -6329,7 +6510,7 @@ static PlannedRegion planDynamicVDWStoreColsFromVPM(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
-                       (vertical ? 0u : 0x4000u);
+                       (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6346,7 +6527,8 @@ static PlannedRegion planDynamicVDWStoreColsFromVPM(
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWRuntimeStrideGapSetup(region, loc, activeColsReg, maxCols,
-                                 memoryStrideBytes, memoryStrideReg);
+                                 memoryStrideBytes, memoryStrideReg,
+                                 elemBytes);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, mlir::vc4::QPUMux::a,
                                   std::nullopt, /*addressAddMultiplier=*/1);
@@ -6360,7 +6542,8 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t staticVpmX,
     int64_t activeColsReg, int64_t maxCols,
     std::optional<int64_t> memoryStrideBytes,
-    std::optional<int64_t> memoryStrideReg, bool vertical, bool useMutex) {
+    std::optional<int64_t> memoryStrideReg, int64_t elemBytes, uint32_t modew,
+    bool vertical, bool useMutex) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
@@ -6399,7 +6582,8 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
       mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
       mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/7);
-  uint32_t setupBase = 0x80000000u | (vertical ? 0u : 0x4000u);
+  uint32_t setupBase =
+      0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6422,7 +6606,8 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWRuntimeStrideGapSetup(region, loc, activeColsReg, maxCols,
-                                 memoryStrideBytes, memoryStrideReg);
+                                 memoryStrideBytes, memoryStrideReg,
+                                 elemBytes);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, mlir::vc4::QPUMux::a,
                                   std::nullopt, /*addressAddMultiplier=*/1);
@@ -6434,10 +6619,10 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
 
 static std::optional<int64_t>
 getStaticVDWStrideGapBytes(std::optional<int64_t> memoryStrideBytes,
-                           int64_t activeCols) {
+                           int64_t activeCols, int64_t elemBytes) {
   if (!memoryStrideBytes)
     return std::nullopt;
-  return *memoryStrideBytes - activeCols * 4;
+  return *memoryStrideBytes - activeCols * elemBytes;
 }
 
 static bool isEncodableVDWStrideGap(int64_t strideGapBytes) {
@@ -6445,13 +6630,20 @@ static bool isEncodableVDWStrideGap(int64_t strideGapBytes) {
 }
 
 static bool isVDWStrideGapAlwaysEncodableForDynamicCols(int64_t strideBytes,
-                                                        int64_t maxCols) {
-  return isEncodableVDWStrideGap(strideBytes - maxCols * 4) &&
-         isEncodableVDWStrideGap(strideBytes - 4);
+                                                        int64_t maxCols,
+                                                        int64_t elemBytes) {
+  return isEncodableVDWStrideGap(strideBytes - maxCols * elemBytes) &&
+         isEncodableVDWStrideGap(strideBytes - elemBytes);
 }
 
 static bool
-isVDWRectangularVPMSourceLayoutEncodable(const DMARectPlan &plan) {
+isVDWRectangularVPMSourceLayoutEncodable(const DMARectPlan &plan,
+                                         int64_t elemBytes) {
+  // Subword VDW block modes do not preserve the VC4Kernel logical row-major
+  // VPM tile contract for multi-row rectangles. Use the dense row fallback so
+  // each hardware VDW setup starts from the exact logical VPM row.
+  if (elemBytes != 4)
+    return false;
   if (plan.vertical)
     return true;
   return plan.vpmPitch == 1;
@@ -6460,8 +6652,9 @@ isVDWRectangularVPMSourceLayoutEncodable(const DMARectPlan &plan) {
 static void appendCompareRuntimeVDWStrideGapNegative(PlannedRegion &region,
                                                      Location loc,
                                                      int64_t memoryStrideReg,
-                                                     int64_t activeCols) {
-  appendSplat32LDISlot(region, loc, activeCols * 4, 32);
+                                                     int64_t activeCols,
+                                                     int64_t elemBytes) {
+  appendSplat32LDISlot(region, loc, activeCols * elemBytes, 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/35, /*waddrMul=*/32,
@@ -6485,14 +6678,17 @@ static void appendCompareRuntimeVDWStrideGapOverflow(PlannedRegion &region,
 
 static void appendCompareVDWStrideGapNegativeDynamicCols(
     PlannedRegion &region, Location loc, std::optional<int64_t> memoryStrideBytes,
-    std::optional<int64_t> memoryStrideReg) {
-  appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/2);
+    std::optional<int64_t> memoryStrideReg, int64_t elemBytes) {
+  if (elemBytes != 1) {
+    appendScheduledBundleSlot(
+        region, loc, mlir::vc4::QPUSignal::small_imm,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
+        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/elemBytes == 2 ? 1 : 2);
+  }
   if (memoryStrideBytes) {
     appendSplat32LDISlot(region, loc, *memoryStrideBytes, 33);
     appendScheduledBundleSlot(
@@ -6516,10 +6712,10 @@ static void appendCompareVDWStrideGapNegativeDynamicCols(
 
 static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
     Location loc, int64_t memoryStrideReg, int64_t activeCols,
-    PlannedRegion rectangular, PlannedRegion fallback) {
+    int64_t elemBytes, PlannedRegion rectangular, PlannedRegion fallback) {
   PlannedRegion region;
   appendCompareRuntimeVDWStrideGapNegative(region, loc, memoryStrideReg,
-                                           activeCols);
+                                           activeCols, elemBytes);
 
   PlannedRegion nonNegativePath;
   appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
@@ -6546,10 +6742,10 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
 static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
     Location loc, std::optional<int64_t> memoryStrideBytes,
     std::optional<int64_t> memoryStrideReg, PlannedRegion rectangular,
-    PlannedRegion fallback) {
+    PlannedRegion fallback, int64_t elemBytes) {
   PlannedRegion region;
   appendCompareVDWStrideGapNegativeDynamicCols(region, loc, memoryStrideBytes,
-                                               memoryStrideReg);
+                                               memoryStrideReg, elemBytes);
 
   PlannedRegion nonNegativePath;
   appendCompareRuntimeVDWStrideGapOverflow(nonNegativePath, loc);
@@ -6580,15 +6776,15 @@ static PlannedRegion planDynamicVDWActiveColsBody(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t activeColsReg, int64_t maxCols, int64_t row,
     std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
-    const DMARectPlan &plan) {
+    const DMARectPlan &plan, int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
   region.appendRegion("vdw-row-store-from-vpm", planRawVDWStoreFromVPM(
       loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
       activeColsReg, /*activeLanes=*/maxCols, /*rowLen=*/maxCols,
-      /*nrows=*/1, /*memoryPitchBytes=*/maxCols * 4, plan.vertical,
-      plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
+      /*nrows=*/1, /*memoryPitchBytes=*/maxCols * elemBytes, elemBytes,
+      modew, plan.vertical, plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
       mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
       rowAddress.dynamicPitchMultiplier,
       /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
@@ -6599,7 +6795,8 @@ static PlannedRegion planDynamicVDWActiveColsBody(
 static PlannedRegion planStaticVDWRowBody(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t staticCols, int64_t row, std::optional<int64_t> strideBytes,
-    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+    std::optional<int64_t> strideReg, const DMARectPlan &plan,
+    int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
@@ -6608,7 +6805,8 @@ static PlannedRegion planStaticVDWRowBody(
       loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
       /*dynamicActiveLanesReg=*/std::nullopt,
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
-      /*memoryPitchBytes=*/staticCols * 4, plan.vertical, plan.useMutex,
+      /*memoryPitchBytes=*/staticCols * elemBytes, elemBytes, modew,
+      plan.vertical, plan.useMutex,
       rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
       rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
       /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
@@ -6619,13 +6817,15 @@ static PlannedRegion planStaticVDWRowBody(
 static PlannedRegion planVDWStaticRowsFallback(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t staticCols, int64_t rows, std::optional<int64_t> strideBytes,
-    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+    std::optional<int64_t> strideReg, const DMARectPlan &plan,
+    int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
     region.appendRegion("vdw-static-row-body",
                         planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg,
                                              staticCols, row, strideBytes,
-                                             strideReg, plan));
+                                             strideReg, plan, elemBytes,
+                                             modew));
   }
   return region;
 }
@@ -6634,12 +6834,12 @@ static PlannedRegion planVDWDynamicActiveRowsFallback(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t activeRowsReg, int64_t maxRows, int64_t staticCols,
     std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
-    const DMARectPlan &plan) {
+    const DMARectPlan &plan, int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < maxRows; ++row) {
     PlannedRegion body =
         planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
-                             strideBytes, strideReg, plan);
+                             strideBytes, strideReg, plan, elemBytes, modew);
     region.appendRegion("vdw-row-active-rows-guard",
                         planActiveRowsGuardedRegion(
         loc, activeRowsReg, maxRows, row, std::move(body)));
@@ -6651,13 +6851,13 @@ static PlannedRegion planVDWStaticRowsDynamicColsFallback(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t activeColsReg, int64_t maxCols, int64_t rows,
     std::optional<int64_t> strideBytes, std::optional<int64_t> strideReg,
-    const DMARectPlan &plan) {
+    const DMARectPlan &plan, int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
     PlannedRegion body =
         planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
                                      activeColsReg, maxCols, row, strideBytes,
-                                     strideReg, plan);
+                                     strideReg, plan, elemBytes, modew);
     region.appendRegion("vdw-row-active-cols-guard",
                         planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols, std::move(body)));
@@ -6669,13 +6869,14 @@ static PlannedRegion planVDWRowsColsFallback(
     Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
     int64_t activeRowsReg, int64_t activeColsReg, int64_t maxRows,
     int64_t maxCols, std::optional<int64_t> strideBytes,
-    std::optional<int64_t> strideReg, const DMARectPlan &plan) {
+    std::optional<int64_t> strideReg, const DMARectPlan &plan,
+    int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < maxRows; ++row) {
     PlannedRegion body =
         planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
                                      activeColsReg, maxCols, row, strideBytes,
-                                     strideReg, plan);
+                                     strideReg, plan, elemBytes, modew);
     PlannedRegion colsGuarded = planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols, std::move(body));
     region.appendRegion("vdw-row-cols-active-rows-guard",
@@ -6702,7 +6903,11 @@ static LogicalResult emitVDWStoreRectDynamic(
 
   int64_t maxRows = getI32IntegerAttrOr(source, "max_rows", -1);
   int64_t maxCols = getI32IntegerAttrOr(source, "max_cols", -1);
+  int64_t elemBytes = getI32IntegerAttrOr(source, "elem_bytes", 4);
   DMARectPlan plan = getDMARectPlan(source, "src_x");
+  uint32_t modew = 0;
+  if (failed(getDMAModeW(source, plan.baseX, modew)))
+    return failure();
   std::optional<int64_t> activeRows =
       getConstantI32FromLoadImm(templ.operands[2]);
   std::optional<int64_t> activeCols =
@@ -6729,7 +6934,7 @@ static LogicalResult emitVDWStoreRectDynamic(
     if (failed(verifyDMARectXSpan(source, plan, "VDW", "src_x")))
       return failure();
     bool vpmSourceLayoutEncodable =
-        isVDWRectangularVPMSourceLayoutEncodable(plan);
+        isVDWRectangularVPMSourceLayoutEncodable(plan, elemBytes);
     if (!activeCols) {
       std::optional<int64_t> activeColsReg =
           allocator.lookup(templ, templ.operands[3]);
@@ -6742,22 +6947,25 @@ static LogicalResult emitVDWStoreRectDynamic(
       if (!vpmSourceLayoutEncodable) {
         payload = planVDWRowsColsFallback(
             source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan);
+            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan,
+            elemBytes, modew);
       } else {
         PlannedRegion rectangular = planDynamicVDWStoreRowsColsFromVPM(
             source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
-            *activeColsReg, maxCols, strideBytes, strideReg, plan.vertical,
-            plan.useMutex);
+            *activeColsReg, maxCols, strideBytes, strideReg, elemBytes, modew,
+            plan.vertical, plan.useMutex);
         if (strideBytes &&
-            isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols)) {
+            isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols,
+                                                        elemBytes)) {
           payload = std::move(rectangular);
         } else {
           PlannedRegion fallback = planVDWRowsColsFallback(
             source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan);
+            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan,
+            elemBytes, modew);
           payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
               source->getLoc(), strideBytes, strideReg, std::move(rectangular),
-              std::move(fallback));
+              std::move(fallback), elemBytes);
         }
       }
       PlannedRegion activeColsGuarded = planActiveColsGuardedRegion(
@@ -6775,30 +6983,32 @@ static LogicalResult emitVDWStoreRectDynamic(
       return success();
     PlannedRegion payload;
     std::optional<int64_t> strideGapBytes =
-        getStaticVDWStrideGapBytes(strideBytes, staticCols);
+        getStaticVDWStrideGapBytes(strideBytes, staticCols, elemBytes);
     if (!vpmSourceLayoutEncodable) {
       payload = planVDWDynamicActiveRowsFallback(
           source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-          maxRows, staticCols, strideBytes, strideReg, plan);
+          maxRows, staticCols, strideBytes, strideReg, plan, elemBytes, modew);
     } else {
       PlannedRegion rectangular = planActiveRowsGuardedRegion(
           source->getLoc(), *activeRowsReg, maxRows, /*row=*/0,
           planDynamicVDWStoreRowsFromVPM(
               source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
               /*rowLen=*/staticCols, /*memoryPitchBytes=*/strideBytes,
-              /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
+              /*memoryPitchReg=*/strideReg, elemBytes, modew, plan.vertical,
+              plan.useMutex));
       if (strideGapBytes && isEncodableVDWStrideGap(*strideGapBytes)) {
         payload = std::move(rectangular);
       } else {
         PlannedRegion fallback = planVDWDynamicActiveRowsFallback(
             source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-            maxRows, staticCols, strideBytes, strideReg, plan);
+            maxRows, staticCols, strideBytes, strideReg, plan, elemBytes,
+            modew);
         if (strideGapBytes) {
           payload = std::move(fallback);
         } else {
           payload = planDynamicVDWStrideGapFallbackDispatch(
-              source->getLoc(), *strideReg, staticCols, std::move(rectangular),
-              std::move(fallback));
+              source->getLoc(), *strideReg, staticCols, elemBytes,
+              std::move(rectangular), std::move(fallback));
         }
       }
     }
@@ -6824,30 +7034,31 @@ static LogicalResult emitVDWStoreRectDynamic(
   if (failed(verifyDMARectXSpan(source, plan, "VDW", "src_x")))
     return failure();
   bool vpmSourceLayoutEncodable =
-      isVDWRectangularVPMSourceLayoutEncodable(plan);
+      isVDWRectangularVPMSourceLayoutEncodable(plan, elemBytes);
   if (dynamicActiveColsReg) {
     PlannedRegion payload;
     if (!vpmSourceLayoutEncodable) {
       payload = planVDWStaticRowsDynamicColsFallback(
           source->getLoc(), *addressReg, *vpmSourceRowReg,
           *dynamicActiveColsReg, maxCols, clampedRows, strideBytes, strideReg,
-          plan);
+          plan, elemBytes, modew);
     } else {
       PlannedRegion rectangular = planDynamicVDWStoreColsFromVPM(
           source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
           clampedRows, *dynamicActiveColsReg, maxCols, strideBytes, strideReg,
-          plan.vertical, plan.useMutex);
+          elemBytes, modew, plan.vertical, plan.useMutex);
       if (strideBytes &&
-          isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols)) {
+          isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols,
+                                                      elemBytes)) {
         payload = std::move(rectangular);
       } else {
         PlannedRegion fallback = planVDWStaticRowsDynamicColsFallback(
           source->getLoc(), *addressReg, *vpmSourceRowReg,
           *dynamicActiveColsReg, maxCols, clampedRows, strideBytes, strideReg,
-          plan);
+          plan, elemBytes, modew);
         payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
             source->getLoc(), strideBytes, strideReg, std::move(rectangular),
-            std::move(fallback));
+            std::move(fallback), elemBytes);
       }
     }
     return planActiveColsGuardedRegion(source->getLoc(), *dynamicActiveColsReg,
@@ -6855,7 +7066,7 @@ static LogicalResult emitVDWStoreRectDynamic(
         .emit(builder);
   }
   std::optional<int64_t> strideGapBytes =
-      getStaticVDWStrideGapBytes(strideBytes, staticCols);
+      getStaticVDWStrideGapBytes(strideBytes, staticCols, elemBytes);
   if (clampedRows > 1 && vpmSourceLayoutEncodable && !strideBytes) {
     PlannedRegion rectangular = planStaticRowsCountInR2(source->getLoc(),
                                                         clampedRows);
@@ -6863,12 +7074,13 @@ static LogicalResult emitVDWStoreRectDynamic(
                              planDynamicVDWStoreRowsFromVPM(
         source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
         /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
-        /*memoryPitchReg=*/strideReg, plan.vertical, plan.useMutex));
+        /*memoryPitchReg=*/strideReg, elemBytes, modew, plan.vertical,
+        plan.useMutex));
     PlannedRegion fallback = planVDWStaticRowsFallback(
         source->getLoc(), *addressReg, *vpmSourceRowReg, staticCols,
-        clampedRows, strideBytes, strideReg, plan);
+        clampedRows, strideBytes, strideReg, plan, elemBytes, modew);
     return planDynamicVDWStrideGapFallbackDispatch(
-               source->getLoc(), *strideReg, staticCols,
+               source->getLoc(), *strideReg, staticCols, elemBytes,
                std::move(rectangular), std::move(fallback))
         .emit(builder);
   }
@@ -6879,15 +7091,16 @@ static LogicalResult emitVDWStoreRectDynamic(
   if (useStaticRowsFallback)
     return planVDWStaticRowsFallback(source->getLoc(), *addressReg,
                                      *vpmSourceRowReg, staticCols, clampedRows,
-                                     strideBytes, strideReg, plan)
+                                     strideBytes, strideReg, plan, elemBytes,
+                                     modew)
         .emit(builder);
   emitRawVDWStoreFromVPM(
       builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
       *vpmSourceRowReg, dynamicActiveColsReg,
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols,
       /*nrows=*/clampedRows,
-      /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * 4,
-      plan.vertical, plan.useMutex,
+      /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * elemBytes,
+      elemBytes, modew, plan.vertical, plan.useMutex,
       mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
       /*addressAddReg=*/std::nullopt, /*addressAddMultiplier=*/1,
       /*vpmRowOffset=*/0, /*staticVpmX=*/plan.baseX);

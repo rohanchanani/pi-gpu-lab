@@ -3,8 +3,13 @@
 // CHECK-LABEL: vc4.func @vdw_store_vpm_dynamic_kernel
 // CHECK: op_add = #vc4.add_opcode<max>
 // CHECK-SAME: small_imm = 0 : i32
+// CHECK: value = 4 : i32
 // CHECK: op_add = #vc4.add_opcode<min>
-// CHECK-SAME: small_imm = 4 : i32
+// CHECK: op_add = #vc4.add_opcode<sub>
+// CHECK-SAME: set_flags
+// CHECK-SAME: small_imm = 1 : i32
+// CHECK: vc4.qpu.branch
+// CHECK-SAME: cond = #vc4.branch_cond<any_c_set>
 // CHECK: op_add = #vc4.add_opcode<shl>
 // CHECK-SAME: small_imm = 8 : i32
 // CHECK: op_add = #vc4.add_opcode<shl>

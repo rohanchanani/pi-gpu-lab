@@ -3488,20 +3488,26 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (predicate->kind == PredicatePlan::Class::TailPrefix) {
       if (!predicate->base || !predicate->limit)
         return op->emitOpError("pred.tail plan is missing base or limit values");
-      Type fragmentType = VectorType::get({16}, builder.getI32Type());
-      Value fragment = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4VPMReadOpName, srcRow,
-          {getSSAVC4VPMOrientation(builder, op),
-           getSSAVC4VPMWidth(builder, op),
-           getSSAVC4VPMSubword(builder, op),
-           builder.getNamedAttr("x", op->getAttr("src_x")),
-           builder.getNamedAttr("stride", op->getAttr("vpm_pitch")),
-           builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
-          fragmentType);
       Value activeTail =
           createI32Sub(builder, op->getLoc(), predicate->limit, predicate->base);
-      emitVDWStore(op, builder, address, fragment, activeTail, state,
-                   std::nullopt);
+      auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
+      Value vpmX = createLoadImm(
+          builder, op->getLoc(), builder.getI32Type(),
+          builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+      SmallVector<Value, 4> operands{address, srcRow, vpmX, activeTail};
+      int64_t elemBytes = 4;
+      if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
+        elemBytes = elemBytesAttr.getInt();
+      createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
+               {getSSAVC4VPMOrientation(builder, op),
+                getSSAVC4VPMWidth(builder, op),
+                getSSAVC4VPMSubword(builder, op),
+                builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
+                builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
+                builder.getNamedAttr("memory_pitch_bytes",
+                                     builder.getI32IntegerAttr(16 * elemBytes)),
+                builder.getNamedAttr("serialize",
+                                     builder.getStringAttr("mutex"))});
       return success();
     }
     auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
@@ -3515,7 +3521,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
         builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
         builder.getNamedAttr("memory_pitch_bytes",
-                             builder.getI32IntegerAttr(64)),
+                             builder.getI32IntegerAttr(
+                                 16 * (op->getAttrOfType<IntegerAttr>(
+                                           "elem_bytes")
+                                            ? op->getAttrOfType<IntegerAttr>(
+                                                    "elem_bytes")
+                                                  .getInt()
+                                            : 4))),
         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
     if (predicate->kind == PredicatePlan::Class::Full) {
       attrs.push_back(builder.getNamedAttr(
