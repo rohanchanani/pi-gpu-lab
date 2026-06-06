@@ -1,0 +1,15 @@
+{
+  "name": "scalar_i32_bitwise_shift_minmax_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "op_segments": 10,
+    "runtime_allocations": 1,
+    "runtime_launches": 8
+  }
+}

@@ -1999,14 +1999,12 @@ emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
     emitted.selectCond = mlir::vc4::Cond::cc;
     break;
   case arith::CmpIPredicate::ugt:
-    flagsLhs = rhs;
-    flagsRhs = lhs;
+    std::swap(flagsLhs, flagsRhs);
     emitted.branchCond = mlir::vc4::BranchCond::any_c_set;
     emitted.selectCond = mlir::vc4::Cond::cs;
     break;
   case arith::CmpIPredicate::ule:
-    flagsLhs = rhs;
-    flagsRhs = lhs;
+    std::swap(flagsLhs, flagsRhs);
     emitted.branchCond = mlir::vc4::BranchCond::any_c_clear;
     emitted.selectCond = mlir::vc4::Cond::cc;
     break;
