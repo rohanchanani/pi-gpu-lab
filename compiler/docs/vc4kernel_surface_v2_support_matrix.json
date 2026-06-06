@@ -328,14 +328,14 @@
       "category": "reduction",
       "current_status": "hardware_proven_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
-      "current_surface": "P4c hardware-proves general i32 fragment_reduce kinds add, min_s, max_s, min_u, max_u, bit_and, bit_or, and bit_xor; f32 add remains temporarily migration-compatible until explicit finite_tree policy migration.",
+      "current_surface": "P4c hardware-proves general i32 fragment_reduce kinds add, min_s, max_s, min_u, max_u, bit_and, bit_or, and bit_xor. P4d hardware-proves finite-tree f32 fragment_reduce kinds add, fmin, and fmax with explicit #vc4kernel.fp_reduce_policy<finite_tree>; no-policy f32 add remains temporarily migration-compatible until P4e.",
       "target_surface": "General reduction family for admitted associative operations and explicit inactive-lane identity.",
       "vc4kernel_verifier_plan": "Verify reduction kind, type, identity, predicate class, supported lowering plan, and f32 finite_tree policy after P4 f32 migration.",
-      "vc4kernel_to_ssavc4_plan": "Lower i32 reductions to select-to-identity plus rotate/ALU tree; lower unsigned min/max through sign-bias; lower f32 reductions only under the later explicit finite_tree policy or deterministic reject.",
+      "vc4kernel_to_ssavc4_plan": "Lower i32 reductions to select-to-identity plus rotate/ALU tree; lower unsigned min/max through sign-bias; lower finite_tree f32 add/fmin/fmax to f32 identity select plus deterministic rotate-tree fadd/fmin/fmax. Policy-missing f32 reductions become deterministic rejects after P4e migration lock.",
       "ssavc4_to_vc4_plan": "Use existing rotate and ALU scheduling with branch/layout accounting as needed.",
-      "hardware_or_reject_verification_plan": "P4c hardware proof covers i32 add, signed min/max, unsigned min/max, and bitwise reductions under full, empty, prefix/tail, one-hot, sparse, and consumer cases; P4d hardware proof remains required for finite-tree f32 reductions; deterministic-reject tests cover unsupported or policy-missing reductions.",
+      "hardware_or_reject_verification_plan": "P4c hardware proof covers i32 add, signed min/max, unsigned min/max, and bitwise reductions under full, empty, prefix/tail, one-hot, sparse, and consumer cases. P4d hardware proof covers finite-tree f32 add, finite fmin/fmax, empty-mask +0/+Inf/-Inf identities, and GEMM-style one-hot broadcast; deterministic-reject tests cover unsupported or policy-missing reductions.",
       "upstream_use": "Vector reductions after pre-vector lock.",
-      "migration_or_removal": "Generalizes current add-only reduce; add-only f32 uses migrate to explicit finite_tree before final P4 lock.",
+      "migration_or_removal": "Generalizes current add-only reduce; no-policy add-only f32 uses remain migration targets and migrate to explicit finite_tree before final P4 lock in P4e.",
       "dependencies": [
         "p1_general_fragment_add_alu",
         "p11_fragment_rotate_dynamic_if_hardware"

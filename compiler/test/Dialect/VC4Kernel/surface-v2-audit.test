@@ -13,7 +13,7 @@
 # P1-SAME: forbidden_tile_dsl_hits=0
 # P1-SAME: retired_tile_hits=0
 # P1: fixture_purity:
-# P1-SAME: hardware_inputs=79
+# P1-SAME: hardware_inputs=82
 # P1-SAME: producer_or_lower_half_hits=0
 # P1: p1_general_alu_lock:
 # P1-SAME: removed_legacy_hits=0
@@ -25,7 +25,7 @@
 # P2-SAME: removed_special_case_ops=4
 # P2-SAME: special_case_removed_in_p1=4
 # P2: fixture_purity:
-# P2-SAME: hardware_inputs=79
+# P2-SAME: hardware_inputs=82
 # P2-SAME: producer_or_lower_half_hits=0
 # P2: p1_general_alu_lock:
 # P2-SAME: removed_legacy_hits=0
@@ -43,16 +43,16 @@
 # P3-SAME: p3_post_phase_planned_entries=22
 # P3-SAME: special_case_removed_in_p1=4
 # P3: fixture_purity:
-# P3-SAME: hardware_inputs=79
+# P3-SAME: hardware_inputs=82
 # P3-SAME: producer_or_lower_half_hits=0
 # P3: p1_general_alu_lock:
 # P3-SAME: removed_legacy_hits=0
 # P3: p3_general_cmp_lock:
-# P3-SAME: active_cmp_uses=123
+# P3-SAME: active_cmp_uses=137
 # P3-SAME: f32_finite_cmp_uses=23
 # P3-SAME: f32_missing_policy_hits=0
 # P3-SAME: fp_policy_on_i32_hits=0
-# P3-SAME: i32_cmp_uses=100
+# P3-SAME: i32_cmp_uses=114
 # P3-SAME: matrix_scalar_cmpi_claims=0
 # P3-SAME: p3_f32_nan_inf_hits=0
 # P3-SAME: unordered_active_hits=0

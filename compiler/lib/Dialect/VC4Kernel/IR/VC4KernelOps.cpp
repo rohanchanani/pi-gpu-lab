@@ -1296,10 +1296,15 @@ LogicalResult FragmentReduceOp::verify() {
     return success();
   }
   if (isVC4KernelVector16F32Type(getInput().getType())) {
-    if (!isF32ReduceKind(kind) || kind != ReduceKind::add)
-      return emitOpError("P4b supports only f32 add fragment_reduce");
-    // P4b keeps existing f32 add behavior temporarily for migration. P4d/P4e
-    // will require finite_tree for every f32 reduction.
+    if (!isF32ReduceKind(kind))
+      return emitOpError("integer reduce kind requires vector<16xi32>");
+    if (!getFpPolicy()) {
+      if (kind == ReduceKind::add)
+        // P4d keeps existing no-policy f32 add temporarily for migration.
+        // P4e will require finite_tree for every f32 reduction.
+        return success();
+      return emitOpError("f32 fragment_reduce requires finite_tree policy in P4");
+    }
     return success();
   }
   return emitOpError("fragment_reduce input must be vector<16xi32> or "

@@ -1373,6 +1373,26 @@ static int32_t getI32ReduceIdentity(mlir::vc4kernel::ReduceKind kind) {
   llvm_unreachable("unhandled VC4Kernel reduce kind");
 }
 
+static int32_t getF32ReduceIdentityBits(mlir::vc4kernel::ReduceKind kind) {
+  switch (kind) {
+  case mlir::vc4kernel::ReduceKind::add:
+    return 0x00000000;
+  case mlir::vc4kernel::ReduceKind::fmin:
+    return static_cast<int32_t>(0x7f800000u);
+  case mlir::vc4kernel::ReduceKind::fmax:
+    return static_cast<int32_t>(0xff800000u);
+  case mlir::vc4kernel::ReduceKind::min_s:
+  case mlir::vc4kernel::ReduceKind::max_s:
+  case mlir::vc4kernel::ReduceKind::min_u:
+  case mlir::vc4kernel::ReduceKind::max_u:
+  case mlir::vc4kernel::ReduceKind::bit_and:
+  case mlir::vc4kernel::ReduceKind::bit_or:
+  case mlir::vc4kernel::ReduceKind::bit_xor:
+    llvm_unreachable("i32 reduce kind has no f32 identity");
+  }
+  llvm_unreachable("unhandled VC4Kernel reduce kind");
+}
+
 static Value emitRotateReduceTree(OpBuilder &builder, Location loc, Value value,
                                   mlir::vc4kernel::ReduceKind kind) {
   Value reduced = value;
@@ -2618,10 +2638,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       identity = createI32SplatConstant(builder, op->getLoc(), resultType,
                                         identityValue);
     } else {
-      if (reduceKind != mlir::vc4kernel::ReduceKind::add)
-        return op->emitOpError(
-            "P4b fragment_reduce lowering supports only f32 add");
-      identity = createZeroValue(builder, op->getLoc(), resultType);
+      if (reduceKind != mlir::vc4kernel::ReduceKind::add &&
+          reduceKind != mlir::vc4kernel::ReduceKind::fmin &&
+          reduceKind != mlir::vc4kernel::ReduceKind::fmax)
+        return op->emitOpError("integer reduce kind requires vector<16xi32>");
+      identity = createLoadImm(
+          builder, op->getLoc(), resultType,
+          builder.getI32IntegerAttr(getF32ReduceIdentityBits(reduceKind)));
     }
 
     if (unsignedMinMax) {
