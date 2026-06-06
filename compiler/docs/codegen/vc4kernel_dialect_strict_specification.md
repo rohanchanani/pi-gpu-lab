@@ -239,10 +239,11 @@ tmu_load_fragment implicit safe-address behavior:
   active sources use explicit scalar safe_offset and inactive_load<zero>.
 
 vdw_store_fragment implicit inactive-store behavior:
-  migration target for P8 explicit inactive-store policy.
+  P8b migration target after optional explicit inactive_store<preserve>;
+  P8e removes attr-absent implicit preserve from active sources.
 ```
 
-Future agents must not keep historical legacy migration ops `fragment_add`, `fragment_sub`, `fragment_mul`, `fragment_shl`, add-only reduction specialness, or implicit TMU safe-address semantics merely because they already existed; the fragment arithmetic spellings are removed_in_p1.
+Future agents must not keep historical legacy migration ops `fragment_add`, `fragment_sub`, `fragment_mul`, `fragment_shl`, add-only reduction specialness, implicit TMU safe-address semantics, or implicit VDW inactive-store behavior merely because they already existed; the fragment arithmetic spellings are removed_in_p1.
 
 ### Locked P0-P13 phase order
 
@@ -1556,7 +1557,8 @@ Rules:
 ```mlir
 vc4kernel.vdw_store_fragment %base, %byte_offsets, %value, %pred
   {memory_path = #vc4kernel.memory_path<vdw_global_store>,
-   coherency = #vc4kernel.coherency<dma_ordered>}
+   coherency = #vc4kernel.coherency<dma_ordered>,
+   inactive_store = #vc4kernel.inactive_store<preserve>}
   : i32, vector<16xi32>, vector<16xT>, !vc4kernel.pred<16>
 ```
 
@@ -1579,9 +1581,10 @@ Rules:
 
 ```text
 - byte_offsets must describe a contiguous 32-bit row fragment.
-- pred may be full, empty, tail_prefix, or rect_row in executable v1.
+- pred may be full, empty, or tail_prefix in executable P8 v1.
 - full/tail may lower to direct staging plus active-prefix store if hardware path preserves inactive destination.
-- arbitrary sparse general_mask must deterministic-reject until the deferred sparse VDW phase exists.
+- register-fragment rect_row and arbitrary sparse general_mask must deterministic-reject until a later hardware-proven phase exists.
+- P8b permits attr-absent stores only as a migration bridge; new executable examples should use inactive_store<preserve>.
 - empty predicate skips the store.
 - This op must never lower as if VC4 had a direct register-to-global store instruction.
 ```
@@ -1754,7 +1757,8 @@ vc4kernel.vdw_store_vpm_fragment %tile, %src_y, %src_x, %base, %byte_offset, %pr
    width = #vc4kernel.vpm_width<w32>,
    subword_mode = #vc4kernel.vpm_subword<none>,
    memory_path = #vc4kernel.memory_path<vdw_global_store>,
-   coherency = #vc4kernel.coherency<dma_ordered>}
+   coherency = #vc4kernel.coherency<dma_ordered>,
+   inactive_store = #vc4kernel.inactive_store<preserve>}
   : !vc4kernel.vpm_tile, i32, i32, i32, i32, !vc4kernel.pred<16>
 ```
 
@@ -1772,6 +1776,7 @@ Rules:
 - full/empty/tail_prefix are direct classes.
 - arbitrary sparse general_mask deterministic-rejects until the deferred sparse VDW phase is implemented and hardware-proven.
 - byte_offset must be 4-byte aligned.
+- P8b permits attr absence only as a temporary migration bridge; P8e requires inactive_store<preserve>.
 ```
 
 This op is for shared/VPM-to-global fragment paths. Register-to-global convenience paths use `vdw_store_fragment` and compiler-managed staging.
@@ -1852,7 +1857,8 @@ vc4kernel.vdw_store_rect_from_vpm
     src_x = 0 : i32,
     vpm_pitch = 1 : i32,
     memory_path = #vc4kernel.memory_path<vdw_global_store>,
-    coherency = #vc4kernel.coherency<dma_ordered>
+    coherency = #vc4kernel.coherency<dma_ordered>,
+    inactive_store = #vc4kernel.inactive_store<preserve>
   }
   : !vc4kernel.vpm_tile, i32, i32, i32, i32, i32, i32
 ```

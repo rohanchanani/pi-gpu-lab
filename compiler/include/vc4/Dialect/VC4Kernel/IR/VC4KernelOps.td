@@ -281,7 +281,8 @@ def VC4Kernel_VDWStoreFragmentOp : VC4Kernel_Op<"vdw_store_fragment", [
                        VC4Kernel_Vector16Data:$value,
                        VC4Kernel_PredType:$pred,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
-                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
+                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
+                       OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
   let assemblyFormat = "$base `,` $byte_offsets `,` $value `,` $pred attr-dict `:` type($base) `,` type($byte_offsets) `,` type($value) `,` type($pred)";
   let hasVerifier = 1;
 }
@@ -392,7 +393,8 @@ def VC4Kernel_VDWStoreVPMFragmentOp : VC4Kernel_Op<"vdw_store_vpm_fragment", [
                        I32Attr:$src_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
-                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
+                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
+                       OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
   let assemblyFormat = "$tile `,` $src_row `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) `,` type($base) `,` type($byte_offset) `,` type($pred)";
   let hasVerifier = 1;
 }
@@ -416,7 +418,8 @@ def VC4Kernel_VDWStoreRectFromVPMOp : VC4Kernel_Op<"vdw_store_rect_from_vpm", [
                        I32Attr:$src_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
-                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
+                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
+                       OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
   let assemblyFormat = "$tile `,` $src_row `,` $base `,` $byte_offset `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($tile) `,` type($src_row) `,` type($base) `,` type($byte_offset) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }

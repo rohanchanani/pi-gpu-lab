@@ -148,6 +148,11 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "migration_target",
         "removed_in_p7",
     },
+    "p8_vdw_store_inactive_preserve_full_tail_rect": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -243,6 +248,11 @@ P5_POST_PHASE_STAGED_STATUSES = {
     "p7_remove_old_tmu_load_signature": {
         "migration_target",
         "removed_in_p7",
+    },
+    "p8_vdw_store_inactive_preserve_full_tail_rect": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
     },
 }
 

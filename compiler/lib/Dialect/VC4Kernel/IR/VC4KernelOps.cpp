@@ -493,6 +493,14 @@ static PredicateClass classifyPredicate(Value pred) {
         return lhsClass;
       if (lhs == rhs)
         return lhsClass;
+      Operation *lhsDef = lhs.getDefiningOp();
+      Operation *rhsDef = rhs.getDefiningOp();
+      if (lhsClass == PredicateClass::TailPrefix &&
+          rhsClass == PredicateClass::TailPrefix &&
+          hasName(lhsDef, "vc4kernel.pred.tail") &&
+          hasName(rhsDef, "vc4kernel.pred.tail") &&
+          lhsDef->getOperand(0) == rhsDef->getOperand(0))
+        return PredicateClass::TailPrefix;
       return PredicateClass::GeneralMask;
     }
     if (lhsClass == PredicateClass::Full ||
@@ -569,6 +577,55 @@ static LogicalResult verifyPredicateForRowTailVDW(Operation *op, Value pred) {
     return success();
   return op->emitOpError(
       "predicate value must be produced by a known vc4kernel predicate op");
+}
+
+static LogicalResult verifyVDWInactiveStorePolicy(Operation *op) {
+  auto inactiveStore = op->getAttrOfType<InactiveStoreAttr>("inactive_store");
+  if (!inactiveStore)
+    return success();
+  if (inactiveStore.getValue() == InactiveStore::preserve)
+    return success();
+  return op->emitOpError(
+      "VDW stores support only inactive_store<preserve> in P8");
+}
+
+static bool hasExplicitInactiveStorePolicy(Operation *op) {
+  return op->getAttrOfType<InactiveStoreAttr>("inactive_store") != nullptr;
+}
+
+static LogicalResult verifyExplicitVDWFragmentPredicate(Operation *op,
+                                                       Value pred) {
+  PredicateClass predClass = classifyPredicate(pred);
+  switch (predClass) {
+  case PredicateClass::Full:
+  case PredicateClass::Empty:
+  case PredicateClass::TailPrefix:
+    return success();
+  case PredicateClass::RectRow:
+  case PredicateClass::GeneralMask:
+    return op->emitOpError("sparse VDW store masks are not supported in P8");
+  case PredicateClass::Unknown:
+    return op->emitOpError(
+        "predicate value must be produced by a known vc4kernel predicate op");
+  }
+  llvm_unreachable("unknown predicate class");
+}
+
+static LogicalResult verifyExplicitVDWVPMPredicate(Operation *op, Value pred) {
+  PredicateClass predClass = classifyPredicate(pred);
+  switch (predClass) {
+  case PredicateClass::Full:
+  case PredicateClass::Empty:
+  case PredicateClass::TailPrefix:
+    return success();
+  case PredicateClass::RectRow:
+  case PredicateClass::GeneralMask:
+    return op->emitOpError("sparse VDW store masks are not supported in P8");
+  case PredicateClass::Unknown:
+    return op->emitOpError(
+        "predicate value must be produced by a known vc4kernel predicate op");
+  }
+  llvm_unreachable("unknown predicate class");
 }
 
 static LogicalResult verifyRequiredMemoryPolicy(Operation *op,
@@ -1366,12 +1423,18 @@ LogicalResult VDWStoreFragmentOp::verify() {
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
     return failure();
+  if (failed(verifyVDWInactiveStorePolicy(getOperation())))
+    return failure();
   if (!isContiguousByteOffsets(getByteOffsets()))
     return emitOpError(
-        "vdw_store_fragment requires contiguous 32-bit row fragment byte offsets");
+        hasExplicitInactiveStorePolicy(getOperation())
+            ? "VDW tail store requires contiguous lane byte offsets"
+            : "vdw_store_fragment requires contiguous 32-bit row fragment byte offsets");
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
+  if (hasExplicitInactiveStorePolicy(getOperation()))
+    return verifyExplicitVDWFragmentPredicate(getOperation(), getPred());
   return verifyPredicateForPreserveStorePlanning(getOperation(), getPred());
 }
 LogicalResult VPMAllocOp::verify() {
@@ -1441,6 +1504,8 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
     return failure();
+  if (failed(verifyVDWInactiveStorePolicy(getOperation())))
+    return failure();
   if (getElemBytes() != 4)
     return emitOpError("elem_bytes must be 4");
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
@@ -1448,6 +1513,11 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
         "vdw_store_vpm_fragment byte_offset must be statically 4-byte aligned");
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
     return failure();
+  if (hasExplicitInactiveStorePolicy(getOperation())) {
+    if (failed(verifyExplicitVDWVPMPredicate(getOperation(), getPred())))
+      return failure();
+    return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
+  }
   if (failed(verifyPredicateForRowTailVDW(getOperation(), getPred())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
@@ -1456,6 +1526,8 @@ LogicalResult VDWStoreRectFromVPMOp::verify() {
   if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
+    return failure();
+  if (failed(verifyVDWInactiveStorePolicy(getOperation())))
     return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();

@@ -144,6 +144,11 @@ static LogicalResult verifyRequiredMemoryPolicy(
   return success();
 }
 
+static bool hasExplicitInactiveStorePolicy(Operation *op) {
+  return op->getAttrOfType<mlir::vc4kernel::InactiveStoreAttr>(
+             "inactive_store") != nullptr;
+}
+
 static StringAttr asStringAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<StringAttr>(attr);
 }
@@ -3131,6 +3136,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                                          state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
+    if (hasExplicitInactiveStorePolicy(op) &&
+        predicate->kind == PredicatePlan::Class::GeneralMask)
+      return op->emitOpError(
+          "sparse VDW store masks are not supported in P8");
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::Empty &&
         predicate->kind != PredicatePlan::Class::TailPrefix &&

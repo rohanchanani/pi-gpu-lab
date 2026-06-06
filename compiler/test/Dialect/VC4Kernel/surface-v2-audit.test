@@ -52,11 +52,11 @@
 # P3: p1_general_alu_lock:
 # P3-SAME: removed_legacy_hits=0
 # P3: p3_general_cmp_lock:
-# P3-SAME: active_cmp_uses=140
+# P3-SAME: active_cmp_uses=143
 # P3-SAME: f32_finite_cmp_uses=23
 # P3-SAME: f32_missing_policy_hits=0
 # P3-SAME: fp_policy_on_i32_hits=0
-# P3-SAME: i32_cmp_uses=117
+# P3-SAME: i32_cmp_uses=120
 # P3-SAME: matrix_scalar_cmpi_claims=0
 # P3-SAME: p3_f32_nan_inf_hits=0
 # P3-SAME: unordered_active_hits=0
