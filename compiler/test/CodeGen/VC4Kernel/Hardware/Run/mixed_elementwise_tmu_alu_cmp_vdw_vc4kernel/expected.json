@@ -1,0 +1,28 @@
+{
+  "name": "mixed_elementwise_tmu_alu_cmp_vdw_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 12,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 769,
+    "poison_inactive_offsets": 1,
+    "saw_tmu_safe_offset": 1,
+    "saw_vdw_preserve": 1,
+    "saw_f32_cmp": 1,
+    "saw_i32_cmp": 1,
+    "saw_fragment_bitcast": 1,
+    "saw_fragment_const": 1,
+    "saw_fragment_alu_f32": 1,
+    "saw_fragment_alu_i32": 1,
+    "saw_mul24_or_v8": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 12
+  },
+  "float_max": {
+    "max_abs_diff_x10000": 1
+  }
+}
