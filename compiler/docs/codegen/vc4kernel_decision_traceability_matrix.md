@@ -1,136 +1,107 @@
-# VC4Kernel Decision Traceability Matrix
+# VC4Kernel Surface v2 Decision Traceability Matrix
 
-**Date:** 2026-05-31  
-**Purpose:** companion checklist linking the design decisions from the corrected planning discussion to specification changes, implementation slices, tests, and hardware evidence.
-
----
-
-## Decision matrix
-
-| Decision | Final answer | Spec impact | Implementation stage | Required proof |
-|---|---|---|---|---|
-| Lower-half compatibility | Not a design input. Refactor lower half to the natural final model. | Normative rule + design principles | P0, all later | No compatibility-only fields/aliases in final scans |
-| NVIDIA resource analogy | Separate compile config, compiler-computed resource metadata, and runtime launch metadata. | Resource sections | P2, P3 | Resource metadata lit + manifest tests |
-| User-authored resource dict | Remove from source `vc4kernel`. Compute resources from body/planner. | Kernel attrs/resource sections | P1, P2 | `invalid-user-resource-metadata.mlir`; computed `vc4.resource` checks |
-| `lane_id` | Remove. Use `lane_range`. | Op inventory/identity | P1 | No `vc4kernel.lane_id` in source except invalid tests |
-| `block_id` | Remove. Use `program_id`; use `warp_id` only for cooperative local warp identity. | Op inventory/identity | P1 | No `vc4kernel.block_id` in source except invalid tests |
-| `program_id` | Keep as logical program/request id. Not physical QPU number. Supports axis 0, 1, and 2 with `num_programs`. | Identity/ABI | P1, P8, dynamic rectangular transfer / runtime GEMM-GEMV checkpoint | Program-id writeback fixture; 3D identity fixture |
-| `warp_id` | Keep for cooperative-block local warp id. | Identity/ABI/barrier | P1, P8, P13 | Barrier fixture and ABI checks |
-| `lane_range` | Keep; lowers to element_number-derived vector. | Identity | P1, P8 | lane-range lit and vector-store hardware |
-| Scalar `f32` formals | First-class scalar uniform reads. | Type/ABI/lowering | P4, P8 | f32 uniform/splat lit + SAXPY hardware |
-| Scalar `i1` | Condition plan, not ordinary persistent data by default. | arith/control/lowering | P4, P5 | cmp/select/cond_br lit |
-| `fragment_cmp` | Keep. Produces `general_mask` unless proven structured. | Predicate/fragment sections | P1, P5 | fragment-cmp/select lit, masked hardware paths |
-| Predicate model | `!vc4kernel.pred<16>` supports full, empty, tail_prefix, rect_row, general_mask. | Predicate sections | P1, P5 | General-mask lit; no vector<16xi1> |
-| TMU masked loads | Support full, empty, tail, general masks; inactive lanes zero; no unsafe inactive requests. | Memory/lowering | P10 | Tail/general zero-fill hardware |
-| `vdw_store_fragment` | Keep as planning op, lower through hidden VPM staging. | Memory/resource | P7, P9 | full/tail/general store hardware |
-| General masked VDW store | Preserve inactive memory by fallback, e.g. old-row TMU load + select + staging + VDW. | Memory/predicate | P9 | sentinel-preservation hardware |
-| Explicit VPM ops | Keep for real shared-memory algorithms. | Memory/VPM | P1, P11 | VPM horizontal/vertical hardware |
-| Hidden VPM rows | Include in computed resource allocation. | Resource/VPM | P7 | resource lit + hardware stores |
-| VPM ownership | Runtime-assigned `vpm_base_row`, not physical QPU number. | ABI/resource/runtime | P3, P7 | manifest and multi-resident VPM tests |
-| Barrier semaphores | Runtime-assigned `semaphore_base`; v1 uses 4 semaphores/block. | ABI/resource/barrier | P3, P13 | barrier hardware fixture |
-| VPM/VDR/VDW modes | Hardware-derived schema; horizontal/vertical/strided/pitched 32-bit executable in v1. | attrs/memory/lower half | P6, P11 | horizontal and vertical hardware fixtures |
-| VDW STRIDE field | Use the VideoCore IV Section 7 / Tables 31-37 meaning: 13-bit byte gap from the last byte of one row to the start of the next row. Translate high-level row pitch through row_bytes/gap semantics; no 0xffff/65535 VDW stride model is allowed. | lower-half VDW setup semantics | P6, dynamic rectangular transfer / runtime GEMM-GEMV checkpoint | setup-word, stride-boundary, and row-by-row overflow hardware fixtures |
-| Sub-32 modes | Schema allowed, executable use rejected until future milestone. | attrs/precision | P6 | invalid executable subword tests |
-| i32 fragment multiply | Full 32-bit modular semantics; `mul24` fast path only if proven safe; otherwise software fallback. | fragment/lowering | P12 | fast-path and fallback hardware fixtures |
-| f32 fragment multiply | Hardware fmul. | fragment/lowering | P8 | fragment arithmetic and SAXPY hardware |
-| Reductions | Rotate/ALU tree after masking inactive lanes to zero. | fragment/lowering | P8 | reduce hardware fixture |
-| Direct shortcuts | Forbidden: no direct vc4kernel->vc4, no QASM, no host substitution, no fixture dispatch. | acceptance/integrity | all | static scans + hardware freshness |
+**Date:** 2026-06-06
+**Purpose:** P0 matrix linking locked Surface v2 decisions to planned phases, required documentation/spec impact, and required proof. P1-P13 entries are planned unless explicitly marked accepted baseline.
 
 ---
 
-## Dynamic rectangular transfer decisions
+## VC4Kernel Surface v2 pre-vector lock
 
-| Decision | Hardware basis | Upstream motivation | Implementation checkpoint | Hardware proof fixture names |
-|---|---|---|---|---|
-| 3D `program_id(axis)` / `num_programs(axis)` | Runtime launch metadata can supply logical grid coordinates independently of physical QPU number; generated launchers already accept `vc4_dim3`. | Triton and vector lowering need CUDA-like grid axes for tiled GEMM/GEMV, not only a flattened axis-0 request. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `program_id_3d_writeback_vc4kernel`, `num_programs_3d_vc4kernel` |
-| Runtime problem sizes below VC4Kernel | Dynamic rectangular transfer primitives carry runtime active rows/cols and leading dimensions below VC4Kernel while tile sizes remain compile-time. | CUDA/Triton-style GEMM/GEMV use runtime `m`, `n`, `k` and leading dimensions while tile/block maximums stay static. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `gemv_naive_vc4kernel`, `gemv_blocked_vpm_vc4kernel`, `gemm_naive_vc4kernel`, `gemm_blocked_vpm_vc4kernel` |
-| Dynamic VDR rect load | VC4 VDR/VCD is the hardware-natural global-to-VPM path; it supports runtime `active_rows`, runtime `active_cols`, runtime `memory_pitch_bytes`, and device-side zero-fill for inactive/OOB VPM cells. | `vector.transfer_read` and blocked GEMM/GEMV need shared/VPM tile fills with runtime active rows/cols and runtime leading dimensions. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `vdr_rect_runtime_pitch_zero_fill_vc4kernel`, `vdr_rect_row_by_row_fallback_vc4kernel` |
-| Dynamic VDW rect store | VC4 VDW is the hardware-natural VPM-to-global path; it supports runtime `active_rows`, runtime `active_cols`, runtime `memory_stride_bytes`, dynamic/nonzero VPM source row where supported, and preserve-destination semantics outside active rows/cols. | `vector.transfer_write` and blocked GEMM/GEMV need runtime-shaped tile writeback without padding or fixture-specific layouts. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `vdw_rect_runtime_stride_preserve_vc4kernel`, `vdw_rect_row_by_row_fallback_vc4kernel` |
-| Full 64-row VPM use | Full 64-row VPM capacity remains usable through multiple 16x16 tiles, such as rows 0, 16, 32, and 48; per-op max shape remains <=16x16 w32/none for v1. | Larger shared-memory kernels must not be artificially limited to one tile when the resource plan has rows available. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | multi-tile VPM/VDR/VDW hardware fixtures |
-| Row-by-row fallback for unencodable pitch/stride | VC4 setup encodings constrain single-DMA pitches; row-by-row fallback is allowed only for true hardware-unencodable overflow cases and must be explicit and hardware-tested. | Producer lowering should target semantic rectangular movement and let the compiler pick a legal hardware plan without silently weakening the contract. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `vdr_rect_row_by_row_fallback_vc4kernel`, `vdw_rect_row_by_row_fallback_vc4kernel` |
-| Static and dynamic rectangular paths | Static exact rectangular paths and dynamic rectangular paths both remain part of the final design; static/full interior tiles keep compile-time information, dynamic/tail/runtime tiles use dynamic rect ops. | Specialization and runtime-shaped kernels need different representations without forcing one through the other. | P11, dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | static rectangular fixtures plus dynamic rect hardware matrix |
-| GEMM/GEMV blocked VPM reuse | VPM is the shared-memory resource; blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. | Future `vector.contract` lowering needs real shared-memory blocking/tiling, not padded matrices or TMU-to-register-to-VPM as the primary path. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | `gemv_blocked_vpm_vc4kernel`, `gemm_blocked_vpm_vc4kernel` |
-| Planned-emission branch-count invariant | Dynamic VDR/VDW branch-critical regions must be self-counted by planned emission or documented as non-branch-critical. | Runtime rectangular lowering contains branches whose immediates must remain correct after lower-half edits. | Dynamic rectangular transfer / runtime GEMM-GEMV checkpoint. | planned-DMA static audit and branch-count invariant lit |
+| Decision | Locked answer | Phase | Required proof |
+|---|---|---:|---|
+| Layer boundary | Standard value layer owns vector/memref/arith/math/scf/cf; VC4Kernel owns VC4 target execution-plan semantics. | P0 | Spec text and verifier boundary tests when implementation changes. |
+| Lower path | Only `vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware`. | P0, all | Static scans and conversion tests showing no direct VC4KernelToVC4 path. |
+| Producer tile DSL | No producer tile DSL and no VC4Tile resurrection. | P0, all | Static scans and forbidden-op diagnostics. |
+| Compatibility bias | Existing special-case ops are migration targets, not compatibility promises. | P0-P4 | Updated spec and eventual migration tests. |
+| Surface evidence | Every feature needs verifier, VC4KernelToSSAVC4, lower-half coverage where needed, and hardware proof or deterministic-reject proof. | P0-P13 | Final P13 support matrix. |
 
 ---
 
-## Current-to-target delta checklist
+## Phase Ordering
 
-Starting point after pre-lowering cleanups:
-
-```text
-- VC4Kernel exists.
-- FunctionOpInterface is implemented.
-- Source lit works for dialect and conversion.
-- VC4Tile is gone from source-controlled tree.
-- Existing verifier/tests match the old strict spec.
-```
-
-Needed deltas before corrected surface is locked:
-
-```text
-- delete lane_id and block_id ops
-- delete source resource dict requirement
-- add warps_per_block source attr
-- add/adjust VPM mode attrs: horizontal/vertical, w32/w16/w8, none/packed/laned
-- add y/x coordinate operands to VPM ops
-- add vdw_store_vpm if needed for full rectangular VPM->global DMA
-- change predicate verifier to allow general_mask where consumer can lower it
-- update invalid tests around fragment_cmp/general masks
-- add invalid user resource metadata test
-- revise docs and operation inventory
-```
-
-Needed deltas before lowering is accepted:
-
-```text
-- semantic vc4.resource emitted by VC4KernelToSSAVC4
-- runtime vpm_base_row and semaphore_base builtins
-- scalar f32 uniform support
-- scalar i1 condition plan support
-- predicate/general mask lowering
-- full VPM allocator with hidden staging rows
-- hardware-derived VPM/VDR/VDW lower-half schema
-- vdw_store_fragment staging and preserve fallback
-- masked TMU load
-- i32 imul32 with mul24 fast path/fallback
-- cooperative barrier through semaphore_base
-- full hardware fixture matrix
-```
+| Phase | Name | Status in P0 | Scope |
+|---:|---|---|---|
+| P0 | spec/matrix/audit | accepted baseline setup | Documentation, inventory, support matrix planning only. |
+| P1 | general ALU | planned | General hardware-faithful ALU surface; migrate fragment add/sub/mul/shl. |
+| P2 | bitcast/constants | planned | Bitcast and constant materialization inside target planning boundary. |
+| P3 | comparisons | planned | General comparisons and predicate production. |
+| P4 | reductions | planned | General reductions; migrate add-only `fragment_reduce`. |
+| P5 | scalar arith | planned | Scalar arithmetic subset belonging in VC4Kernel planning. |
+| P6 | memory/coherency | planned | TMU/VDR/VDW/VPM paths, coherency, and spill reload policy. |
+| P7 | TMU safe inactive load | planned | Explicit safe offset / inactive-load policy. |
+| P8 | VDW inactive store v1 | planned | Full/tail/rect preserve; sparse deterministic reject. |
+| P9 | pack/unpack/subword | planned | Pack/unpack and sub-32 VPM modes with executable rejects until proven. |
+| P10 | SFU/fastmath | planned | Explicit fastmath/approx contract for SFU-derived math. |
+| P11 | dynamic rotate/shuffle | planned | Dynamic rotate/shuffle only if hardware-proven. |
+| P12 | dynamic VPM/VDR/VDW coordinates | planned | Dynamic coordinates/pitch/stride only where proven. |
+| P13 | final support matrix/pre-vector lock | planned | Close feature matrix before vector/pre-Triton work. |
+| Deferred | arbitrary sparse VDW stores | deferred | No silent decomposition before a later hardware-proven phase. |
 
 ---
 
-## Acceptance gate summary
+## Locked Policy Matrix
 
-Corrected surface lock requires:
-
-```text
-ninja -C compiler/build vc4-opt
-run_lit -sv compiler/test/Dialect/VC4Kernel
-run_lit -sv compiler/test/Conversion/VC4KernelToSSAVC4
-ninja -C compiler/build check-vc4
-git diff --check
-static scans show no lane_id/block_id/thread_id/direct-vc4/vc4tile in normative source
-```
-
-Full Stage 1 acceptance requires the above plus:
-
-```text
-ninja -C compiler/build vc4-codegen
-SSAVC4 and SSAVC4ToVC4 lit suites
-CodeGen lit suites
-fresh hardware fixture matrix
-CPU-reference comparison
-sentinel/zero-fill checks
-anti-shortcut scans
-```
+| Feature or policy | Current classification | Required Surface v2 outcome | Required proof |
+|---|---|---|---|
+| `fragment_add/sub/mul/shl` | migration target | Replace long-term special cases with P1 general ALU. | Verifier, conversion, lower-half, hardware or deterministic-reject evidence per admitted opcode. |
+| Bitcast/constants | planned | P2 target-planning semantics without producer-dialect admission. | Dialect verifier and conversion tests. |
+| Comparisons | planned | P3 general comparison surface. | Predicate verifier/conversion tests and hardware proof where executable. |
+| `fragment_reduce` add-only | migration target | P4 general reductions. | Reduction verifier/conversion/hardware matrix. |
+| Scalar arith | planned | P5 scoped scalar arithmetic subset. | Verifier and lowering tests; no vector producer ops admitted. |
+| TMU memory path | accepted baseline plus P7 migration | Explicit safe inactive-load policy; inactive lanes zero-fill. | Verifier/conversion tests and hardware zero-fill proof. |
+| VDR global-to-VPM path | accepted baseline | Preserve natural shared-memory load path, including dynamic rect baseline. | Existing dynamic VDR canaries plus future matrix entries. |
+| VDW VPM/register-to-global path | accepted baseline plus P8 migration | Full/tail/rect preserve in v1; sparse deterministic reject. | Sentinel hardware proof for admitted classes; deterministic-reject lit for sparse. |
+| Spill coherency | accepted baseline policy | VDW-written compiler spill slots reload through coherent VDR->VPM path, not TMU, unless future invalidation is proven. | Lower-half tests and hardware canaries. |
+| Pack/unpack/subword | planned | P9 hardware-faithful surface with executable rejects until proven. | Verifier reject tests and later hardware proof. |
+| SFU/fastmath | planned | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, hardware proof; no untested NaN/Inf/signed-zero promises. |
+| `sqrt` via `rsqrt` | planned under P10 only | Allowed only under explicit fastmath/approx unless exact sequence is implemented and tested. | Contract tests and numerical hardware fixtures. |
+| Dynamic rotate/shuffle | planned | P11 only if downstream and hardware proof exists. | Verifier/conversion/hardware proof. |
+| Dynamic VPM/VDR/VDW coordinates | planned with accepted dynamic rect baseline | P12 admission only where range verification and lower-half proof exist. | Dynamic-coordinate verifier/lowering/hardware matrix. |
+| Sparse VDW store | deferred deterministic reject | Must reject until a later hardware-proven phase; no silent RMW decomposition. | Deterministic-reject lit and static policy scans. |
 
 ---
 
-## Suggested first three Codex prompt themes
+## Forbidden Permanent Surface
 
-1. **Spec correction docs:** replace the old strict spec and update nearby docs, no code changes.
-2. **Correct VC4Kernel surface:** delete lane_id/block_id/resource dict, update ODS/verifier/tests.
-3. **Semantic resource/lower-half schema:** introduce computed `vc4.resource`, runtime builtins, and lower-half mode enums in SSAVC4/VC4 tests.
+| Forbidden surface | Required handling |
+|---|---|
+| `tile_broadcast` | Forbidden permanent surface. |
+| `tile_dot` | Forbidden permanent surface. |
+| `tile_matmul` | Forbidden permanent surface. |
+| `tile_contract` | Forbidden permanent surface. |
+| `fragment_contract` | Forbidden permanent surface for Surface v2. |
+| Producer-level layout algebra | Keep above VC4Kernel in the standard value layer. |
+| Arbitrary sparse VDW store before deferred phase | Deterministic reject. |
+| Integer div/mod | Forbidden unless a library sequence is designed. |
+| Atomics | Forbidden for compute v1. |
+| Tile-buffer color/Z/stencil | Forbidden for compute v1. |
+| Texture filtering / cube maps / varyings | Forbidden for compute v1. |
 
-Only after these three should implementation proceed into predicate lowering, memory path lowering, and hardware fixtures.
+---
+
+## Accepted Baseline to Preserve
+
+| Baseline area | Evidence class to preserve |
+|---|---|
+| Dynamic rectangular VDR/VDW | Existing dynamic rect lowering, canaries, and runtime pitch/stride fixtures. |
+| Runtime GEMV/GEMM | Existing accepted naive/blocked runtime fixtures and source shapes. |
+| Lower-half branch-layout accounting | Existing branch-layout static audit and closure tests. |
+| Spill and VPM row accounting | Existing spill transport, edge-copy, and VPM row resource tests. |
+| Hardware discipline | Existing sentinels, expected results, CPU references, timeout/power-cycle behavior, and freshness checks. |
+
+---
+
+## P13 Matrix Rule
+
+P13 must publish a final support matrix. Each Surface v2 feature must be marked with exactly one precise status:
+
+```text
+accepted baseline
+implemented and hardware-proven
+implemented with deterministic-reject proof
+planned
+migration target
+deferred
+```
+
+No P13 entry may rely on comments alone, fixture-name dispatch, public-name dispatch, candidate-path dispatch, generated-output strings, or host-side result substitution.

@@ -1,7 +1,7 @@
 # VC4Kernel Dialect Strict Specification
 
-**Status:** corrected Stage 1 target specification for the `vc4kernel` dialect and its lowering boundary.  
-**Date:** 2026-05-31.  
+**Status:** corrected Stage 1 target specification plus Surface v2 pre-vector lock for the `vc4kernel` dialect and its lowering boundary.
+**Date:** 2026-06-06.
 **Audience:** implementation agents maintaining `vc4kernel`, `VC4KernelToSSAVC4`, SSAVC4, scheduled `vc4`, `vc4-codegen`, and the libpi-backed launch/runtime path.  
 **Primary purpose:** replace the earlier strict specification with the corrected final contract after the pre-lowering design review.
 
@@ -200,6 +200,183 @@ No `vc4kernel` pass may lower directly to scheduled `vc4`. The only valid lower 
 
 ```text
 vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware
+```
+
+---
+
+## 2.4 VC4Kernel Surface v2 pre-vector lock
+
+Surface v2 is the pre-vector/pre-Triton hardening lock for `vc4kernel`. It preserves the existing accepted dynamic rectangular, spill, runtime GEMV/GEMM, lower-half branch-layout, and hardware fixture baseline while planning the next surface changes. It does not authorize new execution semantics by documentation alone.
+
+### Normative boundary
+
+```text
+standard value layer:
+  owns vector, memref, arith, math, scf, and cf producer/value semantics.
+
+vc4kernel:
+  owns VC4 target execution-plan semantics above SSAVC4.
+
+lower path:
+  vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware.
+```
+
+There is no direct `VC4KernelToVC4` path. `vc4kernel` is not a producer tile DSL, not a replacement for the standard value layer, and not a compatibility layer for old VC4Tile concepts.
+
+### No compatibility or special-case bias
+
+Current special-case operations are migration targets, not compatibility promises:
+
+```text
+fragment_add / fragment_sub / fragment_mul / fragment_shl:
+  migration target for P1 general hardware-faithful ALU.
+
+fragment_reduce with add only:
+  migration target for P4 general reductions.
+
+tmu_load_fragment implicit safe-address behavior:
+  migration target for P7 explicit safe inactive-load policy.
+
+vdw_store_fragment implicit inactive-store behavior:
+  migration target for P8 explicit inactive-store policy.
+```
+
+Future agents must not keep `fragment_add`, `fragment_sub`, `fragment_mul`, `fragment_shl`, add-only reduction specialness, or implicit TMU safe-address semantics merely because they already exist.
+
+### Locked P0-P13 phase order
+
+```text
+P0  spec/matrix/audit
+P1  general ALU
+P2  bitcast/constants
+P3  comparisons
+P4  reductions
+P5  scalar arith
+P6  memory/coherency
+P7  TMU safe inactive load
+P8  VDW inactive store v1
+P9  pack/unpack/subword
+P10 SFU/fastmath
+P11 dynamic rotate/shuffle
+P12 dynamic VPM/VDR/VDW coordinates
+P13 final support matrix/pre-vector lock
+
+Deferred:
+  arbitrary sparse VDW stores
+```
+
+P1-P13 are planned phases. This document does not claim those phases are implemented until their verifier, conversion, lower-half, and hardware or deterministic-reject evidence exists.
+
+### Locked feature policies
+
+```text
+P1 general ALU:
+  define a general hardware-faithful ALU surface instead of preserving one-off fragment ALU ops as the long-term API.
+
+P2 bitcast/constants:
+  define bit-level carrier reinterpretation and constant materialization without admitting producer dialect operations.
+
+P3 comparisons:
+  define general comparison semantics and predicate production beyond current special-case comparisons.
+
+P4 reductions:
+  define a general reduction family instead of add-only specialness.
+
+P5 scalar arith:
+  define the scalar arithmetic subset that belongs in vc4kernel planning, distinct from producer-level arith ownership.
+
+P6 memory/coherency:
+  lock TMU, VDR, VDW, VPM, spill, and inactive-lane coherency rules.
+
+P7 TMU safe inactive load:
+  replace implicit safe-address behavior with an explicit safe offset / inactive-load policy.
+
+P8 VDW inactive store v1:
+  support full, tail, and rectangular preserve semantics; arbitrary sparse masks deterministic-reject.
+
+P9 pack/unpack/subword:
+  admit only hardware-proven pack/unpack and sub-32 VPM mode semantics, with executable rejects until proven.
+
+P10 SFU/fastmath:
+  add SFU-derived math only behind an explicit fastmath/approx contract.
+
+P11 dynamic rotate/shuffle:
+  admit dynamic rotate/shuffle only if the downstream and hardware proof exists.
+
+P12 dynamic VPM/VDR/VDW coordinates:
+  admit dynamic coordinates/pitch only where lower-half and hardware proof exists.
+
+P13 final matrix:
+  lock each feature to verifier, VC4KernelToSSAVC4, lower-half, and hardware or deterministic-reject proof.
+```
+
+### Fast-math and SFU policy
+
+Default math is exact/conservative. Approximate SFU-derived math is opt-in only through an explicit fastmath/approx contract. `sqrt` may lower through `rsqrt` only under that explicit contract unless an exact sequence is implemented and tested. NaN, Inf, and signed-zero exactness must not be promised without explicit tests covering those cases.
+
+### VDW masked-store policy
+
+VDW v1 supports:
+
+```text
+full store:
+  all lanes/elements active.
+
+tail store:
+  contiguous prefix active, inactive destination lanes preserved.
+
+rectangular store:
+  active rows/columns stored, inactive destination region preserved.
+```
+
+Arbitrary sparse VDW masks deterministic-reject until a later hardware-proven phase. The compiler must not silently decompose sparse stores into read-modify-write stores unless that deferred phase exists and has verifier, lowering, lower-half, and hardware proof.
+
+### Memory path and coherency policy
+
+The legal memory paths are explicit:
+
+```text
+TMU:
+  global memory to register fragment read path.
+
+VDR:
+  global memory to VPM path.
+
+VDW:
+  VPM or compiler-staged register fragment to global memory path.
+```
+
+Compiler spill slots written by VDW must reload through the coherent VDR->VPM path, not TMU, unless a future architecture-backed invalidation/coherency mechanism is specified and proven.
+
+### Surface matrix requirement
+
+Every Surface v2 feature must have:
+
+```text
+verifier coverage
+VC4KernelToSSAVC4 coverage
+lower-half coverage where needed
+hardware fixture proof or deterministic-reject proof
+```
+
+### Forbidden permanent surface
+
+The following are not permanent `vc4kernel` surface features:
+
+```text
+tile_broadcast
+tile_dot
+tile_matmul
+tile_contract
+fragment_contract
+producer-level layout algebra
+arbitrary sparse VDW store before its deferred phase
+integer div/mod unless a library sequence is designed
+atomics
+tile-buffer color/Z/stencil
+texture filtering
+cube maps
+varyings for compute v1
 ```
 
 ---
@@ -787,7 +964,7 @@ If a future pass needs a scalar element extracted from `lane_range`, that scalar
 
 ```text
 TMU per-lane loads
-VDW contiguous stores and read-modify-write fallbacks
+VDW contiguous full/tail/rect stores with preserve semantics
 VDR full rectangular DMA
 VPM read/write zero-fill semantics
 fragment select/reduce
@@ -856,13 +1033,13 @@ vpm_read_fragment:
   accepts all classes; inactive lanes return zero
 
 vdw_store_fragment:
-  accepts all classes for contiguous 32-bit row offsets; full/tail may use direct active-prefix path; general_mask must preserve inactive destination memory through fallback such as TMU old-row load + fragment_select + VPM staging + full-row VDW store
+  accepts full, empty, tail_prefix, and rect_row for contiguous 32-bit row offsets with preserve semantics; arbitrary sparse general_mask deterministic-rejects until the deferred sparse VDW phase is hardware-proven
 
 vdr_load_to_vpm:
   accepts only full static rectangular DMA semantics; runtime rectangular tails and leading dimensions use vdr_load_rect_to_vpm
 
 vdw_store_vpm and vdw_store_vpm_fragment:
-  direct DMA accepts full static rectangular or full/tail row semantics; runtime rectangular preserve-destination stores use vdw_store_rect_from_vpm
+  direct DMA accepts full static rectangular or full/tail row semantics; runtime rectangular preserve-destination stores use vdw_store_rect_from_vpm; arbitrary sparse masks deterministic-reject
 ```
 
 ### 8.5 Forbidden predicate representations
@@ -1068,7 +1245,7 @@ Rules:
 
 ```text
 - TMU load may accept general per-lane byte offsets.
-- VDW direct DMA store paths require contiguous row/rectangle memory. vdw_store_fragment supports general masks only by preserving inactive destination through fallback, not by arbitrary scatter DMA.
+- VDW direct DMA store paths require contiguous row/rectangle memory. vdw_store_fragment v1 supports full/tail/rect preserve semantics; arbitrary sparse masks deterministic-reject until a later hardware-proven phase.
 - VDR global-to-VPM supports full rectangular memory movement only.
 - Arbitrary scatter stores are not part of v1.
 ```
@@ -1230,7 +1407,7 @@ Rules:
 - active byte offsets must be 4-byte aligned.
 - all predicate classes are legal.
 - empty predicates must not issue a TMU request.
-- tail/general masks must use safe inactive addresses before zero-selecting inactive lanes.
+- tail/general masks must use explicit safe inactive-address policy after P7 before zero-selecting inactive lanes. Until P7, existing implicit safe-address behavior is only a migration target and must not be expanded.
 ```
 
 ### 12.3 `vc4kernel.vdw_store_fragment`
@@ -1259,9 +1436,9 @@ Rules:
 
 ```text
 - byte_offsets must describe a contiguous 32-bit row fragment.
-- pred may be full, empty, tail_prefix, rect_row, or general_mask.
+- pred may be full, empty, tail_prefix, or rect_row in executable v1.
 - full/tail may lower to direct staging plus active-prefix store if hardware path preserves inactive destination.
-- general_mask must lower through preserve-destination fallback, e.g. TMU old-row load + fragment_select + hidden VPM staging + full-row VDW.
+- arbitrary sparse general_mask must deterministic-reject until the deferred sparse VDW phase exists.
 - empty predicate skips the store.
 - This op must never lower as if VC4 had a direct register-to-global store instruction.
 ```
@@ -1440,7 +1617,7 @@ Rules:
 
 ```text
 - full/empty/tail_prefix are direct classes.
-- general_mask requires preserve-destination fallback or deterministic rejection until fallback is implemented.
+- arbitrary sparse general_mask deterministic-rejects until the deferred sparse VDW phase is implemented and hardware-proven.
 - byte_offset must be 4-byte aligned.
 ```
 
@@ -1470,7 +1647,7 @@ The architecture-backed dynamic rectangular contract is:
 6. Full 64-row VPM capacity must be usable through multiple 16x16 tiles, such as rows 0, 16, 32, and 48; per-op max shape remains <=16x16 w32/none for v1.
 7. Row-by-row fallback is allowed only for true hardware-unencodable overflow cases, and each fallback class must be explicit and hardware-tested.
 8. Static exact rectangular paths and dynamic rectangular paths both remain part of the final design. Static/full interior tiles keep compile-time information; dynamic/tail/runtime tiles use dynamic rect ops.
-9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads or destination-merge fallback when that is the documented VDW preserve path.
+9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads; it is not an accepted sparse VDW preserve workaround before the deferred sparse-store phase.
 10. Planned-emission branch-count invariant: dynamic VDR/VDW branch-critical regions must be self-counted by planned emission or documented as non-branch-critical.
 
 The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature. Active rows and columns are runtime scalar `i32` values. Memory pitch/stride in bytes is a runtime scalar `i32` value.
@@ -1791,7 +1968,7 @@ vc4kernel.vector_transfer_write
 vc4kernel.fragment_contract
 ```
 
-`fragment_contract` remains outside this stage. It may be added only if the future `vector.contract -> vc4kernel` path proves that a planned contract op is necessary.
+`fragment_contract` is forbidden as a permanent Surface v2 `vc4kernel` feature. Future vector contract handling must lower through the standard value layer into admitted target execution-plan features instead of resurrecting a contract-specific VC4Kernel op.
 
 ---
 
@@ -1866,7 +2043,7 @@ Verify:
 - vector<16xi1> masks are rejected.
 - branching on pred directly is rejected.
 - consumer-specific predicate legality is enforced.
-- general_mask is legal where the consumer has a specified fallback.
+- general_mask is legal only where the consumer has specified support. Arbitrary sparse VDW store consumers deterministic-reject until the deferred sparse VDW phase.
 ```
 
 ### 17.6 Memory legality
@@ -1989,10 +2166,10 @@ pred.any/pred.all -> correct scalar i1 via any/all hardware flag logic
 
 ```text
 tmu_load_fragment:
-  TMU request/read with safe masked-address behavior and zero-fill.
+  TMU request/read with explicit safe inactive-address behavior and zero-fill after P7; current implicit behavior is a migration target.
 
 vdw_store_fragment:
-  compiler-managed hidden VPM staging; general masks use destination-preserving fallback.
+  compiler-managed hidden VPM staging; full/tail/rect preserve semantics are v1, while arbitrary sparse masks deterministic-reject until the deferred sparse VDW phase.
 
 vpm_alloc:
   allocation table/resource planning only; no runtime heap op.
@@ -2150,7 +2327,7 @@ fragment-rotate-lowering.mlir
 fragment-reduce-lowering.mlir
 tmu-load-fragment-full-tail-general.mlir
 vdw-store-fragment-staging.mlir
-vdw-store-fragment-general-mask-preserve.mlir
+vdw-store-fragment-sparse-mask-reject.mlir
 vpm-read-write-horizontal.mlir
 vpm-read-write-vertical.mlir
 vdr-load-to-vpm-horizontal-vertical.mlir
@@ -2170,7 +2347,8 @@ Minimum hardware fixtures:
 ```text
 vc4kernel_vector_store_full
 vc4kernel_vector_store_tail_preserve
-vc4kernel_vector_store_general_mask_preserve
+vc4kernel_vector_store_rect_preserve
+vc4kernel_vector_store_sparse_mask_reject
 vc4kernel_program_id_writeback
 vc4kernel_tmu_load_full
 vc4kernel_tmu_load_tail_zero_fill
@@ -2264,10 +2442,15 @@ Outside the current executable spec:
 - quantization
 - packed/laned executable VPM movement
 - arbitrary global scatter stores
-- fragment_contract / matmul-specific planned op
+- arbitrary sparse VDW stores before the deferred sparse-store phase
+- integer div/mod unless a library sequence is designed
+- atomics
+- tile-buffer color/Z/stencil
+- texture filtering / cube maps / varyings for compute v1
+- fragment_contract / matmul-specific VC4Kernel op
 ```
 
-These may be added only by separate design documents and vertical hardware-proven implementation slices.
+These may be added only by separate design documents and vertical hardware-proven implementation slices, except forbidden permanent Surface v2 features such as `fragment_contract`, `tile_dot`, `tile_matmul`, and `tile_contract`, which must not be resurrected as VC4Kernel ops.
 
 ---
 
