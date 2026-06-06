@@ -6,4 +6,4 @@
 # CHECK: current_status_counts:
 # CHECK: accepted_baseline=
 # CHECK: deterministic_reject=
-# CHECK: migration_target=
+# CHECK: removed_in_p7=1

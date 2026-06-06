@@ -235,8 +235,8 @@ fragment_reduce with add only:
   migration target for P4 general reductions.
 
 tmu_load_fragment implicit safe-address behavior:
-  migration target for P7 explicit safe inactive-load policy; active P7b
-  sources use explicit scalar safe_offset and inactive_load<zero>.
+  removed_in_p7 after replacement by the explicit safe inactive-load policy;
+  active sources use explicit scalar safe_offset and inactive_load<zero>.
 
 vdw_store_fragment implicit inactive-store behavior:
   migration target for P8 explicit inactive-store policy.
@@ -2320,7 +2320,7 @@ pred.any/pred.all -> correct scalar i1 via any/all hardware flag logic
 ```text
 tmu_load_fragment:
   TMU request/read with explicit scalar safe inactive byte offset and
-  inactive_load<zero>; implicit safe-address inference is a P7 migration target.
+  inactive_load<zero>; implicit safe-address inference is removed_in_p7.
   P6 attrs: memory_path = tmu_global_read, coherency = readonly_tmu.
 
 vdw_store_fragment:

@@ -96,6 +96,7 @@ SPECIAL_CASE_ALLOWED_STATUSES = {
     "migrated_pending_deletion",
     "removed_in_p1",
     "removed_in_p4",
+    "removed_in_p7",
 }
 
 FORBIDDEN_TILE_TERMS = {

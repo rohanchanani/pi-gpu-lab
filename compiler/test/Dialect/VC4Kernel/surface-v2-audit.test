@@ -4,6 +4,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p4-general-reduce-lock | FileCheck %s --check-prefix=P4
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p5-scalar-arith-lock | FileCheck %s --check-prefix=P5
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p6-memory-policy-lock | FileCheck %s --check-prefix=P6
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p7-tmu-safe-load-lock | FileCheck %s --check-prefix=P7
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
@@ -116,3 +117,23 @@
 # P6-SAME: p6_targeted_fixture_count=3
 # P6-SAME: producer_fixture_hits=0
 # P6-SAME: source_lower_half_fixture_hits=0
+
+# P7: PASS VC4Kernel Surface v2 audit: mode=p7-tmu-safe-load-lock
+# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P7: migration_targets:
+# P7-SAME: removed_special_case_ops=4
+# P7-SAME: special_case_migration_targets=4
+# P7: fixture_purity:
+# P7-SAME: hardware_inputs=94
+# P7-SAME: producer_or_lower_half_hits=0
+# P7: p1_general_alu_lock:
+# P7-SAME: removed_legacy_hits=0
+# P7: p7_tmu_safe_load_lock:
+# P7-SAME: active_tmu_loads=89
+# P7-SAME: explicit_safe_offset_hits=89
+# P7-SAME: hidden_spill_reload_tmu_hits=0
+# P7-SAME: inactive_zero_hits=89
+# P7-SAME: negative_tmu_loads=9
+# P7-SAME: old_signature_hits=0
+# P7-SAME: straight_line_tmu_lowering=1
+# P7-SAME: tmu_source_policy_hits=0

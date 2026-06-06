@@ -61,6 +61,7 @@ SPECIAL_CASE_ALLOWED_STATUSES = {
     "migration_target",
     "migrated_pending_deletion",
     "removed_in_p1",
+    "removed_in_p7",
 }
 
 PRODUCER_OR_LOWER_HALF_OP_PREFIXES = [
@@ -142,6 +143,10 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
+    },
+    "p7_remove_old_tmu_load_signature": {
+        "migration_target",
+        "removed_in_p7",
     },
 }
 
@@ -234,6 +239,10 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
+    },
+    "p7_remove_old_tmu_load_signature": {
+        "migration_target",
+        "removed_in_p7",
     },
 }
 
@@ -443,6 +452,7 @@ def audit_matrix_ownership(matrix, mode):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
+        "p7-tmu-safe-load-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -460,6 +470,7 @@ def audit_matrix_ownership(matrix, mode):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
+        "p7-tmu-safe-load-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -624,6 +635,31 @@ def audit_matrix_ownership(matrix, mode):
         ]:
             if token not in p6_text:
                 fail(f"P6 memory policy matrix entry must document {token}")
+    if mode == "p7-tmu-safe-load-lock":
+        p7_tmu = require_matrix_feature_status_in(
+            features,
+            "p7_tmu_load_explicit_safe_inactive_offset",
+            "P7",
+            {"hardware_proven_pending_final_acceptance", "accepted"},
+        )
+        p7_text = json.dumps(p7_tmu).lower()
+        for token in [
+            "safe_offset",
+            "inactive_load<zero>",
+            "memory_path",
+            "coherency",
+            "straight-line",
+            "zero",
+            "hardware",
+        ]:
+            if token not in p7_text:
+                fail(f"P7 TMU safe load matrix entry must document {token}")
+        require_matrix_feature(
+            features,
+            "p7_remove_old_tmu_load_signature",
+            "P7",
+            "removed_in_p7",
+        )
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
@@ -631,12 +667,13 @@ def audit_matrix_ownership(matrix, mode):
             "P4",
             {"migration_target", "removed_in_p4"},
         )
-    require_matrix_feature(
-        features,
-        "p7_remove_old_tmu_load_signature",
-        "P7",
-        "migration_target",
-    )
+    if mode != "p7-tmu-safe-load-lock":
+        require_matrix_feature_status_in(
+            features,
+            "p7_remove_old_tmu_load_signature",
+            "P7",
+            {"migration_target", "removed_in_p7"},
+        )
     sparse_p8 = require_matrix_feature(
         features,
         "p8_sparse_vdw_store_deterministic_reject",
@@ -780,6 +817,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
+        "p7-tmu-safe-load-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -1824,8 +1862,12 @@ def audit_p6_memory_policy_lock(repo_root, matrix):
         "P6",
         {"hardware_proven_pending_final_acceptance", "accepted"},
     )
-    require_matrix_feature(features, "p7_remove_old_tmu_load_signature", "P7",
-                           "migration_target")
+    require_matrix_feature_status_in(
+        features,
+        "p7_remove_old_tmu_load_signature",
+        "P7",
+        {"migration_target", "removed_in_p7"},
+    )
     require_matrix_feature(features, "p8_sparse_vdw_store_deterministic_reject",
                            "P8", "deterministic_reject")
     counts.update(
@@ -1839,6 +1881,158 @@ def audit_p6_memory_policy_lock(repo_root, matrix):
             "negative_memory_policy_ops": sum(negative_memory_ops.values()),
             "producer_fixture_hits": 0,
             "source_lower_half_fixture_hits": 0,
+        }
+    )
+    return counts
+
+
+def audit_p7_tmu_safe_load_lock(repo_root, matrix):
+    counts = audit_p6_memory_policy_targeted(repo_root, matrix)
+    features = feature_by_id(matrix)
+    require_matrix_feature_status_in(
+        features,
+        "p7_tmu_load_explicit_safe_inactive_offset",
+        "P7",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    require_matrix_feature(
+        features,
+        "p7_remove_old_tmu_load_signature",
+        "P7",
+        "removed_in_p7",
+    )
+
+    source_roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+    ]
+    tmu_source_policy_hits = []
+    for root in source_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            text = read_text(path)
+            for line_no, line in enumerate(text.splitlines(), start=1):
+                lowered = line.lower()
+                if "tmu" not in lowered:
+                    continue
+                if not re.search(r"\b(?:infer|implicit|legacy|migration-only)\b", lowered):
+                    continue
+                tmu_source_policy_hits.append((path, line_no, line.strip()))
+    if tmu_source_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{line}"
+            for path, line_no, line in tmu_source_policy_hits[:20]
+        )
+        fail(f"P7 lock found old TMU safe-address policy text in active source: {details}")
+
+    conversion = read_text(
+        repo_root / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"
+    )
+    tmu_start = conversion.rfind("if (hasName(op, kTMULoadOpName))")
+    tmu_end = conversion.find("if (hasName(op, kVDWStoreOpName))", tmu_start)
+    if tmu_start < 0 or tmu_end < 0:
+        fail("P7 lock expected explicit TMU lowering block in VC4KernelToSSAVC4")
+    tmu_block = conversion[tmu_start:tmu_end]
+    for token in [
+        "Value safeScalarOffset = mapValue(op, op->getOperand(3), state)",
+        "kSSAVC4SplatOpName",
+        "emitPredicateSelect(op, builder, *predicate, offsets, safeOffsetVec)",
+        "emitTMULoadFragment(op, builder, base, *safeOffsets",
+        "emitPredicateSelect(op, builder, *predicate, loaded, zero)",
+    ]:
+        if token not in tmu_block:
+            fail(f"P7 lock expected straight-line explicit safe-offset TMU lowering token: {token}")
+    for forbidden in ["createBranch", "createCondBranch", "Block *", "push_back"]:
+        if forbidden in tmu_block:
+            fail(
+                "P7 lock found branchy CFG construction in TMU safe-offset lowering: "
+                + forbidden
+            )
+
+    scan_roots = [
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+    ]
+    files_scanned = 0
+    active_tmu_loads = 0
+    negative_tmu_loads = 0
+    explicit_safe_offset_hits = 0
+    inactive_zero_hits = 0
+    missing_policy_hits = []
+    old_signature_hits = []
+    for root in scan_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if path.suffix not in {".mlir", ".test"}:
+                continue
+            files_scanned += 1
+            negative = is_negative_test(path)
+            for line_no, line in enumerate(read_text(path).splitlines(), start=1):
+                stripped = line.strip()
+                if not stripped or stripped.startswith("//"):
+                    continue
+                if "vc4kernel.tmu_load_fragment" not in stripped:
+                    continue
+                if negative:
+                    negative_tmu_loads += 1
+                    continue
+                active_tmu_loads += 1
+                has_safe_offset = ", i32 ->" in stripped
+                has_inactive_zero = (
+                    "inactive_load = #vc4kernel.inactive_load<zero>" in stripped
+                )
+                has_memory_path = (
+                    "#vc4kernel.memory_path<tmu_global_read>" in stripped
+                )
+                has_coherency = "#vc4kernel.coherency<readonly_tmu>" in stripped
+                if has_safe_offset:
+                    explicit_safe_offset_hits += 1
+                else:
+                    old_signature_hits.append((path, line_no, stripped))
+                if has_inactive_zero:
+                    inactive_zero_hits += 1
+                if not (has_safe_offset and has_inactive_zero and
+                        has_memory_path and has_coherency):
+                    missing_policy_hits.append((path, line_no, stripped))
+    if old_signature_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{line}"
+            for path, line_no, line in old_signature_hits[:20]
+        )
+        fail(f"P7 lock found active old TMU load signature: {details}")
+    if missing_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line_no}:{line}"
+            for path, line_no, line in missing_policy_hits[:20]
+        )
+        fail(f"P7 lock found active TMU load missing safe offset/inactive/P6 attrs: {details}")
+    if active_tmu_loads == 0:
+        fail("P7 lock expected active explicit tmu_load_fragment uses")
+    if negative_tmu_loads == 0:
+        fail("P7 lock expected deterministic-reject TMU load tests")
+
+    docs = read_text(
+        repo_root / "compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"
+    )
+    for token in [
+        "safe_offset",
+        "inactive_load = #vc4kernel.inactive_load<zero>",
+        "request base + safe_offset",
+        "removed_in_p7",
+    ]:
+        if token not in docs:
+            fail(f"P7 lock expected strict spec to document {token}")
+
+    counts.update(
+        {
+            "active_tmu_loads": active_tmu_loads,
+            "explicit_safe_offset_hits": explicit_safe_offset_hits,
+            "files_scanned": files_scanned,
+            "inactive_zero_hits": inactive_zero_hits,
+            "negative_tmu_loads": negative_tmu_loads,
+            "old_signature_hits": 0,
+            "straight_line_tmu_lowering": 1,
+            "tmu_source_policy_hits": 0,
         }
     )
     return counts
@@ -1869,6 +2063,7 @@ def main(argv):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
+        "p7-tmu-safe-load-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -1912,6 +2107,7 @@ def main(argv):
             "p5-scalar-arith-lock",
             "p6-memory-policy-targeted",
             "p6-memory-policy-lock",
+            "p7-tmu-safe-load-lock",
         }
         else {}
     )
@@ -1943,6 +2139,11 @@ def main(argv):
     p6_lock_counts = (
         audit_p6_memory_policy_lock(repo_root, matrix)
         if args.mode == "p6-memory-policy-lock"
+        else {}
+    )
+    p7_lock_counts = (
+        audit_p7_tmu_safe_load_lock(repo_root, matrix)
+        if args.mode == "p7-tmu-safe-load-lock"
         else {}
     )
 
@@ -1977,6 +2178,8 @@ def main(argv):
         print(f"p6_memory_policy_targeted: {format_counts(p6_targeted_counts)}")
     if p6_lock_counts:
         print(f"p6_memory_policy_lock: {format_counts(p6_lock_counts)}")
+    if p7_lock_counts:
+        print(f"p7_tmu_safe_load_lock: {format_counts(p7_lock_counts)}")
     return 0
 
 
