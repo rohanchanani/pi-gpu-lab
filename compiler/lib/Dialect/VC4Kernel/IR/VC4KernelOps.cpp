@@ -101,6 +101,42 @@ static bool isIntegerBinaryAddALUOpcode(AddALUOpcode opcode) {
          opcode == AddALUOpcode::v8subs;
 }
 
+static bool isI32ReduceKind(ReduceKind kind) {
+  switch (kind) {
+  case ReduceKind::add:
+  case ReduceKind::min_s:
+  case ReduceKind::max_s:
+  case ReduceKind::min_u:
+  case ReduceKind::max_u:
+  case ReduceKind::bit_and:
+  case ReduceKind::bit_or:
+  case ReduceKind::bit_xor:
+    return true;
+  case ReduceKind::fmin:
+  case ReduceKind::fmax:
+    return false;
+  }
+  llvm_unreachable("unhandled VC4Kernel reduce kind");
+}
+
+static bool isF32ReduceKind(ReduceKind kind) {
+  switch (kind) {
+  case ReduceKind::add:
+  case ReduceKind::fmin:
+  case ReduceKind::fmax:
+    return true;
+  case ReduceKind::min_s:
+  case ReduceKind::max_s:
+  case ReduceKind::min_u:
+  case ReduceKind::max_u:
+  case ReduceKind::bit_and:
+  case ReduceKind::bit_or:
+  case ReduceKind::bit_xor:
+    return false;
+  }
+  llvm_unreachable("unhandled VC4Kernel reduce kind");
+}
+
 static StringAttr asStringAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<StringAttr>(attr);
 }
@@ -1245,14 +1281,29 @@ LogicalResult FragmentRotateOp::verify() {
   return success();
 }
 LogicalResult FragmentReduceOp::verify() {
-  if (getKind() != ReduceKind::add)
-    return emitOpError("only #vc4kernel.reduce<add> is supported");
   if (failed(verifyKnownPredicate(getOperation(), getPred())))
     return failure();
   if (failed(verifySameType(getOperation(), getInput().getType(),
                             getResult().getType(), "fragment_reduce result")))
     return failure();
-  return success();
+  ReduceKind kind = getKind();
+  if (isVC4KernelVector16I32Type(getInput().getType())) {
+    if (getFpPolicy())
+      return emitOpError(
+          "fp reduce policy is only valid for f32 fragment_reduce");
+    if (!isI32ReduceKind(kind))
+      return emitOpError("f32-only reduce kind requires vector<16xf32>");
+    return success();
+  }
+  if (isVC4KernelVector16F32Type(getInput().getType())) {
+    if (!isF32ReduceKind(kind) || kind != ReduceKind::add)
+      return emitOpError("P4b supports only f32 add fragment_reduce");
+    // P4b keeps existing f32 add behavior temporarily for migration. P4d/P4e
+    // will require finite_tree for every f32 reduction.
+    return success();
+  }
+  return emitOpError("fragment_reduce input must be vector<16xi32> or "
+                     "vector<16xf32>");
 }
 
 LogicalResult TMULoadFragmentOp::verify() {

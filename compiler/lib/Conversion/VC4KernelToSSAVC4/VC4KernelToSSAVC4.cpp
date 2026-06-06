@@ -32,6 +32,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1308,6 +1309,83 @@ static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
+static Value createAddPipeBinary(OpBuilder &builder, Location loc, Value lhs,
+                                 Value rhs, mlir::vc4::AddOpcode opcode) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
+      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
+                                          builder.getContext(), opcode))},
+      lhs.getType());
+}
+
+static Value createI32SplatConstant(OpBuilder &builder, Location loc, Type type,
+                                    int32_t value) {
+  return createLoadImm(builder, loc, type, builder.getI32IntegerAttr(value));
+}
+
+static Value combineReduceValues(OpBuilder &builder, Location loc, Value lhs,
+                                 Value rhs,
+                                 mlir::vc4kernel::ReduceKind kind) {
+  switch (kind) {
+  case mlir::vc4kernel::ReduceKind::add:
+    return createFragmentAdd(builder, loc, lhs, rhs);
+  case mlir::vc4kernel::ReduceKind::min_s:
+  case mlir::vc4kernel::ReduceKind::min_u:
+    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::min);
+  case mlir::vc4kernel::ReduceKind::max_s:
+  case mlir::vc4kernel::ReduceKind::max_u:
+    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::max);
+  case mlir::vc4kernel::ReduceKind::bit_and:
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::bit_and);
+  case mlir::vc4kernel::ReduceKind::bit_or:
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::bit_or);
+  case mlir::vc4kernel::ReduceKind::bit_xor:
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::bit_xor);
+  case mlir::vc4kernel::ReduceKind::fmin:
+    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::fmin);
+  case mlir::vc4kernel::ReduceKind::fmax:
+    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::fmax);
+  }
+  llvm_unreachable("unhandled VC4Kernel reduce kind");
+}
+
+static int32_t getI32ReduceIdentity(mlir::vc4kernel::ReduceKind kind) {
+  switch (kind) {
+  case mlir::vc4kernel::ReduceKind::add:
+  case mlir::vc4kernel::ReduceKind::max_u:
+  case mlir::vc4kernel::ReduceKind::bit_or:
+  case mlir::vc4kernel::ReduceKind::bit_xor:
+    return 0;
+  case mlir::vc4kernel::ReduceKind::min_s:
+    return std::numeric_limits<int32_t>::max();
+  case mlir::vc4kernel::ReduceKind::max_s:
+    return std::numeric_limits<int32_t>::min();
+  case mlir::vc4kernel::ReduceKind::min_u:
+  case mlir::vc4kernel::ReduceKind::bit_and:
+    return static_cast<int32_t>(0xffffffffu);
+  case mlir::vc4kernel::ReduceKind::fmin:
+  case mlir::vc4kernel::ReduceKind::fmax:
+    llvm_unreachable("f32 reduce kind has no i32 identity");
+  }
+  llvm_unreachable("unhandled VC4Kernel reduce kind");
+}
+
+static Value emitRotateReduceTree(OpBuilder &builder, Location loc, Value value,
+                                  mlir::vc4kernel::ReduceKind kind) {
+  Value reduced = value;
+  for (int64_t amount : {8, 4, 2, 1}) {
+    Value rotated = createOpWithResult(
+        builder, loc, kSSAVC4RotateOpName, reduced,
+        {builder.getNamedAttr("amount", builder.getI32IntegerAttr(amount))},
+        value.getType());
+    reduced = combineReduceValues(builder, loc, reduced, rotated, kind);
+  }
+  return reduced;
+}
+
 static std::optional<int64_t> getI32ConstantValue(Value value);
 
 static Value emitI32Mul32Fallback(Operation *op, OpBuilder &builder, Value lhs,
@@ -2516,24 +2594,57 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     auto kind =
         llvm::dyn_cast_or_null<mlir::vc4kernel::ReduceKindAttr>(
             op->getAttr("kind"));
-    if (!kind || kind.getValue() != mlir::vc4kernel::ReduceKind::add)
-      return op->emitOpError("fragment_reduce lowering supports only add");
+    if (!kind)
+      return op->emitOpError("fragment_reduce lowering requires kind");
+    Type resultType = op->getResult(0).getType();
+    mlir::vc4kernel::ReduceKind reduceKind = kind.getValue();
+    bool resultIsI32 = mlir::vc4kernel::isVC4KernelVector16I32Type(resultType);
+    bool resultIsF32 = mlir::vc4kernel::isVC4KernelVector16F32Type(resultType);
+    if (!resultIsI32 && !resultIsF32)
+      return op->emitOpError(
+          "fragment_reduce lowering requires vector<16xi32> or vector<16xf32>");
 
-    Value zero = createZeroValue(builder, op->getLoc(), op->getResult(0).getType());
+    Value identity;
+    bool unsignedMinMax =
+        reduceKind == mlir::vc4kernel::ReduceKind::min_u ||
+        reduceKind == mlir::vc4kernel::ReduceKind::max_u;
+    if (resultIsI32) {
+      if (reduceKind == mlir::vc4kernel::ReduceKind::fmin ||
+          reduceKind == mlir::vc4kernel::ReduceKind::fmax)
+        return op->emitOpError("f32-only reduce kind requires vector<16xf32>");
+      int32_t identityValue = getI32ReduceIdentity(reduceKind);
+      if (unsignedMinMax)
+        identityValue ^= static_cast<int32_t>(0x80000000u);
+      identity = createI32SplatConstant(builder, op->getLoc(), resultType,
+                                        identityValue);
+    } else {
+      if (reduceKind != mlir::vc4kernel::ReduceKind::add)
+        return op->emitOpError(
+            "P4b fragment_reduce lowering supports only f32 add");
+      identity = createZeroValue(builder, op->getLoc(), resultType);
+    }
+
+    if (unsignedMinMax) {
+      Value bias = createI32SplatConstant(
+          builder, op->getLoc(), resultType, static_cast<int32_t>(0x80000000u));
+      input = createAddPipeBinary(builder, op->getLoc(), input, bias,
+                                  mlir::vc4::AddOpcode::bit_xor);
+    }
+
     FailureOr<Value> masked =
-        emitPredicateSelect(op, builder, *predicate, input, zero);
+        emitPredicateSelect(op, builder, *predicate, input, identity);
     if (failed(masked))
       return failure();
 
-    Value sum = *masked;
-    for (int64_t amount : {8, 4, 2, 1}) {
-      Value rotated = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4RotateOpName, sum,
-          {builder.getNamedAttr("amount", builder.getI32IntegerAttr(amount))},
-          op->getResult(0).getType());
-      sum = createFragmentAdd(builder, op->getLoc(), sum, rotated);
+    Value reduced = emitRotateReduceTree(builder, op->getLoc(), *masked,
+                                         reduceKind);
+    if (unsignedMinMax) {
+      Value bias = createI32SplatConstant(
+          builder, op->getLoc(), resultType, static_cast<int32_t>(0x80000000u));
+      reduced = createAddPipeBinary(builder, op->getLoc(), reduced, bias,
+                                    mlir::vc4::AddOpcode::bit_xor);
     }
-    state.values[op->getResult(0)] = {sum};
+    state.values[op->getResult(0)] = {reduced};
     return success();
   }
   if (hasName(op, kFragmentCmpOpName)) {

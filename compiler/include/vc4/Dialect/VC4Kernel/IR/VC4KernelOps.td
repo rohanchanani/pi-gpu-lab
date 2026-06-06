@@ -251,7 +251,8 @@ def VC4Kernel_FragmentRotateOp : VC4Kernel_PureOp<"fragment_rotate"> {
 def VC4Kernel_FragmentReduceOp : VC4Kernel_PureOp<"fragment_reduce"> {
   let arguments = (ins VC4Kernel_Vector16Data:$input,
                        VC4Kernel_PredType:$pred,
-                       VC4Kernel_ReduceKindAttr:$kind);
+                       VC4Kernel_ReduceKindAttr:$kind,
+                       OptionalAttr<VC4Kernel_FPReducePolicyAttr>:$fp_policy);
   let results = (outs VC4Kernel_Vector16Data:$result);
   let assemblyFormat = "$input `,` $pred attr-dict `:` type($input) `,` type($pred) `->` type($result)";
   let hasVerifier = 1;

@@ -25,7 +25,16 @@ def VC4Kernel_ScheduleMode : VC4Kernel_DialectI32Enum<"ScheduleMode",
 
 def VC4Kernel_ReduceKind : VC4Kernel_DialectI32Enum<"ReduceKind",
     "VC4Kernel fragment reduction kind", [
-      I32EnumAttrCase<"add", 0>
+      I32EnumAttrCase<"add", 0>,
+      I32EnumAttrCase<"min_s", 1>,
+      I32EnumAttrCase<"max_s", 2>,
+      I32EnumAttrCase<"min_u", 3>,
+      I32EnumAttrCase<"max_u", 4>,
+      I32EnumAttrCase<"fmin", 5>,
+      I32EnumAttrCase<"fmax", 6>,
+      I32EnumAttrCase<"bit_and", 7>,
+      I32EnumAttrCase<"bit_or", 8>,
+      I32EnumAttrCase<"bit_xor", 9>
     ]>;
 
 def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
@@ -54,6 +63,11 @@ def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
 def VC4Kernel_FPCmpPolicy : VC4Kernel_DialectI32Enum<"FPCmpPolicy",
     "VC4Kernel floating-point compare policy", [
       I32EnumAttrCase<"finite_only", 0>
+    ]>;
+
+def VC4Kernel_FPReducePolicy : VC4Kernel_DialectI32Enum<"FPReducePolicy",
+    "VC4Kernel floating-point reduction policy", [
+      I32EnumAttrCase<"finite_tree", 0>
     ]>;
 
 def VC4Kernel_AddALUOpcode : VC4Kernel_DialectI32Enum<"AddALUOpcode",
@@ -124,6 +138,8 @@ def VC4Kernel_CmpPredicateAttr
     : VC4Kernel_EnumAttr<VC4Kernel_CmpPredicate, "cmp">;
 def VC4Kernel_FPCmpPolicyAttr
     : VC4Kernel_EnumAttr<VC4Kernel_FPCmpPolicy, "fp_cmp_policy">;
+def VC4Kernel_FPReducePolicyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_FPReducePolicy, "fp_reduce_policy">;
 def VC4Kernel_AddALUOpcodeAttr
     : VC4Kernel_EnumAttr<VC4Kernel_AddALUOpcode, "add_alu_opcode">;
 def VC4Kernel_MulALUOpcodeAttr
