@@ -25,7 +25,7 @@
 | P1 | general ALU | planned | General hardware-faithful ALU surface; migrate fragment add/sub/mul/shl. |
 | P2 | bitcast/constants | planned | Bitcast and constant materialization inside target planning boundary. |
 | P3 | comparisons | planned | General comparisons and predicate production. |
-| P4 | reductions | planned | General reductions; migrate add-only `fragment_reduce`. |
+| P4 | reductions | hardware-proven pending final acceptance | General reductions; add-only `fragment_reduce` specialness removed_in_p4. |
 | P5 | scalar arith | planned | Scalar arithmetic subset belonging in VC4Kernel planning. |
 | P6 | memory/coherency | planned | TMU/VDR/VDW/VPM paths, coherency, and spill reload policy. |
 | P7 | TMU safe inactive load | planned | Explicit safe offset / inactive-load policy. |
@@ -46,7 +46,7 @@
 | `fragment_add/sub/mul/shl` | removed_in_p1 historical legacy migration | Replace long-term special cases with P1 general ALU. | Verifier, conversion, lower-half, hardware or deterministic-reject evidence per admitted opcode. |
 | Bitcast/constants | planned | P2 target-planning semantics without producer-dialect admission. | Dialect verifier and conversion tests. |
 | Comparisons | planned | P3 general comparison surface. | Predicate verifier/conversion tests and hardware proof where executable. |
-| `fragment_reduce` add-only | migration target | P4 general reductions. | Reduction verifier/conversion/hardware matrix. |
+| `fragment_reduce` add-only | removed_in_p4 historical migration | P4 general reductions. | Reduction verifier/conversion/hardware matrix. |
 | Scalar arith | planned | P5 scoped scalar arithmetic subset. | Verifier and lowering tests; no vector producer ops admitted. |
 | TMU memory path | accepted baseline plus P7 migration | Explicit safe inactive-load policy; inactive lanes zero-fill. | Verifier/conversion tests and hardware zero-fill proof. |
 | VDR global-to-VPM path | accepted baseline | Preserve natural shared-memory load path, including dynamic rect baseline. | Existing dynamic VDR canaries plus future matrix entries. |

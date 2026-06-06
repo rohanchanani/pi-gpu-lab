@@ -32,7 +32,7 @@ fragment_add/sub/mul/shl:
   historical legacy migration target removed_in_p1 after replacement by the P1 general ALU surface.
 
 fragment_reduce add-only:
-  migration target for P4 general reductions.
+  historical migration target removed_in_p4 after replacement by the P4 general reduction surface.
 
 tmu_load_fragment implicit safe-address behavior:
   migration target for P7 explicit safe inactive-load policy.
@@ -91,7 +91,7 @@ Plan general comparisons and predicate production. Current comparison special ca
 
 ### P4 reductions
 
-Plan general reductions. Current add-only reduction is a migration target and not a compatibility promise.
+Plan general reductions. The historical add-only reduction form is removed_in_p4 and is not a compatibility promise.
 
 ### P5 scalar arith
 

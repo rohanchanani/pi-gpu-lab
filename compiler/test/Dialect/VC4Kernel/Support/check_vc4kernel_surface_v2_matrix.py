@@ -95,6 +95,7 @@ SPECIAL_CASE_ALLOWED_STATUSES = {
     "migration_target",
     "migrated_pending_deletion",
     "removed_in_p1",
+    "removed_in_p4",
 }
 
 FORBIDDEN_TILE_TERMS = {
@@ -194,7 +195,7 @@ def validate_feature(feature, phases):
         if feature["current_status"] not in SPECIAL_CASE_ALLOWED_STATUSES:
             fail(
                 f"current special-case {feature['id']} must be migration_target "
-                "or migrated_pending_deletion"
+                "or an explicit removed_in_p* status"
             )
         if feature["current_status"] == "accepted_final":
             fail(f"current special-case {feature['id']} is marked accepted_final")

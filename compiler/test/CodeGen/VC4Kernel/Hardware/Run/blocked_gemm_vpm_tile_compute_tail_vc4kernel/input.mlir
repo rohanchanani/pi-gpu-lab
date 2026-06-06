@@ -31,7 +31,7 @@ module {
     %a_vec0 = vc4kernel.vpm_read_fragment %a_tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %k0v = vc4kernel.fragment_const {value = dense<0> : vector<16xi32>} : vector<16xi32>
     %k0p = vc4kernel.fragment_cmp %lanes, %k0v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %a0 = vc4kernel.fragment_reduce %a_vec0, %k0p {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a0 = vc4kernel.fragment_reduce %a_vec0, %k0p {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     %b0 = vc4kernel.vpm_read_fragment %b_tile, %c0, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %p0 = vc4kernel.fragment_alu.mul %a0, %b0 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc0 = vc4kernel.fragment_alu.add %zero, %p0 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -39,7 +39,7 @@ module {
     %a_vec1 = vc4kernel.vpm_read_fragment %a_tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %k1v = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     %k1p = vc4kernel.fragment_cmp %lanes, %k1v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %a1 = vc4kernel.fragment_reduce %a_vec1, %k1p {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a1 = vc4kernel.fragment_reduce %a_vec1, %k1p {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     %b1 = vc4kernel.vpm_read_fragment %b_tile, %c1, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %p1 = vc4kernel.fragment_alu.mul %a1, %b1 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc1 = vc4kernel.fragment_alu.add %acc0, %p1 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -47,7 +47,7 @@ module {
     %a_vec2 = vc4kernel.vpm_read_fragment %a_tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %k2v = vc4kernel.fragment_const {value = dense<2> : vector<16xi32>} : vector<16xi32>
     %k2p = vc4kernel.fragment_cmp %lanes, %k2v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %a2 = vc4kernel.fragment_reduce %a_vec2, %k2p {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a2 = vc4kernel.fragment_reduce %a_vec2, %k2p {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     %b2 = vc4kernel.vpm_read_fragment %b_tile, %c2, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %p2 = vc4kernel.fragment_alu.mul %a2, %b2 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc2 = vc4kernel.fragment_alu.add %acc1, %p2 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -55,7 +55,7 @@ module {
     %a_vec3 = vc4kernel.vpm_read_fragment %a_tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %k3v = vc4kernel.fragment_const {value = dense<3> : vector<16xi32>} : vector<16xi32>
     %k3p = vc4kernel.fragment_cmp %lanes, %k3v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %a3 = vc4kernel.fragment_reduce %a_vec3, %k3p {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a3 = vc4kernel.fragment_reduce %a_vec3, %k3p {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     %b3 = vc4kernel.vpm_read_fragment %b_tile, %c3, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %p3 = vc4kernel.fragment_alu.mul %a3, %b3 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc3 = vc4kernel.fragment_alu.add %acc2, %p3 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>

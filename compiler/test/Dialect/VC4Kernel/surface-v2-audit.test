@@ -1,6 +1,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p1-general-alu-lock | FileCheck %s --check-prefix=P1
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p2-bitcast-const-lock | FileCheck %s --check-prefix=P2
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p3-general-cmp-lock | FileCheck %s --check-prefix=P3
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p4-general-reduce-lock | FileCheck %s --check-prefix=P4
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
@@ -56,3 +57,23 @@
 # P3-SAME: matrix_scalar_cmpi_claims=0
 # P3-SAME: p3_f32_nan_inf_hits=0
 # P3-SAME: unordered_active_hits=0
+
+# P4: PASS VC4Kernel Surface v2 audit: mode=p4-general-reduce-lock
+# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P4: migration_targets:
+# P4-SAME: removed_special_case_ops=4
+# P4-SAME: special_case_removed_in_p1=4
+# P4: fixture_purity:
+# P4-SAME: hardware_inputs=82
+# P4-SAME: producer_or_lower_half_hits=0
+# P4: p1_general_alu_lock:
+# P4-SAME: removed_legacy_hits=0
+# P4: p4_general_reduce_lock:
+# P4-SAME: active_reduce_uses=106
+# P4-SAME: f32_finite_tree_reduce_uses=48
+# P4-SAME: f32_missing_policy_hits=0
+# P4-SAME: fp_policy_on_i32_hits=0
+# P4-SAME: i32_reduce_uses=58
+# P4-SAME: negative_missing_policy_mentions=3
+# P4-SAME: p4_f32_nan_inf_hits=0
+# P4-SAME: stale_add_only_source_hits=0

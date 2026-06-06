@@ -126,6 +126,25 @@ P3_POST_PHASE_ALLOWED_STATUSES = {
     "deterministic_reject",
     "implemented_pending_hardware",
     "hardware_proven_pending_final_acceptance",
+    "accepted",
+    "removed_in_p4",
+}
+
+P4_I32_REDUCE_KINDS = {
+    "add",
+    "min_s",
+    "max_s",
+    "min_u",
+    "max_u",
+    "bit_and",
+    "bit_or",
+    "bit_xor",
+}
+
+P4_F32_REDUCE_KINDS = {
+    "add",
+    "fmin",
+    "fmax",
 }
 
 TEXT_SUFFIXES = {
@@ -250,6 +269,7 @@ def audit_matrix_ownership(matrix, mode):
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
+        "p4-general-reduce-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -263,6 +283,7 @@ def audit_matrix_ownership(matrix, mode):
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
+        "p4-general-reduce-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -330,12 +351,42 @@ def audit_matrix_ownership(matrix, mode):
                     f"P3 lock expected post-P3 feature {feature.get('id')} "
                     f"to remain planned/migration_target/deterministic_reject"
                 )
-    require_matrix_feature(
-        features,
-        "p4_remove_add_only_reduce_specialness",
-        "P4",
-        "migration_target",
-    )
+    if mode == "p4-general-reduce-lock":
+        p4_reduce = require_matrix_feature_status_in(
+            features,
+            "p4_fragment_reduce_general",
+            "P4",
+            {"accepted", "hardware_proven_pending_final_acceptance"},
+        )
+        p4_reduce_text = json.dumps(p4_reduce).lower()
+        for token in [
+            "finite_tree",
+            "min_s",
+            "max_s",
+            "min_u",
+            "max_u",
+            "bit_and",
+            "bit_or",
+            "bit_xor",
+            "fmin",
+            "fmax",
+            "deterministic",
+        ]:
+            if token not in p4_reduce_text:
+                fail(f"P4 reduction matrix entry must document {token}")
+        require_matrix_feature(
+            features,
+            "p4_remove_add_only_reduce_specialness",
+            "P4",
+            "removed_in_p4",
+        )
+    else:
+        require_matrix_feature_status_in(
+            features,
+            "p4_remove_add_only_reduce_specialness",
+            "P4",
+            {"migration_target", "removed_in_p4"},
+        )
     require_matrix_feature(
         features,
         "p7_remove_old_tmu_load_signature",
@@ -479,6 +530,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
+        "p4-general-reduce-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -917,6 +969,190 @@ def audit_p3_general_cmp_lock(repo_root, matrix):
     }
 
 
+def collect_fragment_reduce_ops(text):
+    reduce_ops = []
+    for line in text.splitlines():
+        if "vc4kernel.fragment_reduce" not in line:
+            continue
+        if "// CHECK:" in line:
+            continue
+        kind_match = re.search(r"#vc4kernel\.reduce<([^>]+)>", line)
+        reduce_ops.append(
+            {
+                "line": line,
+                "kind": kind_match.group(1) if kind_match else None,
+                "has_finite_tree_policy": "#vc4kernel.fp_reduce_policy<finite_tree>" in line,
+                "has_f32_type": "vector<16xf32>" in line,
+                "has_i32_type": "vector<16xi32>" in line,
+            }
+        )
+    return reduce_ops
+
+
+def audit_p4_general_reduce_lock(repo_root, matrix):
+    features = feature_by_id(matrix)
+    require_matrix_feature_status_in(
+        features,
+        "p4_fragment_reduce_general",
+        "P4",
+        {"accepted", "hardware_proven_pending_final_acceptance"},
+    )
+    require_matrix_feature(
+        features,
+        "p4_remove_add_only_reduce_specialness",
+        "P4",
+        "removed_in_p4",
+    )
+
+    source_roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+    ]
+    stale_source_hits = []
+    stale_phrases = (
+        "only add reductions are supported",
+        "add-only",
+        "add only",
+        "only valid kind",
+    )
+    for root in source_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            text = read_text(path).lower()
+            if "fragment_reduce" not in text and "reduction" not in text:
+                continue
+            for phrase in stale_phrases:
+                if phrase in text:
+                    stale_source_hits.append((path, phrase))
+    if stale_source_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{phrase}"
+            for path, phrase in stale_source_hits[:20]
+        )
+        fail(f"P4 lock found stale add-only reduction source text: {details}")
+
+    roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+        Path("compiler/docs"),
+    ]
+    active_reduce_uses = 0
+    i32_reduce_uses = 0
+    f32_finite_tree_uses = 0
+    f32_missing_policy_hits = []
+    fp_policy_on_i32_hits = []
+    unclassified_hits = []
+    docs_historical_mentions = 0
+    negative_missing_policy_mentions = 0
+    files_scanned = 0
+    historical_markers = ("historical", "removed", "old", "removed_in_p4")
+
+    for root in roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if is_support_audit_text(path):
+                continue
+            files_scanned += 1
+            is_negative = is_negative_test(path)
+            is_doc = "compiler/docs" in str(rel(path, repo_root))
+            for reduce_op in collect_fragment_reduce_ops(read_text(path)):
+                kind = reduce_op["kind"]
+                line_lower = reduce_op["line"].lower()
+                if is_doc and any(marker in line_lower for marker in historical_markers):
+                    docs_historical_mentions += 1
+                    continue
+                if reduce_op["has_f32_type"]:
+                    if kind not in P4_F32_REDUCE_KINDS:
+                        if is_negative:
+                            continue
+                        unclassified_hits.append((path, kind))
+                        continue
+                    if not reduce_op["has_finite_tree_policy"]:
+                        if is_negative:
+                            negative_missing_policy_mentions += 1
+                            continue
+                        f32_missing_policy_hits.append((path, kind))
+                        continue
+                    active_reduce_uses += 1
+                    f32_finite_tree_uses += 1
+                    continue
+                if reduce_op["has_i32_type"]:
+                    if kind not in P4_I32_REDUCE_KINDS:
+                        if is_negative:
+                            continue
+                        unclassified_hits.append((path, kind))
+                        continue
+                    if reduce_op["has_finite_tree_policy"]:
+                        if is_negative:
+                            continue
+                        fp_policy_on_i32_hits.append((path, kind))
+                        continue
+                    active_reduce_uses += 1
+                    i32_reduce_uses += 1
+                    continue
+                if kind is None and (is_negative or is_doc):
+                    continue
+                if kind is None and path.suffix not in {".mlir", ".md"}:
+                    continue
+                if is_doc and not (reduce_op["has_f32_type"] or reduce_op["has_i32_type"]):
+                    continue
+                if is_negative:
+                    continue
+                unclassified_hits.append((path, kind))
+
+    if f32_missing_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{kind}"
+            for path, kind in f32_missing_policy_hits[:20]
+        )
+        fail(f"P4 lock found f32 fragment_reduce without finite_tree policy: {details}")
+    if fp_policy_on_i32_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{kind}"
+            for path, kind in fp_policy_on_i32_hits[:20]
+        )
+        fail(f"P4 lock found fp_reduce_policy on i32 fragment_reduce: {details}")
+    if unclassified_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{kind}"
+            for path, kind in unclassified_hits[:20]
+        )
+        fail(f"P4 lock found unclassified fragment_reduce use: {details}")
+    if i32_reduce_uses == 0 or f32_finite_tree_uses == 0:
+        fail("P4 lock expected both i32 and finite_tree f32 fragment_reduce uses")
+
+    fixture_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    nan_inf_re = re.compile(r"\b(?:nan|inf|infinity|NAN|INF|INFINITY)\b")
+    p4_f32_nan_inf_hits = []
+    for path in sorted(fixture_root.rglob("input.mlir")):
+        text = read_text(path)
+        if "vc4kernel.fragment_reduce" not in text or "vector<16xf32>" not in text:
+            continue
+        if nan_inf_re.search(text):
+            p4_f32_nan_inf_hits.append(path)
+    if p4_f32_nan_inf_hits:
+        details = "; ".join(
+            str(rel(path, repo_root)) for path in p4_f32_nan_inf_hits[:20]
+        )
+        fail(f"P4 lock found NaN/Inf text in f32 reduction fixture input: {details}")
+
+    return {
+        "active_reduce_uses": active_reduce_uses,
+        "docs_historical_mentions": docs_historical_mentions,
+        "f32_finite_tree_reduce_uses": f32_finite_tree_uses,
+        "f32_missing_policy_hits": 0,
+        "fp_policy_on_i32_hits": 0,
+        "i32_reduce_uses": i32_reduce_uses,
+        "negative_missing_policy_mentions": negative_missing_policy_mentions,
+        "p4_f32_nan_inf_hits": 0,
+        "reduce_files_scanned": files_scanned,
+        "stale_add_only_source_hits": 0,
+    }
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -938,6 +1174,7 @@ def main(argv):
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
+        "p4-general-reduce-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -954,6 +1191,7 @@ def main(argv):
         "p1-general-alu-lock",
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
+        "p4-general-reduce-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -969,7 +1207,12 @@ def main(argv):
     p1_lock_counts = (
         audit_p1_general_alu_lock(repo_root)
         if args.mode
-        in {"p1-general-alu-lock", "p2-bitcast-const-lock", "p3-general-cmp-lock"}
+        in {
+            "p1-general-alu-lock",
+            "p2-bitcast-const-lock",
+            "p3-general-cmp-lock",
+            "p4-general-reduce-lock",
+        }
         else {}
     )
     p2_lock_counts = (
@@ -980,6 +1223,11 @@ def main(argv):
     p3_lock_counts = (
         audit_p3_general_cmp_lock(repo_root, matrix)
         if args.mode == "p3-general-cmp-lock"
+        else {}
+    )
+    p4_lock_counts = (
+        audit_p4_general_reduce_lock(repo_root, matrix)
+        if args.mode == "p4-general-reduce-lock"
         else {}
     )
 
@@ -1006,6 +1254,8 @@ def main(argv):
         print(f"p2_bitcast_const_lock: {format_counts(p2_lock_counts)}")
     if p3_lock_counts:
         print(f"p3_general_cmp_lock: {format_counts(p3_lock_counts)}")
+    if p4_lock_counts:
+        print(f"p4_general_reduce_lock: {format_counts(p4_lock_counts)}")
     return 0
 
 

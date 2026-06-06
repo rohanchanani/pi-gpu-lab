@@ -25,7 +25,7 @@ module {
     %kk_v = vc4kernel.splat %kk : i32 -> vector<16xi32>
     %one_hot = vc4kernel.fragment_cmp %lanes, %kk_v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %values = vc4kernel.splat %value : f32 -> vector<16xf32>
-    %sum = vc4kernel.fragment_reduce %values, %one_hot {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %sum = vc4kernel.fragment_reduce %values, %one_hot {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %sum, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

@@ -1196,7 +1196,11 @@ Rules:
 
 ```mlir
 %r = vc4kernel.fragment_reduce %value, %pred {kind = #vc4kernel.reduce<add>}
-  : vector<16xT>, !vc4kernel.pred<16> -> vector<16xT>
+  : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+%rf = vc4kernel.fragment_reduce %value, %pred {
+    kind = #vc4kernel.reduce<fmin>,
+    fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>
+  } : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
 ```
 
 Allowed `T`:
@@ -1206,15 +1210,61 @@ i32
 f32
 ```
 
+Allowed i32 kinds:
+
+```text
+add
+min_s
+max_s
+min_u
+max_u
+bit_and
+bit_or
+bit_xor
+```
+
+Allowed f32 kinds:
+
+```text
+add
+fmin
+fmax
+```
+
 Semantics:
 
 ```text
-Computes the sum of active lanes and returns a vector<16xT> in which every lane contains the same reduced value.
+Computes the requested reduction over active lanes and returns a vector<16xT> in which every lane contains the same reduced value.
 Inactive lanes do not contribute.
-If pred is empty, the result is zero for add.
+If pred is empty, the result is the identity for the reduction kind.
 ```
 
-Lowering uses a fragment_select-to-zero plus rotate/ALU tree. There is no first-class VC4 hardware reduction instruction in v1.
+Empty predicate identities:
+
+```text
+i32 add      -> 0
+i32 min_s    -> INT_MAX
+i32 max_s    -> INT_MIN
+i32 min_u    -> UINT_MAX
+i32 max_u    -> 0
+i32 bit_and  -> UINT_MAX
+i32 bit_or   -> 0
+i32 bit_xor  -> 0
+f32 add      -> +0.0
+f32 fmin     -> +Inf identity bit pattern
+f32 fmax     -> -Inf identity bit pattern
+```
+
+All f32 reductions require `#vc4kernel.fp_reduce_policy<finite_tree>`.
+The finite-tree policy is a target-kernel contract: input lanes are finite,
+non-NaN values, f32 add uses the deterministic VC4 rotate-tree accumulation
+order, and fmin/fmax use finite ordered min/max. P4 does not claim NaN, Inf, or
+signed-zero IEEE edge semantics. Source-level vector reduction lowering must
+prove this target-tree contract before mapping source reductions to
+`fragment_reduce`.
+
+Lowering uses a fragment_select-to-identity plus rotate/ALU tree. There is no
+first-class VC4 hardware reduction instruction in v1.
 
 ---
 

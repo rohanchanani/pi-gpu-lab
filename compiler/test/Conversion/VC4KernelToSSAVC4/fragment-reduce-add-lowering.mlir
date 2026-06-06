@@ -27,7 +27,7 @@ module {
     %threshold_v = vc4kernel.splat %threshold : i32 -> vector<16xi32>
     %mask = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %values = vc4kernel.tmu_load_fragment %input, %byte_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %sum = vc4kernel.fragment_reduce %values, %mask {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %sum = vc4kernel.fragment_reduce %values, %mask {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %sum, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
