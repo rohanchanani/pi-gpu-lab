@@ -150,6 +150,7 @@ P3_POST_PHASE_STAGED_STATUSES = {
     },
     "p8_vdw_store_inactive_preserve_full_tail_rect": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },
@@ -251,6 +252,7 @@ P5_POST_PHASE_STAGED_STATUSES = {
     },
     "p8_vdw_store_inactive_preserve_full_tail_rect": {
         "implemented_pending_hardware",
+        "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },

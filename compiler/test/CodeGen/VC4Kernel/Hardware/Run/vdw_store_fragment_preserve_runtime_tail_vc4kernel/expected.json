@@ -1,0 +1,21 @@
+{
+  "name": "vdw_store_fragment_preserve_runtime_tail_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 33,
+    "max_coverage_n": 192,
+    "buffer_n": 224,
+    "saw_n0": 1,
+    "saw_n17": 1,
+    "saw_n33": 1,
+    "checksum_accum": 1850,
+    "runtime_allocations": 1,
+    "runtime_launches": 8
+  }
+}

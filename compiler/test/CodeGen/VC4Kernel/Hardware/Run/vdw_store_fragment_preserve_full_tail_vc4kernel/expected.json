@@ -1,0 +1,21 @@
+{
+  "name": "vdw_store_fragment_preserve_full_tail_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 7,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "buffer_n": 64,
+    "saw_full": 1,
+    "saw_empty": 1,
+    "saw_tail0": 1,
+    "saw_tail15": 1,
+    "saw_tail16": 1,
+    "checksum_accum": 20945,
+    "runtime_allocations": 1,
+    "runtime_launches": 7
+  }
+}
