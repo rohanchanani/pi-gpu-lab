@@ -3227,6 +3227,23 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
 
+  int64_t packInputReg = *inputReg;
+  if (templ.kind == InstructionTemplate::Kind::Pack && *resultReg == *inputReg) {
+    static constexpr int64_t kPackSourceScratchReg = 31;
+    if (*inputReg == kPackSourceScratchReg)
+      return source->emitOpError()
+             << "requires a distinct scratch register for aliased pack lowering";
+    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          /*waddrAdd=*/kPackSourceScratchReg,
+                          /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createNopLDISlot(builder, source->getLoc());
+    packInputReg = kPackSourceScratchReg;
+  }
+
   if (templ.kind == InstructionTemplate::Kind::Pack)
     createSplat32LDI(builder, source->getLoc(), 0, *resultReg);
 
@@ -3235,7 +3252,7 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                        *resultReg, /*waddrMul=*/32,
                        mlir::vc4::AddOpcode::bit_or,
-                       mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
+                       mlir::vc4::MulOpcode::nop, packInputReg, packInputReg,
                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (Attribute mode = source->getAttr("mode")) {
