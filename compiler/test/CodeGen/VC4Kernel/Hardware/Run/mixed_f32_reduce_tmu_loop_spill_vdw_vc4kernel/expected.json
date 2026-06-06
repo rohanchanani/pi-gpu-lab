@@ -1,0 +1,25 @@
+{
+  "name": "mixed_f32_reduce_tmu_loop_spill_vdw_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 21,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_two_tmu_loop": 1,
+    "saw_f32_reduce": 1,
+    "saw_spill_frame_nonzero": 1,
+    "saw_vdw_preserve": 1,
+    "saw_safe_offset": 1,
+    "saw_k0": 1,
+    "saw_k33": 1,
+    "saw_active_cols1": 1,
+    "saw_active_cols15": 1,
+    "saw_active_cols16": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 21
+  },
+  "float_max": {
+    "max_abs_diff": 0.0002
+  }
+}

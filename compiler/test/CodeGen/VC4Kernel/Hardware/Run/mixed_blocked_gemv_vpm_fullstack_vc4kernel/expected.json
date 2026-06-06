@@ -1,0 +1,31 @@
+{
+  "name": "mixed_blocked_gemv_vpm_fullstack_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 28,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "max_m": 1024,
+    "max_n": 1024,
+    "max_lda": 1031,
+    "block_rows": 16,
+    "block_k": 4,
+    "saw_lda_exact": 1,
+    "saw_lda_plus1": 1,
+    "saw_lda_plus7": 1,
+    "saw_large_lda": 1,
+    "saw_vdr_vpm_path": 1,
+    "saw_tmu_safe_offset_x": 1,
+    "saw_runtime_lda": 1,
+    "saw_vdw_preserve": 1,
+    "no_fixed_padded_stride": 1,
+    "saw_alpha_bias_path": 1,
+    "saw_f32_cmp_select_gate": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 28
+  },
+  "float_max": {
+    "max_abs_diff": 0.0001
+  }
+}
