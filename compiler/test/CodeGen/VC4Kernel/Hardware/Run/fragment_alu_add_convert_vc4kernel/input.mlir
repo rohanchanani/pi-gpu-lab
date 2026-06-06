@@ -13,8 +13,10 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
-    %fv = vc4kernel.tmu_load_fragment %fin, %lane_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %iv = vc4kernel.tmu_load_fragment %iin, %lane_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %fv = vc4kernel.tmu_load_fragment %fin, %lane_bytes, %full, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
+    %p7_safe1 = arith.constant 0 : i32
+    %iv = vc4kernel.tmu_load_fragment %iin, %lane_bytes, %full, %p7_safe1 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     %to_i = vc4kernel.fragment_alu.add %fv {opcode = #vc4kernel.add_alu_opcode<ftoi>} : (vector<16xf32>) -> vector<16xi32>
     %to_f = vc4kernel.fragment_alu.add %iv {opcode = #vc4kernel.add_alu_opcode<itof>} : (vector<16xi32>) -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out_i32, %lane_bytes, %to_i, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>

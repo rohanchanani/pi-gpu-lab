@@ -1335,6 +1335,11 @@ LogicalResult TMULoadFragmentOp::verify() {
           getOperation(), MemoryPath::tmu_global_read,
           Coherency::readonly_tmu)))
     return failure();
+  if (getInactiveLoad() != InactiveLoad::zero)
+    return emitOpError("tmu_load_fragment supports only inactive_load<zero> in P7");
+  if (!isVC4KernelVector16DataType(getResult().getType()))
+    return emitOpError(
+        "tmu_load_fragment result must be vector<16xi32> or vector<16xf32>");
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "tmu_load_fragment byte_offsets must be statically 4-byte aligned");

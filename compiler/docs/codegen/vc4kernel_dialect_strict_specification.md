@@ -235,7 +235,8 @@ fragment_reduce with add only:
   migration target for P4 general reductions.
 
 tmu_load_fragment implicit safe-address behavior:
-  migration target for P7 explicit safe inactive-load policy.
+  migration target for P7 explicit safe inactive-load policy; active P7b
+  sources use explicit scalar safe_offset and inactive_load<zero>.
 
 vdw_store_fragment implicit inactive-store behavior:
   migration target for P8 explicit inactive-store policy.
@@ -1510,10 +1511,11 @@ Do not add producer-facing names such as `masked_load_global`, `masked_store_glo
 ### 12.2 `vc4kernel.tmu_load_fragment`
 
 ```mlir
-%value = vc4kernel.tmu_load_fragment %base, %byte_offsets, %pred
+%value = vc4kernel.tmu_load_fragment %base, %byte_offsets, %pred, %safe_offset
   {memory_path = #vc4kernel.memory_path<tmu_global_read>,
-   coherency = #vc4kernel.coherency<readonly_tmu>}
-  : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xT>
+   coherency = #vc4kernel.coherency<readonly_tmu>,
+   inactive_load = #vc4kernel.inactive_load<zero>}
+  : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xT>
 ```
 
 Allowed `T`:
@@ -1528,7 +1530,8 @@ Semantics:
 ```text
 global memory -> register fragment through TMU direct-address load.
 For each active lane l: load 32 bits from base + byte_offsets[l].
-For each inactive lane: result lane is zero for the element type.
+For each inactive lane: request base + safe_offset, then zero-fill the
+result lane for the element type.
 ```
 
 Rules:
@@ -1536,10 +1539,16 @@ Rules:
 ```text
 - base is raw i32 device pointer word.
 - byte_offsets are byte offsets.
+- safe_offset is a scalar i32 byte offset relative to base and must be
+  safe to request for inactive lanes.
+- inactive_load<zero> is the only P7 inactive TMU load policy.
+- The verifier checks the explicit contract and static offset alignment;
+  it cannot prove memory bounds for safe_offset.
 - active byte offsets must be 4-byte aligned.
 - all predicate classes are legal.
 - empty predicates must not issue a TMU request.
-- tail/general masks must use explicit safe inactive-address policy after P7 before zero-selecting inactive lanes. Until P7, existing implicit safe-address behavior is only a migration target and must not be expanded.
+- tail/general/rect masks must use the explicit safe inactive-address
+  operand before zero-selecting inactive result lanes.
 ```
 
 ### 12.3 `vc4kernel.vdw_store_fragment`
@@ -2310,7 +2319,8 @@ pred.any/pred.all -> correct scalar i1 via any/all hardware flag logic
 
 ```text
 tmu_load_fragment:
-  TMU request/read with explicit safe inactive-address behavior and zero-fill after P7; current implicit behavior is a migration target.
+  TMU request/read with explicit scalar safe inactive byte offset and
+  inactive_load<zero>; implicit safe-address inference is a P7 migration target.
   P6 attrs: memory_path = tmu_global_read, coherency = readonly_tmu.
 
 vdw_store_fragment:

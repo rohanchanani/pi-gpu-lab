@@ -15,7 +15,8 @@ module {
     // CHECK: vc4kernel.fragment_cmp
     %cmp = vc4kernel.fragment_cmp %lanes, %offs {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.tmu_load_fragment
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %cmp {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %cmp, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     // CHECK: vc4kernel.vdw_store_fragment
     vc4kernel.vdw_store_fragment %ptr, %offs, %v, %cmp {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     // CHECK: vc4kernel.vpm_alloc

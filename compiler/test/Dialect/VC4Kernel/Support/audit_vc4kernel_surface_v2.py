@@ -223,6 +223,11 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },
+    "p7_tmu_load_explicit_safe_inactive_offset": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
+    },
 }
 
 P6_MEMORY_OP_POLICIES = {

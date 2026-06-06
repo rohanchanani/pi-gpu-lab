@@ -35,7 +35,8 @@ fragment_reduce add-only:
   historical migration target removed_in_p4 after replacement by the P4 general reduction surface.
 
 tmu_load_fragment implicit safe-address behavior:
-  migration target for P7 explicit safe inactive-load policy.
+  migration target for P7 explicit safe inactive-load policy; active P7b
+  sources use explicit scalar safe_offset plus inactive_load<zero>.
 
 vdw_store_fragment implicit inactive-store behavior:
   migration target for P8 explicit inactive-store policy.

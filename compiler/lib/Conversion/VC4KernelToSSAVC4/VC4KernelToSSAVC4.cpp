@@ -3072,7 +3072,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                 "fragment_cmp general masks";
     Value base = mapValue(op, op->getOperand(0), state);
     Value offsets = mapValue(op, op->getOperand(1), state);
-    if (!base || !offsets)
+    Value safeScalarOffset = mapValue(op, op->getOperand(3), state);
+    if (!base || !offsets || !safeScalarOffset)
       return failure();
 
     if (predicate->kind == PredicatePlan::Class::Full) {
@@ -3088,169 +3089,22 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return success();
     }
 
-    FullRowVDWOffsets sourceOffsets =
-        matchFullRowVDWByteOffsets(op->getOperand(1));
-    if (!sourceOffsets.matched)
-      return op->emitOpError(
-          "tmu_load_fragment predicated lowering currently supports only "
-          "contiguous byte_offsets = base_byte_offset + 4*lane_range so "
-          "inactive lanes can use a proven in-bounds safe address");
-    Value zeroOffset = createLoadImm(builder, op->getLoc(),
-                                     builder.getI32Type(),
-                                     builder.getI32IntegerAttr(0));
-    Value safeScalarOffset = zeroOffset;
-    if (sourceOffsets.scalarBaseByteOffset) {
-      safeScalarOffset = mapValue(op, sourceOffsets.scalarBaseByteOffset, state);
-      if (!safeScalarOffset)
-        return failure();
-    } else if (sourceOffsets.constantBaseByteOffset) {
-      safeScalarOffset = createLoadImm(
-          builder, op->getLoc(), builder.getI32Type(),
-          builder.getI32IntegerAttr(*sourceOffsets.constantBaseByteOffset));
-    }
-
-    Value lane = createOpWithResult(builder, op->getLoc(),
-                                    kSSAVC4ElementNumberOpName, {}, {},
-                                    offsets.getType());
     Value safeOffsetVec = createOpWithResult(
         builder, op->getLoc(), kSSAVC4SplatOpName, safeScalarOffset, {},
         offsets.getType());
 
-    auto emitTailLoad = [&]() -> LogicalResult {
-      Value tailSafeOffsetVec = createOpWithResult(
-          builder, op->getLoc(), kSSAVC4SplatOpName, zeroOffset, {},
-          offsets.getType());
-      FailureOr<Value> safeOffsets =
-          emitPredicateSelect(op, builder, *predicate, offsets,
-                              tailSafeOffsetVec);
-      if (failed(safeOffsets))
-        return failure();
-      Value loaded = emitTMULoadFragment(op, builder, base, *safeOffsets,
-                                         op->getResult(0).getType());
-      FailureOr<Value> masked =
-          emitPredicateSelect(op, builder, *predicate, loaded, zero);
-      if (failed(masked))
-        return failure();
-      state.values[op->getResult(0)] = {*masked};
-      return success();
-    };
-
-    auto emitRectLoad = [&]() -> LogicalResult {
-      Value row = predicate->row;
-      Value rows = predicate->rows;
-      Value colBase = predicate->colBase;
-      Value cols = predicate->cols;
-      if (!row || !rows || !colBase || !cols)
-        return op->emitOpError(
-            "pred.rect plan is missing row, rows, col_base, or cols values");
-
-      Value one =
-          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                        builder.getI32IntegerAttr(1));
-      Value two =
-          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                        builder.getI32IntegerAttr(2));
-      Value sixteen =
-          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                        builder.getI32IntegerAttr(16));
-      Value rowPlusOne = createI32Add(builder, op->getLoc(), row, one);
-      Value rowActiveFlags =
-          createSubFlags(builder, op->getLoc(), rows, rowPlusOne);
-
-      Region *region = builder.getInsertionBlock()->getParent();
-      Block *colsBlock = new Block();
-      Block *colBaseBlock = new Block();
-      Block *loadBlock = new Block();
-      Block *doneBlock = new Block();
-      doneBlock->addArgument(op->getResult(0).getType(), op->getLoc());
-      region->push_back(colsBlock);
-      region->push_back(colBaseBlock);
-      region->push_back(loadBlock);
-      region->push_back(doneBlock);
-
-      createCondBranch(builder, op->getLoc(), rowActiveFlags, doneBlock,
-                       colsBlock, mlir::vc4::BranchCond::any_c_set, zero);
-
-      builder.setInsertionPointToEnd(colsBlock);
-      Value colsActiveFlags =
-          createSubFlags(builder, op->getLoc(), cols, one);
-      createCondBranch(builder, op->getLoc(), colsActiveFlags, doneBlock,
-                       colBaseBlock, mlir::vc4::BranchCond::any_c_set, zero);
-
-      builder.setInsertionPointToEnd(colBaseBlock);
-      Value colBaseInRangeFlags =
-          createSubFlags(builder, op->getLoc(), colBase, sixteen);
-      createCondBranch(builder, op->getLoc(), colBaseInRangeFlags, doneBlock,
-                       loadBlock, mlir::vc4::BranchCond::any_c_clear, zero);
-
-      builder.setInsertionPointToEnd(loadBlock);
-      Value colBaseBytes =
-          createOpWithResult(builder, op->getLoc(), kSSAVC4ALUAddOpName,
-                             {colBase, two},
-                             {builder.getNamedAttr(
-                                 "opcode", mlir::vc4::AddOpcodeAttr::get(
-                                               builder.getContext(),
-                                               mlir::vc4::AddOpcode::shl))},
-                             colBase.getType());
-      Value rectSafeScalar =
-          createI32Add(builder, op->getLoc(), safeScalarOffset, colBaseBytes);
-      Value rectSafeVec =
-          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
-                             rectSafeScalar, {}, offsets.getType());
-      Value colBaseVec =
-          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
-                             colBase, {}, offsets.getType());
-      Value colEnd = createI32Add(builder, op->getLoc(), colBase, cols);
-      Value colEndVec =
-          createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName, colEnd,
-                             {}, offsets.getType());
-      Value upperFlags = createSubFlags(builder, op->getLoc(), lane, colEndVec);
-      Value upperSafe =
-          createCondSelect(builder, op->getLoc(), upperFlags, offsets,
-                           rectSafeVec, mlir::vc4::Cond::cs);
-      Value lowerFlags =
-          createSubFlags(builder, op->getLoc(), lane, colBaseVec);
-      Value safeOffsets =
-          createCondSelect(builder, op->getLoc(), lowerFlags, upperSafe,
-                           rectSafeVec, mlir::vc4::Cond::cc);
-      Value loaded = emitTMULoadFragment(op, builder, base, safeOffsets,
-                                         op->getResult(0).getType());
-      Value resultUpperFlags =
-          createSubFlags(builder, op->getLoc(), lane, colEndVec);
-      Value upperMasked =
-          createCondSelect(builder, op->getLoc(), resultUpperFlags, loaded,
-                           zero, mlir::vc4::Cond::cs);
-      Value resultLowerFlags =
-          createSubFlags(builder, op->getLoc(), lane, colBaseVec);
-      Value masked =
-          createCondSelect(builder, op->getLoc(), resultLowerFlags,
-                           upperMasked, zero, mlir::vc4::Cond::cc);
-      createBranch(builder, op->getLoc(), doneBlock, masked);
-
-      builder.setInsertionPointToEnd(doneBlock);
-      state.values[op->getResult(0)] = {doneBlock->getArgument(0)};
-      return success();
-    };
-
-    if (predicate->kind == PredicatePlan::Class::TailPrefix)
-      return emitTailLoad();
-    if (predicate->kind == PredicatePlan::Class::RectRow)
-      return emitRectLoad();
-    if (predicate->kind == PredicatePlan::Class::GeneralMask) {
-      FailureOr<Value> safeOffsets =
-          emitPredicateSelect(op, builder, *predicate, offsets, safeOffsetVec);
-      if (failed(safeOffsets))
-        return failure();
-      Value loaded = emitTMULoadFragment(op, builder, base, *safeOffsets,
-                                         op->getResult(0).getType());
-      FailureOr<Value> masked =
-          emitPredicateSelect(op, builder, *predicate, loaded, zero);
-      if (failed(masked))
-        return failure();
-      state.values[op->getResult(0)] = {*masked};
-      return success();
-    }
-    return op->emitOpError("unsupported tmu_load_fragment predicate plan");
+    FailureOr<Value> safeOffsets =
+        emitPredicateSelect(op, builder, *predicate, offsets, safeOffsetVec);
+    if (failed(safeOffsets))
+      return failure();
+    Value loaded = emitTMULoadFragment(op, builder, base, *safeOffsets,
+                                       op->getResult(0).getType());
+    FailureOr<Value> masked =
+        emitPredicateSelect(op, builder, *predicate, loaded, zero);
+    if (failed(masked))
+      return failure();
+    state.values[op->getResult(0)] = {*masked};
+    return success();
   }
   if (hasName(op, kVDWStoreOpName)) {
     if (failed(verifyRequiredMemoryPolicy(

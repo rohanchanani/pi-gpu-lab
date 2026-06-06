@@ -11,7 +11,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %offs = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     // CHECK: tmu_load_fragment byte_offsets must be statically 4-byte aligned
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     vc4kernel.return
   }
 }

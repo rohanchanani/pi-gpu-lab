@@ -22,7 +22,8 @@ module {
     // CHECK: vc4kernel.tmu_load_fragment
     // CHECK-SAME: coherency = #vc4kernel.coherency<readonly_tmu>
     // CHECK-SAME: memory_path = #vc4kernel.memory_path<tmu_global_read>
-    %loaded = vc4kernel.tmu_load_fragment %in, %offs, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %loaded = vc4kernel.tmu_load_fragment %in, %offs, %full, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
 
     // CHECK: vc4kernel.vpm_write_fragment
     // CHECK-SAME: coherency = #vc4kernel.coherency<vpm_local>

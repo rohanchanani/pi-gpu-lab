@@ -10,7 +10,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     // CHECK: memory_path attr does not match operation
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full {memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     vc4kernel.return
   }
 }
@@ -81,7 +82,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     // CHECK: compiler spill memory path is internal to the lower half
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full {memory_path = #vc4kernel.memory_path<compiler_spill_vdw_vdr>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe1 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full, %p7_safe1 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<compiler_spill_vdw_vdr>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     vc4kernel.return
   }
 }
@@ -98,7 +100,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     // CHECK: compiler spill memory path is internal to the lower half
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full {coherency = #vc4kernel.coherency<compiler_spill_coherent>, memory_path = #vc4kernel.memory_path<tmu_global_read>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe2 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full, %p7_safe2 {inactive_load = #vc4kernel.inactive_load<zero>, coherency = #vc4kernel.coherency<compiler_spill_coherent>, memory_path = #vc4kernel.memory_path<tmu_global_read>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     vc4kernel.return
   }
 }

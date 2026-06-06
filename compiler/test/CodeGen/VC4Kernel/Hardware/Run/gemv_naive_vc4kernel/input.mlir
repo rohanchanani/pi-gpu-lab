@@ -43,8 +43,10 @@ module {
     %j_bytes_v = vc4kernel.splat %x_bytes : i32 -> vector<16xi32>
     %a_bytes = vc4kernel.fragment_alu.add %row_byte_offsets, %j_bytes_v {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %x_offsets = vc4kernel.splat %x_bytes : i32 -> vector<16xi32>
-    %a_values = vc4kernel.tmu_load_fragment %a, %a_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %x_values = vc4kernel.tmu_load_fragment %x, %x_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %p7_safe0 = arith.constant 0 : i32
+    %a_values = vc4kernel.tmu_load_fragment %a, %a_bytes, %full, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
+    %p7_safe1 = arith.constant 0 : i32
+    %x_values = vc4kernel.tmu_load_fragment %x, %x_offsets, %full, %p7_safe1 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
     %products = vc4kernel.fragment_alu.mul %a_values, %x_values {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc_next = vc4kernel.fragment_alu.add %acc_step, %products {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %j_next = arith.addi %j_step, %c1 : i32

@@ -264,10 +264,12 @@ def VC4Kernel_TMULoadFragmentOp : VC4Kernel_Op<"tmu_load_fragment", [
   let arguments = (ins VC4Kernel_I32:$base,
                        VC4Kernel_Vector16I32:$byte_offsets,
                        VC4Kernel_PredType:$pred,
+                       VC4Kernel_I32:$safe_offset,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
-                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
+                       OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
+                       VC4Kernel_InactiveLoadAttr:$inactive_load);
   let results = (outs VC4Kernel_Vector16Data:$result);
-  let assemblyFormat = "$base `,` $byte_offsets `,` $pred attr-dict `:` type($base) `,` type($byte_offsets) `,` type($pred) `->` type($result)";
+  let assemblyFormat = "$base `,` $byte_offsets `,` $pred `,` $safe_offset attr-dict `:` type($base) `,` type($byte_offsets) `,` type($pred) `,` type($safe_offset) `->` type($result)";
   let hasVerifier = 1;
 }
 

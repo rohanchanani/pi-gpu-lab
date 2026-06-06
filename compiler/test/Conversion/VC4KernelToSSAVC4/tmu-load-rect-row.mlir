@@ -1,15 +1,14 @@
 // RUN: vc4-opt %s --verify-vc4kernel --convert-vc4kernel-to-ssavc4 | FileCheck %s
 
 // CHECK-LABEL: ssavc4.func @tmu_rect
-// CHECK: ssavc4.cond_br
-// CHECK: ssavc4.cond_br
-// CHECK: ssavc4.cond_br
 // CHECK: ssavc4.cond_select
-// CHECK: ssavc4.cond_select
+// CHECK-NOT: ssavc4.cond_br
 // CHECK: ssavc4.tmu.request
+// CHECK-NOT: ssavc4.cond_br
 // CHECK: ssavc4.tmu.read
+// CHECK-NOT: ssavc4.cond_br
 // CHECK: ssavc4.cond_select
-// CHECK: ssavc4.cond_select
+// CHECK-NOT: ssavc4.cond_br
 // CHECK-NOT: vc4kernel.
 module {
   vc4kernel.kernel @tmu_rect(%ptr : i32, %row : i32, %rows : i32, %col_base : i32, %cols : i32) attributes {
@@ -27,7 +26,8 @@ module {
     %rect = vc4kernel.pred.rect %row, %rows, %col_base, %cols : i32, i32, i32, i32 -> !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %rect {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %p7_safe0 = arith.constant 0 : i32
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %rect, %p7_safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xi32>
     vc4kernel.return
   }
 }
