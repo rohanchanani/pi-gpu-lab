@@ -28,6 +28,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/Support/ErrorHandling.h"
 
 #include <algorithm>
 #include <cctype>
@@ -59,6 +60,10 @@ constexpr llvm::StringLiteral kFragmentAddOpName("vc4kernel.fragment_add");
 constexpr llvm::StringLiteral kFragmentSubOpName("vc4kernel.fragment_sub");
 constexpr llvm::StringLiteral kFragmentMulOpName("vc4kernel.fragment_mul");
 constexpr llvm::StringLiteral kFragmentShlOpName("vc4kernel.fragment_shl");
+constexpr llvm::StringLiteral kFragmentALUAddOpName(
+    "vc4kernel.fragment_alu.add");
+constexpr llvm::StringLiteral kFragmentALUMulOpName(
+    "vc4kernel.fragment_alu.mul");
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
 constexpr llvm::StringLiteral kFragmentSelectOpName(
     "vc4kernel.fragment_select");
@@ -194,6 +199,8 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.fragment_sub",
       "vc4kernel.fragment_mul",
       "vc4kernel.fragment_shl",
+      "vc4kernel.fragment_alu.add",
+      "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
       "vc4kernel.fragment_select",
       "vc4kernel.fragment_rotate",
@@ -1060,6 +1067,84 @@ static Value createMul24(OpBuilder &builder, Location loc, Value lhs,
                                           builder.getContext(),
                                           mlir::vc4::MulOpcode::mul24))},
       lhs.getType());
+}
+
+static mlir::vc4::AddOpcode
+mapAddALUOpcode(mlir::vc4kernel::AddALUOpcode opcode) {
+  switch (opcode) {
+  case mlir::vc4kernel::AddALUOpcode::nop:
+    return mlir::vc4::AddOpcode::nop;
+  case mlir::vc4kernel::AddALUOpcode::fadd:
+    return mlir::vc4::AddOpcode::fadd;
+  case mlir::vc4kernel::AddALUOpcode::fsub:
+    return mlir::vc4::AddOpcode::fsub;
+  case mlir::vc4kernel::AddALUOpcode::fmin:
+    return mlir::vc4::AddOpcode::fmin;
+  case mlir::vc4kernel::AddALUOpcode::fmax:
+    return mlir::vc4::AddOpcode::fmax;
+  case mlir::vc4kernel::AddALUOpcode::fminabs:
+    return mlir::vc4::AddOpcode::fminabs;
+  case mlir::vc4kernel::AddALUOpcode::fmaxabs:
+    return mlir::vc4::AddOpcode::fmaxabs;
+  case mlir::vc4kernel::AddALUOpcode::ftoi:
+    return mlir::vc4::AddOpcode::ftoi;
+  case mlir::vc4kernel::AddALUOpcode::itof:
+    return mlir::vc4::AddOpcode::itof;
+  case mlir::vc4kernel::AddALUOpcode::add:
+    return mlir::vc4::AddOpcode::add;
+  case mlir::vc4kernel::AddALUOpcode::sub:
+    return mlir::vc4::AddOpcode::sub;
+  case mlir::vc4kernel::AddALUOpcode::shr:
+    return mlir::vc4::AddOpcode::shr;
+  case mlir::vc4kernel::AddALUOpcode::asr:
+    return mlir::vc4::AddOpcode::asr;
+  case mlir::vc4kernel::AddALUOpcode::ror:
+    return mlir::vc4::AddOpcode::ror;
+  case mlir::vc4kernel::AddALUOpcode::shl:
+    return mlir::vc4::AddOpcode::shl;
+  case mlir::vc4kernel::AddALUOpcode::min:
+    return mlir::vc4::AddOpcode::min;
+  case mlir::vc4kernel::AddALUOpcode::max:
+    return mlir::vc4::AddOpcode::max;
+  case mlir::vc4kernel::AddALUOpcode::bit_and:
+    return mlir::vc4::AddOpcode::bit_and;
+  case mlir::vc4kernel::AddALUOpcode::bit_or:
+    return mlir::vc4::AddOpcode::bit_or;
+  case mlir::vc4kernel::AddALUOpcode::bit_xor:
+    return mlir::vc4::AddOpcode::bit_xor;
+  case mlir::vc4kernel::AddALUOpcode::bit_not:
+    return mlir::vc4::AddOpcode::bit_not;
+  case mlir::vc4kernel::AddALUOpcode::clz:
+    return mlir::vc4::AddOpcode::clz;
+  case mlir::vc4kernel::AddALUOpcode::v8adds:
+    return mlir::vc4::AddOpcode::v8adds;
+  case mlir::vc4kernel::AddALUOpcode::v8subs:
+    return mlir::vc4::AddOpcode::v8subs;
+  }
+  llvm_unreachable("unhandled VC4Kernel ADD-pipe opcode");
+}
+
+static mlir::vc4::MulOpcode
+mapMulALUOpcode(mlir::vc4kernel::MulALUOpcode opcode) {
+  switch (opcode) {
+  case mlir::vc4kernel::MulALUOpcode::nop:
+    return mlir::vc4::MulOpcode::nop;
+  case mlir::vc4kernel::MulALUOpcode::fmul:
+    return mlir::vc4::MulOpcode::fmul;
+  case mlir::vc4kernel::MulALUOpcode::mul24:
+    return mlir::vc4::MulOpcode::mul24;
+  case mlir::vc4kernel::MulALUOpcode::v8muld:
+    return mlir::vc4::MulOpcode::v8muld;
+  case mlir::vc4kernel::MulALUOpcode::v8min:
+    return mlir::vc4::MulOpcode::v8min;
+  case mlir::vc4kernel::MulALUOpcode::v8max:
+    return mlir::vc4::MulOpcode::v8max;
+  case mlir::vc4kernel::MulALUOpcode::v8adds:
+    return mlir::vc4::MulOpcode::v8adds;
+  case mlir::vc4kernel::MulALUOpcode::v8subs:
+    return mlir::vc4::MulOpcode::v8subs;
+  }
+  llvm_unreachable("unhandled VC4Kernel MUL-pipe opcode");
 }
 
 static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
@@ -2077,6 +2162,50 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4SplatOpName, input, {},
+        op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentALUAddOpName)) {
+    SmallVector<Value, 2> operands;
+    for (Value operand : op->getOperands()) {
+      Value mapped = mapValue(op, operand, state);
+      if (!mapped)
+        return failure();
+      operands.push_back(mapped);
+    }
+    auto opcodeAttr =
+        llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+            op->getAttr("opcode"));
+    if (!opcodeAttr)
+      return op->emitOpError("requires ADD-pipe opcode attribute");
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4ALUAddOpName, operands,
+        {builder.getNamedAttr(
+            "opcode",
+            mlir::vc4::AddOpcodeAttr::get(
+                builder.getContext(), mapAddALUOpcode(opcodeAttr.getValue())))},
+        op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentALUMulOpName)) {
+    SmallVector<Value, 2> operands;
+    for (Value operand : op->getOperands()) {
+      Value mapped = mapValue(op, operand, state);
+      if (!mapped)
+        return failure();
+      operands.push_back(mapped);
+    }
+    auto opcodeAttr =
+        llvm::dyn_cast_if_present<mlir::vc4kernel::MulALUOpcodeAttr>(
+            op->getAttr("opcode"));
+    if (!opcodeAttr)
+      return op->emitOpError("requires MUL-pipe opcode attribute");
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4ALUMulOpName, operands,
+        {builder.getNamedAttr(
+            "opcode",
+            mlir::vc4::MulOpcodeAttr::get(
+                builder.getContext(), mapMulALUOpcode(opcodeAttr.getValue())))},
         op->getResult(0).getType())};
     return success();
   }

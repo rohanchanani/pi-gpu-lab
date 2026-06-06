@@ -204,6 +204,28 @@ def VC4Kernel_FragmentShlOp : VC4Kernel_PureOp<"fragment_shl"> {
   let hasVerifier = 1;
 }
 
+def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
+  let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
+  let arguments = (ins
+    Variadic<VC4Kernel_Vector16Data>:$inputs,
+    VC4Kernel_AddALUOpcodeAttr:$opcode
+  );
+  let results = (outs VC4Kernel_Vector16Data:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
+def VC4Kernel_FragmentALUMulOp : VC4Kernel_PureOp<"fragment_alu.mul"> {
+  let summary = "hardware-faithful VC4 MUL-pipe fragment ALU operation";
+  let arguments = (ins
+    Variadic<VC4Kernel_Vector16Data>:$inputs,
+    VC4Kernel_MulALUOpcodeAttr:$opcode
+  );
+  let results = (outs VC4Kernel_Vector16Data:$result);
+  let assemblyFormat = "$inputs attr-dict `:` functional-type($inputs, $result)";
+  let hasVerifier = 1;
+}
+
 def VC4Kernel_FragmentCmpOp : VC4Kernel_PureOp<"fragment_cmp"> {
   let arguments = (ins VC4Kernel_Vector16Data:$lhs,
                        VC4Kernel_Vector16Data:$rhs,

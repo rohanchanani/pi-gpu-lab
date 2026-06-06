@@ -57,12 +57,47 @@ static LogicalResult verifyVector16Data(Operation *op, Type type,
                        "vector<16xi32> or vector<16xf32>");
 }
 
+static LogicalResult verifyVector16I32(Operation *op, Type type,
+                                       StringRef role) {
+  if (isVC4KernelVector16I32Type(type))
+    return success();
+  return emitTypeError(op, type, role, "vector<16xi32>");
+}
+
+static LogicalResult verifyVector16F32(Operation *op, Type type,
+                                       StringRef role) {
+  if (isVC4KernelVector16F32Type(type))
+    return success();
+  return emitTypeError(op, type, role, "vector<16xf32>");
+}
+
 static LogicalResult verifySameType(Operation *op, Type lhs, Type rhs,
                                     StringRef what) {
   if (lhs == rhs)
     return success();
   return op->emitOpError() << what << " must have matching types; got " << lhs
                            << " and " << rhs;
+}
+
+static bool isUnaryAddALUOpcode(AddALUOpcode opcode) {
+  return opcode == AddALUOpcode::ftoi || opcode == AddALUOpcode::itof ||
+         opcode == AddALUOpcode::bit_not || opcode == AddALUOpcode::clz;
+}
+
+static bool isFloatBinaryAddALUOpcode(AddALUOpcode opcode) {
+  return opcode == AddALUOpcode::fadd || opcode == AddALUOpcode::fsub ||
+         opcode == AddALUOpcode::fmin || opcode == AddALUOpcode::fmax ||
+         opcode == AddALUOpcode::fminabs || opcode == AddALUOpcode::fmaxabs;
+}
+
+static bool isIntegerBinaryAddALUOpcode(AddALUOpcode opcode) {
+  return opcode == AddALUOpcode::add || opcode == AddALUOpcode::sub ||
+         opcode == AddALUOpcode::shr || opcode == AddALUOpcode::asr ||
+         opcode == AddALUOpcode::ror || opcode == AddALUOpcode::shl ||
+         opcode == AddALUOpcode::min || opcode == AddALUOpcode::max ||
+         opcode == AddALUOpcode::bit_and || opcode == AddALUOpcode::bit_or ||
+         opcode == AddALUOpcode::bit_xor || opcode == AddALUOpcode::v8adds ||
+         opcode == AddALUOpcode::v8subs;
 }
 
 static StringAttr asStringAttr(Attribute attr) {
@@ -877,6 +912,90 @@ LogicalResult FragmentShlOp::verify() {
              : emitTypeError(getOperation(), getResult().getType(), "result",
                              "vector<16xi32>");
 }
+
+LogicalResult FragmentALUAddOp::verify() {
+  Operation *op = getOperation();
+  AddALUOpcode opcode = getOpcode();
+  unsigned arity = getInputs().size();
+
+  if (opcode == AddALUOpcode::nop)
+    return emitOpError("nop has no fragment value result in VC4Kernel P1");
+  if (arity == 0 || arity > 2)
+    return emitOpError("requires one or two vector fragment operands");
+  if (isUnaryAddALUOpcode(opcode) && arity != 1)
+    return emitOpError("selected ADD-pipe opcode requires exactly one operand");
+  if (!isUnaryAddALUOpcode(opcode) && arity != 2)
+    return emitOpError("selected ADD-pipe opcode requires exactly two operands");
+
+  Type resultType = getResult().getType();
+  if (opcode == AddALUOpcode::ftoi) {
+    Type inputType = getInputs().front().getType();
+    return failure(
+        failed(verifyVector16F32(op, inputType, "operand")) ||
+        failed(verifyVector16I32(op, resultType, "result")));
+  }
+  if (opcode == AddALUOpcode::itof) {
+    Type inputType = getInputs().front().getType();
+    return failure(
+        failed(verifyVector16I32(op, inputType, "operand")) ||
+        failed(verifyVector16F32(op, resultType, "result")));
+  }
+  if (opcode == AddALUOpcode::bit_not || opcode == AddALUOpcode::clz) {
+    Type inputType = getInputs().front().getType();
+    return failure(
+        failed(verifyVector16I32(op, inputType, "operand")) ||
+        failed(verifyVector16I32(op, resultType, "result")));
+  }
+
+  if (isFloatBinaryAddALUOpcode(opcode)) {
+    if (failed(verifyVector16F32(op, resultType, "result")))
+      return failure();
+    for (Value input : getInputs()) {
+      if (failed(verifyVector16F32(op, input.getType(), "operand")))
+        return failure();
+    }
+    return success();
+  }
+
+  if (!isIntegerBinaryAddALUOpcode(opcode))
+    return emitOpError("unsupported ADD-pipe opcode");
+  if (failed(verifyVector16I32(op, resultType, "result")))
+    return failure();
+  for (Value input : getInputs()) {
+    if (failed(verifyVector16I32(op, input.getType(), "operand")))
+      return failure();
+  }
+  return success();
+}
+
+LogicalResult FragmentALUMulOp::verify() {
+  Operation *op = getOperation();
+  MulALUOpcode opcode = getOpcode();
+  if (opcode == MulALUOpcode::nop)
+    return emitOpError("nop has no fragment value result in VC4Kernel P1");
+  if (getInputs().size() != 2)
+    return emitOpError("selected MUL-pipe opcode requires exactly two operands");
+
+  Type resultType = getResult().getType();
+  if (opcode == MulALUOpcode::fmul) {
+    if (failed(verifyVector16F32(op, resultType, "result")))
+      return failure();
+    for (Value input : getInputs()) {
+      if (failed(verifyVector16F32(op, input.getType(), "operand")))
+        return failure();
+    }
+    return success();
+  }
+
+  if (failed(verifyVector16I32(op, resultType, "result")))
+    return failure();
+  for (Value input : getInputs()) {
+    if (failed(verifyVector16I32(op, input.getType(), "operand")))
+      return failure();
+  }
+  return success();
+}
+
 LogicalResult FragmentCmpOp::verify() {
   if (!isVC4KernelVector16I32Type(getLhs().getType()) ||
       !isVC4KernelVector16I32Type(getRhs().getType()))

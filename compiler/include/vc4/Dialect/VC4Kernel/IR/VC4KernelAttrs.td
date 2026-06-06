@@ -38,6 +38,46 @@ def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
       I32EnumAttrCase<"uge", 5>
     ]>;
 
+def VC4Kernel_AddALUOpcode : VC4Kernel_DialectI32Enum<"AddALUOpcode",
+    "VC4Kernel ADD-pipe fragment ALU opcode", [
+      I32EnumAttrCase<"nop", 0>,
+      I32EnumAttrCase<"fadd", 1>,
+      I32EnumAttrCase<"fsub", 2>,
+      I32EnumAttrCase<"fmin", 3>,
+      I32EnumAttrCase<"fmax", 4>,
+      I32EnumAttrCase<"fminabs", 5>,
+      I32EnumAttrCase<"fmaxabs", 6>,
+      I32EnumAttrCase<"ftoi", 7>,
+      I32EnumAttrCase<"itof", 8>,
+      I32EnumAttrCase<"add", 12>,
+      I32EnumAttrCase<"sub", 13>,
+      I32EnumAttrCase<"shr", 14>,
+      I32EnumAttrCase<"asr", 15>,
+      I32EnumAttrCase<"ror", 16>,
+      I32EnumAttrCase<"shl", 17>,
+      I32EnumAttrCase<"min", 18>,
+      I32EnumAttrCase<"max", 19>,
+      I32EnumAttrCase<"bit_and", 20, "and">,
+      I32EnumAttrCase<"bit_or", 21, "or">,
+      I32EnumAttrCase<"bit_xor", 22, "xor">,
+      I32EnumAttrCase<"bit_not", 23, "not">,
+      I32EnumAttrCase<"clz", 24>,
+      I32EnumAttrCase<"v8adds", 30>,
+      I32EnumAttrCase<"v8subs", 31>
+    ]>;
+
+def VC4Kernel_MulALUOpcode : VC4Kernel_DialectI32Enum<"MulALUOpcode",
+    "VC4Kernel MUL-pipe fragment ALU opcode", [
+      I32EnumAttrCase<"nop", 0>,
+      I32EnumAttrCase<"fmul", 1>,
+      I32EnumAttrCase<"mul24", 2>,
+      I32EnumAttrCase<"v8muld", 3>,
+      I32EnumAttrCase<"v8min", 4>,
+      I32EnumAttrCase<"v8max", 5>,
+      I32EnumAttrCase<"v8adds", 6>,
+      I32EnumAttrCase<"v8subs", 7>
+    ]>;
+
 def VC4Kernel_VPMOrientation : VC4Kernel_DialectI32Enum<"VPMOrientation",
     "VC4Kernel VPM fragment orientation", [
       I32EnumAttrCase<"horizontal", 0>,
@@ -64,6 +104,10 @@ def VC4Kernel_ReduceKindAttr
     : VC4Kernel_EnumAttr<VC4Kernel_ReduceKind, "reduce">;
 def VC4Kernel_CmpPredicateAttr
     : VC4Kernel_EnumAttr<VC4Kernel_CmpPredicate, "cmp">;
+def VC4Kernel_AddALUOpcodeAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_AddALUOpcode, "add_alu_opcode">;
+def VC4Kernel_MulALUOpcodeAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_MulALUOpcode, "mul_alu_opcode">;
 def VC4Kernel_VPMOrientationAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMOrientation, "vpm_orientation">;
 def VC4Kernel_VPMWidthAttr
