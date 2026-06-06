@@ -1,0 +1,768 @@
+{
+  "schema_version": 1,
+  "generated_by": "P0",
+  "phase_order": [
+    "P0",
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "P5",
+    "P6",
+    "P7",
+    "P8",
+    "P9",
+    "P10",
+    "P11",
+    "P12",
+    "P13",
+    "DEFERRED_SPARSE_VDW_STORE"
+  ],
+  "locked_policies": {
+    "generalize_not_special_case": {
+      "status": "locked",
+      "rule": "Current special-case fragment ops are migration targets, not compatibility promises."
+    },
+    "fastmath_opt_in": {
+      "status": "locked",
+      "opt_in_required": true,
+      "rule": "Default math is exact/conservative; approximate SFU-derived math requires an explicit fastmath/approx contract."
+    },
+    "vdw_sparse_store_deferred": {
+      "status": "locked",
+      "deterministic_reject_until_deferred": true,
+      "rule": "Arbitrary sparse VDW stores deterministic-reject until a later hardware-proven phase."
+    },
+    "no_tile_dsl": {
+      "status": "locked",
+      "rule": "VC4Kernel is not a producer tile DSL and does not resurrect VC4Tile."
+    },
+    "only_vc4kernel_to_ssavc4": {
+      "status": "locked",
+      "rule": "The only accepted lower path is vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware."
+    },
+    "hardware_or_deterministic_reject_required": {
+      "status": "locked",
+      "rule": "Every Surface v2 feature requires verifier, conversion, lower-half coverage where needed, and hardware proof or deterministic-reject proof."
+    }
+  },
+  "features": [
+    {
+      "id": "baseline_kernel_return_launch_identity",
+      "phase": "P0",
+      "category": "accepted_baseline",
+      "current_status": "accepted_baseline",
+      "final_status_target": "accepted_baseline",
+      "current_surface": "vc4kernel.kernel, vc4kernel.return, program_id, num_programs, warp_id, lane_range.",
+      "target_surface": "Preserve kernel wrapper, return, and logical launch identity while later phases generalize compute surfaces.",
+      "vc4kernel_verifier_plan": "Keep existing verifier coverage for kernel attrs, function type, launch axes, schedule mode, and legal identity ops.",
+      "vc4kernel_to_ssavc4_plan": "Keep existing launch ABI and builtin lowering through SSAVC4.",
+      "ssavc4_to_vc4_plan": "Keep existing scheduled VC4 launch metadata and uniform packing behavior.",
+      "hardware_or_reject_verification_plan": "Accepted baseline hardware fixtures and check-vc4 must remain green.",
+      "upstream_use": "Program/grid identity for future vector and Triton paths.",
+      "migration_or_removal": "Preserve; do not add block_id, lane_id, or thread_id.",
+      "dependencies": [],
+      "acceptance_line": "Accepted baseline remains valid when verifier, conversion, and hardware identity fixtures continue passing."
+    },
+    {
+      "id": "baseline_predicate_algebra",
+      "phase": "P0",
+      "category": "accepted_baseline",
+      "current_status": "accepted_baseline",
+      "final_status_target": "accepted_baseline",
+      "current_surface": "pred.full, pred.empty, pred.tail, pred.rect, pred.and, pred.or, pred.not, pred.any, pred.all.",
+      "target_surface": "Preserve predicate values as !vc4kernel.pred<16> while later phases refine consumer legality.",
+      "vc4kernel_verifier_plan": "Keep predicate type and consumer legality checks; sparse VDW consumers must reject until deferred.",
+      "vc4kernel_to_ssavc4_plan": "Keep predicate planning to masks, flags, branches, and zero-fill or preserve behavior where accepted.",
+      "ssavc4_to_vc4_plan": "Keep existing flag and branch lowering coverage.",
+      "hardware_or_reject_verification_plan": "Accepted predicate hardware fixtures and deterministic rejects must remain in check-vc4.",
+      "upstream_use": "Masks from vector and future Triton load/store semantics.",
+      "migration_or_removal": "Preserve predicate algebra; do not admit vector<16xi1> as VC4Kernel mask storage.",
+      "dependencies": [],
+      "acceptance_line": "Accepted baseline remains valid when predicate roundtrip, conversion, and hardware fixtures continue passing."
+    },
+    {
+      "id": "baseline_vpm_vdr_vdw_rect_paths",
+      "phase": "P0",
+      "category": "accepted_baseline",
+      "current_status": "accepted_baseline",
+      "final_status_target": "accepted_baseline",
+      "current_surface": "vpm_alloc, vpm_read_fragment, vpm_write_fragment, vdr_load_to_vpm, vdr_load_rect_to_vpm, vdw_store_vpm_fragment, vdw_store_rect_from_vpm.",
+      "target_surface": "Preserve explicit TMU/VDR/VPM/VDW path naming and dynamic rectangular baseline.",
+      "vc4kernel_verifier_plan": "Keep VPM allocation bounds, executable w32/none mode checks, and dynamic rect shape/alignment checks.",
+      "vc4kernel_to_ssavc4_plan": "Keep existing VPM/VDR/VDW lowering through SSAVC4 dynamic and static path ops.",
+      "ssavc4_to_vc4_plan": "Keep lower-half VPMVCD setup, planned dynamic DMA, and branch-count accounting coverage.",
+      "hardware_or_reject_verification_plan": "Accepted dynamic VDR/VDW canaries and VPM roundtrip fixtures must remain passing.",
+      "upstream_use": "Shared-memory and rectangular tile movement for blocked GEMV/GEMM and future value-layer transfers.",
+      "migration_or_removal": "Preserve accepted paths; later P12 may admit additional dynamic coordinates only with proof.",
+      "dependencies": [],
+      "acceptance_line": "Accepted baseline remains valid when dynamic rectangular and VPM tests continue passing."
+    },
+    {
+      "id": "baseline_gemv_gemm_runtime_blocked",
+      "phase": "P0",
+      "category": "accepted_baseline",
+      "current_status": "accepted_baseline",
+      "final_status_target": "accepted_baseline",
+      "current_surface": "Runtime GEMV/GEMM and blocked VPM reuse fixtures accepted before Surface v2.",
+      "target_surface": "Preserve source shapes and dynamic rectangular shared-memory path discipline.",
+      "vc4kernel_verifier_plan": "Keep existing GEMV/GEMM input legality and do not reduce adversarial dimensions.",
+      "vc4kernel_to_ssavc4_plan": "Keep current runtime dimension and dynamic rect lowering behavior.",
+      "ssavc4_to_vc4_plan": "Keep lower-half planned emission and resource accounting coverage.",
+      "hardware_or_reject_verification_plan": "Accepted GEMV/GEMM fixtures must continue to use CPU references and sentinels.",
+      "upstream_use": "Regression baseline for future vector contract planning without adding a contract-specific VC4Kernel op.",
+      "migration_or_removal": "Preserve fixtures; do not alter source shapes in P0.",
+      "dependencies": [
+        "baseline_vpm_vdr_vdw_rect_paths"
+      ],
+      "acceptance_line": "Accepted baseline remains valid when runtime GEMV/GEMM fixtures and check-vc4 continue passing."
+    },
+    {
+      "id": "baseline_branch_spill_lower_half_canaries",
+      "phase": "P0",
+      "category": "accepted_baseline",
+      "current_status": "accepted_baseline",
+      "final_status_target": "accepted_baseline",
+      "current_surface": "Lower-half branch-layout accounting, spill transport, dynamic DMA branch regions, and VPM row accounting.",
+      "target_surface": "Preserve lower-half accounting closure while Surface v2 features are planned.",
+      "vc4kernel_verifier_plan": "Keep VC4Kernel resource planning diagnostics and VPM row limits.",
+      "vc4kernel_to_ssavc4_plan": "Keep computed resource metadata and no direct VC4 lowering.",
+      "ssavc4_to_vc4_plan": "Keep planned branch layout, spill edge-copy, and dynamic DMA emission audits.",
+      "hardware_or_reject_verification_plan": "Accepted lower-half canaries must remain passing; hardware discipline is unchanged.",
+      "upstream_use": "Reliability base for later memory and dynamic-coordinate phases.",
+      "migration_or_removal": "Preserve; do not weaken branch layout or spill checks.",
+      "dependencies": [],
+      "acceptance_line": "Accepted baseline remains valid when branch-layout, spill, and dynamic DMA audits continue passing."
+    },
+    {
+      "id": "p1_general_fragment_add_alu",
+      "phase": "P1",
+      "category": "alu",
+      "current_status": "planned",
+      "final_status_target": "implemented_or_rejected_by_opcode",
+      "current_surface": "Current add behavior is represented by special-case fragment_add.",
+      "target_surface": "General hardware-faithful ALU surface for add-pipe addition semantics.",
+      "vc4kernel_verifier_plan": "Verify opcode, operand/result types, math policy, and lane carrier width.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted add opcodes to ssavc4.alu.add with explicit VC4 opcode attrs.",
+      "ssavc4_to_vc4_plan": "Use existing ADD-pipe scheduling and verifier rules for admitted opcodes.",
+      "hardware_or_reject_verification_plan": "Hardware proof for executable opcodes or deterministic-reject tests for unsupported opcodes.",
+      "upstream_use": "Vector arithmetic lowering after pre-vector lock.",
+      "migration_or_removal": "Migrate users from fragment_add special case to the P1 ALU surface.",
+      "dependencies": [
+        "baseline_predicate_algebra"
+      ],
+      "acceptance_line": "P1 add ALU is accepted only with verifier, conversion, lower-half, and proof matrix entries."
+    },
+    {
+      "id": "p1_general_fragment_mul_alu",
+      "phase": "P1",
+      "category": "alu",
+      "current_status": "planned",
+      "final_status_target": "implemented_or_rejected_by_opcode",
+      "current_surface": "Current multiply behavior is represented by special-case fragment_mul.",
+      "target_surface": "General hardware-faithful ALU surface for mul-pipe multiply semantics and safe full-width fallbacks.",
+      "vc4kernel_verifier_plan": "Verify opcode, operand/result types, f32 versus i32 semantics, and range-proof requirements.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted multiply opcodes to ssavc4.alu.mul or proven software fallback sequences.",
+      "ssavc4_to_vc4_plan": "Use existing MUL-pipe scheduling and fallback sequence coverage.",
+      "hardware_or_reject_verification_plan": "Hardware proof for f32/mul24/full-i32 paths or deterministic-reject tests.",
+      "upstream_use": "Vector multiply and future numerical kernels.",
+      "migration_or_removal": "Migrate users from fragment_mul special case to the P1 ALU surface.",
+      "dependencies": [
+        "p1_general_fragment_add_alu"
+      ],
+      "acceptance_line": "P1 multiply ALU is accepted only when mul24 is never used for unproven full i32 multiply."
+    },
+    {
+      "id": "p1_remove_fragment_add",
+      "phase": "P1",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_alias_rejected",
+      "current_surface": "vc4kernel.fragment_add exists as a special-case op.",
+      "target_surface": "General ALU addition surface.",
+      "vc4kernel_verifier_plan": "Reject stale fragment_add in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
+      "ssavc4_to_vc4_plan": "No lower-half special case for fragment_add remains after migration.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
+      "upstream_use": "No direct upstream use after P1.",
+      "migration_or_removal": "Remove special-case add spelling as a compatibility promise.",
+      "dependencies": [
+        "p1_general_fragment_add_alu"
+      ],
+      "acceptance_line": "fragment_add is not accepted_final; it is gone or rejected after the P1 migration."
+    },
+    {
+      "id": "p1_remove_fragment_sub",
+      "phase": "P1",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_alias_rejected",
+      "current_surface": "vc4kernel.fragment_sub exists as a special-case op.",
+      "target_surface": "General ALU subtraction surface.",
+      "vc4kernel_verifier_plan": "Reject stale fragment_sub in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
+      "ssavc4_to_vc4_plan": "No lower-half special case for fragment_sub remains after migration.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
+      "upstream_use": "No direct upstream use after P1.",
+      "migration_or_removal": "Remove special-case sub spelling as a compatibility promise.",
+      "dependencies": [
+        "p1_general_fragment_add_alu"
+      ],
+      "acceptance_line": "fragment_sub is not accepted_final; it is gone or rejected after the P1 migration."
+    },
+    {
+      "id": "p1_remove_fragment_mul",
+      "phase": "P1",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_alias_rejected",
+      "current_surface": "vc4kernel.fragment_mul exists as a special-case op.",
+      "target_surface": "General ALU multiply surface.",
+      "vc4kernel_verifier_plan": "Reject stale fragment_mul in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
+      "ssavc4_to_vc4_plan": "No lower-half special case for fragment_mul remains after migration.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
+      "upstream_use": "No direct upstream use after P1.",
+      "migration_or_removal": "Remove special-case mul spelling as a compatibility promise.",
+      "dependencies": [
+        "p1_general_fragment_mul_alu"
+      ],
+      "acceptance_line": "fragment_mul is not accepted_final; it is gone or rejected after the P1 migration."
+    },
+    {
+      "id": "p1_remove_fragment_shl",
+      "phase": "P1",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_alias_rejected",
+      "current_surface": "vc4kernel.fragment_shl exists as a special-case op.",
+      "target_surface": "General ALU shift surface.",
+      "vc4kernel_verifier_plan": "Reject stale fragment_shl in final Surface v2 or classify only as temporary migration input during P1.",
+      "vc4kernel_to_ssavc4_plan": "Route only the general ALU op through conversion after migration.",
+      "ssavc4_to_vc4_plan": "No lower-half special case for fragment_shl remains after migration.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject stale-op tests plus hardware proof through replacement ALU tests.",
+      "upstream_use": "No direct upstream use after P1.",
+      "migration_or_removal": "Remove special-case shl spelling as a compatibility promise.",
+      "dependencies": [
+        "p1_general_fragment_add_alu"
+      ],
+      "acceptance_line": "fragment_shl is not accepted_final; it is gone or rejected after the P1 migration."
+    },
+    {
+      "id": "p2_fragment_bitcast",
+      "phase": "P2",
+      "category": "bitcast_constants",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "No dedicated VC4Kernel fragment bitcast surface.",
+      "target_surface": "Target-planning bitcast between compatible 32-bit fragment carriers without producer dialect admission.",
+      "vc4kernel_verifier_plan": "Verify same lane count, same bit width, and no sub-32 executable carrier.",
+      "vc4kernel_to_ssavc4_plan": "Lower to semantic move or lower-half bit reinterpretation without arithmetic conversion.",
+      "ssavc4_to_vc4_plan": "Preserve raw bit representation through register allocation and scheduling.",
+      "hardware_or_reject_verification_plan": "Lit proof for bit preservation; hardware proof where observable through stores.",
+      "upstream_use": "Value-layer bitcast lowering after pre-vector lock.",
+      "migration_or_removal": "New planned surface; no old op retained.",
+      "dependencies": [],
+      "acceptance_line": "P2 bitcast is accepted only when bit-preserving behavior is tested end to end."
+    },
+    {
+      "id": "p2_fragment_const_splat_zero_allones_lane_affine",
+      "phase": "P2",
+      "category": "bitcast_constants",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "Current constants use scalar arith.constant plus splat or lane_range composition.",
+      "target_surface": "Explicit constant fragment forms for zero, all-ones, and lane-affine values where useful.",
+      "vc4kernel_verifier_plan": "Verify constant kind, element type, lane expression bounds, and no producer dialect operations.",
+      "vc4kernel_to_ssavc4_plan": "Lower to ssavc4.load_imm, splat, element_number, or ALU sequence.",
+      "ssavc4_to_vc4_plan": "Use existing immediate and element-number lowering.",
+      "hardware_or_reject_verification_plan": "Lit and hardware-visible store checks for each admitted constant form.",
+      "upstream_use": "Vector constants and masks after pre-vector lock.",
+      "migration_or_removal": "May replace ad hoc splat/lane_range patterns when accepted.",
+      "dependencies": [
+        "baseline_kernel_return_launch_identity"
+      ],
+      "acceptance_line": "P2 constants are accepted only when each form has deterministic verifier and lowering coverage."
+    },
+    {
+      "id": "p3_fragment_cmp_signed_i32",
+      "phase": "P3",
+      "category": "comparison",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "Current fragment_cmp supports i32 predicates as a special comparison op.",
+      "target_surface": "General comparison surface for signed i32 where hardware/lowering proof exists.",
+      "vc4kernel_verifier_plan": "Verify comparison predicate, signedness, operand types, and predicate result class.",
+      "vc4kernel_to_ssavc4_plan": "Lower to condition plans, flags, and mask materialization as required by consumers.",
+      "ssavc4_to_vc4_plan": "Use existing flag and branch machinery with explicit compare semantics.",
+      "hardware_or_reject_verification_plan": "Hardware proof for representative signed comparisons or deterministic rejects.",
+      "upstream_use": "Vector compare masks after pre-vector lock.",
+      "migration_or_removal": "Migrate current fragment_cmp specialness into the P3 comparison family.",
+      "dependencies": [
+        "baseline_predicate_algebra"
+      ],
+      "acceptance_line": "P3 signed i32 comparisons are accepted only when all admitted predicates have verifier and conversion proof."
+    },
+    {
+      "id": "p3_fragment_cmp_ordered_f32",
+      "phase": "P3",
+      "category": "comparison",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "f32 fragment comparison is not accepted in current VC4Kernel.",
+      "target_surface": "Ordered f32 comparison only if exact NaN and ordering behavior is specified and tested.",
+      "vc4kernel_verifier_plan": "Verify ordered predicate kind and require explicit policy for NaN behavior.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to a tested flag/mask sequence; reject otherwise.",
+      "ssavc4_to_vc4_plan": "Use lower-half compare implementation only after hardware proof.",
+      "hardware_or_reject_verification_plan": "Hardware tests must include NaN, Inf, signed-zero, normal, and boundary values or deterministic rejects.",
+      "upstream_use": "Floating vector masks after pre-vector lock.",
+      "migration_or_removal": "New planned surface; current f32 compare reject remains valid until P3 proof.",
+      "dependencies": [
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "P3 f32 comparisons are accepted only with explicit ordered semantics and numerical edge-case tests."
+    },
+    {
+      "id": "p4_fragment_reduce_general",
+      "phase": "P4",
+      "category": "reduction",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "Current fragment_reduce is add-only.",
+      "target_surface": "General reduction family for admitted associative operations and explicit inactive-lane identity.",
+      "vc4kernel_verifier_plan": "Verify reduction kind, type, identity, predicate class, and supported lowering plan.",
+      "vc4kernel_to_ssavc4_plan": "Lower to select-to-identity plus rotate/ALU tree or deterministic reject.",
+      "ssavc4_to_vc4_plan": "Use existing rotate and ALU scheduling with branch/layout accounting as needed.",
+      "hardware_or_reject_verification_plan": "Hardware proof for each admitted reduction kind or deterministic-reject tests.",
+      "upstream_use": "Vector reductions after pre-vector lock.",
+      "migration_or_removal": "Generalizes current add-only reduce.",
+      "dependencies": [
+        "p1_general_fragment_add_alu",
+        "p11_fragment_rotate_dynamic_if_hardware"
+      ],
+      "acceptance_line": "P4 reductions are accepted only when each reduction kind has identity and lowering proof."
+    },
+    {
+      "id": "p4_remove_add_only_reduce_specialness",
+      "phase": "P4",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_generalized",
+      "current_surface": "vc4kernel.fragment_reduce supports #vc4kernel.reduce<add> only.",
+      "target_surface": "General reduction family with add as one admitted kind if proven.",
+      "vc4kernel_verifier_plan": "Reject add-only special form as final API or map it through a documented migration rule.",
+      "vc4kernel_to_ssavc4_plan": "Convert only through the general reduction lowering plan after migration.",
+      "ssavc4_to_vc4_plan": "No add-only lower-half shortcut remains after migration.",
+      "hardware_or_reject_verification_plan": "Existing add hardware proof is retained; stale add-only form has deterministic-reject coverage if removed.",
+      "upstream_use": "No direct upstream use after P4.",
+      "migration_or_removal": "Remove add-only specialness as a compatibility promise.",
+      "dependencies": [
+        "p4_fragment_reduce_general"
+      ],
+      "acceptance_line": "Add reduction is accepted only as part of the general P4 reduction surface."
+    },
+    {
+      "id": "p5_scalar_arith_bitwise_shift_minmax_casts",
+      "phase": "P5",
+      "category": "scalar_arith",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "Restricted scalar arith exists for constants, addi, subi, muli, shli, cmpi, and select.",
+      "target_surface": "Scoped scalar arithmetic subset for bitwise ops, shifts, min/max, and casts that belong in target planning.",
+      "vc4kernel_verifier_plan": "Verify scalar-only operands, no vector arith ops, and explicit signedness/cast semantics.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted scalar ops to condition plans, uniforms, or SSAVC4 ALU sequences.",
+      "ssavc4_to_vc4_plan": "Use existing scalar/register scheduling and reject unsupported scalar sequences.",
+      "hardware_or_reject_verification_plan": "Lit and hardware-visible tests for admitted ops; deterministic rejects for unsupported ops.",
+      "upstream_use": "Loop bounds, address math, and scalar predicates after value-layer lowering.",
+      "migration_or_removal": "Clarifies current scalar subset; does not admit vector arith dialect ops.",
+      "dependencies": [
+        "p1_general_fragment_add_alu"
+      ],
+      "acceptance_line": "P5 scalar arith is accepted only when no producer-level arith surface leaks into vector carriers."
+    },
+    {
+      "id": "p6_memory_path_coherency_policy",
+      "phase": "P6",
+      "category": "memory",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "TMU, VDR, VPM, and VDW paths exist with accepted dynamic rectangular and spill baselines.",
+      "target_surface": "Explicit memory path and coherency policy, including VDW-written spill reload through VDR->VPM.",
+      "vc4kernel_verifier_plan": "Verify memory path selection and reject ambiguous or unsupported coherency plans.",
+      "vc4kernel_to_ssavc4_plan": "Emit explicit SSAVC4 paths and resource metadata for TMU, VDR, VPM, VDW, and spills.",
+      "ssavc4_to_vc4_plan": "Preserve planned DMA emission, branch-count accounting, and coherent spill reload path.",
+      "hardware_or_reject_verification_plan": "Existing spill and dynamic DMA canaries plus new deterministic rejects for unsupported coherency plans.",
+      "upstream_use": "Correct transfer selection for future vector transfer lowering.",
+      "migration_or_removal": "No TMU reload of VDW-written compiler spill slots unless future invalidation proof exists.",
+      "dependencies": [
+        "baseline_branch_spill_lower_half_canaries",
+        "baseline_vpm_vdr_vdw_rect_paths"
+      ],
+      "acceptance_line": "P6 memory policy is accepted only when spill coherency and path selection are explicitly tested."
+    },
+    {
+      "id": "p7_tmu_load_explicit_safe_inactive_offset",
+      "phase": "P7",
+      "category": "tmu",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "tmu_load_fragment currently has implicit safe inactive-address behavior.",
+      "target_surface": "TMU load with explicit safe inactive offset and zero-fill policy.",
+      "vc4kernel_verifier_plan": "Verify safe offset presence, alignment, type, and predicate consumer legality.",
+      "vc4kernel_to_ssavc4_plan": "Lower active lanes to requested addresses and inactive lanes to explicit safe address before zero-select.",
+      "ssavc4_to_vc4_plan": "Keep TMU request/read sequencing and avoid requests for empty masks.",
+      "hardware_or_reject_verification_plan": "Hardware proof that inactive lanes zero-fill and never issue unsafe requests; deterministic rejects for missing safe offset.",
+      "upstream_use": "Masked vector and future Triton loads.",
+      "migration_or_removal": "Replaces implicit safe-address behavior.",
+      "dependencies": [
+        "baseline_predicate_algebra"
+      ],
+      "acceptance_line": "P7 TMU load is accepted only when the safe inactive offset is explicit and tested."
+    },
+    {
+      "id": "p7_remove_old_tmu_load_signature",
+      "phase": "P7",
+      "category": "migration",
+      "current_status": "migration_target",
+      "final_status_target": "removed_or_alias_rejected",
+      "current_surface": "Old tmu_load_fragment signature relies on implicit safe inactive behavior.",
+      "target_surface": "Explicit safe inactive TMU load signature.",
+      "vc4kernel_verifier_plan": "Reject old signature after migration or confine it to a temporary migration diagnostic.",
+      "vc4kernel_to_ssavc4_plan": "Convert only the explicit safe-offset form after P7.",
+      "ssavc4_to_vc4_plan": "No lower-half behavior depends on hidden safe address selection after migration.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject old signature tests plus hardware proof through replacement tests.",
+      "upstream_use": "No direct upstream use after P7.",
+      "migration_or_removal": "Remove old implicit signature as a compatibility promise.",
+      "dependencies": [
+        "p7_tmu_load_explicit_safe_inactive_offset"
+      ],
+      "acceptance_line": "Old TMU load signature is not accepted_final; P7 requires explicit safe inactive policy."
+    },
+    {
+      "id": "p8_vdw_store_inactive_preserve_full_tail_rect",
+      "phase": "P8",
+      "category": "vdw",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "VDW store inactive preserve exists implicitly for accepted full/tail/rect paths.",
+      "target_surface": "Explicit inactive_store policy for full, tail, and rectangular preserve semantics.",
+      "vc4kernel_verifier_plan": "Verify predicate class is full, empty, tail, or rect and policy requests preserve semantics.",
+      "vc4kernel_to_ssavc4_plan": "Lower to VPM staging and VDW paths that preserve inactive destination for admitted classes.",
+      "ssavc4_to_vc4_plan": "Use lower-half VDW setup and dynamic rect preserve paths with branch accounting.",
+      "hardware_or_reject_verification_plan": "Sentinel hardware proof for full, tail, and rect preserve; deterministic reject for unsupported classes.",
+      "upstream_use": "Masked vector stores after pre-vector lock.",
+      "migration_or_removal": "Makes current implicit inactive semantics explicit.",
+      "dependencies": [
+        "p6_memory_path_coherency_policy"
+      ],
+      "acceptance_line": "P8 VDW preserve is accepted only for full/tail/rect classes with sentinel proof."
+    },
+    {
+      "id": "p8_sparse_vdw_store_deterministic_reject",
+      "phase": "P8",
+      "category": "vdw",
+      "current_status": "deterministic_reject",
+      "final_status_target": "deterministic_reject_until_deferred",
+      "current_surface": "Arbitrary sparse VDW stores are not accepted final Surface v2 behavior.",
+      "target_surface": "Sparse VDW masks deterministic-reject until DEFERRED_SPARSE_VDW_STORE.",
+      "vc4kernel_verifier_plan": "Reject sparse general-mask VDW consumers with a precise diagnostic.",
+      "vc4kernel_to_ssavc4_plan": "Conversion must not silently decompose sparse stores before the deferred phase.",
+      "ssavc4_to_vc4_plan": "No lower-half sparse VDW RMW path is used before the deferred phase.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject lit proof; no hardware substitution for missing sparse-store proof.",
+      "upstream_use": "Future arbitrary masked stores must observe this reject until deferred proof exists.",
+      "migration_or_removal": "Reject sparse stores; do not preserve old general-mask store behavior as final.",
+      "dependencies": [
+        "p8_vdw_store_inactive_preserve_full_tail_rect"
+      ],
+      "acceptance_line": "P8 sparse VDW handling is accepted only as deterministic reject."
+    },
+    {
+      "id": "p9_fragment_pack",
+      "phase": "P9",
+      "category": "pack_unpack",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "No accepted VC4Kernel fragment pack surface.",
+      "target_surface": "Hardware-faithful fragment pack with explicit mode and executable proof.",
+      "vc4kernel_verifier_plan": "Verify pack mode, carrier type, saturation behavior, and no unsupported sub-32 value type.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted modes to ssavc4.pack or reject unsupported modes.",
+      "ssavc4_to_vc4_plan": "Use VC4 pack fields with hardware-accurate enum values.",
+      "hardware_or_reject_verification_plan": "Hardware proof per pack mode or deterministic-reject tests.",
+      "upstream_use": "Packed storage and quantized transport after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p2_fragment_bitcast"
+      ],
+      "acceptance_line": "P9 pack is accepted only per hardware-proven mode."
+    },
+    {
+      "id": "p9_fragment_unpack",
+      "phase": "P9",
+      "category": "pack_unpack",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "No accepted VC4Kernel fragment unpack surface.",
+      "target_surface": "Hardware-faithful fragment unpack with explicit mode and executable proof.",
+      "vc4kernel_verifier_plan": "Verify unpack mode, source carrier, result carrier, and no unsupported sub-32 executable type.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted modes to ssavc4.unpack or reject unsupported modes.",
+      "ssavc4_to_vc4_plan": "Use VC4 unpack fields with hardware-accurate enum values.",
+      "hardware_or_reject_verification_plan": "Hardware proof per unpack mode or deterministic-reject tests.",
+      "upstream_use": "Packed storage and quantized transport after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p9_fragment_pack"
+      ],
+      "acceptance_line": "P9 unpack is accepted only per hardware-proven mode."
+    },
+    {
+      "id": "p9_vpm_subword_w16_w8_modes",
+      "phase": "P9",
+      "category": "pack_unpack",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "VC4Kernel schema names w16/w8/packed/laned but executable use is rejected.",
+      "target_surface": "Executable VPM subword modes only after hardware proof and exact verifier coverage.",
+      "vc4kernel_verifier_plan": "Keep executable rejects until P9 proves mode, alignment, coordinate, and type semantics.",
+      "vc4kernel_to_ssavc4_plan": "Lower admitted subword modes to SSAVC4 VPM attrs; reject all others.",
+      "ssavc4_to_vc4_plan": "Use hardware-derived VPM setup fields and reject unencodable combinations.",
+      "hardware_or_reject_verification_plan": "Hardware proof for w16/w8 modes or deterministic-reject tests.",
+      "upstream_use": "Sub-32 storage movement after pre-vector lock.",
+      "migration_or_removal": "Current executable reject remains valid until P9 proof.",
+      "dependencies": [
+        "baseline_vpm_vdr_vdw_rect_paths"
+      ],
+      "acceptance_line": "P9 VPM subword modes are accepted only when each executable mode has hardware proof."
+    },
+    {
+      "id": "p10_fragment_sfu_recip",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_fastmath_or_rejected",
+      "current_surface": "No VC4Kernel SFU reciprocal surface.",
+      "target_surface": "SFU reciprocal only under explicit fastmath/approx contract.",
+      "vc4kernel_verifier_plan": "Require explicit fastmath/approx attribute and f32 carrier type.",
+      "vc4kernel_to_ssavc4_plan": "Lower to SFU write/read sequence only when the contract is present.",
+      "ssavc4_to_vc4_plan": "Honor SFU hazards and r4 timing rules in scheduled VC4.",
+      "hardware_or_reject_verification_plan": "Hardware numerical tests under approximate contract; deterministic reject without contract.",
+      "upstream_use": "Approximate math after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "SFU reciprocal is accepted only as opt-in approximate math."
+    },
+    {
+      "id": "p10_fragment_sfu_rsqrt",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_fastmath_or_rejected",
+      "current_surface": "No VC4Kernel SFU rsqrt surface.",
+      "target_surface": "SFU reciprocal-square-root only under explicit fastmath/approx contract.",
+      "vc4kernel_verifier_plan": "Require explicit fastmath/approx attribute and f32 carrier type.",
+      "vc4kernel_to_ssavc4_plan": "Lower to SFU sequence only when the contract is present.",
+      "ssavc4_to_vc4_plan": "Honor SFU hazards and scheduled hardware verifier rules.",
+      "hardware_or_reject_verification_plan": "Hardware numerical tests under approximate contract; deterministic reject without contract.",
+      "upstream_use": "Approximate normalization and math after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "SFU rsqrt is accepted only as opt-in approximate math."
+    },
+    {
+      "id": "p10_fragment_sfu_exp",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_fastmath_or_rejected",
+      "current_surface": "No VC4Kernel SFU exp surface.",
+      "target_surface": "SFU-derived exponential only under explicit fastmath/approx contract.",
+      "vc4kernel_verifier_plan": "Require explicit fastmath/approx attribute and specify approximation domain.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to tested SFU or polynomial sequence; reject otherwise.",
+      "ssavc4_to_vc4_plan": "Honor SFU hazards and scheduled hardware verifier rules.",
+      "hardware_or_reject_verification_plan": "Hardware numerical tests for domain and special values under contract; deterministic reject without contract.",
+      "upstream_use": "Approximate softmax-style kernels after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "SFU exp is accepted only as explicitly contracted approximate math."
+    },
+    {
+      "id": "p10_fragment_sfu_log",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_fastmath_or_rejected",
+      "current_surface": "No VC4Kernel SFU log surface.",
+      "target_surface": "SFU-derived logarithm only under explicit fastmath/approx contract.",
+      "vc4kernel_verifier_plan": "Require explicit fastmath/approx attribute and specify approximation domain.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to tested SFU or polynomial sequence; reject otherwise.",
+      "ssavc4_to_vc4_plan": "Honor SFU hazards and scheduled hardware verifier rules.",
+      "hardware_or_reject_verification_plan": "Hardware numerical tests for domain and special values under contract; deterministic reject without contract.",
+      "upstream_use": "Approximate math kernels after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "SFU log is accepted only as explicitly contracted approximate math."
+    },
+    {
+      "id": "p10_fastmath_approx_contract",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "Default math is exact/conservative and no SFU fastmath contract exists.",
+      "target_surface": "Explicit opt-in fastmath/approx contract for approximate SFU-derived math.",
+      "vc4kernel_verifier_plan": "Reject approximate operations without explicit contract and require declared special-value policy.",
+      "vc4kernel_to_ssavc4_plan": "Propagate the contract to lowering choices and reject absent or incompatible policies.",
+      "ssavc4_to_vc4_plan": "Schedule SFU only through hardware-valid hazard windows.",
+      "hardware_or_reject_verification_plan": "Deterministic reject without contract; hardware numerical tests with contract.",
+      "upstream_use": "Future math lowering after pre-vector lock.",
+      "migration_or_removal": "New policy surface.",
+      "dependencies": [],
+      "acceptance_line": "P10 fastmath is accepted only when approximate behavior is explicit and opt-in."
+    },
+    {
+      "id": "p10_sqrt_policy",
+      "phase": "P10",
+      "category": "sfu_fastmath",
+      "current_status": "planned",
+      "final_status_target": "implemented_with_policy_or_rejected",
+      "current_surface": "No accepted VC4Kernel sqrt surface.",
+      "target_surface": "sqrt lowers through rsqrt only under explicit fastmath/approx unless an exact tested sequence exists.",
+      "vc4kernel_verifier_plan": "Require exact sequence availability or explicit fastmath/approx contract.",
+      "vc4kernel_to_ssavc4_plan": "Lower exact sqrt only to tested exact sequence; approximate path uses contracted rsqrt policy.",
+      "ssavc4_to_vc4_plan": "Honor SFU hazards for approximate path and ALU sequence rules for exact path.",
+      "hardware_or_reject_verification_plan": "NaN, Inf, signed-zero, negative, and normal-case tests for any promised exactness; deterministic reject otherwise.",
+      "upstream_use": "Future math.sqrt lowering after pre-vector lock.",
+      "migration_or_removal": "New planned surface.",
+      "dependencies": [
+        "p10_fastmath_approx_contract",
+        "p10_fragment_sfu_rsqrt"
+      ],
+      "acceptance_line": "sqrt policy is accepted only when exactness claims are tested or approximation is explicitly opted in."
+    },
+    {
+      "id": "p11_fragment_rotate_dynamic_if_hardware",
+      "phase": "P11",
+      "category": "rotate_shuffle",
+      "current_status": "planned",
+      "final_status_target": "implemented_if_hardware_proven_or_rejected",
+      "current_surface": "fragment_rotate uses a static amount attribute.",
+      "target_surface": "Dynamic rotate amount only if hardware and lower-half proof exists.",
+      "vc4kernel_verifier_plan": "Reject dynamic amount until P11 proves range, type, and lowering legality.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to supported SSAVC4/hardware sequence; reject unsupported dynamic forms.",
+      "ssavc4_to_vc4_plan": "Use dynamic rotate support only if scheduled VC4 can encode or synthesize it safely.",
+      "hardware_or_reject_verification_plan": "Hardware proof for dynamic rotate or deterministic-reject lit tests.",
+      "upstream_use": "Dynamic shuffle and reduction patterns after pre-vector lock.",
+      "migration_or_removal": "Static rotate remains baseline until P11 proof.",
+      "dependencies": [
+        "p4_fragment_reduce_general"
+      ],
+      "acceptance_line": "Dynamic rotate is accepted only if hardware-proven; otherwise it remains rejected."
+    },
+    {
+      "id": "p11_fragment_broadcast_lane_if_supported",
+      "phase": "P11",
+      "category": "rotate_shuffle",
+      "current_status": "planned",
+      "final_status_target": "implemented_if_hardware_proven_or_rejected",
+      "current_surface": "Lane broadcast is currently expressed through existing VPM/read or reduction patterns where proven.",
+      "target_surface": "Dedicated lane broadcast only if supported by hardware-proven lowering.",
+      "vc4kernel_verifier_plan": "Reject unsupported broadcast sources and require lane index range proof.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to proven rotate/VPM/ALU sequence; reject otherwise.",
+      "ssavc4_to_vc4_plan": "Preserve branch/layout and VPM resource accounting for any sequence used.",
+      "hardware_or_reject_verification_plan": "Hardware proof for each admitted broadcast form or deterministic-reject tests.",
+      "upstream_use": "Vector shuffle patterns after pre-vector lock.",
+      "migration_or_removal": "New planned surface; do not add a producer tile broadcast op.",
+      "dependencies": [
+        "p11_fragment_rotate_dynamic_if_hardware"
+      ],
+      "acceptance_line": "Lane broadcast is accepted only when it is not a tile DSL feature and has hardware proof."
+    },
+    {
+      "id": "p12_dynamic_vpm_read_write_coordinates",
+      "phase": "P12",
+      "category": "dynamic_coordinates",
+      "current_status": "planned",
+      "final_status_target": "implemented_if_hardware_proven_or_rejected",
+      "current_surface": "VPM row can be dynamic in accepted cases; executable mode and coordinates remain constrained.",
+      "target_surface": "Dynamic VPM read/write coordinates only where range verification and hardware proof exist.",
+      "vc4kernel_verifier_plan": "Require range proof, allocation bounds, mode legality, and pitch/coordinate constraints.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to supported SSAVC4 dynamic coordinate forms; reject unproven forms.",
+      "ssavc4_to_vc4_plan": "Use lower-half setup encodings with explicit branch-count and hazard coverage.",
+      "hardware_or_reject_verification_plan": "Hardware proof for admitted dynamic coordinate cases; deterministic rejects for unproven cases.",
+      "upstream_use": "Dynamic shared-memory algorithms after pre-vector lock.",
+      "migration_or_removal": "Extends accepted dynamic-row baseline only with proof.",
+      "dependencies": [
+        "baseline_vpm_vdr_vdw_rect_paths",
+        "p6_memory_path_coherency_policy"
+      ],
+      "acceptance_line": "Dynamic VPM coordinates are accepted only with verifier range proof and hardware evidence."
+    },
+    {
+      "id": "p12_dynamic_vdr_vdw_coordinates",
+      "phase": "P12",
+      "category": "dynamic_coordinates",
+      "current_status": "planned",
+      "final_status_target": "implemented_if_hardware_proven_or_rejected",
+      "current_surface": "Dynamic rectangular VDR/VDW active rows, columns, pitch, stride, and selected source/destination rows are accepted baseline.",
+      "target_surface": "Additional dynamic VDR/VDW coordinates only where hardware encodings or explicit fallbacks are proven.",
+      "vc4kernel_verifier_plan": "Require range proof, alignment, static max shape, and mode legality for each dynamic coordinate.",
+      "vc4kernel_to_ssavc4_plan": "Lower only to supported dynamic rect or row-by-row planned emission paths.",
+      "ssavc4_to_vc4_plan": "Preserve planned-emission branch-count invariants and setup-word audits.",
+      "hardware_or_reject_verification_plan": "Hardware proof for admitted dynamic coordinates; deterministic reject for unproven shapes.",
+      "upstream_use": "Runtime-shaped transfers after pre-vector lock.",
+      "migration_or_removal": "Extends accepted dynamic rectangular baseline only with proof.",
+      "dependencies": [
+        "baseline_vpm_vdr_vdw_rect_paths",
+        "baseline_branch_spill_lower_half_canaries"
+      ],
+      "acceptance_line": "Dynamic VDR/VDW coordinates are accepted only with lower-half and hardware proof."
+    },
+    {
+      "id": "p13_surface_support_matrix_final",
+      "phase": "P13",
+      "category": "matrix",
+      "current_status": "planned",
+      "final_status_target": "final_matrix_locked",
+      "current_surface": "P0 matrix records baseline, planned, migration, and deterministic-reject status.",
+      "target_surface": "Final Surface v2 support matrix locks every feature status before vector/pre-Triton work.",
+      "vc4kernel_verifier_plan": "Every implemented or rejected feature has matching verifier coverage listed in the final matrix.",
+      "vc4kernel_to_ssavc4_plan": "Every implemented feature has conversion coverage or explicit no-conversion reject coverage.",
+      "ssavc4_to_vc4_plan": "Every lower-half-dependent feature has SSAVC4ToVC4 coverage or explicit reject coverage.",
+      "hardware_or_reject_verification_plan": "Every feature has hardware fixture proof or deterministic-reject proof recorded.",
+      "upstream_use": "Gate for later vector and Triton planning.",
+      "migration_or_removal": "Close all migration targets or keep them explicitly planned outside accepted final surface.",
+      "dependencies": [
+        "p1_general_fragment_add_alu",
+        "p8_sparse_vdw_store_deterministic_reject",
+        "p10_fastmath_approx_contract"
+      ],
+      "acceptance_line": "P13 is accepted only when the matrix has no ambiguous status and all required proof links are present."
+    },
+    {
+      "id": "deferred_sparse_vdw_store_general_masks",
+      "phase": "DEFERRED_SPARSE_VDW_STORE",
+      "category": "deferred",
+      "current_status": "deterministic_reject",
+      "final_status_target": "deterministic_reject_until_deferred_phase_replaces_it",
+      "current_surface": "Arbitrary sparse general-mask VDW stores are rejected for Surface v2.",
+      "target_surface": "Deferred phase may design sparse VDW stores only with hardware-proven semantics.",
+      "vc4kernel_verifier_plan": "Reject sparse VDW general masks with a deterministic diagnostic until the deferred phase lands.",
+      "vc4kernel_to_ssavc4_plan": "Do not lower sparse VDW stores before the deferred phase.",
+      "ssavc4_to_vc4_plan": "Do not add hidden sparse VDW read-modify-write sequences before the deferred phase.",
+      "hardware_or_reject_verification_plan": "Deterministic-reject tests are the required proof for Surface v2; later hardware proof must replace them if admitted.",
+      "upstream_use": "Arbitrary masked stores after a future hardware-proven design.",
+      "migration_or_removal": "Deferred; not part of accepted Surface v2 execution.",
+      "dependencies": [
+        "p8_sparse_vdw_store_deterministic_reject"
+      ],
+      "acceptance_line": "Sparse VDW general masks remain rejected until a later phase supplies full verifier, conversion, lower-half, and hardware proof."
+    }
+  ]
+}
