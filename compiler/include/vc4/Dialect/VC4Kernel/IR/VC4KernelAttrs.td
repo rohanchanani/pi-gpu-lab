@@ -130,6 +130,34 @@ def VC4Kernel_VPMSubword : VC4Kernel_DialectI32Enum<"VPMSubword",
       I32EnumAttrCase<"laned", 2>
     ]>;
 
+def VC4Kernel_MemoryPath : VC4Kernel_DialectI32Enum<"MemoryPath",
+    "VC4Kernel explicit memory path", [
+      I32EnumAttrCase<"vpm_qpu", 0>,
+      I32EnumAttrCase<"tmu_global_read", 1>,
+      I32EnumAttrCase<"vdr_global_to_vpm", 2>,
+      I32EnumAttrCase<"vdw_global_store", 3>,
+      I32EnumAttrCase<"compiler_spill_vdw_vdr", 4>
+    ]>;
+
+def VC4Kernel_Coherency : VC4Kernel_DialectI32Enum<"Coherency",
+    "VC4Kernel memory coherency domain", [
+      I32EnumAttrCase<"vpm_local", 0>,
+      I32EnumAttrCase<"readonly_tmu", 1>,
+      I32EnumAttrCase<"dma_ordered", 2>,
+      I32EnumAttrCase<"compiler_spill_coherent", 3>
+    ]>;
+
+def VC4Kernel_InactiveLoad : VC4Kernel_DialectI32Enum<"InactiveLoad",
+    "VC4Kernel inactive-load policy", [
+      I32EnumAttrCase<"zero", 0>
+    ]>;
+
+def VC4Kernel_InactiveStore : VC4Kernel_DialectI32Enum<"InactiveStore",
+    "VC4Kernel inactive-store policy", [
+      I32EnumAttrCase<"preserve", 0>,
+      I32EnumAttrCase<"deterministic_reject_sparse", 1>
+    ]>;
+
 def VC4Kernel_ScheduleModeAttr
     : VC4Kernel_EnumAttr<VC4Kernel_ScheduleMode, "schedule_mode">;
 def VC4Kernel_ReduceKindAttr
@@ -150,5 +178,13 @@ def VC4Kernel_VPMWidthAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMWidth, "vpm_width">;
 def VC4Kernel_VPMSubwordAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMSubword, "vpm_subword">;
+def VC4Kernel_MemoryPathAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_MemoryPath, "memory_path">;
+def VC4Kernel_CoherencyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_Coherency, "coherency">;
+def VC4Kernel_InactiveLoadAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_InactiveLoad, "inactive_load">;
+def VC4Kernel_InactiveStoreAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_InactiveStore, "inactive_store">;
 
 #endif // VC4KERNEL_ATTRS_TD

@@ -348,6 +348,45 @@ VDW:
 
 Compiler spill slots written by VDW must reload through the coherent VDR->VPM path, not TMU, unless a future architecture-backed invalidation/coherency mechanism is specified and proven.
 
+P6 exposes memory policy attrs on VC4Kernel memory ops as an explicit contract:
+
+```text
+#vc4kernel.memory_path<vpm_qpu>
+#vc4kernel.memory_path<tmu_global_read>
+#vc4kernel.memory_path<vdr_global_to_vpm>
+#vc4kernel.memory_path<vdw_global_store>
+
+#vc4kernel.coherency<readonly_tmu>
+#vc4kernel.coherency<vpm_local>
+#vc4kernel.coherency<dma_ordered>
+```
+
+The operation name and attrs must agree exactly whenever the attrs are present.
+During P6b/P6c the attrs are a migration bridge and existing memory ops may omit
+them. P6d makes them required on active VC4Kernel memory ops.
+
+The internal-only policy names:
+
+```text
+#vc4kernel.memory_path<compiler_spill_vdw_vdr>
+#vc4kernel.coherency<compiler_spill_coherent>
+```
+
+document the lower-half spill invariant only. They are forbidden on user
+VC4Kernel ops.
+
+P6 also defines inactive policy attrs for future phases:
+
+```text
+#vc4kernel.inactive_load<zero>
+#vc4kernel.inactive_store<preserve>
+#vc4kernel.inactive_store<deterministic_reject_sparse>
+```
+
+P6 does not add safe inactive TMU offsets or change old VDW inactive-store
+signatures. P7 owns explicit TMU safe inactive offsets. P8 owns explicit VDW
+inactive-store preserve policy and sparse-mask rejection hardening.
+
 ### Surface matrix requirement
 
 Every Surface v2 feature must have:
@@ -2254,21 +2293,26 @@ pred.any/pred.all -> correct scalar i1 via any/all hardware flag logic
 ```text
 tmu_load_fragment:
   TMU request/read with explicit safe inactive-address behavior and zero-fill after P7; current implicit behavior is a migration target.
+  P6 attrs: memory_path = tmu_global_read, coherency = readonly_tmu.
 
 vdw_store_fragment:
   compiler-managed hidden VPM staging; full/tail/rect preserve semantics are v1, while arbitrary sparse masks deterministic-reject until the deferred sparse VDW phase.
+  P6 attrs: memory_path = vdw_global_store, coherency = dma_ordered.
 
 vpm_alloc:
   allocation table/resource planning only; no runtime heap op.
 
 vpm_write_fragment / vpm_read_fragment:
   SSAVC4 VPM setup/read/write using hardware mode attrs and vpm_base_row-relative coordinates.
+  P6 attrs: memory_path = vpm_qpu, coherency = vpm_local.
 
 vdr_load_to_vpm:
   SSAVC4 VDR/VCD global-to-VPM setup/address/wait sequence using hardware mode attrs.
+  P6 attrs: memory_path = vdr_global_to_vpm, coherency = dma_ordered.
 
 vdw_store_vpm / vdw_store_vpm_fragment:
   SSAVC4 VDW setup/address/wait sequence using hardware mode attrs; preserve inactive destination where predicated.
+  P6 attrs: memory_path = vdw_global_store, coherency = dma_ordered.
 
 barrier:
   SSAVC4 barrier/semaphore sequence using semaphore_base, warp_id, and warps_per_block.

@@ -130,6 +130,10 @@ P3_POST_PHASE_ALLOWED_STATUSES = {
     "removed_in_p4",
 }
 
+P3_POST_PHASE_STAGED_STATUSES = {
+    "p6_memory_path_coherency_policy": {"implemented_pending_migration"},
+}
+
 P4_I32_REDUCE_KINDS = {
     "add",
     "min_s",
@@ -205,6 +209,10 @@ P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
     "migration_target",
     "deterministic_reject",
+}
+
+P5_POST_PHASE_STAGED_STATUSES = {
+    "p6_memory_path_coherency_policy": {"implemented_pending_migration"},
 }
 
 TEXT_SUFFIXES = {
@@ -408,10 +416,15 @@ def audit_matrix_ownership(matrix, mode):
                 continue
             p3_post_phase_planned_entries += 1
             status = feature.get("current_status")
-            if status not in P3_POST_PHASE_ALLOWED_STATUSES:
+            staged_statuses = P3_POST_PHASE_STAGED_STATUSES.get(
+                feature.get("id"), set()
+            )
+            if (status not in P3_POST_PHASE_ALLOWED_STATUSES and
+                    status not in staged_statuses):
                 fail(
                     f"P3 lock expected post-P3 feature {feature.get('id')} "
-                    f"to remain planned/migration_target/deterministic_reject"
+                    "to remain planned/migration_target/deterministic_reject "
+                    "or an explicitly staged current phase status"
                 )
     if mode == "p4-general-reduce-lock":
         p4_reduce = require_matrix_feature_status_in(
@@ -471,10 +484,15 @@ def audit_matrix_ownership(matrix, mode):
                 continue
             p5_post_phase_planned_entries += 1
             status = feature.get("current_status")
-            if status not in P5_POST_PHASE_ALLOWED_STATUSES:
+            staged_statuses = P5_POST_PHASE_STAGED_STATUSES.get(
+                feature.get("id"), set()
+            )
+            if (status not in P5_POST_PHASE_ALLOWED_STATUSES and
+                    status not in staged_statuses):
                 fail(
                     f"P5 lock expected post-P5 feature {feature.get('id')} "
-                    "to remain planned/migration_target/deterministic_reject"
+                    "to remain planned/migration_target/deterministic_reject "
+                    "or an explicitly staged current phase status"
                 )
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(

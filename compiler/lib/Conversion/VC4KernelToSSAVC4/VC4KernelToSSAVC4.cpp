@@ -116,6 +116,32 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
+static LogicalResult verifyOptionalMemoryPolicy(
+    Operation *op, mlir::vc4kernel::MemoryPath expectedPath,
+    mlir::vc4kernel::Coherency expectedCoherency) {
+  if (auto memoryPath =
+          op->getAttrOfType<mlir::vc4kernel::MemoryPathAttr>("memory_path")) {
+    if (memoryPath.getValue() ==
+        mlir::vc4kernel::MemoryPath::compiler_spill_vdw_vdr)
+      return op->emitOpError(
+          "compiler spill memory path is internal to the lower half");
+    if (memoryPath.getValue() != expectedPath)
+      return op->emitOpError("memory_path attr does not match operation");
+  }
+
+  if (auto coherency =
+          op->getAttrOfType<mlir::vc4kernel::CoherencyAttr>("coherency")) {
+    if (coherency.getValue() ==
+        mlir::vc4kernel::Coherency::compiler_spill_coherent)
+      return op->emitOpError(
+          "compiler spill memory path is internal to the lower half");
+    if (coherency.getValue() != expectedCoherency)
+      return op->emitOpError("coherency attr does not match operation");
+  }
+
+  return success();
+}
+
 static StringAttr asStringAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<StringAttr>(attr);
 }
@@ -3025,6 +3051,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kTMULoadOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::tmu_global_read,
+            mlir::vc4kernel::Coherency::readonly_tmu)))
+      return failure();
     const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(2),
                                                          state);
     if (!predicate)
@@ -3221,6 +3251,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return op->emitOpError("unsupported tmu_load_fragment predicate plan");
   }
   if (hasName(op, kVDWStoreOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vdw_global_store,
+            mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
     if (!offsets.matched)
       return op->emitOpError(
@@ -3338,6 +3372,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vpm_qpu,
+            mlir::vc4kernel::Coherency::vpm_local)))
+      return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     Value value = mapValue(op, op->getOperand(2), state);
     if (!row || !value)
@@ -3362,6 +3400,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vpm_qpu,
+            mlir::vc4kernel::Coherency::vpm_local)))
+      return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     if (!row)
       return failure();
@@ -3387,6 +3429,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDRLoadOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vdr_global_to_vpm,
+            mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
@@ -3417,6 +3463,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDRLoadRectOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vdr_global_to_vpm,
+            mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
@@ -3452,6 +3502,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vdw_global_store,
+            mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
     const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(4),
                                                          state);
     if (!predicate)
@@ -3522,6 +3576,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreRectOpName)) {
+    if (failed(verifyOptionalMemoryPolicy(
+            op, mlir::vc4kernel::MemoryPath::vdw_global_store,
+            mlir::vc4kernel::Coherency::dma_ordered)))
+      return failure();
     Value srcRow = mapValue(op, op->getOperand(1), state);
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);

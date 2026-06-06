@@ -555,6 +555,28 @@ static LogicalResult verifyPredicateForRowTailVDW(Operation *op, Value pred) {
       "predicate value must be produced by a known vc4kernel predicate op");
 }
 
+static LogicalResult verifyOptionalMemoryPolicy(Operation *op,
+                                                MemoryPath expectedPath,
+                                                Coherency expectedCoherency) {
+  if (auto memoryPath = op->getAttrOfType<MemoryPathAttr>("memory_path")) {
+    if (memoryPath.getValue() == MemoryPath::compiler_spill_vdw_vdr)
+      return op->emitOpError(
+          "compiler spill memory path is internal to the lower half");
+    if (memoryPath.getValue() != expectedPath)
+      return op->emitOpError("memory_path attr does not match operation");
+  }
+
+  if (auto coherency = op->getAttrOfType<CoherencyAttr>("coherency")) {
+    if (coherency.getValue() == Coherency::compiler_spill_coherent)
+      return op->emitOpError(
+          "compiler spill memory path is internal to the lower half");
+    if (coherency.getValue() != expectedCoherency)
+      return op->emitOpError("coherency attr does not match operation");
+  }
+
+  return success();
+}
+
 static std::optional<int64_t> getVPMAllocRows(Value tile) {
   Operation *def = tile.getDefiningOp();
   if (!hasName(def, "vc4kernel.vpm_alloc"))
@@ -1307,12 +1329,20 @@ LogicalResult FragmentReduceOp::verify() {
 }
 
 LogicalResult TMULoadFragmentOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::tmu_global_read,
+          Coherency::readonly_tmu)))
+    return failure();
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "tmu_load_fragment byte_offsets must be statically 4-byte aligned");
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDWStoreFragmentOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::vdw_global_store,
+          Coherency::dma_ordered)))
+    return failure();
   if (!isContiguousByteOffsets(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment requires contiguous 32-bit row fragment byte offsets");
@@ -1329,18 +1359,28 @@ LogicalResult VPMAllocOp::verify() {
   return success();
 }
 LogicalResult VPMWriteFragmentOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
+                                        Coherency::vpm_local)))
+    return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VPMReadFragmentOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
+                                        Coherency::vpm_local)))
+    return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDRLoadToVPMOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::vdr_global_to_vpm,
+          Coherency::dma_ordered)))
+    return failure();
   if (getOperation()->getNumOperands() != 4)
     return emitOpError("does not accept a predicate operand");
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
@@ -1359,6 +1399,10 @@ LogicalResult VDRLoadToVPMOp::verify() {
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
 }
 LogicalResult VDRLoadRectToVPMOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::vdr_global_to_vpm,
+          Coherency::dma_ordered)))
+    return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch")))
@@ -1370,6 +1414,10 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
                               getMaxRows());
 }
 LogicalResult VDWStoreVPMFragmentOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::vdw_global_store,
+          Coherency::dma_ordered)))
+    return failure();
   if (getElemBytes() != 4)
     return emitOpError("elem_bytes must be 4");
   if (!isKnownScalarByteOffsetAligned4(getByteOffset()))
@@ -1382,6 +1430,10 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }
 LogicalResult VDWStoreRectFromVPMOp::verify() {
+  if (failed(verifyOptionalMemoryPolicy(
+          getOperation(), MemoryPath::vdw_global_store,
+          Coherency::dma_ordered)))
+    return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch")))
