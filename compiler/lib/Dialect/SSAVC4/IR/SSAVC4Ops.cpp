@@ -84,8 +84,8 @@ static LogicalResult verifyVector16(Operation *op, Type type, StringRef role) {
                            << type;
 }
 
-static bool isVector16I32ToF32Reinterpret(Type inputType, Type resultType) {
-  return isSSAVC4Vector16(inputType) && isSSAVC4Vector16(resultType) &&
+static bool isI32ToF32Reinterpret(Type inputType, Type resultType) {
+  return haveSameSSAVC4Shape(inputType, resultType) &&
          ((isSSAVC4IntCarrier(inputType) &&
            isSSAVC4FloatCarrier(resultType)) ||
           (isSSAVC4FloatCarrier(inputType) &&
@@ -414,10 +414,10 @@ LogicalResult MovOp::verify() {
       failed(verifyValueType(op, resultType, "result")))
     return failure();
   if (inputType != resultType)
-    if (!isVector16I32ToF32Reinterpret(inputType, resultType))
+    if (!isI32ToF32Reinterpret(inputType, resultType))
       return emitOpError()
-             << "input and result types must match or be vector<16xi32>/"
-                "vector<16xf32> bit reinterpretation carriers; got "
+             << "input and result types must match or be scalar/vector i32/f32 "
+                "bit reinterpretation carriers with the same shape; got "
              << inputType << " and " << resultType;
   return success();
 }

@@ -330,8 +330,13 @@ static LogicalResult verifyIntegerArithI32(Operation *op) {
   for (Type type : op->getResultTypes())
     if (!isScalarI32(type))
       return op->emitOpError(
-          "integer arith operations in vc4kernel require scalar i32 operands and results");
+        "integer arith operations in vc4kernel require scalar i32 operands and results");
   return success();
+}
+
+static bool isScalarI32F32Bitcast(Type inputType, Type resultType) {
+  return (isScalarI32(inputType) && isScalarF32(resultType)) ||
+         (isScalarF32(inputType) && isScalarI32(resultType));
 }
 
 static LogicalResult verifyNoVPMSuccessorOperands(Operation *op,
@@ -373,8 +378,47 @@ static LogicalResult verifyArithBoundary(Operation *op) {
     if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
         isScalarI32(op->getOperand(0).getType()))
       return verifyIntegerArithI32(op);
+    if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
+        isScalarI1(op->getOperand(0).getType()) &&
+        isScalarI1(op->getOperand(1).getType()) &&
+        isScalarI1(op->getResult(0).getType()))
+      return success();
     return op->emitOpError(
-        "bitwise arith operations in vc4kernel require scalar i32 operands and results");
+        "bitwise arith operations in vc4kernel require scalar i32 operands and results or scalar i1 operands and result");
+  }
+  if (name == "arith.bitcast") {
+    if (op->getNumOperands() == 1 && op->getNumResults() == 1 &&
+        isScalarI32F32Bitcast(op->getOperand(0).getType(),
+                              op->getResult(0).getType()))
+      return success();
+    return op->emitOpError(
+        "arith.bitcast requires scalar i32/f32 reinterpretation in vc4kernel");
+  }
+  if (name == "arith.extui") {
+    if (op->getNumOperands() == 1 && op->getNumResults() == 1 &&
+        isScalarI1(op->getOperand(0).getType()) &&
+        isScalarI32(op->getResult(0).getType()))
+      return success();
+    return op->emitOpError(
+        "arith.extui in vc4kernel supports only i1 to i32 in P5");
+  }
+  if (name == "arith.trunci") {
+    if (op->getNumOperands() == 1 && op->getNumResults() == 1 &&
+        isScalarI32(op->getOperand(0).getType()) &&
+        isScalarI1(op->getResult(0).getType()))
+      return success();
+    return op->emitOpError(
+        "arith.trunci in vc4kernel supports only i32 to i1 low-bit trunc in P5");
+  }
+  if (name == "arith.sitofp")
+    return op->emitOpError(
+        "arith.sitofp requires exact scalar numeric cast support not available in P5");
+  if (name == "arith.fptosi")
+    return op->emitOpError(
+        "arith.fptosi requires exact scalar numeric cast support not available in P5");
+  if (hasAnyName(op, {"arith.uitofp", "arith.fptoui"})) {
+    return op->emitOpError(
+        "scalar numeric casts require exact scalar numeric cast support not available in P5");
   }
   if (name == "arith.cmpi") {
     if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
@@ -2501,6 +2545,33 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                       "arith.andi", "arith.ori", "arith.xori",
                       "arith.minsi", "arith.maxsi", "arith.minui",
                       "arith.maxui"})) {
+    if (op->getResult(0).getType().isInteger(1)) {
+      auto lhsIt = state.conditions.find(op->getOperand(0));
+      auto rhsIt = state.conditions.find(op->getOperand(1));
+      if (lhsIt == state.conditions.end() || rhsIt == state.conditions.end())
+        return op->emitOpError("i1 bitwise operands require condition plans");
+      FailureOr<Value> lhs =
+          materializeConditionAsI32(op, builder, lhsIt->second, state);
+      FailureOr<Value> rhs =
+          materializeConditionAsI32(op, builder, rhsIt->second, state);
+      if (failed(lhs) || failed(rhs))
+        return failure();
+      mlir::vc4::AddOpcode opcode = mlir::vc4::AddOpcode::bit_and;
+      if (hasName(op, "arith.ori"))
+        opcode = mlir::vc4::AddOpcode::bit_or;
+      if (hasName(op, "arith.xori"))
+        opcode = mlir::vc4::AddOpcode::bit_xor;
+      Value materialized =
+          createI32BinaryAddPipe(builder, op->getLoc(), *lhs, *rhs, opcode);
+      Value zero = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                                 builder.getI32IntegerAttr(0));
+      state.values[op->getResult(0)] = {materialized};
+      state.conditions[op->getResult(0)] = ConditionPlan::scalarI32Compare(
+          materialized, zero,
+          arith::CmpIPredicateAttr::get(builder.getContext(),
+                                        arith::CmpIPredicate::ne));
+      return success();
+    }
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
       Value mapped = mapValue(op, operand, state);
@@ -2549,6 +2620,43 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
                                             builder.getContext(), opcode))},
         op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, "arith.bitcast")) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4MovOpName, input, {},
+        op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, "arith.extui")) {
+    auto conditionIt = state.conditions.find(op->getOperand(0));
+    if (conditionIt == state.conditions.end())
+      return op->emitOpError("arith.extui i1 operand requires condition plan");
+    FailureOr<Value> materialized =
+        materializeConditionAsI32(op, builder, conditionIt->second, state);
+    if (failed(materialized))
+      return failure();
+    state.values[op->getResult(0)] = {*materialized};
+    return success();
+  }
+  if (hasName(op, "arith.trunci")) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    Value one = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                              builder.getI32IntegerAttr(1));
+    Value lowBit = createI32BinaryAddPipe(builder, op->getLoc(), input, one,
+                                          mlir::vc4::AddOpcode::bit_and);
+    Value zero = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                               builder.getI32IntegerAttr(0));
+    state.values[op->getResult(0)] = {lowBit};
+    state.conditions[op->getResult(0)] = ConditionPlan::scalarI32Compare(
+        lowBit, zero,
+        arith::CmpIPredicateAttr::get(builder.getContext(),
+                                      arith::CmpIPredicate::ne));
     return success();
   }
   if (auto cmp = dyn_cast<arith::CmpIOp>(op)) {

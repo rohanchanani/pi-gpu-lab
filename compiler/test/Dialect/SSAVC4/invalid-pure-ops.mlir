@@ -25,7 +25,7 @@ module {
 module {
   %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
   // expected-error@+1 {{input and result types must match}}
-  %bad = ssavc4.mov %x : i32 -> f32
+  %bad = ssavc4.mov %x : i32 -> vector<16xi32>
 }
 
 // ----

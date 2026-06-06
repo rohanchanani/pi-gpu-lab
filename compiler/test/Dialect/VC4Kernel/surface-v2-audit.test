@@ -14,7 +14,7 @@
 # P1-SAME: forbidden_tile_dsl_hits=0
 # P1-SAME: retired_tile_hits=0
 # P1: fixture_purity:
-# P1-SAME: hardware_inputs=86
+# P1-SAME: hardware_inputs=87
 # P1-SAME: producer_or_lower_half_hits=0
 # P1: p1_general_alu_lock:
 # P1-SAME: removed_legacy_hits=0
@@ -26,7 +26,7 @@
 # P2-SAME: removed_special_case_ops=4
 # P2-SAME: special_case_removed_in_p1=4
 # P2: fixture_purity:
-# P2-SAME: hardware_inputs=86
+# P2-SAME: hardware_inputs=87
 # P2-SAME: producer_or_lower_half_hits=0
 # P2: p1_general_alu_lock:
 # P2-SAME: removed_legacy_hits=0
@@ -44,7 +44,7 @@
 # P3-SAME: p3_post_phase_planned_entries=22
 # P3-SAME: special_case_removed_in_p1=4
 # P3: fixture_purity:
-# P3-SAME: hardware_inputs=86
+# P3-SAME: hardware_inputs=87
 # P3-SAME: producer_or_lower_half_hits=0
 # P3: p1_general_alu_lock:
 # P3-SAME: removed_legacy_hits=0
@@ -64,7 +64,7 @@
 # P4-SAME: removed_special_case_ops=4
 # P4-SAME: special_case_removed_in_p1=4
 # P4: fixture_purity:
-# P4-SAME: hardware_inputs=86
+# P4-SAME: hardware_inputs=87
 # P4-SAME: producer_or_lower_half_hits=0
 # P4: p1_general_alu_lock:
 # P4-SAME: removed_legacy_hits=0

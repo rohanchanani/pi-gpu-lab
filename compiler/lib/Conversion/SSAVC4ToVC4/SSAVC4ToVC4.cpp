@@ -2351,13 +2351,16 @@ static LogicalResult selectInstructionTemplates(
         Type inputType = op.getOperand(0).getType();
         Type resultType = op.getResult(0).getType();
         bool sameType = inputType == resultType;
-        bool reinterpretVector =
+        bool scalarReinterpret =
+            (inputType.isSignlessInteger(32) && resultType.isF32()) ||
+            (inputType.isF32() && resultType.isSignlessInteger(32));
+        bool vectorReinterpret =
             (isVector16I32Type(inputType) && isVector16F32Type(resultType)) ||
             (isVector16F32Type(inputType) && isVector16I32Type(resultType));
-        if (!sameType && !reinterpretVector) {
+        if (!sameType && !scalarReinterpret && !vectorReinterpret) {
           return op.emitOpError(
-              "requires identical types or vector<16xi32>/vector<16xf32> bit "
-              "reinterpretation carriers for M3 lowering");
+              "requires identical types or scalar/vector i32/f32 bit "
+              "reinterpretation carriers with the same shape for M3 lowering");
         }
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});

@@ -559,6 +559,9 @@ arith.minui
 arith.maxui
 arith.cmpi
 arith.select
+arith.bitcast
+arith.extui
+arith.trunci
 ```
 
 Restrictions:
@@ -567,17 +570,22 @@ Restrictions:
 - arith operations may not have vector result types.
 - arith operations may not have vector operands.
 - arith.constant may produce only scalar i1/i32/f32.
-- arith.addi/subi/muli/shli/shrui/shrsi/andi/ori/xori/minsi/maxsi/minui/maxui may operate only on scalar i32 in P5b.
+- arith.addi/subi/muli/shli/shrui/shrsi/minsi/maxsi/minui/maxui may operate only on scalar i32 in P5.
+- arith.andi/ori/xori may operate on scalar i32 or scalar i1. The i1 form composes condition-plan values by materializing explicit 0/1 values as needed; it must not reuse stale hardware flags.
 - arith.muli is exact modulo 2^32 and lowers through a tested 16x16 partial-product expansion using mul24 only for bounded partial operands.
 - arith.minui/maxui use explicit unsigned semantics; when the lower half exposes signed min/max, lowering must use sign-bias and unbias.
 - arith.cmpi may compare only scalar i32 values and produce scalar i1. All standard i32 predicates eq/ne/slt/sle/sgt/sge/ult/ule/ugt/uge are admitted in P5b.
 - arith.select condition must be scalar i1 and selected values must be scalar i1/i32/f32.
+- arith.bitcast may reinterpret scalar i32 <-> f32 only. It is bit-preserving and lowers through ssavc4.mov or an equivalent coalescable move, never through itof/ftoi numeric conversion.
+- arith.extui may materialize scalar i1 -> i32 only, producing exact 0 or 1.
+- arith.trunci may lower scalar i32 -> i1 only, with low-bit truncation semantics implemented as `(value & 1) != 0`.
 - integer division and remainder deterministically reject in P5.
 - scalar f32 arithmetic deterministically rejects in P5.
+- arith.sitofp, arith.fptosi, arith.uitofp, and arith.fptoui deterministically reject in P5 because full exact standard dynamic numeric-cast semantics are not hardware-proven.
 - vector arith, unsupported integer widths, index values, and unproven numeric casts deterministically reject in P5.
 ```
 
-Scalar `i1` lowers through condition plans. It is not assumed to be a persistent hardware flag value.
+Scalar `i1` lowers through condition plans. It is not assumed to be a persistent hardware flag value. Any lowering that needs an i1 as data must explicitly materialize 0/1 and rematerialize fresh flags at each condition use.
 
 ### 5.3 Allowed `cf` operations
 
