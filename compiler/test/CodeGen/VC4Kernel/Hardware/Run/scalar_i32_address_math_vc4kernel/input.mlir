@@ -29,7 +29,7 @@ module {
     %tag = arith.xori %selector, %c85 : i32
     %value_scalar = arith.addi %addr_elems, %tag : i32
     %value = vc4kernel.splat %value_scalar : i32 -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -26,7 +26,7 @@ module {
     %tail_n = vc4kernel.pred.tail %c0, %n : i32, i32 -> !vc4kernel.pred<16>
     %tail_cap = vc4kernel.pred.tail %c0, %cap : i32, i32 -> !vc4kernel.pred<16>
     %mask = vc4kernel.pred.and %tail_n, %tail_cap : !vc4kernel.pred<16>, !vc4kernel.pred<16> -> !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %mask : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %mask {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

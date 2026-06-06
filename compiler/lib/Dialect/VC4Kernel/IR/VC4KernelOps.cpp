@@ -555,24 +555,26 @@ static LogicalResult verifyPredicateForRowTailVDW(Operation *op, Value pred) {
       "predicate value must be produced by a known vc4kernel predicate op");
 }
 
-static LogicalResult verifyOptionalMemoryPolicy(Operation *op,
+static LogicalResult verifyRequiredMemoryPolicy(Operation *op,
                                                 MemoryPath expectedPath,
                                                 Coherency expectedCoherency) {
-  if (auto memoryPath = op->getAttrOfType<MemoryPathAttr>("memory_path")) {
-    if (memoryPath.getValue() == MemoryPath::compiler_spill_vdw_vdr)
-      return op->emitOpError(
-          "compiler spill memory path is internal to the lower half");
-    if (memoryPath.getValue() != expectedPath)
-      return op->emitOpError("memory_path attr does not match operation");
-  }
+  auto memoryPath = op->getAttrOfType<MemoryPathAttr>("memory_path");
+  auto coherency = op->getAttrOfType<CoherencyAttr>("coherency");
+  if (!memoryPath || !coherency)
+    return op->emitOpError(
+        "requires explicit memory_path and coherency attrs in Surface v2");
 
-  if (auto coherency = op->getAttrOfType<CoherencyAttr>("coherency")) {
-    if (coherency.getValue() == Coherency::compiler_spill_coherent)
-      return op->emitOpError(
-          "compiler spill memory path is internal to the lower half");
-    if (coherency.getValue() != expectedCoherency)
-      return op->emitOpError("coherency attr does not match operation");
-  }
+  if (memoryPath.getValue() == MemoryPath::compiler_spill_vdw_vdr)
+    return op->emitOpError(
+        "compiler spill memory path is internal to the lower half");
+  if (memoryPath.getValue() != expectedPath)
+    return op->emitOpError("memory_path attr does not match operation");
+
+  if (coherency.getValue() == Coherency::compiler_spill_coherent)
+    return op->emitOpError(
+        "compiler spill memory path is internal to the lower half");
+  if (coherency.getValue() != expectedCoherency)
+    return op->emitOpError("coherency attr does not match operation");
 
   return success();
 }
@@ -1329,7 +1331,7 @@ LogicalResult FragmentReduceOp::verify() {
 }
 
 LogicalResult TMULoadFragmentOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::tmu_global_read,
           Coherency::readonly_tmu)))
     return failure();
@@ -1339,7 +1341,7 @@ LogicalResult TMULoadFragmentOp::verify() {
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDWStoreFragmentOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
     return failure();
@@ -1359,7 +1361,7 @@ LogicalResult VPMAllocOp::verify() {
   return success();
 }
 LogicalResult VPMWriteFragmentOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
+  if (failed(verifyRequiredMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
                                         Coherency::vpm_local)))
     return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
@@ -1368,7 +1370,7 @@ LogicalResult VPMWriteFragmentOp::verify() {
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VPMReadFragmentOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
+  if (failed(verifyRequiredMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
                                         Coherency::vpm_local)))
     return failure();
   if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
@@ -1377,7 +1379,7 @@ LogicalResult VPMReadFragmentOp::verify() {
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDRLoadToVPMOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdr_global_to_vpm,
           Coherency::dma_ordered)))
     return failure();
@@ -1399,7 +1401,7 @@ LogicalResult VDRLoadToVPMOp::verify() {
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
 }
 LogicalResult VDRLoadRectToVPMOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdr_global_to_vpm,
           Coherency::dma_ordered)))
     return failure();
@@ -1414,7 +1416,7 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
                               getMaxRows());
 }
 LogicalResult VDWStoreVPMFragmentOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
     return failure();
@@ -1430,7 +1432,7 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }
 LogicalResult VDWStoreRectFromVPMOp::verify() {
-  if (failed(verifyOptionalMemoryPolicy(
+  if (failed(verifyRequiredMemoryPolicy(
           getOperation(), MemoryPath::vdw_global_store,
           Coherency::dma_ordered)))
     return failure();

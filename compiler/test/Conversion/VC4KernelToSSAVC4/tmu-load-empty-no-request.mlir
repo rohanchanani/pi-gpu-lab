@@ -16,7 +16,7 @@ module {
     %empty = vc4kernel.pred.empty : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
-    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %empty : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %v = vc4kernel.tmu_load_fragment %ptr, %offs, %empty {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
 }

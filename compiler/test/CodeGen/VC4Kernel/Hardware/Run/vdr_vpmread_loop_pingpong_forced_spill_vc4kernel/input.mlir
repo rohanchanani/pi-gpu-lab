@@ -59,11 +59,11 @@ module {
 
   ^step(%k_step : i32, %row_step : i32, %acc_step : vector<16xi32>):
     %byte_offset = arith.shli %k_step, %c7 : i32
-    vc4kernel.vdr_load_rect_to_vpm %in, %byte_offset, %tile, %row_step, %c2, %c16, %pitch {max_rows = 2 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
+    vc4kernel.vdr_load_rect_to_vpm %in, %byte_offset, %tile, %row_step, %c2, %c16, %pitch {max_rows = 2 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
     %row_tail = arith.addi %row_step, %c1 : i32
     %tail = vc4kernel.pred.tail %c0, %active_cols : i32, i32 -> !vc4kernel.pred<16>
-    %r0 = vc4kernel.vpm_read_fragment %tile, %row_step, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
-    %r1 = vc4kernel.vpm_read_fragment %tile, %row_tail, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
+    %r0 = vc4kernel.vpm_read_fragment %tile, %row_step, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
+    %r1 = vc4kernel.vpm_read_fragment %tile, %row_tail, %tail {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
     %sum0 = vc4kernel.fragment_alu.add %acc_step, %r0 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %sum1 = vc4kernel.fragment_alu.add %sum0, %r1 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %k_next = arith.addi %k_step, %c1 : i32
@@ -99,7 +99,7 @@ module {
     %a26 = vc4kernel.fragment_alu.add %a25, %v26 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %a27 = vc4kernel.fragment_alu.add %a26, %v27 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %final = vc4kernel.fragment_alu.add %a27, %v28 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %lane_bytes, %final, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %lane_bytes, %final, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

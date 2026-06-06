@@ -116,28 +116,30 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
-static LogicalResult verifyOptionalMemoryPolicy(
+static LogicalResult verifyRequiredMemoryPolicy(
     Operation *op, mlir::vc4kernel::MemoryPath expectedPath,
     mlir::vc4kernel::Coherency expectedCoherency) {
-  if (auto memoryPath =
-          op->getAttrOfType<mlir::vc4kernel::MemoryPathAttr>("memory_path")) {
-    if (memoryPath.getValue() ==
-        mlir::vc4kernel::MemoryPath::compiler_spill_vdw_vdr)
-      return op->emitOpError(
-          "compiler spill memory path is internal to the lower half");
-    if (memoryPath.getValue() != expectedPath)
-      return op->emitOpError("memory_path attr does not match operation");
-  }
+  auto memoryPath =
+      op->getAttrOfType<mlir::vc4kernel::MemoryPathAttr>("memory_path");
+  auto coherency =
+      op->getAttrOfType<mlir::vc4kernel::CoherencyAttr>("coherency");
+  if (!memoryPath || !coherency)
+    return op->emitOpError(
+        "requires explicit memory_path and coherency attrs in Surface v2");
 
-  if (auto coherency =
-          op->getAttrOfType<mlir::vc4kernel::CoherencyAttr>("coherency")) {
-    if (coherency.getValue() ==
-        mlir::vc4kernel::Coherency::compiler_spill_coherent)
-      return op->emitOpError(
-          "compiler spill memory path is internal to the lower half");
-    if (coherency.getValue() != expectedCoherency)
-      return op->emitOpError("coherency attr does not match operation");
-  }
+  if (memoryPath.getValue() ==
+      mlir::vc4kernel::MemoryPath::compiler_spill_vdw_vdr)
+    return op->emitOpError(
+        "compiler spill memory path is internal to the lower half");
+  if (memoryPath.getValue() != expectedPath)
+    return op->emitOpError("memory_path attr does not match operation");
+
+  if (coherency.getValue() ==
+      mlir::vc4kernel::Coherency::compiler_spill_coherent)
+    return op->emitOpError(
+        "compiler spill memory path is internal to the lower half");
+  if (coherency.getValue() != expectedCoherency)
+    return op->emitOpError("coherency attr does not match operation");
 
   return success();
 }
@@ -3051,7 +3053,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kTMULoadOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::tmu_global_read,
             mlir::vc4kernel::Coherency::readonly_tmu)))
       return failure();
@@ -3251,7 +3253,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return op->emitOpError("unsupported tmu_load_fragment predicate plan");
   }
   if (hasName(op, kVDWStoreOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
@@ -3372,7 +3374,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vpm_qpu,
             mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
@@ -3400,7 +3402,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vpm_qpu,
             mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
@@ -3429,7 +3431,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDRLoadOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdr_global_to_vpm,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
@@ -3463,7 +3465,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDRLoadRectOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdr_global_to_vpm,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
@@ -3502,7 +3504,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();
@@ -3576,7 +3578,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kVDWStoreRectOpName)) {
-    if (failed(verifyOptionalMemoryPolicy(
+    if (failed(verifyRequiredMemoryPolicy(
             op, mlir::vc4kernel::MemoryPath::vdw_global_store,
             mlir::vc4kernel::Coherency::dma_ordered)))
       return failure();

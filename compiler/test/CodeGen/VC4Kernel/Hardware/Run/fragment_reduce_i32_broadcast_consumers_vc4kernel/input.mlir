@@ -11,7 +11,7 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %values = vc4kernel.tmu_load_fragment %input, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %values = vc4kernel.tmu_load_fragment %input, %lane_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %k0 = vc4kernel.fragment_const {value = dense<0> : vector<16xi32>} : vector<16xi32>
     %k2 = vc4kernel.fragment_const {value = dense<2> : vector<16xi32>} : vector<16xi32>
     %k6 = vc4kernel.fragment_const {value = dense<6> : vector<16xi32>} : vector<16xi32>
@@ -27,28 +27,28 @@ module {
     %low8 = vc4kernel.fragment_cmp %lanes, %k8 {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
 
     %add = vc4kernel.fragment_reduce %values, %sparse {kind = #vc4kernel.reduce<add>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %lane_bytes, %add, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %lane_bytes, %add, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %base1 = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
     %off1 = vc4kernel.fragment_alu.add %base1, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %min_s = vc4kernel.fragment_reduce %values, %full {kind = #vc4kernel.reduce<min_s>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %off1, %min_s, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %off1, %min_s, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %base2 = vc4kernel.fragment_const {value = dense<128> : vector<16xi32>} : vector<16xi32>
     %off2 = vc4kernel.fragment_alu.add %base2, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %max_u = vc4kernel.fragment_reduce %values, %sparse {kind = #vc4kernel.reduce<max_u>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %off2, %max_u, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %off2, %max_u, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %base3 = vc4kernel.fragment_const {value = dense<192> : vector<16xi32>} : vector<16xi32>
     %off3 = vc4kernel.fragment_alu.add %base3, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %xor = vc4kernel.fragment_reduce %values, %full {kind = #vc4kernel.reduce<bit_xor>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %off3, %xor, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %off3, %xor, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
 
     %base4 = vc4kernel.fragment_const {value = dense<256> : vector<16xi32>} : vector<16xi32>
     %off4 = vc4kernel.fragment_alu.add %base4, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %add_consumer = vc4kernel.fragment_alu.add %add, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %off4, %add_consumer, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %off4, %add_consumer, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %base5 = vc4kernel.fragment_const {value = dense<320> : vector<16xi32>} : vector<16xi32>
     %off5 = vc4kernel.fragment_alu.add %base5, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %select_consumer = vc4kernel.fragment_select %low8, %min_s, %max_u : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %off5, %select_consumer, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %off5, %select_consumer, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

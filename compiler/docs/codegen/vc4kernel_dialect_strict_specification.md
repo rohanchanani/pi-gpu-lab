@@ -1511,6 +1511,8 @@ Do not add producer-facing names such as `masked_load_global`, `masked_store_glo
 
 ```mlir
 %value = vc4kernel.tmu_load_fragment %base, %byte_offsets, %pred
+  {memory_path = #vc4kernel.memory_path<tmu_global_read>,
+   coherency = #vc4kernel.coherency<readonly_tmu>}
   : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xT>
 ```
 
@@ -1544,6 +1546,8 @@ Rules:
 
 ```mlir
 vc4kernel.vdw_store_fragment %base, %byte_offsets, %value, %pred
+  {memory_path = #vc4kernel.memory_path<vdw_global_store>,
+   coherency = #vc4kernel.coherency<dma_ordered>}
   : i32, vector<16xi32>, vector<16xT>, !vc4kernel.pred<16>
 ```
 
@@ -1602,7 +1606,9 @@ Rules:
 vc4kernel.vpm_write_fragment %tile, %y, %x, %value, %pred
   {orientation = #vc4kernel.vpm_orientation<horizontal>,
    width = #vc4kernel.vpm_width<w32>,
-   subword_mode = #vc4kernel.vpm_subword<none>}
+   subword_mode = #vc4kernel.vpm_subword<none>,
+   memory_path = #vc4kernel.memory_path<vpm_qpu>,
+   coherency = #vc4kernel.coherency<vpm_local>}
   : !vc4kernel.vpm_tile, i32, i32, vector<16xT>, !vc4kernel.pred<16>
 ```
 
@@ -1637,7 +1643,9 @@ Rules:
 %value = vc4kernel.vpm_read_fragment %tile, %y, %x, %pred
   {orientation = #vc4kernel.vpm_orientation<horizontal>,
    width = #vc4kernel.vpm_width<w32>,
-   subword_mode = #vc4kernel.vpm_subword<none>}
+   subword_mode = #vc4kernel.vpm_subword<none>,
+   memory_path = #vc4kernel.memory_path<vpm_qpu>,
+   coherency = #vc4kernel.coherency<vpm_local>}
   : !vc4kernel.vpm_tile, i32, i32, !vc4kernel.pred<16> -> vector<16xT>
 ```
 
@@ -1668,7 +1676,9 @@ vc4kernel.vdr_load_to_vpm %base, %byte_offset, %tile, %dst_y, %dst_x
    vpm_pitch = 16 : i32,
    orientation = #vc4kernel.vpm_orientation<horizontal>,
    width = #vc4kernel.vpm_width<w32>,
-   subword_mode = #vc4kernel.vpm_subword<none>}
+   subword_mode = #vc4kernel.vpm_subword<none>,
+   memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>,
+   coherency = #vc4kernel.coherency<dma_ordered>}
   : i32, i32, !vc4kernel.vpm_tile, i32, i32
 ```
 
@@ -1703,7 +1713,9 @@ vc4kernel.vdw_store_vpm %tile, %src_y, %src_x, %base, %byte_offset
    block_mode = false,
    orientation = #vc4kernel.vpm_orientation<horizontal>,
    width = #vc4kernel.vpm_width<w32>,
-   subword_mode = #vc4kernel.vpm_subword<none>}
+   subword_mode = #vc4kernel.vpm_subword<none>,
+   memory_path = #vc4kernel.memory_path<vdw_global_store>,
+   coherency = #vc4kernel.coherency<dma_ordered>}
   : !vc4kernel.vpm_tile, i32, i32, i32, i32
 ```
 
@@ -1731,7 +1743,9 @@ Rules:
 vc4kernel.vdw_store_vpm_fragment %tile, %src_y, %src_x, %base, %byte_offset, %pred
   {orientation = #vc4kernel.vpm_orientation<horizontal>,
    width = #vc4kernel.vpm_width<w32>,
-   subword_mode = #vc4kernel.vpm_subword<none>}
+   subword_mode = #vc4kernel.vpm_subword<none>,
+   memory_path = #vc4kernel.memory_path<vdw_global_store>,
+   coherency = #vc4kernel.coherency<dma_ordered>}
   : !vc4kernel.vpm_tile, i32, i32, i32, i32, !vc4kernel.pred<16>
 ```
 
@@ -1796,7 +1810,9 @@ vc4kernel.vdr_load_rect_to_vpm
     width = #vc4kernel.vpm_width<w32>,
     subword = #vc4kernel.vpm_subword<none>,
     dst_x = 0 : i32,
-    vpm_pitch = 1 : i32
+    vpm_pitch = 1 : i32,
+    memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>,
+    coherency = #vc4kernel.coherency<dma_ordered>
   }
   : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
 ```
@@ -1825,7 +1841,9 @@ vc4kernel.vdw_store_rect_from_vpm
     width = #vc4kernel.vpm_width<w32>,
     subword = #vc4kernel.vpm_subword<none>,
     src_x = 0 : i32,
-    vpm_pitch = 1 : i32
+    vpm_pitch = 1 : i32,
+    memory_path = #vc4kernel.memory_path<vdw_global_store>,
+    coherency = #vc4kernel.coherency<dma_ordered>
   }
   : !vc4kernel.vpm_tile, i32, i32, i32, i32, i32, i32
 ```

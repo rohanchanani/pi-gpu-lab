@@ -384,21 +384,21 @@
       "id": "p6_memory_path_coherency_policy",
       "phase": "P6",
       "category": "memory",
-      "current_status": "hardware_proven_pending_full_migration",
+      "current_status": "hardware_proven_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
-      "current_surface": "TMU, VDR, VPM, and VDW paths exist with accepted dynamic rectangular and spill baselines. P6b defines memory_path, coherency, inactive_load, and inactive_store attrs; P6c adds targeted explicit-attr hardware canaries for TMU->VDW, VDR->VPM->VDW, and VPM QPU local roundtrip. memory_path/coherency remain optional migration attrs until P6d.",
-      "target_surface": "Explicit memory path and coherency policy, including VDW-written spill reload through VDR->VPM. P7 owns explicit TMU inactive-load safe offsets. P8 owns explicit VDW inactive-store preserve policy and sparse-mask rejection hardening.",
-      "vc4kernel_verifier_plan": "During P6b/P6c, verify optional memory_path/coherency attrs when present and reject mismatched or internal compiler-spill attrs on user ops. By P6d, require explicit memory_path/coherency attrs on active memory ops.",
-      "vc4kernel_to_ssavc4_plan": "Validate optional memory_path/coherency attrs when present, then lower through the existing SSAVC4 TMU, VPM, VDR, and VDW paths without semantic changes.",
+      "current_surface": "TMU, VDR, VPM, and VDW paths exist with accepted dynamic rectangular and spill baselines. P6b defines memory_path, coherency, inactive_load, and inactive_store attrs. P6c hardware-proves explicit-attr canaries for TMU->VDW, VDR->VPM->VDW, and VPM QPU local roundtrip. P6d requires explicit memory_path/coherency attrs on active VC4Kernel memory ops.",
+      "target_surface": "Explicit memory path and coherency policy, including VDW-written spill reload through VDR->VPM. P7 owns explicit TMU inactive_load safe offsets. P8 owns explicit VDW inactive_store preserve policy and sparse-mask rejection hardening.",
+      "vc4kernel_verifier_plan": "Require explicit memory_path/coherency attrs on active memory ops, reject mismatched op-family attrs, and reject compiler_spill_vdw_vdr or compiler_spill_coherent on user VC4Kernel ops. inactive_load and inactive_store attrs are defined and documented but remain P7/P8 migration targets, not P6 signature changes.",
+      "vc4kernel_to_ssavc4_plan": "Validate required memory_path/coherency attrs, then lower through the existing SSAVC4 TMU, VPM, VDR, and VDW paths without semantic changes. P6 does not add safe_offset TMU operands or VDW inactive_store policy operands.",
       "ssavc4_to_vc4_plan": "Preserve planned DMA emission, branch-count accounting, and coherent spill reload path.",
-      "hardware_or_reject_verification_plan": "P6c targeted canaries prove explicit user-visible TMU, VPM QPU, VDR, and VDW paths while the p6-memory-policy-targeted audit rejects TMU/ldtmu0 hidden spill reloads. P6d completes full fixture migration; P6e runs the full cross-phase regression.",
+      "hardware_or_reject_verification_plan": "P6c targeted canaries prove explicit user-visible TMU, VPM QPU, VDR, and VDW paths while the P6 audits reject TMU/ldtmu0 hidden spill reloads. P6d migrates all active VC4Kernel memory op uses to required attrs and runs targeted memory-heavy canaries. P6e runs the full cross-phase regression.",
       "upstream_use": "Correct transfer selection for future vector transfer lowering.",
-      "migration_or_removal": "P6b/P6c attrs are a migration bridge. No TMU reload of VDW-written compiler spill slots unless future invalidation proof exists. compiler_spill_vdw_vdr and compiler_spill_coherent are internal-only docs/audit attrs.",
+      "migration_or_removal": "P6d ends the optional migration bridge: active VC4Kernel memory ops require memory_path/coherency. P7 keeps old implicit TMU safe inactive-address behavior as a migration target. P8 keeps VDW inactive_store preserve policy and sparse-mask rejection as migration/planned work. compiler_spill_vdw_vdr and compiler_spill_coherent are internal-only docs/audit attrs.",
       "dependencies": [
         "baseline_branch_spill_lower_half_canaries",
         "baseline_vpm_vdr_vdw_rect_paths"
       ],
-      "acceptance_line": "P6 memory policy is accepted only when spill coherency and path selection are explicitly tested."
+      "acceptance_line": "P6 memory path and coherency policy is accepted only when required attrs, spill coherency, and path selection are explicitly audited and hardware-tested."
     },
     {
       "id": "p7_tmu_load_explicit_safe_inactive_offset",

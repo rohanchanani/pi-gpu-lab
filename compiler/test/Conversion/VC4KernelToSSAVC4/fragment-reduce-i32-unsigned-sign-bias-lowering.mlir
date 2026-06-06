@@ -30,7 +30,7 @@ module {
     %min_u = vc4kernel.fragment_reduce %lanes, %pred {kind = #vc4kernel.reduce<min_u>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %max_u = vc4kernel.fragment_reduce %lanes, %pred {kind = #vc4kernel.reduce<max_u>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %result = vc4kernel.fragment_alu.add %min_u, %max_u {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %offsets, %result, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offsets, %result, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

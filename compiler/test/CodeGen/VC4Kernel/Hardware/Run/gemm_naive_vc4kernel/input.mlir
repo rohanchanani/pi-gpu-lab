@@ -53,8 +53,8 @@ module {
     %b_base_vec = vc4kernel.splat %b_base_bytes : i32 -> vector<16xi32>
     %b_offsets = vc4kernel.fragment_alu.add %b_base_vec, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
 
-    %a_values = vc4kernel.tmu_load_fragment %a, %a_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %b_values = vc4kernel.tmu_load_fragment %b, %b_offsets, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a_values = vc4kernel.tmu_load_fragment %a, %a_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %b_values = vc4kernel.tmu_load_fragment %b, %b_offsets, %tail {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
     %products = vc4kernel.fragment_alu.mul %a_values, %b_values {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc_next = vc4kernel.fragment_alu.add %acc_step, %products {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %kk_next = arith.addi %kk_step, %c1 : i32
@@ -66,7 +66,7 @@ module {
     %c_base_bytes = arith.shli %c_col_base, %c2 : i32
     %c_base_vec = vc4kernel.splat %c_base_bytes : i32 -> vector<16xi32>
     %c_offsets = vc4kernel.fragment_alu.add %c_base_vec, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %c, %c_offsets, %sum, %tail : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %c, %c_offsets, %sum, %tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
 
   ^done:

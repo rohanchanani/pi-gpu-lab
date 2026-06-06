@@ -20,12 +20,12 @@ module {
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %base_bytes_v = vc4kernel.splat %base_bytes : i32 -> vector<16xi32>
     %byte_offsets = vc4kernel.fragment_alu.add %base_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %xv = vc4kernel.tmu_load_fragment %x, %byte_offsets, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %yv = vc4kernel.tmu_load_fragment %y, %byte_offsets, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %xv = vc4kernel.tmu_load_fragment %x, %byte_offsets, %tail {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %yv = vc4kernel.tmu_load_fragment %y, %byte_offsets, %tail {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
     %alpha_v = vc4kernel.splat %alpha : f32 -> vector<16xf32>
     %scaled = vc4kernel.fragment_alu.mul %alpha_v, %xv {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %sum = vc4kernel.fragment_alu.add %scaled, %yv {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
-    vc4kernel.vdw_store_fragment %y, %byte_offsets, %sum, %tail : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %y, %byte_offsets, %sum, %tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

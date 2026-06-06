@@ -32,8 +32,8 @@ module {
     %21 = arith.shli %20, %c2_i32 : i32
     %22 = vc4kernel.splat %21 : i32 -> vector<16xi32>
     %23 = vc4kernel.fragment_alu.add %22, %6 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %24 = vc4kernel.tmu_load_fragment %arg0, %18, %8 : i32, vector<16xi32>, <16> -> vector<16xf32>
-    %25 = vc4kernel.tmu_load_fragment %arg1, %23, %7 : i32, vector<16xi32>, <16> -> vector<16xf32>
+    %24 = vc4kernel.tmu_load_fragment %arg0, %18, %8 {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, <16> -> vector<16xf32>
+    %25 = vc4kernel.tmu_load_fragment %arg1, %23, %7 {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, <16> -> vector<16xf32>
     %26 = vc4kernel.fragment_alu.mul %24, %25 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %27 = vc4kernel.fragment_alu.add %14, %26 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %28 = arith.addi %13, %c1_i32 : i32
@@ -44,7 +44,7 @@ module {
     %32 = arith.shli %31, %c2_i32 : i32
     %33 = vc4kernel.splat %32 : i32 -> vector<16xi32>
     %34 = vc4kernel.fragment_alu.add %33, %6 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %arg2, %34, %29, %7 : i32, vector<16xi32>, vector<16xf32>, <16>
+    vc4kernel.vdw_store_fragment %arg2, %34, %29, %7 {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, <16>
     vc4kernel.return
   ^bb6:  // 2 preds: ^bb0, ^bb1
     vc4kernel.return

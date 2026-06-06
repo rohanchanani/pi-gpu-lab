@@ -43,11 +43,11 @@ module {
   ^body(%body_acc : vector<16xf32>):
     %a_elem = arith.addi %row_base_lda, %k0 : i32
     %a_byte_offset = arith.shli %a_elem, %c2 : i32
-    vc4kernel.vdr_load_rect_to_vpm %a, %a_byte_offset, %tile, %c0, %c16, %c4, %lda_bytes {max_rows = 16 : i32, max_cols = 4 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
-    %a_col0 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
+    vc4kernel.vdr_load_rect_to_vpm %a, %a_byte_offset, %tile, %c0, %c16, %c4, %lda_bytes {max_rows = 16 : i32, max_cols = 4 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
+    %a_col0 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %x0_bytes = arith.shli %k0, %c2 : i32
     %x0_offsets = vc4kernel.splat %x0_bytes : i32 -> vector<16xi32>
-    %x0 = vc4kernel.tmu_load_fragment %x, %x0_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %x0 = vc4kernel.tmu_load_fragment %x, %x0_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
     %prod0 = vc4kernel.fragment_alu.mul %a_col0, %x0 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc0 = vc4kernel.fragment_alu.add %body_acc, %prod0 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %k1 = arith.addi %k0, %c1 : i32
@@ -57,8 +57,8 @@ module {
     %x1_index = arith.select %k1_active, %k1, %k0 : i32
     %x1_bytes = arith.shli %x1_index, %c2 : i32
     %x1_offsets = vc4kernel.splat %x1_bytes : i32 -> vector<16xi32>
-    %x1 = vc4kernel.tmu_load_fragment %x, %x1_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %a_col1 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 1 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
+    %x1 = vc4kernel.tmu_load_fragment %x, %x1_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a_col1 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 1 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %prod1_raw = vc4kernel.fragment_alu.mul %a_col1, %x1 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %prod1 = vc4kernel.fragment_alu.mul %prod1_raw, %k1_scale {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc1 = vc4kernel.fragment_alu.add %acc0, %prod1 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -69,8 +69,8 @@ module {
     %x2_index = arith.select %k2_active, %k2, %k0 : i32
     %x2_bytes = arith.shli %x2_index, %c2 : i32
     %x2_offsets = vc4kernel.splat %x2_bytes : i32 -> vector<16xi32>
-    %x2 = vc4kernel.tmu_load_fragment %x, %x2_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %a_col2 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 2 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
+    %x2 = vc4kernel.tmu_load_fragment %x, %x2_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a_col2 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 2 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %prod2_raw = vc4kernel.fragment_alu.mul %a_col2, %x2 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %prod2 = vc4kernel.fragment_alu.mul %prod2_raw, %k2_scale {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc2 = vc4kernel.fragment_alu.add %acc1, %prod2 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -81,8 +81,8 @@ module {
     %x3_index = arith.select %k3_active, %k3, %k0 : i32
     %x3_bytes = arith.shli %x3_index, %c2 : i32
     %x3_offsets = vc4kernel.splat %x3_bytes : i32 -> vector<16xi32>
-    %x3 = vc4kernel.tmu_load_fragment %x, %x3_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %a_col3 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 3 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
+    %x3 = vc4kernel.tmu_load_fragment %x, %x3_offsets, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
+    %a_col3 = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 3 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xf32>
     %prod3_raw = vc4kernel.fragment_alu.mul %a_col3, %x3 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %prod3 = vc4kernel.fragment_alu.mul %prod3_raw, %k3_scale {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %acc3 = vc4kernel.fragment_alu.add %acc2, %prod3 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -94,7 +94,7 @@ module {
     %row0_bytes = arith.shli %row_base, %c2 : i32
     %row0_v = vc4kernel.splat %row0_bytes : i32 -> vector<16xi32>
     %offs = vc4kernel.fragment_alu.add %row0_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %y, %offs, %sum, %row_tail : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %y, %offs, %sum, %row_tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
 
   ^done:

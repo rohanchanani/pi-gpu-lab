@@ -12,8 +12,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lhs_v = vc4kernel.tmu_load_fragment %lhs, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    %rhs_v = vc4kernel.tmu_load_fragment %rhs, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %lhs_v = vc4kernel.tmu_load_fragment %lhs, %lane_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %rhs_v = vc4kernel.tmu_load_fragment %rhs, %lane_bytes, %full {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
 
     %signed = vc4kernel.fragment_cmp %lhs_v, %rhs_v {predicate = #vc4kernel.cmp<slt>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %unsigned = vc4kernel.fragment_cmp %lhs_v, %rhs_v {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
@@ -66,24 +66,24 @@ module {
     %offs2 = vc4kernel.fragment_alu.add %off2, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs3 = vc4kernel.fragment_alu.add %off3, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs4 = vc4kernel.fragment_alu.add %off4, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %offs0, %sel0, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %offs1, %sel1, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %offs2, %sel2, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %offs3, %sel3, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    vc4kernel.vdw_store_fragment %out, %offs4, %sel4, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs0, %sel0, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs1, %sel1, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs2, %sel2, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs3, %sel3, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs4, %sel4, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
 
     %any_signed = vc4kernel.pred.any %signed : !vc4kernel.pred<16> -> i1
     cf.cond_br %any_signed, ^any_merge(%true_any : vector<16xi32>), ^any_merge(%false_any : vector<16xi32>)
   ^any_merge(%any_value : vector<16xi32>):
     %off5 = vc4kernel.fragment_const {value = dense<320> : vector<16xi32>} : vector<16xi32>
     %offs5 = vc4kernel.fragment_alu.add %off5, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %offs5, %any_value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs5, %any_value, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     %all_unsigned = vc4kernel.pred.all %unsigned : !vc4kernel.pred<16> -> i1
     cf.cond_br %all_unsigned, ^all_merge(%true_all : vector<16xi32>), ^all_merge(%false_all : vector<16xi32>)
   ^all_merge(%all_value : vector<16xi32>):
     %off6 = vc4kernel.fragment_const {value = dense<384> : vector<16xi32>} : vector<16xi32>
     %offs6 = vc4kernel.fragment_alu.add %off6, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %offs6, %all_value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %offs6, %all_value, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

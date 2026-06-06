@@ -134,6 +134,8 @@ P3_POST_PHASE_STAGED_STATUSES = {
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
     },
 }
 
@@ -218,7 +220,44 @@ P5_POST_PHASE_STAGED_STATUSES = {
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
     },
+}
+
+P6_MEMORY_OP_POLICIES = {
+    "vc4kernel.tmu_load_fragment": (
+        "#vc4kernel.memory_path<tmu_global_read>",
+        "#vc4kernel.coherency<readonly_tmu>",
+    ),
+    "vc4kernel.vpm_write_fragment": (
+        "#vc4kernel.memory_path<vpm_qpu>",
+        "#vc4kernel.coherency<vpm_local>",
+    ),
+    "vc4kernel.vpm_read_fragment": (
+        "#vc4kernel.memory_path<vpm_qpu>",
+        "#vc4kernel.coherency<vpm_local>",
+    ),
+    "vc4kernel.vdr_load_to_vpm": (
+        "#vc4kernel.memory_path<vdr_global_to_vpm>",
+        "#vc4kernel.coherency<dma_ordered>",
+    ),
+    "vc4kernel.vdr_load_rect_to_vpm": (
+        "#vc4kernel.memory_path<vdr_global_to_vpm>",
+        "#vc4kernel.coherency<dma_ordered>",
+    ),
+    "vc4kernel.vdw_store_fragment": (
+        "#vc4kernel.memory_path<vdw_global_store>",
+        "#vc4kernel.coherency<dma_ordered>",
+    ),
+    "vc4kernel.vdw_store_vpm_fragment": (
+        "#vc4kernel.memory_path<vdw_global_store>",
+        "#vc4kernel.coherency<dma_ordered>",
+    ),
+    "vc4kernel.vdw_store_rect_from_vpm": (
+        "#vc4kernel.memory_path<vdw_global_store>",
+        "#vc4kernel.coherency<dma_ordered>",
+    ),
 }
 
 P6_TARGETED_MEMORY_FIXTURES = {
@@ -391,6 +430,7 @@ def audit_matrix_ownership(matrix, mode):
         "p4-general-reduce-lock",
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
+        "p6-memory-policy-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -407,6 +447,7 @@ def audit_matrix_ownership(matrix, mode):
         "p4-general-reduce-lock",
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
+        "p6-memory-policy-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -547,6 +588,30 @@ def audit_matrix_ownership(matrix, mode):
                     "to remain planned/migration_target/deterministic_reject "
                     "or an explicitly staged current phase status"
                 )
+    if mode == "p6-memory-policy-lock":
+        p6_memory = require_matrix_feature_status_in(
+            features,
+            "p6_memory_path_coherency_policy",
+            "P6",
+            {"hardware_proven_pending_final_acceptance", "accepted"},
+        )
+        p6_text = json.dumps(p6_memory).lower()
+        for token in [
+            "memory_path",
+            "coherency",
+            "required",
+            "inactive_load",
+            "inactive_store",
+            "p7",
+            "p8",
+            "spill",
+            "vdr",
+            "vpm",
+            "tmu",
+            "vdw",
+        ]:
+            if token not in p6_text:
+                fail(f"P6 memory policy matrix entry must document {token}")
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
@@ -702,6 +767,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p4-general-reduce-lock",
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
+        "p6-memory-policy-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -1641,6 +1707,131 @@ def audit_p6_memory_policy_targeted(repo_root, matrix):
     }
 
 
+def audit_p6_memory_policy_lock(repo_root, matrix):
+    counts = audit_p6_memory_policy_targeted(repo_root, matrix)
+
+    roots = [
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+    ]
+    files_scanned = 0
+    active_memory_ops = Counter()
+    negative_memory_ops = Counter()
+    missing_attr_hits = []
+    mismatch_hits = []
+    internal_attr_hits = []
+    source_lower_half_hits = []
+    producer_hits = []
+    producer_prefixes = [
+        "vector.",
+        "memref.",
+        "scf.",
+        "linalg.",
+        "gpu.",
+        "tt.",
+        "triton.",
+    ]
+    for root in roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if path.suffix != ".mlir":
+                continue
+            files_scanned += 1
+            negative = is_negative_test(path)
+            text = read_text(path)
+            if (
+                "compiler_spill_vdw_vdr" in text
+                or "compiler_spill_coherent" in text
+            ) and not negative:
+                internal_attr_hits.append(path)
+            if "compiler/test/CodeGen/VC4Kernel/Hardware/Run" in str(
+                rel(path, repo_root)
+            ):
+                if "ssavc4." in text or "vc4.qpu." in text or "vc4.module" in text:
+                    source_lower_half_hits.append(path)
+                for prefix in producer_prefixes:
+                    if prefix in text:
+                        producer_hits.append((path, prefix))
+            for line in text.splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("//"):
+                    continue
+                for op_name, (memory_path, coherency) in P6_MEMORY_OP_POLICIES.items():
+                    if op_name not in stripped:
+                        continue
+                    if negative:
+                        negative_memory_ops[op_name] += 1
+                        continue
+                    active_memory_ops[op_name] += 1
+                    has_memory_path = "memory_path" in stripped
+                    has_coherency = "coherency" in stripped
+                    if not has_memory_path or not has_coherency:
+                        missing_attr_hits.append((path, op_name, stripped))
+                        continue
+                    if memory_path not in stripped or coherency not in stripped:
+                        mismatch_hits.append((path, op_name, stripped))
+    if missing_attr_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{op_name}:{line}"
+            for path, op_name, line in missing_attr_hits[:20]
+        )
+        fail(f"P6 memory policy lock found memory op without explicit attrs: {details}")
+    if mismatch_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{op_name}:{line}"
+            for path, op_name, line in mismatch_hits[:20]
+        )
+        fail(f"P6 memory policy lock found mismatched memory attrs: {details}")
+    if internal_attr_hits:
+        details = "; ".join(str(rel(path, repo_root)) for path in internal_attr_hits[:20])
+        fail(f"P6 memory policy lock found internal spill attrs on user ops: {details}")
+    if source_lower_half_hits:
+        details = "; ".join(str(rel(path, repo_root)) for path in source_lower_half_hits[:20])
+        fail(f"P6 memory policy lock found source-authored lower-half ops in fixtures: {details}")
+    if producer_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{prefix}" for path, prefix in producer_hits[:20]
+        )
+        fail(f"P6 memory policy lock found producer dialect in fixtures: {details}")
+    missing_active_families = sorted(
+        op_name for op_name in P6_MEMORY_OP_POLICIES
+        if active_memory_ops[op_name] == 0
+    )
+    if missing_active_families:
+        fail(
+            "P6 memory policy lock expected active migrated uses for: "
+            + ", ".join(missing_active_families)
+        )
+    if sum(negative_memory_ops.values()) == 0:
+        fail("P6 memory policy lock expected deterministic-reject memory policy tests")
+
+    features = feature_by_id(matrix)
+    require_matrix_feature_status_in(
+        features,
+        "p6_memory_path_coherency_policy",
+        "P6",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    require_matrix_feature(features, "p7_remove_old_tmu_load_signature", "P7",
+                           "migration_target")
+    require_matrix_feature(features, "p8_sparse_vdw_store_deterministic_reject",
+                           "P8", "deterministic_reject")
+    counts.update(
+        {
+            "active_memory_ops": sum(active_memory_ops.values()),
+            "active_memory_op_families": len(active_memory_ops),
+            "files_scanned": files_scanned,
+            "internal_spill_user_attr_hits": 0,
+            "memory_attr_mismatch_hits": 0,
+            "memory_attr_missing_hits": 0,
+            "negative_memory_policy_ops": sum(negative_memory_ops.values()),
+            "producer_fixture_hits": 0,
+            "source_lower_half_fixture_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -1665,6 +1856,7 @@ def main(argv):
         "p4-general-reduce-lock",
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
+        "p6-memory-policy-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -1684,6 +1876,7 @@ def main(argv):
         "p4-general-reduce-lock",
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
+        "p6-memory-policy-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -1706,6 +1899,7 @@ def main(argv):
             "p4-general-reduce-lock",
             "p5-scalar-arith-lock",
             "p6-memory-policy-targeted",
+            "p6-memory-policy-lock",
         }
         else {}
     )
@@ -1729,9 +1923,14 @@ def main(argv):
         if args.mode == "p5-scalar-arith-lock"
         else {}
     )
-    p6_lock_counts = (
+    p6_targeted_counts = (
         audit_p6_memory_policy_targeted(repo_root, matrix)
         if args.mode == "p6-memory-policy-targeted"
+        else {}
+    )
+    p6_lock_counts = (
+        audit_p6_memory_policy_lock(repo_root, matrix)
+        if args.mode == "p6-memory-policy-lock"
         else {}
     )
 
@@ -1762,8 +1961,10 @@ def main(argv):
         print(f"p4_general_reduce_lock: {format_counts(p4_lock_counts)}")
     if p5_lock_counts:
         print(f"p5_scalar_arith_lock: {format_counts(p5_lock_counts)}")
+    if p6_targeted_counts:
+        print(f"p6_memory_policy_targeted: {format_counts(p6_targeted_counts)}")
     if p6_lock_counts:
-        print(f"p6_memory_policy_targeted: {format_counts(p6_lock_counts)}")
+        print(f"p6_memory_policy_lock: {format_counts(p6_lock_counts)}")
     return 0
 
 

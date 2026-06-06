@@ -30,7 +30,7 @@ module {
     %v = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 64 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     // CHECK: computed VPM row requirement exceeds 64 rows
-    vc4kernel.vdw_store_fragment %c0, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %c0, %offs, %v, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

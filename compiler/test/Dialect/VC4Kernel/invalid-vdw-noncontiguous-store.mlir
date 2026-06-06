@@ -14,7 +14,7 @@ module {
     %offs = vc4kernel.fragment_alu.add %lane_bytes, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %v = vc4kernel.fragment_const {value = dense<0> : vector<16xi32>} : vector<16xi32>
     // CHECK: vdw_store_fragment requires contiguous 32-bit row fragment byte offsets
-    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

@@ -14,8 +14,8 @@ module {
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %threshold_v = vc4kernel.splat %threshold : i32 -> vector<16xi32>
     %mask = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %loaded = vc4kernel.tmu_load_fragment %in, %lane_bytes, %mask : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %lane_bytes, %loaded, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
+    %loaded = vc4kernel.tmu_load_fragment %in, %lane_bytes, %mask {memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    vc4kernel.vdw_store_fragment %out, %lane_bytes, %loaded, %full {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }
