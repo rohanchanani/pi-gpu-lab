@@ -60,6 +60,9 @@ constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
 constexpr llvm::StringLiteral kFragmentBitcastOpName(
     "vc4kernel.fragment_bitcast");
 constexpr llvm::StringLiteral kFragmentConstOpName("vc4kernel.fragment_const");
+constexpr llvm::StringLiteral kFragmentUnpackOpName(
+    "vc4kernel.fragment_unpack");
+constexpr llvm::StringLiteral kFragmentPackOpName("vc4kernel.fragment_pack");
 constexpr llvm::StringLiteral kFragmentALUAddOpName(
     "vc4kernel.fragment_alu.add");
 constexpr llvm::StringLiteral kFragmentALUMulOpName(
@@ -94,6 +97,8 @@ constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
+constexpr llvm::StringLiteral kSSAVC4PackOpName("ssavc4.pack");
+constexpr llvm::StringLiteral kSSAVC4UnpackOpName("ssavc4.unpack");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
 constexpr llvm::StringLiteral kSSAVC4TMURequestOpName("ssavc4.tmu.request");
 constexpr llvm::StringLiteral kSSAVC4TMUReadOpName("ssavc4.tmu.read");
@@ -215,6 +220,58 @@ static NamedAttribute getSSAVC4VPMSubword(OpBuilder &builder, Operation *op) {
       mlir::ssavc4::VPMSubwordAttr::get(builder.getContext(), value));
 }
 
+static FailureOr<Attribute> getFragmentUnpackMode(OpBuilder &builder,
+                                                  Operation *op) {
+  auto source =
+      op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("source");
+  auto layout =
+      op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
+  auto policy =
+      op->getAttrOfType<mlir::vc4kernel::UnpackPolicyAttr>("policy");
+  if (!source || !layout || !policy)
+    return op->emitOpError("requires explicit fragment unpack mode attrs");
+  if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed)
+    return op->emitOpError("unsupported VC4Kernel fragment unpack mode");
+
+  MLIRContext *ctx = builder.getContext();
+  if (source.getValue() == mlir::vc4kernel::SubwordType::u8 &&
+      policy.getValue() == mlir::vc4kernel::UnpackPolicy::zero_extend) {
+    return mlir::vc4::RegfileAUnpackModeAttr::get(
+        ctx, mlir::vc4::RegfileAUnpackMode::color8a);
+  }
+  if (source.getValue() == mlir::vc4kernel::SubwordType::s16 &&
+      policy.getValue() == mlir::vc4kernel::UnpackPolicy::sign_extend) {
+    return mlir::vc4::RegfileAUnpackModeAttr::get(
+        ctx, mlir::vc4::RegfileAUnpackMode::f16a_or_i16a);
+  }
+  return op->emitOpError("unsupported VC4Kernel fragment unpack mode");
+}
+
+static FailureOr<Attribute> getFragmentPackMode(OpBuilder &builder,
+                                                Operation *op) {
+  auto dest = op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("dest");
+  auto layout =
+      op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
+  auto policy =
+      op->getAttrOfType<mlir::vc4kernel::PackPolicyAttr>("policy");
+  if (!dest || !layout || !policy)
+    return op->emitOpError("requires explicit fragment pack mode attrs");
+  if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed ||
+      policy.getValue() != mlir::vc4kernel::PackPolicy::truncate)
+    return op->emitOpError("unsupported VC4Kernel fragment pack mode");
+
+  MLIRContext *ctx = builder.getContext();
+  if (dest.getValue() == mlir::vc4kernel::SubwordType::u8) {
+    return mlir::vc4::RegfileAPackModeAttr::get(
+        ctx, mlir::vc4::RegfileAPackMode::to_8a);
+  }
+  if (dest.getValue() == mlir::vc4kernel::SubwordType::u16) {
+    return mlir::vc4::RegfileAPackModeAttr::get(
+        ctx, mlir::vc4::RegfileAPackMode::to_16a);
+  }
+  return op->emitOpError("unsupported VC4Kernel fragment pack mode");
+}
+
 static StringAttr getSymbolNameAttr(Operation *op) {
   return asStringAttr(op->getAttr(SymbolTable::getSymbolAttrName()));
 }
@@ -239,6 +296,8 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.splat",
       "vc4kernel.fragment_bitcast",
       "vc4kernel.fragment_const",
+      "vc4kernel.fragment_unpack",
+      "vc4kernel.fragment_pack",
       "vc4kernel.fragment_alu.add",
       "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
@@ -2786,6 +2845,30 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4MovOpName, input, {},
         op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentUnpackOpName)) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    FailureOr<Attribute> mode = getFragmentUnpackMode(builder, op);
+    if (failed(mode))
+      return failure();
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4UnpackOpName, input,
+        {builder.getNamedAttr("mode", *mode)}, op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentPackOpName)) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    FailureOr<Attribute> mode = getFragmentPackMode(builder, op);
+    if (failed(mode))
+      return failure();
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4PackOpName, input,
+        {builder.getNamedAttr("mode", *mode)}, op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentConstOpName)) {

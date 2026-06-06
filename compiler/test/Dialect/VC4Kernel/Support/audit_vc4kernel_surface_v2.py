@@ -154,6 +154,12 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_final_acceptance",
         "accepted",
     },
+    "p9_fragment_pack": {
+        "implemented_pending_hardware",
+    },
+    "p9_fragment_unpack": {
+        "implemented_pending_hardware",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -291,6 +297,12 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_migration",
         "hardware_proven_pending_final_acceptance",
         "accepted",
+    },
+    "p9_fragment_pack": {
+        "implemented_pending_hardware",
+    },
+    "p9_fragment_unpack": {
+        "implemented_pending_hardware",
     },
 }
 
@@ -2519,6 +2531,15 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
         if token not in docs:
             fail(f"P8.5 lock expected policy docs to contain: {token}")
 
+    p9_staged_surface_tokens = {
+        "vc4kernel.fragment_pack": "p9_fragment_pack",
+        "vc4kernel.fragment_unpack": "p9_fragment_unpack",
+    }
+    p9_staged_statuses = {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+        "accepted",
+    }
     future_phase_surface_hits = []
     source_roots = [
         Path("compiler/include/vc4/Dialect/VC4Kernel"),
@@ -2542,6 +2563,13 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
                 "vc4kernel.triton",
             ]:
                 if token in text:
+                    feature_id = p9_staged_surface_tokens.get(token)
+                    if feature_id:
+                        feature = features.get(feature_id, {})
+                        if feature.get("phase") == "P9" and feature.get(
+                            "current_status"
+                        ) in p9_staged_statuses:
+                            continue
                     future_phase_surface_hits.append((path, token))
     if future_phase_surface_hits:
         details = "; ".join(

@@ -130,6 +130,33 @@ def VC4Kernel_VPMSubword : VC4Kernel_DialectI32Enum<"VPMSubword",
       I32EnumAttrCase<"laned", 2>
     ]>;
 
+def VC4Kernel_SubwordType : VC4Kernel_DialectI32Enum<"SubwordType",
+    "VC4Kernel explicit fragment pack/unpack subword type", [
+      I32EnumAttrCase<"u8", 0>,
+      I32EnumAttrCase<"s8", 1>,
+      I32EnumAttrCase<"u16", 2>,
+      I32EnumAttrCase<"s16", 3>
+    ]>;
+
+def VC4Kernel_SubwordLayout : VC4Kernel_DialectI32Enum<"SubwordLayout",
+    "VC4Kernel explicit fragment pack/unpack subword layout", [
+      I32EnumAttrCase<"packed", 0>,
+      I32EnumAttrCase<"laned", 1>
+    ]>;
+
+def VC4Kernel_UnpackPolicy : VC4Kernel_DialectI32Enum<"UnpackPolicy",
+    "VC4Kernel explicit fragment unpack policy", [
+      I32EnumAttrCase<"zero_extend", 0>,
+      I32EnumAttrCase<"sign_extend", 1>
+    ]>;
+
+def VC4Kernel_PackPolicy : VC4Kernel_DialectI32Enum<"PackPolicy",
+    "VC4Kernel explicit fragment pack policy", [
+      I32EnumAttrCase<"truncate", 0>,
+      I32EnumAttrCase<"saturate", 1>,
+      I32EnumAttrCase<"wrap", 2>
+    ]>;
+
 def VC4Kernel_MemoryPath : VC4Kernel_DialectI32Enum<"MemoryPath",
     "VC4Kernel explicit memory path", [
       I32EnumAttrCase<"vpm_qpu", 0>,
@@ -178,6 +205,14 @@ def VC4Kernel_VPMWidthAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMWidth, "vpm_width">;
 def VC4Kernel_VPMSubwordAttr
     : VC4Kernel_EnumAttr<VC4Kernel_VPMSubword, "vpm_subword">;
+def VC4Kernel_SubwordTypeAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_SubwordType, "subword_type">;
+def VC4Kernel_SubwordLayoutAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_SubwordLayout, "subword_layout">;
+def VC4Kernel_UnpackPolicyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_UnpackPolicy, "unpack_policy">;
+def VC4Kernel_PackPolicyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_PackPolicy, "pack_policy">;
 def VC4Kernel_MemoryPathAttr
     : VC4Kernel_EnumAttr<VC4Kernel_MemoryPath, "memory_path">;
 def VC4Kernel_CoherencyAttr

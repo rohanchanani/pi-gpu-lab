@@ -200,6 +200,32 @@ def VC4Kernel_FragmentConstOp : VC4Kernel_PureOp<"fragment_const"> {
   let hasVerifier = 1;
 }
 
+def VC4Kernel_FragmentUnpackOp : VC4Kernel_PureOp<"fragment_unpack"> {
+  let summary = "hardware-faithful VC4 fragment subword unpack";
+  let arguments = (ins
+    VC4Kernel_Vector16I32:$input,
+    VC4Kernel_SubwordTypeAttr:$source,
+    VC4Kernel_SubwordLayoutAttr:$layout,
+    VC4Kernel_UnpackPolicyAttr:$policy
+  );
+  let results = (outs VC4Kernel_Vector16I32:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
+def VC4Kernel_FragmentPackOp : VC4Kernel_PureOp<"fragment_pack"> {
+  let summary = "hardware-faithful VC4 fragment subword pack";
+  let arguments = (ins
+    VC4Kernel_Vector16I32:$input,
+    VC4Kernel_SubwordTypeAttr:$dest,
+    VC4Kernel_SubwordLayoutAttr:$layout,
+    VC4Kernel_PackPolicyAttr:$policy
+  );
+  let results = (outs VC4Kernel_Vector16I32:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
   let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
   let arguments = (ins

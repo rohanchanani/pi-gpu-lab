@@ -1158,6 +1158,38 @@ LogicalResult FragmentConstOp::verify() {
   return emitOpError("requires efficient fragment_const materialization");
 }
 
+LogicalResult FragmentUnpackOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyVector16I32(op, getInput().getType(), "input")) ||
+      failed(verifyVector16I32(op, getResult().getType(), "result")))
+    return failure();
+
+  bool accepted =
+      getLayout() == SubwordLayout::packed &&
+      ((getSource() == SubwordType::u8 &&
+        getPolicy() == UnpackPolicy::zero_extend) ||
+       (getSource() == SubwordType::s16 &&
+        getPolicy() == UnpackPolicy::sign_extend));
+  if (accepted)
+    return success();
+  return emitOpError("unsupported VC4Kernel fragment unpack mode");
+}
+
+LogicalResult FragmentPackOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyVector16I32(op, getInput().getType(), "input")) ||
+      failed(verifyVector16I32(op, getResult().getType(), "result")))
+    return failure();
+
+  bool accepted = getLayout() == SubwordLayout::packed &&
+                  getPolicy() == PackPolicy::truncate &&
+                  (getDest() == SubwordType::u8 ||
+                   getDest() == SubwordType::u16);
+  if (accepted)
+    return success();
+  return emitOpError("unsupported VC4Kernel fragment pack mode");
+}
+
 LogicalResult FragmentALUAddOp::verify() {
   Operation *op = getOperation();
   AddALUOpcode opcode = getOpcode();
