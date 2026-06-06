@@ -10,9 +10,8 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c1 = arith.constant 1 : i32
     %iv = vc4kernel.splat %i : i32 -> vector<16xi32>
-    %shift = vc4kernel.splat %c1 : i32 -> vector<16xi32>
+    %shift = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     %fv = vc4kernel.splat %f : f32 -> vector<16xf32>
 
     // CHECK: #vc4kernel.add_alu_opcode<fadd>

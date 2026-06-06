@@ -24,16 +24,14 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c1 = arith.constant 1 : i32
     %c2 = arith.constant 2 : i32
     %base_bytes = arith.shli %base_index, %c2 : i32
     %tail = vc4kernel.pred.tail %base_index, %limit : i32, i32 -> !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %base_bytes_v = vc4kernel.splat %base_bytes : i32 -> vector<16xi32>
     %byte_offsets = vc4kernel.fragment_alu.add %base_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %value = vc4kernel.splat %c1 : i32 -> vector<16xi32>
+    %value = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %tail : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
@@ -45,12 +43,10 @@ module {
     warps_per_block = 1 : i32
   } {
     %c2 = arith.constant 2 : i32
-    %c7 = arith.constant 7 : i32
     %empty = vc4kernel.pred.empty : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %value = vc4kernel.splat %c7 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
+    %value = vc4kernel.fragment_const {value = dense<7> : vector<16xi32>} : vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %empty : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

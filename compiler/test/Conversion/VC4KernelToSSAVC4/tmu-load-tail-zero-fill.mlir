@@ -32,8 +32,7 @@ module {
     %base_bytes = arith.shli %base_index, %c2 : i32
     %tail = vc4kernel.pred.tail %base_index, %limit : i32, i32 -> !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %base_bytes_v = vc4kernel.splat %base_bytes : i32 -> vector<16xi32>
     %offs = vc4kernel.fragment_alu.add %base_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %v = vc4kernel.tmu_load_fragment %ptr, %offs, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>

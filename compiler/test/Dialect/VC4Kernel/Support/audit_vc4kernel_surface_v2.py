@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections import Counter
@@ -192,7 +193,7 @@ def audit_matrix_ownership(matrix, mode):
     required_special_status = None
     if mode == "p1-migrated":
         required_special_status = "migrated_pending_deletion"
-    if mode == "p1-general-alu-lock":
+    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
         if required_special_status:
@@ -201,9 +202,28 @@ def audit_matrix_ownership(matrix, mode):
             require_matrix_feature_status_in(
                 features, feature_id, phase, SPECIAL_CASE_ALLOWED_STATUSES
             )
-    if mode == "p1-general-alu-lock":
+    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
+    p2_status_entries = 0
+    if mode == "p2-bitcast-const-lock":
+        allowed_p2_statuses = {"accepted", "deterministic_reject"}
+        for feature in features.values():
+            if feature.get("phase") != "P2":
+                continue
+            p2_status_entries += 1
+            status = feature.get("current_status")
+            if status not in allowed_p2_statuses:
+                fail(
+                    f"P2 feature {feature.get('id')} must be accepted or deterministic_reject"
+                )
+        require_matrix_feature(features, "p2_fragment_bitcast", "P2", "accepted")
+        require_matrix_feature(
+            features,
+            "p2_fragment_const_splat_zero_allones_lane_affine",
+            "P2",
+            "accepted",
+        )
     require_matrix_feature(
         features,
         "p4_remove_add_only_reduce_specialness",
@@ -241,6 +261,7 @@ def audit_matrix_ownership(matrix, mode):
         "tmu_migration_targets": 1,
         "sparse_vdw_reject_entries": 2,
         "fastmath_opt_in": 1,
+        "p2_locked_status_entries": p2_status_entries,
     }
 
 
@@ -346,7 +367,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
             present.append(op_name)
         else:
             missing.append(op_name)
-    if mode == "p1-general-alu-lock":
+    if mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
         return {"present_special_case_ops": 0, "removed_special_case_ops": len(missing)}
@@ -455,6 +476,144 @@ def audit_p1_general_alu_lock(repo_root):
     }
 
 
+def count_exact_static_const_splats(repo_root):
+    roots = [
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+        Path("compiler/docs/examples"),
+    ]
+    const_re = re.compile(
+        r"^\s*(%[\w.$-]+)\s*=\s*arith\.constant\s+(.+?)\s*:\s*(i32|f32)\s*$"
+    )
+    splat_re = re.compile(
+        r"^\s*(%[\w.$-]+)\s*=\s*vc4kernel\.splat\s+(%[\w.$-]+)\s*:\s*"
+        r"(i32|f32)\s*->\s*(vector<16x(?:i32|f32)>)\s*$"
+    )
+    hits = []
+    scanned = 0
+    for root in roots:
+        full_root = repo_root / root
+        if not full_root.exists():
+            continue
+        for path in iter_text_files(full_root, repo_root):
+            if path.suffix != ".mlir":
+                continue
+            scanned += 1
+            constants = {}
+            lines = read_text(path).splitlines()
+            for lineno, line in enumerate(lines, start=1):
+                match = const_re.match(line)
+                if match:
+                    constants[match.group(1)] = (match.group(2), match.group(3), lineno)
+            for lineno, line in enumerate(lines, start=1):
+                match = splat_re.match(line)
+                if not match:
+                    continue
+                source = match.group(2)
+                if source in constants and match.group(3) == constants[source][1]:
+                    hits.append((path, lineno, source))
+    if hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{lineno}:{source}"
+            for path, lineno, source in hits[:20]
+        )
+        fail(f"P2 lock found compile-time arith.constant -> vc4kernel.splat: {details}")
+    return {"static_const_splat_hits": 0, "static_const_splat_files_scanned": scanned}
+
+
+def audit_p2_bitcast_const_lock(repo_root, matrix):
+    conversion_path = (
+        repo_root
+        / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"
+    )
+    conversion_text = read_text(conversion_path)
+    bitcast_marker = "if (hasName(op, kFragmentBitcastOpName))"
+    const_marker = "if (hasName(op, kFragmentConstOpName))"
+    bitcast_index = conversion_text.find(bitcast_marker)
+    if bitcast_index < 0:
+        fail("P2 lock expected fragment_bitcast lowering marker")
+    next_index = conversion_text.find(const_marker, bitcast_index + len(bitcast_marker))
+    bitcast_block = conversion_text[bitcast_index: next_index if next_index >= 0 else None]
+    numeric_hits = sum(
+        term in bitcast_block
+        for term in [
+            "itof",
+            "ftoi",
+            "VC4Kernel_AddALUOpcode::itof",
+            "VC4Kernel_AddALUOpcode::ftoi",
+            "kSSAVC4ALUAddOpName",
+        ]
+    )
+    if "kSSAVC4MovOpName" not in bitcast_block:
+        fail("P2 lock expected fragment_bitcast lowering to ssavc4.mov")
+    if numeric_hits:
+        fail("P2 lock found numeric conversion in fragment_bitcast lowering")
+
+    ops_cpp = read_text(
+        repo_root / "compiler/lib/Dialect/VC4Kernel/IR/VC4KernelOps.cpp"
+    )
+    reject_diag = "requires efficient fragment_const materialization"
+    finite_diag = "fragment_const f32 splat must be finite in P2"
+    if reject_diag not in ops_cpp:
+        fail("P2 lock expected fragment_const efficient-materialization diagnostic")
+    if finite_diag not in ops_cpp:
+        fail("P2 lock expected fragment_const NaN/Inf rejection diagnostic")
+    reject_test = (
+        repo_root
+        / "compiler/test/Dialect/VC4Kernel/fragment_const_reject_arbitrary_dense.mlir"
+    )
+    if not reject_test.is_file() or reject_diag not in read_text(reject_test):
+        fail("P2 lock expected arbitrary dense fragment_const reject test")
+
+    hardware_legacy_hits = []
+    legacy_terms = [
+        "vc4kernel." + "fragment_add",
+        "vc4kernel." + "fragment_sub",
+        "vc4kernel." + "fragment_mul",
+        "vc4kernel." + "fragment_shl",
+    ]
+    for path in sorted(
+        (repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run").rglob(
+            "input.mlir"
+        )
+    ):
+        text = read_text(path)
+        for term in legacy_terms:
+            if term in text:
+                hardware_legacy_hits.append((path, term))
+    if hardware_legacy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{term}"
+            for path, term in hardware_legacy_hits[:20]
+        )
+        fail(f"P2 lock found legacy fragment arithmetic in hardware fixtures: {details}")
+
+    features = feature_by_id(matrix)
+    p2_matrix_statuses = Counter()
+    for feature in features.values():
+        if feature.get("phase") == "P2":
+            p2_matrix_statuses[feature.get("current_status")] += 1
+    if p2_matrix_statuses.get("accepted", 0) < 2:
+        fail("P2 lock expected accepted bitcast and fragment_const matrix entries")
+
+    counts = count_exact_static_const_splats(repo_root)
+    counts.update(
+        {
+            "bitcast_uses_mov": 1,
+            "bitcast_numeric_conversion_hits": 0,
+            "fragment_const_reject_diagnostic": 1,
+            "nan_inf_reject_diagnostic": 1,
+            "hardware_legacy_arith_hits": 0,
+            "p2_matrix_accepted": p2_matrix_statuses.get("accepted", 0),
+            "p2_matrix_deterministic_reject": p2_matrix_statuses.get(
+                "deterministic_reject", 0
+            ),
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -470,7 +629,12 @@ def main(argv):
     parser.add_argument("--phase-lock", default=None)
     args = parser.parse_args(argv)
 
-    if args.mode not in {"p0-baseline", "p1-migrated", "p1-general-alu-lock"}:
+    if args.mode not in {
+        "p0-baseline",
+        "p1-migrated",
+        "p1-general-alu-lock",
+        "p2-bitcast-const-lock",
+    }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
     matrix_path = Path(args.matrix)
@@ -482,7 +646,7 @@ def main(argv):
     matrix_summary = run_matrix_checker(repo_root, matrix_path)
     matrix = load_matrix(matrix_path)
     matrix_counts = audit_matrix_ownership(matrix, args.mode)
-    if args.mode == "p1-general-alu-lock":
+    if args.mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
     direct_counts = audit_direct_paths(repo_root)
@@ -496,7 +660,12 @@ def main(argv):
     )
     p1_lock_counts = (
         audit_p1_general_alu_lock(repo_root)
-        if args.mode == "p1-general-alu-lock"
+        if args.mode in {"p1-general-alu-lock", "p2-bitcast-const-lock"}
+        else {}
+    )
+    p2_lock_counts = (
+        audit_p2_bitcast_const_lock(repo_root, matrix)
+        if args.mode == "p2-bitcast-const-lock"
         else {}
     )
 
@@ -519,6 +688,8 @@ def main(argv):
         print(f"legacy_user_scan: {format_counts(legacy_user_counts)}")
     if p1_lock_counts:
         print(f"p1_general_alu_lock: {format_counts(p1_lock_counts)}")
+    if p2_lock_counts:
+        print(f"p2_bitcast_const_lock: {format_counts(p2_lock_counts)}")
     return 0
 
 

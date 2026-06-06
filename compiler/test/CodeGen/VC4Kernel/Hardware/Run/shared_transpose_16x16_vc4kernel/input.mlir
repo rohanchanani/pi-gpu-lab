@@ -16,8 +16,7 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %warp = vc4kernel.warp_id : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %row_base = arith.shli %warp, %c2 : i32
     %row0 = arith.addi %row_base, %c0 : i32
     %row1 = arith.addi %row_base, %c1 : i32

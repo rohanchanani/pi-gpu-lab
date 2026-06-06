@@ -8,9 +8,8 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c1 = arith.constant 1 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
-    %offs = vc4kernel.splat %c1 : i32 -> vector<16xi32>
+    %offs = vc4kernel.fragment_const {value = dense<1> : vector<16xi32>} : vector<16xi32>
     // CHECK: tmu_load_fragment byte_offsets must be statically 4-byte aligned
     %v = vc4kernel.tmu_load_fragment %ptr, %offs, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return

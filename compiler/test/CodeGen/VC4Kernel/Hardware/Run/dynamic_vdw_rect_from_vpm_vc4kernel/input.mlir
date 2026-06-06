@@ -14,16 +14,12 @@ module {
     %c1 = arith.constant 1 : i32
     %c2 = arith.constant 2 : i32
     %c3 = arith.constant 3 : i32
-    %base0 = arith.constant 1660944384 : i32
-    %base1 = arith.constant 1660944640 : i32
-    %base2 = arith.constant 1660944896 : i32
-    %base3 = arith.constant 1660945152 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %base0v = vc4kernel.splat %base0 : i32 -> vector<16xi32>
-    %base1v = vc4kernel.splat %base1 : i32 -> vector<16xi32>
-    %base2v = vc4kernel.splat %base2 : i32 -> vector<16xi32>
-    %base3v = vc4kernel.splat %base3 : i32 -> vector<16xi32>
+    %base0v = vc4kernel.fragment_const {value = dense<1660944384> : vector<16xi32>} : vector<16xi32>
+    %base1v = vc4kernel.fragment_const {value = dense<1660944640> : vector<16xi32>} : vector<16xi32>
+    %base2v = vc4kernel.fragment_const {value = dense<1660944896> : vector<16xi32>} : vector<16xi32>
+    %base3v = vc4kernel.fragment_const {value = dense<1660945152> : vector<16xi32>} : vector<16xi32>
     %value0 = vc4kernel.fragment_alu.add %base0v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value1 = vc4kernel.fragment_alu.add %base1v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value2 = vc4kernel.fragment_alu.add %base2v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>

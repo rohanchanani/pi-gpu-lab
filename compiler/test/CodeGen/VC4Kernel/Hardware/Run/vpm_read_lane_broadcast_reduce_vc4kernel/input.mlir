@@ -11,16 +11,13 @@ module {
   } {
     %c0 = arith.constant 0 : i32
     %c1 = arith.constant 1 : i32
-    %c2 = arith.constant 2 : i32
     %c16 = arith.constant 16 : i32
     %pitch = arith.constant 64 : i32
-    %row1 = arith.constant 64 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %empty = vc4kernel.pred.empty : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %row1_v = vc4kernel.splat %row1 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
+    %row1_v = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
     %empty_offsets = vc4kernel.fragment_alu.add %row1_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     vc4kernel.vdr_load_rect_to_vpm %in, %c0, %tile, %c0, %c1, %c16, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, dst_x = 0 : i32, vpm_pitch = 1 : i32} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32

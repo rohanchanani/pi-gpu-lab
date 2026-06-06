@@ -6,7 +6,6 @@ module {
     arg_attrs = [{name = "x", kind = "scalar", direction = "by_value", type = "i32"}],
     warps_per_block = 1 : i32
   } {
-    %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     // CHECK: vc4kernel.splat
     %a = vc4kernel.splat %x : i32 -> vector<16xi32>
@@ -17,7 +16,7 @@ module {
     // CHECK: vc4kernel.fragment_alu.mul
     %mul = vc4kernel.fragment_alu.mul %sub, %a {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     // CHECK: vc4kernel.fragment_alu.add
-    %shl_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %shl_shift = vc4kernel.fragment_const {value = dense<2> : vector<16xi32>} : vector<16xi32>
     %shl = vc4kernel.fragment_alu.add %mul, %shl_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     // CHECK: vc4kernel.fragment_cmp
     %cmp = vc4kernel.fragment_cmp %shl, %a {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>

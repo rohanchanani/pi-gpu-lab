@@ -22,10 +22,9 @@ module {
     %one_scalar = arith.constant 1.000000e+00 : f32
     %tile_id = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
-    %zero = vc4kernel.splat %zero_scalar : f32 -> vector<16xf32>
+    %zero = vc4kernel.fragment_const {value = dense<0.000000e+00> : vector<16xf32>} : vector<16xf32>
     %row_base = arith.shli %tile_id, %c4 : i32
     %has_rows = arith.cmpi ult, %row_base, %m : i32
     cf.cond_br %has_rows, ^compute, ^done

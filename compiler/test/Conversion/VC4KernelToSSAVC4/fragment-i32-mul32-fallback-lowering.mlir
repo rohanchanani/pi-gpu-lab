@@ -21,19 +21,15 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %lhs_base_v = vc4kernel.splat %lhs_base : i32 -> vector<16xi32>
     %rhs_base_v = vc4kernel.splat %rhs_base : i32 -> vector<16xi32>
     %lhs = vc4kernel.fragment_alu.add %lhs_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %rhs = vc4kernel.fragment_alu.add %rhs_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %value_c16 = arith.constant 16 : i32
-    %value_c65535 = arith.constant 65535 : i32
-    %value_mask = vc4kernel.splat %value_c65535 : i32 -> vector<16xi32>
-    %value_shift = vc4kernel.splat %value_c16 : i32 -> vector<16xi32>
+    %value_mask = vc4kernel.fragment_const {value = dense<65535> : vector<16xi32>} : vector<16xi32>
+    %value_shift = vc4kernel.fragment_const {value = dense<16> : vector<16xi32>} : vector<16xi32>
     %value_lhs_lo = vc4kernel.fragment_alu.add %lhs, %value_mask {opcode = #vc4kernel.add_alu_opcode<and>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value_rhs_lo = vc4kernel.fragment_alu.add %rhs, %value_mask {opcode = #vc4kernel.add_alu_opcode<and>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value_lhs_hi = vc4kernel.fragment_alu.add %lhs, %value_shift {opcode = #vc4kernel.add_alu_opcode<shr>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>

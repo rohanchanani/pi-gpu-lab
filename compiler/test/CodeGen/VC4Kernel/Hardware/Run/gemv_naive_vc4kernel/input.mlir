@@ -17,7 +17,6 @@ module {
     %c2 = arith.constant 2 : i32
     %c4 = arith.constant 4 : i32
     %c16 = arith.constant 16 : i32
-    %zero_scalar = arith.constant 0.000000e+00 : f32
     %request = vc4kernel.program_id {axis = 0 : i32} : i32
     %row_base = arith.shli %request, %c4 : i32
     %has_rows = arith.cmpi ult, %row_base, %m : i32
@@ -29,7 +28,7 @@ module {
     %rows = vc4kernel.fragment_alu.add %row_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %row_tail = vc4kernel.pred.tail %row_base, %m : i32, i32 -> !vc4kernel.pred<16>
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
-    %zero = vc4kernel.splat %zero_scalar : f32 -> vector<16xf32>
+    %zero = vc4kernel.fragment_const {value = dense<0.000000e+00> : vector<16xf32>} : vector<16xf32>
     cf.br ^loop(%c0, %zero : i32, vector<16xf32>)
 
   ^loop(%j : i32, %acc : vector<16xf32>):
@@ -54,8 +53,7 @@ module {
   ^store(%sum : vector<16xf32>):
     %row_base_bytes = arith.shli %row_base, %c2 : i32
     %row_base_bytes_v = vc4kernel.splat %row_base_bytes : i32 -> vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %y_bytes = vc4kernel.fragment_alu.add %row_base_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %y, %y_bytes, %sum, %row_tail : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return

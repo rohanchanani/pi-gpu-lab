@@ -11,11 +11,9 @@ module {
     arg_attrs = [{name = "out", kind = "buffer", direction = "out", elem_type = "i32"}],
     warps_per_block = 1 : i32
   } {
-    %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %r3 = vc4kernel.fragment_rotate %lanes {amount = 3 : i32} : vector<16xi32> -> vector<16xi32>
     %r0 = vc4kernel.fragment_rotate %r3 {amount = 0 : i32} : vector<16xi32> -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %r0, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>

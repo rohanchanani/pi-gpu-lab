@@ -9,18 +9,15 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c2 = arith.constant 2 : i32
-    %b1 = arith.constant 64 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %c2v = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %c2v {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %av = vc4kernel.tmu_load_fragment %a, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %bv = vc4kernel.tmu_load_fragment %b, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %minv = vc4kernel.fragment_alu.add %av, %bv {opcode = #vc4kernel.add_alu_opcode<min>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %maxv = vc4kernel.fragment_alu.add %av, %bv {opcode = #vc4kernel.add_alu_opcode<max>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %lane_bytes, %minv, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
-    %b1v = vc4kernel.splat %b1 : i32 -> vector<16xi32>
+    %b1v = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
     %o1 = vc4kernel.fragment_alu.add %b1v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %o1, %maxv, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return

@@ -20,33 +20,16 @@ module {
     %c5 = arith.constant 5 : i32
     %c6 = arith.constant 6 : i32
     %c7 = arith.constant 7 : i32
-    %shift2 = arith.constant 2 : i32
-    %row64 = arith.constant 64 : i32
-    %row128 = arith.constant 128 : i32
-    %row192 = arith.constant 192 : i32
-    %row256 = arith.constant 256 : i32
-    %row320 = arith.constant 320 : i32
-    %row384 = arith.constant 384 : i32
-    %row448 = arith.constant 448 : i32
-    %base0 = arith.constant 1895825408 : i32
-    %base1 = arith.constant 1895825664 : i32
-    %base2 = arith.constant 1895825920 : i32
-    %base3 = arith.constant 1895826176 : i32
-    %base4 = arith.constant 1895826432 : i32
-    %base5 = arith.constant 1895826688 : i32
-    %base6 = arith.constant 1895826944 : i32
-    %base7 = arith.constant 1895827200 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes_shift = vc4kernel.splat %shift2 : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %row64v = vc4kernel.splat %row64 : i32 -> vector<16xi32>
-    %row128v = vc4kernel.splat %row128 : i32 -> vector<16xi32>
-    %row192v = vc4kernel.splat %row192 : i32 -> vector<16xi32>
-    %row256v = vc4kernel.splat %row256 : i32 -> vector<16xi32>
-    %row320v = vc4kernel.splat %row320 : i32 -> vector<16xi32>
-    %row384v = vc4kernel.splat %row384 : i32 -> vector<16xi32>
-    %row448v = vc4kernel.splat %row448 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
+    %row64v = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
+    %row128v = vc4kernel.fragment_const {value = dense<128> : vector<16xi32>} : vector<16xi32>
+    %row192v = vc4kernel.fragment_const {value = dense<192> : vector<16xi32>} : vector<16xi32>
+    %row256v = vc4kernel.fragment_const {value = dense<256> : vector<16xi32>} : vector<16xi32>
+    %row320v = vc4kernel.fragment_const {value = dense<320> : vector<16xi32>} : vector<16xi32>
+    %row384v = vc4kernel.fragment_const {value = dense<384> : vector<16xi32>} : vector<16xi32>
+    %row448v = vc4kernel.fragment_const {value = dense<448> : vector<16xi32>} : vector<16xi32>
     %offs1 = vc4kernel.fragment_alu.add %row64v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs2 = vc4kernel.fragment_alu.add %row128v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs3 = vc4kernel.fragment_alu.add %row192v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
@@ -54,14 +37,14 @@ module {
     %offs5 = vc4kernel.fragment_alu.add %row320v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs6 = vc4kernel.fragment_alu.add %row384v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offs7 = vc4kernel.fragment_alu.add %row448v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %base0v = vc4kernel.splat %base0 : i32 -> vector<16xi32>
-    %base1v = vc4kernel.splat %base1 : i32 -> vector<16xi32>
-    %base2v = vc4kernel.splat %base2 : i32 -> vector<16xi32>
-    %base3v = vc4kernel.splat %base3 : i32 -> vector<16xi32>
-    %base4v = vc4kernel.splat %base4 : i32 -> vector<16xi32>
-    %base5v = vc4kernel.splat %base5 : i32 -> vector<16xi32>
-    %base6v = vc4kernel.splat %base6 : i32 -> vector<16xi32>
-    %base7v = vc4kernel.splat %base7 : i32 -> vector<16xi32>
+    %base0v = vc4kernel.fragment_const {value = dense<1895825408> : vector<16xi32>} : vector<16xi32>
+    %base1v = vc4kernel.fragment_const {value = dense<1895825664> : vector<16xi32>} : vector<16xi32>
+    %base2v = vc4kernel.fragment_const {value = dense<1895825920> : vector<16xi32>} : vector<16xi32>
+    %base3v = vc4kernel.fragment_const {value = dense<1895826176> : vector<16xi32>} : vector<16xi32>
+    %base4v = vc4kernel.fragment_const {value = dense<1895826432> : vector<16xi32>} : vector<16xi32>
+    %base5v = vc4kernel.fragment_const {value = dense<1895826688> : vector<16xi32>} : vector<16xi32>
+    %base6v = vc4kernel.fragment_const {value = dense<1895826944> : vector<16xi32>} : vector<16xi32>
+    %base7v = vc4kernel.fragment_const {value = dense<1895827200> : vector<16xi32>} : vector<16xi32>
     %value0 = vc4kernel.fragment_alu.add %base0v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value1 = vc4kernel.fragment_alu.add %base1v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value2 = vc4kernel.fragment_alu.add %base2v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>

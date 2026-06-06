@@ -4,7 +4,6 @@ module {
     %c1_i32 = arith.constant 1 : i32
     %c2_i32 = arith.constant 2 : i32
     %c4_i32 = arith.constant 4 : i32
-    %cst = arith.constant 0.000000e+00 : f32
     %0 = vc4kernel.program_id {axis = 0 : i32} : i32
     %1 = vc4kernel.program_id {axis = 1 : i32} : i32
     %2 = arith.shli %0, %c4_i32 : i32
@@ -15,11 +14,10 @@ module {
     cf.cond_br %4, ^bb2, ^bb6
   ^bb2:  // pred: ^bb1
     %5 = vc4kernel.lane_range : vector<16xi32>
-    %6_shift = vc4kernel.splat %c2_i32 : i32 -> vector<16xi32>
-    %6 = vc4kernel.fragment_alu.add %5, %6_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %6 = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %7 = vc4kernel.pred.tail %2, %arg4 : i32, i32 -> <16>
     %8 = vc4kernel.pred.full : <16>
-    %9 = vc4kernel.splat %cst : f32 -> vector<16xf32>
+    %9 = vc4kernel.fragment_const {value = dense<0.000000e+00> : vector<16xf32>} : vector<16xf32>
     cf.br ^bb3(%c0_i32, %9 : i32, vector<16xf32>)
   ^bb3(%10: i32, %11: vector<16xf32>):  // 2 preds: ^bb2, ^bb4
     %12 = arith.cmpi ult, %10, %arg5 : i32

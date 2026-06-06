@@ -10,7 +10,6 @@ module {
     ],
     warps_per_block = 1 : i32
   } {
-    %c2 = arith.constant 2 : i32
     // CHECK: vc4kernel.pred.full
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     // CHECK: vc4kernel.pred.tail
@@ -18,8 +17,7 @@ module {
     // CHECK: vc4kernel.lane_range
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %basev = vc4kernel.splat %base : i32 -> vector<16xi32>
-    %offs_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
-    %offs = vc4kernel.fragment_alu.add %lanes, %offs_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     // CHECK: vc4kernel.fragment_cmp
     %cmp = vc4kernel.fragment_cmp %lanes, %basev {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.tmu_load_fragment
