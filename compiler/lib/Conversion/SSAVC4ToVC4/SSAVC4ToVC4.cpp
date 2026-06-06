@@ -2348,8 +2348,17 @@ static LogicalResult selectInstructionTemplates(
       if (hasName(&op, kSSAVC4MovOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
           return op.emitOpError("requires one input operand and one result for M3 lowering");
-        if (op.getOperand(0).getType() != op.getResult(0).getType())
-          return op.emitOpError("requires identical input and result types for M3 lowering");
+        Type inputType = op.getOperand(0).getType();
+        Type resultType = op.getResult(0).getType();
+        bool sameType = inputType == resultType;
+        bool reinterpretVector =
+            (isVector16I32Type(inputType) && isVector16F32Type(resultType)) ||
+            (isVector16F32Type(inputType) && isVector16I32Type(resultType));
+        if (!sameType && !reinterpretVector) {
+          return op.emitOpError(
+              "requires identical types or vector<16xi32>/vector<16xf32> bit "
+              "reinterpretation carriers for M3 lowering");
+        }
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;

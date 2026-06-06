@@ -184,6 +184,14 @@ def VC4Kernel_SplatOp : VC4Kernel_PureOp<"splat"> {
   let hasVerifier = 1;
 }
 
+def VC4Kernel_FragmentBitcastOp : VC4Kernel_PureOp<"fragment_bitcast"> {
+  let summary = "bit-preserving reinterpretation between 32-bit fragment carriers";
+  let arguments = (ins VC4Kernel_Vector16Data:$input);
+  let results = (outs VC4Kernel_Vector16Data:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
   let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
   let arguments = (ins

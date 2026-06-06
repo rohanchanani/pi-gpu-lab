@@ -56,6 +56,8 @@ constexpr llvm::StringLiteral kPredNotOpName("vc4kernel.pred.not");
 constexpr llvm::StringLiteral kPredAnyOpName("vc4kernel.pred.any");
 constexpr llvm::StringLiteral kPredAllOpName("vc4kernel.pred.all");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
+constexpr llvm::StringLiteral kFragmentBitcastOpName(
+    "vc4kernel.fragment_bitcast");
 constexpr llvm::StringLiteral kFragmentALUAddOpName(
     "vc4kernel.fragment_alu.add");
 constexpr llvm::StringLiteral kFragmentALUMulOpName(
@@ -87,6 +89,7 @@ constexpr llvm::StringLiteral kSSAVC4ElementNumberOpName(
     "ssavc4.element_number");
 constexpr llvm::StringLiteral kSSAVC4UniformReadOpName("ssavc4.uniform.read");
 constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
+constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
@@ -191,6 +194,7 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.pred.any",
       "vc4kernel.pred.all",
       "vc4kernel.splat",
+      "vc4kernel.fragment_bitcast",
       "vc4kernel.fragment_alu.add",
       "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
@@ -2108,6 +2112,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4SplatOpName, input, {},
+        op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentBitcastOpName)) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4MovOpName, input, {},
         op->getResult(0).getType())};
     return success();
   }

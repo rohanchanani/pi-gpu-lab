@@ -252,7 +252,7 @@
       "id": "p2_fragment_bitcast",
       "phase": "P2",
       "category": "bitcast_constants",
-      "current_status": "planned",
+      "current_status": "implemented_hardware_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
       "current_surface": "No dedicated VC4Kernel fragment bitcast surface.",
       "target_surface": "Target-planning bitcast between compatible 32-bit fragment carriers without producer dialect admission.",

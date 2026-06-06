@@ -906,6 +906,26 @@ LogicalResult SplatOp::verify() {
   return success();
 }
 
+LogicalResult FragmentBitcastOp::verify() {
+  Type inputType = getInput().getType();
+  Type resultType = getResult().getType();
+  bool inputI32 = isVC4KernelVector16I32Type(inputType);
+  bool inputF32 = isVC4KernelVector16F32Type(inputType);
+  bool resultI32 = isVC4KernelVector16I32Type(resultType);
+  bool resultF32 = isVC4KernelVector16F32Type(resultType);
+
+  if ((!inputI32 && !inputF32) || (!resultI32 && !resultF32)) {
+    return emitOpError(
+        "fragment_bitcast requires i32/f32 reinterpretation between "
+        "vector<16xi32> and vector<16xf32>");
+  }
+  if ((inputI32 && resultF32) || (inputF32 && resultI32))
+    return success();
+  return emitOpError(
+      "fragment_bitcast requires i32/f32 reinterpretation between "
+      "vector<16xi32> and vector<16xf32>");
+}
+
 LogicalResult FragmentALUAddOp::verify() {
   Operation *op = getOperation();
   AddALUOpcode opcode = getOpcode();

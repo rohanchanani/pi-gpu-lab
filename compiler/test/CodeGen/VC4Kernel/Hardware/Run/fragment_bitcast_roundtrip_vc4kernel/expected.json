@@ -1,0 +1,16 @@
+{
+  "name": "fragment_bitcast_roundtrip_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "raw_word_oracle": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 1,
+    "checksum_accum": 340937
+  }
+}

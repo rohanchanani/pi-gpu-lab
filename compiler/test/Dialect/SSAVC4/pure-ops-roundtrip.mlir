@@ -24,7 +24,9 @@ module {
   %lane = ssavc4.element_number : vector<16xi32>
   %splat = ssavc4.splat %i : i32 -> vector<16xi32>
   %moved = ssavc4.mov %splat : vector<16xi32> -> vector<16xi32>
-  %sum = ssavc4.alu.add %moved, %lane {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+  %as_f = ssavc4.mov %moved : vector<16xi32> -> vector<16xf32>
+  %as_i = ssavc4.mov %as_f : vector<16xf32> -> vector<16xi32>
+  %sum = ssavc4.alu.add %as_i, %lane {opcode = #vc4.add_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
   %prod = ssavc4.alu.mul %sum, %v {opcode = #vc4.mul_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
   %rot = ssavc4.rotate %prod {amount = 4 : i32} : vector<16xi32> -> vector<16xi32>
   %packed = ssavc4.pack %rot {mode = #vc4.regfile_a_pack_mode<to_16a>} : vector<16xi32> -> vector<16xi32>
