@@ -8,7 +8,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-vdw-store-policy-lock | FileCheck %s --check-prefix=P8
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
-# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P1: migration_targets:
 # P1-SAME: removed_special_case_ops=4
 # P1-SAME: special_case_migration_targets=4
@@ -24,7 +24,7 @@
 # P1-SAME: removed_legacy_hits=0
 
 # P2: PASS VC4Kernel Surface v2 audit: mode=p2-bitcast-const-lock
-# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P2: migration_targets:
 # P2-SAME: p2_locked_status_entries=2
 # P2-SAME: removed_special_case_ops=4
@@ -42,7 +42,7 @@
 # P2-SAME: static_const_splat_hits=0
 
 # P3: PASS VC4Kernel Surface v2 audit: mode=p3-general-cmp-lock
-# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P3: migration_targets:
 # P3-SAME: p3_locked_status_entries=2
 # P3-SAME: p3_post_phase_planned_entries=22
@@ -63,7 +63,7 @@
 # P3-SAME: unordered_active_hits=0
 
 # P4: PASS VC4Kernel Surface v2 audit: mode=p4-general-reduce-lock
-# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P4: migration_targets:
 # P4-SAME: removed_special_case_ops=4
 # P4-SAME: special_case_removed_in_p1=4
@@ -83,7 +83,7 @@
 # P4-SAME: stale_add_only_source_hits=0
 
 # P5: PASS VC4Kernel Surface v2 audit: mode=p5-scalar-arith-lock
-# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P5: migration_targets:
 # P5-SAME: p5_locked_status_entries=1
 # P5-SAME: p5_post_phase_planned_entries=20
@@ -101,7 +101,7 @@
 # P5-SAME: vector_arith_hits=0
 
 # P6: PASS VC4Kernel Surface v2 audit: mode=p6-memory-policy-lock
-# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P6: migration_targets:
 # P6-SAME: special_case_removed_in_p1=4
 # P6: fixture_purity:
@@ -120,7 +120,7 @@
 # P6-SAME: source_lower_half_fixture_hits=0
 
 # P7: PASS VC4Kernel Surface v2 audit: mode=p7-tmu-safe-load-lock
-# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P7: migration_targets:
 # P7-SAME: removed_special_case_ops=4
 # P7-SAME: special_case_migration_targets=4
@@ -140,7 +140,7 @@
 # P7-SAME: tmu_source_policy_hits=0
 
 # P8: PASS VC4Kernel Surface v2 audit: mode=p8-vdw-store-policy-lock
-# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
 # P8: migration_targets:
 # P8-SAME: removed_special_case_ops=4
 # P8-SAME: special_case_migration_targets=4

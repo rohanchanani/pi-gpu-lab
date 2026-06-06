@@ -11,6 +11,7 @@
     "P6",
     "P7",
     "P8",
+    "P8_5",
     "P9",
     "P10",
     "P11",
@@ -475,6 +476,26 @@
         "p8_vdw_store_inactive_preserve_full_tail_rect"
       ],
       "acceptance_line": "P8 sparse VDW handling is accepted only as deterministic reject."
+    },
+    {
+      "id": "p8_5_mixed_acceptance_policy",
+      "phase": "P8_5",
+      "category": "acceptance_policy",
+      "current_status": "implemented_pending_mixed_fixtures",
+      "final_status_target": "mixed_acceptance_locked",
+      "current_surface": "P8.5 introduces a machine-readable mixed acceptance manifest, planned-mode coverage checker, mixed hardware runner, and policy docs. No compiler feature surface changes in P8.5b.",
+      "target_surface": "After P8.5 lock, routine final hardware acceptance uses the mixed suite plus audits, lit, and check-vc4 instead of replaying every historical isolated fixture.",
+      "vc4kernel_verifier_plan": "No verifier semantics change. Existing P8 lock audit remains required, and later P8.5 lock mode will verify mixed fixture purity.",
+      "vc4kernel_to_ssavc4_plan": "No conversion semantics change. Mixed fixtures added later must exercise accepted conversion paths without direct VC4KernelToVC4.",
+      "ssavc4_to_vc4_plan": "No lower-half semantics change. Lower-half mixed fixtures cover spill, DMA, branch layout, and vertical canaries.",
+      "hardware_or_reject_verification_plan": "Planned mode validates manifest coverage and deterministic-reject entries. Later lock mode requires all mixed fixtures and P8.5 final acceptance runs the mixed suite once.",
+      "upstream_use": "P9-P13 final acceptance cadence and mixed coverage extension points.",
+      "migration_or_removal": "Isolated fixtures are retained as phase proofs and triage tools; routine final acceptance stops using every isolated fixture by default after the mixed suite is locked.",
+      "dependencies": [
+        "p8_vdw_store_inactive_preserve_full_tail_rect",
+        "p8_sparse_vdw_store_deterministic_reject"
+      ],
+      "acceptance_line": "P8.5 is accepted only when the mixed manifest, checker, runner, docs, audits, and final mixed hardware suite are locked."
     },
     {
       "id": "p9_fragment_pack",

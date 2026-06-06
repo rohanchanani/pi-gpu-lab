@@ -33,9 +33,9 @@ FEATURE_FIELDS = {
     "acceptance_line",
 }
 
-REQUIRED_PHASES = [f"P{i}" for i in range(14)] + [
-    "DEFERRED_SPARSE_VDW_STORE"
-]
+REQUIRED_PHASES = [f"P{i}" for i in range(9)] + [
+    "P8_5",
+] + [f"P{i}" for i in range(9, 14)] + ["DEFERRED_SPARSE_VDW_STORE"]
 
 REQUIRED_POLICIES = {
     "generalize_not_special_case",
@@ -65,6 +65,7 @@ REQUIRED_FEATURE_IDS = {
     "p7_remove_old_tmu_load_signature",
     "p8_vdw_store_inactive_preserve_full_tail_rect",
     "p8_sparse_vdw_store_deterministic_reject",
+    "p8_5_mixed_acceptance_policy",
     "p9_fragment_pack",
     "p9_fragment_unpack",
     "p9_vpm_subword_w16_w8_modes",
