@@ -6,6 +6,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p6-memory-policy-lock | FileCheck %s --check-prefix=P6
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p7-tmu-safe-load-lock | FileCheck %s --check-prefix=P7
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-vdw-store-policy-lock | FileCheck %s --check-prefix=P8
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-5-mixed-acceptance-lock | FileCheck %s --check-prefix=P8_5
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
@@ -158,3 +159,21 @@
 # P8-SAME: sparse_vdw_active_hits=0
 # P8-SAME: vdw_source_policy_hits=0
 # P8-SAME: vdw_sparse_rmw_fallback_hits=0
+
+# P8_5: PASS VC4Kernel Surface v2 audit: mode=p8-5-mixed-acceptance-lock
+# P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=39
+# P8_5: fixture_purity:
+# P8_5-SAME: hardware_inputs=104
+# P8_5-SAME: producer_or_lower_half_hits=0
+# P8_5: p1_general_alu_lock:
+# P8_5-SAME: removed_legacy_hits=0
+# P8_5: p8_5_mixed_acceptance_lock:
+# P8_5-SAME: future_phase_surface_hits=0
+# P8_5-SAME: hidden_spill_reload_tmu_hits=0
+# P8_5-SAME: missing_isolated_fixtures=0
+# P8_5-SAME: mixed_checker_lock=1
+# P8_5-SAME: mixed_fixtures=8
+# P8_5-SAME: mixed_ssavc4_fixtures=1
+# P8_5-SAME: mixed_vc4kernel_fixtures=7
+# P8_5-SAME: old_signature_hits=0
+# P8_5-SAME: sparse_vdw_active_hits=0

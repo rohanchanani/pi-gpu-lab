@@ -290,7 +290,7 @@
         "mixed_blocked_gemm_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p1_fragment_alu_i32_logic_shift_minmax_clz",
@@ -302,7 +302,7 @@
         "mixed_cooperative_barrier_vpm_transpose_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p1_fragment_alu_mul24_v8",
@@ -313,7 +313,7 @@
         "mixed_blocked_gemm_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p2_fragment_bitcast_const",
@@ -325,7 +325,7 @@
         "mixed_cooperative_barrier_vpm_transpose_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p3_i32_cmp",
@@ -336,7 +336,7 @@
         "mixed_i32_control_reduce_scalar_address_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p3_f32_cmp_finite",
@@ -348,7 +348,7 @@
         "mixed_blocked_gemv_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p4_i32_reduce",
@@ -358,7 +358,7 @@
         "mixed_i32_control_reduce_scalar_address_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p4_f32_reduce_finite_tree",
@@ -369,7 +369,7 @@
         "mixed_blocked_gemm_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p5_scalar_i32_control_address",
@@ -381,7 +381,7 @@
         "mixed_blocked_gemm_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p5_scalar_i1_bitcast_policy",
@@ -392,7 +392,7 @@
         "unsupported_numeric_casts_reject"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p6_memory_path_coherency",
@@ -405,7 +405,7 @@
         "missing_memory_path_coherency_reject"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p6_spill_coherency",
@@ -417,7 +417,7 @@
         "p8_vdw_store_policy_audit"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p7_tmu_safe_offset",
@@ -429,7 +429,7 @@
         "old_tmu_signature_reject"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p8_vdw_preserve_register",
@@ -440,7 +440,7 @@
         "mixed_i32_control_reduce_scalar_address_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p8_vdw_preserve_vpm_rect",
@@ -452,7 +452,7 @@
         "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "p8_sparse_store_reject",
@@ -474,7 +474,7 @@
         "mixed_lower_half_spill_dma_branch_ssavc4"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "dynamic_vdr_vdw_vertical",
@@ -484,7 +484,7 @@
         "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "blocked_gemv_runtime_dims",
@@ -494,7 +494,7 @@
         "mixed_blocked_gemv_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "blocked_gemm_runtime_dims",
@@ -504,7 +504,7 @@
         "mixed_blocked_gemm_vpm_fullstack_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "cooperative_barrier_vpm",
@@ -514,7 +514,7 @@
         "mixed_cooperative_barrier_vpm_transpose_vc4kernel"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     },
     {
       "id": "lower_half_spill_dma_branch",
@@ -525,7 +525,7 @@
         "mixed_lower_half_spill_dma_branch_ssavc4"
       ],
       "required": true,
-      "status": "planned"
+      "status": "implemented"
     }
   ],
   "deterministic_rejects": [

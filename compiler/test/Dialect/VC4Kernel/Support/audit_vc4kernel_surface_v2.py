@@ -227,6 +227,42 @@ P5_POST_PHASES = {
     "DEFERRED_SPARSE_VDW_STORE",
 }
 
+P8_5_MIXED_ACCEPTANCE_MANIFEST = Path(
+    "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/"
+    "mixed_acceptance_manifest.json"
+)
+P8_5_MIXED_ACCEPTANCE_CHECKER = Path(
+    "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/"
+    "check_mixed_acceptance_coverage.py"
+)
+P8_5_MIXED_ACCEPTANCE_RUNNER = Path(
+    "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/"
+    "run_mixed_acceptance.sh"
+)
+P8_5_MIXED_POLICY_DOC = Path(
+    "compiler/docs/vc4kernel_mixed_acceptance_policy.md"
+)
+P8_5_REQUIRED_MIXED_FIXTURES = {
+    "mixed_elementwise_tmu_alu_cmp_vdw_vc4kernel",
+    "mixed_i32_control_reduce_scalar_address_vc4kernel",
+    "mixed_f32_reduce_tmu_loop_spill_vdw_vc4kernel",
+    "mixed_blocked_gemv_vpm_fullstack_vc4kernel",
+    "mixed_blocked_gemm_vpm_fullstack_vc4kernel",
+    "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel",
+    "mixed_cooperative_barrier_vpm_transpose_vc4kernel",
+    "mixed_lower_half_spill_dma_branch_ssavc4",
+}
+P8_5_REPRESENTATIVE_ISOLATED_FIXTURES = {
+    "fragment_alu_add_i32_logic_shift_vc4kernel",
+    "fragment_cmp_f32_finite_ordered_vc4kernel",
+    "fragment_reduce_f32_add_finite_tree_vc4kernel",
+    "scalar_i32_address_math_vc4kernel",
+    "memory_path_explicit_tmu_vdw_vc4kernel",
+    "tmu_load_safe_offset_full_tail_vc4kernel",
+    "vdw_store_fragment_preserve_full_tail_vc4kernel",
+    "vdw_store_rect_from_vpm_preserve_dynamic_shape_vc4kernel",
+}
+
 P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
     "migration_target",
@@ -472,6 +508,7 @@ def audit_matrix_ownership(matrix, mode):
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -491,6 +528,7 @@ def audit_matrix_ownership(matrix, mode):
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -707,6 +745,26 @@ def audit_matrix_ownership(matrix, mode):
         ]:
             if token not in p8_text:
                 fail(f"P8 VDW store matrix entries must document {token}")
+    if mode == "p8-5-mixed-acceptance-lock":
+        p8_5_policy = require_matrix_feature(
+            features,
+            "p8_5_mixed_acceptance_policy",
+            "P8_5",
+            "accepted",
+        )
+        p8_5_text = json.dumps(p8_5_policy).lower()
+        for token in [
+            "mixed",
+            "manifest",
+            "runner",
+            "lock",
+            "isolated fixtures",
+            "triage",
+            "p9-p13",
+            "hardware",
+        ]:
+            if token not in p8_5_text:
+                fail(f"P8.5 mixed acceptance matrix entry must document {token}")
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
@@ -714,7 +772,11 @@ def audit_matrix_ownership(matrix, mode):
             "P4",
             {"migration_target", "removed_in_p4"},
         )
-    if mode not in {"p7-tmu-safe-load-lock", "p8-vdw-store-policy-lock"}:
+    if mode not in {
+        "p7-tmu-safe-load-lock",
+        "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
+    }:
         require_matrix_feature_status_in(
             features,
             "p7_remove_old_tmu_load_signature",
@@ -866,6 +928,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -2339,6 +2402,168 @@ def audit_p8_vdw_store_policy_lock(repo_root, matrix):
     return counts
 
 
+def run_mixed_acceptance_checker_lock(repo_root):
+    manifest = repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST
+    checker = repo_root / P8_5_MIXED_ACCEPTANCE_CHECKER
+    command = [
+        sys.executable,
+        str(checker),
+        "--manifest",
+        str(manifest),
+        "--repo-root",
+        str(repo_root),
+        "--mode",
+        "lock",
+    ]
+    result = subprocess.run(
+        command,
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        fail(f"mixed acceptance checker lock failed: {output}")
+    return result.stdout.strip().splitlines()
+
+
+def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
+    counts = audit_p8_vdw_store_policy_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+    require_matrix_feature(
+        features,
+        "p8_5_mixed_acceptance_policy",
+        "P8_5",
+        "accepted",
+    )
+
+    required_paths = [
+        P8_5_MIXED_ACCEPTANCE_MANIFEST,
+        P8_5_MIXED_ACCEPTANCE_CHECKER,
+        P8_5_MIXED_ACCEPTANCE_RUNNER,
+        P8_5_MIXED_POLICY_DOC,
+    ]
+    missing_paths = [
+        str(path) for path in required_paths if not (repo_root / path).is_file()
+    ]
+    if missing_paths:
+        fail("P8.5 lock missing mixed acceptance files: " + ", ".join(missing_paths))
+    if not (repo_root / P8_5_MIXED_ACCEPTANCE_RUNNER).stat().st_mode & 0o111:
+        fail("P8.5 lock expected mixed acceptance runner to be executable")
+
+    checker_summary = run_mixed_acceptance_checker_lock(repo_root)
+    if not checker_summary or "mode=lock" not in checker_summary[0]:
+        fail("P8.5 lock expected mixed acceptance checker lock PASS summary")
+
+    manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    missing_fixtures = sorted(P8_5_REQUIRED_MIXED_FIXTURES - fixtures.keys())
+    if missing_fixtures:
+        fail("P8.5 lock missing mixed fixtures: " + ", ".join(missing_fixtures))
+    planned_fixtures = sorted(
+        name
+        for name, fixture in fixtures.items()
+        if name in P8_5_REQUIRED_MIXED_FIXTURES and fixture.get("status") == "planned"
+    )
+    if planned_fixtures:
+        fail("P8.5 lock found planned mixed fixtures: " + ", ".join(planned_fixtures))
+
+    vc4kernel_fixture_hits = 0
+    ssavc4_fixture_hits = 0
+    for name in sorted(P8_5_REQUIRED_MIXED_FIXTURES):
+        fixture = fixtures[name]
+        fixture_dir = repo_root / fixture["path"]
+        input_path = fixture_dir / "input.mlir"
+        expected_path = fixture_dir / "expected.json"
+        if not input_path.is_file() or not expected_path.is_file():
+            fail(f"P8.5 lock missing input/expected for {name}")
+        text = read_text(input_path)
+        if fixture["dialect"] == "vc4kernel":
+            vc4kernel_fixture_hits += 1
+            if "vc4kernel.kernel" not in text:
+                fail(f"P8.5 lock VC4Kernel mixed fixture lacks kernel op: {name}")
+            for prefix in PRODUCER_OR_LOWER_HALF_OP_PREFIXES:
+                if prefix in text:
+                    fail(
+                        f"P8.5 lock VC4Kernel mixed fixture {name} contains {prefix}"
+                    )
+        elif fixture["dialect"] == "ssavc4":
+            ssavc4_fixture_hits += 1
+            if "ssavc4.module" not in text:
+                fail(f"P8.5 lock SSAVC4 mixed fixture lacks module op: {name}")
+            if "vc4kernel." in text or "\nvc4." in text or " vc4." in text:
+                fail(f"P8.5 lock SSAVC4 mixed fixture has forbidden source dialect: {name}")
+        else:
+            fail(f"P8.5 lock invalid mixed fixture dialect for {name}")
+
+    missing_isolated = []
+    vc4kernel_run_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    for name in sorted(P8_5_REPRESENTATIVE_ISOLATED_FIXTURES):
+        if not (vc4kernel_run_root / name / "input.mlir").is_file():
+            missing_isolated.append(name)
+    if missing_isolated:
+        fail(
+            "P8.5 lock expected representative isolated fixtures retained: "
+            + ", ".join(missing_isolated)
+        )
+
+    docs = read_text(repo_root / P8_5_MIXED_POLICY_DOC)
+    for token in [
+        "isolated fixtures remain",
+        "Routine final acceptance does not run every isolated historical hardware",
+        "Run the isolated fixture band",
+        "P9-P13 must add mixed coverage",
+    ]:
+        if token not in docs:
+            fail(f"P8.5 lock expected policy docs to contain: {token}")
+
+    future_phase_surface_hits = []
+    source_roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+    ]
+    for root in source_roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            text = read_text(path)
+            for token in [
+                "vc4kernel.fragment_pack",
+                "vc4kernel.fragment_unpack",
+                "vc4kernel.pack",
+                "vc4kernel.unpack",
+                "vc4kernel.sfu",
+                "vc4kernel.fragment_sfu",
+                "vc4kernel.dynamic_rotate",
+                "vc4kernel.fragment_rotate_dynamic",
+                "vc4kernel.dynamic_vpm_coord",
+                "vc4kernel.vector",
+                "vc4kernel.triton",
+            ]:
+                if token in text:
+                    future_phase_surface_hits.append((path, token))
+    if future_phase_surface_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{token}"
+            for path, token in future_phase_surface_hits[:20]
+        )
+        fail(f"P8.5 lock found future phase surface tokens in active source: {details}")
+
+    counts.update(
+        {
+            "mixed_checker_lock": 1,
+            "mixed_fixtures": len(P8_5_REQUIRED_MIXED_FIXTURES),
+            "mixed_vc4kernel_fixtures": vc4kernel_fixture_hits,
+            "mixed_ssavc4_fixtures": ssavc4_fixture_hits,
+            "isolated_fixture_retention_checks": len(P8_5_REPRESENTATIVE_ISOLATED_FIXTURES),
+            "missing_isolated_fixtures": 0,
+            "future_phase_surface_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -2366,6 +2591,7 @@ def main(argv):
         "p6-memory-policy-lock",
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -2387,6 +2613,7 @@ def main(argv):
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
         "p8-vdw-store-policy-lock",
+        "p8-5-mixed-acceptance-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -2412,6 +2639,7 @@ def main(argv):
             "p6-memory-policy-lock",
             "p7-tmu-safe-load-lock",
             "p8-vdw-store-policy-lock",
+            "p8-5-mixed-acceptance-lock",
         }
         else {}
     )
@@ -2455,6 +2683,11 @@ def main(argv):
         if args.mode == "p8-vdw-store-policy-lock"
         else {}
     )
+    p8_5_lock_counts = (
+        audit_p8_5_mixed_acceptance_lock(repo_root, matrix)
+        if args.mode == "p8-5-mixed-acceptance-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -2491,6 +2724,8 @@ def main(argv):
         print(f"p7_tmu_safe_load_lock: {format_counts(p7_lock_counts)}")
     if p8_lock_counts:
         print(f"p8_vdw_store_policy_lock: {format_counts(p8_lock_counts)}")
+    if p8_5_lock_counts:
+        print(f"p8_5_mixed_acceptance_lock: {format_counts(p8_5_lock_counts)}")
     return 0
 
 

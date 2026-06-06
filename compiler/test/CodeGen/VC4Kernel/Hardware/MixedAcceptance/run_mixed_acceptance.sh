@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 manifest="${script_dir}/mixed_acceptance_manifest.json"
 repo_root="$(cd "${script_dir}/../../../../../../" && pwd)"
-state_root=""
+state_root="${VC4_CODEGEN_STATE_ROOT:-}"
 list_only=0
 fixtures=()
 
@@ -118,18 +118,22 @@ while IFS=$'\t' read -r name status runner path dialect; do
   fi
 
   fixture_dir="${repo_root}/${path}"
+  if [[ ! -d "${fixture_dir}" ]]; then
+    echo "missing mixed acceptance fixture directory: ${fixture_dir}" >&2
+    exit 1
+  fi
   log_path="${state_root}/logs/${name}.log"
   echo "RUN mixed acceptance fixture: ${name}"
   case "${runner}" in
     vc4kernel_candidate)
       VC4_CODEGEN_STATE_ROOT="${state_root}" \
         "${repo_root}/compiler/test/CodeGen/VC4Kernel/Support/run_vc4kernel_candidate_codegen_test.sh" \
-        "${fixture_dir}" all 2>&1 | tee "${log_path}"
+        "${name}" all 2>&1 | tee "${log_path}"
       ;;
     ssavc4_candidate)
       VC4_CODEGEN_STATE_ROOT="${state_root}" \
         "${repo_root}/compiler/test/CodeGen/SSAVC4/Support/run_ssavc4_candidate_codegen_test.sh" \
-        "${fixture_dir}" all 2>&1 | tee "${log_path}"
+        "${name}" all 2>&1 | tee "${log_path}"
       ;;
     *)
       echo "unsupported runner_kind for ${name}: ${runner}" >&2
