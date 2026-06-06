@@ -1,0 +1,19 @@
+{
+  "name": "fragment_const_lane_range_affine_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "segments": 11,
+    "lane_range_exact": 1,
+    "lane_affine_add_shifts": 5,
+    "lane_affine_sub_shifts": 5,
+    "runtime_allocations": 1,
+    "runtime_launches": 1,
+    "checksum_accum": 80680
+  }
+}

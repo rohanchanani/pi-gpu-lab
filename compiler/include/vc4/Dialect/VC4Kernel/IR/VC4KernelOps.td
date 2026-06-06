@@ -192,6 +192,14 @@ def VC4Kernel_FragmentBitcastOp : VC4Kernel_PureOp<"fragment_bitcast"> {
   let hasVerifier = 1;
 }
 
+def VC4Kernel_FragmentConstOp : VC4Kernel_PureOp<"fragment_const"> {
+  let summary = "efficient hardware-backed fragment constant";
+  let arguments = (ins AnyAttr:$value);
+  let results = (outs VC4Kernel_Vector16Data:$result);
+  let assemblyFormat = "attr-dict `:` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
   let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
   let arguments = (ins

@@ -58,6 +58,7 @@ constexpr llvm::StringLiteral kPredAllOpName("vc4kernel.pred.all");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
 constexpr llvm::StringLiteral kFragmentBitcastOpName(
     "vc4kernel.fragment_bitcast");
+constexpr llvm::StringLiteral kFragmentConstOpName("vc4kernel.fragment_const");
 constexpr llvm::StringLiteral kFragmentALUAddOpName(
     "vc4kernel.fragment_alu.add");
 constexpr llvm::StringLiteral kFragmentALUMulOpName(
@@ -195,6 +196,7 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.pred.all",
       "vc4kernel.splat",
       "vc4kernel.fragment_bitcast",
+      "vc4kernel.fragment_const",
       "vc4kernel.fragment_alu.add",
       "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
@@ -232,6 +234,73 @@ static bool isScalarF32(Type type) { return type && type.isF32(); }
 
 static bool isAllowedScalarArithType(Type type) {
   return isScalarI1(type) || isScalarI32(type) || isScalarF32(type);
+}
+
+struct LaneAffineConstPlan {
+  int64_t base = 0;
+  int64_t shift = 0;
+  bool subtract = false;
+};
+
+static SmallVector<int64_t, 16> getDenseI32Values(DenseElementsAttr attr) {
+  SmallVector<int64_t, 16> values;
+  values.reserve(attr.getNumElements());
+  for (APInt value : attr.getValues<APInt>())
+    values.push_back(value.getSExtValue());
+  return values;
+}
+
+static bool isDenseI32Splat(DenseElementsAttr attr) {
+  return attr && attr.isSplat() &&
+         attr.getElementType().isSignlessInteger(32);
+}
+
+static bool isDenseF32Splat(DenseElementsAttr attr) {
+  return attr && attr.isSplat() && attr.getElementType().isF32();
+}
+
+static bool isI32LaneRange(ArrayRef<int64_t> values) {
+  if (values.size() != 16)
+    return false;
+  for (int64_t lane = 0; lane < 16; ++lane)
+    if (values[lane] != lane)
+      return false;
+  return true;
+}
+
+static std::optional<LaneAffineConstPlan>
+getI32LaneAffinePlan(ArrayRef<int64_t> values) {
+  if (values.size() != 16)
+    return std::nullopt;
+  int64_t base = values.front();
+  for (int64_t shift = 0; shift <= 4; ++shift) {
+    bool add = true;
+    bool sub = true;
+    for (int64_t lane = 0; lane < 16; ++lane) {
+      int64_t delta = lane << shift;
+      add &= values[lane] == base + delta;
+      sub &= values[lane] == base - delta;
+    }
+    if (add)
+      return LaneAffineConstPlan{base, shift, false};
+    if (sub)
+      return LaneAffineConstPlan{base, shift, true};
+  }
+  return std::nullopt;
+}
+
+static bool isPerLaneU2(ArrayRef<int64_t> values) {
+  return values.size() == 16 &&
+         llvm::all_of(values, [](int64_t value) {
+           return value >= 0 && value <= 3;
+         });
+}
+
+static bool isPerLaneS2(ArrayRef<int64_t> values) {
+  return values.size() == 16 &&
+         llvm::all_of(values, [](int64_t value) {
+           return value >= -2 && value <= 1;
+         });
 }
 
 static LogicalResult verifyNoArithVectors(Operation *op) {
@@ -806,6 +875,22 @@ static Value createLoadImm(OpBuilder &builder, Location loc, Type type,
   return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs, type);
 }
 
+static Value createPerLaneLoadImm(OpBuilder &builder, Location loc, Type type,
+                                  mlir::vc4::LoadImmMode mode,
+                                  ArrayRef<int64_t> values) {
+  SmallVector<int32_t, 16> i32Values;
+  i32Values.reserve(values.size());
+  for (int64_t value : values)
+    i32Values.push_back(static_cast<int32_t>(value));
+  SmallVector<NamedAttribute, 2> attrs{
+      builder.getNamedAttr("mode",
+                           mlir::vc4::LoadImmModeAttr::get(builder.getContext(),
+                                                           mode)),
+      builder.getNamedAttr("values",
+                           builder.getDenseI32ArrayAttr(i32Values))};
+  return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs, type);
+}
+
 struct LoweredValue {
   Value value;
 };
@@ -1050,6 +1135,79 @@ static Value createI32BinaryAddPipe(OpBuilder &builder, Location loc, Value lhs,
       lhs.getType());
 }
 
+static FailureOr<Value> emitFragmentConst(Operation *op, OpBuilder &builder) {
+  auto valueAttr = llvm::dyn_cast_if_present<DenseElementsAttr>(
+      op->getAttr("value"));
+  if (!valueAttr) {
+    op->emitOpError("requires dense value attribute");
+    return failure();
+  }
+
+  Type resultType = op->getResult(0).getType();
+  Location loc = op->getLoc();
+
+  if (mlir::vc4kernel::isVC4KernelVector16F32Type(resultType)) {
+    if (!isDenseF32Splat(valueAttr)) {
+      op->emitOpError("requires efficient fragment_const materialization");
+      return failure();
+    }
+    APFloat value = *valueAttr.getValues<APFloat>().begin();
+    if (!value.isFinite()) {
+      op->emitOpError("fragment_const f32 splat must be finite in P2");
+      return failure();
+    }
+    auto elementType = llvm::cast<VectorType>(resultType).getElementType();
+    return createLoadImm(builder, loc, resultType,
+                         FloatAttr::get(elementType, value));
+  }
+
+  if (!mlir::vc4kernel::isVC4KernelVector16I32Type(resultType)) {
+    op->emitOpError("requires vector<16xi32> or vector<16xf32> result");
+    return failure();
+  }
+
+  if (isDenseI32Splat(valueAttr)) {
+    APInt value = *valueAttr.getValues<APInt>().begin();
+    return createLoadImm(builder, loc, resultType,
+                         builder.getI32IntegerAttr(value.getSExtValue()));
+  }
+
+  SmallVector<int64_t, 16> values = getDenseI32Values(valueAttr);
+  if (isI32LaneRange(values))
+    return createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
+                              resultType);
+
+  if (std::optional<LaneAffineConstPlan> plan =
+          getI32LaneAffinePlan(values)) {
+    Value lanes = createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName,
+                                     {}, {}, resultType);
+    Value shift = createLoadImm(builder, loc, resultType,
+                                builder.getI32IntegerAttr(plan->shift));
+    Value delta = createI32BinaryAddPipe(builder, loc, lanes, shift,
+                                         mlir::vc4::AddOpcode::shl);
+    Value base = createLoadImm(builder, loc, resultType,
+                               builder.getI32IntegerAttr(plan->base));
+    return createI32BinaryAddPipe(
+        builder, loc, base, delta,
+        plan->subtract ? mlir::vc4::AddOpcode::sub : mlir::vc4::AddOpcode::add);
+  }
+
+  if (isPerLaneS2(values) && llvm::any_of(values, [](int64_t value) {
+        return value < 0;
+      }))
+    return createPerLaneLoadImm(builder, loc, resultType,
+                                mlir::vc4::LoadImmMode::per_elem_i2, values);
+  if (isPerLaneU2(values))
+    return createPerLaneLoadImm(builder, loc, resultType,
+                                mlir::vc4::LoadImmMode::per_elem_u2, values);
+  if (isPerLaneS2(values))
+    return createPerLaneLoadImm(builder, loc, resultType,
+                                mlir::vc4::LoadImmMode::per_elem_i2, values);
+
+  op->emitOpError("requires efficient fragment_const materialization");
+  return failure();
+}
+
 static Value createMul24(OpBuilder &builder, Location loc, Value lhs,
                          Value rhs) {
   return createOpWithResult(
@@ -1210,7 +1368,38 @@ static std::optional<int64_t> getSplatI32ConstantValue(Value value) {
   return getI32ConstantValue(def->getOperand(0));
 }
 
+static std::optional<SmallVector<int64_t, 16>>
+getFragmentConstI32Values(Value value) {
+  auto constOp = dyn_cast_or_null<mlir::vc4kernel::FragmentConstOp>(
+      value.getDefiningOp());
+  if (!constOp || !mlir::vc4kernel::isVC4KernelVector16I32Type(value.getType()))
+    return std::nullopt;
+  auto attr = llvm::dyn_cast<DenseElementsAttr>(constOp.getValue());
+  if (!attr || !attr.getElementType().isSignlessInteger(32))
+    return std::nullopt;
+  return getDenseI32Values(attr);
+}
+
+static std::optional<int64_t> getFragmentConstSplatI32Value(Value value) {
+  auto values = getFragmentConstI32Values(value);
+  if (!values || values->empty())
+    return std::nullopt;
+  int64_t first = values->front();
+  if (!llvm::all_of(*values, [first](int64_t value) { return value == first; }))
+    return std::nullopt;
+  return first;
+}
+
 static bool isLaneByteOffsets(Value value) {
+  if (auto values = getFragmentConstI32Values(value)) {
+    if (values->size() != 16)
+      return false;
+    for (int64_t lane = 0; lane < 16; ++lane)
+      if ((*values)[lane] != lane * 4)
+        return false;
+    return true;
+  }
+
   Operation *def = value.getDefiningOp();
   if (!def || def->getNumOperands() != 2)
     return false;
@@ -1237,11 +1426,13 @@ static Value getSplatScalar(Value value) {
 struct FullRowVDWOffsets {
   bool matched = false;
   Value scalarBaseByteOffset;
+  std::optional<int64_t> constantBaseByteOffset;
 };
 
 static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
   if (isLaneByteOffsets(value))
-    return {/*matched=*/true, /*scalarBaseByteOffset=*/{}};
+    return {/*matched=*/true, /*scalarBaseByteOffset=*/{},
+            /*constantBaseByteOffset=*/std::nullopt};
 
   Operation *def = value.getDefiningOp();
   if (!def || def->getNumOperands() != 2)
@@ -1258,7 +1449,10 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
                                    Value rhs) -> FullRowVDWOffsets {
     Value scalarBase = getSplatScalar(lhs);
     if (scalarBase && isLaneByteOffsets(rhs))
-      return {/*matched=*/true, scalarBase};
+      return {/*matched=*/true, scalarBase, std::nullopt};
+    std::optional<int64_t> constantBase = getFragmentConstSplatI32Value(lhs);
+    if (constantBase && isLaneByteOffsets(rhs))
+      return {/*matched=*/true, {}, constantBase};
     return {};
   };
   FullRowVDWOffsets result =
@@ -2124,6 +2318,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         op->getResult(0).getType())};
     return success();
   }
+  if (hasName(op, kFragmentConstOpName)) {
+    FailureOr<Value> value = emitFragmentConst(op, builder);
+    if (failed(value))
+      return failure();
+    state.values[op->getResult(0)] = {*value};
+    return success();
+  }
   if (hasName(op, kFragmentALUAddOpName)) {
     SmallVector<Value, 2> operands;
     for (Value operand : op->getOperands()) {
@@ -2417,6 +2618,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       safeScalarOffset = mapValue(op, sourceOffsets.scalarBaseByteOffset, state);
       if (!safeScalarOffset)
         return failure();
+    } else if (sourceOffsets.constantBaseByteOffset) {
+      safeScalarOffset = createLoadImm(
+          builder, op->getLoc(), builder.getI32Type(),
+          builder.getI32IntegerAttr(*sourceOffsets.constantBaseByteOffset));
     }
 
     Value lane = createOpWithResult(builder, op->getLoc(),
@@ -2591,6 +2796,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           mapValue(op, offsets.scalarBaseByteOffset, state);
       if (!mappedOffset)
         return failure();
+      base = createI32Add(builder, op->getLoc(), base, mappedOffset);
+    } else if (offsets.constantBaseByteOffset) {
+      Value mappedOffset = createLoadImm(
+          builder, op->getLoc(), builder.getI32Type(),
+          builder.getI32IntegerAttr(*offsets.constantBaseByteOffset));
       base = createI32Add(builder, op->getLoc(), base, mappedOffset);
     }
     if (predicate->kind == PredicatePlan::Class::Empty)

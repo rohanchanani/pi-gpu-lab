@@ -11,6 +11,7 @@
 #include "mlir/IR/Operation.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/SymbolTable.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSet.h"
 
 #include <algorithm>
@@ -116,6 +117,71 @@ static IntegerAttr asIntegerAttr(Attribute attr) {
   return llvm::dyn_cast_if_present<IntegerAttr>(attr);
 }
 
+static SmallVector<int64_t, 16> getDenseI32Values(DenseElementsAttr attr) {
+  SmallVector<int64_t, 16> values;
+  values.reserve(attr.getNumElements());
+  for (APInt value : attr.getValues<APInt>())
+    values.push_back(value.getSExtValue());
+  return values;
+}
+
+static bool isDenseI32Splat(DenseElementsAttr attr) {
+  return attr && attr.isSplat() &&
+         attr.getElementType().isSignlessInteger(32);
+}
+
+static bool isDenseF32Splat(DenseElementsAttr attr) {
+  return attr && attr.isSplat() && attr.getElementType().isF32();
+}
+
+static bool isFiniteF32Splat(DenseElementsAttr attr) {
+  if (!isDenseF32Splat(attr))
+    return false;
+  APFloat value = *attr.getValues<APFloat>().begin();
+  return value.isFinite();
+}
+
+static bool isI32LaneRange(ArrayRef<int64_t> values) {
+  if (values.size() != 16)
+    return false;
+  for (int64_t lane = 0; lane < 16; ++lane)
+    if (values[lane] != lane)
+      return false;
+  return true;
+}
+
+static bool isI32LaneAffine(ArrayRef<int64_t> values) {
+  if (values.size() != 16)
+    return false;
+  int64_t base = values.front();
+  for (int64_t shift = 0; shift <= 4; ++shift) {
+    bool add = true;
+    bool sub = true;
+    for (int64_t lane = 0; lane < 16; ++lane) {
+      int64_t delta = lane << shift;
+      add &= values[lane] == base + delta;
+      sub &= values[lane] == base - delta;
+    }
+    if (add || sub)
+      return true;
+  }
+  return false;
+}
+
+static bool isPerLaneU2(ArrayRef<int64_t> values) {
+  return values.size() == 16 &&
+         llvm::all_of(values, [](int64_t value) {
+           return value >= 0 && value <= 3;
+         });
+}
+
+static bool isPerLaneS2(ArrayRef<int64_t> values) {
+  return values.size() == 16 &&
+         llvm::all_of(values, [](int64_t value) {
+           return value >= -2 && value <= 1;
+         });
+}
+
 static StringAttr getStringAttr(DictionaryAttr dict, StringRef name) {
   return dict ? asStringAttr(dict.get(name)) : nullptr;
 }
@@ -156,6 +222,27 @@ static std::optional<int64_t> getSplatConstantI32(Value value) {
   if (!hasName(def, "vc4kernel.splat") || def->getNumOperands() != 1)
     return std::nullopt;
   return getConstantI32(def->getOperand(0));
+}
+
+static std::optional<SmallVector<int64_t, 16>>
+getFragmentConstI32Values(Value value) {
+  auto constOp = dyn_cast_or_null<FragmentConstOp>(value.getDefiningOp());
+  if (!constOp || !isVC4KernelVector16I32Type(value.getType()))
+    return std::nullopt;
+  auto attr = llvm::dyn_cast<DenseElementsAttr>(constOp.getValue());
+  if (!attr || !attr.getElementType().isSignlessInteger(32))
+    return std::nullopt;
+  return getDenseI32Values(attr);
+}
+
+static std::optional<int64_t> getFragmentConstSplatI32(Value value) {
+  auto values = getFragmentConstI32Values(value);
+  if (!values || values->empty())
+    return std::nullopt;
+  int64_t first = values->front();
+  if (!llvm::all_of(*values, [first](int64_t value) { return value == first; }))
+    return std::nullopt;
+  return first;
 }
 
 static bool isKnownScalarByteOffsetAligned4Impl(Value value,
@@ -202,6 +289,15 @@ static bool isKnownScalarByteOffsetAligned4Impl(Value value, unsigned depth) {
 }
 
 static bool isLaneBytes(Value value) {
+  if (auto values = getFragmentConstI32Values(value)) {
+    if (values->size() != 16)
+      return false;
+    for (int64_t lane = 0; lane < 16; ++lane)
+      if ((*values)[lane] != lane * 4)
+        return false;
+    return true;
+  }
+
   Operation *def = value.getDefiningOp();
   if (!def || def->getNumOperands() != 2)
     return false;
@@ -234,6 +330,11 @@ static bool isLaneBytesOrGreater(Value value) {
 static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
   if (depth > 16)
     return false;
+  if (auto values = getFragmentConstI32Values(value)) {
+    return llvm::all_of(*values, [](int64_t offset) {
+      return offset % 4 == 0;
+    });
+  }
   if (isLaneBytesOrGreater(value))
     return true;
 
@@ -276,7 +377,9 @@ static bool isContiguousByteOffsets(Value value) {
     return false;
   auto isBasePlusLaneBytes = [](Value lhs, Value rhs) {
     Operation *splat = lhs.getDefiningOp();
-    return hasName(splat, "vc4kernel.splat") && isLaneBytes(rhs);
+    return (hasName(splat, "vc4kernel.splat") ||
+            getFragmentConstSplatI32(lhs)) &&
+           isLaneBytes(rhs);
   };
   return isBasePlusLaneBytes(def->getOperand(0), def->getOperand(1)) ||
          isBasePlusLaneBytes(def->getOperand(1), def->getOperand(0));
@@ -924,6 +1027,44 @@ LogicalResult FragmentBitcastOp::verify() {
   return emitOpError(
       "fragment_bitcast requires i32/f32 reinterpretation between "
       "vector<16xi32> and vector<16xf32>");
+}
+
+LogicalResult FragmentConstOp::verify() {
+  Type resultType = getResult().getType();
+  if (failed(verifyVector16Data(getOperation(), resultType, "result")))
+    return failure();
+
+  auto valueAttr = llvm::dyn_cast<DenseElementsAttr>(getValue());
+  if (!valueAttr)
+    return emitOpError("value attr must be dense elements");
+  auto valueType = llvm::dyn_cast<ShapedType>(valueAttr.getType());
+  if (!valueType || valueType != resultType)
+    return emitOpError("value attr type must exactly match result type");
+
+  if (isVC4KernelVector16I32Type(resultType)) {
+    if (!valueAttr.getElementType().isSignlessInteger(32))
+      return emitOpError("value attr type must exactly match result type");
+    if (isDenseI32Splat(valueAttr))
+      return success();
+
+    SmallVector<int64_t, 16> values = getDenseI32Values(valueAttr);
+    if (isI32LaneRange(values) || isI32LaneAffine(values) ||
+        isPerLaneU2(values) || isPerLaneS2(values))
+      return success();
+    return emitOpError("requires efficient fragment_const materialization");
+  }
+
+  if (isVC4KernelVector16F32Type(resultType)) {
+    if (!valueAttr.getElementType().isF32())
+      return emitOpError("value attr type must exactly match result type");
+    if (!isDenseF32Splat(valueAttr))
+      return emitOpError("requires efficient fragment_const materialization");
+    if (!isFiniteF32Splat(valueAttr))
+      return emitOpError("fragment_const f32 splat must be finite in P2");
+    return success();
+  }
+
+  return emitOpError("requires efficient fragment_const materialization");
 }
 
 LogicalResult FragmentALUAddOp::verify() {
