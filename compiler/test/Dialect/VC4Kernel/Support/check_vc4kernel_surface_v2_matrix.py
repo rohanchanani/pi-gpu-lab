@@ -91,6 +91,11 @@ SPECIAL_CASE_FEATURE_IDS = {
     "p7_remove_old_tmu_load_signature",
 }
 
+SPECIAL_CASE_ALLOWED_STATUSES = {
+    "migration_target",
+    "migrated_pending_deletion",
+}
+
 FORBIDDEN_TILE_TERMS = {
     "tile_broadcast",
     "tile_dot",
@@ -185,8 +190,11 @@ def validate_feature(feature, phases):
     for dependency in feature["dependencies"]:
         require_string(dependency, f"feature {feature['id']} dependency")
     if feature["id"] in SPECIAL_CASE_FEATURE_IDS:
-        if feature["current_status"] != "migration_target":
-            fail(f"current special-case {feature['id']} must be migration_target")
+        if feature["current_status"] not in SPECIAL_CASE_ALLOWED_STATUSES:
+            fail(
+                f"current special-case {feature['id']} must be migration_target "
+                "or migrated_pending_deletion"
+            )
         if feature["current_status"] == "accepted_final":
             fail(f"current special-case {feature['id']} is marked accepted_final")
     text = "\n".join(walk_strings(feature))

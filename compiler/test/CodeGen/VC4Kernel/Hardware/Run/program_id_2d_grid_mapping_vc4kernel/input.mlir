@@ -24,9 +24,10 @@ module {
     %row_base = arith.muli %pid_y, %num_x : i32
     %request = arith.addi %row_base, %pid_x : i32
     %request_bytes = arith.shli %request, %c6 : i32
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %request_bytes_v = vc4kernel.splat %request_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %request_bytes_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %request_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
 
     %pid_y_scaled = arith.muli %pid_y, %c10 : i32
     %num_x_scaled = arith.muli %num_x, %c100 : i32
@@ -38,7 +39,7 @@ module {
     %v3 = arith.addi %v2, %num_y_scaled : i32
     %base_scalar = arith.addi %v3, %request_scaled : i32
     %base = vc4kernel.splat %base_scalar : i32 -> vector<16xi32>
-    %values = vc4kernel.fragment_add %base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %values = vc4kernel.fragment_alu.add %base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %values, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

@@ -15,7 +15,8 @@ module {
     cf.cond_br %4, ^bb2, ^bb6
   ^bb2:  // pred: ^bb1
     %5 = vc4kernel.lane_range : vector<16xi32>
-    %6 = vc4kernel.fragment_shl %5, %c2_i32 : vector<16xi32>, i32 -> vector<16xi32>
+    %6_shift = vc4kernel.splat %c2_i32 : i32 -> vector<16xi32>
+    %6 = vc4kernel.fragment_alu.add %5, %6_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %7 = vc4kernel.pred.tail %2, %arg4 : i32, i32 -> <16>
     %8 = vc4kernel.pred.full : <16>
     %9 = vc4kernel.splat %cst : f32 -> vector<16xf32>
@@ -32,11 +33,11 @@ module {
     %20 = arith.addi %19, %2 : i32
     %21 = arith.shli %20, %c2_i32 : i32
     %22 = vc4kernel.splat %21 : i32 -> vector<16xi32>
-    %23 = vc4kernel.fragment_add %22, %6 : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %23 = vc4kernel.fragment_alu.add %22, %6 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %24 = vc4kernel.tmu_load_fragment %arg0, %18, %8 : i32, vector<16xi32>, <16> -> vector<16xf32>
     %25 = vc4kernel.tmu_load_fragment %arg1, %23, %7 : i32, vector<16xi32>, <16> -> vector<16xf32>
-    %26 = vc4kernel.fragment_mul %24, %25 : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-    %27 = vc4kernel.fragment_add %14, %26 : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+    %26 = vc4kernel.fragment_alu.mul %24, %25 {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+    %27 = vc4kernel.fragment_alu.add %14, %26 {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %28 = arith.addi %13, %c1_i32 : i32
     cf.br ^bb3(%28, %27 : i32, vector<16xf32>)
   ^bb5(%29: vector<16xf32>):  // pred: ^bb3
@@ -44,7 +45,7 @@ module {
     %31 = arith.addi %30, %2 : i32
     %32 = arith.shli %31, %c2_i32 : i32
     %33 = vc4kernel.splat %32 : i32 -> vector<16xi32>
-    %34 = vc4kernel.fragment_add %33, %6 : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %34 = vc4kernel.fragment_alu.add %33, %6 {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %arg2, %34, %29, %7 : i32, vector<16xi32>, vector<16xf32>, <16>
     vc4kernel.return
   ^bb6:  // 2 preds: ^bb0, ^bb1

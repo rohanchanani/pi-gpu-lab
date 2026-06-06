@@ -16,7 +16,8 @@ module {
     %c2 = arith.constant 2 : i32
     %empty = vc4kernel.pred.empty : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %offs = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %offs_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %lanes, %offs_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %v = vc4kernel.tmu_load_fragment %ptr, %offs, %empty : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }

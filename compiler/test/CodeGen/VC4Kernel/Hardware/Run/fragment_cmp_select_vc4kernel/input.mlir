@@ -25,7 +25,8 @@ module {
     %five_step = arith.constant 5 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %threshold_v = vc4kernel.splat %threshold : i32 -> vector<16xi32>
     %true_base_v = vc4kernel.splat %true_base : i32 -> vector<16xi32>
     %false_base_v = vc4kernel.splat %false_base : i32 -> vector<16xi32>
@@ -36,36 +37,36 @@ module {
     %four_v = vc4kernel.splat %four_step : i32 -> vector<16xi32>
     %five_v = vc4kernel.splat %five_step : i32 -> vector<16xi32>
 
-    %true0 = vc4kernel.fragment_add %true_base_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false0 = vc4kernel.fragment_add %false_base_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true1_base = vc4kernel.fragment_add %true_base_v, %step_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false1_base = vc4kernel.fragment_add %false_base_v, %step_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true1 = vc4kernel.fragment_add %true1_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false1 = vc4kernel.fragment_add %false1_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true2_base_mul = vc4kernel.fragment_mul %step_v, %two_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false2_base_mul = vc4kernel.fragment_mul %step_v, %two_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true2_base = vc4kernel.fragment_add %true_base_v, %true2_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false2_base = vc4kernel.fragment_add %false_base_v, %false2_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true2 = vc4kernel.fragment_add %true2_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false2 = vc4kernel.fragment_add %false2_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true3_base_mul = vc4kernel.fragment_mul %step_v, %three_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false3_base_mul = vc4kernel.fragment_mul %step_v, %three_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true3_base = vc4kernel.fragment_add %true_base_v, %true3_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false3_base = vc4kernel.fragment_add %false_base_v, %false3_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true3 = vc4kernel.fragment_add %true3_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false3 = vc4kernel.fragment_add %false3_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true4_base_mul = vc4kernel.fragment_mul %step_v, %four_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false4_base_mul = vc4kernel.fragment_mul %step_v, %four_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true4_base = vc4kernel.fragment_add %true_base_v, %true4_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false4_base = vc4kernel.fragment_add %false_base_v, %false4_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true4 = vc4kernel.fragment_add %true4_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false4 = vc4kernel.fragment_add %false4_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true5_base_mul = vc4kernel.fragment_mul %step_v, %five_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false5_base_mul = vc4kernel.fragment_mul %step_v, %five_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true5_base = vc4kernel.fragment_add %true_base_v, %true5_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false5_base = vc4kernel.fragment_add %false_base_v, %false5_base_mul : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %true5 = vc4kernel.fragment_add %true5_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %false5 = vc4kernel.fragment_add %false5_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %true0 = vc4kernel.fragment_alu.add %true_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false0 = vc4kernel.fragment_alu.add %false_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true1_base = vc4kernel.fragment_alu.add %true_base_v, %step_v {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false1_base = vc4kernel.fragment_alu.add %false_base_v, %step_v {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true1 = vc4kernel.fragment_alu.add %true1_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false1 = vc4kernel.fragment_alu.add %false1_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true2_base_mul = vc4kernel.fragment_alu.mul %step_v, %two_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false2_base_mul = vc4kernel.fragment_alu.mul %step_v, %two_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true2_base = vc4kernel.fragment_alu.add %true_base_v, %true2_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false2_base = vc4kernel.fragment_alu.add %false_base_v, %false2_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true2 = vc4kernel.fragment_alu.add %true2_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false2 = vc4kernel.fragment_alu.add %false2_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true3_base_mul = vc4kernel.fragment_alu.mul %step_v, %three_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false3_base_mul = vc4kernel.fragment_alu.mul %step_v, %three_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true3_base = vc4kernel.fragment_alu.add %true_base_v, %true3_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false3_base = vc4kernel.fragment_alu.add %false_base_v, %false3_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true3 = vc4kernel.fragment_alu.add %true3_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false3 = vc4kernel.fragment_alu.add %false3_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true4_base_mul = vc4kernel.fragment_alu.mul %step_v, %four_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false4_base_mul = vc4kernel.fragment_alu.mul %step_v, %four_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true4_base = vc4kernel.fragment_alu.add %true_base_v, %true4_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false4_base = vc4kernel.fragment_alu.add %false_base_v, %false4_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true4 = vc4kernel.fragment_alu.add %true4_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false4 = vc4kernel.fragment_alu.add %false4_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true5_base_mul = vc4kernel.fragment_alu.mul %step_v, %five_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false5_base_mul = vc4kernel.fragment_alu.mul %step_v, %five_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true5_base = vc4kernel.fragment_alu.add %true_base_v, %true5_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false5_base = vc4kernel.fragment_alu.add %false_base_v, %false5_base_mul {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %true5 = vc4kernel.fragment_alu.add %true5_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %false5 = vc4kernel.fragment_alu.add %false5_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
 
     %eq = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     %ne = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<ne>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
@@ -86,12 +87,12 @@ module {
     %off192v = vc4kernel.splat %off192 : i32 -> vector<16xi32>
     %off256v = vc4kernel.splat %off256 : i32 -> vector<16xi32>
     %off320v = vc4kernel.splat %off320 : i32 -> vector<16xi32>
-    %offs0 = vc4kernel.fragment_add %off0v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %offs1 = vc4kernel.fragment_add %off64v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %offs2 = vc4kernel.fragment_add %off128v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %offs3 = vc4kernel.fragment_add %off192v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %offs4 = vc4kernel.fragment_add %off256v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %offs5 = vc4kernel.fragment_add %off320v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %offs0 = vc4kernel.fragment_alu.add %off0v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs1 = vc4kernel.fragment_alu.add %off64v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs2 = vc4kernel.fragment_alu.add %off128v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs3 = vc4kernel.fragment_alu.add %off192v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs4 = vc4kernel.fragment_alu.add %off256v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs5 = vc4kernel.fragment_alu.add %off320v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %offs0, %sel0, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.vdw_store_fragment %out, %offs1, %sel1, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.vdw_store_fragment %out, %offs2, %sel2, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>

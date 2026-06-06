@@ -28,7 +28,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %warp = vc4kernel.warp_id : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 4 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     vc4kernel.vpm_write_fragment %tile, %warp, %lanes, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.vdw_store_fragment %out, %lane_bytes, %lanes, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>

@@ -24,10 +24,10 @@ module {
     %base1v = vc4kernel.splat %base1 : i32 -> vector<16xi32>
     %base2v = vc4kernel.splat %base2 : i32 -> vector<16xi32>
     %base3v = vc4kernel.splat %base3 : i32 -> vector<16xi32>
-    %value0 = vc4kernel.fragment_add %base0v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %value1 = vc4kernel.fragment_add %base1v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %value2 = vc4kernel.fragment_add %base2v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %value3 = vc4kernel.fragment_add %base3v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %value0 = vc4kernel.fragment_alu.add %base0v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value1 = vc4kernel.fragment_alu.add %base1v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value2 = vc4kernel.fragment_alu.add %base2v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value3 = vc4kernel.fragment_alu.add %base3v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 4 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     vc4kernel.vpm_write_fragment %tile, %c0, %value0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.vpm_write_fragment %tile, %c1, %value1, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, x = 0 : i32, stride = 1 : i32} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>

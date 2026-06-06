@@ -15,14 +15,16 @@ module {
     %warp = vc4kernel.warp_id : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %warp_bytes = arith.shli %warp, %c6 : i32
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %warp_bytes_v = vc4kernel.splat %warp_bytes : i32 -> vector<16xi32>
-    %offsets = vc4kernel.fragment_add %warp_bytes_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %offsets = vc4kernel.fragment_alu.add %warp_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tag_v = vc4kernel.splat %tag : i32 -> vector<16xi32>
     %warp_v = vc4kernel.splat %warp : i32 -> vector<16xi32>
-    %warp_scaled = vc4kernel.fragment_shl %warp_v, %c4 : vector<16xi32>, i32 -> vector<16xi32>
-    %base = vc4kernel.fragment_add %tag_v, %warp_scaled : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %values = vc4kernel.fragment_add %base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %warp_scaled_shift = vc4kernel.splat %c4 : i32 -> vector<16xi32>
+    %warp_scaled = vc4kernel.fragment_alu.add %warp_v, %warp_scaled_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %base = vc4kernel.fragment_alu.add %tag_v, %warp_scaled {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %values = vc4kernel.fragment_alu.add %base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %offsets, %values, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

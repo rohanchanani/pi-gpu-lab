@@ -12,9 +12,10 @@ module {
     %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %base = vc4kernel.splat %c1 : i32 -> vector<16xi32>
-    %offs = vc4kernel.fragment_add %base, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %base, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %v = vc4kernel.splat %c1 : i32 -> vector<16xi32>
     // CHECK: vdw_store_fragment byte_offsets must be statically 4-byte aligned
     vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>

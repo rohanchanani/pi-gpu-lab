@@ -26,7 +26,7 @@ module {
   ^compute:
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %row_base_v = vc4kernel.splat %row_base : i32 -> vector<16xi32>
-    %rows = vc4kernel.fragment_add %row_base_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %rows = vc4kernel.fragment_alu.add %row_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %row_tail = vc4kernel.pred.tail %row_base, %m : i32, i32 -> !vc4kernel.pred<16>
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %zero = vc4kernel.splat %zero_scalar : f32 -> vector<16xf32>
@@ -40,22 +40,23 @@ module {
     %lda_bytes = arith.shli %lda, %c2 : i32
     %x_bytes = arith.shli %j_step, %c2 : i32
     %lda_bytes_v = vc4kernel.splat %lda_bytes : i32 -> vector<16xi32>
-    %row_byte_offsets = vc4kernel.fragment_mul %rows, %lda_bytes_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %row_byte_offsets = vc4kernel.fragment_alu.mul %rows, %lda_bytes_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %j_bytes_v = vc4kernel.splat %x_bytes : i32 -> vector<16xi32>
-    %a_bytes = vc4kernel.fragment_add %row_byte_offsets, %j_bytes_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %a_bytes = vc4kernel.fragment_alu.add %row_byte_offsets, %j_bytes_v {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %x_offsets = vc4kernel.splat %x_bytes : i32 -> vector<16xi32>
     %a_values = vc4kernel.tmu_load_fragment %a, %a_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
     %x_values = vc4kernel.tmu_load_fragment %x, %x_offsets, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %products = vc4kernel.fragment_mul %a_values, %x_values : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-    %acc_next = vc4kernel.fragment_add %acc_step, %products : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+    %products = vc4kernel.fragment_alu.mul %a_values, %x_values {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+    %acc_next = vc4kernel.fragment_alu.add %acc_step, %products {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %j_next = arith.addi %j_step, %c1 : i32
     cf.br ^loop(%j_next, %acc_next : i32, vector<16xf32>)
 
   ^store(%sum : vector<16xf32>):
     %row_base_bytes = arith.shli %row_base, %c2 : i32
     %row_base_bytes_v = vc4kernel.splat %row_base_bytes : i32 -> vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
-    %y_bytes = vc4kernel.fragment_add %row_base_bytes_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %y_bytes = vc4kernel.fragment_alu.add %row_base_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %y, %y_bytes, %sum, %row_tail : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
 

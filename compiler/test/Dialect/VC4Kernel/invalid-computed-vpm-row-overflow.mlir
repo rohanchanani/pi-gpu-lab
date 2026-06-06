@@ -27,7 +27,8 @@ module {
     %one = arith.constant 1 : i32
     %two = arith.constant 2 : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %offs = vc4kernel.fragment_shl %lanes, %two : vector<16xi32>, i32 -> vector<16xi32>
+    %offs_shift = vc4kernel.splat %two : i32 -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %lanes, %offs_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %v = vc4kernel.splat %one : i32 -> vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 64 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile

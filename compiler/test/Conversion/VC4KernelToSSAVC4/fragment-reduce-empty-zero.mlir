@@ -22,7 +22,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %empty = vc4kernel.pred.empty : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %values = vc4kernel.splat %value : f32 -> vector<16xf32>
     %sum = vc4kernel.fragment_reduce %values, %empty {kind = #vc4kernel.reduce<add>} : vector<16xf32>, !vc4kernel.pred<16> -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %sum, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>

@@ -13,12 +13,13 @@ module {
     %tag = arith.constant 1409286144 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %one_v = vc4kernel.splat %c1 : i32 -> vector<16xi32>
     %tag_v = vc4kernel.splat %tag : i32 -> vector<16xi32>
     %mask_values = vc4kernel.tmu_load_fragment %mask_in, %lane_bytes, %full : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     %mask = vc4kernel.fragment_cmp %mask_values, %one_v {predicate = #vc4kernel.cmp<eq>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
-    %value = vc4kernel.fragment_add %tag_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %value = vc4kernel.fragment_alu.add %tag_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %lane_bytes, %value, %mask : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

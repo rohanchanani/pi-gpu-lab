@@ -19,7 +19,8 @@ module {
     %tail = vc4kernel.pred.tail %c0, %active_cols : i32, i32 -> !vc4kernel.pred<16>
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %zero = vc4kernel.splat %zero_scalar : f32 -> vector<16xf32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     cf.br ^loop(%c0, %zero : i32, vector<16xf32>)
 
   ^loop(%j : i32, %acc : vector<16xf32>):
@@ -29,14 +30,15 @@ module {
   ^step(%j_step : i32, %acc_step : vector<16xf32>):
     %row_bytes = arith.shli %j_step, %c6 : i32
     %row_bytes_v = vc4kernel.splat %row_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %row_bytes_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %row_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %loaded = vc4kernel.tmu_load_fragment %b, %byte_offsets, %tail : i32, vector<16xi32>, !vc4kernel.pred<16> -> vector<16xf32>
-    %acc_next = vc4kernel.fragment_add %acc_step, %loaded : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+    %acc_next = vc4kernel.fragment_alu.add %acc_step, %loaded {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     %j_next = arith.addi %j_step, %c1 : i32
     cf.br ^loop(%j_next, %acc_next : i32, vector<16xf32>)
 
   ^store(%sum : vector<16xf32>):
-    %out_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %out_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %out_offsets = vc4kernel.fragment_alu.add %lanes, %out_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %out_offsets, %sum, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

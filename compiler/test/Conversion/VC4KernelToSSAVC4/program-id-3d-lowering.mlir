@@ -31,7 +31,8 @@ module {
     %xy = arith.addi %x, %y : i32
     %xyz = arith.addi %xy, %z : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %offs = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %offs_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %lanes, %offs_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value = vc4kernel.splat %xyz : i32 -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %offs, %value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return

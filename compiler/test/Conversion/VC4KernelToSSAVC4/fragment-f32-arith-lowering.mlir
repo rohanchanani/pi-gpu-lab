@@ -20,12 +20,13 @@ module {
     %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %a = vc4kernel.splat %alpha : f32 -> vector<16xf32>
     %b = vc4kernel.splat %beta : f32 -> vector<16xf32>
-    %sum = vc4kernel.fragment_add %a, %b : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-    %diff = vc4kernel.fragment_sub %sum, %a : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-    %prod = vc4kernel.fragment_mul %diff, %b : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+    %sum = vc4kernel.fragment_alu.add %a, %b {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+    %diff = vc4kernel.fragment_alu.add %sum, %a {opcode = #vc4kernel.add_alu_opcode<fsub>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+    %prod = vc4kernel.fragment_alu.mul %diff, %b {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %prod, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

@@ -23,7 +23,8 @@ module {
     %c11 = arith.constant 11 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %threshold_v = vc4kernel.splat %threshold : i32 -> vector<16xi32>
     %true_v = vc4kernel.splat %c7 : i32 -> vector<16xi32>
     %false_v = vc4kernel.splat %c11 : i32 -> vector<16xi32>

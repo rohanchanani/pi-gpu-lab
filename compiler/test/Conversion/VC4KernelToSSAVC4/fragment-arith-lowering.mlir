@@ -22,13 +22,13 @@ module {
   } {
     %c1 = arith.constant 1 : i32
     %v = vc4kernel.splat %c1 : i32 -> vector<16xi32>
-    %add = vc4kernel.fragment_add %v, %v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %sub = vc4kernel.fragment_sub %add, %v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %mul = vc4kernel.fragment_mul %sub, %v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %add = vc4kernel.fragment_alu.add %v, %v {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %sub = vc4kernel.fragment_alu.add %add, %v {opcode = #vc4kernel.add_alu_opcode<sub>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %mul = vc4kernel.fragment_alu.mul %sub, %v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %rot = vc4kernel.fragment_rotate %mul {amount = 1 : i32} : vector<16xi32> -> vector<16xi32>
     %fv = vc4kernel.splat %f : f32 -> vector<16xf32>
-    %fadd = vc4kernel.fragment_add %fv, %fv : vector<16xf32>, vector<16xf32> -> vector<16xf32>
-    %fmul = vc4kernel.fragment_mul %fadd, %fv : vector<16xf32>, vector<16xf32> -> vector<16xf32>
+    %fadd = vc4kernel.fragment_alu.add %fv, %fv {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+    %fmul = vc4kernel.fragment_alu.mul %fadd, %fv {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
     vc4kernel.return
   }
 }

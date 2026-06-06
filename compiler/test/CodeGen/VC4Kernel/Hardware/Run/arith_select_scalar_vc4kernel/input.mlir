@@ -17,10 +17,11 @@ module {
     %use_alpha = arith.cmpi ne, %control, %c0 : i32
     %selected = arith.select %use_alpha, %alpha, %beta : f32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offset_bytes = arith.shli %offset_elems, %c2 : i32
     %offset_vec = vc4kernel.splat %offset_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %offset_vec, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %offset_vec, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %value = vc4kernel.splat %selected : f32 -> vector<16xf32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return

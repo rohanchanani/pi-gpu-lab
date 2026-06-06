@@ -56,6 +56,11 @@ SPECIAL_CASE_MATRIX = {
     "fragment_shl": ("p1_remove_fragment_shl", "P1"),
 }
 
+SPECIAL_CASE_ALLOWED_STATUSES = {
+    "migration_target",
+    "migrated_pending_deletion",
+}
+
 PRODUCER_OR_LOWER_HALF_OP_PREFIXES = [
     "vector.",
     "memref.",
@@ -172,10 +177,27 @@ def require_matrix_feature(features, feature_id, phase=None, status=None):
     return feature
 
 
-def audit_matrix_ownership(matrix):
+def require_matrix_feature_status_in(features, feature_id, phase, statuses):
+    feature = require_matrix_feature(features, feature_id, phase)
+    status = feature.get("current_status")
+    if status not in statuses:
+        allowed = ", ".join(sorted(statuses))
+        fail(f"feature {feature_id} must have current_status in {{{allowed}}}")
+    return feature
+
+
+def audit_matrix_ownership(matrix, mode):
     features = feature_by_id(matrix)
+    required_special_status = (
+        "migrated_pending_deletion" if mode == "p1-migrated" else None
+    )
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
-        require_matrix_feature(features, feature_id, phase, "migration_target")
+        if required_special_status:
+            require_matrix_feature(features, feature_id, phase, required_special_status)
+        else:
+            require_matrix_feature_status_in(
+                features, feature_id, phase, SPECIAL_CASE_ALLOWED_STATUSES
+            )
     require_matrix_feature(
         features,
         "p4_remove_add_only_reduce_specialness",
@@ -328,6 +350,34 @@ def audit_special_case_presence(repo_root, matrix_counts):
     return {"present_special_case_ops": len(present)}
 
 
+def audit_no_legacy_user_spellings(repo_root):
+    roots = [
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel"),
+        Path("compiler/docs"),
+    ]
+    spellings = [
+        "vc4kernel." + "fragment_add",
+        "vc4kernel." + "fragment_sub",
+        "vc4kernel." + "fragment_mul",
+        "vc4kernel." + "fragment_shl",
+    ]
+    hits = []
+    scanned = 0
+    for root in roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            scanned += 1
+            text = read_text(path)
+            for spelling in spellings:
+                if spelling in text:
+                    hits.append((path, spelling))
+    if hits:
+        details = "; ".join(f"{rel(path, repo_root)}:{spelling}" for path, spelling in hits[:20])
+        fail(f"P1 migrated mode found legacy user spellings: {details}")
+    return {"legacy_user_spelling_hits": 0, "legacy_user_files_scanned": scanned}
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -343,8 +393,8 @@ def main(argv):
     parser.add_argument("--phase-lock", default=None)
     args = parser.parse_args(argv)
 
-    if args.mode != "p0-baseline":
-        fail(f"unsupported audit mode for this P0 audit: {args.mode}")
+    if args.mode not in {"p0-baseline", "p1-migrated"}:
+        fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
     matrix_path = Path(args.matrix)
     if not matrix_path.is_absolute():
@@ -354,12 +404,17 @@ def main(argv):
 
     matrix_summary = run_matrix_checker(repo_root, matrix_path)
     matrix = load_matrix(matrix_path)
-    matrix_counts = audit_matrix_ownership(matrix)
+    matrix_counts = audit_matrix_ownership(matrix, args.mode)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts)
     direct_counts = audit_direct_paths(repo_root)
     vc4tile_counts = audit_vc4tile(repo_root)
     tile_counts = audit_forbidden_tile_dsl(repo_root)
     fixture_counts = audit_fixture_purity(repo_root)
+    legacy_user_counts = (
+        audit_no_legacy_user_spellings(repo_root)
+        if args.mode == "p1-migrated"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -370,12 +425,14 @@ def main(argv):
     forbidden_summary.update(vc4tile_counts)
     forbidden_summary.update(tile_counts)
 
-    print("PASS VC4Kernel Surface v2 audit: mode=p0-baseline")
+    print(f"PASS VC4Kernel Surface v2 audit: mode={args.mode}")
     if matrix_summary:
         print(f"matrix_checker: {matrix_summary[0]}")
     print(f"migration_targets: {format_counts(migration_summary)}")
     print(f"forbidden_path_scan: {format_counts(forbidden_summary)}")
     print(f"fixture_purity: {format_counts(fixture_counts)}")
+    if legacy_user_counts:
+        print(f"legacy_user_scan: {format_counts(legacy_user_counts)}")
     return 0
 
 

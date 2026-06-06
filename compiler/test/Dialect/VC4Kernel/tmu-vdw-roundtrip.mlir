@@ -18,7 +18,8 @@ module {
     // CHECK: vc4kernel.lane_range
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %basev = vc4kernel.splat %base : i32 -> vector<16xi32>
-    %offs = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %offs_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %lanes, %offs_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     // CHECK: vc4kernel.fragment_cmp
     %cmp = vc4kernel.fragment_cmp %lanes, %basev {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     // CHECK: vc4kernel.tmu_load_fragment

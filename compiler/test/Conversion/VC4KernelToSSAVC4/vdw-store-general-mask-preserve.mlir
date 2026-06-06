@@ -20,10 +20,11 @@ module {
     %c2 = arith.constant 2 : i32
     %tag = arith.constant 858980352 : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %threshold_v = vc4kernel.splat %threshold : i32 -> vector<16xi32>
     %tag_v = vc4kernel.splat %tag : i32 -> vector<16xi32>
-    %value = vc4kernel.fragment_add %tag_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %value = vc4kernel.fragment_alu.add %tag_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %mask = vc4kernel.fragment_cmp %lanes, %threshold_v {predicate = #vc4kernel.cmp<ult>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %mask : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return

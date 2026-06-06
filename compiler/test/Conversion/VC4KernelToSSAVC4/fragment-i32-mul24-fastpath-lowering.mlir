@@ -19,9 +19,10 @@ module {
     %scale = arith.constant 257 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %byte_offsets_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %lanes, %byte_offsets_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %scale_v = vc4kernel.splat %scale : i32 -> vector<16xi32>
-    %value = vc4kernel.fragment_mul %lanes, %scale_v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %value = vc4kernel.fragment_alu.mul %lanes, %scale_v {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

@@ -13,15 +13,29 @@ module {
     %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %offset_bytes = arith.shli %offset_elems, %c2 : i32
     %offset_vec = vc4kernel.splat %offset_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %offset_vec, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %offset_vec, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %lhs_base_v = vc4kernel.splat %lhs_base : i32 -> vector<16xi32>
     %rhs_base_v = vc4kernel.splat %rhs_base : i32 -> vector<16xi32>
-    %lhs = vc4kernel.fragment_add %lhs_base_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %rhs = vc4kernel.fragment_add %rhs_base_v, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %value = vc4kernel.fragment_mul %lhs, %rhs : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %lhs = vc4kernel.fragment_alu.add %lhs_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %rhs = vc4kernel.fragment_alu.add %rhs_base_v, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_c16 = arith.constant 16 : i32
+    %value_c65535 = arith.constant 65535 : i32
+    %value_mask = vc4kernel.splat %value_c65535 : i32 -> vector<16xi32>
+    %value_shift = vc4kernel.splat %value_c16 : i32 -> vector<16xi32>
+    %value_lhs_lo = vc4kernel.fragment_alu.add %lhs, %value_mask {opcode = #vc4kernel.add_alu_opcode<and>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_rhs_lo = vc4kernel.fragment_alu.add %rhs, %value_mask {opcode = #vc4kernel.add_alu_opcode<and>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_lhs_hi = vc4kernel.fragment_alu.add %lhs, %value_shift {opcode = #vc4kernel.add_alu_opcode<shr>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_rhs_hi = vc4kernel.fragment_alu.add %rhs, %value_shift {opcode = #vc4kernel.add_alu_opcode<shr>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_lo_lo = vc4kernel.fragment_alu.mul %value_lhs_lo, %value_rhs_lo {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_lo_hi = vc4kernel.fragment_alu.mul %value_lhs_lo, %value_rhs_hi {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_hi_lo = vc4kernel.fragment_alu.mul %value_lhs_hi, %value_rhs_lo {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_cross = vc4kernel.fragment_alu.add %value_lo_hi, %value_hi_lo {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_cross_shifted = vc4kernel.fragment_alu.add %value_cross, %value_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value = vc4kernel.fragment_alu.add %value_lo_lo, %value_cross_shifted {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

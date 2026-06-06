@@ -35,14 +35,16 @@ module {
     %pid = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %request_bytes = arith.shli %pid, %c6 : i32
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %request_vec = vc4kernel.splat %request_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %request_vec, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %request_vec, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tag_vec = vc4kernel.splat %tag : i32 -> vector<16xi32>
     %pid_vec = vc4kernel.splat %pid : i32 -> vector<16xi32>
-    %pid_scaled = vc4kernel.fragment_shl %pid_vec, %c4 : vector<16xi32>, i32 -> vector<16xi32>
-    %value_base = vc4kernel.fragment_add %tag_vec, %pid_scaled : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %value = vc4kernel.fragment_add %value_base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %pid_scaled_shift = vc4kernel.splat %c4 : i32 -> vector<16xi32>
+    %pid_scaled = vc4kernel.fragment_alu.add %pid_vec, %pid_scaled_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value_base = vc4kernel.fragment_alu.add %tag_vec, %pid_scaled {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %value = vc4kernel.fragment_alu.add %value_base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %value, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

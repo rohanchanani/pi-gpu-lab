@@ -15,14 +15,16 @@ module {
     %request = vc4kernel.program_id {axis = 0 : i32} : i32
     %lanes = vc4kernel.lane_range : vector<16xi32>
     %request_bytes = arith.shli %request, %c6 : i32
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %request_bytes_v = vc4kernel.splat %request_bytes : i32 -> vector<16xi32>
-    %byte_offsets = vc4kernel.fragment_add %request_bytes_v, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %byte_offsets = vc4kernel.fragment_alu.add %request_bytes_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %tag_v = vc4kernel.splat %tag : i32 -> vector<16xi32>
     %request_v = vc4kernel.splat %request : i32 -> vector<16xi32>
-    %request_scaled = vc4kernel.fragment_shl %request_v, %c4 : vector<16xi32>, i32 -> vector<16xi32>
-    %base = vc4kernel.fragment_add %tag_v, %request_scaled : vector<16xi32>, vector<16xi32> -> vector<16xi32>
-    %values = vc4kernel.fragment_add %base, %lanes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %request_scaled_shift = vc4kernel.splat %c4 : i32 -> vector<16xi32>
+    %request_scaled = vc4kernel.fragment_alu.add %request_v, %request_scaled_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %base = vc4kernel.fragment_alu.add %tag_v, %request_scaled {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %values = vc4kernel.fragment_alu.add %base, %lanes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     vc4kernel.vdw_store_fragment %out, %byte_offsets, %values, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }

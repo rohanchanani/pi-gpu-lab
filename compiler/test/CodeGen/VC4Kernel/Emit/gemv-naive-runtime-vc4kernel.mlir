@@ -14,7 +14,7 @@
 
 // VERIFY: vc4kernel.kernel @gemv_naive_vc4kernel
 // VERIFY-SAME: {direction = "by_value", kind = "scalar", name = "lda", type = "i32"}
-// VERIFY: vc4kernel.fragment_mul
+// VERIFY: vc4kernel.fragment_alu.mul
 // VERIFY: vc4kernel.tmu_load_fragment
 // VERIFY: vc4kernel.vdw_store_fragment
 // VERIFY-NOT: ssavc4.

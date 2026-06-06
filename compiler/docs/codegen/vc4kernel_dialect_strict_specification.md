@@ -1072,35 +1072,38 @@ All operations over `vector<16xi32>` or `vector<16xf32>` values inside `vc4kerne
 
 Broadcasts a scalar to all 16 lanes. Scalar `f32` splat is first-class and must be supported by SSAVC4/lower-half uniform and splat machinery.
 
-### 9.3 Arithmetic fragment ops
+### 9.3 General fragment ALU ops
 
 ```mlir
-%r = vc4kernel.fragment_add %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
-%r = vc4kernel.fragment_sub %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
-%r = vc4kernel.fragment_mul %a, %b : vector<16xT>, vector<16xT> -> vector<16xT>
-%r = vc4kernel.fragment_shl %a, %amount : vector<16xi32>, i32 -> vector<16xi32>
+%r = vc4kernel.fragment_alu.add %a, %b {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+%r = vc4kernel.fragment_alu.add %a, %b {opcode = #vc4kernel.add_alu_opcode<fadd>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
+%r = vc4kernel.fragment_alu.mul %a, %b {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+%r = vc4kernel.fragment_alu.mul %a, %b {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
 ```
 
-Allowed `T`:
+Allowed carrier element types:
 
 ```text
 i32
 f32
 ```
 
-Semantics:
+The fragment ALU surface is hardware-faithful. The add-pipe and mul-pipe opcode attributes name the target VC4 ALU opcode. These ops do not promise producer-level generic arithmetic semantics.
+
+Selected semantics:
 
 ```text
-i32 add/sub/shl:
-  32-bit integer semantics.
+i32 add/sub/shl/logic/min/max:
+  VC4 add-pipe opcode semantics over vector<16xi32> carriers.
 
-i32 mul:
-  full 32-bit modular integer multiplication.
-  Lowering may use hardware mul24 only when operands are proven 24-bit safe; otherwise it must use a software full-32-bit fallback.
-  It must never silently compile general i32 multiply to mul24.
+i32 mul24:
+  VC4 mul-pipe mul24 semantics only. It is not exact full-width i32 multiplication.
+
+exact i32 multiply:
+  Requires an explicit, tested expansion using hardware-faithful ops. It must never silently compile to mul24.
 
 f32 add/sub/mul:
-  VC4 f32 semantics; f32 fragment_mul lowers to hardware fmul, not mul24.
+  VC4 f32 add-pipe or mul-pipe semantics. NaN/Inf/signed-zero exactness is not promised without explicit tests.
 ```
 
 ### 9.4 `vc4kernel.fragment_cmp`
@@ -1904,10 +1907,8 @@ vc4kernel.pred.all
 
 ```text
 vc4kernel.splat
-vc4kernel.fragment_add
-vc4kernel.fragment_sub
-vc4kernel.fragment_mul
-vc4kernel.fragment_shl
+vc4kernel.fragment_alu.add
+vc4kernel.fragment_alu.mul
 vc4kernel.fragment_cmp
 vc4kernel.fragment_select
 vc4kernel.fragment_rotate
@@ -2137,11 +2138,9 @@ Representative mappings:
 
 ```text
 vc4kernel.splat            -> ssavc4.splat / scalar uniform splat / load immediate as appropriate
-vc4kernel.fragment_add     -> ssavc4 ALU add/fadd
-vc4kernel.fragment_sub     -> ssavc4 ALU sub/fsub
-vc4kernel.fragment_mul f32 -> ssavc4 fmul
-vc4kernel.fragment_mul i32 -> semantic imul32; use mul24 fast path only if proven safe, else software fallback
-vc4kernel.fragment_shl     -> SSAVC4 integer shl path
+fragment_alu.add           -> ssavc4.alu.add with mapped VC4 add-pipe opcode
+fragment_alu.mul           -> ssavc4.alu.mul with mapped VC4 mul-pipe opcode
+explicit i32 mul32         -> tested add/and/shr/shl plus mul24 decomposition
 vc4kernel.fragment_cmp     -> predicate plan / flags / mask value as needed
 vc4kernel.fragment_select  -> conditional select using predicate plan
 vc4kernel.fragment_rotate  -> ssavc4.rotate

@@ -12,8 +12,9 @@ module {
     %c2 = arith.constant 2 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %lanes = vc4kernel.lane_range : vector<16xi32>
-    %lane_bytes = vc4kernel.fragment_shl %lanes, %c2 : vector<16xi32>, i32 -> vector<16xi32>
-    %offs = vc4kernel.fragment_add %lane_bytes, %lane_bytes : vector<16xi32>, vector<16xi32> -> vector<16xi32>
+    %lane_bytes_shift = vc4kernel.splat %c2 : i32 -> vector<16xi32>
+    %lane_bytes = vc4kernel.fragment_alu.add %lanes, %lane_bytes_shift {opcode = #vc4kernel.add_alu_opcode<shl>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
+    %offs = vc4kernel.fragment_alu.add %lane_bytes, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %v = vc4kernel.splat %c0 : i32 -> vector<16xi32>
     // CHECK: vdw_store_fragment requires contiguous 32-bit row fragment byte offsets
     vc4kernel.vdw_store_fragment %ptr, %offs, %v, %full : i32, vector<16xi32>, vector<16xi32>, !vc4kernel.pred<16>
