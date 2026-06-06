@@ -11,7 +11,7 @@ module {
   } {
     %v = vc4kernel.splat %x : i32 -> vector<16xi32>
     // CHECK: f32 fragment_cmp predicate requires f32 operands
-    %cmp = vc4kernel.fragment_cmp %v, %v {predicate = #vc4kernel.cmp<olt>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
+    %cmp = vc4kernel.fragment_cmp %v, %v {predicate = #vc4kernel.cmp<ogt>} : vector<16xi32>, vector<16xi32> -> !vc4kernel.pred<16>
     vc4kernel.return
   }
 }

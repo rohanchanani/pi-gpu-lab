@@ -1151,19 +1151,79 @@ LogicalResult FragmentALUMulOp::verify() {
 }
 
 LogicalResult FragmentCmpOp::verify() {
-  if (getOperation()->getAttr("fp_policy"))
-    return emitOpError(
-        "fp comparison policy is only valid for f32 fragment_cmp");
-  if (!isVC4KernelVector16I32Type(getLhs().getType()) ||
-      !isVC4KernelVector16I32Type(getRhs().getType()))
-    return emitOpError(
-        "fragment_cmp supports only vector<16xi32> operands before P3 f32 "
-        "finite-only support");
+  auto predicate = getPredicate();
+  auto isIntegerPredicate = [](CmpPredicate predicate) {
+    switch (predicate) {
+    case CmpPredicate::eq:
+    case CmpPredicate::ne:
+    case CmpPredicate::ult:
+    case CmpPredicate::ule:
+    case CmpPredicate::ugt:
+    case CmpPredicate::uge:
+    case CmpPredicate::slt:
+    case CmpPredicate::sle:
+    case CmpPredicate::sgt:
+    case CmpPredicate::sge:
+      return true;
+    default:
+      return false;
+    }
+  };
+  auto isOrderedF32Predicate = [](CmpPredicate predicate) {
+    switch (predicate) {
+    case CmpPredicate::oeq:
+    case CmpPredicate::one:
+    case CmpPredicate::olt:
+    case CmpPredicate::ole:
+    case CmpPredicate::ogt:
+    case CmpPredicate::oge:
+      return true;
+    default:
+      return false;
+    }
+  };
+  auto isUnorderedF32Predicate = [](CmpPredicate predicate) {
+    switch (predicate) {
+    case CmpPredicate::uno:
+    case CmpPredicate::ueq:
+    case CmpPredicate::une:
+      return true;
+    default:
+      return false;
+    }
+  };
+
+  if (isUnorderedF32Predicate(predicate))
+    return emitOpError("unordered f32 fragment_cmp is not supported in P3");
+
   if (failed(verifySameType(getOperation(), getLhs().getType(),
                             getRhs().getType(),
                             "fragment_cmp operands")))
     return failure();
-  return verifyPred16(getOperation(), getResult().getType(), "result");
+  if (failed(verifyPred16(getOperation(), getResult().getType(), "result")))
+    return failure();
+
+  if (isVC4KernelVector16I32Type(getLhs().getType())) {
+    if (getFpPolicy())
+      return emitOpError(
+          "fp comparison policy is only valid for f32 fragment_cmp");
+    if (!isIntegerPredicate(predicate))
+      return emitOpError("f32 fragment_cmp predicate requires f32 operands");
+    return success();
+  }
+
+  if (isVC4KernelVector16F32Type(getLhs().getType())) {
+    if (!isOrderedF32Predicate(predicate))
+      return emitOpError("integer fragment_cmp predicate requires i32 operands");
+    auto policy = getFpPolicy();
+    if (!policy || *policy != mlir::vc4kernel::FPCmpPolicy::finite_only)
+      return emitOpError(
+          "f32 fragment_cmp requires finite_only policy in P3");
+    return success();
+  }
+
+  return emitOpError("fragment_cmp operands must be vector<16xi32> or "
+                     "vector<16xf32>");
 }
 LogicalResult FragmentSelectOp::verify() {
   if (failed(verifyKnownPredicate(getOperation(), getPred())))

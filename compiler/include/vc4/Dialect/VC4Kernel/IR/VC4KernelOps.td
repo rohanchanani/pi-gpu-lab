@@ -225,7 +225,8 @@ def VC4Kernel_FragmentALUMulOp : VC4Kernel_PureOp<"fragment_alu.mul"> {
 def VC4Kernel_FragmentCmpOp : VC4Kernel_PureOp<"fragment_cmp"> {
   let arguments = (ins VC4Kernel_Vector16Data:$lhs,
                        VC4Kernel_Vector16Data:$rhs,
-                       VC4Kernel_CmpPredicateAttr:$predicate);
+                       VC4Kernel_CmpPredicateAttr:$predicate,
+                       OptionalAttr<VC4Kernel_FPCmpPolicyAttr>:$fp_policy);
   let results = (outs VC4Kernel_PredType:$result);
   let assemblyFormat = "$lhs `,` $rhs attr-dict `:` type($lhs) `,` type($rhs) `->` type($result)";
   let hasVerifier = 1;

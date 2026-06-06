@@ -1472,6 +1472,16 @@ static Value createSubFlags(OpBuilder &builder, Location loc, Value lhs,
       mlir::ssavc4::FlagsType::get(builder.getContext()));
 }
 
+static Value createFSubFlags(OpBuilder &builder, Location loc, Value lhs,
+                             Value rhs) {
+  return createOpWithResult(
+      builder, loc, kSSAVC4MakeFlagsOpName, {lhs, rhs},
+      {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
+                                        builder.getContext(),
+                                        mlir::ssavc4::FlagKind::fsub))},
+      mlir::ssavc4::FlagsType::get(builder.getContext()));
+}
+
 static Value createZeroTestFlags(OpBuilder &builder, Location loc, Value input) {
   return createOpWithResult(
       builder, loc, kSSAVC4MakeFlagsOpName, input,
@@ -1626,7 +1636,15 @@ struct CompareMaskLowering {
   Value lhs;
   Value rhs;
   mlir::vc4::Cond cond = mlir::vc4::Cond::zs;
+  mlir::ssavc4::FlagKind flagKind = mlir::ssavc4::FlagKind::sub;
 };
+
+static Value createCompareFlags(OpBuilder &builder, Location loc,
+                                const CompareMaskLowering &compare) {
+  if (compare.flagKind == mlir::ssavc4::FlagKind::fsub)
+    return createFSubFlags(builder, loc, compare.lhs, compare.rhs);
+  return createSubFlags(builder, loc, compare.lhs, compare.rhs);
+}
 
 static FailureOr<CompareMaskLowering>
 mapUnsignedFragmentCmpPredicate(Operation *op,
@@ -1655,6 +1673,49 @@ mapUnsignedFragmentCmpPredicate(Operation *op,
   default:
     return op->emitOpError("internal lowering error: expected unsigned "
                            "fragment_cmp predicate");
+  }
+  return result;
+}
+
+static FailureOr<CompareMaskLowering>
+mapOrderedF32FragmentCmpPredicate(Operation *op,
+                                  mlir::vc4kernel::CmpPredicate predicate,
+                                  Value lhs, Value rhs) {
+  CompareMaskLowering result;
+  result.flagKind = mlir::ssavc4::FlagKind::fsub;
+  switch (predicate) {
+  case mlir::vc4kernel::CmpPredicate::oeq:
+    result.lhs = lhs;
+    result.rhs = rhs;
+    result.cond = mlir::vc4::Cond::zs;
+    break;
+  case mlir::vc4kernel::CmpPredicate::one:
+    result.lhs = lhs;
+    result.rhs = rhs;
+    result.cond = mlir::vc4::Cond::zc;
+    break;
+  case mlir::vc4kernel::CmpPredicate::olt:
+    result.lhs = lhs;
+    result.rhs = rhs;
+    result.cond = mlir::vc4::Cond::ns;
+    break;
+  case mlir::vc4kernel::CmpPredicate::oge:
+    result.lhs = lhs;
+    result.rhs = rhs;
+    result.cond = mlir::vc4::Cond::nc;
+    break;
+  case mlir::vc4kernel::CmpPredicate::ogt:
+    result.lhs = rhs;
+    result.rhs = lhs;
+    result.cond = mlir::vc4::Cond::ns;
+    break;
+  case mlir::vc4kernel::CmpPredicate::ole:
+    result.lhs = rhs;
+    result.rhs = lhs;
+    result.cond = mlir::vc4::Cond::nc;
+    break;
+  default:
+    return op->emitOpError("unordered f32 fragment_cmp is not supported in P3");
   }
   return result;
 }
@@ -1708,6 +1769,17 @@ mapFragmentCmpPredicate(Operation *op, OpBuilder &builder, Value lhs,
     return mapUnsignedFragmentCmpPredicate(
         op, mlir::vc4kernel::CmpPredicate::uge, biasedLhs, biasedRhs);
   }
+  case mlir::vc4kernel::CmpPredicate::oeq:
+  case mlir::vc4kernel::CmpPredicate::one:
+  case mlir::vc4kernel::CmpPredicate::olt:
+  case mlir::vc4kernel::CmpPredicate::ole:
+  case mlir::vc4kernel::CmpPredicate::ogt:
+  case mlir::vc4kernel::CmpPredicate::oge:
+    return mapOrderedF32FragmentCmpPredicate(op, attr.getValue(), lhs, rhs);
+  case mlir::vc4kernel::CmpPredicate::uno:
+  case mlir::vc4kernel::CmpPredicate::ueq:
+  case mlir::vc4kernel::CmpPredicate::une:
+    return op->emitOpError("unordered f32 fragment_cmp is not supported in P3");
   }
   llvm_unreachable("all VC4Kernel comparison predicates are handled");
 }
@@ -2475,8 +2547,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     Value one = createMaskConstant(builder, op->getLoc(), 1);
     Value zero = createMaskConstant(builder, op->getLoc(), 0);
-    Value flags = createSubFlags(builder, op->getLoc(), compare->lhs,
-                                 compare->rhs);
+    Value flags = createCompareFlags(builder, op->getLoc(), *compare);
     Value mask = createCondSelect(builder, op->getLoc(), flags, one, zero,
                                   compare->cond);
     state.predicates[op->getResult(0)] = PredicatePlan::generalMaskValue(mask);

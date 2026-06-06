@@ -3479,6 +3479,11 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
   Operation *source = templ.flagSource ? templ.flagSource : templ.source;
   unsigned flagOperandCount =
       templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
+  auto kindAttr =
+      llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(source->getAttr("kind"));
+  mlir::vc4::AddOpcode flagOpcode = mlir::vc4::AddOpcode::sub;
+  if (kindAttr && kindAttr.getValue() == mlir::ssavc4::FlagKind::fsub)
+    flagOpcode = mlir::vc4::AddOpcode::fsub;
   SmallVector<int64_t, 2> operandRegs;
   for (unsigned index = 0; index < flagOperandCount; ++index) {
     Value operand = templ.operands[index];
@@ -3499,8 +3504,6 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
                                                   : mlir::vc4::QPUMux::r1;
   std::optional<int64_t> smallImm;
   if (flagOperandCount == 1) {
-    auto kindAttr =
-        llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(source->getAttr("kind"));
     if (!kindAttr ||
         kindAttr.getValue() != mlir::ssavc4::FlagKind::zero_test)
       return source->emitOpError(
@@ -3526,11 +3529,10 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
                                  : mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/31, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::sub,
-                        mlir::vc4::MulOpcode::nop, raddrA, raddrB,
-                        mlir::vc4::QPUMux::a, addB,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        smallImm, /*setFlags=*/true);
+                        flagOpcode, mlir::vc4::MulOpcode::nop, raddrA,
+                        raddrB, mlir::vc4::QPUMux::a, addB,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, smallImm,
+                        /*setFlags=*/true);
   return success();
 }
 

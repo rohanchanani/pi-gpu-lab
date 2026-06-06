@@ -63,7 +63,8 @@ def SSAVC4_FlagKind : SSAVC4_DialectI32Enum<"FlagKind",
     "SSAVC4 flag-producing operation kind", [
       I32EnumAttrCase<"sub", 0>,
       I32EnumAttrCase<"zero_test", 1>,
-      I32EnumAttrCase<"compare", 2>
+      I32EnumAttrCase<"compare", 2>,
+      I32EnumAttrCase<"fsub", 3>
     ]>;
 
 def SSAVC4_TMUUnitAttr : SSAVC4_EnumAttr<SSAVC4_TMUUnit, "tmu_unit">;

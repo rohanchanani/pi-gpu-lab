@@ -39,7 +39,21 @@ def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
       I32EnumAttrCase<"slt", 6>,
       I32EnumAttrCase<"sle", 7>,
       I32EnumAttrCase<"sgt", 8>,
-      I32EnumAttrCase<"sge", 9>
+      I32EnumAttrCase<"sge", 9>,
+      I32EnumAttrCase<"oeq", 10>,
+      I32EnumAttrCase<"one", 11>,
+      I32EnumAttrCase<"olt", 12>,
+      I32EnumAttrCase<"ole", 13>,
+      I32EnumAttrCase<"ogt", 14>,
+      I32EnumAttrCase<"oge", 15>,
+      I32EnumAttrCase<"uno", 16>,
+      I32EnumAttrCase<"ueq", 17>,
+      I32EnumAttrCase<"une", 18>
+    ]>;
+
+def VC4Kernel_FPCmpPolicy : VC4Kernel_DialectI32Enum<"FPCmpPolicy",
+    "VC4Kernel floating-point compare policy", [
+      I32EnumAttrCase<"finite_only", 0>
     ]>;
 
 def VC4Kernel_AddALUOpcode : VC4Kernel_DialectI32Enum<"AddALUOpcode",
@@ -108,6 +122,8 @@ def VC4Kernel_ReduceKindAttr
     : VC4Kernel_EnumAttr<VC4Kernel_ReduceKind, "reduce">;
 def VC4Kernel_CmpPredicateAttr
     : VC4Kernel_EnumAttr<VC4Kernel_CmpPredicate, "cmp">;
+def VC4Kernel_FPCmpPolicyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_FPCmpPolicy, "fp_cmp_policy">;
 def VC4Kernel_AddALUOpcodeAttr
     : VC4Kernel_EnumAttr<VC4Kernel_AddALUOpcode, "add_alu_opcode">;
 def VC4Kernel_MulALUOpcodeAttr

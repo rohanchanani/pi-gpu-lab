@@ -307,20 +307,20 @@
       "id": "p3_fragment_cmp_ordered_f32",
       "phase": "P3",
       "category": "comparison",
-      "current_status": "planned",
+      "current_status": "hardware_proven_pending_final_acceptance",
       "final_status_target": "implemented_with_policy_or_rejected",
       "current_surface": "f32 fragment comparison is not accepted in current VC4Kernel.",
-      "target_surface": "Ordered f32 comparison only if exact NaN and ordering behavior is specified and tested.",
-      "vc4kernel_verifier_plan": "Verify ordered predicate kind and require explicit policy for NaN behavior.",
-      "vc4kernel_to_ssavc4_plan": "Lower only to a tested flag/mask sequence; reject otherwise.",
-      "ssavc4_to_vc4_plan": "Use lower-half compare implementation only after hardware proof.",
-      "hardware_or_reject_verification_plan": "Hardware tests must include NaN, Inf, signed-zero, normal, and boundary values or deterministic rejects.",
+      "target_surface": "Finite-only ordered f32 comparison with explicit policy; unordered and NaN-sensitive predicates deterministically reject.",
+      "vc4kernel_verifier_plan": "Verify ordered predicate kind, require finite_only policy for f32 operands, and reject unordered predicates in P3.",
+      "vc4kernel_to_ssavc4_plan": "Lower finite-only ordered f32 predicates to tested fsub flag and mask sequences; reject unordered predicates.",
+      "ssavc4_to_vc4_plan": "Lower fsub flag production to a flag-setting VC4 fsub add-pipe instruction.",
+      "hardware_or_reject_verification_plan": "Hardware tests cover finite normal values for oeq/one/olt/ole/ogt/oge; NaN, Inf, and unordered predicates deterministically reject until a later explicit policy phase.",
       "upstream_use": "Floating vector masks after pre-vector lock.",
       "migration_or_removal": "New planned surface; current f32 compare reject remains valid until P3 proof.",
       "dependencies": [
-        "p10_fastmath_approx_contract"
+        "p2_fragment_const_splat_zero_allones_lane_affine"
       ],
-      "acceptance_line": "P3 f32 comparisons are accepted only with explicit ordered semantics and numerical edge-case tests."
+      "acceptance_line": "P3 f32 comparisons are accepted only for finite_only ordered predicates with verifier, conversion, lower-half, and hardware proof; unordered and NaN-sensitive forms deterministically reject."
     },
     {
       "id": "p4_fragment_reduce_general",

@@ -586,20 +586,34 @@ LogicalResult MakeFlagsOp::verify() {
     return emitOpError("requires one or two operands");
   mlir::ssavc4::FlagKind kind = getKind();
   Type firstType = getInputs().front().getType();
-  if (failed(verifyIntCarrier(op, firstType, "operand")))
-    return failure();
   if (kind == mlir::ssavc4::FlagKind::zero_test && getInputs().size() != 1)
     return emitOpError("zero_test flags require exactly one operand");
   if ((kind == mlir::ssavc4::FlagKind::sub ||
        kind == mlir::ssavc4::FlagKind::compare) &&
       getInputs().size() != 2)
     return emitOpError("sub/compare flags require exactly two operands");
+  if (kind == mlir::ssavc4::FlagKind::fsub && getInputs().size() != 2)
+    return emitOpError("fsub flags require exactly two operands");
+
+  if (kind == mlir::ssavc4::FlagKind::fsub) {
+    if (failed(verifyFloatCarrier(op, firstType, "operand")))
+      return failure();
+  } else if (failed(verifyIntCarrier(op, firstType, "operand"))) {
+    return failure();
+  }
+
   if (getInputs().size() == 2) {
     Type secondType = getInputs()[1].getType();
-    if (failed(verifyIntCarrier(op, secondType, "operand")) ||
-        failed(verifySameShapeAndDomain(op, firstType, secondType, "operand",
-                                        "operand")))
+    if (kind == mlir::ssavc4::FlagKind::fsub) {
+      if (failed(verifyFloatCarrier(op, secondType, "operand")) ||
+          failed(verifySameShapeAndDomain(op, firstType, secondType, "operand",
+                                          "operand")))
+        return failure();
+    } else if (failed(verifyIntCarrier(op, secondType, "operand")) ||
+               failed(verifySameShapeAndDomain(op, firstType, secondType,
+                                               "operand", "operand"))) {
       return failure();
+    }
   }
   return success();
 }
