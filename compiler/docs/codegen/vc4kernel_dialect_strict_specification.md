@@ -1458,20 +1458,23 @@ of one stored row to the first byte of the next stored row. High-level row pitch
 must be translated through row_bytes/gap semantics before encoding. No
 0xffff/65535 VDW stride model is allowed.
 
-### 11.2 Executable v1 precision policy for modes
+### 11.2 Executable precision policy for VPM modes
 
-The schema must include `w8`, `w16`, `packed`, and `laned` to avoid an artificial lower-half shape, but executable `vc4kernel` v1 may use only:
+The schema includes `w8`, `w16`, `packed`, and `laned` to avoid an
+artificial lower-half shape. After P9d, QPU VPM read/write accepts:
 
 ```text
-width = w32
-subword_mode = none
-orientation = horizontal | vertical
-stride / pitch / blockmode where meaningful for 32-bit movement
+width = w32, subword_mode = none
+width = w16, subword_mode = packed | laned
+width = w8,  subword_mode = packed | laned
 ```
 
-Sub-32 packed/laned executable movement is a future precision/storage milestone. In 32-bit mode, the hardware ignores the laned bit, so executable 32-bit ops must require `subword_mode = none`.
+VDR/VDW DMA subword movement is still P9e scope until separately proven. In
+32-bit mode, the hardware ignores the laned bit, so executable 32-bit ops must
+require `subword_mode = none`. Sub-32 QPU VPM ops must use `packed` or `laned`;
+`none` has no accepted P9d meaning for w8/w16 QPU VPM movement.
 
-### 11.3 VPM coordinate rules for 32-bit mode
+### 11.3 VPM coordinate rules for QPU modes
 
 For QPU VPM read/write:
 
@@ -1480,9 +1483,20 @@ horizontal 32-bit:
   x must be 0 for a full 16-lane row fragment.
   y selects the VPM row.
 
+horizontal 16-bit:
+  x is a halfword selector in [0, 1].
+  y selects the VPM row/subvector base.
+
+horizontal 8-bit:
+  x is a byte selector in [0, 3].
+  y selects the VPM row/subvector base.
+
 vertical 32-bit:
   x selects the column.
   y must be aligned as required by the hardware vertical 32-bit address encoding.
+
+vertical 16-bit/8-bit:
+  x remains a VPM column/address selector in [0, 15].
 ```
 
 All row/coordinate accesses are relative to the runtime-assigned `vpm_base_row` plus planned allocation offsets.
@@ -1977,11 +1991,12 @@ Scalar `i1` lowering uses condition plans and hardware flags/branch conditions.
 #vc4kernel.vpm_subword<none | packed | laned>
 ```
 
-Executable v1 accepts only:
+QPU VPM read/write accepts:
 
 ```text
-vpm_width = w32
-vpm_subword = none
+vpm_width = w32, vpm_subword = none
+vpm_width = w16, vpm_subword = packed | laned
+vpm_width = w8,  vpm_subword = packed | laned
 ```
 
 ### 15.2 Forbidden old surface attrs

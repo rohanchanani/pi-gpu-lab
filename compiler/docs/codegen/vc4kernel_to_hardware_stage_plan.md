@@ -144,7 +144,11 @@ to the existing 32-bit/none executable store modes.
 
 ### P9 pack/unpack/subword
 
-Plan pack/unpack and sub-32 VPM modes. Lower-half schema may expose hardware pack/unpack/subword concepts, but executable `vc4kernel` use must remain rejected until hardware proof and verifier/lowering coverage exist.
+Plan pack/unpack and sub-32 VPM modes. P9b/P9c hardware-prove fragment
+pack/unpack. P9d hardware-proves QPU VPM read/write w8/w16 packed and laned
+modes with explicit width/subword attrs and deterministic rejects for
+meaningless combinations. VDR/VDW DMA subword modes remain separate P9e work
+until their MODEW/stride behavior is hardware-proven.
 
 ### P10 SFU/fastmath
 

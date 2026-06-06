@@ -1780,27 +1780,79 @@ static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
       op->getAttr("width"));
   if (!width)
     return op->emitOpError("requires typed VPM width attr");
-  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-    return op->emitOpError(
-        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
   auto subword = llvm::dyn_cast_or_null<mlir::ssavc4::VPMSubwordAttr>(
       op->getAttr("subword"));
   if (!subword)
     return op->emitOpError("requires typed VPM subword attr");
-  if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
+  if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() != mlir::ssavc4::VPMSubword::none)
     return op->emitOpError(
-        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+        "32-bit VPM QPU access requires subword = #ssavc4.vpm_subword<none>");
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() == mlir::ssavc4::VPMSubword::none)
+    return op->emitOpError(
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
   int64_t x = getI32IntegerAttrOr(op, "x", -1);
   int64_t stride = getI32IntegerAttrOr(op, "stride", -1);
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
-      x != 0)
+      width.getValue() == mlir::ssavc4::VPMElemWidth::w32 && x != 0)
     return op->emitOpError(
-        "horizontal 32-bit VPM QPU access requires x = 0 in executable v1");
-  if (stride <= 0)
-    return op->emitOpError("requires positive VPM stride");
+        "horizontal 32-bit VPM QPU access requires x = 0");
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
+      width.getValue() == mlir::ssavc4::VPMElemWidth::w16 && x > 1)
+    return op->emitOpError(
+        "horizontal 16-bit VPM QPU access requires halfword selector x in range [0, 1]");
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
+      width.getValue() == mlir::ssavc4::VPMElemWidth::w8 && x > 3)
+    return op->emitOpError(
+        "horizontal 8-bit VPM QPU access requires byte selector x in range [0, 3]");
+  if (stride <= 0 || stride > 63)
+    return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
+}
+
+static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
+  auto orientation =
+      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+          source->getAttr("orientation"));
+  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
+      source->getAttr("width"));
+  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
+      source->getAttr("subword"));
+  int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
+  int64_t x = getI32IntegerAttrOr(source, "x", 0);
+  if (stride < 1 || stride > 63 || x < 0 || x > 15)
+    return source->emitOpError(
+        "has invalid VPM QPU setup attributes after verification");
+  if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() != mlir::ssavc4::VPMSubword::none)
+    return source->emitOpError(
+        "32-bit VPM QPU access requires subword = #ssavc4.vpm_subword<none>");
+  if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
+      subword.getValue() == mlir::ssavc4::VPMSubword::none)
+    return source->emitOpError(
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
+  int64_t sizeBits = 0;
+  switch (width.getValue()) {
+  case mlir::ssavc4::VPMElemWidth::w8:
+    sizeBits = 0;
+    break;
+  case mlir::ssavc4::VPMElemWidth::w16:
+    sizeBits = 1;
+    break;
+  case mlir::ssavc4::VPMElemWidth::w32:
+    sizeBits = 2;
+    break;
+  }
+  int64_t modeBits = (sizeBits << 8);
+  if (subword.getValue() == mlir::ssavc4::VPMSubword::laned)
+    modeBits |= 0x400;
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal)
+    modeBits |= 0x800;
+  modeBits |= x;
+  return (1 << 20) | (stride << 12) | modeBits;
 }
 
 static LogicalResult verifyRestrictedFlagUses(Operation *func) {
@@ -3580,16 +3632,9 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
 
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
-  int64_t x = getI32IntegerAttrOr(source, "x", 0);
-  int64_t setupBase =
-      (1 << 20) | ((stride & 0x3f) << 12) |
-      (orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical
-           ? (0x200 | x)
-           : 0xa00);
+  FailureOr<int64_t> setupBase = buildVPMQPUSetupBase(source);
+  if (failed(setupBase))
+    return failure();
 
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
@@ -3603,7 +3648,7 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
   }
-  createSplat32LDI(builder, loc, setupBase, 35);
+  createSplat32LDI(builder, loc, *setupBase, 35);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -3636,16 +3681,9 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
     return source->emitOpError()
            << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
 
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
-  int64_t x = getI32IntegerAttrOr(source, "x", 0);
-  int64_t setupBase =
-      (1 << 20) | ((stride & 0x3f) << 12) |
-      (orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical
-           ? (0x200 | x)
-           : 0xa00);
+  FailureOr<int64_t> setupBase = buildVPMQPUSetupBase(source);
+  if (failed(setupBase))
+    return failure();
 
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
@@ -3659,7 +3697,7 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                           mlir::vc4::QPUMux::r1);
   }
-  createSplat32LDI(builder, loc, setupBase, 35);
+  createSplat32LDI(builder, loc, *setupBase, 35);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,

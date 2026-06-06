@@ -25,7 +25,7 @@ ssavc4.module @bad_shared_vpm_resource {
   } {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %seed = ssavc4.load_imm <splat32> {value = 42 : i32} : vector<16xi32>
-    // CHECK: supports only width = #ssavc4.vpm_elem_width<w32> in executable v1
+    // CHECK: sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>
     ssavc4.vpm.write %row0, %seed {
       orientation = #ssavc4.vpm_orientation<horizontal>,
       width = #ssavc4.vpm_elem_width<w16>,

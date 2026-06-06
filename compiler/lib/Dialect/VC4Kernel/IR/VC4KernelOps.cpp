@@ -647,7 +647,8 @@ static LogicalResult verifyVPMRowInBounds(Operation *op, Value tile, Value row,
 }
 
 static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
-                                             StringRef strideAttrName) {
+                                             StringRef strideAttrName,
+                                             bool qpuSubwordModes = false) {
   auto orientation =
       llvm::dyn_cast_if_present<VPMOrientationAttr>(op->getAttr("orientation"));
   if (!orientation)
@@ -655,26 +656,53 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
   auto width = llvm::dyn_cast_if_present<VPMWidthAttr>(op->getAttr("width"));
   if (!width)
     return op->emitOpError("width attribute is required");
-  if (width.getValue() != VPMWidth::w32)
-    return op->emitOpError(
-        "sub-32 VPM width is not executable in vc4kernel v1");
   auto subword =
       llvm::dyn_cast_if_present<VPMSubwordAttr>(op->getAttr("subword"));
   if (!subword)
     return op->emitOpError("subword attribute is required");
-  if (subword.getValue() != VPMSubword::none)
+  if (!qpuSubwordModes) {
+    if (width.getValue() != VPMWidth::w32)
+      return op->emitOpError(
+          "sub-32 VPM width is not executable in vc4kernel v1");
+    if (subword.getValue() != VPMSubword::none)
+      return op->emitOpError(
+          "packed/laned VPM subword modes are not executable in vc4kernel v1");
+  }
+  if (width.getValue() == VPMWidth::w32 &&
+      subword.getValue() != VPMSubword::none)
     return op->emitOpError(
-        "packed/laned VPM subword modes are not executable in vc4kernel v1");
+        "32-bit VPM QPU access requires subword<none>");
+  if (width.getValue() != VPMWidth::w32 &&
+      subword.getValue() == VPMSubword::none)
+    return op->emitOpError(
+        "sub-32 VPM QPU access requires subword<packed> or subword<laned>");
 
   auto xAttr = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(xAttrName));
   if (!xAttr)
     return op->emitOpError() << xAttrName << " attribute is required";
   int64_t x = xAttr.getInt();
-  if (orientation.getValue() == VPMOrientation::horizontal && x != 0)
+  if (x < 0 || x > 15)
+    return qpuSubwordModes
+               ? op->emitOpError() << xAttrName
+                                    << " must be in VPM ADDR range [0, 15]"
+               : op->emitOpError("vertical VPM x must be in range [0, 15]");
+  if (orientation.getValue() == VPMOrientation::horizontal &&
+      width.getValue() == VPMWidth::w32 && x != 0)
+    return qpuSubwordModes
+               ? op->emitOpError(
+                     "horizontal 32-bit VPM QPU access requires x = 0")
+               : op->emitOpError(
+                     "horizontal 32-bit VPM access requires x = 0 in vc4kernel v1");
+  if (orientation.getValue() == VPMOrientation::horizontal &&
+      width.getValue() == VPMWidth::w16 && x > 1)
     return op->emitOpError(
-        "horizontal 32-bit VPM access requires x = 0 in vc4kernel v1");
-  if (orientation.getValue() == VPMOrientation::vertical && (x < 0 || x > 15))
-    return op->emitOpError("vertical VPM x must be in range [0, 15]");
+        "horizontal 16-bit VPM QPU access requires halfword selector x in "
+        "range [0, 1]");
+  if (orientation.getValue() == VPMOrientation::horizontal &&
+      width.getValue() == VPMWidth::w8 && x > 3)
+    return op->emitOpError(
+        "horizontal 8-bit VPM QPU access requires byte selector x in range "
+        "[0, 3]");
 
   auto strideAttr =
       llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(strideAttrName));
@@ -682,6 +710,9 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
     return op->emitOpError() << strideAttrName << " attribute is required";
   if (strideAttr.getInt() <= 0)
     return op->emitOpError() << strideAttrName << " must be positive";
+  if (qpuSubwordModes && strideAttr.getInt() > 63)
+    return op->emitOpError()
+           << strideAttrName << " must fit the 6-bit VPM QPU stride field";
   return success();
 }
 
@@ -1434,7 +1465,8 @@ LogicalResult VPMWriteFragmentOp::verify() {
   if (failed(verifyRequiredMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
                                         Coherency::vpm_local)))
     return failure();
-  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
+  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride",
+                                     /*qpuSubwordModes=*/true)) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());
@@ -1443,7 +1475,8 @@ LogicalResult VPMReadFragmentOp::verify() {
   if (failed(verifyRequiredMemoryPolicy(getOperation(), MemoryPath::vpm_qpu,
                                         Coherency::vpm_local)))
     return failure();
-  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride")) ||
+  if (failed(verifyVPMExecutableMode(getOperation(), "x", "stride",
+                                     /*qpuSubwordModes=*/true)) ||
       failed(verifyVPMRowInBounds(getOperation(), getTile(), getRow())))
     return failure();
   return verifyPredicateForZeroFill(getOperation(), getPred());

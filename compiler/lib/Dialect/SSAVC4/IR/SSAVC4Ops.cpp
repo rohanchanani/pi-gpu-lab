@@ -170,21 +170,45 @@ static LogicalResult verifyExecutableVPMMode(Operation *op,
                                              VPMElemWidth width,
                                              VPMSubword subword) {
   if (width != VPMElemWidth::w32)
-    return op->emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+    return op->emitOpError(
+        "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
   if (subword != VPMSubword::none)
-    return op->emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+    return op->emitOpError(
+        "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+  return success();
+}
+
+static LogicalResult verifyExecutableVPMQPUMode(Operation *op,
+                                                VPMElemWidth width,
+                                                VPMSubword subword) {
+  if (width == VPMElemWidth::w32 && subword != VPMSubword::none)
+    return op->emitOpError(
+        "32-bit VPM QPU access requires subword = #ssavc4.vpm_subword<none>");
+  if (width != VPMElemWidth::w32 && subword == VPMSubword::none)
+    return op->emitOpError(
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
   return success();
 }
 
 static LogicalResult verifyVPMQPUCoordinates(Operation *op,
+                                             VPMElemWidth width,
                                              VPMOrientation orientation,
                                              int64_t x, int64_t stride) {
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation == VPMOrientation::horizontal && x != 0)
-    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0 in executable v1");
-  if (stride <= 0)
-    return op->emitOpError("requires positive VPM stride");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w32 && x != 0)
+    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w16 && x > 1)
+    return op->emitOpError(
+        "horizontal 16-bit VPM QPU access requires halfword selector x in range [0, 1]");
+  if (orientation == VPMOrientation::horizontal &&
+      width == VPMElemWidth::w8 && x > 3)
+    return op->emitOpError(
+        "horizontal 8-bit VPM QPU access requires byte selector x in range [0, 3]");
+  if (stride <= 0 || stride > 63)
+    return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
 }
 
@@ -382,12 +406,13 @@ LogicalResult VPMWriteOp::verify() {
     return emitOpError("requires an i32 VPM row/y operand");
   if (failed(verifyVector16(op, getValue().getType(), "value")))
     return failure();
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMQPUMode(op, getWidth(), getSubword())))
     return failure();
   int64_t lanes = getLanesAttr().getInt();
   if (lanes != 16)
     return emitOpError("supports only full 16-lane VPM vectors in executable v1");
-  return verifyVPMQPUCoordinates(op, getOrientation(), getXAttr().getInt(),
+  return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
+                                 getXAttr().getInt(),
                                  getStrideAttr().getInt());
 }
 
@@ -397,12 +422,13 @@ LogicalResult VPMReadOp::verify() {
     return emitOpError("requires an i32 VPM row/y operand");
   if (failed(verifyVector16(op, getResult().getType(), "result")))
     return failure();
-  if (failed(verifyExecutableVPMMode(op, getWidth(), getSubword())))
+  if (failed(verifyExecutableVPMQPUMode(op, getWidth(), getSubword())))
     return failure();
   int64_t lanes = getLanesAttr().getInt();
   if (lanes != 16)
     return emitOpError("supports only full 16-lane VPM vectors in executable v1");
-  return verifyVPMQPUCoordinates(op, getOrientation(), getXAttr().getInt(),
+  return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
+                                 getXAttr().getInt(),
                                  getStrideAttr().getInt());
 }
 

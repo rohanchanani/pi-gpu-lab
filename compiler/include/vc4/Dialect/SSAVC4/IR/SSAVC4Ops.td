@@ -293,8 +293,8 @@ def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
   let description = [{
     Writes one 16-lane vector value to VPM through QPU register-space VPM
     setup/write traffic.  The typed mode attrs describe the hardware-derived
-    32-bit VPM setup word; executable v1 accepts only width = w32 and
-    subword = none.
+    32-bit VPM setup word. P9 accepts w32/none plus hardware-proven w8/w16
+    packed and laned QPU VPM modes.
   }];
   let arguments = (ins
     AnyType:$row,
@@ -315,8 +315,8 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let description = [{
     Reads one 16-lane vector value from VPM through QPU register-space VPM
     setup/read traffic.  The typed mode attrs describe the hardware-derived
-    32-bit VPM setup word; executable v1 accepts only width = w32 and
-    subword = none.
+    32-bit VPM setup word. P9 accepts w32/none plus hardware-proven w8/w16
+    packed and laned QPU VPM modes.
   }];
   let arguments = (ins
     AnyType:$row,

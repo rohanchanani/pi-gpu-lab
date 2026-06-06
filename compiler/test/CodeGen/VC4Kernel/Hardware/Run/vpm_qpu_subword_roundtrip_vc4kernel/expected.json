@@ -1,0 +1,19 @@
+{
+  "name": "vpm_qpu_subword_roundtrip_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "saw_vpm_qpu_w8": 1,
+    "saw_vpm_qpu_w16": 1,
+    "saw_packed": 1,
+    "saw_laned": 1,
+    "saw_horizontal": 1,
+    "saw_vertical": 1,
+    "saw_pack_unpack": 1,
+    "saw_vdw_preserve": 1
+  }
+}
