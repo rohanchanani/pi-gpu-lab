@@ -98,3 +98,37 @@ module {
     vc4kernel.return
   }
 }
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_uitofp(%x : i32) attributes {
+    public_name = "bad_uitofp",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "i32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: scalar numeric casts require exact scalar numeric cast support not available in P5
+    %bad = arith.uitofp %x : i32 to f32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_fptoui(%x : f32) attributes {
+    public_name = "bad_fptoui",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "f32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: scalar numeric casts require exact scalar numeric cast support not available in P5
+    %bad = arith.fptoui %x : f32 to i32
+    vc4kernel.return
+  }
+}

@@ -37,6 +37,42 @@ module {
 // -----
 
 module {
+  vc4kernel.kernel @bad_divui(%x : i32, %y : i32) attributes {
+    public_name = "bad_divui",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "i32"},
+      {name = "y", kind = "scalar", direction = "by_value", type = "i32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: integer division and remainder are not supported in vc4kernel scalar arith
+    %r = arith.divui %x, %y : i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_remsi(%x : i32, %y : i32) attributes {
+    public_name = "bad_remsi",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "i32"},
+      {name = "y", kind = "scalar", direction = "by_value", type = "i32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: integer division and remainder are not supported in vc4kernel scalar arith
+    %r = arith.remsi %x, %y : i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
   vc4kernel.kernel @bad_vector_arith attributes {
     public_name = "bad_vector_arith",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
@@ -133,6 +169,42 @@ module {
   } {
     // CHECK: scalar f32 arithmetic is not supported in vc4kernel scalar arith
     %r = arith.addf %x, %y : f32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_f32_sub(%x : f32, %y : f32) attributes {
+    public_name = "bad_f32_sub",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "f32"},
+      {name = "y", kind = "scalar", direction = "by_value", type = "f32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: scalar f32 arithmetic is not supported in vc4kernel scalar arith
+    %r = arith.subf %x, %y : f32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_f32_mul(%x : f32, %y : f32) attributes {
+    public_name = "bad_f32_mul",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [
+      {name = "x", kind = "scalar", direction = "by_value", type = "f32"},
+      {name = "y", kind = "scalar", direction = "by_value", type = "f32"}
+    ],
+    warps_per_block = 1 : i32
+  } {
+    // CHECK: scalar f32 arithmetic is not supported in vc4kernel scalar arith
+    %r = arith.mulf %x, %y : f32
     vc4kernel.return
   }
 }

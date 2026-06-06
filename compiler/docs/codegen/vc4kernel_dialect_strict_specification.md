@@ -574,7 +574,7 @@ Restrictions:
 - arith.andi/ori/xori may operate on scalar i32 or scalar i1. The i1 form composes condition-plan values by materializing explicit 0/1 values as needed; it must not reuse stale hardware flags.
 - arith.muli is exact modulo 2^32 and lowers through a tested 16x16 partial-product expansion using mul24 only for bounded partial operands.
 - arith.minui/maxui use explicit unsigned semantics; when the lower half exposes signed min/max, lowering must use sign-bias and unbias.
-- arith.cmpi may compare only scalar i32 values and produce scalar i1. All standard i32 predicates eq/ne/slt/sle/sgt/sge/ult/ule/ugt/uge are admitted in P5b.
+- arith.cmpi may compare only scalar i32 values and produce scalar i1. All standard i32 predicates eq/ne/slt/sle/sgt/sge/ult/ule/ugt/uge are admitted in final P5.
 - arith.select condition must be scalar i1 and selected values must be scalar i1/i32/f32.
 - arith.bitcast may reinterpret scalar i32 <-> f32 only. It is bit-preserving and lowers through ssavc4.mov or an equivalent coalescable move, never through itof/ftoi numeric conversion.
 - arith.extui may materialize scalar i1 -> i32 only, producing exact 0 or 1.

@@ -147,6 +147,66 @@ P4_F32_REDUCE_KINDS = {
     "fmax",
 }
 
+P5_ACCEPTED_ARITH_OPS = {
+    "arith.constant",
+    "arith.addi",
+    "arith.subi",
+    "arith.muli",
+    "arith.shli",
+    "arith.shrui",
+    "arith.shrsi",
+    "arith.andi",
+    "arith.ori",
+    "arith.xori",
+    "arith.minsi",
+    "arith.maxsi",
+    "arith.minui",
+    "arith.maxui",
+    "arith.cmpi",
+    "arith.select",
+    "arith.bitcast",
+    "arith.extui",
+    "arith.trunci",
+}
+
+P5_REJECTED_ARITH_OPS = {
+    "arith.addf",
+    "arith.subf",
+    "arith.mulf",
+    "arith.divf",
+    "arith.minimumf",
+    "arith.maximumf",
+    "arith.minnumf",
+    "arith.maxnumf",
+    "arith.divsi",
+    "arith.divui",
+    "arith.remsi",
+    "arith.remui",
+    "arith.sitofp",
+    "arith.fptosi",
+    "arith.uitofp",
+    "arith.fptoui",
+    "arith.index_cast",
+}
+
+P5_POST_PHASES = {
+    "P6",
+    "P7",
+    "P8",
+    "P9",
+    "P10",
+    "P11",
+    "P12",
+    "P13",
+    "DEFERRED_SPARSE_VDW_STORE",
+}
+
+P5_POST_PHASE_ALLOWED_STATUSES = {
+    "planned",
+    "migration_target",
+    "deterministic_reject",
+}
+
 TEXT_SUFFIXES = {
     ".td",
     ".h",
@@ -270,6 +330,7 @@ def audit_matrix_ownership(matrix, mode):
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
         "p4-general-reduce-lock",
+        "p5-scalar-arith-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -284,6 +345,7 @@ def audit_matrix_ownership(matrix, mode):
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
         "p4-general-reduce-lock",
+        "p5-scalar-arith-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -380,7 +442,41 @@ def audit_matrix_ownership(matrix, mode):
             "P4",
             "removed_in_p4",
         )
-    else:
+    p5_status_entries = 0
+    p5_post_phase_planned_entries = 0
+    if mode == "p5-scalar-arith-lock":
+        p5_scalar = require_matrix_feature(
+            features,
+            "p5_scalar_arith_bitwise_shift_minmax_casts",
+            "P5",
+            "accepted",
+        )
+        p5_status_entries = 1
+        p5_text = json.dumps(p5_scalar).lower()
+        for token in [
+            "exact mul32",
+            "bitcast",
+            "i1",
+            "extui",
+            "trunci",
+            "numeric casts",
+            "deterministic",
+            "vector arith",
+        ]:
+            if token not in p5_text:
+                fail(f"P5 scalar matrix entry must document {token}")
+        for feature in features.values():
+            phase = feature.get("phase")
+            if phase not in P5_POST_PHASES:
+                continue
+            p5_post_phase_planned_entries += 1
+            status = feature.get("current_status")
+            if status not in P5_POST_PHASE_ALLOWED_STATUSES:
+                fail(
+                    f"P5 lock expected post-P5 feature {feature.get('id')} "
+                    "to remain planned/migration_target/deterministic_reject"
+                )
+    if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
             "p4_remove_add_only_reduce_specialness",
@@ -421,6 +517,8 @@ def audit_matrix_ownership(matrix, mode):
         "p2_locked_status_entries": p2_status_entries,
         "p3_locked_status_entries": p3_status_entries,
         "p3_post_phase_planned_entries": p3_post_phase_planned_entries,
+        "p5_locked_status_entries": p5_status_entries,
+        "p5_post_phase_planned_entries": p5_post_phase_planned_entries,
     }
 
 
@@ -531,6 +629,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
         "p4-general-reduce-lock",
+        "p5-scalar-arith-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -1153,6 +1252,196 @@ def audit_p4_general_reduce_lock(repo_root, matrix):
     }
 
 
+def audit_p5_scalar_arith_lock(repo_root, matrix):
+    features = feature_by_id(matrix)
+    require_matrix_feature(
+        features,
+        "p5_scalar_arith_bitwise_shift_minmax_casts",
+        "P5",
+        "accepted",
+    )
+
+    lowering_path = (
+        repo_root
+        / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"
+    )
+    lowering_text = read_text(lowering_path)
+    required_lowering_tokens = [
+        "emitI32Mul32Fallback",
+        "Exact modulo-2^32 multiply",
+        "builder.getI32IntegerAttr(0xffff)",
+        "builder.getI32IntegerAttr(16)",
+        "arith.sitofp requires exact scalar numeric cast support not available in P5",
+        "arith.fptosi requires exact scalar numeric cast support not available in P5",
+        "scalar numeric casts require exact scalar numeric cast support not available in P5",
+        "scalar f32 arithmetic is not supported in vc4kernel scalar arith",
+        "integer division and remainder are not supported in vc4kernel scalar arith",
+        "arith.bitcast requires scalar i32/f32 reinterpretation in vc4kernel",
+        "arith.extui in vc4kernel supports only i1 to i32 in P5",
+        "arith.trunci in vc4kernel supports only i32 to i1 low-bit trunc in P5",
+    ]
+    for token in required_lowering_tokens:
+        if token not in lowering_text:
+            fail(f"P5 scalar arith lock missing lowering/verifier token: {token}")
+    muli_match = re.search(
+        r'if \(hasName\(op, "arith\.muli"\)\) \{(?P<body>.*?)return success\(\);',
+        lowering_text,
+        re.DOTALL,
+    )
+    if not muli_match or "emitI32Mul32Fallback" not in muli_match.group("body"):
+        fail("P5 scalar arith lock requires arith.muli to use exact fallback")
+    bitcast_match = re.search(
+        r'if \(hasName\(op, "arith\.bitcast"\)\) \{(?P<body>.*?)return success\(\);',
+        lowering_text,
+        re.DOTALL,
+    )
+    if not bitcast_match or "kSSAVC4MovOpName" not in bitcast_match.group("body"):
+        fail("P5 scalar arith lock requires arith.bitcast to lower through mov")
+    if "arith.bitcast" in lowering_text and (
+        "arith.sitofp" in bitcast_match.group("body")
+        or "arith.fptosi" in bitcast_match.group("body")
+    ):
+        fail("P5 scalar arith lock found numeric conversion in bitcast lowering")
+
+    roots = [
+        Path("compiler/include/vc4/Dialect/VC4Kernel"),
+        Path("compiler/lib/Dialect/VC4Kernel"),
+        Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/Dialect/VC4Kernel"),
+        Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+        Path("compiler/test/CodeGen/VC4Kernel/Hardware/Run"),
+    ]
+    active_arith_ops = Counter()
+    rejected_negative_mentions = Counter()
+    vector_arith_hits = []
+    unsupported_active_hits = []
+    unsupported_type_hits = []
+    files_scanned = 0
+    arith_op_re = re.compile(r"\barith\.[A-Za-z0-9_]+")
+    unsupported_type_re = re.compile(
+        r"\barith\.[A-Za-z0-9_]+[^\n]*(?:\bi8\b|\bi16\b|\bi64\b|\bf64\b|\bindex\b)"
+    )
+    vector_arith_re = re.compile(r"\barith\.[A-Za-z0-9_]+[^\n]*vector<")
+    for root in roots:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if is_support_audit_text(path):
+                continue
+            files_scanned += 1
+            if path.suffix != ".mlir":
+                continue
+            text = read_text(path)
+            negative = is_negative_test(path)
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("//") or stripped.startswith("#"):
+                    continue
+                ops = arith_op_re.findall(line)
+                if not ops:
+                    continue
+                if negative:
+                    for op_name in ops:
+                        if op_name in P5_REJECTED_ARITH_OPS:
+                            rejected_negative_mentions[op_name] += 1
+                    continue
+                for op_name in ops:
+                    if op_name not in P5_ACCEPTED_ARITH_OPS:
+                        unsupported_active_hits.append((path, op_name, stripped))
+                    else:
+                        active_arith_ops[op_name] += 1
+                if vector_arith_re.search(line):
+                    vector_arith_hits.append((path, stripped))
+                if unsupported_type_re.search(line):
+                    unsupported_type_hits.append((path, stripped))
+
+    if unsupported_active_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{op_name}:{line}"
+            for path, op_name, line in unsupported_active_hits[:20]
+        )
+        fail(f"P5 scalar arith lock found unsupported active arith op: {details}")
+    if vector_arith_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in vector_arith_hits[:20]
+        )
+        fail(f"P5 scalar arith lock found active vector arith: {details}")
+    if unsupported_type_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in unsupported_type_hits[:20]
+        )
+        fail(f"P5 scalar arith lock found unsupported scalar width/type: {details}")
+
+    required_active_ops = {
+        "arith.muli",
+        "arith.andi",
+        "arith.ori",
+        "arith.xori",
+        "arith.shrui",
+        "arith.shrsi",
+        "arith.minsi",
+        "arith.maxsi",
+        "arith.minui",
+        "arith.maxui",
+        "arith.bitcast",
+        "arith.extui",
+        "arith.trunci",
+    }
+    missing_active = sorted(op for op in required_active_ops if active_arith_ops[op] == 0)
+    if missing_active:
+        fail(
+            "P5 scalar arith lock expected active tests/fixtures for: "
+            + ", ".join(missing_active)
+        )
+
+    required_negative_ops = {
+        "arith.addf",
+        "arith.subf",
+        "arith.mulf",
+        "arith.divsi",
+        "arith.divui",
+        "arith.remsi",
+        "arith.remui",
+        "arith.sitofp",
+        "arith.fptosi",
+        "arith.uitofp",
+        "arith.fptoui",
+    }
+    missing_negative = sorted(
+        op for op in required_negative_ops if rejected_negative_mentions[op] == 0
+    )
+    if missing_negative:
+        fail(
+            "P5 scalar arith lock expected deterministic-reject tests for: "
+            + ", ".join(missing_negative)
+        )
+
+    fixture_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    fixture_scalar_ops = Counter()
+    for path in sorted(fixture_root.rglob("input.mlir")):
+        text = read_text(path)
+        if "vc4kernel.kernel" not in text:
+            continue
+        for op_name in arith_op_re.findall(text):
+            fixture_scalar_ops[op_name] += 1
+    for op_name in ["arith.muli", "arith.bitcast", "arith.extui", "arith.trunci"]:
+        if fixture_scalar_ops[op_name] == 0:
+            fail(f"P5 scalar arith lock expected hardware fixture use of {op_name}")
+
+    return {
+        "active_arith_ops": sum(active_arith_ops.values()),
+        "deterministic_reject_tests": sum(rejected_negative_mentions.values()),
+        "exact_muli_fallback": 1,
+        "files_scanned": files_scanned,
+        "fixture_scalar_ops": sum(fixture_scalar_ops.values()),
+        "numeric_cast_rejects": rejected_negative_mentions["arith.sitofp"]
+        + rejected_negative_mentions["arith.fptosi"]
+        + rejected_negative_mentions["arith.uitofp"]
+        + rejected_negative_mentions["arith.fptoui"],
+        "unsupported_active_hits": 0,
+        "unsupported_type_hits": 0,
+        "vector_arith_hits": 0,
+    }
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -1175,6 +1464,7 @@ def main(argv):
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
         "p4-general-reduce-lock",
+        "p5-scalar-arith-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -1192,6 +1482,7 @@ def main(argv):
         "p2-bitcast-const-lock",
         "p3-general-cmp-lock",
         "p4-general-reduce-lock",
+        "p5-scalar-arith-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -1212,6 +1503,7 @@ def main(argv):
             "p2-bitcast-const-lock",
             "p3-general-cmp-lock",
             "p4-general-reduce-lock",
+            "p5-scalar-arith-lock",
         }
         else {}
     )
@@ -1228,6 +1520,11 @@ def main(argv):
     p4_lock_counts = (
         audit_p4_general_reduce_lock(repo_root, matrix)
         if args.mode == "p4-general-reduce-lock"
+        else {}
+    )
+    p5_lock_counts = (
+        audit_p5_scalar_arith_lock(repo_root, matrix)
+        if args.mode == "p5-scalar-arith-lock"
         else {}
     )
 
@@ -1256,6 +1553,8 @@ def main(argv):
         print(f"p3_general_cmp_lock: {format_counts(p3_lock_counts)}")
     if p4_lock_counts:
         print(f"p4_general_reduce_lock: {format_counts(p4_lock_counts)}")
+    if p5_lock_counts:
+        print(f"p5_scalar_arith_lock: {format_counts(p5_lock_counts)}")
     return 0
 
 

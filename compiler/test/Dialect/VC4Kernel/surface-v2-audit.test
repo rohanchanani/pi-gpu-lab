@@ -2,6 +2,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p2-bitcast-const-lock | FileCheck %s --check-prefix=P2
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p3-general-cmp-lock | FileCheck %s --check-prefix=P3
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p4-general-reduce-lock | FileCheck %s --check-prefix=P4
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p5-scalar-arith-lock | FileCheck %s --check-prefix=P5
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
@@ -77,3 +78,21 @@
 # P4-SAME: negative_missing_policy_mentions=3
 # P4-SAME: p4_f32_nan_inf_hits=0
 # P4-SAME: stale_add_only_source_hits=0
+
+# P5: PASS VC4Kernel Surface v2 audit: mode=p5-scalar-arith-lock
+# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# P5: migration_targets:
+# P5-SAME: p5_locked_status_entries=1
+# P5-SAME: p5_post_phase_planned_entries=20
+# P5-SAME: special_case_removed_in_p1=4
+# P5: fixture_purity:
+# P5-SAME: hardware_inputs=87
+# P5-SAME: producer_or_lower_half_hits=0
+# P5: p1_general_alu_lock:
+# P5-SAME: removed_legacy_hits=0
+# P5: p5_scalar_arith_lock:
+# P5-SAME: exact_muli_fallback=1
+# P5-SAME: numeric_cast_rejects=4
+# P5-SAME: unsupported_active_hits=0
+# P5-SAME: unsupported_type_hits=0
+# P5-SAME: vector_arith_hits=0

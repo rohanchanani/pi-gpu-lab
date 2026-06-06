@@ -365,7 +365,7 @@
       "id": "p5_scalar_arith_bitwise_shift_minmax_casts",
       "phase": "P5",
       "category": "scalar_arith",
-      "current_status": "hardware_proven_pending_final_acceptance",
+      "current_status": "accepted",
       "final_status_target": "implemented_with_policy_or_rejected",
       "current_surface": "P5c hardware-proves scalar i32 add/sub/exact mul32, bitwise, shifts, signed and unsigned min/max, all scalar i32 cmpi predicates, and live address/control use. P5d hardware-proves scalar bitcast i32<->f32, i1 and/or/xor, extui i1->i32, and trunci i32->i1 low-bit boundary semantics. Scalar f32 arithmetic, integer div/rem, vector arith, unsupported widths, index values, and unproven numeric casts remain deterministic rejects.",
       "target_surface": "Scoped scalar arithmetic subset for exact i32 address/control math, condition planning, scalar i32/f32 bit reinterpretation, i1 Boolean/boundary forms, and deterministic rejects for unproven scalar math.",
