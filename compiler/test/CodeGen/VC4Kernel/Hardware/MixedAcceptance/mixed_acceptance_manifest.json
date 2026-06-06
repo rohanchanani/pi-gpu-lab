@@ -190,7 +190,7 @@
       "dialect": "vc4kernel",
       "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_vertical_rect_vpm_vdw_preserve_vc4kernel",
       "runner_kind": "vc4kernel_candidate",
-      "status": "planned",
+      "status": "implemented",
       "real_world_role": "Vertical rectangular VPM and VDW preserve canary expressed in VC4Kernel before dynamic coordinate expansion phases.",
       "feature_tags": [
         "p6_memory_path_coherency",
@@ -202,6 +202,10 @@
         "total_mismatches",
         "sentinel_mismatches",
         "launch_failures",
+        "saw_vertical_vdr_vdw",
+        "saw_dynamic_active_rows_cols",
+        "saw_inactive_preserve",
+        "saw_nonzero_vpm_coord",
         "saw_vdr_vpm_path",
         "saw_vdw_preserve"
       ],
@@ -217,22 +221,24 @@
       "dialect": "vc4kernel",
       "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_cooperative_barrier_vpm_transpose_vc4kernel",
       "runner_kind": "vc4kernel_candidate",
-      "status": "planned",
+      "status": "implemented",
       "real_world_role": "Cooperative VPM transpose-style staging kernel with barrier and resource sharing coverage.",
       "feature_tags": [
         "p1_fragment_alu_i32_logic_shift_minmax_clz",
         "p2_fragment_bitcast_const",
         "p6_memory_path_coherency",
-        "cooperative_barrier_vpm",
-        "dynamic_vdr_vdw_horizontal"
+        "cooperative_barrier_vpm"
       ],
       "required_result_fields": [
         "status",
         "total_mismatches",
         "sentinel_mismatches",
         "launch_failures",
-        "saw_vdr_vpm_path",
-        "saw_barrier"
+        "saw_barrier",
+        "saw_cooperative_warps",
+        "saw_vpm_qpu_read_write",
+        "saw_vdw_preserve",
+        "saw_resource_metadata"
       ],
       "expected_cases_summary": "Multi-QPU cooperative staging cases with guard regions and barrier-sensitive output checks.",
       "triage_feature_bands": [
@@ -246,12 +252,11 @@
       "dialect": "ssavc4",
       "path": "compiler/test/CodeGen/SSAVC4/Hardware/Run/mixed_lower_half_spill_dma_branch_ssavc4",
       "runner_kind": "ssavc4_candidate",
-      "status": "planned",
+      "status": "implemented",
       "real_world_role": "Lower-half DMA, branch layout, and spill coherency interaction canary below VC4Kernel.",
       "feature_tags": [
         "p6_spill_coherency",
         "dynamic_vdr_vdw_horizontal",
-        "dynamic_vdr_vdw_vertical",
         "lower_half_spill_dma_branch"
       ],
       "required_result_fields": [
@@ -260,7 +265,11 @@
         "sentinel_mismatches",
         "launch_failures",
         "saw_spill_frame_nonzero",
-        "saw_dma_branch"
+        "saw_dynamic_dma_branch",
+        "saw_dma_branch",
+        "saw_edge_copy",
+        "saw_thread_end_epilogue",
+        "hidden_spill_reload_tmu_hits"
       ],
       "expected_cases_summary": "Branch-heavy DMA and spill cases with guarded outputs.",
       "triage_feature_bands": [
@@ -472,8 +481,7 @@
       "phase": "P0",
       "verification_kind": "hardware_mixed",
       "covered_by": [
-        "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel",
-        "mixed_lower_half_spill_dma_branch_ssavc4"
+        "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel"
       ],
       "required": true,
       "status": "planned"

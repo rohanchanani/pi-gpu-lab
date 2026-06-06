@@ -1,0 +1,22 @@
+{
+  "name": "mixed_cooperative_barrier_vpm_transpose_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "warps_per_block": 4,
+    "runtime_allocations": 1,
+    "runtime_launches": 4,
+    "timeouts": 0,
+    "errstat_relevant_changed": 0,
+    "saw_barrier": 1,
+    "saw_cooperative_warps": 1,
+    "saw_vpm_qpu_read_write": 1,
+    "saw_vdw_preserve": 1,
+    "saw_resource_metadata": 1
+  }
+}

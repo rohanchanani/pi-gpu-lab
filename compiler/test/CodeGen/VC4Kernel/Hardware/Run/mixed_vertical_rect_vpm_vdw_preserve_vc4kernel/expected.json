@@ -1,0 +1,26 @@
+{
+  "name": "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "max_rows": 4,
+    "max_cols": 8,
+    "max_stride_words": 19,
+    "saw_rows0": 1,
+    "saw_rows4": 1,
+    "saw_cols0": 1,
+    "saw_cols8": 1,
+    "saw_stride19": 1,
+    "saw_vertical_vdr_vdw": 1,
+    "saw_dynamic_active_rows_cols": 1,
+    "saw_inactive_preserve": 1,
+    "saw_nonzero_vpm_coord": 1,
+    "saw_vdr_vpm_path": 1,
+    "saw_vdw_preserve": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 5
+  }
+}
