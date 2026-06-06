@@ -125,6 +125,7 @@ P3_POST_PHASE_ALLOWED_STATUSES = {
     "migration_target",
     "deterministic_reject",
     "implemented_pending_hardware",
+    "hardware_proven_pending_final_acceptance",
 }
 
 TEXT_SUFFIXES = {
