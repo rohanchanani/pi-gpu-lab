@@ -1,0 +1,14 @@
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p0-baseline | FileCheck %s
+
+# CHECK: PASS VC4Kernel Surface v2 audit: mode=p0-baseline
+# CHECK: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=38
+# CHECK: migration_targets:
+# CHECK-SAME: present_special_case_ops=4
+# CHECK-SAME: special_case_migration_targets=4
+# CHECK: forbidden_path_scan:
+# CHECK-SAME: direct_path_hits=0
+# CHECK-SAME: forbidden_tile_dsl_hits=0
+# CHECK-SAME: retired_tile_hits=0
+# CHECK: fixture_purity:
+# CHECK-SAME: hardware_inputs=60
+# CHECK-SAME: producer_or_lower_half_hits=0
