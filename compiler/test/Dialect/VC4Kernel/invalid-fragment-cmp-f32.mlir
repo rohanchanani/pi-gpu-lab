@@ -9,7 +9,7 @@ module {
     warps_per_block = 1 : i32
   } {
     %a = vc4kernel.splat %x : f32 -> vector<16xf32>
-    // CHECK: fragment_cmp supports only vector<16xi32> operands in v1
+    // CHECK: fragment_cmp supports only vector<16xi32> operands before P3 f32 finite-only support
     %cmp = vc4kernel.fragment_cmp %a, %a {predicate = #vc4kernel.cmp<ult>} : vector<16xf32>, vector<16xf32> -> !vc4kernel.pred<16>
     vc4kernel.return
   }

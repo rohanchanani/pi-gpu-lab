@@ -1629,15 +1629,11 @@ struct CompareMaskLowering {
 };
 
 static FailureOr<CompareMaskLowering>
-mapFragmentCmpPredicate(Operation *op, Value lhs, Value rhs) {
-  auto attr =
-      llvm::dyn_cast_or_null<mlir::vc4kernel::CmpPredicateAttr>(
-          op->getAttr("predicate"));
-  if (!attr)
-    return op->emitOpError("fragment_cmp is missing predicate attribute");
-
+mapUnsignedFragmentCmpPredicate(Operation *op,
+                                mlir::vc4kernel::CmpPredicate predicate,
+                                Value lhs, Value rhs) {
   CompareMaskLowering result;
-  switch (attr.getValue()) {
+  switch (predicate) {
   case mlir::vc4kernel::CmpPredicate::eq:
     result = {lhs, rhs, mlir::vc4::Cond::zs};
     break;
@@ -1656,8 +1652,64 @@ mapFragmentCmpPredicate(Operation *op, Value lhs, Value rhs) {
   case mlir::vc4kernel::CmpPredicate::ule:
     result = {rhs, lhs, mlir::vc4::Cond::cc};
     break;
+  default:
+    return op->emitOpError("internal lowering error: expected unsigned "
+                           "fragment_cmp predicate");
   }
   return result;
+}
+
+static Value createSignBiasedI32(OpBuilder &builder, Location loc, Value value) {
+  Value signBit = createLoadImm(
+      builder, loc, value.getType(),
+      builder.getIntegerAttr(builder.getI32Type(), llvm::APInt(32, 0x80000000u)));
+  return createI32BinaryAddPipe(builder, loc, value, signBit,
+                                mlir::vc4::AddOpcode::bit_xor);
+}
+
+static FailureOr<CompareMaskLowering>
+mapFragmentCmpPredicate(Operation *op, OpBuilder &builder, Value lhs,
+                        Value rhs) {
+  auto attr =
+      llvm::dyn_cast_or_null<mlir::vc4kernel::CmpPredicateAttr>(
+          op->getAttr("predicate"));
+  if (!attr)
+    return op->emitOpError("fragment_cmp is missing predicate attribute");
+
+  switch (attr.getValue()) {
+  case mlir::vc4kernel::CmpPredicate::eq:
+  case mlir::vc4kernel::CmpPredicate::ne:
+  case mlir::vc4kernel::CmpPredicate::ult:
+  case mlir::vc4kernel::CmpPredicate::ule:
+  case mlir::vc4kernel::CmpPredicate::ugt:
+  case mlir::vc4kernel::CmpPredicate::uge:
+    return mapUnsignedFragmentCmpPredicate(op, attr.getValue(), lhs, rhs);
+  case mlir::vc4kernel::CmpPredicate::slt: {
+    Value biasedLhs = createSignBiasedI32(builder, op->getLoc(), lhs);
+    Value biasedRhs = createSignBiasedI32(builder, op->getLoc(), rhs);
+    return mapUnsignedFragmentCmpPredicate(
+        op, mlir::vc4kernel::CmpPredicate::ult, biasedLhs, biasedRhs);
+  }
+  case mlir::vc4kernel::CmpPredicate::sle: {
+    Value biasedLhs = createSignBiasedI32(builder, op->getLoc(), lhs);
+    Value biasedRhs = createSignBiasedI32(builder, op->getLoc(), rhs);
+    return mapUnsignedFragmentCmpPredicate(
+        op, mlir::vc4kernel::CmpPredicate::ule, biasedLhs, biasedRhs);
+  }
+  case mlir::vc4kernel::CmpPredicate::sgt: {
+    Value biasedLhs = createSignBiasedI32(builder, op->getLoc(), lhs);
+    Value biasedRhs = createSignBiasedI32(builder, op->getLoc(), rhs);
+    return mapUnsignedFragmentCmpPredicate(
+        op, mlir::vc4kernel::CmpPredicate::ugt, biasedLhs, biasedRhs);
+  }
+  case mlir::vc4kernel::CmpPredicate::sge: {
+    Value biasedLhs = createSignBiasedI32(builder, op->getLoc(), lhs);
+    Value biasedRhs = createSignBiasedI32(builder, op->getLoc(), rhs);
+    return mapUnsignedFragmentCmpPredicate(
+        op, mlir::vc4kernel::CmpPredicate::uge, biasedLhs, biasedRhs);
+  }
+  }
+  llvm_unreachable("all VC4Kernel comparison predicates are handled");
 }
 
 static Value createZeroValue(OpBuilder &builder, Location loc, Type type) {
@@ -2418,7 +2470,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!lhs || !rhs)
       return failure();
     FailureOr<CompareMaskLowering> compare =
-        mapFragmentCmpPredicate(op, lhs, rhs);
+        mapFragmentCmpPredicate(op, builder, lhs, rhs);
     if (failed(compare))
       return failure();
     Value one = createMaskConstant(builder, op->getLoc(), 1);

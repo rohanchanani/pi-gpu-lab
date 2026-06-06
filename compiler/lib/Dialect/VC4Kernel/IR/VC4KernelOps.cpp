@@ -1151,10 +1151,14 @@ LogicalResult FragmentALUMulOp::verify() {
 }
 
 LogicalResult FragmentCmpOp::verify() {
+  if (getOperation()->getAttr("fp_policy"))
+    return emitOpError(
+        "fp comparison policy is only valid for f32 fragment_cmp");
   if (!isVC4KernelVector16I32Type(getLhs().getType()) ||
       !isVC4KernelVector16I32Type(getRhs().getType()))
     return emitOpError(
-        "fragment_cmp supports only vector<16xi32> operands in v1");
+        "fragment_cmp supports only vector<16xi32> operands before P3 f32 "
+        "finite-only support");
   if (failed(verifySameType(getOperation(), getLhs().getType(),
                             getRhs().getType(),
                             "fragment_cmp operands")))

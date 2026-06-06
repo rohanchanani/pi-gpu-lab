@@ -35,7 +35,11 @@ def VC4Kernel_CmpPredicate : VC4Kernel_DialectI32Enum<"CmpPredicate",
       I32EnumAttrCase<"ult", 2>,
       I32EnumAttrCase<"ule", 3>,
       I32EnumAttrCase<"ugt", 4>,
-      I32EnumAttrCase<"uge", 5>
+      I32EnumAttrCase<"uge", 5>,
+      I32EnumAttrCase<"slt", 6>,
+      I32EnumAttrCase<"sle", 7>,
+      I32EnumAttrCase<"sgt", 8>,
+      I32EnumAttrCase<"sge", 9>
     ]>;
 
 def VC4Kernel_AddALUOpcode : VC4Kernel_DialectI32Enum<"AddALUOpcode",

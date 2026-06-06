@@ -288,7 +288,7 @@
       "id": "p3_fragment_cmp_signed_i32",
       "phase": "P3",
       "category": "comparison",
-      "current_status": "planned",
+      "current_status": "implemented_pending_hardware",
       "final_status_target": "implemented_with_policy_or_rejected",
       "current_surface": "Current fragment_cmp supports i32 predicates as a special comparison op.",
       "target_surface": "General comparison surface for signed i32 where hardware/lowering proof exists.",
