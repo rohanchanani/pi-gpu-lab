@@ -20,7 +20,7 @@
 # P1-SAME: forbidden_tile_dsl_hits=0
 # P1-SAME: retired_tile_hits=0
 # P1: fixture_purity:
-# P1-SAME: hardware_inputs=119
+# P1-SAME: hardware_inputs=122
 # P1-SAME: producer_or_lower_half_hits=0
 # P1: p1_general_alu_lock:
 # P1-SAME: removed_legacy_hits=0
@@ -32,7 +32,7 @@
 # P2-SAME: removed_special_case_ops=4
 # P2-SAME: special_case_removed_in_p1=4
 # P2: fixture_purity:
-# P2-SAME: hardware_inputs=119
+# P2-SAME: hardware_inputs=122
 # P2-SAME: producer_or_lower_half_hits=0
 # P2: p1_general_alu_lock:
 # P2-SAME: removed_legacy_hits=0
@@ -50,7 +50,7 @@
 # P3-SAME: p3_post_phase_planned_entries=23
 # P3-SAME: special_case_removed_in_p1=4
 # P3: fixture_purity:
-# P3-SAME: hardware_inputs=119
+# P3-SAME: hardware_inputs=122
 # P3-SAME: producer_or_lower_half_hits=0
 # P3: p1_general_alu_lock:
 # P3-SAME: removed_legacy_hits=0
@@ -70,7 +70,7 @@
 # P4-SAME: removed_special_case_ops=4
 # P4-SAME: special_case_removed_in_p1=4
 # P4: fixture_purity:
-# P4-SAME: hardware_inputs=119
+# P4-SAME: hardware_inputs=122
 # P4-SAME: producer_or_lower_half_hits=0
 # P4: p1_general_alu_lock:
 # P4-SAME: removed_legacy_hits=0
@@ -91,7 +91,7 @@
 # P5-SAME: p5_post_phase_planned_entries=21
 # P5-SAME: special_case_removed_in_p1=4
 # P5: fixture_purity:
-# P5-SAME: hardware_inputs=119
+# P5-SAME: hardware_inputs=122
 # P5-SAME: producer_or_lower_half_hits=0
 # P5: p1_general_alu_lock:
 # P5-SAME: removed_legacy_hits=0
@@ -107,7 +107,7 @@
 # P6: migration_targets:
 # P6-SAME: special_case_removed_in_p1=4
 # P6: fixture_purity:
-# P6-SAME: hardware_inputs=119
+# P6-SAME: hardware_inputs=122
 # P6-SAME: producer_or_lower_half_hits=0
 # P6: p1_general_alu_lock:
 # P6-SAME: removed_legacy_hits=0
@@ -127,15 +127,15 @@
 # P7-SAME: removed_special_case_ops=4
 # P7-SAME: special_case_migration_targets=4
 # P7: fixture_purity:
-# P7-SAME: hardware_inputs=119
+# P7-SAME: hardware_inputs=122
 # P7-SAME: producer_or_lower_half_hits=0
 # P7: p1_general_alu_lock:
 # P7-SAME: removed_legacy_hits=0
 # P7: p7_tmu_safe_load_lock:
-# P7-SAME: active_tmu_loads=108
-# P7-SAME: explicit_safe_offset_hits=108
+# P7-SAME: active_tmu_loads=113
+# P7-SAME: explicit_safe_offset_hits=113
 # P7-SAME: hidden_spill_reload_tmu_hits=0
-# P7-SAME: inactive_zero_hits=108
+# P7-SAME: inactive_zero_hits=113
 # P7-SAME: negative_tmu_loads=9
 # P7-SAME: old_signature_hits=0
 # P7-SAME: straight_line_tmu_lowering=1
@@ -148,13 +148,13 @@
 # P8-SAME: special_case_migration_targets=4
 # P8-SAME: special_case_removed_in_p1=4
 # P8: fixture_purity:
-# P8-SAME: hardware_inputs=119
+# P8-SAME: hardware_inputs=122
 # P8-SAME: producer_or_lower_half_hits=0
 # P8: p1_general_alu_lock:
 # P8-SAME: removed_legacy_hits=0
 # P8: p8_vdw_store_policy_lock:
 # P8-SAME: active_vdw_store_families=3
-# P8-SAME: active_vdw_stores=420
+# P8-SAME: active_vdw_stores=424
 # P8-SAME: missing_inactive_store_hits=0
 # P8-SAME: negative_vdw_store_tests=27
 # P8-SAME: sparse_vdw_active_hits=0
@@ -164,7 +164,7 @@
 # P8_5: PASS VC4Kernel Surface v2 audit: mode=p8-5-mixed-acceptance-lock
 # P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
 # P8_5: fixture_purity:
-# P8_5-SAME: hardware_inputs=119
+# P8_5-SAME: hardware_inputs=122
 # P8_5-SAME: producer_or_lower_half_hits=0
 # P8_5: p1_general_alu_lock:
 # P8_5-SAME: removed_legacy_hits=0
@@ -182,7 +182,7 @@
 # P9: PASS VC4Kernel Surface v2 audit: mode=p9-pack-unpack-subword-lock
 # P9: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
 # P9: fixture_purity:
-# P9-SAME: hardware_inputs=119
+# P9-SAME: hardware_inputs=122
 # P9-SAME: producer_or_lower_half_hits=0
 # P9: p1_general_alu_lock:
 # P9-SAME: removed_legacy_hits=0

@@ -1,0 +1,26 @@
+{
+  "name": "fragment_sfu_predicated_loop_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 21,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_sfu_loop": 1,
+    "saw_predicated_sfu": 1,
+    "saw_tmu_safe_offset": 1,
+    "saw_vdw_preserve": 1,
+    "saw_recip": 1,
+    "saw_rsqrt": 1,
+    "saw_k0": 1,
+    "saw_k33": 1,
+    "saw_active_cols1": 1,
+    "saw_active_cols15": 1,
+    "saw_active_cols16": 1,
+    "runtime_allocations": 3,
+    "runtime_launches": 21
+  },
+  "float_max": {
+    "max_abs_diff": 0.05
+  }
+}

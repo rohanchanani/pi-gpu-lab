@@ -173,21 +173,25 @@ P3_POST_PHASE_STAGED_STATUSES = {
     "p10_fragment_sfu_recip": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_rsqrt": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_exp": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_log": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fastmath_approx_contract": {
@@ -371,21 +375,25 @@ P5_POST_PHASE_STAGED_STATUSES = {
     "p10_fragment_sfu_recip": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_rsqrt": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_exp": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fragment_sfu_log": {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
     "p10_fastmath_approx_contract": {
@@ -2648,6 +2656,7 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
     p9_staged_statuses = {
         "implemented_pending_hardware",
         "hardware_proven_pending_latency_mix",
+        "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
         "accepted",
     }
