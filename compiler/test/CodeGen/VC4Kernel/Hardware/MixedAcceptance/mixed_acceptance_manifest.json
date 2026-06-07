@@ -955,6 +955,36 @@
       "status": "future_extension"
     },
     {
+      "id": "p11_dynamic_rotate",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
+      "id": "p11_rotate_amount_modulo_or_range_policy",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
+      "id": "p11_rotate_special_register_hazard",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
+      "id": "p11_arbitrary_shuffle_reject",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
+      "id": "p11_mixed_dynamic_rotate_reduction_scan",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
+      "id": "p11_mixed_shuffle_vpm_tile_swizzle",
+      "phase": "P11",
+      "status": "future_extension"
+    },
+    {
       "id": "p12_dynamic_vpm_coords_mixed",
       "phase": "P12",
       "status": "future_extension"

@@ -202,6 +202,7 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_pressure_policy",
         "hardware_proven_pending_policy_lock",
+        "hardware_proven_pending_final_acceptance",
     },
 }
 
@@ -362,6 +363,27 @@ P10_REQUIRED_MIXED_FEATURES = {
     "p10_mixed_sfu_activation",
     "p10_mixed_sfu_norm_reduce",
 }
+P11_REQUIRED_ISOLATED_FIXTURES = {
+    "fragment_rotate_dynamic_i32_vc4kernel",
+    "fragment_rotate_dynamic_f32_vc4kernel",
+    "fragment_rotate_dynamic_amount_sources_vc4kernel",
+    "fragment_rotate_dynamic_loop_branch_vc4kernel",
+    "fragment_rotate_dynamic_forced_spill_vc4kernel",
+    "fragment_rotate_dynamic_tmu_sfu_pack_interaction_vc4kernel",
+}
+P11_REQUIRED_NEGATIVE_TESTS = {
+    "compiler/test/Dialect/VC4Kernel/invalid-fragment-rotate.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-fragment-shuffle.mlir",
+    "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir",
+}
+P11_REQUIRED_FUTURE_FEATURES = {
+    "p11_dynamic_rotate",
+    "p11_rotate_amount_modulo_or_range_policy",
+    "p11_rotate_special_register_hazard",
+    "p11_arbitrary_shuffle_reject",
+    "p11_mixed_dynamic_rotate_reduction_scan",
+    "p11_mixed_shuffle_vpm_tile_swizzle",
+}
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
@@ -440,6 +462,7 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_pressure_policy",
         "hardware_proven_pending_policy_lock",
+        "hardware_proven_pending_final_acceptance",
     },
 }
 
@@ -660,6 +683,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -682,6 +706,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -902,6 +927,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         p8_5_policy = require_matrix_feature(
             features,
@@ -952,6 +978,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         require_matrix_feature_status_in(
             features,
@@ -1107,6 +1134,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -3197,6 +3225,284 @@ def audit_p10_sfu_fastmath_lock(repo_root, matrix):
     return counts
 
 
+def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
+    counts = audit_p10_sfu_fastmath_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+
+    rotate_feature = require_matrix_feature_status_in(
+        features,
+        "p11_fragment_rotate_dynamic_if_hardware",
+        "P11",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    rotate_text = json.dumps(rotate_feature).lower()
+    for token in [
+        "fragment_rotate",
+        "modulo-16",
+        "r5",
+        "selector 48",
+        "branch",
+        "spill",
+    ]:
+        if token not in rotate_text:
+            fail(f"P11 dynamic rotate matrix entry must document {token}")
+
+    shuffle_feature = require_matrix_feature(
+        features,
+        "p11_arbitrary_shuffle_permutation_reject",
+        "P11",
+        "deterministic_reject",
+    )
+    shuffle_text = json.dumps(shuffle_feature).lower()
+    for token in ["arbitrary", "shuffle", "vector.shuffle", "deterministic-reject"]:
+        if token not in shuffle_text:
+            fail(f"P11 arbitrary shuffle matrix entry must document {token}")
+
+    p12_vpm = require_matrix_feature(
+        features,
+        "p12_dynamic_vpm_read_write_coordinates",
+        "P12",
+        "planned",
+    )
+    p12_dma = require_matrix_feature(
+        features,
+        "p12_dynamic_vdr_vdw_coordinates",
+        "P12",
+        "planned",
+    )
+    if not p12_vpm or not p12_dma:
+        fail("P11 lock expected P12 dynamic coordinate entries to remain planned")
+
+    source_text_by_path = {
+        path: read_text(path)
+        for root in [
+            Path("compiler/include/vc4/Dialect/VC4Kernel"),
+            Path("compiler/lib/Dialect/VC4Kernel"),
+            Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+            Path("compiler/include/vc4/Dialect/SSAVC4"),
+            Path("compiler/lib/Dialect/SSAVC4"),
+            Path("compiler/lib/Conversion/SSAVC4ToVC4"),
+            Path("compiler/lib/Target/VC4"),
+        ]
+        for path in iter_text_files(repo_root / root, repo_root)
+    }
+    source_text = "\n".join(source_text_by_path.values())
+    for token in [
+        "VC4Kernel_FragmentRotateOp",
+        "Optional<VC4Kernel_I32>:$dynamic_amount",
+        "dynamic amount operand must be scalar i32",
+        "SSAVC4_RotateOp",
+        "selector 48",
+        "waddrAdd=*/37",
+    ]:
+        if token not in source_text:
+            fail(f"P11 rotate lock expected active source token: {token}")
+    for forbidden in [
+        "vc4kernel.fragment_rotate_dynamic",
+        "vc4kernel.fragment_shuffle",
+        "vc4kernel.dynamic_vpm_coord",
+        "vc4kernel.vector",
+        "vc4kernel.triton",
+    ]:
+        if forbidden in source_text:
+            fail(f"P11 lock found forbidden source token: {forbidden}")
+    for legacy in ["fragment_add", "fragment_sub", "fragment_mul", "fragment_shl"]:
+        if f"def VC4Kernel_{legacy}" in source_text:
+            fail(f"P11 lock found resurrected legacy op definition: {legacy}")
+    for math_token in ["math.sqrt", "math.exp", "math.log", "math."]:
+        if math_token in read_text(repo_root / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"):
+            fail(f"P11 lock found source-level math lowering token in VC4KernelToSSAVC4: {math_token}")
+
+    vc4kernel_run_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    missing_isolated = sorted(
+        name
+        for name in P11_REQUIRED_ISOLATED_FIXTURES
+        if not (vc4kernel_run_root / name / "input.mlir").is_file()
+        or not (vc4kernel_run_root / name / "expected.json").is_file()
+    )
+    if missing_isolated:
+        fail("P11 lock missing isolated dynamic rotate fixtures: " + ", ".join(missing_isolated))
+
+    expected_fixture_tokens = {
+        "fragment_rotate_dynamic_i32_vc4kernel": [
+            "vc4kernel.fragment_rotate",
+            "vc4kernel.pred.tail",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "fragment_rotate_dynamic_f32_vc4kernel": [
+            "vc4kernel.fragment_rotate",
+            "vc4kernel.tmu_load_fragment",
+            "vc4kernel.fragment_cmp",
+            "vc4kernel.fragment_select",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "fragment_rotate_dynamic_amount_sources_vc4kernel": [
+            "vc4kernel.program_id",
+            "arith.muli",
+            "arith.addi",
+            "vc4kernel.fragment_rotate",
+        ],
+        "fragment_rotate_dynamic_loop_branch_vc4kernel": [
+            "cf.cond_br",
+            "^loop",
+            "vc4kernel.fragment_rotate",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "fragment_rotate_dynamic_forced_spill_vc4kernel": [
+            "vc4kernel.fragment_rotate",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "fragment_rotate_dynamic_tmu_sfu_pack_interaction_vc4kernel": [
+            "vc4kernel.tmu_load_fragment",
+            "vc4kernel.fragment_sfu",
+            "vc4kernel.fragment_pack",
+            "vc4kernel.fragment_unpack",
+            "vc4kernel.fragment_rotate",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+    }
+    expected_metadata = {
+        "fragment_rotate_dynamic_i32_vc4kernel": [
+            "saw_dynamic_rotate",
+            "saw_amount0",
+            "saw_amount15",
+            "saw_amount16_or_modulo",
+            "saw_i32",
+            "saw_vdw_preserve",
+        ],
+        "fragment_rotate_dynamic_f32_vc4kernel": [
+            "saw_dynamic_rotate",
+            "saw_amount0",
+            "saw_amount15",
+            "saw_amount16_or_modulo",
+            "saw_f32",
+            "saw_tmu_safe_offset",
+            "saw_f32_cmp_select",
+            "saw_vdw_preserve",
+        ],
+        "fragment_rotate_dynamic_amount_sources_vc4kernel": [
+            "saw_dynamic_rotate",
+            "saw_amount_source_program_id",
+            "saw_amount_source_scalar_arith",
+            "saw_amount16_or_modulo",
+        ],
+        "fragment_rotate_dynamic_loop_branch_vc4kernel": [
+            "saw_dynamic_rotate_loop",
+            "saw_dynamic_rotate_branch",
+            "saw_both_paths",
+            "saw_vdw_preserve",
+        ],
+        "fragment_rotate_dynamic_forced_spill_vc4kernel": [
+            "saw_spill_frame_nonzero",
+            "saw_dynamic_rotate",
+            "hidden_spill_reload_tmu_hits",
+            "saw_vdw_preserve",
+        ],
+        "fragment_rotate_dynamic_tmu_sfu_pack_interaction_vc4kernel": [
+            "saw_tmu_safe_offset",
+            "saw_sfu",
+            "saw_pack_unpack",
+            "saw_dynamic_rotate",
+            "saw_vdw_preserve",
+        ],
+    }
+    dynamic_rotate_ops = 0
+    vector_dialect_hits = []
+    vector_amount_hits = []
+    for path in sorted(vc4kernel_run_root.glob("*/input.mlir")):
+        text = read_text(path)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if "vector." in line:
+                vector_dialect_hits.append((path, line_number))
+            if "vc4kernel.fragment_rotate" in line:
+                dynamic_rotate_ops += 1 if "," in line and " i32 -> " in line else 0
+                if "vector<16xi32>, vector<16xi32>" in line or "vector<16xf32>, vector<16xf32>" in line:
+                    vector_amount_hits.append((path, line_number))
+    if vector_dialect_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in vector_dialect_hits[:20]
+        )
+        fail(f"P11 lock found vector dialect inside active VC4Kernel fixture: {details}")
+    if vector_amount_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in vector_amount_hits[:20]
+        )
+        fail(f"P11 lock found vector amount dynamic rotate in fixture: {details}")
+
+    for name, tokens in expected_fixture_tokens.items():
+        fixture_dir = vc4kernel_run_root / name
+        input_text = read_text(fixture_dir / "input.mlir")
+        expected = json.loads(read_text(fixture_dir / "expected.json"))
+        required = expected.get("required", {})
+        for token in tokens:
+            if token not in input_text:
+                fail(f"P11 lock fixture {name} missing token {token}")
+        for key in expected_metadata[name]:
+            if key not in required:
+                fail(f"P11 lock fixture {name} expected.json missing metadata {key}")
+        for key in ["total_mismatches", "sentinel_mismatches", "launch_failures"]:
+            if required.get(key) != 0:
+                fail(f"P11 lock fixture {name} expected {key}=0")
+
+    negative_paths = [repo_root / path for path in sorted(P11_REQUIRED_NEGATIVE_TESTS)]
+    for path in negative_paths:
+        if not path.is_file():
+            fail(f"P11 lock missing negative test: {rel(path, repo_root)}")
+    negative_text = "\n".join(read_text(path) for path in negative_paths)
+    for token in [
+        "requires exactly one of static amount attr or dynamic i32 amount operand",
+        "amount must be in range [0, 15]",
+        "dynamic amount operand must be scalar i32",
+        "fragment_rotate result must have matching types",
+        "vector dialect operations are forbidden",
+    ]:
+        if token not in negative_text:
+            fail(f"P11 lock negative tests missing diagnostic/token: {token}")
+
+    manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    future_ids = {entry.get("id") for entry in manifest.get("future_phase_extension_points", [])}
+    missing_future = sorted(P11_REQUIRED_FUTURE_FEATURES - future_ids)
+    if missing_future:
+        fail("P11 lock missing future manifest extension entries: " + ", ".join(missing_future))
+    if "p12_dynamic_vpm_coords_mixed" not in future_ids:
+        fail("P11 lock expected P12 dynamic coordinate mixed extension point to remain next")
+
+    docs = "\n".join(
+        read_text(repo_root / path)
+        for path in [
+            P8_5_MIXED_POLICY_DOC,
+            Path("compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"),
+        ]
+    )
+    for token in [
+        "vc4kernel.fragment_rotate",
+        "dynamic scalar amount",
+        "modulo 16",
+        "output lane `l` reads source lane `(l + (amount & 15)) & 15`",
+        "r5",
+        "rotate-derived shuffle",
+        "arbitrary shuffle",
+        "vector.shuffle",
+        "P11 mixed fixtures",
+    ]:
+        if token not in docs:
+            fail(f"P11 lock expected docs to contain: {token}")
+
+    counts.update(
+        {
+            "p11_dynamic_rotate_matrix_features": 1,
+            "p11_shuffle_reject_entries": 1,
+            "p11_isolated_fixture_retention_checks": len(P11_REQUIRED_ISOLATED_FIXTURES),
+            "p11_negative_tests": len(P11_REQUIRED_NEGATIVE_TESTS),
+            "p11_dynamic_rotate_fixture_ops": dynamic_rotate_ops,
+            "p11_future_manifest_features": len(P11_REQUIRED_FUTURE_FEATURES),
+            "p11_vector_dialect_hits": 0,
+            "p11_vector_amount_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -3227,6 +3533,7 @@ def main(argv):
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -3250,6 +3557,7 @@ def main(argv):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p11-dynamic-rotate-shuffle-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -3278,6 +3586,7 @@ def main(argv):
             "p8-5-mixed-acceptance-lock",
             "p9-pack-unpack-subword-lock",
             "p10-sfu-fastmath-lock",
+            "p11-dynamic-rotate-shuffle-lock",
         }
         else {}
     )
@@ -3336,6 +3645,11 @@ def main(argv):
         if args.mode == "p10-sfu-fastmath-lock"
         else {}
     )
+    p11_lock_counts = (
+        audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix)
+        if args.mode == "p11-dynamic-rotate-shuffle-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -3378,6 +3692,8 @@ def main(argv):
         print(f"p9_pack_unpack_subword_lock: {format_counts(p9_lock_counts)}")
     if p10_lock_counts:
         print(f"p10_sfu_fastmath_lock: {format_counts(p10_lock_counts)}")
+    if p11_lock_counts:
+        print(f"p11_dynamic_rotate_shuffle_lock: {format_counts(p11_lock_counts)}")
     return 0
 
 

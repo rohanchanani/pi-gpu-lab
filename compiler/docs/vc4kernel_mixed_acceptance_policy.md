@@ -62,6 +62,15 @@ input, finite f32 reductions, VDW preserve, and P9 subword side paths in the
 mixed suite. P10 mixed fixtures combine SFU with earlier accepted features
 rather than replacing the mixed suite with isolated SFU smokes.
 
+P11 locks dynamic `vc4kernel.fragment_rotate` before adding mixed acceptance
+fixtures. The final rotate surface has a static amount attr form and a dynamic
+scalar amount operand form, both modulo 16, with output lane `l` reads source lane `(l + (amount & 15)) & 15`. Dynamic lowering uses r5 and explicit hazard
+spacing. Rotate-derived shuffle means only whole-vector horizontal rotate by one
+scalar amount; arbitrary shuffle, permutation, and `vector.shuffle` producer
+semantics remain deterministic rejects. P11 mixed fixtures are staged in the
+manifest as future extension points until P11f promotes them into lock-mode
+required mixed coverage.
+
 P10-P13 must add mixed coverage for new accepted features instead of restoring
 the old every-isolated-fixture final matrix. Future mixed additions should keep
 the same strict requirements: CPU oracle, sentinels, expected PASS metadata, no

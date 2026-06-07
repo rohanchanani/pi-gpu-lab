@@ -107,6 +107,12 @@ REQUIRED_REJECTS = {
 
 FUTURE_EXTENSION_IDS = {
     "p11_dynamic_rotate_mixed",
+    "p11_dynamic_rotate",
+    "p11_rotate_amount_modulo_or_range_policy",
+    "p11_rotate_special_register_hazard",
+    "p11_arbitrary_shuffle_reject",
+    "p11_mixed_dynamic_rotate_reduction_scan",
+    "p11_mixed_shuffle_vpm_tile_swizzle",
     "p12_dynamic_vpm_coords_mixed",
     "p13_final_surface_lock",
 }

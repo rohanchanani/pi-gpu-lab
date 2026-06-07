@@ -1248,6 +1248,8 @@ Accepts all predicate classes.
 ```mlir
 %r = vc4kernel.fragment_rotate %value {amount = 1 : i32}
   : vector<16xT> -> vector<16xT>
+%rd = vc4kernel.fragment_rotate %value, %amount
+  : vector<16xT>, i32 -> vector<16xT>
 ```
 
 Allowed `T`:
@@ -1260,10 +1262,24 @@ f32
 Rules:
 
 ```text
-- amount must be an integer attribute in [0, 15].
-- Rotation direction must be documented and proven by lit plus hardware tests.
-- No dynamic rotate amount is permitted in this stage.
+- Exactly one amount source is required: either a static integer attribute in
+  [0, 15], or a dynamic scalar amount operand of type i32.
+- Dynamic amount semantics are modulo 16.
+- The direction convention is shared by static and dynamic forms: output lane `l` reads source lane `(l + (amount & 15)) & 15`.
+- Dynamic rotate uses the VC4 r5-selected rotate path. Lowering materializes the
+  low-nibble two's-complement amount in r5 so hardware selector 48 preserves the
+  public direction convention, stages the input in a rotate-capable accumulator,
+  and emits explicit spacers for the r5/accumulator rotate hazards.
+- Static amount 0 lowers as identity, never as selector 48.
+- Vector/per-lane amount operands reject.
 ```
+
+P11 accepts rotate-derived shuffle behavior only when it is expressible as this
+whole-vector horizontal rotate by one scalar amount. There is no
+`vc4kernel.fragment_shuffle` surface in P11. Arbitrary shuffle and permutation
+semantics, including producer `vector.shuffle` inside verified VC4Kernel, are
+deterministic-rejects. Future vector lowering may map only legal rotate patterns
+to this op after preserving the documented direction and modulo 16 policy.
 
 ### 9.7 `vc4kernel.fragment_reduce`
 

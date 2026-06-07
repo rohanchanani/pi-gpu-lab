@@ -9,9 +9,10 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-5-mixed-acceptance-lock | FileCheck %s --check-prefix=P8_5
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p9-pack-unpack-subword-lock | FileCheck %s --check-prefix=P9
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p10-sfu-fastmath-lock | FileCheck %s --check-prefix=P10
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p11-dynamic-rotate-shuffle-lock | FileCheck %s --check-prefix=P11
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
-# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P1: migration_targets:
 # P1-SAME: removed_special_case_ops=4
 # P1-SAME: special_case_migration_targets=4
@@ -27,7 +28,7 @@
 # P1-SAME: removed_legacy_hits=0
 
 # P2: PASS VC4Kernel Surface v2 audit: mode=p2-bitcast-const-lock
-# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P2: migration_targets:
 # P2-SAME: p2_locked_status_entries=2
 # P2-SAME: removed_special_case_ops=4
@@ -45,10 +46,10 @@
 # P2-SAME: static_const_splat_hits=0
 
 # P3: PASS VC4Kernel Surface v2 audit: mode=p3-general-cmp-lock
-# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P3: migration_targets:
 # P3-SAME: p3_locked_status_entries=2
-# P3-SAME: p3_post_phase_planned_entries=23
+# P3-SAME: p3_post_phase_planned_entries=24
 # P3-SAME: special_case_removed_in_p1=4
 # P3: fixture_purity:
 # P3-SAME: hardware_inputs=130
@@ -66,7 +67,7 @@
 # P3-SAME: unordered_active_hits=0
 
 # P4: PASS VC4Kernel Surface v2 audit: mode=p4-general-reduce-lock
-# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P4: migration_targets:
 # P4-SAME: removed_special_case_ops=4
 # P4-SAME: special_case_removed_in_p1=4
@@ -86,10 +87,10 @@
 # P4-SAME: stale_add_only_source_hits=0
 
 # P5: PASS VC4Kernel Surface v2 audit: mode=p5-scalar-arith-lock
-# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P5: migration_targets:
 # P5-SAME: p5_locked_status_entries=1
-# P5-SAME: p5_post_phase_planned_entries=21
+# P5-SAME: p5_post_phase_planned_entries=22
 # P5-SAME: special_case_removed_in_p1=4
 # P5: fixture_purity:
 # P5-SAME: hardware_inputs=130
@@ -104,7 +105,7 @@
 # P5-SAME: vector_arith_hits=0
 
 # P6: PASS VC4Kernel Surface v2 audit: mode=p6-memory-policy-lock
-# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P6: migration_targets:
 # P6-SAME: special_case_removed_in_p1=4
 # P6: fixture_purity:
@@ -123,7 +124,7 @@
 # P6-SAME: source_lower_half_fixture_hits=0
 
 # P7: PASS VC4Kernel Surface v2 audit: mode=p7-tmu-safe-load-lock
-# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P7: migration_targets:
 # P7-SAME: removed_special_case_ops=4
 # P7-SAME: special_case_migration_targets=4
@@ -143,7 +144,7 @@
 # P7-SAME: tmu_source_policy_hits=0
 
 # P8: PASS VC4Kernel Surface v2 audit: mode=p8-vdw-store-policy-lock
-# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P8: migration_targets:
 # P8-SAME: removed_special_case_ops=4
 # P8-SAME: special_case_migration_targets=4
@@ -163,7 +164,7 @@
 # P8-SAME: vdw_sparse_rmw_fallback_hits=0
 
 # P8_5: PASS VC4Kernel Surface v2 audit: mode=p8-5-mixed-acceptance-lock
-# P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P8_5: fixture_purity:
 # P8_5-SAME: hardware_inputs=130
 # P8_5-SAME: producer_or_lower_half_hits=0
@@ -181,7 +182,7 @@
 # P8_5-SAME: sparse_vdw_active_hits=0
 
 # P9: PASS VC4Kernel Surface v2 audit: mode=p9-pack-unpack-subword-lock
-# P9: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P9: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P9: fixture_purity:
 # P9-SAME: hardware_inputs=130
 # P9-SAME: producer_or_lower_half_hits=0
@@ -198,7 +199,7 @@
 # P9-SAME: sparse_vdw_active_hits=0
 
 # P10: PASS VC4Kernel Surface v2 audit: mode=p10-sfu-fastmath-lock
-# P10: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P10: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P10: fixture_purity:
 # P10-SAME: hardware_inputs=130
 # P10-SAME: producer_or_lower_half_hits=0
@@ -220,3 +221,28 @@
 # P10-SAME: p10_wrong_domain_hits=0
 # P10-SAME: p9_dma_laned_hits=0
 # P10-SAME: sparse_vdw_active_hits=0
+
+# P11: PASS VC4Kernel Surface v2 audit: mode=p11-dynamic-rotate-shuffle-lock
+# P11: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P11: migration_targets:
+# P11-SAME: special_case_removed_in_p1=4
+# P11: fixture_purity:
+# P11-SAME: hardware_inputs=130
+# P11-SAME: producer_or_lower_half_hits=0
+# P11: p1_general_alu_lock:
+# P11-SAME: removed_legacy_hits=0
+# P11: p11_dynamic_rotate_shuffle_lock:
+# P11-SAME: hidden_spill_reload_tmu_hits=0
+# P11-SAME: mixed_checker_lock=1
+# P11-SAME: p10_missing_policy_hits=0
+# P11-SAME: p10_source_math_hits=0
+# P11-SAME: p11_dynamic_rotate_fixture_ops=8
+# P11-SAME: p11_dynamic_rotate_matrix_features=1
+# P11-SAME: p11_future_manifest_features=6
+# P11-SAME: p11_isolated_fixture_retention_checks=6
+# P11-SAME: p11_negative_tests=3
+# P11-SAME: p11_shuffle_reject_entries=1
+# P11-SAME: p11_vector_amount_hits=0
+# P11-SAME: p11_vector_dialect_hits=0
+# P11-SAME: p9_dma_laned_hits=0
+# P11-SAME: sparse_vdw_active_hits=0
