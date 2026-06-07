@@ -53,8 +53,8 @@
 | VDW VPM/register-to-global path | accepted baseline plus P8 migration | Full/tail/rect preserve in v1; sparse deterministic reject. | Sentinel hardware proof for admitted classes; deterministic-reject lit for sparse. |
 | Spill coherency | accepted baseline policy | VDW-written compiler spill slots reload through coherent VDR->VPM path, not TMU, unless future invalidation is proven. | Lower-half tests and hardware canaries. |
 | Pack/unpack/subword | planned | P9 hardware-faithful surface with executable rejects until proven. | Verifier reject tests and later hardware proof. |
-| SFU/fastmath | planned | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, hardware proof; no untested NaN/Inf/signed-zero promises. |
-| `sqrt` via `rsqrt` | planned under P10 only | Allowed only under explicit fastmath/approx unless exact sequence is implemented and tested. | Contract tests and numerical hardware fixtures. |
+| SFU/fastmath | hardware-proven pending final mixed acceptance | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, raw and latency hardware proof, deterministic rejects; no untested NaN/Inf/signed-zero promises. |
+| `sqrt` via `rsqrt` | deterministic reject in P10 | No exact/default sqrt SFU lowering; approximate composite sqrt requires a later explicit policy and proof. | Contract tests reject sqrt because the hardware map has recipsqrt but no distinct SFU sqrt write address. |
 | Dynamic rotate/shuffle | planned | P11 only if downstream and hardware proof exists. | Verifier/conversion/hardware proof. |
 | Dynamic VPM/VDR/VDW coordinates | planned with accepted dynamic rect baseline | P12 admission only where range verification and lower-half proof exist. | Dynamic-coordinate verifier/lowering/hardware matrix. |
 | Sparse VDW store | deferred deterministic reject | Must reject until a later hardware-proven phase; no silent RMW decomposition. | Deterministic-reject lit and static policy scans. |

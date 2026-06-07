@@ -8,6 +8,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-vdw-store-policy-lock | FileCheck %s --check-prefix=P8
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p8-5-mixed-acceptance-lock | FileCheck %s --check-prefix=P8_5
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p9-pack-unpack-subword-lock | FileCheck %s --check-prefix=P9
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p10-sfu-fastmath-lock | FileCheck %s --check-prefix=P10
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
@@ -195,3 +196,26 @@
 # P9-SAME: p9_manifest_features=8
 # P9-SAME: p9_mixed_fixtures=2
 # P9-SAME: sparse_vdw_active_hits=0
+
+# P10: PASS VC4Kernel Surface v2 audit: mode=p10-sfu-fastmath-lock
+# P10: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=40
+# P10: fixture_purity:
+# P10-SAME: hardware_inputs=122
+# P10-SAME: producer_or_lower_half_hits=0
+# P10: p1_general_alu_lock:
+# P10-SAME: removed_legacy_hits=0
+# P10: p10_sfu_fastmath_lock:
+# P10-SAME: hidden_spill_reload_tmu_hits=0
+# P10-SAME: mixed_checker_lock=1
+# P10-SAME: p10_isolated_fixture_retention_checks=5
+# P10-SAME: p10_missing_policy_hits=0
+# P10-SAME: p10_negative_tests=4
+# P10-SAME: p10_planned_mixed_features=6
+# P10-SAME: p10_policy_contract_entries=1
+# P10-SAME: p10_sfu_fixture_ops=9
+# P10-SAME: p10_sfu_matrix_features=4
+# P10-SAME: p10_source_math_hits=0
+# P10-SAME: p10_sqrt_reject_entries=1
+# P10-SAME: p10_wrong_domain_hits=0
+# P10-SAME: p9_dma_laned_hits=0
+# P10-SAME: sparse_vdw_active_hits=0

@@ -314,7 +314,11 @@ P13 final matrix:
 
 ### Fast-math and SFU policy
 
-Default math is exact/conservative. Approximate SFU-derived math is opt-in only through an explicit fastmath/approx contract. `sqrt` may lower through `rsqrt` only under that explicit contract unless an exact sequence is implemented and tested. NaN, Inf, and signed-zero exactness must not be promised without explicit tests covering those cases.
+Default math is exact/conservative. Approximate SFU-derived math is opt-in only through an explicit fastmath/approx contract. P10 admits only target SFU operations through `vc4kernel.fragment_sfu` with `fp_policy = #vc4kernel.fp_math_policy<approx_sfu>` and an explicit finite-domain attr. Missing policy, `exact` policy, unsupported kinds, wrong domains, non-`vector<16xf32>` carriers, and source-level `math.*` forms deterministic-reject.
+
+`sqrt` does not lower through `rsqrt` in P10. The VC4 register map exposes `recipsqrt`, not a distinct sqrt SFU write address. Exact/default sqrt remains rejected unless a later phase adds a separate approximate composite policy or a tested exact sequence. NaN, Inf, denormal, exception-flag, exact-rounding, and signed-zero semantics are not promised by the P10 SFU surface.
+
+The source-level `math.*` lowering is future work. `arith.divf` and similar producer math lowering is also future work and must prove source fastmath/approx legality before mapping to `vc4kernel.fragment_sfu`.
 
 ### VDW masked-store policy
 
@@ -1335,6 +1339,66 @@ prove this target-tree contract before mapping source reductions to
 Lowering uses a fragment_select-to-identity plus rotate/ALU tree. There is no
 first-class VC4 hardware reduction instruction in v1.
 
+### 9.8 `vc4kernel.fragment_sfu`
+
+```mlir
+%y = vc4kernel.fragment_sfu %x {
+    kind = #vc4kernel.sfu_kind<recip>,
+    fp_policy = #vc4kernel.fp_math_policy<approx_sfu>,
+    domain = #vc4kernel.fp_domain<finite_nonzero>
+  } : vector<16xf32> -> vector<16xf32>
+```
+
+Allowed kinds and domains:
+
+```text
+recip  -> VC4 SFU_RECIP write address 52, approximate 1/x, domain finite_nonzero
+rsqrt  -> VC4 SFU_RECIPSQRT write address 53, approximate 1/sqrt(x), domain finite_positive
+exp    -> VC4 SFU_EXP write address 54, approximate base-2 exponential, domain finite
+log    -> VC4 SFU_LOG write address 55, approximate base-2 logarithm, domain finite_positive
+```
+
+Rules:
+
+```text
+- input and result must be vector<16xf32>.
+- fp_policy is required and must be #vc4kernel.fp_math_policy<approx_sfu>.
+- domain is required and must match the kind-specific contract above.
+- exact/default math policy cannot lower to VC4 SFU.
+- sqrt is not an accepted SFU kind in P10.
+- integer and subword SFU operands are rejected.
+```
+
+The domain attrs are IR contracts, not dynamic checks. Fixtures may use
+`fragment_alu`, `fragment_cmp`, and `fragment_select` to make finite-domain
+inputs before issuing the SFU, but the verifier checks only the declared
+contract.
+
+P10 hardware fixtures use finite CPU references with principled absolute and
+relative tolerances. The tolerance policy checks useful approximate numerical
+agreement without claiming IEEE exactness or exceptional-value behavior.
+
+Lowering is layered:
+
+```text
+vc4kernel.fragment_sfu
+  -> ssavc4.sfu preserving kind, approx_sfu policy, and domain
+  -> scheduled vc4.qpu.bundle sequence
+  -> QASM/artifact emission
+```
+
+Scheduled lowering must explicitly model the SFU `r4` hazard:
+
+```text
+N+0: write input to SFU register 52/53/54/55.
+N+1: no read or write of r4.
+N+2: no read or write of r4.
+N+3: read r4 as the SFU result.
+```
+
+TMU loads also deliver through `r4`, so SSAVC4ToVC4 must not interleave TMU
+result delivery with an active SFU result window.
+
 ---
 
 ## 10. Address and offset conventions
@@ -2131,6 +2195,7 @@ vc4kernel.fragment_cmp
 vc4kernel.fragment_select
 vc4kernel.fragment_rotate
 vc4kernel.fragment_reduce
+vc4kernel.fragment_sfu
 ```
 
 ### 16.4 Memory/resources
@@ -2363,6 +2428,7 @@ vc4kernel.fragment_cmp     -> predicate plan / flags / mask value as needed
 vc4kernel.fragment_select  -> conditional select using predicate plan
 vc4kernel.fragment_rotate  -> ssavc4.rotate
 vc4kernel.fragment_reduce  -> zero-mask then rotate/ALU tree
+vc4kernel.fragment_sfu     -> ssavc4.sfu preserving kind/policy/domain
 ```
 
 ### 18.6 Predicate lowering

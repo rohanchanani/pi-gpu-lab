@@ -326,6 +326,33 @@ P9_REQUIRED_ISOLATED_FIXTURES = {
     "vdr_vdw_subword_roundtrip_vc4kernel",
     "vdw_subword_preserve_tail_rect_vc4kernel",
 }
+P10_SFU_FEATURES = {
+    "p10_fragment_sfu_recip",
+    "p10_fragment_sfu_rsqrt",
+    "p10_fragment_sfu_exp",
+    "p10_fragment_sfu_log",
+}
+P10_REQUIRED_ISOLATED_FIXTURES = {
+    "fragment_sfu_recip_rsqrt_vc4kernel",
+    "fragment_sfu_exp_log_vc4kernel",
+    "fragment_sfu_predicated_loop_vc4kernel",
+    "fragment_sfu_branch_layout_vc4kernel",
+    "fragment_sfu_forced_spill_vc4kernel",
+}
+P10_REQUIRED_NEGATIVE_TESTS = {
+    "compiler/test/Dialect/VC4Kernel/invalid-fragment-sfu.mlir",
+    "compiler/test/Dialect/VC4Kernel/fragment-sfu-policy-rejects.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-forbidden-math-op.mlir",
+    "compiler/test/Dialect/SSAVC4/sfu-invalid.mlir",
+}
+P10_PLANNED_MIXED_FEATURES = {
+    "p10_fragment_sfu",
+    "p10_sfu_approx_policy",
+    "p10_sfu_latency_wait",
+    "p10_exact_math_reject",
+    "p10_mixed_sfu_activation",
+    "p10_mixed_sfu_norm_reduce",
+}
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
@@ -618,6 +645,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -639,6 +667,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -855,7 +884,11 @@ def audit_matrix_ownership(matrix, mode):
         ]:
             if token not in p8_text:
                 fail(f"P8 VDW store matrix entries must document {token}")
-    if mode in {"p8-5-mixed-acceptance-lock", "p9-pack-unpack-subword-lock"}:
+    if mode in {
+        "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
+    }:
         p8_5_policy = require_matrix_feature(
             features,
             "p8_5_mixed_acceptance_policy",
@@ -904,6 +937,7 @@ def audit_matrix_ownership(matrix, mode):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
     }:
         require_matrix_feature_status_in(
             features,
@@ -1058,6 +1092,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -2894,6 +2929,210 @@ def audit_p9_pack_unpack_subword_lock(repo_root, matrix):
     return counts
 
 
+def audit_p10_sfu_fastmath_lock(repo_root, matrix):
+    counts = audit_p9_pack_unpack_subword_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+
+    for feature_id in sorted(P10_SFU_FEATURES):
+        feature = require_matrix_feature_status_in(
+            features,
+            feature_id,
+            "P10",
+            {"hardware_proven_pending_final_acceptance", "accepted"},
+        )
+        feature_text = json.dumps(feature).lower()
+        for token in ["approx_sfu", "domain", "r4", "deterministic reject"]:
+            if token not in feature_text:
+                fail(f"P10 matrix entry {feature_id} must document {token}")
+    contract = require_matrix_feature_status_in(
+        features,
+        "p10_fastmath_approx_contract",
+        "P10",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    contract_text = json.dumps(contract).lower()
+    for token in [
+        "approx_sfu",
+        "missing",
+        "exact",
+        "deterministic-reject",
+    ]:
+        if token not in contract_text:
+            fail(f"P10 fastmath contract must document {token}")
+    sqrt_policy = require_matrix_feature(
+        features,
+        "p10_sqrt_policy",
+        "P10",
+        "deterministic_reject",
+    )
+    if "no distinct sfu sqrt" not in json.dumps(sqrt_policy).lower():
+        fail("P10 sqrt policy must document lack of a distinct SFU sqrt path")
+
+    source_text_by_path = {
+        path: read_text(path)
+        for root in [
+            Path("compiler/include/vc4/Dialect/VC4Kernel"),
+            Path("compiler/lib/Dialect/VC4Kernel"),
+            Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+            Path("compiler/include/vc4/Dialect/SSAVC4"),
+            Path("compiler/lib/Dialect/SSAVC4"),
+            Path("compiler/lib/Conversion/SSAVC4ToVC4"),
+        ]
+        for path in iter_text_files(repo_root / root, repo_root)
+    }
+    source_text = "\n".join(source_text_by_path.values())
+    for token in [
+        "VC4Kernel_FragmentSFUOp",
+        "VC4Kernel_SFUKind",
+        "VC4Kernel_FPMathPolicy",
+        "VC4Kernel_FPDomain",
+        "SSAVC4_SFUOp",
+        "SSAVC4_SFUKind",
+        "ssavc4.sfu",
+        "fragment_sfu requires explicit approximate SFU math policy",
+        "exact floating-point math cannot be lowered to VC4 SFU",
+    ]:
+        if token not in source_text:
+            fail(f"P10 SFU lock expected active source token: {token}")
+    for legacy in ["fragment_add", "fragment_sub", "fragment_mul", "fragment_shl"]:
+        if f"def VC4Kernel_{legacy}" in source_text:
+            fail(f"P10 lock found resurrected legacy op definition: {legacy}")
+    for forbidden in [
+        "VC4KernelToVC4",
+        "ConvertVC4KernelToVC4",
+        "vc4kernel.dynamic_rotate",
+        "vc4kernel.fragment_rotate_dynamic",
+        "vc4kernel.dynamic_vpm_coord",
+        "vc4kernel.vector",
+        "vc4kernel.triton",
+    ]:
+        if forbidden in source_text:
+            fail(f"P10 lock found forbidden source token: {forbidden}")
+    for math_token in ["math.sqrt", "math.exp", "math.log", "math."]:
+        if math_token in read_text(repo_root / "compiler/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp"):
+            fail(f"P10 lock found source-level math lowering token in VC4KernelToSSAVC4: {math_token}")
+
+    vc4kernel_run_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    missing_isolated = sorted(
+        name
+        for name in P10_REQUIRED_ISOLATED_FIXTURES
+        if not (vc4kernel_run_root / name / "input.mlir").is_file()
+    )
+    if missing_isolated:
+        fail("P10 lock missing isolated SFU fixtures: " + ", ".join(missing_isolated))
+
+    sfu_fixture_ops = 0
+    missing_policy_hits = []
+    wrong_domain_hits = []
+    source_math_hits = []
+    for path in sorted(vc4kernel_run_root.glob("*/input.mlir")):
+        text = read_text(path)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if "math." in line:
+                source_math_hits.append((path, line_number))
+            if "vc4kernel.fragment_sfu" not in line:
+                continue
+            sfu_fixture_ops += 1
+            if "#vc4kernel.fp_math_policy<approx_sfu>" not in line:
+                missing_policy_hits.append((path, line_number))
+            if "#vc4kernel.sfu_kind<recip>" in line and "#vc4kernel.fp_domain<finite_nonzero>" not in line:
+                wrong_domain_hits.append((path, line_number))
+            if "#vc4kernel.sfu_kind<rsqrt>" in line and "#vc4kernel.fp_domain<finite_positive>" not in line:
+                wrong_domain_hits.append((path, line_number))
+            if "#vc4kernel.sfu_kind<log>" in line and "#vc4kernel.fp_domain<finite_positive>" not in line:
+                wrong_domain_hits.append((path, line_number))
+            if "#vc4kernel.sfu_kind<exp>" in line and "#vc4kernel.fp_domain<finite>" not in line:
+                wrong_domain_hits.append((path, line_number))
+            if "#vc4kernel.sfu_kind<sqrt>" in line:
+                wrong_domain_hits.append((path, line_number))
+    if missing_policy_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in missing_policy_hits[:20]
+        )
+        fail(f"P10 lock found active SFU without approx policy: {details}")
+    if wrong_domain_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in wrong_domain_hits[:20]
+        )
+        fail(f"P10 lock found active SFU with wrong domain/kind: {details}")
+    if source_math_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in source_math_hits[:20]
+        )
+        fail(f"P10 lock found source math.* inside active VC4Kernel fixtures: {details}")
+
+    negative_paths = [repo_root / path for path in sorted(P10_REQUIRED_NEGATIVE_TESTS)]
+    for path in negative_paths:
+        if not path.is_file():
+            fail(f"P10 lock missing negative test: {rel(path, repo_root)}")
+    negative_text = "\n".join(read_text(path) for path in negative_paths)
+    for token in [
+        "fragment_sfu requires explicit approximate SFU math policy",
+        "exact floating-point math cannot be lowered to VC4 SFU",
+        "fragment_sfu domain does not match SFU kind contract",
+        "expected ::mlir::vc4kernel::SFUKind to be one of: recip, rsqrt, exp, log",
+        "operand #0 must be vector<16xf32>",
+        "dialect 'math' is forbidden inside vc4kernel",
+    ]:
+        if token not in negative_text:
+            fail(f"P10 lock negative tests missing diagnostic/token: {token}")
+
+    manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    future_entries = manifest.get("future_phase_extension_points", [])
+    p10_entry = next(
+        (entry for entry in future_entries if entry.get("id") == "p10_sfu_mixed"),
+        None,
+    )
+    if p10_entry is None:
+        fail("P10 lock missing p10_sfu_mixed future extension entry")
+    planned = {
+        feature.get("id")
+        for feature in p10_entry.get("planned_required_features", [])
+        if isinstance(feature, dict)
+    }
+    missing_planned = sorted(P10_PLANNED_MIXED_FEATURES - planned)
+    if missing_planned:
+        fail("P10 lock missing planned mixed feature entries: " + ", ".join(missing_planned))
+    for feature in p10_entry.get("planned_required_features", []):
+        if feature.get("status") != "planned_until_p10f":
+            fail(f"P10 lock expected planned_until_p10f status for {feature.get('id')}")
+
+    docs = "\n".join(
+        read_text(repo_root / path)
+        for path in [
+            P8_5_MIXED_POLICY_DOC,
+            Path("compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"),
+        ]
+    )
+    for token in [
+        "vc4kernel.fragment_sfu",
+        "#vc4kernel.fp_math_policy<approx_sfu>",
+        "base-2 exponential",
+        "base-2 logarithm",
+        "source-level `math.*` lowering is future work",
+        "exact/default math",
+        "P10 mixed fixtures",
+    ]:
+        if token not in docs:
+            fail(f"P10 lock expected docs to contain: {token}")
+
+    counts.update(
+        {
+            "p10_sfu_matrix_features": len(P10_SFU_FEATURES),
+            "p10_policy_contract_entries": 1,
+            "p10_sqrt_reject_entries": 1,
+            "p10_isolated_fixture_retention_checks": len(P10_REQUIRED_ISOLATED_FIXTURES),
+            "p10_sfu_fixture_ops": sfu_fixture_ops,
+            "p10_negative_tests": len(P10_REQUIRED_NEGATIVE_TESTS),
+            "p10_planned_mixed_features": len(P10_PLANNED_MIXED_FEATURES),
+            "p10_missing_policy_hits": 0,
+            "p10_wrong_domain_hits": 0,
+            "p10_source_math_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -2923,6 +3162,7 @@ def main(argv):
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
         "p9-pack-unpack-subword-lock",
+        "p10-sfu-fastmath-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -2973,6 +3213,7 @@ def main(argv):
             "p8-vdw-store-policy-lock",
             "p8-5-mixed-acceptance-lock",
             "p9-pack-unpack-subword-lock",
+            "p10-sfu-fastmath-lock",
         }
         else {}
     )
@@ -3026,6 +3267,11 @@ def main(argv):
         if args.mode == "p9-pack-unpack-subword-lock"
         else {}
     )
+    p10_lock_counts = (
+        audit_p10_sfu_fastmath_lock(repo_root, matrix)
+        if args.mode == "p10-sfu-fastmath-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -3066,6 +3312,8 @@ def main(argv):
         print(f"p8_5_mixed_acceptance_lock: {format_counts(p8_5_lock_counts)}")
     if p9_lock_counts:
         print(f"p9_pack_unpack_subword_lock: {format_counts(p9_lock_counts)}")
+    if p10_lock_counts:
+        print(f"p10_sfu_fastmath_lock: {format_counts(p10_lock_counts)}")
     return 0
 
 

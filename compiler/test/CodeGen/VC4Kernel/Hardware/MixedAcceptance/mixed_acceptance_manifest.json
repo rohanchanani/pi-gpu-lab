@@ -780,13 +780,57 @@
         "compiler/test/Dialect/SSAVC4/dynamic-vdr-vdw-rect-subword-invalid.mlir"
       ],
       "status": "implemented"
+    },
+    {
+      "id": "p10_sfu_fastmath_policy_rejects",
+      "description": "P10 SFU requires explicit approximate policy/domain attrs; exact/default math, unsupported kinds, wrong domains, wrong carriers, source math.*, and sqrt-by-SFU attempts remain deterministic rejects.",
+      "verification_kind": "lit_negative",
+      "coverage_entries": [
+        "compiler/test/Dialect/VC4Kernel/invalid-fragment-sfu.mlir",
+        "compiler/test/Dialect/VC4Kernel/fragment-sfu-policy-rejects.mlir",
+        "compiler/test/Dialect/VC4Kernel/invalid-forbidden-math-op.mlir",
+        "compiler/test/Dialect/SSAVC4/sfu-invalid.mlir"
+      ],
+      "status": "implemented"
     }
   ],
   "future_phase_extension_points": [
     {
       "id": "p10_sfu_mixed",
       "phase": "P10",
-      "status": "future_extension"
+      "status": "future_extension",
+      "planned_required_features": [
+        {
+          "id": "p10_fragment_sfu",
+          "verification_kind": "hardware_mixed",
+          "status": "planned_until_p10f"
+        },
+        {
+          "id": "p10_sfu_approx_policy",
+          "verification_kind": "hardware_mixed",
+          "status": "planned_until_p10f"
+        },
+        {
+          "id": "p10_sfu_latency_wait",
+          "verification_kind": "hardware_mixed",
+          "status": "planned_until_p10f"
+        },
+        {
+          "id": "p10_exact_math_reject",
+          "verification_kind": "lit_negative",
+          "status": "planned_until_p10f"
+        },
+        {
+          "id": "p10_mixed_sfu_activation",
+          "verification_kind": "hardware_mixed",
+          "status": "planned_until_p10f"
+        },
+        {
+          "id": "p10_mixed_sfu_norm_reduce",
+          "verification_kind": "hardware_mixed",
+          "status": "planned_until_p10f"
+        }
+      ]
     },
     {
       "id": "p11_dynamic_rotate_mixed",
