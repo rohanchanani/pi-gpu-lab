@@ -52,6 +52,8 @@ REQUIRED_FIXTURES = {
     "mixed_quantized_gemv_subword_vpm_vc4kernel",
     "mixed_sfu_activation_tmu_vdw_vc4kernel",
     "mixed_sfu_norm_reduce_vpm_vc4kernel",
+    "mixed_dynamic_rotate_reduction_scan_vc4kernel",
+    "mixed_shuffle_vpm_tile_swizzle_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -91,6 +93,12 @@ REQUIRED_FEATURES = {
     "p10_exact_math_reject",
     "p10_mixed_sfu_activation",
     "p10_mixed_sfu_norm_reduce",
+    "p11_dynamic_rotate",
+    "p11_rotate_amount_modulo_or_range_policy",
+    "p11_rotate_special_register_hazard",
+    "p11_arbitrary_shuffle_reject",
+    "p11_mixed_dynamic_rotate_reduction_scan",
+    "p11_mixed_shuffle_vpm_tile_swizzle",
 }
 
 REQUIRED_REJECTS = {
@@ -106,13 +114,6 @@ REQUIRED_REJECTS = {
 }
 
 FUTURE_EXTENSION_IDS = {
-    "p11_dynamic_rotate_mixed",
-    "p11_dynamic_rotate",
-    "p11_rotate_amount_modulo_or_range_policy",
-    "p11_rotate_special_register_hazard",
-    "p11_arbitrary_shuffle_reject",
-    "p11_mixed_dynamic_rotate_reduction_scan",
-    "p11_mixed_shuffle_vpm_tile_swizzle",
     "p12_dynamic_vpm_coords_mixed",
     "p13_final_surface_lock",
 }
@@ -134,7 +135,7 @@ FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
     "stablehlo.",
     "mhlo.",
 )
-FUTURE_PHASE_TAG_PREFIXES = ("p11_", "p12_")
+FUTURE_PHASE_TAG_PREFIXES = ("p12_",)
 
 
 def fail(message):

@@ -1,0 +1,24 @@
+{
+  "name": "mixed_shuffle_vpm_tile_swizzle_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 60,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdr_vpm_path": 1,
+    "saw_dynamic_rotate": 1,
+    "saw_tile_swizzle": 1,
+    "saw_vdw_preserve": 1,
+    "saw_runtime_shape": 1,
+    "no_tmu_tile_workaround": 1,
+    "saw_p9_subword_path": 1,
+    "saw_sfu_path": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 60
+  },
+  "float_max": {
+    "max_abs_diff": 0.02,
+    "max_rel_diff": 0.02
+  }
+}

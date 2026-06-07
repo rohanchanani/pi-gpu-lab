@@ -376,13 +376,21 @@ P11_REQUIRED_NEGATIVE_TESTS = {
     "compiler/test/Dialect/VC4Kernel/invalid-fragment-shuffle.mlir",
     "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir",
 }
-P11_REQUIRED_FUTURE_FEATURES = {
+P11_REQUIRED_MIXED_FIXTURES = {
+    "mixed_dynamic_rotate_reduction_scan_vc4kernel",
+    "mixed_shuffle_vpm_tile_swizzle_vc4kernel",
+}
+P11_REQUIRED_MIXED_FEATURES = {
     "p11_dynamic_rotate",
     "p11_rotate_amount_modulo_or_range_policy",
     "p11_rotate_special_register_hazard",
     "p11_arbitrary_shuffle_reject",
     "p11_mixed_dynamic_rotate_reduction_scan",
     "p11_mixed_shuffle_vpm_tile_swizzle",
+}
+P11_NEXT_FUTURE_FEATURES = {
+    "p12_dynamic_vpm_coords_mixed",
+    "p13_final_surface_lock",
 }
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
@@ -3146,8 +3154,9 @@ def audit_p10_sfu_fastmath_lock(repo_root, matrix):
     future_ids = {entry.get("id") for entry in manifest.get("future_phase_extension_points", [])}
     if "p10_sfu_mixed" in future_ids:
         fail("P10 lock must promote p10_sfu_mixed out of future extension points")
-    if "p11_dynamic_rotate_mixed" not in future_ids:
-        fail("P10 lock expected P11 to be the next future mixed extension point")
+    p11_promoted = P11_REQUIRED_MIXED_FEATURES.issubset(manifest_features.keys())
+    if "p11_dynamic_rotate_mixed" not in future_ids and not p11_promoted:
+        fail("P10 lock expected P11 to be the next future mixed extension point or already promoted")
 
     expected_fixture_tokens = {
         "mixed_sfu_activation_tmu_vdw_vc4kernel": [
@@ -3460,12 +3469,109 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
             fail(f"P11 lock negative tests missing diagnostic/token: {token}")
 
     manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    missing_mixed = sorted(P11_REQUIRED_MIXED_FIXTURES - fixtures.keys())
+    if missing_mixed:
+        fail("P11 lock missing mixed dynamic rotate fixtures: " + ", ".join(missing_mixed))
+    planned_mixed = sorted(
+        name
+        for name in P11_REQUIRED_MIXED_FIXTURES
+        if fixtures[name].get("status") != "implemented"
+    )
+    if planned_mixed:
+        fail("P11 lock found non-implemented mixed dynamic rotate fixtures: " + ", ".join(planned_mixed))
+
+    manifest_features = {
+        feature["id"]: feature for feature in manifest.get("required_features", [])
+    }
+    missing_features = sorted(P11_REQUIRED_MIXED_FEATURES - manifest_features.keys())
+    if missing_features:
+        fail("P11 lock missing implemented manifest features: " + ", ".join(missing_features))
+    for feature_id in sorted(P11_REQUIRED_MIXED_FEATURES):
+        feature = manifest_features[feature_id]
+        if feature.get("status") != "implemented":
+            fail(f"P11 lock manifest feature is not implemented: {feature_id}")
+
     future_ids = {entry.get("id") for entry in manifest.get("future_phase_extension_points", [])}
-    missing_future = sorted(P11_REQUIRED_FUTURE_FEATURES - future_ids)
+    stale_future = sorted(P11_REQUIRED_MIXED_FEATURES & future_ids)
+    if stale_future or "p11_dynamic_rotate_mixed" in future_ids:
+        fail("P11 lock must promote P11 mixed features out of future extension points")
+    missing_future = sorted(P11_NEXT_FUTURE_FEATURES - future_ids)
     if missing_future:
         fail("P11 lock missing future manifest extension entries: " + ", ".join(missing_future))
     if "p12_dynamic_vpm_coords_mixed" not in future_ids:
         fail("P11 lock expected P12 dynamic coordinate mixed extension point to remain next")
+
+    expected_mixed_tokens = {
+        "mixed_dynamic_rotate_reduction_scan_vc4kernel": [
+            "vc4kernel.tmu_load_fragment",
+            "vc4kernel.fragment_rotate",
+            "vc4kernel.fragment_reduce",
+            "vc4kernel.fragment_sfu",
+            "#vc4kernel.sfu_kind<recip>",
+            "vc4kernel.fragment_cmp",
+            "vc4kernel.fragment_select",
+            "vc4kernel.vdr_load_to_vpm",
+            "vc4kernel.fragment_pack",
+            "vc4kernel.fragment_unpack",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "mixed_shuffle_vpm_tile_swizzle_vc4kernel": [
+            "vc4kernel.vdr_load_to_vpm",
+            "vc4kernel.vpm_read_fragment",
+            "vc4kernel.fragment_rotate",
+            "vc4kernel.fragment_reduce",
+            "vc4kernel.fragment_sfu",
+            "#vc4kernel.sfu_kind<rsqrt>",
+            "vc4kernel.fragment_pack",
+            "vc4kernel.fragment_unpack",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+    }
+    expected_mixed_metadata = {
+        "mixed_dynamic_rotate_reduction_scan_vc4kernel": [
+            "saw_dynamic_rotate",
+            "saw_amount0",
+            "saw_amount15",
+            "saw_amount16_or_modulo",
+            "saw_tmu_safe_offset",
+            "saw_fragment_reduce",
+            "saw_vdw_preserve",
+            "saw_cmp_select",
+            "saw_p9_subword_sidepath",
+            "saw_sfu_sidepath",
+        ],
+        "mixed_shuffle_vpm_tile_swizzle_vc4kernel": [
+            "saw_vdr_vpm_path",
+            "saw_dynamic_rotate",
+            "saw_tile_swizzle",
+            "saw_vdw_preserve",
+            "saw_runtime_shape",
+            "no_tmu_tile_workaround",
+            "saw_p9_subword_path",
+            "saw_sfu_path",
+        ],
+    }
+    for name, tokens in expected_mixed_tokens.items():
+        fixture_dir = repo_root / fixtures[name]["path"]
+        input_path = fixture_dir / "input.mlir"
+        expected_path = fixture_dir / "expected.json"
+        if not input_path.is_file() or not expected_path.is_file():
+            fail(f"P11 lock missing input/expected for {name}")
+        input_text = read_text(input_path)
+        expected = json.loads(read_text(expected_path))
+        required = expected.get("required", {})
+        for token in tokens:
+            if token not in input_text:
+                fail(f"P11 lock mixed fixture {name} missing token {token}")
+        for key in expected_mixed_metadata[name]:
+            if key not in required:
+                fail(f"P11 lock mixed fixture {name} expected.json missing metadata {key}")
+        for key in ["total_mismatches", "sentinel_mismatches", "launch_failures"]:
+            if required.get(key) != 0:
+                fail(f"P11 lock mixed fixture {name} expected {key}=0")
+        if name == "mixed_shuffle_vpm_tile_swizzle_vc4kernel" and "vc4kernel.tmu_load_fragment" in input_text:
+            fail("P11 lock tile swizzle fixture must not use TMU tile workaround")
 
     docs = "\n".join(
         read_text(repo_root / path)
@@ -3495,7 +3601,9 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
             "p11_isolated_fixture_retention_checks": len(P11_REQUIRED_ISOLATED_FIXTURES),
             "p11_negative_tests": len(P11_REQUIRED_NEGATIVE_TESTS),
             "p11_dynamic_rotate_fixture_ops": dynamic_rotate_ops,
-            "p11_future_manifest_features": len(P11_REQUIRED_FUTURE_FEATURES),
+            "p11_mixed_fixtures": len(P11_REQUIRED_MIXED_FIXTURES),
+            "p11_manifest_features": len(P11_REQUIRED_MIXED_FEATURES),
+            "p11_future_manifest_features": len(P11_NEXT_FUTURE_FEATURES),
             "p11_vector_dialect_hits": 0,
             "p11_vector_amount_hits": 0,
         }
