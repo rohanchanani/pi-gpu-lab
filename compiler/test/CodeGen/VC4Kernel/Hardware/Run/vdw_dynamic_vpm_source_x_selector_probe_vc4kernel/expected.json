@@ -1,0 +1,20 @@
+{
+  "name": "vdw_dynamic_vpm_source_x_selector_probe_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdw_dynamic_vpm_row": 1,
+    "saw_vdw_dynamic_vpm_x": 1,
+    "saw_vdw_dynamic_subword_selector": 1,
+    "saw_horizontal_w32": 1,
+    "saw_vertical_w32": 1,
+    "saw_horizontal_subword": 1,
+    "saw_vertical_subword": 1,
+    "saw_byte_halfword_guards": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_to_vpm": 1
+  }
+}

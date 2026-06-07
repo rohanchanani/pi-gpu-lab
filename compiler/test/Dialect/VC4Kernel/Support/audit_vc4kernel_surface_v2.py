@@ -3297,7 +3297,11 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         features,
         "p12_dynamic_vdr_vdw_coordinates",
         "P12",
-        {"planned", "implemented_pending_hardware"},
+        {
+            "planned",
+            "implemented_pending_hardware",
+            "hardware_proven_pending_final_acceptance",
+        },
     )
     if not p12_vpm or not p12_dma:
         fail(
