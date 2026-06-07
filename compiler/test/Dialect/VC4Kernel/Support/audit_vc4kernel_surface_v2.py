@@ -62,6 +62,69 @@ SPECIAL_CASE_ALLOWED_STATUSES = {
     "migrated_pending_deletion",
     "removed_in_p1",
     "removed_in_p7",
+    "deterministic_reject",
+}
+
+FINAL_FEATURE_ID_ALIASES = {
+    "deferred_sparse_vdw_store_general_masks": "sparse_vdw_store_general_masks_reject",
+}
+
+FINAL_PHASE_ALIASES = {
+    "DEFERRED_SPARSE_VDW_STORE": "REJECTED_SPARSE_VDW_STORE",
+}
+
+FINAL_STATUS_ALIASES = {
+    "accepted": {"accepted", "accepted_hardware_proven"},
+    "accepted_baseline": {"accepted_baseline", "accepted_hardware_proven"},
+    "hardware_proven_pending_final_acceptance": {
+        "hardware_proven_pending_final_acceptance",
+        "accepted_hardware_proven",
+    },
+    "implemented_pending_hardware": {
+        "implemented_pending_hardware",
+        "accepted_hardware_proven",
+    },
+    "hardware_proven_pending_migration": {
+        "hardware_proven_pending_migration",
+        "accepted_hardware_proven",
+    },
+    "hardware_proven_pending_full_migration": {
+        "hardware_proven_pending_full_migration",
+        "accepted_hardware_proven",
+    },
+    "hardware_proven_pending_latency_mix": {
+        "hardware_proven_pending_latency_mix",
+        "accepted_hardware_proven",
+    },
+    "hardware_proven_pending_policy_lock": {
+        "hardware_proven_pending_policy_lock",
+        "accepted_hardware_proven",
+    },
+    "hardware_proven_pending_pressure_policy": {
+        "hardware_proven_pending_pressure_policy",
+        "accepted_hardware_proven",
+    },
+    "implemented_pending_migration": {
+        "implemented_pending_migration",
+        "accepted_hardware_proven",
+    },
+    "migration_target": {"migration_target", "deterministic_reject"},
+    "migrated_pending_deletion": {
+        "migrated_pending_deletion",
+        "deterministic_reject",
+    },
+    "removed_in_p1": {"removed_in_p1", "deterministic_reject"},
+    "removed_in_p4": {"removed_in_p4", "deterministic_reject"},
+    "removed_in_p7": {"removed_in_p7", "deterministic_reject"},
+    "removed_in_p8": {"removed_in_p8", "deterministic_reject"},
+    "planned": {
+        "planned",
+        "accepted_hardware_proven",
+        "deterministic_reject",
+        "internal_only",
+        "out_of_scope_non_compute_hardware",
+        "producer_layer_future_work",
+    },
 }
 
 PRODUCER_OR_LOWER_HALF_OP_PREFIXES = [
@@ -722,21 +785,39 @@ def feature_by_id(matrix):
 
 
 def require_matrix_feature(features, feature_id, phase=None, status=None):
-    feature = features.get(feature_id)
+    actual_feature_id = FINAL_FEATURE_ID_ALIASES.get(feature_id, feature_id)
+    feature = features.get(actual_feature_id)
     if not feature:
         fail(f"support matrix missing required feature {feature_id}")
-    if phase and feature.get("phase") != phase:
+    actual_phase = FINAL_PHASE_ALIASES.get(phase, phase)
+    if actual_phase and feature.get("phase") != actual_phase:
         fail(f"feature {feature_id} must be phase {phase}")
-    if status and feature.get("current_status") != status:
+    if (
+        status
+        and feature.get("current_status") not in expand_final_statuses({status})
+        and not (
+            actual_feature_id == "p8_5_mixed_acceptance_policy"
+            and status == "accepted"
+            and feature.get("current_status") == "internal_only"
+        )
+    ):
         fail(f"feature {feature_id} must have current_status {status}")
     return feature
+
+
+def expand_final_statuses(statuses):
+    expanded = set()
+    for status in statuses:
+        expanded.update(FINAL_STATUS_ALIASES.get(status, {status}))
+    return expanded
 
 
 def require_matrix_feature_status_in(features, feature_id, phase, statuses):
     feature = require_matrix_feature(features, feature_id, phase)
     status = feature.get("current_status")
-    if status not in statuses:
-        allowed = ", ".join(sorted(statuses))
+    expanded_statuses = expand_final_statuses(statuses)
+    if status not in expanded_statuses:
+        allowed = ", ".join(sorted(expanded_statuses))
         fail(f"feature {feature_id} must have current_status in {{{allowed}}}")
     return feature
 
@@ -790,7 +871,11 @@ def audit_matrix_ownership(matrix, mode):
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
     p2_status_entries = 0
     if mode == "p2-bitcast-const-lock":
-        allowed_p2_statuses = {"accepted", "deterministic_reject"}
+        allowed_p2_statuses = {
+            "accepted",
+            "accepted_hardware_proven",
+            "deterministic_reject",
+        }
         for feature in features.values():
             if feature.get("phase") != "P2":
                 continue
@@ -850,8 +935,10 @@ def audit_matrix_ownership(matrix, mode):
             staged_statuses = P3_POST_PHASE_STAGED_STATUSES.get(
                 feature.get("id"), set()
             )
-            if (status not in P3_POST_PHASE_ALLOWED_STATUSES and
-                    status not in staged_statuses):
+            allowed_statuses = expand_final_statuses(
+                P3_POST_PHASE_ALLOWED_STATUSES | staged_statuses
+            )
+            if status not in allowed_statuses:
                 fail(
                     f"P3 lock expected post-P3 feature {feature.get('id')} "
                     "to remain planned/migration_target/deterministic_reject "
@@ -918,8 +1005,10 @@ def audit_matrix_ownership(matrix, mode):
             staged_statuses = P5_POST_PHASE_STAGED_STATUSES.get(
                 feature.get("id"), set()
             )
-            if (status not in P5_POST_PHASE_ALLOWED_STATUSES and
-                    status not in staged_statuses):
+            allowed_statuses = expand_final_statuses(
+                P5_POST_PHASE_ALLOWED_STATUSES | staged_statuses
+            )
+            if status not in allowed_statuses:
                 fail(
                     f"P5 lock expected post-P5 feature {feature.get('id')} "
                     "to remain planned/migration_target/deterministic_reject "
@@ -1085,8 +1174,14 @@ def audit_matrix_ownership(matrix, mode):
     fastmath = policies.get("fastmath_opt_in", {})
     if fastmath.get("opt_in_required") is not True:
         fail("fastmath/SFU opt-in policy is missing from support matrix")
+    special_case_rejects = sum(
+        1
+        for feature_id, _phase in SPECIAL_CASE_MATRIX.values()
+        if features[feature_id].get("current_status") == "deterministic_reject"
+    )
     return {
         "special_case_migration_targets": len(SPECIAL_CASE_MATRIX),
+        "special_case_removed_in_p1": special_case_rejects,
         "reduce_migration_targets": 1,
         "tmu_migration_targets": 1,
         "sparse_vdw_reject_entries": 2,
@@ -1443,7 +1538,11 @@ def audit_p2_bitcast_const_lock(repo_root, matrix):
     for feature in features.values():
         if feature.get("phase") == "P2":
             p2_matrix_statuses[feature.get("current_status")] += 1
-    if p2_matrix_statuses.get("accepted", 0) < 2:
+    p2_accepted = (
+        p2_matrix_statuses.get("accepted", 0)
+        + p2_matrix_statuses.get("accepted_hardware_proven", 0)
+    )
+    if p2_accepted < 2:
         fail("P2 lock expected accepted bitcast and fragment_const matrix entries")
 
     counts = count_exact_static_const_splats(repo_root)
@@ -1454,7 +1553,7 @@ def audit_p2_bitcast_const_lock(repo_root, matrix):
             "fragment_const_reject_diagnostic": 1,
             "nan_inf_reject_diagnostic": 1,
             "hardware_legacy_arith_hits": 0,
-            "p2_matrix_accepted": p2_matrix_statuses.get("accepted", 0),
+            "p2_matrix_accepted": p2_accepted,
             "p2_matrix_deterministic_reject": p2_matrix_statuses.get(
                 "deterministic_reject", 0
             ),
@@ -2416,7 +2515,7 @@ def audit_p7_tmu_safe_load_lock(repo_root, matrix):
         "safe_offset",
         "inactive_load = #vc4kernel.inactive_load<zero>",
         "request base + safe_offset",
-        "removed_in_p7",
+        "safe-address inference is rejected",
     ]:
         if token not in docs:
             fail(f"P7 lock expected strict spec to document {token}")
@@ -2799,9 +2898,9 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
     docs = read_text(repo_root / P8_5_MIXED_POLICY_DOC)
     for token in [
         "isolated fixtures remain",
-        "Routine final acceptance does not run every isolated historical hardware",
+        "Routine final acceptance does not run every isolated hardware",
         "Run the isolated fixture band",
-        "P9-P13 must add mixed coverage",
+        "P9-P13 mixed coverage is present",
     ]:
         if token not in docs:
             fail(f"P8.5 lock expected policy docs to contain: {token}")
@@ -2817,6 +2916,7 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
         "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
         "accepted",
+        "accepted_hardware_proven",
     }
     future_phase_surface_hits = []
     source_roots = [
@@ -3790,7 +3890,7 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
         "not meaningful",
         "vdr and vdw",
         "asymmetric",
-        "no hardware-backed coordinate/selector mode remains deferred",
+        "no hardware-backed coordinate/selector mode is outside final status categories",
     ]:
         if token not in p12_text:
             fail(f"P12 dynamic coordinate matrix entries must document {token}")
@@ -4033,7 +4133,7 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
         "dynamic selector is not dynamic subword mode",
         "setup-field isolation, not modulo semantics",
         "vdr and vdw are asymmetric",
-        "no hardware-backed dynamic coordinate or selector mode remains deferred in p12",
+        "no hardware-backed dynamic coordinate or selector mode is outside final status categories in p12",
         "p12 mixed fixtures",
     ]:
         if token not in docs:

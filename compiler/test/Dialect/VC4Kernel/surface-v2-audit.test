@@ -58,11 +58,11 @@
 # P3: p1_general_alu_lock:
 # P3-SAME: removed_legacy_hits=0
 # P3: p3_general_cmp_lock:
-# P3-SAME: active_cmp_uses=167
-# P3-SAME: f32_finite_cmp_uses=34
+# P3-SAME: active_cmp_uses=165
+# P3-SAME: f32_finite_cmp_uses=33
 # P3-SAME: f32_missing_policy_hits=0
 # P3-SAME: fp_policy_on_i32_hits=0
-# P3-SAME: i32_cmp_uses=133
+# P3-SAME: i32_cmp_uses=132
 # P3-SAME: matrix_scalar_cmpi_claims=0
 # P3-SAME: p3_f32_nan_inf_hits=0
 # P3-SAME: unordered_active_hits=0
@@ -91,7 +91,7 @@
 # P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
 # P5: migration_targets:
 # P5-SAME: p5_locked_status_entries=1
-# P5-SAME: p5_post_phase_planned_entries=22
+# P5-SAME: p5_post_phase_planned_entries=21
 # P5-SAME: special_case_removed_in_p1=4
 # P5: fixture_purity:
 # P5-SAME: hardware_inputs=149

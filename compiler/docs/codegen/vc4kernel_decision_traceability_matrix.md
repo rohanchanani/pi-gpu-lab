@@ -1,107 +1,56 @@
 # VC4Kernel Surface v2 Decision Traceability Matrix
 
-**Date:** 2026-06-06
-**Purpose:** P0 matrix linking locked Surface v2 decisions to planned phases, required documentation/spec impact, and required proof. P1-P13 entries are planned unless explicitly marked accepted baseline.
+This traceability document points from each final Surface v2 decision to the canonical proof source. The machine-readable source of truth is `compiler/docs/vc4kernel_surface_v2_support_matrix.json`; this document records the human-readable grouping.
 
----
+## Final Surface Groups
 
-## VC4Kernel Surface v2 pre-vector lock
+| Surface group | Final category | Proof source |
+| --- | --- | --- |
+| Kernel, return, ABI, program id, number of programs, warp identity, lane identity | `accepted_hardware_proven` | Support matrix row `baseline_kernel_return_launch_identity` |
+| Predicate algebra: full, empty, tail, rect, and, or, not, any, all | `accepted_hardware_proven` | Support matrix row `baseline_predicate_algebra` |
+| Fragment const, bitcast, splat, select | `accepted_hardware_proven` | Support matrix rows `p2_fragment_constants_splat`, `p2_fragment_bitcast`, `p3_fragment_select` |
+| Add-pipe ALU opcodes | `accepted_hardware_proven` | Support matrix row `p1_general_fragment_add_alu` |
+| Mul-pipe ALU opcodes | `accepted_hardware_proven` | Support matrix row `p1_general_fragment_mul_alu` |
+| i32 and finite f32 comparisons | `accepted_hardware_proven` | Support matrix rows `p3_fragment_cmp_signed_i32`, `p10_finite_f32_cmp` |
+| i32 and finite f32 reductions | `accepted_hardware_proven` | Support matrix rows `p4_fragment_reduce_general`, `p10_finite_f32_reduce` |
+| Scalar arith/control/address subset | `accepted_hardware_proven` | Support matrix row `p5_scalar_arith_control_address_subset` |
+| TMU safe-offset inactive loads | `accepted_hardware_proven` | Support matrix row `p7_tmu_safe_inactive_load_policy` |
+| VDW register-fragment preserve stores | `accepted_hardware_proven` | Support matrix row `p8_vdw_fragment_store_preserve_full_tail_rect` |
+| VPM alloc/QPU read/write w32, subword, dynamic coords/selectors | `accepted_hardware_proven` | Support matrix rows `baseline_vpm_vdr_vdw_rect_paths`, `p9_vpm_subword_modes`, `p12_dynamic_vpm_read_write_coordinates` |
+| VDR to VPM w32, subword, dynamic coords/selectors | `accepted_hardware_proven` | Support matrix rows `p9_vdr_vdw_subword_modes`, `p12_dynamic_vdr_vdw_coordinates` |
+| VDW from VPM w32, subword, dynamic coords/selectors | `accepted_hardware_proven` | Support matrix rows `p8_vdw_fragment_store_preserve_full_tail_rect`, `p9_vdr_vdw_subword_modes`, `p12_dynamic_vdr_vdw_coordinates` |
+| Pack/unpack | `accepted_hardware_proven` | Support matrix rows `p9_pack_unpack_subword_ops`, `p9_vpm_subword_modes` |
+| SFU approximate policy | `accepted_hardware_proven` | Support matrix row `p10_fastmath_approx_contract` |
+| Dynamic rotate and rotate-derived shuffle policy | `accepted_hardware_proven` | Support matrix rows `p11_dynamic_rotate`, `p11_fragment_broadcast_lane_if_supported` |
+| Barriers, semaphores, cooperative resource metadata | `accepted_hardware_proven` | Support matrix rows `p6_memory_resource_metadata`, `p8_5_mixed_acceptance_policy` |
+| Runtime resource metadata, libpi descriptors, artifacts, generated C | `accepted_hardware_proven` or `internal_only` | Support matrix rows `p6_memory_resource_metadata`, `p13_surface_support_matrix_final` |
 
-| Decision | Locked answer | Phase | Required proof |
-|---|---|---:|---|
-| Layer boundary | Standard value layer owns vector/memref/arith/math/scf/cf; VC4Kernel owns VC4 target execution-plan semantics. | P0 | Spec text and verifier boundary tests when implementation changes. |
-| Lower path | Only `vc4kernel -> ssavc4 -> scheduled vc4 -> artifacts/runtime/hardware`. | P0, all | Static scans and conversion tests showing no direct VC4KernelToVC4 path. |
-| Producer tile DSL | No producer tile DSL and no VC4Tile resurrection. | P0, all | Static scans and forbidden-op diagnostics. |
-| Compatibility bias | Existing special-case ops are migration targets, not compatibility promises. | P0-P4 | Updated spec and eventual migration tests. |
-| Surface evidence | Every feature needs verifier, VC4KernelToSSAVC4, lower-half coverage where needed, and hardware proof or deterministic-reject proof. | P0-P13 | Final P13 support matrix. |
+## Deterministic Reject Groups
 
----
+| Reject group | Category | Proof source |
+| --- | --- | --- |
+| Removed fragment special-case spellings | `unsupported_source_layer_inside_vc4kernel` | Support matrix rows `p1_remove_legacy_fragment_add_sub_mul_shl`, `p4_remove_legacy_fragment_contract`, `p7_remove_legacy_tmu_signature_and_safe_inference` |
+| Producer dialect operations inside verified VC4Kernel | `unsupported_source_layer_inside_vc4kernel` | Strict spec plus verifier lit proofs in support matrix rows |
+| Dynamic orientation, width, subword mode attrs | `static_surface_policy` | Support matrix row `p12_dynamic_vpm_read_write_coordinates` |
+| Vector or lane-varying coordinate operands | `static_surface_policy` | Support matrix rows `p12_dynamic_vpm_read_write_coordinates`, `p12_dynamic_vdr_vdw_coordinates` |
+| QPU horizontal w32 dynamic word-X | `not_meaningful` | P12 verifier and audit proofs |
+| DMA laned selector modes | `hardware_forbidden` | P12 verifier and audit proofs |
+| Sparse VDW general-mask stores | `static_surface_policy` | Support matrix rows `p8_sparse_vdw_store_deterministic_reject`, `sparse_vdw_store_general_masks_reject` |
+| Exact/default SFU math | `static_surface_policy` | Support matrix row `p10_exact_default_math_no_sfu` |
+| Arbitrary shuffle/permutation | `static_surface_policy` | Support matrix row `p11_arbitrary_shuffle_permutation_reject` |
+| Fixed-function graphics, tile-buffer color/Z/stencil, texture filtering, cube maps, varyings | `out_of_scope_non_compute_hardware` | Strict spec out-of-scope classification |
 
-## Phase Ordering
+## P12 Selector Traceability
 
-| Phase | Name | Status in P0 | Scope |
-|---:|---|---|---|
-| P0 | spec/matrix/audit | accepted baseline setup | Documentation, inventory, support matrix planning only. |
-| P1 | general ALU | planned | General hardware-faithful ALU surface; migrate fragment add/sub/mul/shl. |
-| P2 | bitcast/constants | planned | Bitcast and constant materialization inside target planning boundary. |
-| P3 | comparisons | planned | General comparisons and predicate production. |
-| P4 | reductions | hardware-proven pending final acceptance | General reductions; add-only `fragment_reduce` specialness removed_in_p4. |
-| P5 | scalar arith | planned | Scalar arithmetic subset belonging in VC4Kernel planning. |
-| P6 | memory/coherency | planned | TMU/VDR/VDW/VPM paths, coherency, and spill reload policy. |
-| P7 | TMU safe inactive load | planned | Explicit safe offset / inactive-load policy. |
-| P8 | VDW inactive store v1 | planned | Full/tail/rect preserve; sparse deterministic reject. |
-| P9 | pack/unpack/subword | planned | Pack/unpack and sub-32 VPM modes with executable rejects until proven. |
-| P10 | SFU/fastmath | mixed coverage implemented pending final acceptance | Explicit fastmath/approx contract for SFU-derived math. |
-| P11 | dynamic rotate/shuffle | dynamic rotate hardware-proven pending final acceptance; lane broadcast accepted as composite | Dynamic rotate is the only rotate-derived op surface. Lane broadcast is internalized into `lane_range`, `fragment_cmp`, `fragment_select`, `fragment_reduce`, and `fragment_bitcast`; generic f32 broadcast uses bitcast+i32, finite numeric f32 uses explicit finite-tree reduction only, and arbitrary shuffle remains rejected. |
-| P12 | dynamic VPM/VDR/VDW coordinates | hardware-proven pending final lock | Dynamic VPM/VDR/VDW row, word-X, and byte/halfword selector modes only where proven; no hardware-backed coordinate/selector mode remains deferred. |
-| P13 | final support matrix/pre-vector lock | planned | Close feature matrix before vector/pre-Triton work. |
-| Deferred | arbitrary sparse VDW stores | deferred | No silent decomposition before a later hardware-proven phase. |
+P12 proof rows keep row, word-X, and subword selector as separate fields. Dynamic subword selector is byte/halfword selection and does not alter static width, subword mode, or orientation. VDR raw carrier placement, QPU-normalized subword readback, VDW memory output, and mixed dataflow are different proof views.
 
----
+The proof set covers QPU VPM dynamic row, dynamic word-X, dynamic subword selector for packed/laned horizontal/vertical modes; VDR dynamic destination row, word-X, and horizontal/vertical selector; VDW dynamic source row, word-X, and horizontal/vertical selector; VDR-to-VPM-to-VDW selector roundtrip; runtime pitch/stride selector cases; double-buffered ping-pong VPM tiles; and dynamic coordinate/selector use under spill pressure.
 
-## Locked Policy Matrix
+## Final Lock Conditions
 
-| Feature or policy | Current classification | Required Surface v2 outcome | Required proof |
-|---|---|---|---|
-| `fragment_add/sub/mul/shl` | removed_in_p1 historical legacy migration | Replace long-term special cases with P1 general ALU. | Verifier, conversion, lower-half, hardware or deterministic-reject evidence per admitted opcode. |
-| Bitcast/constants | planned | P2 target-planning semantics without producer-dialect admission. | Dialect verifier and conversion tests. |
-| Comparisons | planned | P3 general comparison surface. | Predicate verifier/conversion tests and hardware proof where executable. |
-| `fragment_reduce` add-only | removed_in_p4 historical migration | P4 general reductions. | Reduction verifier/conversion/hardware matrix. |
-| Scalar arith | planned | P5 scoped scalar arithmetic subset. | Verifier and lowering tests; no vector producer ops admitted. |
-| TMU memory path | accepted baseline plus P7 migration | Explicit safe inactive-load policy; inactive lanes zero-fill. | Verifier/conversion tests and hardware zero-fill proof. |
-| VDR global-to-VPM path | accepted baseline | Preserve natural shared-memory load path, including dynamic rect baseline. | Existing dynamic VDR canaries plus future matrix entries. |
-| VDW VPM/register-to-global path | accepted baseline plus P8 migration | Full/tail/rect preserve in v1; sparse deterministic reject. | Sentinel hardware proof for admitted classes; deterministic-reject lit for sparse. |
-| Spill coherency | accepted baseline policy | VDW-written compiler spill slots reload through coherent VDR->VPM path, not TMU, unless future invalidation is proven. | Lower-half tests and hardware canaries. |
-| Pack/unpack/subword | planned | P9 hardware-faithful surface with executable rejects until proven. | Verifier reject tests and later hardware proof. |
-| SFU/fastmath | mixed coverage implemented pending final acceptance | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, raw and latency hardware proof, deterministic rejects, plus P10 mixed activation and norm/reduce fixtures; no untested NaN/Inf/signed-zero promises. |
-| `sqrt` via `rsqrt` | deterministic reject in P10 | No exact/default sqrt SFU lowering; approximate composite sqrt requires a later explicit policy and proof. | Contract tests reject sqrt because the hardware map has recipsqrt but no distinct SFU sqrt write address. |
-| Dynamic rotate/shuffle | dynamic rotate hardware-proven pending final acceptance; lane broadcast accepted as composite | P11 admits dynamic rotate and both f32-relevant lane-broadcast composite recipes only where proof exists; no first-class broadcast op. | Verifier/conversion/hardware proof, including `fragment_broadcast_lane_composite_vc4kernel` for bit-preserving f32 and finite numeric f32. |
-| Dynamic VPM/VDR/VDW coordinates | hardware-proven pending final lock | P12 admits dynamic row, word-X, and subword selector only with scalar i32 operands, range checks, and lower-half proof. Word-X and subword selector are separate fields; dynamic selector is not dynamic subword mode; setup masks are not modulo semantics. | P12 QPU, VDR-only, VDW-only, combined roundtrip, double-buffered, and spill-pressure hardware fixtures plus deterministic-reject lit. |
-| Sparse VDW store | deferred deterministic reject | Must reject until a later hardware-proven phase; no silent RMW decomposition. | Deterministic-reject lit and static policy scans. |
+The final lock is valid when:
 
----
-
-## Forbidden Permanent Surface
-
-| Forbidden surface | Required handling |
-|---|---|
-| `tile_broadcast` | Forbidden permanent surface. |
-| `tile_dot` | Forbidden permanent surface. |
-| `tile_matmul` | Forbidden permanent surface. |
-| `tile_contract` | Forbidden permanent surface. |
-| `fragment_contract` | Forbidden permanent surface for Surface v2. |
-| Producer-level layout algebra | Keep above VC4Kernel in the standard value layer. |
-| Arbitrary sparse VDW store before deferred phase | Deterministic reject. |
-| Integer div/mod | Forbidden unless a library sequence is designed. |
-| Atomics | Forbidden for compute v1. |
-| Tile-buffer color/Z/stencil | Forbidden for compute v1. |
-| Texture filtering / cube maps / varyings | Forbidden for compute v1. |
-
----
-
-## Accepted Baseline to Preserve
-
-| Baseline area | Evidence class to preserve |
-|---|---|
-| Dynamic rectangular VDR/VDW | Existing dynamic rect lowering, canaries, and runtime pitch/stride fixtures. |
-| Runtime GEMV/GEMM | Existing accepted naive/blocked runtime fixtures and source shapes. |
-| Lower-half branch-layout accounting | Existing branch-layout static audit and closure tests. |
-| Spill and VPM row accounting | Existing spill transport, edge-copy, and VPM row resource tests. |
-| Hardware discipline | Existing sentinels, expected results, CPU references, timeout/power-cycle behavior, and freshness checks. |
-
----
-
-## P13 Matrix Rule
-
-P13 must publish a final support matrix. Each Surface v2 feature must be marked with exactly one precise status:
-
-```text
-accepted baseline
-implemented and hardware-proven
-implemented with deterministic-reject proof
-planned
-migration target
-deferred
-```
-
-No P13 entry may rely on comments alone, fixture-name dispatch, public-name dispatch, candidate-path dispatch, generated-output strings, or host-side result substitution.
+- The matrix checker accepts only final status categories.
+- The mixed fixture claim audit accepts all `saw_*` and `no_*` fields.
+- The mixed manifest checker, P12 audit, relevant lit tests, `vc4-opt`, `vc4-codegen`, and `check-vc4` pass.
+- The final mixed suite remains the hardware gate for producer-layer work that lowers into VC4Kernel.

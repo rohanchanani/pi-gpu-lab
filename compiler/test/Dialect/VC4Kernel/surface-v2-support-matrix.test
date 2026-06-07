@@ -1,9 +1,9 @@
-# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/check_vc4kernel_surface_v2_matrix.py %S/../../../../../compiler/docs/vc4kernel_surface_v2_support_matrix.json | FileCheck %s
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/check_vc4kernel_surface_v2_matrix.py %S/../../../../../compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode final | FileCheck %s
 
 # CHECK: PASS VC4Kernel Surface v2 matrix: features=
 # CHECK: phase_counts:
 # CHECK: P13=1
 # CHECK: current_status_counts:
-# CHECK: accepted_baseline=
+# CHECK: accepted_hardware_proven=29
 # CHECK: deterministic_reject=
-# CHECK: removed_in_p7=1
+# CHECK: internal_only=2
