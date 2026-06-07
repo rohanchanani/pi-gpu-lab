@@ -1,4 +1,4 @@
-# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/check_vc4kernel_surface_v2_matrix.py %S/../../../../../compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode final | FileCheck %s
+# RUN: python3 %vc4_repo_root/compiler/test/Dialect/VC4Kernel/Support/check_vc4kernel_surface_v2_matrix.py %vc4_repo_root/compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode final | FileCheck %s
 
 # CHECK: PASS VC4Kernel Surface v2 matrix: features=
 # CHECK: phase_counts:

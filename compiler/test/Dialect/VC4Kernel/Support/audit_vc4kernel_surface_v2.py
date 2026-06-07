@@ -516,6 +516,7 @@ P13_FINAL_MODES = {
     "p13-final-surface-lock-pre-fixtures",
     "p13-final-surface-lock",
 }
+P13E_FINAL_CORPUS_MODE = "p13-final-verifier-reject-corpus"
 P13_FINAL_FIXTURE_EXTENSION_ID = "p13_final_surface_lock"
 P13_FINAL_SURFACE_STATUSES = {
     "accepted_hardware_proven",
@@ -531,6 +532,99 @@ P13_FINAL_REJECT_CATEGORIES = {
     "unsupported_source_layer_inside_vc4kernel",
     "out_of_scope_non_compute_hardware",
 }
+
+P13E_DETERMINISTIC_REJECT_CORPUS = [
+    ("source dialect vector", "compiler/test/Dialect/VC4Kernel/invalid-forbidden-vector-op.mlir", "vector dialect operations are forbidden"),
+    ("source dialect memref", "compiler/test/Dialect/VC4Kernel/invalid-forbidden-memref.mlir", "formal arguments may only be i32 or f32"),
+    ("source dialect scf", "compiler/test/Dialect/VC4Kernel/invalid-forbidden-scf.mlir", "raw scf operations are forbidden"),
+    ("source dialect tt/gpu/linalg", "compiler/test/Dialect/VC4Kernel/invalid-producer-dialect-tt-gpu-linalg.mlir", "dialect 'tt' is forbidden inside vc4kernel"),
+    ("lower-half dialects in VC4Kernel", "compiler/test/Dialect/VC4Kernel/invalid-lower-half-dialect-ssavc4-vc4.mlir", "lower-half dialect op"),
+    ("direct VC4KernelToVC4 path", "compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py", "DIRECT_PATH_TERMS"),
+    ("legacy fragment_add", "compiler/test/Dialect/VC4Kernel/invalid-removed-fragment-add.mlir", "unknown or forbidden vc4kernel operation"),
+    ("legacy fragment_sub", "compiler/test/Dialect/VC4Kernel/invalid-removed-fragment-sub.mlir", "unknown or forbidden vc4kernel operation"),
+    ("legacy fragment_mul", "compiler/test/Dialect/VC4Kernel/invalid-removed-fragment-mul.mlir", "unknown or forbidden vc4kernel operation"),
+    ("legacy fragment_shl", "compiler/test/Dialect/VC4Kernel/invalid-removed-fragment-shl.mlir", "unknown or forbidden vc4kernel operation"),
+    ("unsupported ALU policy", "compiler/test/Dialect/VC4Kernel/invalid-fragment-alu.mlir", "nop has no fragment value result in VC4Kernel P1"),
+    ("unsupported cmp policy", "compiler/test/Dialect/VC4Kernel/invalid-fragment-cmp-f32.mlir", "integer fragment_cmp predicate requires i32 operands"),
+    ("unsupported reduce policy", "compiler/test/Dialect/VC4Kernel/invalid-fragment-reduce-i32.mlir", "fp reduce policy is only valid for f32 fragment_reduce"),
+    ("exact/default SFU policy", "compiler/test/Dialect/VC4Kernel/fragment-sfu-policy-rejects.mlir", "exact floating-point math cannot be lowered to VC4 SFU"),
+    ("forbidden sqrt math op", "compiler/test/Dialect/VC4Kernel/invalid-forbidden-math-op.mlir", "dialect 'math' is forbidden inside vc4kernel"),
+    ("arbitrary shuffle", "compiler/test/Dialect/VC4Kernel/invalid-fragment-shuffle.mlir", "vector dialect operations are forbidden"),
+    ("TMU missing safe_offset", "compiler/test/Dialect/VC4Kernel/invalid-tmu-safe-offset-policy.mlir", "requires attribute 'inactive_load'"),
+    ("TMU old signature", "compiler/test/Dialect/VC4Kernel/invalid-tmu-safe-offset-policy.mlir", "expected ','"),
+    ("VDW missing inactive preserve", "compiler/test/Dialect/VC4Kernel/invalid-vdw-inactive-store-policy.mlir", "VDW stores require explicit inactive_store<preserve> in Surface v2"),
+    ("sparse VDW", "compiler/test/Dialect/VC4Kernel/invalid-vdw-inactive-store-policy.mlir", "sparse VDW store masks are not supported in P8"),
+    ("general-mask VDW VPM store", "compiler/test/Dialect/VC4Kernel/invalid-vdw-store-vpm-general-mask.mlir", "sparse VDW store masks are not supported in P8"),
+    ("DMA laned", "compiler/test/Dialect/VC4Kernel/invalid-vdr-vdw-subword-dma.mlir", "VDR DMA laned subword mode is not supported by VC4 hardware"),
+    ("dynamic orientation/width/subword policy", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-rect-subword.mlir", "32-bit VDW DMA requires subword<none>"),
+    ("vector coordinate operands", "compiler/test/Dialect/VC4Kernel/final-p12-selector-invalid-corpus.mlir", "operand #5 must be i32"),
+    ("vector selector operands", "compiler/test/Dialect/VC4Kernel/final-p12-selector-invalid-corpus.mlir", "operand #3 must be i32"),
+    ("horizontal w32 dynamic word-X", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir", "horizontal VPM QPU access does not encode a word x coordinate"),
+    ("selector on w32", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir", "32-bit VPM QPU access must not specify a dynamic subword selector"),
+    ("out-of-range static selector", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir", "subword_selector must be in range [0, 3]"),
+    ("out-of-range static word-X", "compiler/test/Dialect/VC4Kernel/invalid-vpm-vertical-x.mlir", "x must be in VPM word-X range [0, 15]"),
+    ("out-of-range static row", "compiler/test/Dialect/VC4Kernel/invalid-vpm-out-of-bounds.mlir", "VPM row access is out of bounds for allocation"),
+    ("unencodable VDR/VDW pitch-stride", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-rect-unaligned-pitch-stride.mlir", "memory_pitch_bytes constant must be positive and aligned to elem_bytes"),
+]
+
+P13E_ACCEPTED_VERIFIER_CORPUS = [
+    ("kernel identity ABI", "compiler/test/Dialect/VC4Kernel/identity-roundtrip.mlir", "vc4kernel.program_id"),
+    ("predicates", "compiler/test/Dialect/VC4Kernel/predicate-roundtrip.mlir", "vc4kernel.pred.any"),
+    ("fragment const/bitcast/splat/select", "compiler/test/Dialect/VC4Kernel/fragment-bitcast-roundtrip.mlir", "vc4kernel.fragment_bitcast"),
+    ("add/mul ALU", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-alu-lowering.mlir", "vc4kernel.fragment_alu.mul"),
+    ("i32 comparisons", "compiler/test/Dialect/VC4Kernel/fragment-cmp-i32-roundtrip.mlir", "vc4kernel.cmp<sge>"),
+    ("finite f32 comparisons", "compiler/test/Dialect/VC4Kernel/fragment-cmp-f32-finite-roundtrip.mlir", "fp_policy = #vc4kernel.fp_cmp_policy<finite_only>"),
+    ("i32 reductions", "compiler/test/Dialect/VC4Kernel/fragment-reduce-i32-roundtrip.mlir", "vc4kernel.reduce<bit_xor>"),
+    ("finite f32 reductions", "compiler/test/Dialect/VC4Kernel/fragment-reduce-f32-policy-roundtrip.mlir", "fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>"),
+    ("scalar arith/control/address", "compiler/test/Conversion/VC4KernelToSSAVC4/scalar-i32-arith-lowering.mlir", "arith.addi"),
+    ("TMU safe inactive load", "compiler/test/Dialect/VC4Kernel/tmu-vdw-roundtrip.mlir", "vc4kernel.tmu_load_fragment"),
+    ("VDW preserve store", "compiler/test/Dialect/VC4Kernel/tmu-vdw-roundtrip.mlir", "inactive_store = #vc4kernel.inactive_store<preserve>"),
+    ("VPM static/dynamic coordinates", "compiler/test/Dialect/VC4Kernel/dynamic-vpm-coordinates-roundtrip.mlir", "dynamic_subword_selector"),
+    ("P12 selector cross-product", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "vc4kernel.vdw_store_rect_from_vpm"),
+    ("pack/unpack", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-pack-unpack-lowering.mlir", "vc4kernel.fragment_pack"),
+    ("SFU approximate policy", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-sfu-lowering.mlir", "fp_policy = #vc4kernel.fp_math_policy<approx_sfu>"),
+    ("dynamic rotate", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-rotate-lowering.mlir", "vc4kernel.fragment_rotate"),
+    ("barrier/resource metadata", "compiler/test/Conversion/VC4KernelToSSAVC4/barrier-resource-bridge.mlir", "vc4kernel.barrier"),
+]
+
+P13E_CONVERSION_CORPUS = [
+    ("identity ABI lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/identity-lowering.mlir", "ssavc4.uniform.read"),
+    ("fragment ALU lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-alu-lowering.mlir", "ssavc4.alu.add"),
+    ("cmp lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-cmp-select-lowering.mlir", "ssavc4.make_flags"),
+    ("reduce lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-reduce-f32-finite-tree-lowering.mlir", "ssavc4.rotate"),
+    ("memory attrs lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/memory-policy-attrs-lowering.mlir", "ssavc4.tmu.request"),
+    ("pack/unpack lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-pack-unpack-lowering.mlir", "ssavc4.pack"),
+    ("SFU lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-sfu-lowering.mlir", "ssavc4.sfu"),
+    ("rotate lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-rotate-lowering.mlir", "ssavc4.rotate"),
+    ("dynamic VPM/VDR/VDW lowering", "compiler/test/Conversion/VC4KernelToSSAVC4/dynamic-vpm-coordinates-lowering.mlir", "dynamic_subword_selector"),
+    ("SSAVC4 VPM subword setup", "compiler/test/Conversion/SSAVC4ToVC4/vpm-subword-qpu-setup.mlir", "vc4.qpu.vpmvcd_setup"),
+    ("SSAVC4 VDR/VDW subword setup", "compiler/test/Conversion/SSAVC4ToVC4/vdr-vdw-subword-dma-setup.mlir", "vc4.qpu.vpmvcd_setup"),
+    ("SSAVC4 dynamic selector setup", "compiler/test/Conversion/SSAVC4ToVC4/vdw-dynamic-subword-selector-setup.mlir", "dynamic_subword_selector"),
+]
+
+P13E_P12_SELECTOR_VALID_CORPUS = [
+    ("QPU horizontal w8 dynamic selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_qpu_horizontal_w8_selector"),
+    ("QPU horizontal w16 dynamic selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_qpu_horizontal_w16_selector"),
+    ("QPU vertical w8 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_qpu_vertical_w8_x_selector"),
+    ("QPU vertical w16 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_qpu_vertical_w16_x_selector"),
+    ("VDR horizontal w8 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdr_horizontal_w8_x_selector"),
+    ("VDR horizontal w16 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdr_horizontal_w16_x_selector"),
+    ("VDR vertical w8 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdr_vertical_w8_x_selector"),
+    ("VDR vertical w16 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdr_vertical_w16_x_selector"),
+    ("VDW horizontal w8 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdw_horizontal_w8_x_selector"),
+    ("VDW horizontal w16 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdw_horizontal_w16_x_selector"),
+    ("VDW vertical w8 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdw_vertical_w8_x_selector"),
+    ("VDW vertical w16 dynamic word-X selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-valid-corpus.mlir", "final_vdw_vertical_w16_x_selector"),
+]
+
+P13E_P12_SELECTOR_INVALID_CORPUS = [
+    ("w32 selector", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir", "32-bit VPM QPU access must not specify a dynamic subword selector"),
+    ("out-of-range selector", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir", "subword_selector must be in range [0, 3]"),
+    ("vector selector", "compiler/test/Dialect/VC4Kernel/final-p12-selector-invalid-corpus.mlir", "operand #3 must be i32"),
+    ("dynamic width/subword/orientation policy", "compiler/test/Dialect/VC4Kernel/invalid-dynamic-rect-subword.mlir", "32-bit VDW DMA requires subword<none>"),
+    ("DMA laned", "compiler/test/Dialect/VC4Kernel/invalid-vdr-vdw-subword-dma.mlir", "laned subword mode is not supported by VC4 hardware"),
+    ("vector coordinate", "compiler/test/Dialect/VC4Kernel/final-p12-selector-invalid-corpus.mlir", "operand #5 must be i32"),
+]
 P13_ACTIVE_SURFACE_DOCS = [
     Path("compiler/docs/vc4kernel_surface_v2_support_matrix.json"),
     Path("compiler/docs/vc4kernel_mixed_acceptance_policy.md"),
@@ -961,6 +1055,7 @@ def audit_matrix_ownership(matrix, mode):
         "p12-dynamic-vpm-coord-lock",
         "p13-final-surface-lock-pre-fixtures",
         "p13-final-surface-lock",
+        "p13-final-verifier-reject-corpus",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -987,6 +1082,7 @@ def audit_matrix_ownership(matrix, mode):
         "p12-dynamic-vpm-coord-lock",
         "p13-final-surface-lock-pre-fixtures",
         "p13-final-surface-lock",
+        "p13-final-verifier-reject-corpus",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -1438,6 +1534,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p12-dynamic-vpm-coord-lock",
         "p13-final-surface-lock-pre-fixtures",
         "p13-final-surface-lock",
+        "p13-final-verifier-reject-corpus",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -4511,6 +4608,42 @@ def audit_p13_final_surface_lock(repo_root, matrix, mode):
     return counts
 
 
+def audit_p13e_corpus_table(repo_root, rows, table_name):
+    missing = []
+    for label, rel_path, token in rows:
+        path = repo_root / rel_path
+        if not path.is_file():
+            missing.append(f"{table_name}:{label}:missing path {rel_path}")
+            continue
+        text = read_text(path)
+        if token not in text:
+            missing.append(f"{table_name}:{label}:missing token {token!r} in {rel_path}")
+    if missing:
+        fail("P13e final corpus coverage gaps: " + "; ".join(missing[:20]))
+    return len(rows)
+
+
+def audit_p13e_final_verifier_reject_corpus(repo_root, matrix):
+    counts = {}
+    counts.update(audit_p13_matrix_final_contract(matrix))
+    counts["deterministic_reject_rows"] = audit_p13e_corpus_table(
+        repo_root, P13E_DETERMINISTIC_REJECT_CORPUS, "deterministic_reject"
+    )
+    counts["accepted_parser_verifier_rows"] = audit_p13e_corpus_table(
+        repo_root, P13E_ACCEPTED_VERIFIER_CORPUS, "accepted_parser_verifier"
+    )
+    counts["conversion_corpus_rows"] = audit_p13e_corpus_table(
+        repo_root, P13E_CONVERSION_CORPUS, "conversion"
+    )
+    counts["p12_selector_valid_rows"] = audit_p13e_corpus_table(
+        repo_root, P13E_P12_SELECTOR_VALID_CORPUS, "p12_selector_valid"
+    )
+    counts["p12_selector_invalid_rows"] = audit_p13e_corpus_table(
+        repo_root, P13E_P12_SELECTOR_INVALID_CORPUS, "p12_selector_invalid"
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -4545,6 +4678,7 @@ def main(argv):
         "p12-dynamic-vpm-coord-lock",
         "p13-final-surface-lock-pre-fixtures",
         "p13-final-surface-lock",
+        "p13-final-verifier-reject-corpus",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -4572,6 +4706,7 @@ def main(argv):
             "p12-dynamic-vpm-coord-lock",
             "p13-final-surface-lock-pre-fixtures",
             "p13-final-surface-lock",
+            "p13-final-verifier-reject-corpus",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -4677,6 +4812,11 @@ def main(argv):
         if args.mode in P13_FINAL_MODES
         else {}
     )
+    p13e_corpus_counts = (
+        audit_p13e_final_verifier_reject_corpus(repo_root, matrix)
+        if args.mode == P13E_FINAL_CORPUS_MODE
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -4725,6 +4865,8 @@ def main(argv):
         print(f"p12_dynamic_vpm_coord_lock: {format_counts(p12_lock_counts)}")
     if p13_final_counts:
         print(f"p13_final_surface_lock: {format_counts(p13_final_counts)}")
+    if p13e_corpus_counts:
+        print(f"p13_final_verifier_reject_corpus: {format_counts(p13e_corpus_counts)}")
     return 0
 
 
