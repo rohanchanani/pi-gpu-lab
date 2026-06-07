@@ -3727,7 +3727,7 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
           mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
           /*waddrMul=*/32, mlir::vc4::AddOpcode::fadd,
           mlir::vc4::MulOpcode::nop, *inputReg, /*raddrB=*/0,
-          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::a,
           mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
           /*smallImm=*/0);
       if (Attribute mode = source->getAttr("mode"))

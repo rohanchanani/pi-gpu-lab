@@ -2,6 +2,8 @@
 
 // CHECK-LABEL: vc4.module @f16_pack_unpack_storage_lowering
 // CHECK: vc4.qpu.bundle
+// CHECK-SAME: add_a = #vc4.qpu_mux<b>
+// CHECK-SAME: add_b = #vc4.qpu_mux<a>
 // CHECK-SAME: op_add = #vc4.add_opcode<fadd>
 // CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
 // CHECK-SAME: small_imm = 0 : i32

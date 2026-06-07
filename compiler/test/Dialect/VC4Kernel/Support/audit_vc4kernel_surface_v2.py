@@ -195,6 +195,10 @@ P3_POST_PHASE_ALLOWED_STATUSES = {
 }
 
 P3_POST_PHASE_STAGED_STATUSES = {
+    "p13f16_f16_storage_conversion": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_mixed_lock",
+    },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
@@ -527,6 +531,13 @@ P13_FINAL_SURFACE_STATUSES = {
 }
 P13F16_PENDING_HARDWARE_FEATURE_ID = "p13f16_f16_storage_conversion"
 P13F16_PENDING_HARDWARE_STATUS = "implemented_pending_hardware"
+P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS = (
+    "hardware_proven_pending_mixed_lock"
+)
+P13F16_TRANSITIONAL_STATUSES = {
+    P13F16_PENDING_HARDWARE_STATUS,
+    P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS,
+}
 P13_FINAL_REJECT_CATEGORIES = {
     "hardware_forbidden",
     "static_surface_policy",
@@ -683,7 +694,7 @@ P5_POST_PHASE_ALLOWED_STATUSES = {
 
 P5_POST_PHASE_STAGED_STATUSES = {
     P13F16_PENDING_HARDWARE_FEATURE_ID: {
-        P13F16_PENDING_HARDWARE_STATUS,
+        *P13F16_TRANSITIONAL_STATUSES,
     },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
@@ -4403,13 +4414,13 @@ def audit_p13_matrix_final_contract(matrix):
         ident = feature.get("id", "<missing id>")
         status = feature.get("current_status")
         status_counts[status] += 1
-        is_p13f16_pending = (
+        is_p13f16_transitional = (
             ident == P13F16_PENDING_HARDWARE_FEATURE_ID
-            and status == P13F16_PENDING_HARDWARE_STATUS
+            and status in P13F16_TRANSITIONAL_STATUSES
         )
-        if status not in P13_FINAL_SURFACE_STATUSES and not is_p13f16_pending:
+        if status not in P13_FINAL_SURFACE_STATUSES and not is_p13f16_transitional:
             bad_status.append(f"{ident}:{status}")
-        if is_p13f16_pending:
+        if is_p13f16_transitional:
             if feature.get("final_status_target") != "accepted_hardware_proven":
                 bad_status.append(
                     f"{ident}:final_status_target="
@@ -4430,7 +4441,7 @@ def audit_p13_matrix_final_contract(matrix):
             ]:
                 if not proof_links.get(key):
                     missing_proof.append(f"{ident}:{key}")
-        if is_p13f16_pending:
+        if is_p13f16_transitional:
             for key in [
                 "verifier_lit",
                 "conversion_lit",
@@ -4438,6 +4449,11 @@ def audit_p13_matrix_final_contract(matrix):
             ]:
                 if not proof_links.get(key):
                     missing_proof.append(f"{ident}:{key}")
+            if (
+                status == P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS
+                and not proof_links.get("isolated_hardware_fixture")
+            ):
+                missing_proof.append(f"{ident}:isolated_hardware_fixture")
         if status == "deterministic_reject":
             category = feature.get("reject_category")
             reject_counts[category] += 1
@@ -4472,8 +4488,8 @@ def audit_p13_matrix_final_contract(matrix):
         "matrix_accepted_hardware_proven": status_counts["accepted_hardware_proven"],
         "matrix_deterministic_reject": status_counts["deterministic_reject"],
         "matrix_internal_only": status_counts["internal_only"],
-        "matrix_p13f16_pending_hardware": status_counts[
-            P13F16_PENDING_HARDWARE_STATUS
+        "matrix_p13f16_hardware_proven_pending_mixed_lock": status_counts[
+            P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS
         ],
         "matrix_reject_static_surface_policy": reject_counts["static_surface_policy"],
     }

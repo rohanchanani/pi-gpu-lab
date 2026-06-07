@@ -142,6 +142,7 @@ P13F16_TRANSITIONAL_FEATURE_IDS = {
 
 P13F16_TRANSITIONAL_STATUSES = {
     "implemented_pending_hardware",
+    "hardware_proven_pending_mixed_lock",
 }
 
 REJECT_CATEGORIES = {
