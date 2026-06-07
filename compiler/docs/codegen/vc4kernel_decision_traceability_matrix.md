@@ -31,7 +31,7 @@
 | P7 | TMU safe inactive load | planned | Explicit safe offset / inactive-load policy. |
 | P8 | VDW inactive store v1 | planned | Full/tail/rect preserve; sparse deterministic reject. |
 | P9 | pack/unpack/subword | planned | Pack/unpack and sub-32 VPM modes with executable rejects until proven. |
-| P10 | SFU/fastmath | planned | Explicit fastmath/approx contract for SFU-derived math. |
+| P10 | SFU/fastmath | mixed coverage implemented pending final acceptance | Explicit fastmath/approx contract for SFU-derived math. |
 | P11 | dynamic rotate/shuffle | planned | Dynamic rotate/shuffle only if hardware-proven. |
 | P12 | dynamic VPM/VDR/VDW coordinates | planned | Dynamic coordinates/pitch/stride only where proven. |
 | P13 | final support matrix/pre-vector lock | planned | Close feature matrix before vector/pre-Triton work. |
@@ -53,7 +53,7 @@
 | VDW VPM/register-to-global path | accepted baseline plus P8 migration | Full/tail/rect preserve in v1; sparse deterministic reject. | Sentinel hardware proof for admitted classes; deterministic-reject lit for sparse. |
 | Spill coherency | accepted baseline policy | VDW-written compiler spill slots reload through coherent VDR->VPM path, not TMU, unless future invalidation is proven. | Lower-half tests and hardware canaries. |
 | Pack/unpack/subword | planned | P9 hardware-faithful surface with executable rejects until proven. | Verifier reject tests and later hardware proof. |
-| SFU/fastmath | hardware-proven pending final mixed acceptance | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, raw and latency hardware proof, deterministic rejects; no untested NaN/Inf/signed-zero promises. |
+| SFU/fastmath | mixed coverage implemented pending final acceptance | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, raw and latency hardware proof, deterministic rejects, plus P10 mixed activation and norm/reduce fixtures; no untested NaN/Inf/signed-zero promises. |
 | `sqrt` via `rsqrt` | deterministic reject in P10 | No exact/default sqrt SFU lowering; approximate composite sqrt requires a later explicit policy and proof. | Contract tests reject sqrt because the hardware map has recipsqrt but no distinct SFU sqrt write address. |
 | Dynamic rotate/shuffle | planned | P11 only if downstream and hardware proof exists. | Verifier/conversion/hardware proof. |
 | Dynamic VPM/VDR/VDW coordinates | planned with accepted dynamic rect baseline | P12 admission only where range verification and lower-half proof exist. | Dynamic-coordinate verifier/lowering/hardware matrix. |

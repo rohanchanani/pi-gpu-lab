@@ -1,7 +1,7 @@
 # RUN: python3 %S/Hardware/MixedAcceptance/check_mixed_acceptance_coverage.py --manifest %S/Hardware/MixedAcceptance/mixed_acceptance_manifest.json --repo-root %S/../../../../../ --mode lock | FileCheck %s
 # RUN: %S/Hardware/MixedAcceptance/run_mixed_acceptance.sh --manifest %S/Hardware/MixedAcceptance/mixed_acceptance_manifest.json --repo-root %S/../../../../../ --list | FileCheck %s --check-prefix=LIST
 
-# CHECK: PASS VC4Kernel mixed acceptance coverage: mode=lock fixtures=10 features=30 deterministic_rejects=9 missing_coverage=0
+# CHECK: PASS VC4Kernel mixed acceptance coverage: mode=lock fixtures=12 features=36 deterministic_rejects=9 missing_coverage=0
 
 # LIST: mixed_elementwise_tmu_alu_cmp_vdw_vc4kernel
 # LIST: mixed_i32_control_reduce_scalar_address_vc4kernel
@@ -13,3 +13,5 @@
 # LIST: mixed_lower_half_spill_dma_branch_ssavc4
 # LIST: mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel
 # LIST: mixed_quantized_gemv_subword_vpm_vc4kernel
+# LIST: mixed_sfu_norm_reduce_vpm_vc4kernel
+# LIST: mixed_sfu_activation_tmu_vdw_vc4kernel

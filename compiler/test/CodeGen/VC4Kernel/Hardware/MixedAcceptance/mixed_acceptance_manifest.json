@@ -363,6 +363,97 @@
         "runtime_dimensions",
         "vdr_vpm_subword_tile"
       ]
+    },
+    {
+      "name": "mixed_sfu_norm_reduce_vpm_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_sfu_norm_reduce_vpm_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Normalization-style tiled kernel with VDR to VPM f32 tile input, finite-tree sum-of-squares reduction, approximate rsqrt scaling, P9 subword VDR/VPM audit side path, and preserved VDW stores.",
+      "feature_tags": [
+        "p1_fragment_alu_f32",
+        "p4_f32_reduce_finite_tree",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "dynamic_vdr_vdw_horizontal",
+        "p8_vdw_preserve_register",
+        "p9_fragment_unpack",
+        "p9_vpm_qpu_subword_modes",
+        "p9_vdr_subword_dma",
+        "p10_fragment_sfu",
+        "p10_sfu_approx_policy",
+        "p10_sfu_latency_wait",
+        "p10_mixed_sfu_norm_reduce"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_vdr_vpm_path",
+        "saw_f32_reduce",
+        "saw_sfu_norm",
+        "saw_rsqrt_or_recip",
+        "saw_vdw_preserve",
+        "saw_runtime_shape",
+        "saw_p9_subword_path",
+        "no_tmu_tile_workaround"
+      ],
+      "expected_cases_summary": "Runtime active-column cases 0, 1, 8, 15, and 16 over a VDR/VPM f32 tile with guarded f32 and integer audit outputs.",
+      "triage_feature_bands": [
+        "sfu_norm_reduce",
+        "vdr_vpm_tile",
+        "f32_reduce",
+        "p9_subword_side_path"
+      ]
+    },
+    {
+      "name": "mixed_sfu_activation_tmu_vdw_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_sfu_activation_tmu_vdw_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Activation-style elementwise kernel with TMU safe loads, finite-domain SFU reciprocal/rsqrt, f32 compare/select and ALU, P9 subword VDR/VPM sidecar dataflow, and preserved VDW output tails.",
+      "feature_tags": [
+        "p1_fragment_alu_f32",
+        "p3_f32_cmp_finite",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p7_tmu_safe_offset",
+        "p8_vdw_preserve_register",
+        "p9_fragment_unpack",
+        "p9_vpm_qpu_subword_modes",
+        "p9_vdr_subword_dma",
+        "p10_fragment_sfu",
+        "p10_sfu_approx_policy",
+        "p10_sfu_latency_wait",
+        "p10_mixed_sfu_activation"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_sfu_activation",
+        "saw_sfu",
+        "saw_approx_policy",
+        "saw_domain_guard",
+        "saw_tmu_safe_offset",
+        "saw_vdw_preserve",
+        "saw_f32_cmp_select",
+        "saw_fragment_alu",
+        "saw_p9_subword_sidecar",
+        "max_abs_diff",
+        "max_rel_diff"
+      ],
+      "expected_cases_summary": "Runtime n cases 0, 1, 15, 16, 17, 31, 32, 33, 191, 192, 193, and 769 with guarded f32 SFU activation outputs and u8 sidecar audit sentinels.",
+      "triage_feature_bands": [
+        "sfu_activation",
+        "tmu_safe_offset",
+        "p9_subword_sidecar",
+        "vdw_register_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -695,6 +786,69 @@
       ],
       "required": true,
       "status": "implemented"
+    },
+    {
+      "id": "p10_fragment_sfu",
+      "phase": "P10",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_sfu_activation_tmu_vdw_vc4kernel",
+        "mixed_sfu_norm_reduce_vpm_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p10_sfu_approx_policy",
+      "phase": "P10",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_sfu_activation_tmu_vdw_vc4kernel",
+        "mixed_sfu_norm_reduce_vpm_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p10_sfu_latency_wait",
+      "phase": "P10",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_sfu_activation_tmu_vdw_vc4kernel",
+        "mixed_sfu_norm_reduce_vpm_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p10_exact_math_reject",
+      "phase": "P10",
+      "verification_kind": "lit_negative",
+      "covered_by": [
+        "p10_sfu_fastmath_policy_rejects"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p10_mixed_sfu_activation",
+      "phase": "P10",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_sfu_activation_tmu_vdw_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p10_mixed_sfu_norm_reduce",
+      "phase": "P10",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_sfu_norm_reduce_vpm_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
     }
   ],
   "deterministic_rejects": [
@@ -795,43 +949,6 @@
     }
   ],
   "future_phase_extension_points": [
-    {
-      "id": "p10_sfu_mixed",
-      "phase": "P10",
-      "status": "future_extension",
-      "planned_required_features": [
-        {
-          "id": "p10_fragment_sfu",
-          "verification_kind": "hardware_mixed",
-          "status": "planned_until_p10f"
-        },
-        {
-          "id": "p10_sfu_approx_policy",
-          "verification_kind": "hardware_mixed",
-          "status": "planned_until_p10f"
-        },
-        {
-          "id": "p10_sfu_latency_wait",
-          "verification_kind": "hardware_mixed",
-          "status": "planned_until_p10f"
-        },
-        {
-          "id": "p10_exact_math_reject",
-          "verification_kind": "lit_negative",
-          "status": "planned_until_p10f"
-        },
-        {
-          "id": "p10_mixed_sfu_activation",
-          "verification_kind": "hardware_mixed",
-          "status": "planned_until_p10f"
-        },
-        {
-          "id": "p10_mixed_sfu_norm_reduce",
-          "verification_kind": "hardware_mixed",
-          "status": "planned_until_p10f"
-        }
-      ]
-    },
     {
       "id": "p11_dynamic_rotate_mixed",
       "phase": "P11",

@@ -339,13 +339,17 @@ P10_REQUIRED_ISOLATED_FIXTURES = {
     "fragment_sfu_branch_layout_vc4kernel",
     "fragment_sfu_forced_spill_vc4kernel",
 }
+P10_REQUIRED_MIXED_FIXTURES = {
+    "mixed_sfu_activation_tmu_vdw_vc4kernel",
+    "mixed_sfu_norm_reduce_vpm_vc4kernel",
+}
 P10_REQUIRED_NEGATIVE_TESTS = {
     "compiler/test/Dialect/VC4Kernel/invalid-fragment-sfu.mlir",
     "compiler/test/Dialect/VC4Kernel/fragment-sfu-policy-rejects.mlir",
     "compiler/test/Dialect/VC4Kernel/invalid-forbidden-math-op.mlir",
     "compiler/test/Dialect/SSAVC4/sfu-invalid.mlir",
 }
-P10_PLANNED_MIXED_FEATURES = {
+P10_REQUIRED_MIXED_FEATURES = {
     "p10_fragment_sfu",
     "p10_sfu_approx_policy",
     "p10_sfu_latency_wait",
@@ -3078,24 +3082,73 @@ def audit_p10_sfu_fastmath_lock(repo_root, matrix):
             fail(f"P10 lock negative tests missing diagnostic/token: {token}")
 
     manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
-    future_entries = manifest.get("future_phase_extension_points", [])
-    p10_entry = next(
-        (entry for entry in future_entries if entry.get("id") == "p10_sfu_mixed"),
-        None,
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    missing_mixed = sorted(P10_REQUIRED_MIXED_FIXTURES - fixtures.keys())
+    if missing_mixed:
+        fail("P10 lock missing mixed SFU fixtures: " + ", ".join(missing_mixed))
+    planned_mixed = sorted(
+        name
+        for name in P10_REQUIRED_MIXED_FIXTURES
+        if fixtures[name].get("status") != "implemented"
     )
-    if p10_entry is None:
-        fail("P10 lock missing p10_sfu_mixed future extension entry")
-    planned = {
-        feature.get("id")
-        for feature in p10_entry.get("planned_required_features", [])
-        if isinstance(feature, dict)
+    if planned_mixed:
+        fail("P10 lock found non-implemented mixed SFU fixtures: " + ", ".join(planned_mixed))
+
+    manifest_features = {
+        feature["id"]: feature for feature in manifest.get("required_features", [])
     }
-    missing_planned = sorted(P10_PLANNED_MIXED_FEATURES - planned)
-    if missing_planned:
-        fail("P10 lock missing planned mixed feature entries: " + ", ".join(missing_planned))
-    for feature in p10_entry.get("planned_required_features", []):
-        if feature.get("status") != "planned_until_p10f":
-            fail(f"P10 lock expected planned_until_p10f status for {feature.get('id')}")
+    missing_features = sorted(P10_REQUIRED_MIXED_FEATURES - manifest_features.keys())
+    if missing_features:
+        fail("P10 lock missing implemented manifest features: " + ", ".join(missing_features))
+    for feature_id in sorted(P10_REQUIRED_MIXED_FEATURES):
+        feature = manifest_features[feature_id]
+        if feature.get("status") != "implemented":
+            fail(f"P10 lock manifest feature is not implemented: {feature_id}")
+
+    future_ids = {entry.get("id") for entry in manifest.get("future_phase_extension_points", [])}
+    if "p10_sfu_mixed" in future_ids:
+        fail("P10 lock must promote p10_sfu_mixed out of future extension points")
+    if "p11_dynamic_rotate_mixed" not in future_ids:
+        fail("P10 lock expected P11 to be the next future mixed extension point")
+
+    expected_fixture_tokens = {
+        "mixed_sfu_activation_tmu_vdw_vc4kernel": [
+            "vc4kernel.tmu_load_fragment",
+            "vc4kernel.fragment_sfu",
+            "#vc4kernel.sfu_kind<recip>",
+            "#vc4kernel.sfu_kind<rsqrt>",
+            "#vc4kernel.fp_math_policy<approx_sfu>",
+            "vc4kernel.fragment_cmp",
+            "vc4kernel.fragment_select",
+            "vc4kernel.vdr_load_to_vpm",
+            "vc4kernel.fragment_unpack",
+            "#vc4kernel.vpm_width<w8>",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "mixed_sfu_norm_reduce_vpm_vc4kernel": [
+            "vc4kernel.vdr_load_to_vpm",
+            "vc4kernel.vpm_read_fragment",
+            "vc4kernel.fragment_reduce",
+            "vc4kernel.fragment_sfu",
+            "#vc4kernel.sfu_kind<rsqrt>",
+            "#vc4kernel.fp_math_policy<approx_sfu>",
+            "vc4kernel.fragment_unpack",
+            "#vc4kernel.vpm_width<w8>",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+    }
+    for name, tokens in expected_fixture_tokens.items():
+        fixture_dir = repo_root / fixtures[name]["path"]
+        input_path = fixture_dir / "input.mlir"
+        expected_path = fixture_dir / "expected.json"
+        if not input_path.is_file() or not expected_path.is_file():
+            fail(f"P10 lock missing input/expected for {name}")
+        text = read_text(input_path)
+        for token in tokens:
+            if token not in text:
+                fail(f"P10 lock fixture {name} missing token {token}")
+        if name == "mixed_sfu_norm_reduce_vpm_vc4kernel" and "vc4kernel.tmu_load_fragment" in text:
+            fail("P10 lock norm mixed fixture must not use TMU tile workaround")
 
     docs = "\n".join(
         read_text(repo_root / path)
@@ -3124,7 +3177,8 @@ def audit_p10_sfu_fastmath_lock(repo_root, matrix):
             "p10_isolated_fixture_retention_checks": len(P10_REQUIRED_ISOLATED_FIXTURES),
             "p10_sfu_fixture_ops": sfu_fixture_ops,
             "p10_negative_tests": len(P10_REQUIRED_NEGATIVE_TESTS),
-            "p10_planned_mixed_features": len(P10_PLANNED_MIXED_FEATURES),
+            "p10_mixed_fixtures": len(P10_REQUIRED_MIXED_FIXTURES),
+            "p10_manifest_features": len(P10_REQUIRED_MIXED_FEATURES),
             "p10_missing_policy_hits": 0,
             "p10_wrong_domain_hits": 0,
             "p10_source_math_hits": 0,

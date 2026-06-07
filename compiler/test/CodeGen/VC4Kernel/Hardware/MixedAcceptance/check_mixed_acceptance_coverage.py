@@ -50,6 +50,8 @@ REQUIRED_FIXTURES = {
     "mixed_lower_half_spill_dma_branch_ssavc4",
     "mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel",
     "mixed_quantized_gemv_subword_vpm_vc4kernel",
+    "mixed_sfu_activation_tmu_vdw_vc4kernel",
+    "mixed_sfu_norm_reduce_vpm_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -83,6 +85,12 @@ REQUIRED_FEATURES = {
     "p9_subword_unsupported_mode_rejects",
     "p9_mixed_subword_roundtrip",
     "p9_mixed_quantized_gemv_subword",
+    "p10_fragment_sfu",
+    "p10_sfu_approx_policy",
+    "p10_sfu_latency_wait",
+    "p10_exact_math_reject",
+    "p10_mixed_sfu_activation",
+    "p10_mixed_sfu_norm_reduce",
 }
 
 REQUIRED_REJECTS = {
@@ -94,10 +102,10 @@ REQUIRED_REJECTS = {
     "unsupported_numeric_casts_reject",
     "forbidden_producer_dialect_reject",
     "p9_subword_unsupported_mode_rejects",
+    "p10_sfu_fastmath_policy_rejects",
 }
 
 FUTURE_EXTENSION_IDS = {
-    "p10_sfu_mixed",
     "p11_dynamic_rotate_mixed",
     "p12_dynamic_vpm_coords_mixed",
     "p13_final_surface_lock",
@@ -120,7 +128,7 @@ FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
     "stablehlo.",
     "mhlo.",
 )
-FUTURE_PHASE_TAG_PREFIXES = ("p10_", "p11_", "p12_")
+FUTURE_PHASE_TAG_PREFIXES = ("p11_", "p12_")
 
 
 def fail(message):

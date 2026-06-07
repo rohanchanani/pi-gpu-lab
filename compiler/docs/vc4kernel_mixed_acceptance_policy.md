@@ -55,13 +55,12 @@ P9 adds `mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel` and
 `mixed_quantized_gemv_subword_vpm_vc4kernel` to cover pack/unpack and subword
 VPM/VDR/VDW transport in the mixed suite.
 
-P10 locks raw `vc4kernel.fragment_sfu` proof and exact/default math rejects
-before adding mixed SFU fixtures. The P10 future extension entry names the
-required P10 mixed features as planned until P10f: `p10_fragment_sfu`,
-`p10_sfu_approx_policy`, `p10_sfu_latency_wait`, `p10_exact_math_reject`,
-`p10_mixed_sfu_activation`, and `p10_mixed_sfu_norm_reduce`. P10 mixed fixtures
-must combine SFU with earlier accepted features rather than replacing the mixed
-suite with isolated SFU smokes.
+P10 adds `mixed_sfu_activation_tmu_vdw_vc4kernel` and
+`mixed_sfu_norm_reduce_vpm_vc4kernel` to cover explicit approximate SFU policy,
+SFU r4 wait behavior, exact/default math rejects, TMU safe loads, VDR/VPM tile
+input, finite f32 reductions, VDW preserve, and P9 subword side paths in the
+mixed suite. P10 mixed fixtures combine SFU with earlier accepted features
+rather than replacing the mixed suite with isolated SFU smokes.
 
 P10-P13 must add mixed coverage for new accepted features instead of restoring
 the old every-isolated-fixture final matrix. Future mixed additions should keep
