@@ -559,6 +559,138 @@
         "sfu_norm",
         "p9_subword_sidepath"
       ]
+    },
+    {
+      "name": "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Looped ping-pong VPM tile copy using dynamic VDR destination row/X/selector and dynamic VDW source row/X/selector with tail-column preserve semantics.",
+      "feature_tags": [
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p8_vdw_preserve_vpm_rect",
+        "p12_dynamic_vdr_coord_selector",
+        "p12_dynamic_vdw_coord_selector",
+        "p12_double_buffered_dynamic_vpm_tiles",
+        "p12_mixed_pingpong_coord_selector_loop"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_dynamic_vpm_pingpong",
+        "saw_dynamic_vpm_row",
+        "saw_dynamic_vpm_x",
+        "saw_dynamic_subword_selector",
+        "saw_vdr_dynamic_subword_selector",
+        "saw_vdw_dynamic_subword_selector",
+        "saw_runtime_loop",
+        "saw_iters0",
+        "saw_iters4",
+        "saw_tail_cols",
+        "saw_vdw_preserve",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Runtime loop counts 0, 1, 2, 3, and 4 with ping-pong dynamic VPM rows, nonzero word-X, halfword selectors, tail columns, and preserved output guards.",
+      "triage_feature_bands": [
+        "dynamic_vpm_pingpong",
+        "vdr_dynamic_selector",
+        "vdw_dynamic_selector"
+      ]
+    },
+    {
+      "name": "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Double-buffered horizontal packed subword compute path using VDR dynamic selectors, QPU VPM dynamic selector reads, unpack/ALU/cmp/select/reduce/rotate dataflow, and preserved VDW output.",
+      "feature_tags": [
+        "p1_fragment_alu_i32_logic_shift_minmax_clz",
+        "p3_i32_cmp",
+        "p4_i32_reduce",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p8_vdw_preserve_vpm_rect",
+        "p9_fragment_unpack",
+        "p11_dynamic_rotate",
+        "p12_dynamic_vpm_qpu_coord_selector",
+        "p12_dynamic_vdr_coord_selector",
+        "p12_dynamic_vdw_coord_selector",
+        "p12_double_buffered_dynamic_vpm_tiles",
+        "p12_mixed_double_buffered_subword_compute"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_vdr_dynamic_subword_selector",
+        "saw_dynamic_vpm_row",
+        "saw_dynamic_vpm_x",
+        "saw_dynamic_subword_selector",
+        "saw_vpm_qpu_dynamic_selector_read",
+        "saw_fragment_unpack",
+        "saw_fragment_alu",
+        "saw_cmp_select",
+        "saw_fragment_reduce",
+        "saw_dynamic_rotate",
+        "saw_vdr_to_vpm_sidepath",
+        "saw_vdw_dynamic_subword_selector",
+        "saw_vdw_preserve",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Horizontal packed byte selector cases 0, 1, 2, and 3 with x=0 compute dataflow and separate full-X coverage retained by P12 selector guard fixtures.",
+      "triage_feature_bands": [
+        "qpu_dynamic_selector",
+        "subword_compute",
+        "dynamic_rotate_interaction"
+      ]
+    },
+    {
+      "name": "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "High-pressure dynamic coordinate/selector kernel proving row, word-X, and selector values remain live and correct across a nonzero spill frame without hidden TMU spill reloads.",
+      "feature_tags": [
+        "p1_fragment_alu_i32_logic_shift_minmax_clz",
+        "p4_i32_reduce",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p6_spill_coherency",
+        "p8_vdw_preserve_vpm_rect",
+        "p12_dynamic_vpm_qpu_coord_selector",
+        "p12_dynamic_vdr_coord_selector",
+        "p12_dynamic_vdw_coord_selector",
+        "p12_double_buffered_dynamic_vpm_tiles",
+        "p12_mixed_coord_selector_forced_spill"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_spill_frame_nonzero",
+        "saw_dynamic_vpm_row",
+        "saw_dynamic_vpm_x",
+        "saw_dynamic_subword_selector",
+        "saw_vdr_dynamic_subword_selector",
+        "saw_vdw_dynamic_subword_selector",
+        "saw_vdw_preserve",
+        "hidden_spill_reload_tmu_hits",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Dynamic halfword selector cases with word-X values 0, 1, 7, and 15 under forced spill pressure and preserved VDW output guards.",
+      "triage_feature_bands": [
+        "dynamic_coord_spill",
+        "word_x_selector",
+        "spill_coherency"
+      ]
     }
   ],
   "required_features": [
@@ -1017,6 +1149,93 @@
       ],
       "required": true,
       "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vpm_qpu_coord_selector",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdr_coord_selector",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdw_coord_selector",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_double_buffered_dynamic_vpm_tiles",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_coord_selector_rejects",
+      "phase": "P12",
+      "verification_kind": "lit_negative",
+      "covered_by": [
+        "p12_dynamic_coordinate_selector_rejects"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_mixed_pingpong_coord_selector_loop",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_mixed_double_buffered_subword_compute",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_mixed_coord_selector_forced_spill",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
     }
   ],
   "deterministic_rejects": [
@@ -1114,14 +1333,22 @@
         "compiler/test/Dialect/SSAVC4/sfu-invalid.mlir"
       ],
       "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_coordinate_selector_rejects",
+      "description": "P12 rejects non-meaningful QPU horizontal w32 dynamic word-X, DMA laned modes, vector/lane-varying coordinate operands, sparse VDW/scatter forms, dynamic orientation/width/subword attrs, out-of-range static row/X/selector constants, and unencodable pitch/stride cases without proven fallback.",
+      "verification_kind": "lit_negative",
+      "coverage_entries": [
+        "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir",
+        "compiler/test/Dialect/SSAVC4/dynamic-vpm-coordinates-invalid.mlir",
+        "compiler/test/Dialect/VC4Kernel/invalid-vdr-vdw-subword-dma.mlir",
+        "compiler/test/Dialect/VC4Kernel/invalid-vdw-store-vpm-general-mask.mlir",
+        "compiler/test/Dialect/VC4Kernel/invalid-forbidden-vector-op.mlir"
+      ],
+      "status": "implemented"
     }
   ],
   "future_phase_extension_points": [
-    {
-      "id": "p12_dynamic_vpm_coords_mixed",
-      "phase": "P12",
-      "status": "future_extension"
-    },
     {
       "id": "p13_final_surface_lock",
       "phase": "P13",
@@ -1142,6 +1369,6 @@
       "check-vc4"
     ],
     "run_every_isolated_fixture_by_default": false,
-    "rule": "Final acceptance after P8.5 runs the mixed acceptance suite plus audits, lit, and check-vc4; isolated fixtures run for triage or phase-specific requests."
+    "rule": "Final acceptance after P12 runs the mixed acceptance suite including P9, P10, P11, and P12 mixed fixtures plus audits, lit, and check-vc4; isolated fixtures run for triage or phase-specific requests."
   }
 }

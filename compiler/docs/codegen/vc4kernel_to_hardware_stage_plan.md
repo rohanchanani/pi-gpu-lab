@@ -160,7 +160,16 @@ Plan dynamic rotate/shuffle only where downstream support and hardware proof exi
 
 ### P12 dynamic VPM/VDR/VDW coordinates
 
-Plan dynamic VPM/VDR/VDW coordinates and pitch/stride admission only where lower-half support, range verification, and hardware proof exist.
+P12 locks dynamic VPM/VDR/VDW coordinates and byte/halfword selectors only
+where lower-half support, range verification, and hardware proof exist.
+Word-X and subword selector are separate fields; dynamic selector is not
+dynamic subword mode; setup-field masks are not modulo semantics. VDR and VDW
+are asymmetric and keep separate setup logic. QPU horizontal w32 dynamic word-X
+rejects as not meaningful; DMA laned modes are hardware-forbidden; vector
+coordinate operands, sparse VDW/scatter, dynamic orientation/width/subword
+attrs, out-of-range constants, and unencodable pitch/stride cases without a
+proven fallback deterministic-reject. No hardware-backed coordinate/selector
+mode remains deferred in P12.
 
 ### P13 final support matrix/pre-vector lock
 

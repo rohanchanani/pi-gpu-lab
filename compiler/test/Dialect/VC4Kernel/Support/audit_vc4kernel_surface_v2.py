@@ -397,8 +397,41 @@ P11_REQUIRED_MIXED_FEATURES = {
     "p11_mixed_shuffle_vpm_tile_swizzle",
 }
 P11_NEXT_FUTURE_FEATURES = {
-    "p12_dynamic_vpm_coords_mixed",
     "p13_final_surface_lock",
+}
+P12_REQUIRED_ISOLATED_FIXTURES = {
+    "vpm_qpu_dynamic_subword_selector_vc4kernel",
+    "vpm_qpu_dynamic_selector_loop_branch_vc4kernel",
+    "vpm_qpu_dynamic_selector_tail_preserve_vc4kernel",
+    "vdr_dynamic_vpm_dest_x_selector_probe_vc4kernel",
+    "vdr_dynamic_selector_runtime_pitch_rect_vc4kernel",
+    "vdr_dynamic_selector_loop_branch_vc4kernel",
+    "vdw_dynamic_vpm_source_x_selector_probe_vc4kernel",
+    "vdw_dynamic_selector_preserve_tail_rect_vc4kernel",
+    "vdr_vdw_dynamic_x_selector_roundtrip_vc4kernel",
+    "vdr_vdw_dynamic_selector_runtime_pitch_stride_vc4kernel",
+}
+P12_REQUIRED_MIXED_FIXTURES = {
+    "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+    "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+    "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+}
+P12_REQUIRED_MIXED_FEATURES = {
+    "p12_dynamic_vpm_qpu_coord_selector",
+    "p12_dynamic_vdr_coord_selector",
+    "p12_dynamic_vdw_coord_selector",
+    "p12_double_buffered_dynamic_vpm_tiles",
+    "p12_dynamic_coord_selector_rejects",
+    "p12_mixed_pingpong_coord_selector_loop",
+    "p12_mixed_double_buffered_subword_compute",
+    "p12_mixed_coord_selector_forced_spill",
+}
+P12_REQUIRED_NEGATIVE_TESTS = {
+    "compiler/test/Dialect/VC4Kernel/invalid-dynamic-vpm-coordinates.mlir",
+    "compiler/test/Dialect/SSAVC4/dynamic-vpm-coordinates-invalid.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-vdr-vdw-subword-dma.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-vdw-store-vpm-general-mask.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-forbidden-vector-op.mlir",
 }
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
@@ -708,6 +741,7 @@ def audit_matrix_ownership(matrix, mode):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -731,6 +765,7 @@ def audit_matrix_ownership(matrix, mode):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -952,6 +987,7 @@ def audit_matrix_ownership(matrix, mode):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         p8_5_policy = require_matrix_feature(
             features,
@@ -1003,6 +1039,7 @@ def audit_matrix_ownership(matrix, mode):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         require_matrix_feature_status_in(
             features,
@@ -1159,6 +1196,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -3526,8 +3564,6 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
     missing_future = sorted(P11_NEXT_FUTURE_FEATURES - future_ids)
     if missing_future:
         fail("P11 lock missing future manifest extension entries: " + ", ".join(missing_future))
-    if "p12_dynamic_vpm_coords_mixed" not in future_ids:
-        fail("P11 lock expected P12 dynamic coordinate mixed extension point to remain next")
 
     expected_mixed_tokens = {
         "mixed_dynamic_rotate_reduction_scan_vc4kernel": [
@@ -3638,6 +3674,246 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
     return counts
 
 
+def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
+    counts = audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+
+    p12_vpm = require_matrix_feature_status_in(
+        features,
+        "p12_dynamic_vpm_read_write_coordinates",
+        "P12",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    p12_dma = require_matrix_feature_status_in(
+        features,
+        "p12_dynamic_vdr_vdw_coordinates",
+        "P12",
+        {"hardware_proven_pending_final_acceptance", "accepted"},
+    )
+    p12_text = json.dumps([p12_vpm, p12_dma]).lower()
+    for token in [
+        "word-x",
+        "subword_selector",
+        "not modulo",
+        "hardware-forbidden",
+        "static-surface policy",
+        "not meaningful",
+        "vdr and vdw",
+        "asymmetric",
+        "no hardware-backed coordinate/selector mode remains deferred",
+    ]:
+        if token not in p12_text:
+            fail(f"P12 dynamic coordinate matrix entries must document {token}")
+    for forbidden in [
+        "later p12 prompts prove",
+        "unproven/deferred for p12",
+        "vertical subword dma deterministic-rejects as unproven",
+        "subword dynamic byte/halfword selector modes unless p12",
+    ]:
+        if forbidden in p12_text:
+            fail(f"P12 lock found stale deferred dynamic selector wording: {forbidden}")
+
+    manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    manifest_features = {
+        feature["id"]: feature for feature in manifest.get("required_features", [])
+    }
+    rejects = {reject["id"]: reject for reject in manifest.get("deterministic_rejects", [])}
+    future_ids = {entry.get("id") for entry in manifest.get("future_phase_extension_points", [])}
+
+    if "p12_dynamic_vpm_coords_mixed" in future_ids:
+        fail("P12 lock must promote p12_dynamic_vpm_coords_mixed out of future extension points")
+    if "p13_final_surface_lock" not in future_ids:
+        fail("P12 lock expected P13 final surface lock to remain the next future extension")
+
+    missing_mixed = sorted(P12_REQUIRED_MIXED_FIXTURES - fixtures.keys())
+    if missing_mixed:
+        fail("P12 lock missing mixed dynamic coordinate fixtures: " + ", ".join(missing_mixed))
+    planned_mixed = sorted(
+        name
+        for name in P12_REQUIRED_MIXED_FIXTURES
+        if fixtures[name].get("status") != "implemented"
+    )
+    if planned_mixed:
+        fail("P12 lock found non-implemented mixed dynamic coordinate fixtures: " + ", ".join(planned_mixed))
+
+    missing_features = sorted(P12_REQUIRED_MIXED_FEATURES - manifest_features.keys())
+    if missing_features:
+        fail("P12 lock missing manifest features: " + ", ".join(missing_features))
+    for feature_id in sorted(P12_REQUIRED_MIXED_FEATURES):
+        if manifest_features[feature_id].get("status") != "implemented":
+            fail(f"P12 lock manifest feature is not implemented: {feature_id}")
+    if "p12_dynamic_coordinate_selector_rejects" not in rejects:
+        fail("P12 lock missing dynamic coordinate deterministic reject manifest entry")
+
+    vc4kernel_run_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    missing_isolated = sorted(
+        name
+        for name in P12_REQUIRED_ISOLATED_FIXTURES
+        if not (vc4kernel_run_root / name / "input.mlir").is_file()
+        or not (vc4kernel_run_root / name / "expected.json").is_file()
+    )
+    if missing_isolated:
+        fail("P12 lock missing isolated dynamic coordinate fixtures: " + ", ".join(missing_isolated))
+
+    expected_fixture_metadata = {
+        "vpm_qpu_dynamic_subword_selector_vc4kernel": [
+            "saw_dynamic_vpm_row",
+            "saw_dynamic_vpm_x",
+            "saw_dynamic_subword_selector",
+            "saw_horizontal_subword",
+            "saw_vertical_subword",
+            "saw_vpm_qpu_read_write",
+            "saw_vdw_preserve",
+        ],
+        "vdr_dynamic_vpm_dest_x_selector_probe_vc4kernel": [
+            "saw_vdr_dynamic_vpm_row",
+            "saw_vdr_dynamic_vpm_x",
+            "saw_vdr_dynamic_subword_selector",
+            "saw_horizontal_w32",
+            "saw_vertical_w32",
+            "saw_horizontal_subword",
+            "saw_vertical_subword",
+            "no_tmu_to_vpm",
+        ],
+        "vdw_dynamic_vpm_source_x_selector_probe_vc4kernel": [
+            "saw_vdw_dynamic_vpm_row",
+            "saw_vdw_dynamic_vpm_x",
+            "saw_vdw_dynamic_subword_selector",
+            "saw_horizontal_w32",
+            "saw_vertical_w32",
+            "saw_horizontal_subword",
+            "saw_vertical_subword",
+            "no_tmu_to_vpm",
+        ],
+        "vdr_vdw_dynamic_x_selector_roundtrip_vc4kernel": [
+            "saw_vdr_dynamic_subword_selector",
+            "saw_vdw_dynamic_vpm_row",
+            "saw_vdw_dynamic_vpm_x",
+            "saw_vdw_dynamic_subword_selector",
+            "saw_horizontal_subword",
+            "saw_vertical_subword",
+            "no_tmu_to_vpm",
+        ],
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel": [
+            "saw_dynamic_vpm_pingpong",
+            "saw_dynamic_vpm_row",
+            "saw_dynamic_vpm_x",
+            "saw_dynamic_subword_selector",
+            "saw_vdr_dynamic_subword_selector",
+            "saw_vdw_dynamic_subword_selector",
+            "saw_runtime_loop",
+            "saw_vdw_preserve",
+            "no_tmu_to_vpm",
+        ],
+        "dynamic_vpm_double_buffered_subword_compute_vc4kernel": [
+            "saw_vdr_dynamic_subword_selector",
+            "saw_dynamic_vpm_row",
+            "saw_dynamic_vpm_x",
+            "saw_dynamic_subword_selector",
+            "saw_vpm_qpu_dynamic_selector_read",
+            "saw_fragment_unpack",
+            "saw_cmp_select",
+            "saw_fragment_reduce",
+            "saw_vdw_dynamic_subword_selector",
+            "no_tmu_to_vpm",
+        ],
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel": [
+            "saw_spill_frame_nonzero",
+            "saw_dynamic_vpm_row",
+            "saw_dynamic_vpm_x",
+            "saw_dynamic_subword_selector",
+            "saw_vdr_dynamic_subword_selector",
+            "saw_vdw_dynamic_subword_selector",
+            "hidden_spill_reload_tmu_hits",
+            "no_tmu_to_vpm",
+        ],
+    }
+    for name, metadata in expected_fixture_metadata.items():
+        expected_path = vc4kernel_run_root / name / "expected.json"
+        expected = json.loads(read_text(expected_path))
+        required = expected.get("required", {})
+        for key in metadata:
+            if key not in required:
+                fail(f"P12 lock fixture {name} expected.json missing metadata {key}")
+        for key in ["total_mismatches", "sentinel_mismatches", "launch_failures"]:
+            if required.get(key) != 0:
+                fail(f"P12 lock fixture {name} expected {key}=0")
+
+    for name in sorted(P12_REQUIRED_MIXED_FIXTURES):
+        fixture_dir = repo_root / fixtures[name]["path"]
+        input_text = read_text(fixture_dir / "input.mlir")
+        expected = json.loads(read_text(fixture_dir / "expected.json"))
+        required = expected.get("required", {})
+        if "vc4kernel.kernel" not in input_text:
+            fail(f"P12 lock mixed fixture lacks vc4kernel.kernel: {name}")
+        for prefix in PRODUCER_OR_LOWER_HALF_OP_PREFIXES:
+            if prefix in input_text:
+                fail(f"P12 lock mixed VC4Kernel fixture {name} contains {prefix}")
+        for token in [
+            "dynamic_subword_selector",
+            "#vc4kernel.memory_path<vdr_global_to_vpm>",
+            "#vc4kernel.memory_path<vdw_global_store>",
+            "#vc4kernel.inactive_store<preserve>",
+        ]:
+            if token not in input_text:
+                fail(f"P12 lock mixed fixture {name} missing token {token}")
+        for key in fixtures[name]["required_result_fields"]:
+            if key not in required and key != "status":
+                fail(f"P12 lock mixed fixture {name} expected.json missing required field {key}")
+
+    negative_paths = [repo_root / path for path in sorted(P12_REQUIRED_NEGATIVE_TESTS)]
+    for path in negative_paths:
+        if not path.is_file():
+            fail(f"P12 lock missing negative test: {rel(path, repo_root)}")
+    negative_text = "\n".join(read_text(path) for path in negative_paths)
+    for token in [
+        "horizontal VPM QPU access does not encode a word x coordinate",
+        "requires an i32 VPM x-coordinate operand",
+        "requires an i32 VPM DMA dynamic subword selector operand",
+        "32-bit VPM QPU access must not specify a dynamic subword selector",
+        "32-bit VDR DMA must not specify a dynamic subword selector",
+        "32-bit VDW DMA must not specify a dynamic subword selector",
+        "VDR DMA laned subword mode is not supported by VC4 hardware",
+        "sparse VDW store masks are not supported in P8",
+        "vector dialect operations are forbidden",
+        "subword_selector must be in range [0, 3]",
+    ]:
+        if token not in negative_text:
+            fail(f"P12 lock negative tests missing diagnostic/token: {token}")
+
+    docs = "\n".join(
+        read_text(repo_root / path)
+        for path in [
+            P8_5_MIXED_POLICY_DOC,
+            Path("compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"),
+        ]
+    ).lower()
+    docs = re.sub(r"\s+", " ", docs)
+    for token in [
+        "word-x and subword selector are separate fields",
+        "dynamic selector is not dynamic subword mode",
+        "setup-field isolation, not modulo semantics",
+        "vdr and vdw are asymmetric",
+        "no hardware-backed dynamic coordinate or selector mode remains deferred in p12",
+        "p12 mixed fixtures",
+    ]:
+        if token not in docs:
+            fail(f"P12 lock expected docs to contain: {token}")
+
+    counts.update(
+        {
+            "p12_matrix_features": 2,
+            "p12_isolated_fixture_retention_checks": len(P12_REQUIRED_ISOLATED_FIXTURES),
+            "p12_mixed_fixtures": len(P12_REQUIRED_MIXED_FIXTURES),
+            "p12_manifest_features": len(P12_REQUIRED_MIXED_FEATURES),
+            "p12_negative_tests": len(P12_REQUIRED_NEGATIVE_TESTS),
+            "p12_future_manifest_features": 1,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -3669,6 +3945,7 @@ def main(argv):
         "p9-pack-unpack-subword-lock",
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
+        "p12-dynamic-vpm-coord-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -3689,10 +3966,11 @@ def main(argv):
         "p5-scalar-arith-lock",
         "p6-memory-policy-targeted",
         "p6-memory-policy-lock",
-        "p8-vdw-store-policy-lock",
-        "p8-5-mixed-acceptance-lock",
-        "p9-pack-unpack-subword-lock",
-        "p11-dynamic-rotate-shuffle-lock",
+            "p8-vdw-store-policy-lock",
+            "p8-5-mixed-acceptance-lock",
+            "p9-pack-unpack-subword-lock",
+            "p11-dynamic-rotate-shuffle-lock",
+            "p12-dynamic-vpm-coord-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -3722,6 +4000,7 @@ def main(argv):
             "p9-pack-unpack-subword-lock",
             "p10-sfu-fastmath-lock",
             "p11-dynamic-rotate-shuffle-lock",
+            "p12-dynamic-vpm-coord-lock",
         }
         else {}
     )
@@ -3785,6 +4064,11 @@ def main(argv):
         if args.mode == "p11-dynamic-rotate-shuffle-lock"
         else {}
     )
+    p12_lock_counts = (
+        audit_p12_dynamic_vpm_coord_lock(repo_root, matrix)
+        if args.mode == "p12-dynamic-vpm-coord-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -3829,6 +4113,8 @@ def main(argv):
         print(f"p10_sfu_fastmath_lock: {format_counts(p10_lock_counts)}")
     if p11_lock_counts:
         print(f"p11_dynamic_rotate_shuffle_lock: {format_counts(p11_lock_counts)}")
+    if p12_lock_counts:
+        print(f"p12_dynamic_vpm_coord_lock: {format_counts(p12_lock_counts)}")
     return 0
 
 

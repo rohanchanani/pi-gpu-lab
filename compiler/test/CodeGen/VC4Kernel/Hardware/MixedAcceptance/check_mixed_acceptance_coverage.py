@@ -54,6 +54,9 @@ REQUIRED_FIXTURES = {
     "mixed_sfu_norm_reduce_vpm_vc4kernel",
     "mixed_dynamic_rotate_reduction_scan_vc4kernel",
     "mixed_shuffle_vpm_tile_swizzle_vc4kernel",
+    "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+    "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+    "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -99,6 +102,14 @@ REQUIRED_FEATURES = {
     "p11_arbitrary_shuffle_reject",
     "p11_mixed_dynamic_rotate_reduction_scan",
     "p11_mixed_shuffle_vpm_tile_swizzle",
+    "p12_dynamic_vpm_qpu_coord_selector",
+    "p12_dynamic_vdr_coord_selector",
+    "p12_dynamic_vdw_coord_selector",
+    "p12_double_buffered_dynamic_vpm_tiles",
+    "p12_dynamic_coord_selector_rejects",
+    "p12_mixed_pingpong_coord_selector_loop",
+    "p12_mixed_double_buffered_subword_compute",
+    "p12_mixed_coord_selector_forced_spill",
 }
 
 REQUIRED_REJECTS = {
@@ -111,10 +122,10 @@ REQUIRED_REJECTS = {
     "forbidden_producer_dialect_reject",
     "p9_subword_unsupported_mode_rejects",
     "p10_sfu_fastmath_policy_rejects",
+    "p12_dynamic_coordinate_selector_rejects",
 }
 
 FUTURE_EXTENSION_IDS = {
-    "p12_dynamic_vpm_coords_mixed",
     "p13_final_surface_lock",
 }
 
@@ -135,7 +146,7 @@ FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
     "stablehlo.",
     "mhlo.",
 )
-FUTURE_PHASE_TAG_PREFIXES = ("p12_",)
+FUTURE_PHASE_TAG_PREFIXES = ("p13_",)
 
 
 def fail(message):

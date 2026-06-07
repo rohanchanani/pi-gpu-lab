@@ -307,8 +307,10 @@ P11 dynamic rotate/shuffle:
 
 P12 dynamic VPM/VDR/VDW coordinates:
   admit dynamic coordinates/pitch only where lower-half and hardware proof exists.
-  Deterministic rejects must state whether the reason is hardware-forbidden,
-  VC4Kernel static-surface policy, or unproven/deferred for P12.
+  P12 locks every hardware-backed dynamic coordinate and selector mode proven by
+  VPM QPU, VDR, and VDW hardware fixtures. Deterministic rejects must state
+  whether the reason is hardware-forbidden, VC4Kernel static-surface policy,
+  not meaningful, or unencodable without a proven fallback.
 
 P13 final matrix:
   lock each feature to verifier, VC4KernelToSSAVC4, lower-half, and hardware or deterministic-reject proof.
@@ -1551,22 +1553,21 @@ width = w16, subword_mode = packed | laned
 width = w8,  subword_mode = packed | laned
 ```
 
-After P9e, VDR/VDW DMA accepts:
+After P12, VDR/VDW DMA accepts:
 
 ```text
 width = w32, subword_mode = none
-width = w16, subword_mode = packed, orientation = horizontal
-width = w8,  subword_mode = packed, orientation = horizontal
+width = w16, subword_mode = packed, orientation = horizontal | vertical
+width = w8,  subword_mode = packed, orientation = horizontal | vertical
 ```
 
 VDR/VDW DMA does not accept `laned`; the VC4 DMA setup has its own MODEW
 width/offset fields and VDW writes LANED as zero. In 32-bit mode, the hardware
 ignores the laned bit, so executable 32-bit ops must require `subword_mode =
 none`. Sub-32 QPU VPM ops must use `packed` or `laned`; sub-32 DMA ops must use
-`packed` and horizontal orientation. `none` has no accepted P9 meaning for
-w8/w16 movement. Vertical subword VDR/VDW DMA deterministic-rejects as
-unproven/deferred for P12 unless a later byte/halfword oracle proves it; the
-horizontal path is the hardware-proven subword DMA surface.
+`packed`. `none` has no accepted P9/P12 meaning for w8/w16 movement. Vertical
+subword VDR/VDW DMA is accepted in P12 for the hardware-proven packed modes;
+no hardware-backed dynamic coordinate or selector mode remains deferred in P12.
 
 For DMA, `elem_bytes` must match width exactly:
 
@@ -1579,7 +1580,11 @@ w32 -> 4
 VDR encodes subword width and byte/halfword selector through MODEW in the
 VPMVCD read setup. VDW encodes subword width and byte/halfword selector through
 MODEW in the VDW setup word and continues to translate high-level row pitch to
-the 13-bit hardware byte-gap STRIDE field. The compiler must reject
+the 13-bit hardware byte-gap STRIDE field. VDR and VDW are asymmetric; their
+setup construction must remain separate even when the accepted selector ranges
+match. Word-X and subword selector are separate fields. Dynamic selector is not
+dynamic subword mode, and dynamic field masks are setup-field isolation, not
+modulo semantics. The compiler must reject
 unencodable combinations instead of widening, masking, or silently changing the
 mode. For horizontal packed subword movement, logical VPM row coordinates are
 translated through the architecture-defined byte/halfword address fields so the
@@ -1950,14 +1955,24 @@ The architecture-backed dynamic rectangular contract is:
 
 P12 dynamic coordinate rejects are classified precisely:
 
-- Hardware-forbidden: VDW DMA laned modes and unencodable VDW sparse stores.
-- VC4Kernel static-surface policy: dynamic orientation, width, subword, memory path, and vector coordinate operands.
-- Unproven/deferred for P12: vertical subword DMA and subword dynamic byte/halfword selector modes unless P12 adds explicit oracle fixtures.
+- Hardware-forbidden: DMA laned modes and VDW sparse/scatter stores.
+- VC4Kernel static-surface policy: dynamic orientation, width, subword, and memory path attrs.
+- Hardware/source-surface forbidden: vector or lane-varying coordinate operands, because setup words use vector element 0.
+- Not meaningful: horizontal w32 generic VPM QPU dynamic word-X, because that setup encodes Y only.
+- Static range reject: out-of-range row, word-X, or selector constants.
+- Unencodable without fallback: VPITCH/stride cases that cannot be represented and have no explicit hardware-proven fallback.
 
 Horizontal w32 generic VPM QPU read/write encodes Y only, so dynamic QPU X is
 not a meaningful accepted surface for that mode. Vertical w32 VPM QPU dynamic X
 and horizontal/vertical w32 VDR/VDW dynamic X are P12 proof scope because the
 relevant setup fields encode X/Y coordinates.
+
+No hardware-backed dynamic coordinate or selector mode remains deferred in P12.
+Horizontal w8/w16 QPU VPM accepts dynamic row plus dynamic subword selector;
+vertical w8/w16 QPU VPM accepts dynamic row, word-X, and subword selector.
+Horizontal and vertical w8/w16 packed VDR/VDW DMA accepts dynamic row, word-X,
+and subword selector. W16 selector range is `[0, 1]`; w8 selector range is
+`[0, 3]`; word-X range is `[0, 15]`; w32 has no subword selector.
 
 The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature. Active rows and columns are runtime scalar `i32` values. Memory pitch/stride in bytes is a runtime scalar `i32` value.
 

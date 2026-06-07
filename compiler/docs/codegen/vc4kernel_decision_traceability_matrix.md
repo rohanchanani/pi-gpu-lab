@@ -33,7 +33,7 @@
 | P9 | pack/unpack/subword | planned | Pack/unpack and sub-32 VPM modes with executable rejects until proven. |
 | P10 | SFU/fastmath | mixed coverage implemented pending final acceptance | Explicit fastmath/approx contract for SFU-derived math. |
 | P11 | dynamic rotate/shuffle | planned | Dynamic rotate/shuffle only if hardware-proven. |
-| P12 | dynamic VPM/VDR/VDW coordinates | planned | Dynamic coordinates/pitch/stride only where proven. |
+| P12 | dynamic VPM/VDR/VDW coordinates | hardware-proven pending final lock | Dynamic VPM/VDR/VDW row, word-X, and byte/halfword selector modes only where proven; no hardware-backed coordinate/selector mode remains deferred. |
 | P13 | final support matrix/pre-vector lock | planned | Close feature matrix before vector/pre-Triton work. |
 | Deferred | arbitrary sparse VDW stores | deferred | No silent decomposition before a later hardware-proven phase. |
 
@@ -56,7 +56,7 @@
 | SFU/fastmath | mixed coverage implemented pending final acceptance | P10 explicit fastmath/approx opt-in; default exact/conservative. | Verifier/policy attrs, conversion tests, raw and latency hardware proof, deterministic rejects, plus P10 mixed activation and norm/reduce fixtures; no untested NaN/Inf/signed-zero promises. |
 | `sqrt` via `rsqrt` | deterministic reject in P10 | No exact/default sqrt SFU lowering; approximate composite sqrt requires a later explicit policy and proof. | Contract tests reject sqrt because the hardware map has recipsqrt but no distinct SFU sqrt write address. |
 | Dynamic rotate/shuffle | planned | P11 only if downstream and hardware proof exists. | Verifier/conversion/hardware proof. |
-| Dynamic VPM/VDR/VDW coordinates | planned with accepted dynamic rect baseline | P12 admission only where range verification and lower-half proof exist. | Dynamic-coordinate verifier/lowering/hardware matrix. |
+| Dynamic VPM/VDR/VDW coordinates | hardware-proven pending final lock | P12 admits dynamic row, word-X, and subword selector only with scalar i32 operands, range checks, and lower-half proof. Word-X and subword selector are separate fields; dynamic selector is not dynamic subword mode; setup masks are not modulo semantics. | P12 QPU, VDR-only, VDW-only, combined roundtrip, double-buffered, and spill-pressure hardware fixtures plus deterministic-reject lit. |
 | Sparse VDW store | deferred deterministic reject | Must reject until a later hardware-proven phase; no silent RMW decomposition. | Deterministic-reject lit and static policy scans. |
 
 ---
