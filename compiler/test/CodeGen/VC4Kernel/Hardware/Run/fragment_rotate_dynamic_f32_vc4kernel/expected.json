@@ -1,0 +1,26 @@
+{
+  "name": "fragment_rotate_dynamic_f32_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "saw_dynamic_rotate": 1,
+    "saw_amount0": 1,
+    "saw_amount15": 1,
+    "saw_amount16_or_modulo": 1,
+    "saw_f32": 1,
+    "saw_tmu_safe_offset": 1,
+    "saw_f32_cmp_select": 1,
+    "saw_fragment_alu": 1,
+    "saw_vdw_preserve": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 5
+  },
+  "float_max": {
+    "max_abs_diff": 0.0
+  }
+}

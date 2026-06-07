@@ -1639,7 +1639,7 @@ formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
                                  int64_t selector) {
   // VC4 encodes horizontal vector rotates in the small-immediate field.
   // vc4asm spells fixed rotates as `register << amount` and the r5-selected
-  // rotate as `register >> r5`.  Full-width rotates require the MUL source to
+  // rotate as `register << r5`.  Full-width rotates require the MUL source to
   // be an accumulator r0-r3; the scheduled stream records that source through
   // the MUL mux operands even when the arithmetic result is consumed by the
   // ADD pipe as mux-b.
@@ -1656,7 +1656,7 @@ formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
 
   std::string source = "r" + std::to_string(*accumulator);
   if (selector == 48)
-    return source + " >> r5";
+    return source + " << r5";
   return source + " << " + std::to_string(selector - 48);
 }
 
@@ -1672,7 +1672,7 @@ formatAccumulatorVectorRotateSource(mlir::vc4::QPUMux sourceMux,
 
   std::string source = "r" + std::to_string(*accumulator);
   if (selector == 48)
-    return source + " >> r5";
+    return source + " << r5";
   return source + " << " + std::to_string(selector - 48);
 }
 
@@ -1882,7 +1882,7 @@ static LogicalResult emitVectorRotatePrepBundle(mlir::vc4::QPUBundleOp spacer,
   // symbolic branch labels.
   os << "mov r" << *destination << ", r" << *source;
   if (*selector == 48)
-    os << " >> r5";
+    os << " << r5";
   else
     os << " << " << (*selector - 48);
   os << "\n";

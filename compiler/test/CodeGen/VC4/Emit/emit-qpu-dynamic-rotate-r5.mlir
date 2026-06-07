@@ -1,0 +1,92 @@
+// RUN: rm -rf %t.bundle
+// RUN: vc4-codegen %s --emit-bundle %t.bundle
+// RUN: test -f %t.bundle/kernels/qpu_dynamic_rotate_r5.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_dynamic_rotate_r5.qasm
+
+// QASM: mov ra6, r2 << r5
+// QASM-NEXT: thrend
+// QASM-NEXT: nop
+// QASM-NEXT: nop
+vc4.module @qpu_dynamic_rotate_r5 {
+  vc4.func @qpu_dynamic_rotate_r5_kernel() attributes {
+    domain = #vc4.execution_domain<qpu>,
+    form = #vc4.function_form<scheduled>,
+    kernel,
+    threading = #vc4.threading_mode<single>,
+    "vc4.launch_abi" = {
+      public_name = "qpu_dynamic_rotate_r5",
+      tail_policy = "exact_multiple",
+      uniform_words_per_qpu = 2 : i32,
+      args = [],
+      builtins = [
+        {name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "uniform_suffix", uniform_index = 0 : i32},
+        {name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "uniform_suffix", uniform_index = 1 : i32}
+      ]
+    }
+  } {
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<small_imm>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 6 : i32,
+      waddr_mul = 32 : i32,
+      op_add = #vc4.add_opcode<or>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      small_imm = 48 : i32,
+      add_a = #vc4.qpu_mux<r2>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r2>,
+      mul_b = #vc4.qpu_mux<r2>
+    }
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<thrend>,
+      pm = false,
+      cond_add = #vc4.cond<always>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 33 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<never>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 33 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+    vc4.qpu.bundle {
+      sig = #vc4.qpu_signal<none>,
+      pm = false,
+      cond_add = #vc4.cond<never>,
+      cond_mul = #vc4.cond<never>,
+      waddr_add = 32 : i32,
+      waddr_mul = 33 : i32,
+      op_add = #vc4.add_opcode<nop>,
+      op_mul = #vc4.mul_opcode<nop>,
+      raddr_a = 0 : i32,
+      raddr_b = 1 : i32,
+      add_a = #vc4.qpu_mux<a>,
+      add_b = #vc4.qpu_mux<b>,
+      mul_a = #vc4.qpu_mux<r0>,
+      mul_b = #vc4.qpu_mux<r1>
+    }
+  }
+}

@@ -2,8 +2,15 @@
 
 // CHECK-LABEL: vc4.module @dynamic_rotate_branch_layout
 // CHECK: vc4.qpu.branch attributes {cond = #vc4.branch_cond<any_z_set>
-// CHECK: op_add = #vc4.add_opcode<and>
+// CHECK: op_add = #vc4.add_opcode<xor>
 // CHECK-SAME: small_imm = 15 : i32
+// CHECK-SAME: waddr_add = 34 : i32
+// CHECK-NEXT: vc4.qpu.bundle
+// CHECK-SAME: cond_add = #vc4.cond<never>
+// CHECK-SAME: op_add = #vc4.add_opcode<nop>
+// CHECK-NEXT: vc4.qpu.bundle
+// CHECK-SAME: op_add = #vc4.add_opcode<add>
+// CHECK-SAME: small_imm = 1 : i32
 // CHECK-SAME: waddr_add = 37 : i32
 // CHECK-NEXT: vc4.qpu.bundle
 // CHECK-SAME: cond_add = #vc4.cond<never>

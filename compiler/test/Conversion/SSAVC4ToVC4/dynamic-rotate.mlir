@@ -1,9 +1,17 @@
 // RUN: vc4-opt %s --convert-ssavc4-to-vc4 --vc4-verify-scheduled-hardware-rules | FileCheck %s
 
 // CHECK-LABEL: vc4.module @dynamic_rotate_lowering
-// CHECK: op_add = #vc4.add_opcode<and>
+// CHECK: op_add = #vc4.add_opcode<xor>
 // CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
 // CHECK-SAME: small_imm = 15 : i32
+// CHECK-SAME: waddr_add = 34 : i32
+// CHECK-NEXT: vc4.qpu.bundle
+// CHECK-SAME: cond_add = #vc4.cond<never>
+// CHECK-SAME: op_add = #vc4.add_opcode<nop>
+// CHECK-NEXT: vc4.qpu.bundle
+// CHECK-SAME: op_add = #vc4.add_opcode<add>
+// CHECK-SAME: sig = #vc4.qpu_signal<small_imm>
+// CHECK-SAME: small_imm = 1 : i32
 // CHECK-SAME: waddr_add = 37 : i32
 // CHECK-NEXT: vc4.qpu.bundle
 // CHECK-SAME: cond_add = #vc4.cond<never>

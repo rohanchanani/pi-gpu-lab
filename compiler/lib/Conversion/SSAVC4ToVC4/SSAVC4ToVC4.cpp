@@ -3555,16 +3555,28 @@ static LogicalResult emitRotate(OpBuilder &builder,
     return source->emitOpError()
            << "dynamic rotate amount is not available in a QPU register";
 
-  // Dynamic rotate uses r5 element 0 bits [3:0].  Mask the scalar amount to
-  // make the VC4Kernel/SSAVC4 modulo-16 contract explicit before writing r5.
+  // Dynamic selector 48 uses r5 element 0 bits [3:0] with the opposite
+  // direction from the public/static small-immediate convention. Materialize
+  // (-amount) & 15 in r5 so static and dynamic fragment_rotate share one
+  // modulo-16 direction contract.
   createScheduledBundle(
       builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
       mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-      /*waddrAdd=*/37, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_xor,
       mlir::vc4::MulOpcode::nop, *amountReg,
       /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
       /*smallImm=*/15);
+  createNopBundle(builder, source->getLoc());
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+      /*waddrAdd=*/37, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/1);
   createNopBundle(builder, source->getLoc());
   createScheduledBundle(
       builder, source->getLoc(), mlir::vc4::QPUSignal::none,
