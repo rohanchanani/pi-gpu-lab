@@ -662,14 +662,9 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
       llvm::dyn_cast_if_present<VPMSubwordAttr>(op->getAttr("subword"));
   if (!subword)
     return op->emitOpError("subword attribute is required");
-  if (!qpuSubwordModes && !dmaSubwordModes) {
-    if (width.getValue() != VPMWidth::w32)
-      return op->emitOpError(
-          "sub-32 VPM width is not executable in vc4kernel v1");
-    if (subword.getValue() != VPMSubword::none)
-      return op->emitOpError(
-          "packed/laned VPM subword modes are not executable in vc4kernel v1");
-  }
+  if (!qpuSubwordModes && !dmaSubwordModes)
+    return op->emitOpError(
+        "internal verifier error: VPM executable mode role is not specified");
   if (dmaSubwordModes) {
     if (width.getValue() == VPMWidth::w32 &&
         subword.getValue() != VPMSubword::none)

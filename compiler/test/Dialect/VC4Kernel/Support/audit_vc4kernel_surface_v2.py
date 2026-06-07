@@ -2756,6 +2756,12 @@ def audit_p9_pack_unpack_subword_lock(repo_root, matrix):
     )
     if "fragment_pack" not in source_text or "fragment_unpack" not in source_text:
         fail("P9 lock expected fragment_pack and fragment_unpack in active source")
+    for stale_diag in [
+        "sub-32 VPM width is not executable in vc4kernel v1",
+        "packed/laned VPM subword modes are not executable in vc4kernel v1",
+    ]:
+        if stale_diag in source_text:
+            fail(f"P9 lock found stale blanket subword diagnostic: {stale_diag}")
 
     invalid_paths = [
         repo_root / "compiler/test/Dialect/VC4Kernel/invalid-fragment-pack-unpack.mlir",
