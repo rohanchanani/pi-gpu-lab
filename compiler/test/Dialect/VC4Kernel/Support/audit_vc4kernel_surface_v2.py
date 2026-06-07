@@ -201,6 +201,7 @@ P3_POST_PHASE_STAGED_STATUSES = {
     "p11_fragment_rotate_dynamic_if_hardware": {
         "implemented_pending_hardware",
         "hardware_proven_pending_pressure_policy",
+        "hardware_proven_pending_policy_lock",
     },
 }
 
@@ -438,6 +439,7 @@ P5_POST_PHASE_STAGED_STATUSES = {
     "p11_fragment_rotate_dynamic_if_hardware": {
         "implemented_pending_hardware",
         "hardware_proven_pending_pressure_policy",
+        "hardware_proven_pending_policy_lock",
     },
 }
 
