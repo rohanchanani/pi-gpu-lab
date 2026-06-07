@@ -3967,7 +3967,12 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
     stale_future = sorted(P11_REQUIRED_MIXED_FEATURES & future_ids)
     if stale_future or "p11_dynamic_rotate_mixed" in future_ids:
         fail("P11 lock must promote P11 mixed features out of future extension points")
-    missing_future = sorted(P11_NEXT_FUTURE_FEATURES - future_ids)
+    implemented_p13_final = (
+        manifest_features.get("p13_final_surface_lock", {}).get("status")
+        == "implemented"
+    )
+    expected_future_ids = set() if implemented_p13_final else P11_NEXT_FUTURE_FEATURES
+    missing_future = sorted(expected_future_ids - future_ids)
     if missing_future:
         fail("P11 lock missing future manifest extension entries: " + ", ".join(missing_future))
 
@@ -4139,7 +4144,11 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
 
     if "p12_dynamic_vpm_coords_mixed" in future_ids:
         fail("P12 lock must promote p12_dynamic_vpm_coords_mixed out of future extension points")
-    if "p13_final_surface_lock" not in future_ids:
+    implemented_p13_final = (
+        manifest_features.get("p13_final_surface_lock", {}).get("status")
+        == "implemented"
+    )
+    if "p13_final_surface_lock" not in future_ids and not implemented_p13_final:
         fail("P12 lock expected P13 final surface lock to remain the next future extension")
 
     missing_mixed = sorted(P12_REQUIRED_MIXED_FIXTURES - fixtures.keys())

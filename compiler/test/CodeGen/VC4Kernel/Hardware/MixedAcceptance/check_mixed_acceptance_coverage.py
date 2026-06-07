@@ -60,6 +60,10 @@ REQUIRED_FIXTURES = {
     "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
     "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
     "mixed_double_buffered_vpm_tiles_vc4kernel",
+    "mixed_surface_lock_elementwise_full_vc4kernel",
+    "mixed_surface_lock_vpm_pipeline_full_vc4kernel",
+    "mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel",
+    "mixed_surface_lock_cooperative_barrier_full_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -124,6 +128,12 @@ REQUIRED_FEATURES = {
     "p12_unsupported_coord_rejects",
     "p12_mixed_dynamic_vpm_coordinates_rect_loop",
     "p12_mixed_double_buffered_vpm_tiles",
+    "p13_final_surface_elementwise_full",
+    "p13_final_surface_vpm_pipeline_full",
+    "p13_final_surface_dynamic_pingpong_qpu_compute",
+    "p13_final_surface_cooperative_full",
+    "p13_final_surface_mixed_acceptance",
+    "p13_final_surface_lock",
 }
 
 REQUIRED_REJECTS = {
@@ -139,9 +149,7 @@ REQUIRED_REJECTS = {
     "p12_dynamic_coordinate_selector_rejects",
 }
 
-FUTURE_EXTENSION_IDS = {
-    "p13_final_surface_lock",
-}
+FUTURE_EXTENSION_IDS = set()
 
 AMBIGUOUS_TOKENS = ("TODO", "TBD", "unknown", "maybe", "??")
 FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
@@ -160,7 +168,7 @@ FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
     "stablehlo.",
     "mhlo.",
 )
-FUTURE_PHASE_TAG_PREFIXES = ("p13_",)
+FUTURE_PHASE_TAG_PREFIXES = ()
 
 
 def fail(message):
@@ -322,8 +330,8 @@ def validate_features(manifest, fixture_by_name, reject_by_id, mode):
 
 def validate_future_extensions(manifest):
     entries = manifest["future_phase_extension_points"]
-    if not isinstance(entries, list) or not entries:
-        fail("future_phase_extension_points must be a non-empty list")
+    if not isinstance(entries, list):
+        fail("future_phase_extension_points must be a list")
     seen = set()
     for entry in entries:
         require_dict(entry, "future extension")

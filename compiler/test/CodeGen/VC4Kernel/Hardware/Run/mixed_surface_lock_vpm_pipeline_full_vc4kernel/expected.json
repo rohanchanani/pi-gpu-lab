@@ -1,0 +1,26 @@
+{
+  "name": "mixed_surface_lock_vpm_pipeline_full_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdr_dynamic_coord_selector": 1,
+    "saw_vpm_qpu_dynamic_coord_selector": 1,
+    "saw_vdw_dynamic_coord_selector": 1,
+    "saw_subword_path": 1,
+    "saw_byte_halfword_guards": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_to_vpm": 1,
+    "no_sfu_reason": 1,
+    "saw_final_surface_mix": 1,
+    "saw_w32_path": 1,
+    "saw_fragment_alu": 1,
+    "saw_cmp_select": 1,
+    "saw_fragment_reduce": 1,
+    "saw_dynamic_rotate": 1,
+    "saw_iters0": 1,
+    "saw_iters4": 1
+  }
+}

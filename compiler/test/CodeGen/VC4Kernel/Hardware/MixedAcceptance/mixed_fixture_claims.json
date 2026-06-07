@@ -2839,6 +2839,646 @@
           "notes": "Claim is live only when the named fixture passes with checked output, sentinels, launch counts, and expected result metadata."
         }
       ]
+    },
+    {
+      "name": "mixed_surface_lock_elementwise_full_vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel",
+      "claims": [
+        {
+          "claim": "saw_amount0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_amount0 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_amount15",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_amount15 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_amount16_or_modulo",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_amount16_or_modulo is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_cmp_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_cmp_select is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_dynamic_rotate",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_dynamic_rotate is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_dynamic_subword_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_dynamic_subword_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The checked elementwise audit path uses dynamic subword selector syntax with selector value 0. Nonzero selector values are checked by mixed_surface_lock_vpm_pipeline_full_vc4kernel and P12 dynamic selector guard fixtures in the same mixed acceptance suite."
+        },
+        {
+          "claim": "saw_final_surface_mix",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_final_surface_mix is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_alu_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_alu_f32 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_alu_i32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_alu_i32 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_reduce",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_reduce is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_pack_unpack",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_pack_unpack is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_sfu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_sfu is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_tmu_safe_offset",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_tmu_safe_offset is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdw_preserve is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_elementwise_full_vc4kernel/candidate/mixed_surface_lock_elementwise_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        }
+      ]
+    },
+    {
+      "name": "mixed_surface_lock_vpm_pipeline_full_vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel",
+      "claims": [
+        {
+          "claim": "no_sfu_reason",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "no_sfu_reason is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "no_tmu_to_vpm",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "no_tmu_to_vpm is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_byte_halfword_guards",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_byte_halfword_guards is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_cmp_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_cmp_select is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_dynamic_rotate",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_dynamic_rotate is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_final_surface_mix",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_final_surface_mix is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_alu is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_reduce",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_reduce is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_iters0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_iters0 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_iters4",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_iters4 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_subword_path",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_subword_path is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdr_dynamic_coord_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdr_dynamic_coord_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdw_dynamic_coord_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdw_dynamic_coord_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdw_preserve is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vpm_qpu_dynamic_coord_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vpm_qpu_dynamic_coord_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_w32_path",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_w32_path is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_vpm_pipeline_full_vc4kernel/candidate/mixed_surface_lock_vpm_pipeline_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        }
+      ]
+    },
+    {
+      "name": "mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel",
+      "claims": [
+        {
+          "claim": "no_tmu_to_vpm",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "no_tmu_to_vpm is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_checked_qpu_readback",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_checked_qpu_readback is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_cmp_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_cmp_select is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_dynamic_rotate",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_dynamic_rotate is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_dynamic_vpm_pingpong",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_dynamic_vpm_pingpong is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_alu is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_fragment_reduce",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_fragment_reduce is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_iters0",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_iters0 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_iters4",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_iters4 is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_nonzero_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_nonzero_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_nonzero_x_or_phase_guard",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+              "mixed_double_buffered_vpm_tiles_vc4kernel",
+              "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel"
+            ]
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The live QPU readback is horizontal packed w16 and has dynamic selector but no horizontal word-X field. Nonzero X is checked by the named VDR/VDW dynamic coordinate guard fixtures in the same mixed acceptance run."
+        },
+        {
+          "claim": "saw_runtime_loop",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_runtime_loop is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdr_dynamic_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdr_dynamic_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdw_preserve is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vpm_qpu_dynamic_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vpm_qpu_dynamic_selector is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel/candidate/mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        }
+      ]
+    },
+    {
+      "name": "mixed_surface_lock_cooperative_barrier_full_vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel",
+      "claims": [
+        {
+          "claim": "saw_barrier",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_barrier is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_cooperative_warps",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_cooperative_warps is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_final_surface_mix",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_final_surface_mix is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_resource_metadata",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_resource_metadata is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vdw_preserve is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        },
+        {
+          "claim": "saw_vpm_qpu_read_write",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "saw_vpm_qpu_read_write is required in expected.json; the fixture harness checks output/sentinel buffers, launch counts, and result metadata before emitting PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_surface_lock_cooperative_barrier_full_vc4kernel/candidate/mixed_surface_lock_cooperative_barrier_full_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
+        }
+      ]
     }
   ]
 }

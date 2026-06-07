@@ -1,0 +1,25 @@
+{
+  "name": "mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_dynamic_vpm_pingpong": 1,
+    "saw_checked_qpu_readback": 1,
+    "saw_vdr_dynamic_selector": 1,
+    "saw_vpm_qpu_dynamic_selector": 1,
+    "saw_runtime_loop": 1,
+    "saw_iters0": 1,
+    "saw_iters4": 1,
+    "saw_vdw_preserve": 1,
+    "saw_nonzero_selector": 1,
+    "saw_nonzero_x_or_phase_guard": 1,
+    "no_tmu_to_vpm": 1,
+    "saw_fragment_alu": 1,
+    "saw_cmp_select": 1,
+    "saw_fragment_reduce": 1,
+    "saw_dynamic_rotate": 1
+  }
+}
