@@ -383,13 +383,14 @@ def VC4Kernel_VPMReadFragmentOp : VC4Kernel_Op<"vpm_read_fragment", [
 }
 
 def VC4Kernel_VDRLoadToVPMOp : VC4Kernel_Op<"vdr_load_to_vpm", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let arguments = (ins VC4Kernel_I32:$base,
                        VC4Kernel_I32:$byte_offset,
                        VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$dst_row,
                        Optional<VC4Kernel_I32>:$dst_x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        I32Attr:$rows,
                        I32Attr:$cols,
                        I32Attr:$global_stride_bytes,
@@ -398,15 +399,16 @@ def VC4Kernel_VDRLoadToVPMOp : VC4Kernel_Op<"vdr_load_to_vpm", [
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$dst_x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)?";
+  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)?";
   let hasVerifier = 1;
 }
 
 def VC4Kernel_VDRLoadRectToVPMOp : VC4Kernel_Op<"vdr_load_rect_to_vpm", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let arguments = (ins VC4Kernel_I32:$base,
                        VC4Kernel_I32:$byte_offset,
@@ -416,6 +418,7 @@ def VC4Kernel_VDRLoadRectToVPMOp : VC4Kernel_Op<"vdr_load_rect_to_vpm", [
                        VC4Kernel_I32:$active_cols,
                        VC4Kernel_I32:$memory_pitch_bytes,
                        Optional<VC4Kernel_I32>:$dst_x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        I32Attr:$max_rows,
                        I32Attr:$max_cols,
                        I32Attr:$elem_bytes,
@@ -423,10 +426,11 @@ def VC4Kernel_VDRLoadRectToVPMOp : VC4Kernel_Op<"vdr_load_rect_to_vpm", [
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$dst_x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
+  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
   let hasVerifier = 1;
 }
 

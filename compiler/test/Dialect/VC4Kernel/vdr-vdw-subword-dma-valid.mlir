@@ -20,11 +20,11 @@ module {
     // CHECK-SAME: elem_bytes = 1
     // CHECK-SAME: subword = #vc4kernel.vpm_subword<packed>
     // CHECK-SAME: width = #vc4kernel.vpm_width<w8>
-    vc4kernel.vdr_load_to_vpm %in, %c0, %tile, %c0 {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 3 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
+    vc4kernel.vdr_load_to_vpm %in, %c0, %tile, %c0 {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 3 : i32, subword_selector = 3 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
     // CHECK: vc4kernel.vdr_load_rect_to_vpm
     // CHECK-SAME: elem_bytes = 2
     // CHECK-SAME: width = #vc4kernel.vpm_width<w16>
-    vc4kernel.vdr_load_rect_to_vpm %in, %c0, %tile, %c0, %c1, %c8, %c16 {max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 1 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
+    vc4kernel.vdr_load_rect_to_vpm %in, %c0, %tile, %c0, %c1, %c8, %c16 {max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 1 : i32, subword_selector = 1 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
     // CHECK: vc4kernel.vdw_store_vpm_fragment
     // CHECK-SAME: elem_bytes = 2
     // CHECK-SAME: subword = #vc4kernel.vpm_subword<packed>

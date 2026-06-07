@@ -368,7 +368,7 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read", [
 
 
 
-def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
+def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load", [AttrSizedOperandSegments]> {
   let summary = "SSAVC4 effectful global-to-VPM load through VDR/VCD";
   let description = [{
     Starts and waits for a lower-half VideoCore IV VDR/VCD DMA load from a
@@ -383,6 +383,7 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
     AnyType:$address,
     AnyType:$vpm_base_row,
     Optional<AnyType>:$vpm_x_value,
+    Optional<AnyType>:$subword_selector_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
@@ -390,15 +391,16 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
     OptionalAttr<I32Attr>:$vpm_x,
+    OptionalAttr<I32Attr>:$subword_selector,
     I32Attr:$vpm_pitch,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_x` $vpm_x_value^)? attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_x` type($vpm_x_value)^)?";
+  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_x` $vpm_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_x` type($vpm_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)?";
   let hasVerifier = 1;
 }
 
 def SSAVC4_VDRLoadRectDynamicOp : SSAVC4_Op<"vdr.load_rect.dynamic", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let summary = "SSAVC4 dynamic rectangular global-to-VPM load";
   let description = [{
@@ -414,6 +416,7 @@ def SSAVC4_VDRLoadRectDynamicOp : SSAVC4_Op<"vdr.load_rect.dynamic", [
     AnyType:$active_cols,
     AnyType:$memory_pitch_bytes,
     Optional<AnyType>:$dst_x_value,
+    Optional<AnyType>:$subword_selector_value,
     I32Attr:$max_rows,
     I32Attr:$max_cols,
     I32Attr:$elem_bytes,
@@ -421,11 +424,12 @@ def SSAVC4_VDRLoadRectDynamicOp : SSAVC4_Op<"vdr.load_rect.dynamic", [
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
     OptionalAttr<I32Attr>:$dst_x,
+    OptionalAttr<I32Attr>:$subword_selector,
     I32Attr:$vpm_pitch,
     BoolAttr:$zero_fill,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_dst_x` $dst_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_dst_x` type($dst_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
+  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_dst_x` $dst_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_dst_x` type($dst_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
   let hasVerifier = 1;
 }
 

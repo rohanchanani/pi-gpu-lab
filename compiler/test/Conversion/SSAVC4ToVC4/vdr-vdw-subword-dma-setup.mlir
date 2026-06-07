@@ -48,8 +48,8 @@ ssavc4.module @subword_dma_setup {
     %row0 = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x1 = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %x3 = ssavc4.load_imm <splat32> {value = 3 : i32} : i32
-    ssavc4.vdr.load %addr, %row0 {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, vpm_x = 3 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32
-    ssavc4.vdr.load %addr, %row0 {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, row_len = 4 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, vpm_x = 1 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32
+    ssavc4.vdr.load %addr, %row0 {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, vpm_x = 3 : i32, subword_selector = 3 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32
+    ssavc4.vdr.load %addr, %row0 {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, row_len = 4 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, vpm_x = 1 : i32, subword_selector = 1 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32
     ssavc4.vdw.store_vpm %addr, %row0, %x1 {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, row_len = 8 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, active_lanes = 8 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, i32, i32
     ssavc4.vdw.store_vpm %addr, %row0, %x3 {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 2 : i32, memory_pitch_bytes = 16 : i32, active_lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, i32, i32
     ssavc4.thread_end

@@ -189,7 +189,9 @@ static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
                                                 VPMElemWidth width,
                                                 VPMSubword subword,
                                                 VPMOrientation orientation,
-                                                StringRef role) {
+                                                StringRef role,
+                                                bool allowVerticalSubword =
+                                                    false) {
   if (width == VPMElemWidth::w32 && subword != VPMSubword::none)
     return op->emitOpError() << "32-bit " << role
                              << " requires subword = #ssavc4.vpm_subword<none>";
@@ -200,7 +202,8 @@ static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
   if (width != VPMElemWidth::w32 && subword == VPMSubword::laned)
     return op->emitOpError()
            << role << " laned subword mode is not supported by VC4 hardware";
-  if (width != VPMElemWidth::w32 && orientation == VPMOrientation::vertical)
+  if (!allowVerticalSubword && width != VPMElemWidth::w32 &&
+      orientation == VPMOrientation::vertical)
     return op->emitOpError()
            << "vertical subword " << role
            << " is unproven/deferred in P12";
@@ -277,6 +280,36 @@ static LogicalResult verifyDynamicVPMSubwordSelectorOperand(
   return success();
 }
 
+static int64_t getDMASubwordSelectorMax(VPMElemWidth width) {
+  switch (width) {
+  case VPMElemWidth::w8:
+    return 3;
+  case VPMElemWidth::w16:
+    return 1;
+  case VPMElemWidth::w32:
+    return -1;
+  }
+  return -1;
+}
+
+static LogicalResult verifyDynamicVPMSelOperand(Operation *op, Value selector,
+                                                VPMElemWidth width,
+                                                StringRef role) {
+  if (!selector)
+    return success();
+  if (!selector.getType().isSignlessInteger(32))
+    return op->emitOpError()
+           << "requires an i32 " << role
+           << " dynamic subword selector operand";
+  int64_t maxSelector = getDMASubwordSelectorMax(width);
+  std::optional<int64_t> constant = getSplatI32Constant(selector);
+  if (constant && (*constant < 0 || *constant > maxSelector))
+    return op->emitOpError()
+           << role << " dynamic subword selector constant must be in range [0, "
+           << maxSelector << "]";
+  return success();
+}
+
 static LogicalResult verifyVPMQPUVerticalRowAlignment(Operation *op, Value row,
                                                       VPMOrientation orientation) {
   if (orientation != VPMOrientation::vertical)
@@ -349,7 +382,10 @@ static LogicalResult verifyVPMQPUCoordinates(Operation *op, VPMElemWidth width,
 static LogicalResult verifyVPMDMACoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
                                              IntegerAttr xAttr, Value xValue,
-                                             int64_t stride) {
+                                             IntegerAttr selectorAttr,
+                                             Value selectorValue,
+                                             int64_t stride,
+                                             bool explicitSelector = true) {
   if (xAttr && xValue)
     return op->emitOpError(
         "specify either static x or dynamic x operand, not both");
@@ -357,22 +393,49 @@ static LogicalResult verifyVPMDMACoordinates(Operation *op, VPMElemWidth width,
     return op->emitOpError("requires static x attr or dynamic x operand");
   if (failed(verifyDynamicVPMXOperand(op, xValue, "VPM DMA dynamic x")))
     return failure();
-  if (xValue) {
-    if (width != VPMElemWidth::w32)
-      return op->emitOpError(
-          "dynamic subword VPM DMA x selectors are unproven/deferred in P12");
-  } else {
+  if (!xValue) {
     int64_t x = xAttr.getInt();
     if (x < 0 || x > 15)
       return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-    if (orientation == VPMOrientation::horizontal &&
+    if (!explicitSelector && orientation == VPMOrientation::horizontal &&
         width == VPMElemWidth::w16 && x > 1)
       return op->emitOpError("horizontal 16-bit VPM DMA access requires "
                              "halfword selector x in range [0, 1]");
-    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
-        x > 3)
+    if (!explicitSelector && orientation == VPMOrientation::horizontal &&
+        width == VPMElemWidth::w8 && x > 3)
       return op->emitOpError("horizontal 8-bit VPM DMA access requires byte "
                              "selector x in range [0, 3]");
+  }
+  if (!explicitSelector) {
+    if (xValue && width != VPMElemWidth::w32)
+      return op->emitOpError(
+          "dynamic subword VPM DMA x selectors are unproven/deferred in P12");
+    if (selectorAttr || selectorValue)
+      return op->emitOpError(
+          "subword_selector is not supported for this VPM DMA op yet");
+    if (stride <= 0)
+      return op->emitOpError("requires positive VPM stride");
+    return success();
+  }
+  bool needsSelector = width != VPMElemWidth::w32;
+  if (!needsSelector && selectorValue)
+    return op->emitOpError(
+        "32-bit VPM DMA must not specify a dynamic subword selector");
+  if (!needsSelector && selectorAttr)
+    return op->emitOpError("32-bit VPM DMA must not specify subword_selector");
+  if (needsSelector && selectorAttr && selectorValue)
+    return op->emitOpError("specify either static subword_selector or dynamic "
+                           "subword selector operand, not both");
+  if (needsSelector && !selectorAttr && !selectorValue)
+    return op->emitOpError("requires subword_selector attr or dynamic subword "
+                           "selector operand");
+  if (failed(verifyDynamicVPMSelOperand(op, selectorValue, width, "VPM DMA")))
+    return failure();
+  if (selectorAttr) {
+    int64_t maxSelector = getDMASubwordSelectorMax(width);
+    if (selectorAttr.getInt() < 0 || selectorAttr.getInt() > maxSelector)
+      return op->emitOpError()
+             << "subword_selector must be in range [0, " << maxSelector << "]";
   }
   if (stride <= 0)
     return op->emitOpError("requires positive VPM stride");
@@ -887,8 +950,9 @@ LogicalResult VDRLoadOp::verify() {
   if (!getVpmBaseRow().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM base row operand");
 
-  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(), "VDR DMA")))
+  if (failed(verifyExecutableVPMDMAMode(
+          op, getWidth(), getSubword(), getOrientation(), "VDR DMA",
+          /*allowVerticalSubword=*/true)))
     return failure();
   int64_t elemBytes = *getVPMElemBytes(getWidth());
 
@@ -912,7 +976,8 @@ LogicalResult VDRLoadOp::verify() {
     return emitOpError("requires vpm_pitch in range [1, 16]");
   if (failed(verifyVPMDMACoordinates(
           op, getWidth(), getOrientation(), getVpmXAttr(),
-          getOptionalOperandByCount(getOperation(), 2, 2), vpmPitch)))
+          getVpmXValue(), getSubwordSelectorAttr(),
+          getSubwordSelectorValue(), vpmPitch)))
     return failure();
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
@@ -938,12 +1003,14 @@ LogicalResult VDRLoadRectDynamicOp::verify() {
     return failure();
   if (!getZeroFill())
     return emitOpError("requires zero_fill = true");
-  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(), "VDR DMA")))
+  if (failed(verifyExecutableVPMDMAMode(
+          op, getWidth(), getSubword(), getOrientation(), "VDR DMA",
+          /*allowVerticalSubword=*/true)))
     return failure();
   if (failed(verifyVPMDMACoordinates(
           op, getWidth(), getOrientation(), getDstXAttr(),
-          getOptionalOperandByCount(getOperation(), 5, 5), getVpmPitch())))
+          getDstXValue(), getSubwordSelectorAttr(),
+          getSubwordSelectorValue(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
@@ -1015,7 +1082,8 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
     return failure();
   if (failed(verifyVPMDMACoordinates(
           op, getWidth(), getOrientation(), getSrcXAttr(),
-          getOptionalOperandByCount(getOperation(), 5, 5), getVpmPitch())))
+          getOptionalOperandByCount(getOperation(), 5, 5), IntegerAttr(),
+          Value(), getVpmPitch(), /*explicitSelector=*/false)))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");

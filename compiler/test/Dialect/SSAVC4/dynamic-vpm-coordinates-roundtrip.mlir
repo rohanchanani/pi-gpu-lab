@@ -13,10 +13,14 @@
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdr.load %{{.*}}, %{{.*}} dynamic_x %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
+// CHECK: ssavc4.vdr.load %{{.*}}, %{{.*}} dynamic_x %{{.*}} dynamic_subword_selector %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w8>
 // CHECK: ssavc4.vdr.load_rect.dynamic %{{.*}}, %{{.*}} dynamic_dst_x %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdr.load_rect.dynamic %{{.*}}, %{{.*}} dynamic_dst_x %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
+// CHECK: ssavc4.vdr.load_rect.dynamic %{{.*}}, %{{.*}} dynamic_dst_x %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w16>
 // CHECK: ssavc4.vdw.store_vpm %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdw.store_vpm %{{.*}}, %{{.*}}, %{{.*}} {
@@ -73,8 +77,10 @@ ssavc4.module @dynamic_vpm_coordinates {
     %read_sub = ssavc4.vpm.read %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<laned>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32 dynamic_subword_selector i32 -> vector<16xi32>
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, orientation = #ssavc4.vpm_orientation<vertical>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
+    ssavc4.vdr.load %addr, %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32 dynamic_subword_selector i32
     ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32, i32, i32, i32
     ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<vertical>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32, i32, i32, i32
+    ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x dynamic_subword_selector %sel, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #ssavc4.vpm_orientation<vertical>, width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
     ssavc4.vdw.store_vpm %addr, %row, %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, active_lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, i32, i32
     ssavc4.vdw.store_vpm %addr, %row, %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, active_lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32, i32, i32
     ssavc4.vdw.store_rect.dynamic %addr, %row dynamic_src_x %x, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_pitch = 1 : i32, preserve_inactive = true} : i32, i32 dynamic_src_x i32, i32, i32, i32

@@ -3501,10 +3501,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
-    Value dynamicDstX = getOptionalOperandByCount(op, 4, 4);
+    auto vdr = llvm::cast<mlir::vc4kernel::VDRLoadToVPMOp>(op);
+    Value dynamicDstX = vdr.getDstXValue();
+    Value dynamicSelector = vdr.getSubwordSelectorValue();
     Value mappedDstX =
         dynamicDstX ? mapValue(op, dynamicDstX, state) : Value();
-    if (!base || !byteOffset || !dstRow || (dynamicDstX && !mappedDstX))
+    Value mappedSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
+    if (!base || !byteOffset || !dstRow || (dynamicDstX && !mappedDstX) ||
+        (dynamicSelector && !mappedSelector))
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
@@ -3520,6 +3525,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     SmallVector<Value, 3> operands{address, dstRow};
     if (mappedDstX)
       operands.push_back(mappedDstX);
+    if (mappedSelector)
+      operands.push_back(mappedSelector);
     SmallVector<NamedAttribute, 10> attrs{
         getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
         getSSAVC4VPMSubword(builder, op),
@@ -3528,9 +3535,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         builder.getNamedAttr("memory_pitch_bytes",
                              op->getAttr("global_stride_bytes")),
         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+        builder.getNamedAttr(
+            "operand_segment_sizes",
+            builder.getDenseI32ArrayAttr(
+                {1, 1, mappedDstX ? 1 : 0, mappedSelector ? 1 : 0}))};
     if (Attribute dstXAttr = op->getAttr("dst_x"))
       attrs.push_back(builder.getNamedAttr("vpm_x", dstXAttr));
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, operands, attrs);
     return success();
   }
@@ -3542,14 +3555,19 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
-    Value dynamicDstX = getOptionalOperandByCount(op, 7, 7);
+    auto vdr = llvm::cast<mlir::vc4kernel::VDRLoadRectToVPMOp>(op);
+    Value dynamicDstX = vdr.getDstXValue();
+    Value dynamicSelector = vdr.getSubwordSelectorValue();
     Value mappedDstX =
         dynamicDstX ? mapValue(op, dynamicDstX, state) : Value();
+    Value mappedSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
     Value activeRows = mapValue(op, op->getOperand(4), state);
     Value activeCols = mapValue(op, op->getOperand(5), state);
     Value memoryPitchBytes =
         mapValue(op, op->getOperand(6), state);
     if (!base || !byteOffset || !dstRow || (dynamicDstX && !mappedDstX) ||
+        (dynamicSelector && !mappedSelector) ||
         !activeRows || !activeCols ||
         !memoryPitchBytes)
       return failure();
@@ -3568,6 +3586,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                    memoryPitchBytes};
     if (mappedDstX)
       operands.push_back(mappedDstX);
+    if (mappedSelector)
+      operands.push_back(mappedSelector);
     SmallVector<NamedAttribute, 10> attrs{
         getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
         getSSAVC4VPMSubword(builder, op),
@@ -3576,9 +3596,16 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
         builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
-        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+        builder.getNamedAttr(
+            "operand_segment_sizes",
+            builder.getDenseI32ArrayAttr({1, 1, 1, 1, 1,
+                                          mappedDstX ? 1 : 0,
+                                          mappedSelector ? 1 : 0}))};
     if (Attribute dstXAttr = op->getAttr("dst_x"))
       attrs.push_back(builder.getNamedAttr("dst_x", dstXAttr));
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     createOp(builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName, operands,
              attrs);
     return success();

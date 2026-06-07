@@ -48,7 +48,7 @@ module {
   } {
     %c0 = arith.constant 0 : i32
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: dynamic subword VDR DMA x selectors are unproven/deferred in P12
+    // CHECK: subword_selector attribute or dynamic subword selector operand is required
     vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32
     vc4kernel.return
   }
@@ -120,7 +120,7 @@ module {
   } {
     %c0 = arith.constant 0 : i32
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: vertical subword VDR DMA is unproven/deferred in P12
+    // CHECK: subword_selector attribute or dynamic subword selector operand is required
     vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 {rows = 1 : i32, cols = 4 : i32, global_stride_bytes = 4 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
     vc4kernel.return
   }
@@ -230,6 +230,72 @@ module {
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     // CHECK: dst_x attribute or dynamic x operand is required
     vc4kernel.vdr_load_rect_to_vpm %ptr, %c0, %tile, %c0, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32, i32, i32, i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @vdr_load_both_selector(%ptr : i32, %arg : i32) attributes { public_name = "vdr_load_both_selector", schedule_mode = #vc4kernel.schedule_mode<independent_vector>, arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}, {name = "arg", kind = "scalar", direction = "by_value", type = "i32"}], warps_per_block = 1 : i32 } {
+    %c0 = arith.constant 0 : i32
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg dynamic_subword_selector %arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, subword_selector = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32 dynamic_subword_selector i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @vdr_load_w32_dynamic_selector(%ptr : i32, %arg : i32) attributes { public_name = "vdr_load_w32_dynamic_selector", schedule_mode = #vc4kernel.schedule_mode<independent_vector>, arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}, {name = "arg", kind = "scalar", direction = "by_value", type = "i32"}], warps_per_block = 1 : i32 } {
+    %c0 = arith.constant 0 : i32
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: 32-bit VDR DMA must not specify a dynamic subword selector
+    vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg dynamic_subword_selector %arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32 dynamic_subword_selector i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @vdr_load_selector_out_of_range(%ptr : i32) attributes { public_name = "vdr_load_selector_out_of_range", schedule_mode = #vc4kernel.schedule_mode<independent_vector>, arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}], warps_per_block = 1 : i32 } {
+    %c0 = arith.constant 0 : i32
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: subword_selector must be in range [0, 3]
+    vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, dst_x = 0 : i32, subword_selector = 4 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @vdr_rect_both_selector(%ptr : i32, %arg : i32) attributes { public_name = "vdr_rect_both_selector", schedule_mode = #vc4kernel.schedule_mode<independent_vector>, arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}, {name = "arg", kind = "scalar", direction = "by_value", type = "i32"}], warps_per_block = 1 : i32 } {
+    %c0 = arith.constant 0 : i32
+    %c1 = arith.constant 1 : i32
+    %c16 = arith.constant 16 : i32
+    %c64 = arith.constant 64 : i32
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    vc4kernel.vdr_load_rect_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg dynamic_subword_selector %arg, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, subword_selector = 0 : i32, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @vdr_rect_neither_selector(%ptr : i32, %arg : i32) attributes { public_name = "vdr_rect_neither_selector", schedule_mode = #vc4kernel.schedule_mode<independent_vector>, arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}, {name = "arg", kind = "scalar", direction = "by_value", type = "i32"}], warps_per_block = 1 : i32 } {
+    %c0 = arith.constant 0 : i32
+    %c1 = arith.constant 1 : i32
+    %c16 = arith.constant 16 : i32
+    %c64 = arith.constant 64 : i32
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: subword_selector attribute or dynamic subword selector operand is required
+    vc4kernel.vdr_load_rect_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32, i32, i32, i32
     vc4kernel.return
   }
 }

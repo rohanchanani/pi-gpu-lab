@@ -29,7 +29,7 @@ ssavc4.module @bad_dma_subword_dynamic_x {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
-    // CHECK: dynamic subword VPM DMA x selectors are unproven/deferred in P12
+    // CHECK: requires subword_selector attr or dynamic subword selector operand
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
     ssavc4.thread_end
   }
@@ -171,6 +171,94 @@ ssavc4.module @bad_vdr_rect_neither_x {
     %pitch = ssavc4.load_imm <splat32> {value = 64 : i32} : i32
     // CHECK: requires static x attr or dynamic x operand
     ssavc4.vdr.load_rect.dynamic %addr, %row, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32, i32, i32, i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_load_both_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    ssavc4.vdr.load %addr, %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, subword_selector = 0 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32 dynamic_subword_selector i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_load_w32_dynamic_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    // CHECK: 32-bit VPM DMA must not specify a dynamic subword selector
+    ssavc4.vdr.load %addr, %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32 dynamic_subword_selector i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_load_selector_out_of_range {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    // CHECK: subword_selector must be in range [0, 3]
+    ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, subword_selector = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_rect_both_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %cols = ssavc4.load_imm <splat32> {value = 16 : i32} : i32
+    %pitch = ssavc4.load_imm <splat32> {value = 64 : i32} : i32
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x dynamic_subword_selector %sel, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #ssavc4.vpm_orientation<vertical>, width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, subword_selector = 0 : i32, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_rect_neither_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %cols = ssavc4.load_imm <splat32> {value = 16 : i32} : i32
+    %pitch = ssavc4.load_imm <splat32> {value = 64 : i32} : i32
+    // CHECK: requires subword_selector attr or dynamic subword selector operand
+    ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32, i32, i32, i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_vdr_load_vector_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : vector<16xi32>
+    // CHECK: requires an i32 VPM DMA dynamic subword selector operand
+    ssavc4.vdr.load %addr, %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32 dynamic_subword_selector vector<16xi32>
     ssavc4.thread_end
   }
 }

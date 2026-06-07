@@ -2939,7 +2939,7 @@ def audit_p9_pack_unpack_subword_lock(repo_root, matrix):
         "32-bit VPM QPU access requires subword<none>",
         "VDR DMA laned subword mode is not supported by VC4 hardware",
         "elem_bytes must match VPM width",
-        "vertical subword VDR DMA is unproven/deferred in P12",
+        "subword_selector attribute or dynamic subword selector operand is required",
     ]:
         if token not in invalid_text:
             fail(f"P9 lock invalid tests missing diagnostic/token: {token}")

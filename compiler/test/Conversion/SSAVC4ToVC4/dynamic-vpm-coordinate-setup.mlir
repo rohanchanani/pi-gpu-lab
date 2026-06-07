@@ -13,14 +13,11 @@
 // CHECK: op_add = #vc4.add_opcode<add>
 // CHECK: vc4.qpu.vpmvcd_setup
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
-// Dynamic VDR X is masked and ORed into the VDR setup path.
+// Dynamic VDR X and byte selector are masked and ORed into the VDR setup path.
+// CHECK: value = -1879048128 : i32
 // CHECK: op_add = #vc4.add_opcode<and>
 // CHECK: op_add = #vc4.add_opcode<or>
-// CHECK: vc4.qpu.vpmvcd_setup
-// CHECK-SAME: side = #vc4.vpmvcd_side<read>
-// Rectangular VDR/VDW dynamic X is also composed before DMA setup.
-// CHECK: op_add = #vc4.add_opcode<and>
-// CHECK: op_add = #vc4.add_opcode<or>
+// CHECK: op_add = #vc4.add_opcode<shl>
 // CHECK: vc4.qpu.vpmvcd_setup
 // CHECK-SAME: side = #vc4.vpmvcd_side<read>
 // CHECK: vc4.qpu.vpmvcd_setup
@@ -78,6 +75,14 @@ ssavc4.module @dynamic_vpm_coordinate_setup {
       vpm_pitch = 1 : i32,
       serialize = "mutex"
     } : i32, i32 dynamic_x i32
+    ssavc4.vdr.load %addr, %row dynamic_x %x dynamic_subword_selector %sel {
+      width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32,
+      nrows = 1 : i32,
+      memory_pitch_bytes = 16 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      vpm_pitch = 1 : i32,
+      serialize = "mutex"
+    } : i32, i32 dynamic_x i32 dynamic_subword_selector i32
     ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x, %rows, %cols, %pitch {
       max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 4 : i32,
       orientation = #ssavc4.vpm_orientation<horizontal>,
@@ -87,6 +92,15 @@ ssavc4.module @dynamic_vpm_coordinate_setup {
       zero_fill = true,
       serialize = "mutex"
     } : i32, i32 dynamic_dst_x i32, i32, i32, i32
+    ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x dynamic_subword_selector %sel, %rows, %cols, %pitch {
+      max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 2 : i32,
+      orientation = #ssavc4.vpm_orientation<vertical>,
+      width = #ssavc4.vpm_elem_width<w16>,
+      subword = #ssavc4.vpm_subword<packed>,
+      vpm_pitch = 1 : i32,
+      zero_fill = true,
+      serialize = "mutex"
+    } : i32, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
     ssavc4.vdw.store_rect.dynamic %addr, %row dynamic_src_x %x, %rows, %cols, %pitch {
       max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 4 : i32,
       orientation = #ssavc4.vpm_orientation<horizontal>,

@@ -696,6 +696,37 @@ static LogicalResult verifyDynamicVPMSubwordSelectorOperand(Operation *op,
   return success();
 }
 
+static int64_t getDMASubwordSelectorMax(VPMWidth width) {
+  switch (width) {
+  case VPMWidth::w8:
+    return 3;
+  case VPMWidth::w16:
+    return 1;
+  case VPMWidth::w32:
+    return -1;
+  }
+  return -1;
+}
+
+static LogicalResult verifyDynamicVPMSelOperand(Operation *op, Value selector,
+                                                VPMWidth width,
+                                                StringRef dmaRole) {
+  if (!selector)
+    return success();
+  if (!selector.getType().isSignlessInteger(32))
+    return op->emitOpError()
+           << dmaRole
+           << " dynamic subword selector must be a scalar i32 value";
+  int64_t maxSelector = getDMASubwordSelectorMax(width);
+  std::optional<int64_t> selectorCst = getConstantI32(selector);
+  if (selectorCst && (*selectorCst < 0 || *selectorCst > maxSelector))
+    return op->emitOpError()
+           << dmaRole
+           << " dynamic subword selector constant must be in range [0, "
+           << maxSelector << "]";
+  return success();
+}
+
 static LogicalResult verifyVPMQPUExecutableMode(Operation *op, Value dynamicX,
                                                 Value dynamicSelector) {
   auto orientation =
@@ -796,7 +827,9 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
                                              bool qpuSubwordModes = false,
                                              bool dmaSubwordModes = false,
                                              StringRef dmaRole = "VPM DMA",
-                                             Value dynamicX = {}) {
+                                             Value dynamicX = {},
+                                             StringRef selectorAttrName = {},
+                                             Value dynamicSelector = {}) {
   auto orientation =
       llvm::dyn_cast_if_present<VPMOrientationAttr>(op->getAttr("orientation"));
   if (!orientation)
@@ -811,6 +844,7 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
   if (!qpuSubwordModes && !dmaSubwordModes)
     return op->emitOpError(
         "internal verifier error: VPM executable mode role is not specified");
+  bool dmaUsesExplicitSelector = dmaSubwordModes && !selectorAttrName.empty();
   if (dmaSubwordModes) {
     if (width.getValue() == VPMWidth::w32 &&
         subword.getValue() != VPMSubword::none)
@@ -825,7 +859,7 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
       return op->emitOpError()
              << dmaRole
              << " laned subword mode is not supported by VC4 hardware";
-    if (width.getValue() != VPMWidth::w32 &&
+    if (!dmaUsesExplicitSelector && width.getValue() != VPMWidth::w32 &&
         orientation.getValue() == VPMOrientation::vertical)
       return op->emitOpError()
              << "vertical subword " << dmaRole
@@ -860,7 +894,8 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
     if (qpuSubwordModes && width.getValue() != VPMWidth::w32)
       return op->emitOpError(
           "dynamic subword VPM QPU x selectors are unproven/deferred in P12");
-    if (dmaSubwordModes && width.getValue() != VPMWidth::w32)
+    if (!dmaUsesExplicitSelector && dmaSubwordModes &&
+        width.getValue() != VPMWidth::w32)
       return op->emitOpError()
              << "dynamic subword " << dmaRole
              << " x selectors are unproven/deferred in P12";
@@ -876,16 +911,53 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
         width.getValue() == VPMWidth::w32 && x != 0)
       return op->emitOpError(
           "horizontal 32-bit VPM QPU access requires x = 0");
-    if (orientation.getValue() == VPMOrientation::horizontal &&
+    if (!dmaUsesExplicitSelector &&
+        orientation.getValue() == VPMOrientation::horizontal &&
         width.getValue() == VPMWidth::w16 && x > 1)
       return op->emitOpError(
           "horizontal 16-bit VPM access requires halfword selector x in "
           "range [0, 1]");
-    if (orientation.getValue() == VPMOrientation::horizontal &&
+    if (!dmaUsesExplicitSelector &&
+        orientation.getValue() == VPMOrientation::horizontal &&
         width.getValue() == VPMWidth::w8 && x > 3)
       return op->emitOpError(
           "horizontal 8-bit VPM access requires byte selector x in range "
           "[0, 3]");
+  }
+
+  if (dmaUsesExplicitSelector) {
+    auto selectorAttr =
+        llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr(selectorAttrName));
+    bool needsSelector = width.getValue() != VPMWidth::w32;
+    if (!needsSelector && dynamicSelector)
+      return op->emitOpError()
+             << "32-bit " << dmaRole
+             << " must not specify a dynamic subword selector";
+    if (!needsSelector && selectorAttr)
+      return op->emitOpError()
+             << "32-bit " << dmaRole << " must not specify "
+             << selectorAttrName;
+    if (needsSelector && selectorAttr && dynamicSelector)
+      return op->emitOpError()
+             << "specify either static " << selectorAttrName
+             << " or dynamic subword selector operand, not both";
+    if (needsSelector && !selectorAttr && !dynamicSelector)
+      return op->emitOpError()
+             << selectorAttrName
+             << " attribute or dynamic subword selector operand is required";
+    if (failed(verifyDynamicVPMSelOperand(
+            op, dynamicSelector, width.getValue(), dmaRole)))
+      return failure();
+    if (selectorAttr) {
+      int64_t maxSelector = getDMASubwordSelectorMax(width.getValue());
+      if (selectorAttr.getInt() < 0 || selectorAttr.getInt() > maxSelector)
+        return op->emitOpError()
+               << selectorAttrName << " must be in range [0, " << maxSelector
+               << "]";
+    }
+  } else if (dynamicSelector) {
+    return op->emitOpError(
+        "dynamic subword selector operand is not supported for this VPM mode");
   }
 
   auto strideAttr =
@@ -1761,9 +1833,6 @@ LogicalResult VDRLoadToVPMOp::verify() {
                                         MemoryPath::vdr_global_to_vpm,
                                         Coherency::dma_ordered)))
     return failure();
-  if (getOperation()->getNumOperands() != 4 &&
-      getOperation()->getNumOperands() != 5)
-    return emitOpError("does not accept a predicate operand");
   if (!isKnownScalarByteOffsetAlignedTo(getByteOffset(), getElemBytes()))
     return emitOpError(
         "vdr_load_to_vpm byte_offset must be statically aligned to elem_bytes");
@@ -1780,8 +1849,8 @@ LogicalResult VDRLoadToVPMOp::verify() {
   if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch",
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDR DMA",
-                                     getOptionalOperandByCount(getOperation(),
-                                                               4, 4))))
+                                     getDstXValue(), "subword_selector",
+                                     getSubwordSelectorValue())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(),
                               getRows());
@@ -1796,8 +1865,8 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
   if (failed(verifyVPMExecutableMode(getOperation(), "dst_x", "vpm_pitch",
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDR DMA",
-                                     getOptionalOperandByCount(getOperation(),
-                                                               7, 7))))
+                                     getDstXValue(), "subword_selector",
+                                     getSubwordSelectorValue())))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryPitchBytes(),
                                         "memory_pitch_bytes", getElemBytes())))
