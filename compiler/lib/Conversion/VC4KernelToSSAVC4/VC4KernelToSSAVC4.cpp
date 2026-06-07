@@ -2967,12 +2967,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
+    SmallVector<Value, 2> operands{input};
+    if (op->getNumOperands() == 2) {
+      Value amount = mapValue(op, op->getOperand(1), state);
+      if (!amount)
+        return failure();
+      operands.push_back(amount);
+    }
+    SmallVector<NamedAttribute, 1> attrs;
+    if (Attribute amount = op->getAttr("amount"))
+      attrs.push_back(builder.getNamedAttr("amount", amount));
     // VC4Kernel uses the SSAVC4/VC4 fixed horizontal vector-rotate direction:
     // amount N lowers to vc4asm's `accumulator << N` lane rotate.
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4RotateOpName, input,
-        {builder.getNamedAttr("amount", op->getAttr("amount"))},
-        op->getResult(0).getType())};
+    state.values[op->getResult(0)] = {
+        createOpWithResult(builder, op->getLoc(), kSSAVC4RotateOpName, operands,
+                           attrs, op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentReduceOpName)) {

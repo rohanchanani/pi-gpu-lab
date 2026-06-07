@@ -24,8 +24,10 @@ module {
     %sel = vc4kernel.fragment_select %cmp, %shl, %a : !vc4kernel.pred<16>, vector<16xi32>, vector<16xi32> -> vector<16xi32>
     // CHECK: vc4kernel.fragment_rotate
     %rot = vc4kernel.fragment_rotate %sel {amount = 1 : i32} : vector<16xi32> -> vector<16xi32>
+    // CHECK: vc4kernel.fragment_rotate
+    %dyn_rot = vc4kernel.fragment_rotate %rot, %x : vector<16xi32>, i32 -> vector<16xi32>
     // CHECK: vc4kernel.fragment_reduce
-    %red = vc4kernel.fragment_reduce %rot, %cmp {kind = #vc4kernel.reduce<add>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
+    %red = vc4kernel.fragment_reduce %dyn_rot, %cmp {kind = #vc4kernel.reduce<add>} : vector<16xi32>, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
 }

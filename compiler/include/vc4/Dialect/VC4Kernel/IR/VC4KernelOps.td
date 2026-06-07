@@ -281,9 +281,14 @@ def VC4Kernel_FragmentSelectOp : VC4Kernel_PureOp<"fragment_select"> {
 }
 
 def VC4Kernel_FragmentRotateOp : VC4Kernel_PureOp<"fragment_rotate"> {
-  let arguments = (ins VC4Kernel_Vector16Data:$input, I32Attr:$amount);
+  let arguments = (ins VC4Kernel_Vector16Data:$input,
+                       Optional<VC4Kernel_I32>:$dynamic_amount,
+                       OptionalAttr<I32Attr>:$amount);
   let results = (outs VC4Kernel_Vector16Data:$result);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let assemblyFormat = [{
+    $input (`,` $dynamic_amount^)? attr-dict `:` type($input)
+    (`,` type($dynamic_amount)^)? `->` type($result)
+  }];
   let hasVerifier = 1;
 }
 

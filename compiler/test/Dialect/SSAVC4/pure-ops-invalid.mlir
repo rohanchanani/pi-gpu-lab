@@ -50,8 +50,35 @@ module {
 module {
   %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
   %v = ssavc4.splat %x : i32 -> vector<16xi32>
+  // expected-error@+1 {{requires exactly one of static amount attr or dynamic i32 amount operand}}
+  %bad = ssavc4.rotate %v : vector<16xi32> -> vector<16xi32>
+}
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  %v = ssavc4.splat %x : i32 -> vector<16xi32>
   // expected-error@+1 {{'amount' must be in range [0, 15]}}
   %bad = ssavc4.rotate %v {amount = 16 : i32} : vector<16xi32> -> vector<16xi32>
+}
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  %v = ssavc4.splat %x : i32 -> vector<16xi32>
+  // expected-error@+1 {{requires exactly one of static amount attr or dynamic i32 amount operand}}
+  %bad = ssavc4.rotate %v, %x {amount = 4 : i32} : vector<16xi32>, i32 -> vector<16xi32>
+}
+
+// ----
+
+module {
+  %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+  %v = ssavc4.splat %x : i32 -> vector<16xi32>
+  // expected-error@+1 {{dynamic amount operand must be scalar i32}}
+  %bad = ssavc4.rotate %v, %v : vector<16xi32>, vector<16xi32> -> vector<16xi32>
 }
 
 // ----

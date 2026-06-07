@@ -667,9 +667,18 @@ LogicalResult RotateOp::verify() {
   if (inputType != resultType)
     return emitOpError() << "input and result types must match; got "
                          << inputType << " and " << resultType;
-  int64_t amount = getAmountAttr().getInt();
-  if (amount < 0 || amount > 15)
-    return emitOpError("'amount' must be in range [0, 15]");
+  bool hasStaticAmount =
+      static_cast<bool>(op->getAttrOfType<IntegerAttr>("amount"));
+  bool hasDynamicAmount = op->getNumOperands() == 2;
+  if (hasStaticAmount == hasDynamicAmount)
+    return emitOpError("requires exactly one of static amount attr or dynamic "
+                       "i32 amount operand");
+  if (auto amount = op->getAttrOfType<IntegerAttr>("amount")) {
+    if (amount.getInt() < 0 || amount.getInt() > 15)
+      return emitOpError("'amount' must be in range [0, 15]");
+  }
+  if (hasDynamicAmount && !op->getOperand(1).getType().isSignlessInteger(32))
+    return emitOpError("dynamic amount operand must be scalar i32");
   return success();
 }
 

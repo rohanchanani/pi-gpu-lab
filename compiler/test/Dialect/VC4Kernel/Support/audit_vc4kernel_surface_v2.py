@@ -198,6 +198,9 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },
+    "p11_fragment_rotate_dynamic_if_hardware": {
+        "implemented_pending_hardware",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -430,6 +433,9 @@ P5_POST_PHASE_STAGED_STATUSES = {
     "p10_fastmath_approx_contract": {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
+    },
+    "p11_fragment_rotate_dynamic_if_hardware": {
+        "implemented_pending_hardware",
     },
 }
 

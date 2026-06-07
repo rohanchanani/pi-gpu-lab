@@ -1472,8 +1472,19 @@ LogicalResult FragmentSelectOp::verify() {
   return verifyVector16Data(getOperation(), getResult().getType(), "result");
 }
 LogicalResult FragmentRotateOp::verify() {
-  if (getAmount() < 0 || getAmount() > 15)
-    return emitOpError("amount must be in range [0, 15]");
+  Operation *op = getOperation();
+  bool hasStaticAmount =
+      static_cast<bool>(op->getAttrOfType<IntegerAttr>("amount"));
+  bool hasDynamicAmount = op->getNumOperands() == 2;
+  if (hasStaticAmount == hasDynamicAmount)
+    return emitOpError("requires exactly one of static amount attr or dynamic "
+                       "i32 amount operand");
+  if (auto amount = op->getAttrOfType<IntegerAttr>("amount")) {
+    if (amount.getInt() < 0 || amount.getInt() > 15)
+      return emitOpError("amount must be in range [0, 15]");
+  }
+  if (hasDynamicAmount && !op->getOperand(1).getType().isSignlessInteger(32))
+    return emitOpError("dynamic amount operand must be scalar i32");
   if (failed(verifySameType(getOperation(), getInput().getType(),
                             getResult().getType(), "fragment_rotate result")))
     return failure();

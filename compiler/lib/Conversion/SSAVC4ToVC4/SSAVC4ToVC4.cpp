@@ -2588,9 +2588,14 @@ selectInstructionTemplates(Operation *func,
       if (hasName(&op, kSSAVC4PackOpName) ||
           hasName(&op, kSSAVC4UnpackOpName) ||
           hasName(&op, kSSAVC4RotateOpName)) {
-        if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+        if (op.getNumResults() != 1)
+          return op.emitOpError("requires one result for M3 lowering");
+        if ((hasName(&op, kSSAVC4RotateOpName)
+                 ? (op.getNumOperands() < 1 || op.getNumOperands() > 2)
+                 : op.getNumOperands() != 1))
           return op.emitOpError(
-              "requires one input operand and one result for M3 lowering");
+              "requires one input operand, optional rotate amount, and one "
+              "result for M3 lowering");
         if (op.getOperand(0).getType() != op.getResult(0).getType())
           return op.emitOpError("requires identical input and result carrier "
                                 "types for M3 lowering");
@@ -2599,10 +2604,21 @@ selectInstructionTemplates(Operation *func,
           return op.emitOpError("supports only vector<16xi32> or "
                                 "vector<16xf32> values in M3 lowering");
         if (hasName(&op, kSSAVC4RotateOpName)) {
-          int64_t amount = getI32IntegerAttrOr(&op, "amount", -1);
-          if (amount < 0 || amount > 15)
+          bool hasStaticAmount =
+              static_cast<bool>(op.getAttrOfType<IntegerAttr>("amount"));
+          bool hasDynamicAmount = op.getNumOperands() == 2;
+          if (hasStaticAmount == hasDynamicAmount)
             return op.emitOpError(
-                "requires immediate rotate amount in [0, 15]");
+                "requires exactly one of static amount attr or dynamic i32 "
+                "amount operand");
+          if (auto amount = op.getAttrOfType<IntegerAttr>("amount")) {
+            if (amount.getInt() < 0 || amount.getInt() > 15)
+              return op.emitOpError(
+                  "requires immediate rotate amount in [0, 15]");
+          }
+          if (hasDynamicAmount &&
+              !op.getOperand(1).getType().isSignlessInteger(32))
+            return op.emitOpError("dynamic rotate amount must be scalar i32");
         }
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
@@ -3488,12 +3504,68 @@ static LogicalResult emitRotate(OpBuilder &builder,
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
-  int64_t amount = getI32IntegerAttrOr(source, "amount", -1);
-  if (amount < 0 || amount > 15)
-    return source->emitOpError("requires immediate rotate amount in [0, 15]");
+  bool hasStaticAmount =
+      static_cast<bool>(source->getAttrOfType<IntegerAttr>("amount"));
+  bool hasDynamicAmount = templ.operands.size() == 2;
+  if (hasStaticAmount == hasDynamicAmount)
+    return source->emitOpError(
+        "requires exactly one of static amount attr or dynamic i32 amount "
+        "operand");
 
-  // VC4's small-immediate vector rotate path rotates an accumulator source.
-  // Copy the SSA input to r2, then emit the rotate selector 48 + amount.
+  if (hasStaticAmount) {
+    int64_t amount = getI32IntegerAttrOr(source, "amount", -1);
+    if (amount < 0 || amount > 15)
+      return source->emitOpError("requires immediate rotate amount in [0, 15]");
+
+    if (amount == 0) {
+      createScheduledBundle(
+          builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+          mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+          /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+          mlir::vc4::MulOpcode::nop, *inputReg, *inputReg, mlir::vc4::QPUMux::a,
+          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+      return success();
+    }
+
+    // VC4's small-immediate vector rotate path rotates an accumulator source.
+    // Copy the SSA input to r2, then emit the fixed rotate selector.
+    createScheduledBundle(
+        builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+        /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *inputReg, *inputReg, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createNopBundle(builder, source->getLoc());
+    createScheduledBundle(
+        builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop,
+        /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/48 + amount);
+    emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+    return success();
+  }
+
+  std::optional<int64_t> amountReg = allocator.lookup(templ, templ.operands[1]);
+  if (!amountReg)
+    return source->emitOpError()
+           << "dynamic rotate amount is not available in a QPU register";
+
+  // Dynamic rotate uses r5 element 0 bits [3:0].  Mask the scalar amount to
+  // make the VC4Kernel/SSAVC4 modulo-16 contract explicit before writing r5.
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+      /*waddrAdd=*/37, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
+      mlir::vc4::MulOpcode::nop, *amountReg,
+      /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/15);
+  createNopBundle(builder, source->getLoc());
   createScheduledBundle(
       builder, source->getLoc(), mlir::vc4::QPUSignal::none,
       mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -3508,7 +3580,7 @@ static LogicalResult emitRotate(OpBuilder &builder,
       /*raddrA=*/0,
       /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-      /*smallImm=*/48 + amount);
+      /*smallImm=*/48);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -5545,12 +5617,14 @@ static PlannedRegion planDynamicVDRPitchRowBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, pitchBytes, pitchReg);
+  // clang-format off
   region.appendRegion("vdr-raw-row-load",
       planRawVDRLoad(loc, rowAddress.addressReg, setupWord, vpmBaseRowReg,
                      plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
                      rowAddress.dynamicPitchReg,
                      rowAddress.dynamicPitchMultiplier,
                      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row)));
+  // clang-format on
   return region;
 }
 
@@ -5598,11 +5672,13 @@ static FailureOr<PlannedRegion> planVDRRowByRowActiveRowsFallback(
     if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
                                        setupWord)))
       return failure();
+    // clang-format off
     region.appendRegion("vdr-pitch-row-active-rows-guard",
         planActiveRowsGuardedRegion(
             loc, activeRowsReg, maxRows, row,
             planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg,
                                        row, setupWord, pitchBytes, pitchReg)));
+    // clang-format on
   }
   return region;
 }
@@ -5619,11 +5695,13 @@ static FailureOr<PlannedRegion> planVDRRowByRowActiveColsFallback(
     if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
                                        setupWord)))
       return failure();
+    // clang-format off
     region.appendRegion("vdr-row-active-cols-guard",
         planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
                                     planDynamicVDRActiveColsBody(
                                         loc, plan, addressReg, vpmBaseRowReg,
                                         row, setupWord, pitchBytes, pitchReg)));
+    // clang-format on
   }
   return region;
 }
@@ -5642,9 +5720,11 @@ static FailureOr<PlannedRegion> planVDRRowByRowStaticFallback(
             source, clampedCols, /*nrows=*/1, /*memoryPitchBytes=*/64,
             plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord)))
       return failure();
+    // clang-format off
     region.appendRegion("vdr-pitch-row-body",
         planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg, row,
                                    setupWord, pitchBytes, pitchReg));
+    // clang-format on
   }
   return region;
 }
@@ -5907,9 +5987,11 @@ emitVDRLoadRectDynamic(OpBuilder &builder, const InstructionTemplate &templ,
       if (failed(rectangular))
         return failure();
       PlannedRegion payload = planPreserveClampedRowsInR0(source->getLoc());
+      // clang-format off
       payload.appendRegion("vdr-active-cols-guarded-rect",
           planActiveColsGuardedRegion(source->getLoc(), *activeColsReg, maxCols,
                                       std::move(*rectangular)));
+      // clang-format on
       return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
                                          maxRows, /*row=*/0, std::move(payload))
           .emit(builder);
@@ -6797,6 +6879,7 @@ static PlannedRegion planDynamicVDWActiveColsBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
+  // clang-format off
   region.appendRegion("vdw-row-store-from-vpm",
       planRawVDWStoreFromVPM(
           loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
@@ -6807,6 +6890,7 @@ static PlannedRegion planDynamicVDWActiveColsBody(
           rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
           /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
           /*staticVpmX=*/plan.logicalXForRow(row)));
+  // clang-format on
   return region;
 }
 
@@ -6820,6 +6904,7 @@ static PlannedRegion planStaticVDWRowBody(Location loc, int64_t addressReg,
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
+  // clang-format off
   region.appendRegion("vdw-static-cols-row-store-from-vpm",
       planRawVDWStoreFromVPM(
           loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
@@ -6831,6 +6916,7 @@ static PlannedRegion planStaticVDWRowBody(Location loc, int64_t addressReg,
           rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
           /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
           /*staticVpmX=*/plan.logicalXForRow(row)));
+  // clang-format on
   return region;
 }
 
@@ -6841,9 +6927,11 @@ static PlannedRegion planVDWStaticRowsFallback(
     int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
+    // clang-format off
     region.appendRegion("vdw-static-row-body",
         planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
                              strideBytes, strideReg, plan, elemBytes, modew));
+    // clang-format on
   }
   return region;
 }
@@ -7086,12 +7174,14 @@ emitVDWStoreRectDynamic(OpBuilder &builder, const InstructionTemplate &templ,
   if (clampedRows > 1 && vpmSourceLayoutEncodable && !strideBytes) {
     PlannedRegion rectangular =
         planStaticRowsCountInR2(source->getLoc(), clampedRows);
+    // clang-format off
     rectangular.appendRegion("vdw-dynamic-rows-rectangular",
         planDynamicVDWStoreRowsFromVPM(
             source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
             /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
             /*memoryPitchReg=*/strideReg, elemBytes, modew, plan.vertical,
             plan.useMutex));
+    // clang-format on
     PlannedRegion fallback = planVDWStaticRowsFallback(
         source->getLoc(), *addressReg, *vpmSourceRowReg, staticCols,
         clampedRows, strideBytes, strideReg, plan, elemBytes, modew);

@@ -182,9 +182,14 @@ def SSAVC4_UnpackOp : SSAVC4_PureOp<"unpack"> {
 
 def SSAVC4_RotateOp : SSAVC4_PureOp<"rotate"> {
   let summary = "SSAVC4 vector lane rotate";
-  let arguments = (ins AnyType:$input, I32Attr:$amount);
+  let arguments = (ins AnyType:$input,
+                       Optional<AnyType>:$dynamic_amount,
+                       OptionalAttr<I32Attr>:$amount);
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let assemblyFormat = [{
+    $input (`,` $dynamic_amount^)? attr-dict `:` type($input)
+    (`,` type($dynamic_amount)^)? `->` type($result)
+  }];
   let hasVerifier = 1;
 }
 
