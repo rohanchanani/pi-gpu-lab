@@ -512,6 +512,72 @@ P12_REQUIRED_NEGATIVE_TESTS = {
     "compiler/test/Dialect/VC4Kernel/invalid-vdw-store-vpm-general-mask.mlir",
     "compiler/test/Dialect/VC4Kernel/invalid-forbidden-vector-op.mlir",
 }
+P13_FINAL_MODES = {
+    "p13-final-surface-lock-pre-fixtures",
+    "p13-final-surface-lock",
+}
+P13_FINAL_FIXTURE_EXTENSION_ID = "p13_final_surface_lock"
+P13_FINAL_SURFACE_STATUSES = {
+    "accepted_hardware_proven",
+    "deterministic_reject",
+    "internal_only",
+    "out_of_scope_non_compute_hardware",
+    "producer_layer_future_work",
+}
+P13_FINAL_REJECT_CATEGORIES = {
+    "hardware_forbidden",
+    "static_surface_policy",
+    "not_meaningful",
+    "unsupported_source_layer_inside_vc4kernel",
+    "out_of_scope_non_compute_hardware",
+}
+P13_ACTIVE_SURFACE_DOCS = [
+    Path("compiler/docs/vc4kernel_surface_v2_support_matrix.json"),
+    Path("compiler/docs/vc4kernel_mixed_acceptance_policy.md"),
+    Path("compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"),
+    Path("compiler/docs/codegen/vc4kernel_decision_traceability_matrix.md"),
+]
+P13_ACTIVE_DOC_TRANSITIONAL_PATTERNS = [
+    ("implemented_pending_hardware", re.compile(r"implemented_pending_hardware", re.I)),
+    ("pending_hardware", re.compile(r"pending_hardware", re.I)),
+    ("planned", re.compile(r"\bplanned\b", re.I)),
+    ("deferred", re.compile(r"\bdeferred\b", re.I)),
+    ("unproven", re.compile(r"\bunproven\b", re.I)),
+    ("later", re.compile(r"\blater\b", re.I)),
+    ("TODO", re.compile(r"\bTODO\b")),
+    ("FIXME", re.compile(r"\bFIXME\b")),
+    ("v1", re.compile(r"\bv1\b", re.I)),
+    ("compatibility", re.compile(r"\bcompatibility\b", re.I)),
+]
+P13_FIXTURE_FORBIDDEN_PREFIXES = [
+    "vector.",
+    "memref.",
+    "scf.",
+    "func.",
+    "linalg.",
+    "gpu.",
+    "tt.",
+    "ttg.",
+    "triton.",
+    "stablehlo.",
+    "mhlo.",
+    "iree.",
+    "ssavc4.",
+    "vc4.",
+]
+P13_ACTIVE_SOURCE_ROOTS = [
+    Path("compiler/include/vc4/Dialect/VC4Kernel"),
+    Path("compiler/lib/Dialect/VC4Kernel"),
+    Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+    Path("compiler/test/Conversion/VC4KernelToSSAVC4"),
+]
+P13_FORBIDDEN_ACTIVE_SOURCE_PATTERNS = [
+    ("row/column VPM orientation name", re.compile(r"row_major|column_major|vpm_orientation<row|vpm_orientation<column")),
+    ("old pack/unpack spelling", re.compile(r"\bvc4kernel\.(?:pack|unpack)\b")),
+    ("old coordinate spelling", re.compile(r"\bvc4kernel\.dynamic_vpm_coord\b")),
+    ("exact/default SFU lowering marker", re.compile(r"exact/default.*sfu|sfu.*exact/default", re.I)),
+    ("hidden spill TMU reload marker", re.compile(r"ldtmu0|hidden.*spill.*tmu|spill.*reload.*tmu", re.I)),
+]
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
@@ -755,7 +821,7 @@ def run_matrix_checker(repo_root, matrix_path):
         repo_root
         / "compiler/test/Dialect/VC4Kernel/Support/check_vc4kernel_surface_v2_matrix.py"
     )
-    command = [sys.executable, str(checker), str(matrix_path)]
+    command = [sys.executable, str(checker), str(matrix_path), "--mode", "final"]
     result = subprocess.run(
         command,
         cwd=repo_root,
@@ -775,6 +841,57 @@ def load_matrix(matrix_path):
         return json.loads(matrix_path.read_text())
     except json.JSONDecodeError as error:
         fail(f"invalid support matrix JSON: {error}")
+
+
+def walk_json_strings(value):
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, dict):
+        for item in value.values():
+            yield from walk_json_strings(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from walk_json_strings(item)
+
+
+def load_mixed_manifest(repo_root):
+    return load_matrix(repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST)
+
+
+def run_mixed_fixture_claim_audit(repo_root):
+    audit = (
+        repo_root
+        / "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/"
+        "audit_mixed_fixture_claims.py"
+    )
+    claims = (
+        repo_root
+        / "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/"
+        "mixed_fixture_claims.json"
+    )
+    manifest = repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST
+    command = [
+        sys.executable,
+        str(audit),
+        "--claims",
+        str(claims),
+        "--manifest",
+        str(manifest),
+        "--repo-root",
+        str(repo_root),
+    ]
+    result = subprocess.run(
+        command,
+        cwd=repo_root,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        fail(f"mixed fixture claim audit failed: {output}")
+    return result.stdout.strip().splitlines()
 
 
 def feature_by_id(matrix):
@@ -842,6 +959,8 @@ def audit_matrix_ownership(matrix, mode):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -866,6 +985,8 @@ def audit_matrix_ownership(matrix, mode):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -1096,6 +1217,8 @@ def audit_matrix_ownership(matrix, mode):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         p8_5_policy = require_matrix_feature(
             features,
@@ -1148,6 +1271,8 @@ def audit_matrix_ownership(matrix, mode):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         require_matrix_feature_status_in(
             features,
@@ -1311,6 +1436,8 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -1384,6 +1511,8 @@ def audit_p1_general_alu_lock(repo_root):
     scanned = 0
     for root in active_roots:
         for path in iter_text_files(repo_root / root, repo_root):
+            if is_support_audit_text(path):
+                continue
             scanned += 1
             text = read_text(path)
             for term in forbidden_terms:
@@ -4152,6 +4281,236 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
     return counts
 
 
+def audit_p13_matrix_final_contract(matrix):
+    features = matrix.get("features", [])
+    status_counts = Counter()
+    reject_counts = Counter()
+    missing_proof = []
+    bad_status = []
+    bad_reject = []
+    for feature in features:
+        ident = feature.get("id", "<missing id>")
+        status = feature.get("current_status")
+        status_counts[status] += 1
+        if status not in P13_FINAL_SURFACE_STATUSES:
+            bad_status.append(f"{ident}:{status}")
+        if feature.get("final_status_target") != status:
+            bad_status.append(f"{ident}:final_status_target={feature.get('final_status_target')}")
+        proof_links = feature.get("proof_links")
+        if not isinstance(proof_links, dict) or not proof_links:
+            missing_proof.append(ident)
+        if status == "accepted_hardware_proven":
+            for key in [
+                "verifier_lit",
+                "conversion_lit",
+                "isolated_hardware_fixture",
+                "mixed_hardware_fixture_or_feature",
+                "mixed_claim_contract",
+            ]:
+                if not proof_links.get(key):
+                    missing_proof.append(f"{ident}:{key}")
+        if status == "deterministic_reject":
+            category = feature.get("reject_category")
+            reject_counts[category] += 1
+            if category not in P13_FINAL_REJECT_CATEGORIES:
+                bad_reject.append(f"{ident}:reject_category={category}")
+            if not proof_links:
+                missing_proof.append(f"{ident}:reject_proof")
+    if bad_status:
+        fail("P13 final matrix found non-final statuses: " + ", ".join(bad_status[:20]))
+    if bad_reject:
+        fail("P13 final matrix found invalid reject categories: " + ", ".join(bad_reject[:20]))
+    if missing_proof:
+        fail("P13 final matrix found missing proof links: " + ", ".join(missing_proof[:20]))
+
+    matrix_text = "\n".join(walk_json_strings(matrix))
+    for token in [
+        "implemented_pending_hardware",
+        "pending_hardware",
+        "pending final",
+        "unproven",
+    ]:
+        if token.lower() in matrix_text.lower():
+            fail(f"P13 final matrix contains transitional token: {token}")
+    return {
+        "matrix_final_features": len(features),
+        "matrix_accepted_hardware_proven": status_counts["accepted_hardware_proven"],
+        "matrix_deterministic_reject": status_counts["deterministic_reject"],
+        "matrix_internal_only": status_counts["internal_only"],
+        "matrix_reject_static_surface_policy": reject_counts["static_surface_policy"],
+    }
+
+
+def audit_p13_active_docs(repo_root):
+    hits = []
+    missing = []
+    scanned = 0
+    for rel_path in P13_ACTIVE_SURFACE_DOCS:
+        path = repo_root / rel_path
+        if not path.is_file():
+            missing.append(str(rel_path))
+            continue
+        scanned += 1
+        text = read_text(path)
+        for label, pattern in P13_ACTIVE_DOC_TRANSITIONAL_PATTERNS:
+            for match in pattern.finditer(text):
+                line_no = text.count("\n", 0, match.start()) + 1
+                hits.append(f"{rel_path}:{line_no}:{label}")
+                break
+    if missing:
+        fail("P13 final active docs missing: " + ", ".join(missing))
+    if hits:
+        fail("P13 final active docs contain transitional terms: " + "; ".join(hits[:20]))
+
+    spec_text = read_text(
+        repo_root / "compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"
+    ).lower()
+    for token in [
+        "word-x and subword selector are separate fields",
+        "dynamic selector is not dynamic subword mode",
+        "raw w32 vpm carrier placement and qpu subword readback are different views",
+        "vdw selector proof is separate from vdr proof",
+        "setup-field isolation, not modulo semantics",
+        "mixed fixture claim policy",
+    ]:
+        if token not in spec_text:
+            fail(f"P13 final docs missing selector/claim contract: {token}")
+    return {"active_docs_scanned": scanned, "active_doc_transitional_hits": 0}
+
+
+def audit_p13_active_source_contract(repo_root):
+    hits = []
+    scanned = 0
+    for root in P13_ACTIVE_SOURCE_ROOTS:
+        for path in iter_text_files(repo_root / root, repo_root):
+            if is_support_audit_text(path) or is_negative_test(path):
+                continue
+            scanned += 1
+            text = read_text(path)
+            for label, pattern in P13_FORBIDDEN_ACTIVE_SOURCE_PATTERNS:
+                if pattern.search(text):
+                    hits.append(f"{rel(path, repo_root)}:{label}")
+    if hits:
+        fail("P13 final active source contains forbidden constructs: " + "; ".join(hits[:20]))
+
+    op_text = "\n".join(
+        read_text(path)
+        for root in [
+            Path("compiler/include/vc4/Dialect/VC4Kernel"),
+            Path("compiler/lib/Dialect/VC4Kernel"),
+        ]
+        for path in iter_text_files(repo_root / root, repo_root)
+    )
+    for legacy in [
+        "vc4kernel.fragment_add",
+        "vc4kernel.fragment_sub",
+        "vc4kernel.fragment_mul",
+        "vc4kernel.fragment_shl",
+        "vc4kernel.fragment_contract",
+        "vc4kernel.fragment_broadcast_lane",
+    ]:
+        if legacy in op_text:
+            fail(f"P13 final active source reintroduced legacy surface op: {legacy}")
+    return {"active_source_files_scanned": scanned, "active_source_forbidden_hits": 0}
+
+
+def audit_p13_mixed_fixture_purity(repo_root, manifest):
+    fixtures = manifest.get("fixtures", [])
+    checked = 0
+    hits = []
+    for fixture in fixtures:
+        if fixture.get("dialect") != "vc4kernel":
+            continue
+        path = repo_root / fixture["path"] / "input.mlir"
+        text = read_text(path)
+        checked += 1
+        if "vc4kernel.kernel" not in text:
+            hits.append(f"{rel(path, repo_root)}:missing vc4kernel.kernel")
+        for prefix in P13_FIXTURE_FORBIDDEN_PREFIXES:
+            if prefix in text:
+                hits.append(f"{rel(path, repo_root)}:contains {prefix}")
+    if hits:
+        fail("P13 final mixed VC4Kernel fixture purity violations: " + "; ".join(hits[:20]))
+    return {"mixed_vc4kernel_fixtures_checked": checked, "mixed_fixture_purity_hits": 0}
+
+
+def audit_p13_selector_claim_contract(repo_root, manifest):
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    if "dynamic_vpm_pingpong_qpu_read_vc4kernel" not in fixtures:
+        fail("P13 final P12 coverage missing checked dynamic ping-ponged QPU readback fixture")
+    qpu_expected = json.loads(
+        read_text(
+            repo_root
+            / fixtures["dynamic_vpm_pingpong_qpu_read_vc4kernel"]["path"]
+            / "expected.json"
+        )
+    )
+    qpu_required = qpu_expected.get("required", {})
+    for field in [
+        "saw_pingpong_qpu_read",
+        "saw_checked_qpu_read_output",
+        "saw_qpu_dynamic_subword_selector",
+    ]:
+        if field not in qpu_required:
+            fail(f"P13 final checked ping-pong QPU read fixture missing {field}")
+
+    copy_expected = json.loads(
+        read_text(
+            repo_root
+            / fixtures["dynamic_vpm_pingpong_coord_selector_loop_vc4kernel"]["path"]
+            / "expected.json"
+        )
+    )
+    if "saw_vpm_qpu_read" in copy_expected.get("required", {}):
+        fail("P13 final ping-pong copy fixture must not claim saw_vpm_qpu_read")
+
+    claim_summary = run_mixed_fixture_claim_audit(repo_root)
+    first_line = claim_summary[0] if claim_summary else ""
+    match = re.search(r"fixtures=(\d+) claims=(\d+) phase_guards=(\d+)", first_line)
+    if not match:
+        fail("P13 final mixed fixture claim audit did not report counts")
+    return {
+        "claim_audit_fixtures": int(match.group(1)),
+        "claim_audit_claims": int(match.group(2)),
+        "claim_audit_phase_guards": int(match.group(3)),
+        "checked_pingpong_qpu_read": 1,
+    }
+
+
+def audit_p13_fixture_mode(repo_root, manifest, mode):
+    future_entries = {
+        entry.get("id"): entry
+        for entry in manifest.get("future_phase_extension_points", [])
+    }
+    required_features = {
+        feature.get("id"): feature
+        for feature in manifest.get("required_features", [])
+    }
+    if mode == "p13-final-surface-lock-pre-fixtures":
+        gap = future_entries.get(P13_FINAL_FIXTURE_EXTENSION_ID)
+        if not gap or gap.get("status") != "future_extension":
+            fail("P13 pre-fixture mode requires p13_final_surface_lock future extension gap")
+        return {"p13f_recorded_gap_list": 1, "p13_final_fixture_mode": 0}
+    if P13_FINAL_FIXTURE_EXTENSION_ID in future_entries:
+        fail("P13 final mode still has p13_final_surface_lock in future extension points")
+    feature = required_features.get(P13_FINAL_FIXTURE_EXTENSION_ID)
+    if not feature or feature.get("status") != "implemented":
+        fail("P13 final mode requires implemented p13_final_surface_lock manifest feature")
+    return {"p13f_recorded_gap_list": 0, "p13_final_fixture_mode": 1}
+
+
+def audit_p13_final_surface_lock(repo_root, matrix, mode):
+    manifest = load_mixed_manifest(repo_root)
+    counts = {}
+    counts.update(audit_p13_matrix_final_contract(matrix))
+    counts.update(audit_p13_active_docs(repo_root))
+    counts.update(audit_p13_active_source_contract(repo_root))
+    counts.update(audit_p13_mixed_fixture_purity(repo_root, manifest))
+    counts.update(audit_p13_selector_claim_contract(repo_root, manifest))
+    counts.update(audit_p13_fixture_mode(repo_root, manifest, mode))
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -4184,6 +4543,8 @@ def main(argv):
         "p10-sfu-fastmath-lock",
         "p11-dynamic-rotate-shuffle-lock",
         "p12-dynamic-vpm-coord-lock",
+        "p13-final-surface-lock-pre-fixtures",
+        "p13-final-surface-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -4209,6 +4570,8 @@ def main(argv):
             "p9-pack-unpack-subword-lock",
             "p11-dynamic-rotate-shuffle-lock",
             "p12-dynamic-vpm-coord-lock",
+            "p13-final-surface-lock-pre-fixtures",
+            "p13-final-surface-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -4239,6 +4602,8 @@ def main(argv):
             "p10-sfu-fastmath-lock",
             "p11-dynamic-rotate-shuffle-lock",
             "p12-dynamic-vpm-coord-lock",
+            "p13-final-surface-lock-pre-fixtures",
+            "p13-final-surface-lock",
         }
         else {}
     )
@@ -4304,7 +4669,12 @@ def main(argv):
     )
     p12_lock_counts = (
         audit_p12_dynamic_vpm_coord_lock(repo_root, matrix)
-        if args.mode == "p12-dynamic-vpm-coord-lock"
+        if args.mode == "p12-dynamic-vpm-coord-lock" or args.mode in P13_FINAL_MODES
+        else {}
+    )
+    p13_final_counts = (
+        audit_p13_final_surface_lock(repo_root, matrix, args.mode)
+        if args.mode in P13_FINAL_MODES
         else {}
     )
 
@@ -4353,6 +4723,8 @@ def main(argv):
         print(f"p11_dynamic_rotate_shuffle_lock: {format_counts(p11_lock_counts)}")
     if p12_lock_counts:
         print(f"p12_dynamic_vpm_coord_lock: {format_counts(p12_lock_counts)}")
+    if p13_final_counts:
+        print(f"p13_final_surface_lock: {format_counts(p13_final_counts)}")
     return 0
 
 

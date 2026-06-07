@@ -11,6 +11,7 @@
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p10-sfu-fastmath-lock | FileCheck %s --check-prefix=P10
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p11-dynamic-rotate-shuffle-lock | FileCheck %s --check-prefix=P11
 # RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p12-dynamic-vpm-coord-lock | FileCheck %s --check-prefix=P12
+# RUN: python3 %S/../../../../../compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %S/../../../../../ --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p13-final-surface-lock-pre-fixtures | FileCheck %s --check-prefix=P13
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
 # P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
@@ -269,3 +270,29 @@
 # P12-SAME: p12_negative_tests=5
 # P12-SAME: p9_dma_laned_hits=0
 # P12-SAME: sparse_vdw_active_hits=0
+
+# P13: PASS VC4Kernel Surface v2 audit: mode=p13-final-surface-lock-pre-fixtures
+# P13: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P13: fixture_purity:
+# P13-SAME: hardware_inputs=149
+# P13-SAME: producer_or_lower_half_hits=0
+# P13: p12_dynamic_vpm_coord_lock:
+# P13-SAME: hidden_spill_reload_tmu_hits=0
+# P13-SAME: mixed_checker_lock=1
+# P13-SAME: p12_manifest_features=19
+# P13-SAME: p12_mixed_fixtures=6
+# P13-SAME: p12_negative_tests=5
+# P13-SAME: sparse_vdw_active_hits=0
+# P13: p13_final_surface_lock:
+# P13-SAME: active_doc_transitional_hits=0
+# P13-SAME: active_docs_scanned=4
+# P13-SAME: active_source_forbidden_hits=0
+# P13-SAME: checked_pingpong_qpu_read=1
+# P13-SAME: claim_audit_claims=225
+# P13-SAME: claim_audit_fixtures=20
+# P13-SAME: matrix_accepted_hardware_proven=29
+# P13-SAME: matrix_deterministic_reject=10
+# P13-SAME: matrix_final_features=41
+# P13-SAME: mixed_fixture_purity_hits=0
+# P13-SAME: p13_final_fixture_mode=0
+# P13-SAME: p13f_recorded_gap_list=1
