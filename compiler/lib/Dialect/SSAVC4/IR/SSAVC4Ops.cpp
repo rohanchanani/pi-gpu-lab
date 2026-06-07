@@ -202,7 +202,8 @@ static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
            << role << " laned subword mode is not supported by VC4 hardware";
   if (width != VPMElemWidth::w32 && orientation == VPMOrientation::vertical)
     return op->emitOpError()
-           << "vertical subword " << role << " is not supported in P9";
+           << "vertical subword " << role
+           << " is unproven/deferred in P12";
   return success();
 }
 
@@ -218,22 +219,63 @@ static LogicalResult verifyElemBytesMatchesWidth(Operation *op,
   return success();
 }
 
+static Value getOptionalOperandByCount(Operation *op, unsigned dynamicIndex,
+                                       unsigned staticOperandCount) {
+  if (op->getNumOperands() == staticOperandCount)
+    return {};
+  if (op->getNumOperands() == staticOperandCount + 1)
+    return op->getOperand(dynamicIndex);
+  return {};
+}
+
+static LogicalResult verifyDynamicVPMXOperand(Operation *op, Value xValue,
+                                              StringRef role) {
+  if (!xValue)
+    return success();
+  if (!xValue.getType().isSignlessInteger(32))
+    return op->emitOpError() << "requires an i32 " << role << " operand";
+  std::optional<int64_t> constant = getSplatI32Constant(xValue);
+  if (constant && (*constant < 0 || *constant > 15))
+    return op->emitOpError()
+           << role << " constant must be in VPM ADDR range [0, 15]";
+  return success();
+}
+
 static LogicalResult verifyVPMQPUCoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
-                                             int64_t x, int64_t stride) {
-  if (x < 0 || x > 15)
-    return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32 &&
-      x != 0)
-    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w16 &&
-      x > 1)
-    return op->emitOpError("horizontal 16-bit VPM QPU access requires halfword "
-                           "selector x in range [0, 1]");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
-      x > 3)
-    return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
-                           "selector x in range [0, 3]");
+                                             IntegerAttr xAttr, Value xValue,
+                                             int64_t stride) {
+  if (xAttr && xValue)
+    return op->emitOpError(
+        "specify either static x or dynamic x operand, not both");
+  if (!xAttr && !xValue)
+    return op->emitOpError("requires static x attr or dynamic x operand");
+  if (failed(verifyDynamicVPMXOperand(op, xValue, "VPM QPU dynamic x")))
+    return failure();
+  if (xValue) {
+    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32)
+      return op->emitOpError(
+          "horizontal 32-bit VPM QPU access encodes Y only; dynamic x is not "
+          "meaningful");
+    if (width != VPMElemWidth::w32)
+      return op->emitOpError(
+          "dynamic subword VPM QPU x selectors are unproven/deferred in P12");
+  } else {
+    int64_t x = xAttr.getInt();
+    if (x < 0 || x > 15)
+      return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+    if (orientation == VPMOrientation::horizontal &&
+        width == VPMElemWidth::w32 && x != 0)
+      return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
+    if (orientation == VPMOrientation::horizontal &&
+        width == VPMElemWidth::w16 && x > 1)
+      return op->emitOpError("horizontal 16-bit VPM QPU access requires "
+                             "halfword selector x in range [0, 1]");
+    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
+        x > 3)
+      return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
+                             "selector x in range [0, 3]");
+  }
   if (stride <= 0 || stride > 63)
     return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
@@ -241,20 +283,32 @@ static LogicalResult verifyVPMQPUCoordinates(Operation *op, VPMElemWidth width,
 
 static LogicalResult verifyVPMDMACoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
-                                             int64_t x, int64_t stride) {
-  if (x < 0 || x > 15)
-    return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32 &&
-      x != 0)
-    return op->emitOpError("horizontal 32-bit VPM DMA access requires x = 0");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w16 &&
-      x > 1)
-    return op->emitOpError("horizontal 16-bit VPM DMA access requires halfword "
-                           "selector x in range [0, 1]");
-  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
-      x > 3)
-    return op->emitOpError("horizontal 8-bit VPM DMA access requires byte "
-                           "selector x in range [0, 3]");
+                                             IntegerAttr xAttr, Value xValue,
+                                             int64_t stride) {
+  if (xAttr && xValue)
+    return op->emitOpError(
+        "specify either static x or dynamic x operand, not both");
+  if (!xAttr && !xValue)
+    return op->emitOpError("requires static x attr or dynamic x operand");
+  if (failed(verifyDynamicVPMXOperand(op, xValue, "VPM DMA dynamic x")))
+    return failure();
+  if (xValue) {
+    if (width != VPMElemWidth::w32)
+      return op->emitOpError(
+          "dynamic subword VPM DMA x selectors are unproven/deferred in P12");
+  } else {
+    int64_t x = xAttr.getInt();
+    if (x < 0 || x > 15)
+      return op->emitOpError("requires VPM x coordinate in range [0, 15]");
+    if (orientation == VPMOrientation::horizontal &&
+        width == VPMElemWidth::w16 && x > 1)
+      return op->emitOpError("horizontal 16-bit VPM DMA access requires "
+                             "halfword selector x in range [0, 1]");
+    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
+        x > 3)
+      return op->emitOpError("horizontal 8-bit VPM DMA access requires byte "
+                             "selector x in range [0, 3]");
+  }
   if (stride <= 0)
     return op->emitOpError("requires positive VPM stride");
   return success();
@@ -450,8 +504,9 @@ LogicalResult VPMWriteOp::verify() {
   if (lanes != 16)
     return emitOpError(
         "supports only full 16-lane VPM vectors in executable v1");
-  return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
-                                 getXAttr().getInt(), getStrideAttr().getInt());
+  return verifyVPMQPUCoordinates(
+      op, getWidth(), getOrientation(), getXAttr(),
+      getOptionalOperandByCount(getOperation(), 2, 2), getStrideAttr().getInt());
 }
 
 LogicalResult VPMReadOp::verify() {
@@ -466,8 +521,9 @@ LogicalResult VPMReadOp::verify() {
   if (lanes != 16)
     return emitOpError(
         "supports only full 16-lane VPM vectors in executable v1");
-  return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
-                                 getXAttr().getInt(), getStrideAttr().getInt());
+  return verifyVPMQPUCoordinates(
+      op, getWidth(), getOrientation(), getXAttr(),
+      getOptionalOperandByCount(getOperation(), 1, 1), getStrideAttr().getInt());
 }
 
 LogicalResult MovOp::verify() {
@@ -780,12 +836,12 @@ LogicalResult VDRLoadOp::verify() {
   if (memoryPitchBytes < rowLen * elemBytes)
     return emitOpError("requires memory_pitch_bytes to cover row_len elements");
 
-  int64_t vpmX = getVpmXAttr().getInt();
   int64_t vpmPitch = getVpmPitchAttr().getInt();
   if (vpmPitch <= 0 || vpmPitch > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
-  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(), vpmX,
-                                     vpmPitch)))
+  if (failed(verifyVPMDMACoordinates(
+          op, getWidth(), getOrientation(), getVpmXAttr(),
+          getOptionalOperandByCount(getOperation(), 2, 2), vpmPitch)))
     return failure();
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
@@ -814,8 +870,9 @@ LogicalResult VDRLoadRectDynamicOp::verify() {
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
                                         getOrientation(), "VDR DMA")))
     return failure();
-  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
-                                     getDstX(), getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(
+          op, getWidth(), getOrientation(), getDstXAttr(),
+          getOptionalOperandByCount(getOperation(), 5, 5), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");
@@ -885,8 +942,9 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
                                         getOrientation(), "VDW DMA")))
     return failure();
-  if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
-                                     getSrcX(), getVpmPitch())))
+  if (failed(verifyVPMDMACoordinates(
+          op, getWidth(), getOrientation(), getSrcXAttr(),
+          getOptionalOperandByCount(getOperation(), 5, 5), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");

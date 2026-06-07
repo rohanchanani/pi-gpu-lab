@@ -156,9 +156,9 @@
 # P8-SAME: removed_legacy_hits=0
 # P8: p8_vdw_store_policy_lock:
 # P8-SAME: active_vdw_store_families=3
-# P8-SAME: active_vdw_stores=439
+# P8-SAME: active_vdw_stores=451
 # P8-SAME: missing_inactive_store_hits=0
-# P8-SAME: negative_vdw_store_tests=27
+# P8-SAME: negative_vdw_store_tests=31
 # P8-SAME: sparse_vdw_active_hits=0
 # P8-SAME: vdw_source_policy_hits=0
 # P8-SAME: vdw_sparse_rmw_fallback_hits=0

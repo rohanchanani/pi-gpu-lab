@@ -347,14 +347,15 @@ def VC4Kernel_VPMWriteFragmentOp : VC4Kernel_Op<"vpm_write_fragment", [
                        VC4Kernel_I32:$row,
                        VC4Kernel_Vector16Data:$value,
                        VC4Kernel_PredType:$pred,
+                       Optional<VC4Kernel_I32>:$x_value,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$x,
+                       OptionalAttr<I32Attr>:$x,
                        I32Attr:$stride,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$tile `,` $row `,` $value `,` $pred attr-dict `:` type($tile) `,` type($row) `,` type($value) `,` type($pred)";
+  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? `,` $value `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? `,` type($value) `,` type($pred)";
   let hasVerifier = 1;
 }
 
@@ -364,15 +365,16 @@ def VC4Kernel_VPMReadFragmentOp : VC4Kernel_Op<"vpm_read_fragment", [
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$row,
                        VC4Kernel_PredType:$pred,
+                       Optional<VC4Kernel_I32>:$x_value,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$x,
+                       OptionalAttr<I32Attr>:$x,
                        I32Attr:$stride,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
   let results = (outs VC4Kernel_Vector16Data:$result);
-  let assemblyFormat = "$tile `,` $row `,` $pred attr-dict `:` type($tile) `,` type($row) `,` type($pred) `->` type($result)";
+  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? `,` type($pred) `->` type($result)";
   let hasVerifier = 1;
 }
 
@@ -383,6 +385,7 @@ def VC4Kernel_VDRLoadToVPMOp : VC4Kernel_Op<"vdr_load_to_vpm", [
                        VC4Kernel_I32:$byte_offset,
                        VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$dst_row,
+                       Optional<VC4Kernel_I32>:$dst_x_value,
                        I32Attr:$rows,
                        I32Attr:$cols,
                        I32Attr:$global_stride_bytes,
@@ -390,11 +393,11 @@ def VC4Kernel_VDRLoadToVPMOp : VC4Kernel_Op<"vdr_load_to_vpm", [
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$dst_x,
+                       OptionalAttr<I32Attr>:$dst_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row)";
+  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)?";
   let hasVerifier = 1;
 }
 
@@ -408,17 +411,18 @@ def VC4Kernel_VDRLoadRectToVPMOp : VC4Kernel_Op<"vdr_load_rect_to_vpm", [
                        VC4Kernel_I32:$active_rows,
                        VC4Kernel_I32:$active_cols,
                        VC4Kernel_I32:$memory_pitch_bytes,
+                       Optional<VC4Kernel_I32>:$dst_x_value,
                        I32Attr:$max_rows,
                        I32Attr:$max_cols,
                        I32Attr:$elem_bytes,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$dst_x,
+                       OptionalAttr<I32Attr>:$dst_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
+  let assemblyFormat = "$base `,` $byte_offset `,` $tile `,` $dst_row (`dynamic_dst_x` $dst_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($base) `,` type($byte_offset) `,` type($tile) `,` type($dst_row) (`dynamic_dst_x` type($dst_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
   let hasVerifier = 1;
 }
 
@@ -430,16 +434,17 @@ def VC4Kernel_VDWStoreVPMFragmentOp : VC4Kernel_Op<"vdw_store_vpm_fragment", [
                        VC4Kernel_I32:$base,
                        VC4Kernel_I32:$byte_offset,
                        VC4Kernel_PredType:$pred,
+                       Optional<VC4Kernel_I32>:$src_x_value,
                        I32Attr:$elem_bytes,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$src_x,
+                       OptionalAttr<I32Attr>:$src_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
                        OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
-  let assemblyFormat = "$tile `,` $src_row `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) `,` type($base) `,` type($byte_offset) `,` type($pred)";
+  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($base) `,` type($byte_offset) `,` type($pred)";
   let hasVerifier = 1;
 }
 
@@ -453,18 +458,19 @@ def VC4Kernel_VDWStoreRectFromVPMOp : VC4Kernel_Op<"vdw_store_rect_from_vpm", [
                        VC4Kernel_I32:$active_rows,
                        VC4Kernel_I32:$active_cols,
                        VC4Kernel_I32:$memory_stride_bytes,
+                       Optional<VC4Kernel_I32>:$src_x_value,
                        I32Attr:$max_rows,
                        I32Attr:$max_cols,
                        I32Attr:$elem_bytes,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
-                       I32Attr:$src_x,
+                       OptionalAttr<I32Attr>:$src_x,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
                        OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
-  let assemblyFormat = "$tile `,` $src_row `,` $base `,` $byte_offset `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($tile) `,` type($src_row) `,` type($base) `,` type($byte_offset) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
+  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? `,` $base `,` $byte_offset `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($base) `,` type($byte_offset) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }
 

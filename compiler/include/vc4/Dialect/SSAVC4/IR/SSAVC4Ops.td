@@ -323,14 +323,15 @@ def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
   let arguments = (ins
     AnyType:$row,
     AnyType:$value,
+    Optional<AnyType>:$x_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
-    I32Attr:$x,
+    OptionalAttr<I32Attr>:$x,
     I32Attr:$stride,
     I32Attr:$lanes
   );
-  let assemblyFormat = "$row `,` $value attr-dict `:` type($row) `,` type($value)";
+  let assemblyFormat = "$row (`dynamic_x` $x_value^)? `,` $value attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? `,` type($value)";
   let hasVerifier = 1;
 }
 
@@ -344,15 +345,16 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   }];
   let arguments = (ins
     AnyType:$row,
+    Optional<AnyType>:$x_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
-    I32Attr:$x,
+    OptionalAttr<I32Attr>:$x,
     I32Attr:$stride,
     I32Attr:$lanes
   );
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$row attr-dict `:` type($row) `->` type($result)";
+  let assemblyFormat = "$row (`dynamic_x` $x_value^)? attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? `->` type($result)";
   let hasVerifier = 1;
 }
 
@@ -372,17 +374,18 @@ def SSAVC4_VDRLoadOp : SSAVC4_Op<"vdr.load"> {
   let arguments = (ins
     AnyType:$address,
     AnyType:$vpm_base_row,
+    Optional<AnyType>:$vpm_x_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
     I32Attr:$row_len,
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
-    I32Attr:$vpm_x,
+    OptionalAttr<I32Attr>:$vpm_x,
     I32Attr:$vpm_pitch,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_base_row attr-dict `:` type($address) `,` type($vpm_base_row)";
+  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_x` $vpm_x_value^)? attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_x` type($vpm_x_value)^)?";
   let hasVerifier = 1;
 }
 
@@ -402,18 +405,19 @@ def SSAVC4_VDRLoadRectDynamicOp : SSAVC4_Op<"vdr.load_rect.dynamic", [
     AnyType:$active_rows,
     AnyType:$active_cols,
     AnyType:$memory_pitch_bytes,
+    Optional<AnyType>:$dst_x_value,
     I32Attr:$max_rows,
     I32Attr:$max_cols,
     I32Attr:$elem_bytes,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
-    I32Attr:$dst_x,
+    OptionalAttr<I32Attr>:$dst_x,
     I32Attr:$vpm_pitch,
     BoolAttr:$zero_fill,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_base_row `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($address) `,` type($vpm_base_row) `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
+  let assemblyFormat = "$address `,` $vpm_base_row (`dynamic_dst_x` $dst_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_pitch_bytes attr-dict `:` type($address) `,` type($vpm_base_row) (`dynamic_dst_x` type($dst_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_pitch_bytes)";
   let hasVerifier = 1;
 }
 
@@ -485,18 +489,19 @@ def SSAVC4_VDWStoreRectDynamicOp : SSAVC4_Op<"vdw.store_rect.dynamic", [
     AnyType:$active_rows,
     AnyType:$active_cols,
     AnyType:$memory_stride_bytes,
+    Optional<AnyType>:$src_x_value,
     I32Attr:$max_rows,
     I32Attr:$max_cols,
     I32Attr:$elem_bytes,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
-    I32Attr:$src_x,
+    OptionalAttr<I32Attr>:$src_x,
     I32Attr:$vpm_pitch,
     BoolAttr:$preserve_inactive,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_source_row `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($address) `,` type($vpm_source_row) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
+  let assemblyFormat = "$address `,` $vpm_source_row (`dynamic_src_x` $src_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($address) `,` type($vpm_source_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }
 

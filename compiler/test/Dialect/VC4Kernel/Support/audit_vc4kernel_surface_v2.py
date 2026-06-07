@@ -204,6 +204,14 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
     },
+    "p12_dynamic_vpm_read_write_coordinates": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p12_dynamic_vdr_vdw_coordinates": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -470,6 +478,14 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_pressure_policy",
         "hardware_proven_pending_policy_lock",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p12_dynamic_vpm_read_write_coordinates": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p12_dynamic_vdr_vdw_coordinates": {
+        "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },
 }
@@ -2923,7 +2939,7 @@ def audit_p9_pack_unpack_subword_lock(repo_root, matrix):
         "32-bit VPM QPU access requires subword<none>",
         "VDR DMA laned subword mode is not supported by VC4 hardware",
         "elem_bytes must match VPM width",
-        "vertical subword VDR DMA is not supported in P9",
+        "vertical subword VDR DMA is unproven/deferred in P12",
     ]:
         if token not in invalid_text:
             fail(f"P9 lock invalid tests missing diagnostic/token: {token}")
@@ -3267,20 +3283,23 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         if token not in shuffle_text:
             fail(f"P11 arbitrary shuffle matrix entry must document {token}")
 
-    p12_vpm = require_matrix_feature(
+    p12_vpm = require_matrix_feature_status_in(
         features,
         "p12_dynamic_vpm_read_write_coordinates",
         "P12",
-        "planned",
+        {"planned", "implemented_pending_hardware"},
     )
-    p12_dma = require_matrix_feature(
+    p12_dma = require_matrix_feature_status_in(
         features,
         "p12_dynamic_vdr_vdw_coordinates",
         "P12",
-        "planned",
+        {"planned", "implemented_pending_hardware"},
     )
     if not p12_vpm or not p12_dma:
-        fail("P11 lock expected P12 dynamic coordinate entries to remain planned")
+        fail(
+            "P11 lock expected P12 dynamic coordinate entries to remain planned "
+            "or staged for P12 implementation"
+        )
 
     source_text_by_path = {
         path: read_text(path)

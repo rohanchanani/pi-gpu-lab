@@ -125,6 +125,15 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
+static Value getOptionalOperandByCount(Operation *op, unsigned dynamicIndex,
+                                       unsigned staticOperandCount) {
+  if (op->getNumOperands() == staticOperandCount)
+    return {};
+  if (op->getNumOperands() == staticOperandCount + 1)
+    return op->getOperand(dynamicIndex);
+  return {};
+}
+
 static LogicalResult
 verifyRequiredMemoryPolicy(Operation *op,
                            mlir::vc4kernel::MemoryPath expectedPath,
@@ -3370,8 +3379,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                        mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
+    Value dynamicX = getOptionalOperandByCount(op, 4, 4);
+    Value mappedDynamicX = dynamicX ? mapValue(op, dynamicX, state) : Value();
     Value value = mapValue(op, op->getOperand(2), state);
-    if (!row || !value)
+    if (!row || (dynamicX && !mappedDynamicX) || !value)
       return failure();
     FailureOr<Value> zeroFilled =
         applyVPMPredicateZeroFill(op, builder, op->getOperand(3), value, state);
@@ -3383,12 +3394,17 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedRow))
       return failure();
     row = *plannedRow;
-    createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
-             {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op), getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("x", op->getAttr("x")),
-              builder.getNamedAttr("stride", op->getAttr("stride")),
-              builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))});
+    SmallVector<Value, 3> operands{row, value};
+    if (mappedDynamicX)
+      operands.push_back(mappedDynamicX);
+    SmallVector<NamedAttribute, 8> attrs{
+        getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("stride", op->getAttr("stride")),
+        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))};
+    if (Attribute xAttr = op->getAttr("x"))
+      attrs.push_back(builder.getNamedAttr("x", xAttr));
+    createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, operands, attrs);
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
@@ -3397,21 +3413,28 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                        mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
-    if (!row)
+    Value dynamicX = getOptionalOperandByCount(op, 3, 3);
+    Value mappedDynamicX = dynamicX ? mapValue(op, dynamicX, state) : Value();
+    if (!row || (dynamicX && !mappedDynamicX))
       return failure();
     FailureOr<Value> plannedRow =
         applyVPMTileBase(op, builder, op->getOperand(0), row, state);
     if (failed(plannedRow))
       return failure();
     row = *plannedRow;
-    Value read = createOpWithResult(
-        builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
-        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
-         getSSAVC4VPMSubword(builder, op),
-         builder.getNamedAttr("x", op->getAttr("x")),
-         builder.getNamedAttr("stride", op->getAttr("stride")),
-         builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))},
-        op->getResult(0).getType());
+    SmallVector<Value, 2> operands{row};
+    if (mappedDynamicX)
+      operands.push_back(mappedDynamicX);
+    SmallVector<NamedAttribute, 8> attrs{
+        getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("stride", op->getAttr("stride")),
+        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))};
+    if (Attribute xAttr = op->getAttr("x"))
+      attrs.push_back(builder.getNamedAttr("x", xAttr));
+    Value read = createOpWithResult(builder, op->getLoc(),
+                                    kSSAVC4VPMReadOpName, operands, attrs,
+                                    op->getResult(0).getType());
     FailureOr<Value> zeroFilled =
         applyVPMPredicateZeroFill(op, builder, op->getOperand(2), read, state);
     if (failed(zeroFilled))
@@ -3427,7 +3450,10 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
-    if (!base || !byteOffset || !dstRow)
+    Value dynamicDstX = getOptionalOperandByCount(op, 4, 4);
+    Value mappedDstX =
+        dynamicDstX ? mapValue(op, dynamicDstX, state) : Value();
+    if (!base || !byteOffset || !dstRow || (dynamicDstX && !mappedDstX))
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
@@ -3440,17 +3466,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedDstRow))
       return failure();
     dstRow = *plannedDstRow;
-    createOp(
-        builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
-        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
-         getSSAVC4VPMSubword(builder, op),
-         builder.getNamedAttr("row_len", op->getAttr("cols")),
-         builder.getNamedAttr("nrows", op->getAttr("rows")),
-         builder.getNamedAttr("memory_pitch_bytes",
-                              op->getAttr("global_stride_bytes")),
-         builder.getNamedAttr("vpm_x", op->getAttr("dst_x")),
-         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    SmallVector<Value, 3> operands{address, dstRow};
+    if (mappedDstX)
+      operands.push_back(mappedDstX);
+    SmallVector<NamedAttribute, 10> attrs{
+        getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("row_len", op->getAttr("cols")),
+        builder.getNamedAttr("nrows", op->getAttr("rows")),
+        builder.getNamedAttr("memory_pitch_bytes",
+                             op->getAttr("global_stride_bytes")),
+        builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+    if (Attribute dstXAttr = op->getAttr("dst_x"))
+      attrs.push_back(builder.getNamedAttr("vpm_x", dstXAttr));
+    createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, operands, attrs);
     return success();
   }
   if (hasName(op, kVDRLoadRectOpName)) {
@@ -3461,10 +3491,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value base = mapValue(op, op->getOperand(0), state);
     Value byteOffset = mapValue(op, op->getOperand(1), state);
     Value dstRow = mapValue(op, op->getOperand(3), state);
+    Value dynamicDstX = getOptionalOperandByCount(op, 7, 7);
+    Value mappedDstX =
+        dynamicDstX ? mapValue(op, dynamicDstX, state) : Value();
     Value activeRows = mapValue(op, op->getOperand(4), state);
     Value activeCols = mapValue(op, op->getOperand(5), state);
-    Value memoryPitchBytes = mapValue(op, op->getOperand(6), state);
-    if (!base || !byteOffset || !dstRow || !activeRows || !activeCols ||
+    Value memoryPitchBytes =
+        mapValue(op, op->getOperand(6), state);
+    if (!base || !byteOffset || !dstRow || (dynamicDstX && !mappedDstX) ||
+        !activeRows || !activeCols ||
         !memoryPitchBytes)
       return failure();
     Value address = createOpWithResult(
@@ -3478,18 +3513,23 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedDstRow))
       return failure();
     dstRow = *plannedDstRow;
-    createOp(
-        builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName,
-        {address, dstRow, activeRows, activeCols, memoryPitchBytes},
-        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
-         getSSAVC4VPMSubword(builder, op),
-         builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
-         builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
-         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
-         builder.getNamedAttr("dst_x", op->getAttr("dst_x")),
-         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-         builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
-         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    SmallVector<Value, 6> operands{address, dstRow, activeRows, activeCols,
+                                   memoryPitchBytes};
+    if (mappedDstX)
+      operands.push_back(mappedDstX);
+    SmallVector<NamedAttribute, 10> attrs{
+        getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+        builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+        builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+        builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+        builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+    if (Attribute dstXAttr = op->getAttr("dst_x"))
+      attrs.push_back(builder.getNamedAttr("dst_x", dstXAttr));
+    createOp(builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName, operands,
+             attrs);
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
@@ -3499,6 +3539,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
+    Value dynamicSrcX = getOptionalOperandByCount(op, 5, 5);
     const PredicatePlan *predicate =
         lookupPredicatePlan(op->getOperand(4), state);
     if (!predicate)
@@ -3510,9 +3551,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return op->emitOpError()
              << "sparse VDW store masks are not supported in P8";
     Value srcRow = mapValue(op, op->getOperand(1), state);
+    Value mappedSrcX =
+        dynamicSrcX ? mapValue(op, dynamicSrcX, state) : Value();
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
-    if (!srcRow || !base || !byteOffset)
+    if (!srcRow || (dynamicSrcX && !mappedSrcX) || !base || !byteOffset)
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
@@ -3531,10 +3574,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             "pred.tail plan is missing base or limit values");
       Value activeTail = createI32Sub(builder, op->getLoc(), predicate->limit,
                                       predicate->base);
-      auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
-      Value vpmX =
-          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                        builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+      Value vpmX = mappedSrcX;
+      if (!vpmX) {
+        auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
+        vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                             builder.getI32IntegerAttr(srcX ? srcX.getInt()
+                                                            : 0));
+      }
       SmallVector<Value, 4> operands{address, srcRow, vpmX, activeTail};
       int64_t elemBytes = 4;
       if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
@@ -3550,10 +3596,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
            builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
       return success();
     }
-    auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
-    Value vpmX =
-        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                      builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+    Value vpmX = mappedSrcX;
+    if (!vpmX) {
+      auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
+      vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                           builder.getI32IntegerAttr(srcX ? srcX.getInt()
+                                                          : 0));
+    }
     SmallVector<Value, 4> operands{address, srcRow, vpmX};
     SmallVector<NamedAttribute, 8> attrs{
         getSSAVC4VPMOrientation(builder, op),
@@ -3584,13 +3633,17 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
     Value srcRow = mapValue(op, op->getOperand(1), state);
+    Value dynamicSrcX = getOptionalOperandByCount(op, 7, 7);
+    Value mappedSrcX =
+        dynamicSrcX ? mapValue(op, dynamicSrcX, state) : Value();
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
     Value activeRows = mapValue(op, op->getOperand(4), state);
     Value activeCols = mapValue(op, op->getOperand(5), state);
-    Value memoryStrideBytes = mapValue(op, op->getOperand(6), state);
-    if (!srcRow || !base || !byteOffset || !activeRows || !activeCols ||
-        !memoryStrideBytes)
+    Value memoryStrideBytes =
+        mapValue(op, op->getOperand(6), state);
+    if (!srcRow || (dynamicSrcX && !mappedSrcX) || !base || !byteOffset ||
+        !activeRows || !activeCols || !memoryStrideBytes)
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
@@ -3603,18 +3656,23 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedSrcRow))
       return failure();
     srcRow = *plannedSrcRow;
-    createOp(
-        builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName,
-        {address, srcRow, activeRows, activeCols, memoryStrideBytes},
-        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
-         getSSAVC4VPMSubword(builder, op),
-         builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
-         builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
-         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
-         builder.getNamedAttr("src_x", op->getAttr("src_x")),
-         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-         builder.getNamedAttr("preserve_inactive", builder.getBoolAttr(true)),
-         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    SmallVector<Value, 6> operands{address, srcRow, activeRows, activeCols,
+                                   memoryStrideBytes};
+    if (mappedSrcX)
+      operands.push_back(mappedSrcX);
+    SmallVector<NamedAttribute, 10> attrs{
+        getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+        getSSAVC4VPMSubword(builder, op),
+        builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+        builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+        builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+        builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+        builder.getNamedAttr("preserve_inactive", builder.getBoolAttr(true)),
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+    if (Attribute srcXAttr = op->getAttr("src_x"))
+      attrs.push_back(builder.getNamedAttr("src_x", srcXAttr));
+    createOp(builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName, operands,
+             attrs);
     return success();
   }
   if (hasName(op, kBarrierOpName)) {

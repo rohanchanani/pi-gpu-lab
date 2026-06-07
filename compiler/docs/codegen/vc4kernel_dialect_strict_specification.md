@@ -307,6 +307,8 @@ P11 dynamic rotate/shuffle:
 
 P12 dynamic VPM/VDR/VDW coordinates:
   admit dynamic coordinates/pitch only where lower-half and hardware proof exists.
+  Deterministic rejects must state whether the reason is hardware-forbidden,
+  VC4Kernel static-surface policy, or unproven/deferred for P12.
 
 P13 final matrix:
   lock each feature to verifier, VC4KernelToSSAVC4, lower-half, and hardware or deterministic-reject proof.
@@ -1562,8 +1564,9 @@ width/offset fields and VDW writes LANED as zero. In 32-bit mode, the hardware
 ignores the laned bit, so executable 32-bit ops must require `subword_mode =
 none`. Sub-32 QPU VPM ops must use `packed` or `laned`; sub-32 DMA ops must use
 `packed` and horizontal orientation. `none` has no accepted P9 meaning for
-w8/w16 movement. Vertical subword VDR/VDW DMA is deterministic-rejected in P9;
-the horizontal path is the hardware-proven subword DMA surface.
+w8/w16 movement. Vertical subword VDR/VDW DMA deterministic-rejects as
+unproven/deferred for P12 unless a later byte/halfword oracle proves it; the
+horizontal path is the hardware-proven subword DMA surface.
 
 For DMA, `elem_bytes` must match width exactly:
 
@@ -1944,6 +1947,17 @@ The architecture-backed dynamic rectangular contract is:
 8. Static exact rectangular paths and dynamic rectangular paths both remain part of the final design. Static/full interior tiles keep compile-time information; dynamic/tail/runtime tiles use dynamic rect ops.
 9. Blocked GEMV/GEMM must use natural VDR global-to-VPM shared-memory loads, not TMU-to-VPM as a workaround. TMU may still be used for unrelated direct register loads; it is not an accepted sparse VDW preserve workaround before the deferred sparse-store phase.
 10. Planned-emission branch-count invariant: dynamic VDR/VDW branch-critical regions must be self-counted by planned emission or documented as non-branch-critical.
+
+P12 dynamic coordinate rejects are classified precisely:
+
+- Hardware-forbidden: VDW DMA laned modes and unencodable VDW sparse stores.
+- VC4Kernel static-surface policy: dynamic orientation, width, subword, memory path, and vector coordinate operands.
+- Unproven/deferred for P12: vertical subword DMA and subword dynamic byte/halfword selector modes unless P12 adds explicit oracle fixtures.
+
+Horizontal w32 generic VPM QPU read/write encodes Y only, so dynamic QPU X is
+not a meaningful accepted surface for that mode. Vertical w32 VPM QPU dynamic X
+and horizontal/vertical w32 VDR/VDW dynamic X are P12 proof scope because the
+relevant setup fields encode X/Y coordinates.
 
 The op semantics are independent of GEMM/GEMV; GEMM/GEMV are only the first workloads that force the general feature. Active rows and columns are runtime scalar `i32` values. Memory pitch/stride in bytes is a runtime scalar `i32` value.
 
