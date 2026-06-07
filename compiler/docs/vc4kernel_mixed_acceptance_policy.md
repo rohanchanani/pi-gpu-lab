@@ -76,14 +76,16 @@ side paths, P10 SFU side paths, and VDW preserve stores.
 P12 adds `dynamic_vpm_pingpong_coord_selector_loop_vc4kernel`,
 `dynamic_vpm_double_buffered_subword_compute_vc4kernel`, and
 `dynamic_vpm_coord_selector_forced_spill_vc4kernel` to the lock-mode mixed
-suite. Word-X and subword selector are separate fields. Dynamic selector is not
-dynamic subword mode, and setup-field masks are setup-field isolation, not
-modulo semantics. VDR and VDW are asymmetric and keep separate lower-half setup
-logic. No hardware-backed dynamic coordinate or selector mode remains deferred
-in P12. P12 mixed fixtures combine dynamic VPM rows, word-X, VDR/VDW packed
-byte/halfword selectors, QPU VPM selector reads, double-buffered tile loops,
-spill pressure, P9 pack/unpack, P11 rotate where natural, and VDW preserve
-stores without TMU-to-VPM workarounds.
+suite, followed by the final P12 mixed acceptance fixtures
+`mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel` and
+`mixed_double_buffered_vpm_tiles_vc4kernel`. Word-X and subword selector are
+separate fields. Dynamic selector is not dynamic subword mode, and setup-field
+masks are setup-field isolation, not modulo semantics. VDR and VDW are
+asymmetric and keep separate lower-half setup logic. No hardware-backed dynamic
+coordinate or selector mode remains deferred in P12. P12 mixed fixtures combine
+dynamic VPM rows, word-X, VDR/VDW packed byte/halfword selectors, QPU VPM
+selector reads, double-buffered tile loops, spill pressure, P9 pack/unpack, P11
+rotate where natural, and VDW preserve stores without TMU-to-VPM workarounds.
 
 P10-P13 must add mixed coverage for new accepted features instead of restoring
 the old every-isolated-fixture final matrix. Future mixed additions should keep

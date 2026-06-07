@@ -691,6 +691,116 @@
         "word_x_selector",
         "spill_coherency"
       ]
+    },
+    {
+      "name": "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Runtime rectangular VPM loop mixing dynamic VDR destination row/X/selector, dynamic QPU VPM row/X/selector compute, dynamic VDW source row/X/selector, w32 sidepath, reduction, rotate, and preserved output tails.",
+      "feature_tags": [
+        "p1_fragment_alu_i32_logic_shift_minmax_clz",
+        "p3_i32_cmp",
+        "p4_i32_reduce",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p8_vdw_preserve_vpm_rect",
+        "p9_fragment_pack",
+        "p9_fragment_unpack",
+        "p11_dynamic_rotate",
+        "p12_dynamic_vpm_qpu_coords",
+        "p12_dynamic_vpm_qpu_subword_selectors",
+        "p12_dynamic_vdr_vpm_dest_coords",
+        "p12_dynamic_vdr_subword_selectors",
+        "p12_dynamic_vdw_vpm_source_coords",
+        "p12_dynamic_vdw_subword_selectors",
+        "p12_mixed_dynamic_vpm_coordinates_rect_loop"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_runtime_rect_loop",
+        "saw_dynamic_vdr_vpm_dest_coords",
+        "saw_vdr_dynamic_subword_selector",
+        "saw_dynamic_vpm_qpu_coords",
+        "saw_dynamic_vpm_qpu_subword_selectors",
+        "saw_dynamic_vdw_vpm_source_coords",
+        "saw_vdw_dynamic_subword_selector",
+        "saw_w32_path",
+        "saw_packed_subword_path",
+        "saw_fragment_alu",
+        "saw_cmp_select",
+        "saw_fragment_reduce",
+        "saw_scalar_control",
+        "saw_dynamic_rotate",
+        "saw_tail_cols",
+        "saw_vdw_preserve",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Runtime loop counts 0, 1, 2, 3, and 4 with tail columns, dynamic halfword selector copy, dynamic byte-selector QPU compute/reduce/rotate output, and a w32 dynamic-X VDR/VDW sidepath.",
+      "triage_feature_bands": [
+        "mixed_dynamic_rect_loop",
+        "qpu_vdr_vdw_dynamic_selectors",
+        "dynamic_rotate_reduce"
+      ]
+    },
+    {
+      "name": "mixed_double_buffered_vpm_tiles_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_double_buffered_vpm_tiles_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Mixed horizontal packed subword tile compute using dynamic VDR selectors, dynamic QPU VPM selector reads, pack/unpack, ALU/cmp/select/reduce, dynamic rotate, and preserved VDW output, with P12 spill and full-X guards in the targeted suite.",
+      "feature_tags": [
+        "p1_fragment_alu_i32_logic_shift_minmax_clz",
+        "p3_i32_cmp",
+        "p4_i32_reduce",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p8_vdw_preserve_vpm_rect",
+        "p9_fragment_pack",
+        "p9_fragment_unpack",
+        "p11_dynamic_rotate",
+        "p12_dynamic_vpm_qpu_coords",
+        "p12_dynamic_vpm_qpu_subword_selectors",
+        "p12_dynamic_vdr_vpm_dest_coords",
+        "p12_dynamic_vdr_subword_selectors",
+        "p12_dynamic_vdw_vpm_source_coords",
+        "p12_dynamic_vdw_subword_selectors",
+        "p12_double_buffered_vpm_tiles",
+        "p12_mixed_double_buffered_vpm_tiles"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_double_buffered_vpm_tiles",
+        "saw_horizontal_packed_subword_compute",
+        "saw_dynamic_vpm_qpu_coords",
+        "saw_dynamic_vpm_qpu_subword_selectors",
+        "saw_dynamic_vdr_vpm_dest_coords",
+        "saw_dynamic_vdw_vpm_source_coords",
+        "saw_vpm_qpu_dynamic_selector_read",
+        "saw_fragment_pack_unpack",
+        "saw_fragment_alu",
+        "saw_cmp_select",
+        "saw_fragment_reduce",
+        "saw_dynamic_rotate",
+        "saw_vdw_dynamic_subword_selector",
+        "saw_vdw_preserve",
+        "saw_spill_guard_in_targeted_run",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Selector cases 0, 1, 2, and 3 with checked horizontal packed subword compute dataflow; P12 full-X and spill coverage remains required through the targeted guard fixtures.",
+      "triage_feature_bands": [
+        "mixed_double_buffered_tiles",
+        "packed_subword_compute",
+        "dynamic_rotate_interaction"
+      ]
     }
   ],
   "required_features": [
@@ -1233,6 +1343,114 @@
       "verification_kind": "hardware_mixed",
       "covered_by": [
         "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vpm_qpu_coords",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vpm_qpu_subword_selectors",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdr_vpm_dest_coords",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdr_subword_selectors",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdw_vpm_source_coords",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_dynamic_vdw_subword_selectors",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_double_buffered_vpm_tiles",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_double_buffered_vpm_tiles_vc4kernel",
+        "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_unsupported_coord_rejects",
+      "phase": "P12",
+      "verification_kind": "lit_negative",
+      "covered_by": [
+        "p12_dynamic_coordinate_selector_rejects"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_mixed_dynamic_vpm_coordinates_rect_loop",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_mixed_double_buffered_vpm_tiles",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "mixed_double_buffered_vpm_tiles_vc4kernel"
       ],
       "required": true,
       "status": "implemented"

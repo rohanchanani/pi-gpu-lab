@@ -57,6 +57,8 @@ REQUIRED_FIXTURES = {
     "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
     "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
     "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+    "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
+    "mixed_double_buffered_vpm_tiles_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -110,6 +112,16 @@ REQUIRED_FEATURES = {
     "p12_mixed_pingpong_coord_selector_loop",
     "p12_mixed_double_buffered_subword_compute",
     "p12_mixed_coord_selector_forced_spill",
+    "p12_dynamic_vpm_qpu_coords",
+    "p12_dynamic_vpm_qpu_subword_selectors",
+    "p12_dynamic_vdr_vpm_dest_coords",
+    "p12_dynamic_vdr_subword_selectors",
+    "p12_dynamic_vdw_vpm_source_coords",
+    "p12_dynamic_vdw_subword_selectors",
+    "p12_double_buffered_vpm_tiles",
+    "p12_unsupported_coord_rejects",
+    "p12_mixed_dynamic_vpm_coordinates_rect_loop",
+    "p12_mixed_double_buffered_vpm_tiles",
 }
 
 REQUIRED_REJECTS = {
