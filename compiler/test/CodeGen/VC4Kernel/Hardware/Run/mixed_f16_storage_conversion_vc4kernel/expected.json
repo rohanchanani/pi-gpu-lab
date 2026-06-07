@@ -1,0 +1,23 @@
+{
+  "name": "mixed_f16_storage_conversion_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 9,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_f16_storage_conversion": 1,
+    "saw_f16_unpack_to_f32": 1,
+    "saw_f16_pack_from_f32": 1,
+    "saw_f32_compute": 1,
+    "saw_vdr_w16_packed": 1,
+    "saw_vpm_qpu_w16_packed": 1,
+    "saw_vdw_w16_packed": 1,
+    "saw_dynamic_subword_selector": 1,
+    "saw_vdw_preserve": 1,
+    "no_native_f16_arith": 1,
+    "no_bf16_fp8": 1,
+    "no_tmu_to_vpm": 1,
+    "saw_final_surface_mix": 1
+  }
+}

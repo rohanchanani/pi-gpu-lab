@@ -64,6 +64,7 @@ REQUIRED_FIXTURES = {
     "mixed_surface_lock_vpm_pipeline_full_vc4kernel",
     "mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel",
     "mixed_surface_lock_cooperative_barrier_full_vc4kernel",
+    "mixed_f16_storage_conversion_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -134,6 +135,7 @@ REQUIRED_FEATURES = {
     "p13_final_surface_cooperative_full",
     "p13_final_surface_mixed_acceptance",
     "p13_final_surface_lock",
+    "p13_fp16_storage_conversion",
 }
 
 REQUIRED_REJECTS = {

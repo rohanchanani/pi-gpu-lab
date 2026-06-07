@@ -198,6 +198,7 @@ P3_POST_PHASE_STAGED_STATUSES = {
     "p13f16_f16_storage_conversion": {
         "implemented_pending_hardware",
         "hardware_proven_pending_mixed_lock",
+        "hardware_proven_pending_final_lock",
     },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
@@ -534,9 +535,13 @@ P13F16_PENDING_HARDWARE_STATUS = "implemented_pending_hardware"
 P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS = (
     "hardware_proven_pending_mixed_lock"
 )
+P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS = (
+    "hardware_proven_pending_final_lock"
+)
 P13F16_TRANSITIONAL_STATUSES = {
     P13F16_PENDING_HARDWARE_STATUS,
     P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS,
+    P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS,
 }
 P13_FINAL_REJECT_CATEGORIES = {
     "hardware_forbidden",
@@ -4454,6 +4459,13 @@ def audit_p13_matrix_final_contract(matrix):
                 and not proof_links.get("isolated_hardware_fixture")
             ):
                 missing_proof.append(f"{ident}:isolated_hardware_fixture")
+            if status == P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS:
+                if not proof_links.get("isolated_hardware_fixture"):
+                    missing_proof.append(f"{ident}:isolated_hardware_fixture")
+                if not proof_links.get("mixed_hardware_fixture_or_feature"):
+                    missing_proof.append(f"{ident}:mixed_hardware_fixture_or_feature")
+                if not proof_links.get("mixed_claim_contract"):
+                    missing_proof.append(f"{ident}:mixed_claim_contract")
         if status == "deterministic_reject":
             category = feature.get("reject_category")
             reject_counts[category] += 1
@@ -4490,6 +4502,9 @@ def audit_p13_matrix_final_contract(matrix):
         "matrix_internal_only": status_counts["internal_only"],
         "matrix_p13f16_hardware_proven_pending_mixed_lock": status_counts[
             P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS
+        ],
+        "matrix_p13f16_hardware_proven_pending_final_lock": status_counts[
+            P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS
         ],
         "matrix_reject_static_surface_policy": reject_counts["static_surface_policy"],
     }

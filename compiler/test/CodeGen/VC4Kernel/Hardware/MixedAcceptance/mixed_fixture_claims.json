@@ -3479,6 +3479,168 @@
           "notes": "Claim is live only when the named fixture passes with checked buffers, sentinels, launch counts, and expected result metadata."
         }
       ]
+    },
+    {
+      "name": "mixed_f16_storage_conversion_vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel",
+      "claims": [
+        {
+          "claim": "saw_f16_storage_conversion",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The VDR-loaded w16 carrier feeds QPU readback, f16 unpack, f32 compute, f16 pack, QPU VPM writeback, and checked VDW halfword output before PASS."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The claim is live through exact half-bit output checks, inactive preserve checks, sentinel checks, and launch-count checks."
+        },
+        {
+          "claim": "saw_f16_unpack_to_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "fragment_unpack f16 produces the f32 value consumed by fmul/fadd and the checked output half bits."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The f16 compute path constrains the selector to canonical 16a before unpack; the unpack result feeds checked f32 compute and f16 output."
+        },
+        {
+          "claim": "saw_f16_pack_from_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "fragment_pack f16 consumes the f32 compute result and the harness checks the stored f16 half bits."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The pack result feeds VPM writeback and VDW output."
+        },
+        {
+          "claim": "saw_f32_compute",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The f16-unpacked f32 values feed fmul and fadd before f16 packing; expected half bits encode x + 1 exactly."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "This is f32 compute after conversion, not native f16 arithmetic."
+        },
+        {
+          "claim": "saw_vdr_w16_packed",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The input half bits reach checked output only through a VDR w16 packed load into VPM."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The f16 compute path uses horizontal w16 packed mode with dynamic row and canonical selector 0; nonzero X and selector 1 storage placement are checked by the guard VDR/VDW path."
+        },
+        {
+          "claim": "saw_vpm_qpu_w16_packed",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The VPM QPU w16 packed read result is the carrier consumed by f16 unpack and checked output."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The QPU read uses horizontal w16 packed mode with a runtime-derived operand constrained to canonical selector 0 for the low-half f16 carrier policy."
+        },
+        {
+          "claim": "saw_vdw_w16_packed",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The final packed f16 carrier is written to VPM and stored by VDW w16 packed output checked by half-bit oracle."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The main f16 VDW path uses inactive preserve with dynamic selector; the guard VDR/VDW path checks nonzero dynamic source X."
+        },
+        {
+          "claim": "saw_dynamic_subword_selector",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "Canonical selector 0 is used in the checked f16 compute path; selector values 0 and 1 are used in the checked VDR/VDW guard path."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The f16 compute path remains canonical 16a; the guard path checks the nonzero halfword selector storage placement."
+        },
+        {
+          "claim": "saw_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The harness checks inactive halfwords and trailing sentinels remain preserved for tail n cases."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Runtime n cases include 0, 1, and 15 to exercise inactive preserve."
+        },
+        {
+          "claim": "no_native_f16_arith",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "The MLIR has f16 only on fragment_pack/unpack; arithmetic is f32 fmul/fadd, and the result metadata is required."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "This is an audit claim backed by the source and required metadata."
+        },
+        {
+          "claim": "no_bf16_fp8",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "The fixture source contains no bf16/fp8 operations or metadata aliases, and the result metadata is required."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "This is an audit claim paired with deterministic reject coverage in the surface matrix."
+        },
+        {
+          "claim": "no_tmu_to_vpm",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "The source uses VDR-to-VPM and VDW-from-VPM operations and no TMU-to-VPM path; the result metadata is required."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "The storage path is VDR/VPM/QPU/VDW, with no TMU-to-VPM transfer."
+        },
+        {
+          "claim": "saw_final_surface_mix",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "The fixture combines the accepted fp16 pack/unpack surface with P9 subword VPM paths, P12 dynamic selectors, f32 compute, and VDW preserve output checks."
+          },
+          "source_paths": [
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/input.mlir",
+            "compiler/test/CodeGen/VC4Kernel/Hardware/Run/mixed_f16_storage_conversion_vc4kernel/candidate/mixed_f16_storage_conversion_vc4kernel_candidate_harness.c"
+          ],
+          "notes": "Claim is backed by checked halfword output and preserve checks."
+        }
+      ]
     }
   ]
 }

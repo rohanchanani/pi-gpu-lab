@@ -2,9 +2,9 @@
 # RUN: python3 %S/Hardware/MixedAcceptance/audit_mixed_fixture_claims.py --claims %S/Hardware/MixedAcceptance/mixed_fixture_claims.json --manifest %S/Hardware/MixedAcceptance/mixed_acceptance_manifest.json --repo-root %S/../../../../../ | FileCheck %s --check-prefix=CLAIMS
 # RUN: %S/Hardware/MixedAcceptance/run_mixed_acceptance.sh --manifest %S/Hardware/MixedAcceptance/mixed_acceptance_manifest.json --repo-root %S/../../../../../ --list | FileCheck %s --check-prefix=LIST
 
-# CHECK: PASS VC4Kernel mixed acceptance coverage: mode=lock fixtures=24 features=67 deterministic_rejects=10 missing_coverage=0
+# CHECK: PASS VC4Kernel mixed acceptance coverage: mode=lock fixtures=25 features=68 deterministic_rejects=10 missing_coverage=0
 
-# CLAIMS: PASS VC4Kernel mixed fixture claim audit: fixtures=24 claims=
+# CLAIMS: PASS VC4Kernel mixed fixture claim audit: fixtures=25 claims=
 # CLAIMS-SAME: phase_guards=
 
 # LIST: mixed_elementwise_tmu_alu_cmp_vdw_vc4kernel
@@ -31,3 +31,4 @@
 # LIST: mixed_surface_lock_vpm_pipeline_full_vc4kernel
 # LIST: mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel
 # LIST: mixed_surface_lock_cooperative_barrier_full_vc4kernel
+# LIST: mixed_f16_storage_conversion_vc4kernel

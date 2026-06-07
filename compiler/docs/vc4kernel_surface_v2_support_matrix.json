@@ -1071,14 +1071,14 @@
       "id": "p13f16_f16_storage_conversion",
       "phase": "P13",
       "category": "accepted_hardware_proven",
-      "current_status": "hardware_proven_pending_mixed_lock",
+      "current_status": "hardware_proven_pending_final_lock",
       "final_status_target": "accepted_hardware_proven",
       "current_surface": "VC4Kernel now has an explicit f16 storage conversion surface: packed f16 carriers unpack to vector<16xf32> compute fragments and vector<16xf32> compute fragments pack back to deterministic vector<16xi32> carriers using canonical 16a placement.",
-      "target_surface": "Accepted hardware-proven f16 storage conversion after the targeted P13f16 hardware fixture proves exact representable values through f32 compute.",
+      "target_surface": "Accepted hardware-proven f16 storage conversion after the targeted P13f16 hardware fixtures prove exact representable values through f32 compute and the mixed fixture proves the VDR/VPM/VDW storage path.",
       "vc4kernel_verifier_plan": "Require source/dest subword_type<f16>, packed layout, unpack_policy<to_f32> for carrier-to-f32 conversion, pack_policy<from_f32> for f32-to-carrier conversion, vector<16xi32> storage carriers, and vector<16xf32> compute carriers.",
       "vc4kernel_to_ssavc4_plan": "Lower f16 storage conversion to ssavc4.pack/unpack with f16_storage_conversion marker and the existing 16a regfile-A pack/unpack hardware attrs.",
       "ssavc4_to_vc4_plan": "Emit fadd with +0.0 while applying f16a_or_i16a unpack or to_16a pack so the shared hardware field is interpreted as Float16 conversion, not signed-int conversion. Preserve carrier high bits by zeroing the result carrier before f16 pack.",
-      "hardware_or_reject_verification_plan": "P13f16c targeted hardware proof passed for f16 unpack-to-f32, f32-to-f16 pack, and f32-to-f16-to-f32 roundtrip over exact representable values. P13f16d/e supplies mixed lock coverage before final status changes to accepted_hardware_proven.",
+      "hardware_or_reject_verification_plan": "P13f16c targeted hardware proof passed for f16 unpack-to-f32, f32-to-f16 pack, and f32-to-f16-to-f32 roundtrip over exact representable values. P13f16d mixed hardware proof covers VDR w16 packed load to dynamic VPM placement, QPU w16 dynamic readback, f16-to-f32 compute, f32-to-f16 pack, QPU VPM writeback, and VDW w16 packed preserve output. P13f16e performs final docs/audit promotion to accepted_hardware_proven.",
       "upstream_use": "Producer-layer follow-on vector and Triton lowering can represent f16 storage values through f32 VC4Kernel compute carriers.",
       "migration_or_removal": "No integer s16/u16 alias is used for f16; no first-class 16b high-level VC4Kernel operation is introduced.",
       "dependencies": [
@@ -1087,13 +1087,15 @@
         "p12_dynamic_vpm_read_write_coordinates",
         "p12_dynamic_vdr_vdw_coordinates"
       ],
-      "acceptance_line": "hardware_proven_pending_mixed_lock",
+      "acceptance_line": "hardware_proven_pending_final_lock",
       "proof_links": {
         "verifier_lit": "compiler/test/Dialect/VC4Kernel/fragment-pack-unpack-roundtrip.mlir",
         "conversion_lit": "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-pack-unpack-lowering.mlir",
         "ssavc4_verifier_lit": "compiler/test/Dialect/SSAVC4/pack-unpack-f16-storage.mlir",
         "ssavc4_to_vc4_lit": "compiler/test/Conversion/SSAVC4ToVC4/f16-pack-unpack-storage.mlir",
-        "isolated_hardware_fixture": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_unpack_to_f32_vc4kernel; compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_pack_from_f32_vc4kernel; compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_pack_unpack_roundtrip_vc4kernel"
+        "isolated_hardware_fixture": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_unpack_to_f32_vc4kernel; compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_pack_from_f32_vc4kernel; compiler/test/CodeGen/VC4Kernel/Hardware/Run/fragment_f16_pack_unpack_roundtrip_vc4kernel",
+        "mixed_hardware_fixture_or_feature": "mixed_f16_storage_conversion_vc4kernel; p13_fp16_storage_conversion",
+        "mixed_claim_contract": "compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/mixed_fixture_claims.json"
       },
       "reject_category": ""
     },
