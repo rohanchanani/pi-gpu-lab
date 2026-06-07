@@ -159,9 +159,14 @@ Default math is exact/conservative. Approximate SFU-derived math is opt-in only 
 P11 accepts dynamic rotate as the only rotate-derived op surface. Lane
 broadcast is accepted as a composite idiom over `lane_range`, scalar splat,
 `fragment_cmp` eq, `fragment_select` payload-or-zero, and i32 `fragment_reduce`
-add. Exact f32 payload broadcast uses `fragment_bitcast` to i32, the i32
-composite, then bitcast back. There is no `vc4kernel.fragment_broadcast_lane`
-op, and arbitrary shuffle/permutation remains a deterministic reject.
+add. Generic f32 payload broadcast uses `fragment_bitcast` to i32, the i32
+composite, then bitcast back; this is the canonical lowering for
+vector/value-layer f32 broadcast or shuffle-splat semantics. Explicit finite
+numeric f32 broadcast may use `fragment_select` payload-or-zero plus f32
+`fragment_reduce` add with `#vc4kernel.fp_reduce_policy<finite_tree>` only under
+the existing finite f32 reduction policy, without NaN, Inf, or signed-zero IEEE
+claims. There is no `vc4kernel.fragment_broadcast_lane` op, and arbitrary
+shuffle/permutation remains a deterministic reject.
 
 ### P12 dynamic VPM/VDR/VDW coordinates
 

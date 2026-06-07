@@ -78,8 +78,8 @@
 # P4: p1_general_alu_lock:
 # P4-SAME: removed_legacy_hits=0
 # P4: p4_general_reduce_lock:
-# P4-SAME: active_reduce_uses=136
-# P4-SAME: f32_finite_tree_reduce_uses=58
+# P4-SAME: active_reduce_uses=138
+# P4-SAME: f32_finite_tree_reduce_uses=60
 # P4-SAME: f32_missing_policy_hits=0
 # P4-SAME: fp_policy_on_i32_hits=0
 # P4-SAME: i32_reduce_uses=78
@@ -135,10 +135,10 @@
 # P7: p1_general_alu_lock:
 # P7-SAME: removed_legacy_hits=0
 # P7: p7_tmu_safe_load_lock:
-# P7-SAME: active_tmu_loads=122
-# P7-SAME: explicit_safe_offset_hits=122
+# P7-SAME: active_tmu_loads=124
+# P7-SAME: explicit_safe_offset_hits=124
 # P7-SAME: hidden_spill_reload_tmu_hits=0
-# P7-SAME: inactive_zero_hits=122
+# P7-SAME: inactive_zero_hits=124
 # P7-SAME: negative_tmu_loads=9
 # P7-SAME: old_signature_hits=0
 # P7-SAME: straight_line_tmu_lowering=1
@@ -157,7 +157,7 @@
 # P8-SAME: removed_legacy_hits=0
 # P8: p8_vdw_store_policy_lock:
 # P8-SAME: active_vdw_store_families=3
-# P8-SAME: active_vdw_stores=514
+# P8-SAME: active_vdw_stores=516
 # P8-SAME: missing_inactive_store_hits=0
 # P8-SAME: negative_vdw_store_tests=35
 # P8-SAME: sparse_vdw_active_hits=0

@@ -1286,7 +1286,7 @@ deterministic-rejects. Future vector lowering may map only legal rotate patterns
 to this op after preserving the documented direction and modulo 16 policy.
 
 Lane broadcast is not a separate VC4Kernel operation. The accepted Surface v2
-form is the canonical composite idiom:
+form is the composite idiom:
 
 ```text
 lane_range
@@ -1298,11 +1298,27 @@ i32 fragment_reduce add
 
 For arbitrary 32-bit payloads, exactly one selected lane contributes a nonzero
 value, so the i32 add reduction returns the selected payload unchanged modulo
-2^32. For exact f32 bit preservation, use `fragment_bitcast` from f32 to i32,
-the i32 composite broadcast, then `fragment_bitcast` back. Finite numeric f32
-broadcast may use the existing finite-tree f32 add reduction only under the
-finite f32 reduction policy. Future vector lowering may map legal
-extract-and-broadcast or shuffle-splat forms into this composite idiom, but it
+2^32.
+
+There are two accepted f32-relevant recipes:
+
+```text
+generic bit-preserving f32 broadcast:
+  fragment_bitcast f32 -> i32
+  one-hot fragment_cmp eq plus fragment_select payload-or-zero
+  i32 fragment_reduce add
+  fragment_bitcast i32 -> f32
+
+explicit finite numeric f32 broadcast:
+  one-hot fragment_cmp eq plus fragment_select payload-or-zero
+  f32 fragment_reduce add with #vc4kernel.fp_reduce_policy<finite_tree>
+```
+
+The generic bit-preserving recipe is the canonical lowering for vector/value
+layer f32 broadcast or shuffle-splat semantics. The finite numeric f32 recipe is
+allowed only under the existing finite f32 reduction policy and does not claim
+NaN, Inf, or signed-zero IEEE semantics. Future vector lowering may map legal
+extract-and-broadcast or shuffle-splat forms into these composite idioms, but it
 must not admit arbitrary shuffle/permutation semantics.
 
 ### 9.7 `vc4kernel.fragment_reduce`

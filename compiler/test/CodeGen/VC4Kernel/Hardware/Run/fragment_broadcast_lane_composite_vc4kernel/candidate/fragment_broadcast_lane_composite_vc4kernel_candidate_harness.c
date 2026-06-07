@@ -25,8 +25,15 @@ static const uint32_t f_payload_bits[LANES] = {
 };
 
 static float f_payload[LANES];
+static const float finite_f32_payload[LANES] = {
+    0.25f, 1.5f, -2.0f, 3.75f,
+    -4.5f, 5.25f, -6.75f, 7.0f,
+    8.125f, -9.5f, 10.25f, -11.75f,
+    12.5f, -13.25f, 14.75f, -15.5f
+};
 static uint32_t out_i32[BUFFER_WORDS];
 static uint32_t out_f32_bits[BUFFER_WORDS];
+static float out_finite_f32[BUFFER_WORDS];
 
 static float bits_to_float(uint32_t bits) {
     union {
@@ -37,12 +44,22 @@ static float bits_to_float(uint32_t bits) {
     return value.f;
 }
 
+static uint32_t float_to_bits(float f) {
+    union {
+        uint32_t u;
+        float f;
+    } value;
+    value.f = f;
+    return value.u;
+}
+
 static void fill_buffers(void) {
     for (uint32_t lane = 0; lane < LANES; ++lane)
         f_payload[lane] = bits_to_float(f_payload_bits[lane]);
     for (uint32_t i = 0; i < BUFFER_WORDS; ++i) {
         out_i32[i] = SENTINEL;
         out_f32_bits[i] = SENTINEL;
+        out_finite_f32[i] = bits_to_float(SENTINEL);
     }
 }
 
@@ -50,14 +67,16 @@ static int verify_active(uint32_t selected_lane) {
     int mismatches = 0;
     uint32_t expected_i = selected_lane < LANES ? i_payload[selected_lane] : 0u;
     uint32_t expected_f = selected_lane < LANES ? f_payload_bits[selected_lane] : 0u;
+    float expected_finite = selected_lane < LANES ? finite_f32_payload[selected_lane] : 0.0f;
     for (uint32_t lane = 0; lane < LANES; ++lane) {
         uint32_t got_i = out_i32[lane];
         uint32_t got_f = out_f32_bits[lane];
-        if (got_i != expected_i || got_f != expected_f) {
+        float got_finite = out_finite_f32[lane];
+        if (got_i != expected_i || got_f != expected_f || got_finite != expected_finite) {
             if (mismatches < 8)
-                printk("ERROR: broadcast_lane_composite selected=%d lane=%d got_i=%x expected_i=%x got_f=%x expected_f=%x\n",
+                printk("ERROR: broadcast_lane_composite selected=%d lane=%d got_i=%x expected_i=%x got_f=%x expected_f=%x got_finite=%f expected_finite=%f\n",
                        (int)selected_lane, (int)lane, got_i, expected_i,
-                       got_f, expected_f);
+                       got_f, expected_f, got_finite, expected_finite);
             ++mismatches;
         }
     }
@@ -67,10 +86,12 @@ static int verify_active(uint32_t selected_lane) {
 static int verify_sentinels(void) {
     int mismatches = 0;
     for (uint32_t i = LANES; i < BUFFER_WORDS; ++i) {
-        if (out_i32[i] != SENTINEL || out_f32_bits[i] != SENTINEL) {
+        if (out_i32[i] != SENTINEL || out_f32_bits[i] != SENTINEL ||
+            float_to_bits(out_finite_f32[i]) != SENTINEL) {
             if (mismatches < 8)
-                printk("ERROR: broadcast_lane_composite sentinel=%d got_i=%x got_f=%x\n",
-                       (int)i, out_i32[i], out_f32_bits[i]);
+                printk("ERROR: broadcast_lane_composite sentinel=%d got_i=%x got_f=%x got_finite_bits=%x\n",
+                       (int)i, out_i32[i], out_f32_bits[i],
+                       float_to_bits(out_finite_f32[i]));
             ++mismatches;
         }
     }
@@ -82,6 +103,7 @@ static int checksum_low16(void) {
     for (uint32_t lane = 0; lane < LANES; ++lane) {
         checksum += (int)(out_i32[lane] & 0xffffu);
         checksum += (int)(out_f32_bits[lane] & 0xffffu);
+        checksum += (int)(float_to_bits(out_finite_f32[lane]) & 0xffffu);
     }
     return checksum;
 }
@@ -92,13 +114,17 @@ void notmain(void) {
         panic("fragment_broadcast_lane_composite_vc4kernel program create failed");
 
     vc4_deviceptr_t bits_dev = 0;
-    vc4_deviceptr_t f_dev = 0;
+    vc4_deviceptr_t f_bits_dev = 0;
+    vc4_deviceptr_t finite_f32_dev = 0;
     vc4_deviceptr_t out_i_dev = 0;
-    vc4_deviceptr_t out_f_dev = 0;
+    vc4_deviceptr_t out_f_bits_dev = 0;
+    vc4_deviceptr_t out_finite_dev = 0;
     if (vc4_m2_malloc(program, &bits_dev, LANES * sizeof(uint32_t)) < 0 ||
-        vc4_m2_malloc(program, &f_dev, LANES * sizeof(float)) < 0 ||
+        vc4_m2_malloc(program, &f_bits_dev, LANES * sizeof(float)) < 0 ||
+        vc4_m2_malloc(program, &finite_f32_dev, LANES * sizeof(float)) < 0 ||
         vc4_m2_malloc(program, &out_i_dev, BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
-        vc4_m2_malloc(program, &out_f_dev, BUFFER_WORDS * sizeof(uint32_t)) < 0)
+        vc4_m2_malloc(program, &out_f_bits_dev, BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
+        vc4_m2_malloc(program, &out_finite_dev, BUFFER_WORDS * sizeof(float)) < 0)
         panic("fragment_broadcast_lane_composite_vc4kernel allocation failed");
 
     int total_mismatches = 0;
@@ -118,19 +144,25 @@ void notmain(void) {
         fill_buffers();
         if (vc4_m2_copy_htod(program, bits_dev, i_payload,
                              LANES * sizeof(uint32_t)) < 0 ||
-            vc4_m2_copy_htod(program, f_dev, f_payload,
+            vc4_m2_copy_htod(program, f_bits_dev, f_payload,
+                             LANES * sizeof(float)) < 0 ||
+            vc4_m2_copy_htod(program, finite_f32_dev, finite_f32_payload,
                              LANES * sizeof(float)) < 0 ||
             vc4_m2_copy_htod(program, out_i_dev, out_i32,
                              BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
-            vc4_m2_copy_htod(program, out_f_dev, out_f32_bits,
+            vc4_m2_copy_htod(program, out_f_bits_dev, out_f32_bits,
                              BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
+            vc4_m2_copy_htod(program, out_finite_dev, out_finite_f32,
+                             BUFFER_WORDS * sizeof(float)) < 0 ||
             fragment_broadcast_lane_composite_vc4kernel_launch(
-                program, grid, block, bits_dev, f_dev, out_i_dev, out_f_dev,
-                lane_seed) < 0 ||
+                program, grid, block, bits_dev, f_bits_dev, finite_f32_dev,
+                out_i_dev, out_f_bits_dev, out_finite_dev, lane_seed) < 0 ||
             vc4_m2_copy_dtoh(program, out_i32, out_i_dev,
                              BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
-            vc4_m2_copy_dtoh(program, out_f32_bits, out_f_dev,
-                             BUFFER_WORDS * sizeof(uint32_t)) < 0) {
+            vc4_m2_copy_dtoh(program, out_f32_bits, out_f_bits_dev,
+                             BUFFER_WORDS * sizeof(uint32_t)) < 0 ||
+            vc4_m2_copy_dtoh(program, out_finite_f32, out_finite_dev,
+                             BUFFER_WORDS * sizeof(float)) < 0) {
             printk("ERROR: broadcast_lane_composite launch/copy failed case=%d selected_lane=%d\n",
                    (int)case_id, (int)selected_lane);
             ++launch_failures;
@@ -165,14 +197,16 @@ void notmain(void) {
          saw_empty_identity && launches == CASES)
             ? "PASS"
             : "FAIL";
-    printk("VC4_TEST_RESULT name=fragment_broadcast_lane_composite_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=1 lanes=%d saw_broadcast_lane_composite=1 saw_dynamic_lane_select=1 saw_lane0=%d saw_lane15=%d saw_empty_identity=%d saw_i32_bit_preserving=1 saw_f32_bitcast_path=1 saw_fragment_reduce=1 no_first_class_broadcast_op=1 arbitrary_shuffle_reject_preserved=1 checksum_accum=%d runtime_allocations=4 runtime_launches=%u elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=fragment_broadcast_lane_composite_vc4kernel status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=1 lanes=%d saw_broadcast_lane_composite=1 saw_dynamic_lane_select=1 saw_lane0=%d saw_lane15=%d saw_empty_identity=%d saw_i32_bit_preserving=1 saw_f32_bitcast_path=1 saw_f32_finite_numeric_path=1 saw_finite_tree_policy=1 no_ieee_nan_inf_signed_zero_claim=1 saw_fragment_reduce=1 no_first_class_broadcast_op=1 arbitrary_shuffle_reject_preserved=1 checksum_accum=%d runtime_allocations=6 runtime_launches=%u elapsed_usec=%d\n",
            status, (int)CASES, total_mismatches, sentinel_mismatches,
            launch_failures, (int)LANES, saw_lane0, saw_lane15,
            saw_empty_identity, checksum_accum, launches, elapsed);
 
     vc4Free(program, bits_dev);
-    vc4Free(program, f_dev);
+    vc4Free(program, f_bits_dev);
+    vc4Free(program, finite_f32_dev);
     vc4Free(program, out_i_dev);
-    vc4Free(program, out_f_dev);
+    vc4Free(program, out_f_bits_dev);
+    vc4Free(program, out_finite_dev);
     vc4_program_destroy(program);
 }

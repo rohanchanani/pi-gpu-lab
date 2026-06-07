@@ -76,10 +76,14 @@ side paths, P10 SFU side paths, and VDW preserve stores.
 Lane broadcast is accepted as a composite idiom, not as a mixed-suite feature
 claim and not as a first-class `vc4kernel.fragment_broadcast_lane` op. The
 canonical target idiom is `lane_range`, scalar splat, `fragment_cmp` eq,
-`fragment_select` payload-or-zero, and i32 `fragment_reduce` add. Exact f32
-broadcast uses `fragment_bitcast` to i32, the i32 composite, and bitcast back.
-Finite numeric f32 broadcast may use the existing finite-tree f32 reduce policy.
-Future vector lowering may target this idiom for legal broadcast/splat shuffle
+`fragment_select` payload-or-zero, and i32 `fragment_reduce` add. Generic f32
+broadcast uses `fragment_bitcast` to i32, the i32 composite, and bitcast back;
+this is the canonical lowering for vector/value-layer f32 broadcast or
+shuffle-splat semantics. Explicit finite numeric f32 broadcast may use
+`fragment_select` payload-or-zero plus f32 `fragment_reduce` add with
+`#vc4kernel.fp_reduce_policy<finite_tree>` only under the existing finite f32
+reduction policy, and it does not claim NaN, Inf, or signed-zero IEEE semantics.
+Future vector lowering may target these idioms for legal broadcast/splat shuffle
 patterns only; arbitrary shuffle and permutation remain deterministic rejects.
 
 P12 adds `dynamic_vpm_pingpong_coord_selector_loop_vc4kernel`,

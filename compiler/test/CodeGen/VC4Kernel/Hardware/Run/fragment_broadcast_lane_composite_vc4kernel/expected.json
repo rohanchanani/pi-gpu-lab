@@ -15,10 +15,13 @@
     "saw_empty_identity": 1,
     "saw_i32_bit_preserving": 1,
     "saw_f32_bitcast_path": 1,
+    "saw_f32_finite_numeric_path": 1,
+    "saw_finite_tree_policy": 1,
+    "no_ieee_nan_inf_signed_zero_claim": 1,
     "saw_fragment_reduce": 1,
     "no_first_class_broadcast_op": 1,
     "arbitrary_shuffle_reject_preserved": 1,
-    "runtime_allocations": 4,
+    "runtime_allocations": 6,
     "runtime_launches": 5
   }
 }
