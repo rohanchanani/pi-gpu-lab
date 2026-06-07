@@ -1,7 +1,7 @@
 # VC4Kernel Mixed Acceptance Policy
 
 P8.5 changes final hardware acceptance from replaying every historical isolated
-fixture to running a smaller mixed suite that exercises P1-P8 interactions. The
+fixture to running a smaller mixed suite that exercises phase interactions. The
 isolated fixtures remain in tree as phase-local proofs and triage tools; they
 are not weakened, deleted, or removed from explicit phase prompts.
 
@@ -24,8 +24,8 @@ The mixed suite is described by:
 
 `compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/mixed_acceptance_manifest.json`
 
-The manifest lists the required mixed fixtures, required P1-P8 feature coverage,
-deterministic-reject coverage, and future P9-P13 extension points. Planned mode
+The manifest lists the required mixed fixtures, required P1-P9 feature coverage,
+deterministic-reject coverage, and future P10-P13 extension points. Planned mode
 allows fixture files to be absent while the suite is being added. Lock mode
 requires every fixture input and expected result file to exist and verifies that
 VC4Kernel mixed fixtures do not contain source-authored SSAVC4, scheduled VC4,
@@ -49,9 +49,15 @@ When a mixed fixture fails:
 
 Deterministic rejects remain lit or audit tests. They are not hardware fixtures.
 
-## Future Phases
+## P9 And Future Phases
 
-P9-P13 must add mixed coverage for new accepted features instead of restoring
-the old every-isolated-fixture final matrix. Future mixed additions should keep
-the same strict requirements: CPU oracle, sentinels, expected PASS metadata, no
-fixture-specific compiler special cases, and real hardware execution.
+P9 adds `mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel` and
+`mixed_quantized_gemv_subword_vpm_vc4kernel` to cover pack/unpack and subword
+VPM/VDR/VDW transport in the mixed suite. P10-P13 must add mixed coverage for
+new accepted features instead of restoring the old every-isolated-fixture final
+matrix. Future mixed additions should keep the same strict requirements: CPU
+oracle, sentinels, expected PASS metadata, no fixture-specific compiler special
+cases, and real hardware execution.
+
+P9-P13 must add mixed coverage remains the standing policy phrase for audit
+compatibility; after P9, the practical next extension point is P10.

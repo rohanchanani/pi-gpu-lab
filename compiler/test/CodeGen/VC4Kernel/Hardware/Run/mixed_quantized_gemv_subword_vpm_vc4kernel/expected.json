@@ -1,0 +1,20 @@
+{
+  "name": "mixed_quantized_gemv_subword_vpm_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 13,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_runtime_mn": 1,
+    "saw_runtime_lda": 1,
+    "saw_vdr_vpm_subword_tile": 1,
+    "saw_fragment_unpack": 1,
+    "saw_fragment_reduce": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_ab_path": 1,
+    "no_fixed_padded_stride": 1,
+    "saw_explicit_x_subword": 1,
+    "saw_mul24": 1
+  }
+}

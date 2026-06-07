@@ -1,0 +1,18 @@
+{
+  "name": "mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 9,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_fragment_pack": 1,
+    "saw_fragment_unpack": 1,
+    "saw_vpm_subword": 1,
+    "saw_vdr_subword": 1,
+    "saw_vdw_subword": 1,
+    "saw_vdw_preserve": 1,
+    "saw_byte_halfword_guards": 1,
+    "saw_p1_p8_interactions": 1
+  }
+}

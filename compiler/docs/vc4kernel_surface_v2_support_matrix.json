@@ -508,7 +508,7 @@
       "vc4kernel_verifier_plan": "Verify pack mode, vector<16xi32> carrier type, explicit truncate policy, and deterministic rejection for unsupported subword/sign/layout/policy combinations.",
       "vc4kernel_to_ssavc4_plan": "P9b lowers admitted modes to ssavc4.pack with #vc4.regfile_a_pack_mode<to_8a> or #vc4.regfile_a_pack_mode<to_16a>; unsupported modes reject before lowering.",
       "ssavc4_to_vc4_plan": "Existing SSAVC4ToVC4 pack lowering uses VC4 pack fields with hardware-accurate enum values.",
-      "hardware_or_reject_verification_plan": "P9c hardware proof covers every admitted pack mode; deterministic-reject tests cover unsupported modes.",
+      "hardware_or_reject_verification_plan": "P9c hardware proof covers every admitted pack mode; P9f mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel integrates pack with subword VPM/VDR/VDW transport; deterministic-reject tests cover unsupported modes.",
       "upstream_use": "Packed storage and quantized transport after pre-vector lock.",
       "migration_or_removal": "New P9 surface; final P9 acceptance remains pending.",
       "dependencies": [
@@ -527,7 +527,7 @@
       "vc4kernel_verifier_plan": "Verify unpack mode, vector<16xi32> carrier type, explicit zero/sign extension policy, and deterministic rejection for unsupported subword/sign/layout/policy combinations.",
       "vc4kernel_to_ssavc4_plan": "P9b lowers admitted modes to ssavc4.unpack with #vc4.regfile_a_unpack_mode<color8a> or #vc4.regfile_a_unpack_mode<f16a_or_i16a>; unsupported modes reject before lowering.",
       "ssavc4_to_vc4_plan": "Existing SSAVC4ToVC4 unpack lowering uses VC4 unpack fields with hardware-accurate enum values.",
-      "hardware_or_reject_verification_plan": "P9c hardware proof covers every admitted unpack mode; deterministic-reject tests cover unsupported modes.",
+      "hardware_or_reject_verification_plan": "P9c hardware proof covers every admitted unpack mode; P9f mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel and mixed_quantized_gemv_subword_vpm_vc4kernel integrate unpack with subword VPM/VDR transport; deterministic-reject tests cover unsupported modes.",
       "upstream_use": "Packed storage and quantized transport after pre-vector lock.",
       "migration_or_removal": "New P9 surface; final P9 acceptance remains pending.",
       "dependencies": [
@@ -546,7 +546,7 @@
       "vc4kernel_verifier_plan": "Accept exactly w32/none and hardware-proven w8/w16 packed/laned QPU VPM modes; reject meaningless or unencodable width/subword/x/stride combinations.",
       "vc4kernel_to_ssavc4_plan": "Lower admitted subword QPU modes to SSAVC4 VPM attrs without changing VDR/VDW DMA subword policy.",
       "ssavc4_to_vc4_plan": "Encode generic QPU VPM setup using hardware-derived SIZE, LANED, HORIZ, STRIDE, and ADDR fields; reject unencodable combinations before emission.",
-      "hardware_or_reject_verification_plan": "P9d hardware proof covers w16/w8 packed/laned QPU read/write modes and deterministic-reject tests cover unsupported combinations.",
+      "hardware_or_reject_verification_plan": "P9d hardware proof covers w16/w8 packed/laned QPU read/write modes; P9f mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel and mixed_quantized_gemv_subword_vpm_vc4kernel integrate QPU subword VPM with P1-P8 behavior; deterministic-reject tests cover unsupported combinations.",
       "upstream_use": "Sub-32 storage movement after pre-vector lock.",
       "migration_or_removal": "Old blanket sub-32 QPU VPM executable rejection is replaced by precise P9d accepted/rejected mode rules; VDR/VDW DMA subword modes remain for P9e.",
       "dependencies": [
@@ -565,7 +565,7 @@
       "vc4kernel_verifier_plan": "Accept exactly w32/none and hardware-proven horizontal w8/w16 packed DMA modes; require elem_bytes to match width; reject vertical subword DMA, laned DMA, w8/w16 none, w32 packed/laned, unaligned offsets, unaligned runtime pitch/stride constants, and sparse VDW masks.",
       "vc4kernel_to_ssavc4_plan": "Lower admitted width/subword/orientation/x/pitch attrs and elem_bytes through SSAVC4 VDR/VDW DMA ops while preserving P6 memory attrs and P8 inactive_store<preserve>.",
       "ssavc4_to_vc4_plan": "Encode VDR MODEW in VPMVCD read setup bits 30:28 and VDW MODEW in VDW setup bits 2:0; keep VDW LANED bit 15 at zero, translate high-level row pitch to the 13-bit byte gap, and reject unencodable combinations before emission.",
-      "hardware_or_reject_verification_plan": "P9e targeted hardware fixtures prove horizontal byte/halfword VDR to VPM to VDW roundtrips, compute through VPM QPU subword reads, and VDW tail/rect preserve. Deterministic-reject lit tests cover unsupported modes including vertical subword DMA.",
+      "hardware_or_reject_verification_plan": "P9e targeted hardware fixtures prove horizontal byte/halfword VDR to VPM to VDW roundtrips, compute through VPM QPU subword reads, and VDW tail/rect preserve. P9f mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel and mixed_quantized_gemv_subword_vpm_vc4kernel integrate subword DMA with the mixed acceptance suite. Deterministic-reject lit tests cover unsupported modes including vertical subword DMA.",
       "upstream_use": "Sub-32 tile transport after pre-vector lock.",
       "migration_or_removal": "Old blanket sub-32 DMA executable rejection is replaced by precise P9e accepted/rejected mode rules.",
       "dependencies": [

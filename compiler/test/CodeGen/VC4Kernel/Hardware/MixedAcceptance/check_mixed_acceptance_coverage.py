@@ -48,6 +48,8 @@ REQUIRED_FIXTURES = {
     "mixed_vertical_rect_vpm_vdw_preserve_vc4kernel",
     "mixed_cooperative_barrier_vpm_transpose_vc4kernel",
     "mixed_lower_half_spill_dma_branch_ssavc4",
+    "mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel",
+    "mixed_quantized_gemv_subword_vpm_vc4kernel",
 }
 
 REQUIRED_FEATURES = {
@@ -73,6 +75,14 @@ REQUIRED_FEATURES = {
     "blocked_gemm_runtime_dims",
     "cooperative_barrier_vpm",
     "lower_half_spill_dma_branch",
+    "p9_fragment_pack",
+    "p9_fragment_unpack",
+    "p9_vpm_qpu_subword_modes",
+    "p9_vdr_subword_dma",
+    "p9_vdw_subword_dma",
+    "p9_subword_unsupported_mode_rejects",
+    "p9_mixed_subword_roundtrip",
+    "p9_mixed_quantized_gemv_subword",
 }
 
 REQUIRED_REJECTS = {
@@ -83,10 +93,10 @@ REQUIRED_REJECTS = {
     "f32_cmp_reduce_finite_policy_reject",
     "unsupported_numeric_casts_reject",
     "forbidden_producer_dialect_reject",
+    "p9_subword_unsupported_mode_rejects",
 }
 
 FUTURE_EXTENSION_IDS = {
-    "p9_subword_pack_unpack_mixed",
     "p10_sfu_mixed",
     "p11_dynamic_rotate_mixed",
     "p12_dynamic_vpm_coords_mixed",
@@ -110,7 +120,7 @@ FORBIDDEN_VC4KERNEL_DIALECT_TERMS = (
     "stablehlo.",
     "mhlo.",
 )
-FUTURE_PHASE_TAG_PREFIXES = ("p9_", "p10_", "p11_", "p12_")
+FUTURE_PHASE_TAG_PREFIXES = ("p10_", "p11_", "p12_")
 
 
 def fail(message):

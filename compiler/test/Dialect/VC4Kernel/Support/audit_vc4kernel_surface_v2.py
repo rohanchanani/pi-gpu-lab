@@ -278,6 +278,26 @@ P8_5_REPRESENTATIVE_ISOLATED_FIXTURES = {
     "vdw_store_fragment_preserve_full_tail_vc4kernel",
     "vdw_store_rect_from_vpm_preserve_dynamic_shape_vc4kernel",
 }
+P9_REQUIRED_MIXED_FIXTURES = {
+    "mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel",
+    "mixed_quantized_gemv_subword_vpm_vc4kernel",
+}
+P9_REQUIRED_MIXED_FEATURES = {
+    "p9_fragment_pack",
+    "p9_fragment_unpack",
+    "p9_vpm_qpu_subword_modes",
+    "p9_vdr_subword_dma",
+    "p9_vdw_subword_dma",
+    "p9_subword_unsupported_mode_rejects",
+    "p9_mixed_subword_roundtrip",
+    "p9_mixed_quantized_gemv_subword",
+}
+P9_REQUIRED_ISOLATED_FIXTURES = {
+    "fragment_pack_unpack_roundtrip_vc4kernel",
+    "vpm_qpu_subword_roundtrip_vc4kernel",
+    "vdr_vdw_subword_roundtrip_vc4kernel",
+    "vdw_subword_preserve_tail_rect_vc4kernel",
+}
 
 P5_POST_PHASE_ALLOWED_STATUSES = {
     "planned",
@@ -541,6 +561,7 @@ def audit_matrix_ownership(matrix, mode):
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         required_special_status = "removed_in_p1"
     for op_name, (feature_id, phase) in SPECIAL_CASE_MATRIX.items():
@@ -561,6 +582,7 @@ def audit_matrix_ownership(matrix, mode):
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         require_matrix_feature(features, "p1_general_fragment_add_alu", "P1", "accepted")
         require_matrix_feature(features, "p1_general_fragment_mul_alu", "P1", "accepted")
@@ -777,7 +799,7 @@ def audit_matrix_ownership(matrix, mode):
         ]:
             if token not in p8_text:
                 fail(f"P8 VDW store matrix entries must document {token}")
-    if mode == "p8-5-mixed-acceptance-lock":
+    if mode in {"p8-5-mixed-acceptance-lock", "p9-pack-unpack-subword-lock"}:
         p8_5_policy = require_matrix_feature(
             features,
             "p8_5_mixed_acceptance_policy",
@@ -797,6 +819,23 @@ def audit_matrix_ownership(matrix, mode):
         ]:
             if token not in p8_5_text:
                 fail(f"P8.5 mixed acceptance matrix entry must document {token}")
+    if mode == "p9-pack-unpack-subword-lock":
+        for feature_id in [
+            "p9_fragment_pack",
+            "p9_fragment_unpack",
+            "p9_vpm_subword_w16_w8_modes",
+            "p9_vdr_vdw_subword_dma_modes",
+        ]:
+            feature = require_matrix_feature_status_in(
+                features,
+                feature_id,
+                "P9",
+                {"hardware_proven_pending_final_acceptance", "accepted"},
+            )
+            feature_text = json.dumps(feature).lower()
+            for token in ["hardware", "deterministic", "reject"]:
+                if token not in feature_text:
+                    fail(f"P9 matrix entry {feature_id} must document {token}")
     if mode != "p4-general-reduce-lock":
         require_matrix_feature_status_in(
             features,
@@ -808,6 +847,7 @@ def audit_matrix_ownership(matrix, mode):
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         require_matrix_feature_status_in(
             features,
@@ -961,6 +1001,7 @@ def audit_special_case_presence(repo_root, matrix_counts, mode):
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         if present:
             fail("P1 general ALU lock expected legacy ops to be absent: " + ", ".join(present))
@@ -2612,6 +2653,182 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
     return counts
 
 
+def audit_p9_pack_unpack_subword_lock(repo_root, matrix):
+    counts = audit_p8_5_mixed_acceptance_lock(repo_root, matrix)
+    features = feature_by_id(matrix)
+    for feature_id in [
+        "p9_fragment_pack",
+        "p9_fragment_unpack",
+        "p9_vpm_subword_w16_w8_modes",
+        "p9_vdr_vdw_subword_dma_modes",
+    ]:
+        require_matrix_feature_status_in(
+            features,
+            feature_id,
+            "P9",
+            {"hardware_proven_pending_final_acceptance", "accepted"},
+        )
+
+    manifest = json.loads((repo_root / P8_5_MIXED_ACCEPTANCE_MANIFEST).read_text())
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    missing_fixtures = sorted(P9_REQUIRED_MIXED_FIXTURES - fixtures.keys())
+    if missing_fixtures:
+        fail("P9 lock missing mixed fixtures: " + ", ".join(missing_fixtures))
+    planned_fixtures = sorted(
+        name
+        for name, fixture in fixtures.items()
+        if name in P9_REQUIRED_MIXED_FIXTURES and fixture.get("status") == "planned"
+    )
+    if planned_fixtures:
+        fail("P9 lock found planned mixed fixtures: " + ", ".join(planned_fixtures))
+
+    manifest_features = {
+        feature["id"]: feature for feature in manifest.get("required_features", [])
+    }
+    missing_features = sorted(P9_REQUIRED_MIXED_FEATURES - manifest_features.keys())
+    if missing_features:
+        fail("P9 lock missing manifest features: " + ", ".join(missing_features))
+    for feature_id in sorted(P9_REQUIRED_MIXED_FEATURES):
+        if manifest_features[feature_id].get("status") == "planned":
+            fail(f"P9 lock manifest feature is still planned: {feature_id}")
+
+    rejects = {
+        reject["id"]: reject for reject in manifest.get("deterministic_rejects", [])
+    }
+    if "p9_subword_unsupported_mode_rejects" not in rejects:
+        fail("P9 lock missing subword unsupported-mode deterministic reject entry")
+
+    expected_fixture_tokens = {
+        "mixed_subword_vpm_pack_unpack_roundtrip_vc4kernel": [
+            "vc4kernel.fragment_pack",
+            "vc4kernel.fragment_unpack",
+            "vc4kernel.vdr_load",
+            "vc4kernel.vpm_read_fragment",
+            "vc4kernel.vpm_write_fragment",
+            "vc4kernel.vdw_store_vpm_fragment",
+            "#vc4kernel.vpm_width<w8>",
+            "#vc4kernel.vpm_width<w16>",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+        "mixed_quantized_gemv_subword_vpm_vc4kernel": [
+            "vc4kernel.fragment_unpack",
+            "vc4kernel.fragment_alu.mul",
+            "vc4kernel.fragment_reduce",
+            "vc4kernel.vdr_load_rect_to_vpm",
+            "vc4kernel.vpm_read_fragment",
+            "vc4kernel.vdw_store_fragment",
+            "#vc4kernel.vpm_width<w8>",
+            "#vc4kernel.mul_alu_opcode<mul24>",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
+    }
+    for name, tokens in expected_fixture_tokens.items():
+        fixture = fixtures[name]
+        fixture_dir = repo_root / fixture["path"]
+        input_path = fixture_dir / "input.mlir"
+        expected_path = fixture_dir / "expected.json"
+        if not input_path.is_file() or not expected_path.is_file():
+            fail(f"P9 lock missing input/expected for {name}")
+        text = read_text(input_path)
+        for token in tokens:
+            if token not in text:
+                fail(f"P9 lock fixture {name} missing token {token}")
+        if "vc4kernel.tmu_load_fragment" in text and "mixed_quantized_gemv" in name:
+            fail("P9 lock quantized GEMV mixed fixture must not use TMU for A/B")
+
+    vc4kernel_run_root = repo_root / "compiler/test/CodeGen/VC4Kernel/Hardware/Run"
+    missing_isolated = sorted(
+        name
+        for name in P9_REQUIRED_ISOLATED_FIXTURES
+        if not (vc4kernel_run_root / name / "input.mlir").is_file()
+    )
+    if missing_isolated:
+        fail("P9 lock missing isolated P9 fixtures: " + ", ".join(missing_isolated))
+
+    source_text = "\n".join(
+        read_text(path)
+        for root in [
+            Path("compiler/include/vc4/Dialect/VC4Kernel"),
+            Path("compiler/lib/Dialect/VC4Kernel"),
+            Path("compiler/lib/Conversion/VC4KernelToSSAVC4"),
+        ]
+        for path in iter_text_files(repo_root / root, repo_root)
+    )
+    if "fragment_pack" not in source_text or "fragment_unpack" not in source_text:
+        fail("P9 lock expected fragment_pack and fragment_unpack in active source")
+
+    invalid_paths = [
+        repo_root / "compiler/test/Dialect/VC4Kernel/invalid-fragment-pack-unpack.mlir",
+        repo_root / "compiler/test/Dialect/VC4Kernel/invalid-vpm-subword-mode.mlir",
+        repo_root / "compiler/test/Dialect/VC4Kernel/invalid-vdr-vdw-subword-dma.mlir",
+        repo_root / "compiler/test/Dialect/SSAVC4/dynamic-vdr-vdw-rect-subword-invalid.mlir",
+    ]
+    for path in invalid_paths:
+        if not path.is_file():
+            fail(f"P9 lock missing invalid test: {rel(path, repo_root)}")
+    invalid_text = "\n".join(read_text(path) for path in invalid_paths)
+    for token in [
+        "unsupported VC4Kernel fragment pack mode",
+        "unsupported VC4Kernel fragment unpack mode",
+        "32-bit VPM QPU access requires subword<none>",
+        "VDR DMA laned subword mode is not supported by VC4 hardware",
+        "elem_bytes must match VPM width",
+        "vertical subword VDR DMA is not supported in P9",
+    ]:
+        if token not in invalid_text:
+            fail(f"P9 lock invalid tests missing diagnostic/token: {token}")
+
+    valid_subword_mode_hits = 0
+    invalid_width_subword_hits = []
+    dma_laned_hits = []
+    for path in sorted(vc4kernel_run_root.glob("*/input.mlir")):
+        text = read_text(path)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if "#vc4kernel.vpm_width<w8>" in line or "#vc4kernel.vpm_width<w16>" in line:
+                valid_subword_mode_hits += 1
+            if (
+                "#vc4kernel.vpm_width<w32>" in line
+                and (
+                    "#vc4kernel.vpm_subword<packed>" in line
+                    or "#vc4kernel.vpm_subword<laned>" in line
+                )
+            ):
+                invalid_width_subword_hits.append((path, line_number))
+            if (
+                ("vc4kernel.vdr_load" in line or "vc4kernel.vdw_store" in line)
+                and "#vc4kernel.vpm_subword<laned>" in line
+            ):
+                dma_laned_hits.append((path, line_number))
+            if (
+                ("#vc4kernel.vpm_width<w8>" in line or "#vc4kernel.vpm_width<w16>" in line)
+                and "#vc4kernel.vpm_subword<none>" in line
+            ):
+                invalid_width_subword_hits.append((path, line_number))
+    if invalid_width_subword_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in invalid_width_subword_hits[:20]
+        )
+        fail(f"P9 lock found invalid width/subword combo in active fixture: {details}")
+    if dma_laned_hits:
+        details = "; ".join(
+            f"{rel(path, repo_root)}:{line}" for path, line in dma_laned_hits[:20]
+        )
+        fail(f"P9 lock found DMA laned subword mode in active fixture: {details}")
+
+    counts.update(
+        {
+            "p9_mixed_fixtures": len(P9_REQUIRED_MIXED_FIXTURES),
+            "p9_manifest_features": len(P9_REQUIRED_MIXED_FEATURES),
+            "p9_isolated_fixture_retention_checks": len(P9_REQUIRED_ISOLATED_FIXTURES),
+            "p9_invalid_tests": len(invalid_paths),
+            "p9_valid_subword_mode_hits": valid_subword_mode_hits,
+            "p9_invalid_width_subword_hits": 0,
+            "p9_dma_laned_hits": 0,
+        }
+    )
+    return counts
+
+
 def format_counts(counts):
     return ", ".join(f"{key}={counts[key]}" for key in sorted(counts))
 
@@ -2640,6 +2857,7 @@ def main(argv):
         "p7-tmu-safe-load-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         fail(f"unsupported audit mode: {args.mode}")
     repo_root = Path(args.repo_root).resolve()
@@ -2662,6 +2880,7 @@ def main(argv):
         "p6-memory-policy-lock",
         "p8-vdw-store-policy-lock",
         "p8-5-mixed-acceptance-lock",
+        "p9-pack-unpack-subword-lock",
     }:
         matrix_counts["special_case_removed_in_p1"] = len(SPECIAL_CASE_MATRIX)
     special_case_counts = audit_special_case_presence(repo_root, matrix_counts, args.mode)
@@ -2688,6 +2907,7 @@ def main(argv):
             "p7-tmu-safe-load-lock",
             "p8-vdw-store-policy-lock",
             "p8-5-mixed-acceptance-lock",
+            "p9-pack-unpack-subword-lock",
         }
         else {}
     )
@@ -2736,6 +2956,11 @@ def main(argv):
         if args.mode == "p8-5-mixed-acceptance-lock"
         else {}
     )
+    p9_lock_counts = (
+        audit_p9_pack_unpack_subword_lock(repo_root, matrix)
+        if args.mode == "p9-pack-unpack-subword-lock"
+        else {}
+    )
 
     migration_summary = {}
     migration_summary.update(matrix_counts)
@@ -2774,6 +2999,8 @@ def main(argv):
         print(f"p8_vdw_store_policy_lock: {format_counts(p8_lock_counts)}")
     if p8_5_lock_counts:
         print(f"p8_5_mixed_acceptance_lock: {format_counts(p8_5_lock_counts)}")
+    if p9_lock_counts:
+        print(f"p9_pack_unpack_subword_lock: {format_counts(p9_lock_counts)}")
     return 0
 
 
