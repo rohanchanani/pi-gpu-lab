@@ -3287,7 +3287,11 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         features,
         "p12_dynamic_vpm_read_write_coordinates",
         "P12",
-        {"planned", "implemented_pending_hardware"},
+        {
+            "planned",
+            "implemented_pending_hardware",
+            "hardware_proven_pending_final_acceptance",
+        },
     )
     p12_dma = require_matrix_feature_status_in(
         features,
