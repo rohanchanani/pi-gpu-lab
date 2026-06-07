@@ -17,9 +17,21 @@
 // CHECK: value = -1879048128 : i32
 // CHECK: op_add = #vc4.add_opcode<and>
 // CHECK: op_add = #vc4.add_opcode<or>
+// CHECK: op_add = #vc4.add_opcode<and>
+// CHECK-SAME: small_imm = 1 : i32
 // CHECK: op_add = #vc4.add_opcode<shl>
+// CHECK-SAME: small_imm = 8 : i32
+// CHECK: op_add = #vc4.add_opcode<shl>
+// CHECK-SAME: small_imm = 8 : i32
+// CHECK: op_add = #vc4.add_opcode<shl>
+// CHECK-SAME: small_imm = 8 : i32
+// CHECK: op_add = #vc4.add_opcode<shl>
+// CHECK-SAME: small_imm = 4 : i32
+// CHECK: op_add = #vc4.add_opcode<or>
+// CHECK: op_add = #vc4.add_opcode<shl>
+// CHECK: small_imm = 3 : i32
 // CHECK: vc4.qpu.vpmvcd_setup
-// CHECK-SAME: side = #vc4.vpmvcd_side<read>
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: vc4.qpu.vpmvcd_setup
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: sig = #vc4.qpu_signal<thrend>

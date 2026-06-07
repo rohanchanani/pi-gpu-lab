@@ -4887,6 +4887,34 @@ emitRawVDRLoad(OpBuilder &builder, Location loc, int64_t addressReg,
         mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
+  if (dynamicSelectorReg) {
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
+        mlir::vc4::MulOpcode::nop, *dynamicSelectorReg, /*raddrB=*/0,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1, /*smallImm=*/selectorMask);
+    createNopBundle(builder, loc);
+    for (int64_t shift : {8, 8, 8, 4}) {
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::small_imm,
+          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+          /*smallImm=*/shift);
+      createNopBundle(builder, loc);
+    }
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/35, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
+        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  }
   if (vpmRowOffset != 0) {
     createSplat32LDI(builder, loc, vpmRowOffset, 33);
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
@@ -4961,16 +4989,17 @@ static LogicalResult emitVDRLoad(OpBuilder &builder,
   if (templ.operands.size() < 2 || templ.operands.size() > 4)
     return source->emitError(
         "internal lowering error: VDR load has wrong operand count");
+  auto load = llvm::cast<mlir::ssavc4::VDRLoadOp>(source);
   std::optional<int64_t> addressReg =
       allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> vpmBaseRowReg =
       allocator.lookup(templ, templ.operands[1]);
   std::optional<int64_t> dynamicVpmXReg;
-  Value dynamicVpmX = getOptionalSegmentOperand(source, 2);
+  Value dynamicVpmX = load.getVpmXValue();
   if (dynamicVpmX)
     dynamicVpmXReg = allocator.lookup(templ, dynamicVpmX);
   std::optional<int64_t> dynamicSelectorReg;
-  Value dynamicSelector = getOptionalSegmentOperand(source, 3);
+  Value dynamicSelector = load.getSubwordSelectorValue();
   if (dynamicSelector)
     dynamicSelectorReg = allocator.lookup(templ, dynamicSelector);
   if (!addressReg || !vpmBaseRowReg ||
@@ -5112,6 +5141,8 @@ static void appendScheduledBundleSlot(
                 });
 }
 
+static void appendNopSlot(PlannedRegion &region, Location loc);
+
 static void appendDynamicVDRXToSetup(PlannedRegion &region, Location loc,
                                      std::optional<int64_t> dynamicVpmXReg,
                                      int64_t setupReg,
@@ -5147,6 +5178,7 @@ appendDynamicVDRSubwordSelectorToSetup(PlannedRegion &region, Location loc,
       *dynamicSelectorReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
       mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
       /*smallImm=*/selectorMask);
+  appendNopSlot(region, loc);
   for (int64_t shift : {8, 8, 8, 4}) {
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
@@ -5155,6 +5187,7 @@ appendDynamicVDRSubwordSelectorToSetup(PlannedRegion &region, Location loc,
         /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
         mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
         mlir::vc4::QPUMux::r1, /*smallImm=*/shift);
+    appendNopSlot(region, loc);
   }
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,

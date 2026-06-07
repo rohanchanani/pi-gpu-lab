@@ -1,0 +1,22 @@
+{
+  "name": "vdr_dynamic_selector_loop_branch_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 2,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdr_dynamic_vpm_row": 1,
+    "saw_vdr_dynamic_vpm_x": 1,
+    "saw_vdr_dynamic_subword_selector": 1,
+    "saw_horizontal_w32": 1,
+    "saw_vertical_w32": 1,
+    "saw_horizontal_subword": 1,
+    "saw_vertical_subword": 1,
+    "saw_vpm_qpu_readback": 1,
+    "saw_byte_halfword_guards": 1,
+    "no_tmu_to_vpm": 1,
+    "saw_vdr_loop_branch": 1,
+    "saw_both_paths": 1
+  }
+}
