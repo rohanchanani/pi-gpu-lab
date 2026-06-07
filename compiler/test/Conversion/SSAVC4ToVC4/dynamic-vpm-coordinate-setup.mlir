@@ -113,6 +113,15 @@ ssavc4.module @dynamic_vpm_coordinate_setup {
       zero_fill = true,
       serialize = "mutex"
     } : i32, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
+    ssavc4.vdw.store_vpm %addr, %row, %x dynamic_subword_selector %sel {
+      width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>,
+      row_len = 8 : i32,
+      nrows = 1 : i32,
+      memory_pitch_bytes = 8 : i32,
+      active_lanes = 8 : i32,
+      orientation = #ssavc4.vpm_orientation<horizontal>,
+      serialize = "mutex"
+    } : i32, i32, i32 dynamic_subword_selector i32
     ssavc4.vdw.store_rect.dynamic %addr, %row dynamic_src_x %x, %rows, %cols, %pitch {
       max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 4 : i32,
       orientation = #ssavc4.vpm_orientation<horizontal>,
@@ -122,6 +131,15 @@ ssavc4.module @dynamic_vpm_coordinate_setup {
       preserve_inactive = true,
       serialize = "mutex"
     } : i32, i32 dynamic_src_x i32, i32, i32, i32
+    ssavc4.vdw.store_rect.dynamic %addr, %row dynamic_src_x %x dynamic_subword_selector %sel, %rows, %cols, %pitch {
+      max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 2 : i32,
+      orientation = #ssavc4.vpm_orientation<vertical>,
+      width = #ssavc4.vpm_elem_width<w16>,
+      subword = #ssavc4.vpm_subword<packed>,
+      vpm_pitch = 1 : i32,
+      preserve_inactive = true,
+      serialize = "mutex"
+    } : i32, i32 dynamic_src_x i32 dynamic_subword_selector i32, i32, i32, i32
     ssavc4.thread_end
   }
 }

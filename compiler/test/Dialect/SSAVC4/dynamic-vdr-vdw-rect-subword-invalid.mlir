@@ -22,7 +22,7 @@ ssavc4.module @bad_vertical_subword_dma {
     %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %cols = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %stride = ssavc4.load_imm <splat32> {value = 16 : i32} : i32
-    // CHECK: vertical subword VDW DMA is unproven/deferred in P12
+    // CHECK: requires subword_selector attr or dynamic subword selector operand
     ssavc4.vdw.store_rect.dynamic %addr, %row, %rows, %cols, %stride {max_rows = 1 : i32, max_cols = 4 : i32, elem_bytes = 1 : i32, orientation = #ssavc4.vpm_orientation<vertical>, width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, src_x = 0 : i32, vpm_pitch = 1 : i32, preserve_inactive = true} : i32, i32, i32, i32, i32
     ssavc4.thread_end
   }

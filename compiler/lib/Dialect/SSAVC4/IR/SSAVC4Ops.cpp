@@ -1027,8 +1027,9 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (!getVpmX().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 VPM x-coordinate operand");
 
-  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(), "VDW DMA")))
+  if (failed(verifyExecutableVPMDMAMode(
+          op, getWidth(), getSubword(), getOrientation(), "VDW DMA",
+          /*allowVerticalSubword=*/true)))
     return failure();
   int64_t elemBytes = *getVPMElemBytes(getWidth());
   int64_t rowLen = getRowLenAttr().getInt();
@@ -1053,6 +1054,11 @@ LogicalResult VDWStoreVPMOp::verify() {
   if (auto activeLanes = getActiveLanesAttr())
     if (activeLanes.getInt() != rowLen)
       return emitOpError("active_lanes must match row_len for VDW stores");
+  if (failed(verifyVPMDMACoordinates(
+          op, getWidth(), getOrientation(), IntegerAttr(), getVpmX(),
+          getSubwordSelectorAttr(), getSubwordSelectorValue(),
+          /*stride=*/1)))
+    return failure();
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
                                             "serialize")))
@@ -1077,13 +1083,14 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
     return failure();
   if (!getPreserveInactive())
     return emitOpError("requires preserve_inactive = true");
-  if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(), "VDW DMA")))
+  if (failed(verifyExecutableVPMDMAMode(
+          op, getWidth(), getSubword(), getOrientation(), "VDW DMA",
+          /*allowVerticalSubword=*/true)))
     return failure();
   if (failed(verifyVPMDMACoordinates(
           op, getWidth(), getOrientation(), getSrcXAttr(),
-          getOptionalOperandByCount(getOperation(), 5, 5), IntegerAttr(),
-          Value(), getVpmPitch(), /*explicitSelector=*/false)))
+          getSrcXValue(), getSubwordSelectorAttr(),
+          getSubwordSelectorValue(), getVpmPitch())))
     return failure();
   if (getVpmPitch() > 16)
     return emitOpError("requires vpm_pitch in range [1, 16]");

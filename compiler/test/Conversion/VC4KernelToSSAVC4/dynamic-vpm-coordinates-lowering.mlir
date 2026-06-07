@@ -26,10 +26,14 @@
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdw.store_vpm %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
+// CHECK: ssavc4.vdw.store_vpm %{{.*}}, %{{.*}}, %{{.*}} dynamic_subword_selector %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w8>
 // CHECK: ssavc4.vdw.store_rect.dynamic %{{.*}}, %{{.*}} dynamic_src_x %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdw.store_rect.dynamic %{{.*}}, %{{.*}} dynamic_src_x %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
+// CHECK: ssavc4.vdw.store_rect.dynamic %{{.*}}, %{{.*}} dynamic_src_x %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w16>
 // CHECK-LABEL: ssavc4.func @static_vpm_coords
 // CHECK: ssavc4.vpm.write %{{.*}}, %{{.*}} {
 // CHECK-SAME: x = 0 : i32
@@ -75,8 +79,10 @@ module {
     vc4kernel.vdr_load_rect_to_vpm %in, %c0, %tile, %c0 dynamic_dst_x %x_arg dynamic_subword_selector %sel, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32 dynamic_subword_selector i32, i32, i32, i32
     vc4kernel.vdw_store_vpm_fragment %tile, %c0 dynamic_src_x %x_arg, %out, %c0, %full {elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32, i32, i32, !vc4kernel.pred<16>
     vc4kernel.vdw_store_vpm_fragment %tile, %c0 dynamic_src_x %x_arg, %out, %c0, %full {elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32, i32, i32, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_vpm_fragment %tile, %c0 dynamic_src_x %x_arg dynamic_subword_selector %sel, %out, %c0, %full {elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32 dynamic_subword_selector i32, i32, i32, !vc4kernel.pred<16>
     vc4kernel.vdw_store_rect_from_vpm %tile, %c0 dynamic_src_x %x_arg, %out, %c0, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32, i32, i32, i32, i32, i32
     vc4kernel.vdw_store_rect_from_vpm %tile, %c0 dynamic_src_x %x_arg, %out, %c0, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32, i32, i32, i32, i32, i32
+    vc4kernel.vdw_store_rect_from_vpm %tile, %c0 dynamic_src_x %x_arg dynamic_subword_selector %sel, %out, %c0, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 2 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : !vc4kernel.vpm_tile, i32 dynamic_src_x i32 dynamic_subword_selector i32, i32, i32, i32, i32, i32
     vc4kernel.return
   }
 

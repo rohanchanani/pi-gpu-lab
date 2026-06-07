@@ -40,11 +40,11 @@ ssavc4.module @subword_dma_valid {
     // CHECK: ssavc4.vdw.store_vpm
     // CHECK-SAME: subword = #ssavc4.vpm_subword<packed>
     // CHECK-SAME: width = #ssavc4.vpm_elem_width<w16>
-    ssavc4.vdw.store_vpm %addr, %row, %row {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, row_len = 8 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, active_lanes = 8 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, i32, i32
+    ssavc4.vdw.store_vpm %addr, %row, %row {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, row_len = 8 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, subword_selector = 1 : i32, active_lanes = 8 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, i32, i32
     // CHECK: ssavc4.vdw.store_rect.dynamic
     // CHECK-SAME: elem_bytes = 1
     // CHECK-SAME: width = #ssavc4.vpm_elem_width<w8>
-    ssavc4.vdw.store_rect.dynamic %addr, %row, %rows, %cols, %pitch8 {max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 1 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, src_x = 3 : i32, vpm_pitch = 1 : i32, preserve_inactive = true} : i32, i32, i32, i32, i32
+    ssavc4.vdw.store_rect.dynamic %addr, %row, %rows, %cols, %pitch8 {max_rows = 1 : i32, max_cols = 8 : i32, elem_bytes = 1 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, src_x = 0 : i32, subword_selector = 3 : i32, vpm_pitch = 1 : i32, preserve_inactive = true} : i32, i32, i32, i32, i32
     ssavc4.thread_end
   }
 }

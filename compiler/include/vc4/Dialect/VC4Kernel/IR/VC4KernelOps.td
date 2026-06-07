@@ -435,7 +435,7 @@ def VC4Kernel_VDRLoadRectToVPMOp : VC4Kernel_Op<"vdr_load_rect_to_vpm", [
 }
 
 def VC4Kernel_VDWStoreVPMFragmentOp : VC4Kernel_Op<"vdw_store_vpm_fragment", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$src_row,
@@ -443,21 +443,23 @@ def VC4Kernel_VDWStoreVPMFragmentOp : VC4Kernel_Op<"vdw_store_vpm_fragment", [
                        VC4Kernel_I32:$byte_offset,
                        VC4Kernel_PredType:$pred,
                        Optional<VC4Kernel_I32>:$src_x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        I32Attr:$elem_bytes,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$src_x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
                        OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
-  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($base) `,` type($byte_offset) `,` type($pred)";
+  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $base `,` $byte_offset `,` $pred attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($base) `,` type($byte_offset) `,` type($pred)";
   let hasVerifier = 1;
 }
 
 def VC4Kernel_VDWStoreRectFromVPMOp : VC4Kernel_Op<"vdw_store_rect_from_vpm", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$src_row,
@@ -467,6 +469,7 @@ def VC4Kernel_VDWStoreRectFromVPMOp : VC4Kernel_Op<"vdw_store_rect_from_vpm", [
                        VC4Kernel_I32:$active_cols,
                        VC4Kernel_I32:$memory_stride_bytes,
                        Optional<VC4Kernel_I32>:$src_x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        I32Attr:$max_rows,
                        I32Attr:$max_cols,
                        I32Attr:$elem_bytes,
@@ -474,11 +477,12 @@ def VC4Kernel_VDWStoreRectFromVPMOp : VC4Kernel_Op<"vdw_store_rect_from_vpm", [
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$src_x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$vpm_pitch,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency,
                        OptionalAttr<VC4Kernel_InactiveStoreAttr>:$inactive_store);
-  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? `,` $base `,` $byte_offset `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($base) `,` type($byte_offset) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
+  let assemblyFormat = "$tile `,` $src_row (`dynamic_src_x` $src_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $base `,` $byte_offset `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($tile) `,` type($src_row) (`dynamic_src_x` type($src_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($base) `,` type($byte_offset) `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }
 

@@ -455,7 +455,9 @@ def SSAVC4_VDWStoreOp : SSAVC4_Op<"vdw.store", [AttrSizedOperandSegments]> {
   let assemblyFormat = "$address `,` $value (`,` $active_lanes_value^)? (`,` $vpm_row_value^)? attr-dict `:` type($address) `,` type($value) (`,` type($active_lanes_value)^)? (`,` type($vpm_row_value)^)?";
 }
 
-def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
+def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm", [
+    AttrSizedOperandSegments
+  ]> {
   let summary = "SSAVC4 effectful global store from existing VPM coordinates";
   let description = [{
     Commits data already resident in VPM through the VideoCore IV VDW
@@ -471,6 +473,7 @@ def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
     AnyType:$address,
     AnyType:$vpm_y,
     AnyType:$vpm_x,
+    Optional<AnyType>:$subword_selector_value,
     Optional<AnyType>:$active_lanes_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
@@ -478,15 +481,16 @@ def SSAVC4_VDWStoreVPMOp : SSAVC4_Op<"vdw.store_vpm"> {
     I32Attr:$row_len,
     I32Attr:$nrows,
     I32Attr:$memory_pitch_bytes,
+    OptionalAttr<I32Attr>:$subword_selector,
     OptionalAttr<I32Attr>:$active_lanes,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_y `,` $vpm_x (`,` $active_lanes_value^)? attr-dict `:` type($address) `,` type($vpm_y) `,` type($vpm_x) (`,` type($active_lanes_value)^)?";
+  let assemblyFormat = "$address `,` $vpm_y `,` $vpm_x (`dynamic_subword_selector` $subword_selector_value^)? (`,` $active_lanes_value^)? attr-dict `:` type($address) `,` type($vpm_y) `,` type($vpm_x) (`dynamic_subword_selector` type($subword_selector_value)^)? (`,` type($active_lanes_value)^)?";
   let hasVerifier = 1;
 }
 
 def SSAVC4_VDWStoreRectDynamicOp : SSAVC4_Op<"vdw.store_rect.dynamic", [
-    MemoryEffects<[MemRead, MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead, MemWrite]>
   ]> {
   let summary = "SSAVC4 dynamic rectangular VPM-to-global store";
   let description = [{
@@ -502,6 +506,7 @@ def SSAVC4_VDWStoreRectDynamicOp : SSAVC4_Op<"vdw.store_rect.dynamic", [
     AnyType:$active_cols,
     AnyType:$memory_stride_bytes,
     Optional<AnyType>:$src_x_value,
+    Optional<AnyType>:$subword_selector_value,
     I32Attr:$max_rows,
     I32Attr:$max_cols,
     I32Attr:$elem_bytes,
@@ -509,11 +514,12 @@ def SSAVC4_VDWStoreRectDynamicOp : SSAVC4_Op<"vdw.store_rect.dynamic", [
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
     OptionalAttr<I32Attr>:$src_x,
+    OptionalAttr<I32Attr>:$subword_selector,
     I32Attr:$vpm_pitch,
     BoolAttr:$preserve_inactive,
     OptionalAttr<StrAttr>:$serialize
   );
-  let assemblyFormat = "$address `,` $vpm_source_row (`dynamic_src_x` $src_x_value^)? `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($address) `,` type($vpm_source_row) (`dynamic_src_x` type($src_x_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
+  let assemblyFormat = "$address `,` $vpm_source_row (`dynamic_src_x` $src_x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $active_rows `,` $active_cols `,` $memory_stride_bytes attr-dict `:` type($address) `,` type($vpm_source_row) (`dynamic_src_x` type($src_x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($active_rows) `,` type($active_cols) `,` type($memory_stride_bytes)";
   let hasVerifier = 1;
 }
 

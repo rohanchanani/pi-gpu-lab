@@ -1889,8 +1889,8 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch",
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDW DMA",
-                                     getOptionalOperandByCount(getOperation(),
-                                                               5, 5))))
+                                     getSrcXValue(), "subword_selector",
+                                     getSubwordSelectorValue())))
     return failure();
   if (failed(verifyExplicitVDWVPMPredicate(getOperation(), getPred())))
     return failure();
@@ -1908,8 +1908,8 @@ LogicalResult VDWStoreRectFromVPMOp::verify() {
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch",
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDW DMA",
-                                     getOptionalOperandByCount(getOperation(),
-                                                               7, 7))))
+                                     getSrcXValue(), "subword_selector",
+                                     getSubwordSelectorValue())))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryStrideBytes(),
                                         "memory_stride_bytes", getElemBytes())))

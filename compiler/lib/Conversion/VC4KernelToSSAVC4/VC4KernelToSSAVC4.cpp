@@ -125,15 +125,6 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
-static Value getOptionalOperandByCount(Operation *op, unsigned dynamicIndex,
-                                       unsigned staticOperandCount) {
-  if (op->getNumOperands() == staticOperandCount)
-    return {};
-  if (op->getNumOperands() == staticOperandCount + 1)
-    return op->getOperand(dynamicIndex);
-  return {};
-}
-
 static Value getOptionalSegmentOperand(Operation *op, unsigned segmentIndex) {
   if (auto write = llvm::dyn_cast<mlir::vc4kernel::VPMWriteFragmentOp>(op)) {
     if (segmentIndex == 4)
@@ -3617,7 +3608,9 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
-    Value dynamicSrcX = getOptionalOperandByCount(op, 5, 5);
+    auto vdw = llvm::cast<mlir::vc4kernel::VDWStoreVPMFragmentOp>(op);
+    Value dynamicSrcX = vdw.getSrcXValue();
+    Value dynamicSelector = vdw.getSubwordSelectorValue();
     const PredicatePlan *predicate =
         lookupPredicatePlan(op->getOperand(4), state);
     if (!predicate)
@@ -3631,9 +3624,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value srcRow = mapValue(op, op->getOperand(1), state);
     Value mappedSrcX =
         dynamicSrcX ? mapValue(op, dynamicSrcX, state) : Value();
+    Value mappedSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
-    if (!srcRow || (dynamicSrcX && !mappedSrcX) || !base || !byteOffset)
+    if (!srcRow || (dynamicSrcX && !mappedSrcX) ||
+        (dynamicSelector && !mappedSelector) || !base || !byteOffset)
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
@@ -3659,19 +3655,29 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                              builder.getI32IntegerAttr(srcX ? srcX.getInt()
                                                             : 0));
       }
-      SmallVector<Value, 4> operands{address, srcRow, vpmX, activeTail};
+      SmallVector<Value, 5> operands{address, srcRow, vpmX};
+      if (mappedSelector)
+        operands.push_back(mappedSelector);
+      operands.push_back(activeTail);
       int64_t elemBytes = 4;
       if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
         elemBytes = elemBytesAttr.getInt();
-      createOp(
-          builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
-          {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
-           getSSAVC4VPMSubword(builder, op),
-           builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
-           builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
-           builder.getNamedAttr("memory_pitch_bytes",
-                                builder.getI32IntegerAttr(16 * elemBytes)),
-           builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+      SmallVector<NamedAttribute, 10> attrs{
+          getSSAVC4VPMOrientation(builder, op),
+          getSSAVC4VPMWidth(builder, op), getSSAVC4VPMSubword(builder, op),
+          builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
+          builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
+          builder.getNamedAttr("memory_pitch_bytes",
+                               builder.getI32IntegerAttr(16 * elemBytes)),
+          builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+          builder.getNamedAttr(
+              "operand_segment_sizes",
+              builder.getDenseI32ArrayAttr({1, 1, 1,
+                                            mappedSelector ? 1 : 0, 1}))};
+      if (Attribute selectorAttr = op->getAttr("subword_selector"))
+        attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
+      createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
+               attrs);
       return success();
     }
     Value vpmX = mappedSrcX;
@@ -3681,7 +3687,9 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                            builder.getI32IntegerAttr(srcX ? srcX.getInt()
                                                           : 0));
     }
-    SmallVector<Value, 4> operands{address, srcRow, vpmX};
+    SmallVector<Value, 5> operands{address, srcRow, vpmX};
+    if (mappedSelector)
+      operands.push_back(mappedSelector);
     SmallVector<NamedAttribute, 8> attrs{
         getSSAVC4VPMOrientation(builder, op),
         getSSAVC4VPMWidth(builder, op),
@@ -3695,11 +3703,17 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                 (op->getAttrOfType<IntegerAttr>("elem_bytes")
                      ? op->getAttrOfType<IntegerAttr>("elem_bytes").getInt()
                      : 4))),
-        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+        builder.getNamedAttr(
+            "operand_segment_sizes",
+            builder.getDenseI32ArrayAttr({1, 1, 1,
+                                          mappedSelector ? 1 : 0, 0}))};
     if (predicate->kind == PredicatePlan::Class::Full) {
       attrs.push_back(
           builder.getNamedAttr("active_lanes", builder.getI32IntegerAttr(16)));
     }
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands, attrs);
     return success();
   }
@@ -3710,17 +3724,22 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
+    auto vdw = llvm::cast<mlir::vc4kernel::VDWStoreRectFromVPMOp>(op);
     Value srcRow = mapValue(op, op->getOperand(1), state);
-    Value dynamicSrcX = getOptionalOperandByCount(op, 7, 7);
+    Value dynamicSrcX = vdw.getSrcXValue();
+    Value dynamicSelector = vdw.getSubwordSelectorValue();
     Value mappedSrcX =
         dynamicSrcX ? mapValue(op, dynamicSrcX, state) : Value();
+    Value mappedSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
     Value base = mapValue(op, op->getOperand(2), state);
     Value byteOffset = mapValue(op, op->getOperand(3), state);
     Value activeRows = mapValue(op, op->getOperand(4), state);
     Value activeCols = mapValue(op, op->getOperand(5), state);
     Value memoryStrideBytes =
         mapValue(op, op->getOperand(6), state);
-    if (!srcRow || (dynamicSrcX && !mappedSrcX) || !base || !byteOffset ||
+    if (!srcRow || (dynamicSrcX && !mappedSrcX) ||
+        (dynamicSelector && !mappedSelector) || !base || !byteOffset ||
         !activeRows || !activeCols || !memoryStrideBytes)
       return failure();
     Value address = createOpWithResult(
@@ -3734,10 +3753,12 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedSrcRow))
       return failure();
     srcRow = *plannedSrcRow;
-    SmallVector<Value, 6> operands{address, srcRow, activeRows, activeCols,
+    SmallVector<Value, 7> operands{address, srcRow, activeRows, activeCols,
                                    memoryStrideBytes};
     if (mappedSrcX)
       operands.push_back(mappedSrcX);
+    if (mappedSelector)
+      operands.push_back(mappedSelector);
     SmallVector<NamedAttribute, 10> attrs{
         getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
         getSSAVC4VPMSubword(builder, op),
@@ -3746,9 +3767,16 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
         builder.getNamedAttr("preserve_inactive", builder.getBoolAttr(true)),
-        builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
+        builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
+        builder.getNamedAttr(
+            "operand_segment_sizes",
+            builder.getDenseI32ArrayAttr({1, 1, 1, 1, 1,
+                                          mappedSrcX ? 1 : 0,
+                                          mappedSelector ? 1 : 0}))};
     if (Attribute srcXAttr = op->getAttr("src_x"))
       attrs.push_back(builder.getNamedAttr("src_x", srcXAttr));
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     createOp(builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName, operands,
              attrs);
     return success();
