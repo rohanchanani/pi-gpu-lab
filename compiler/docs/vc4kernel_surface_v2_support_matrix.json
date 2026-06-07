@@ -1068,6 +1068,79 @@
       "reject_category": ""
     },
     {
+      "id": "p13f16_f16_storage_conversion",
+      "phase": "P13",
+      "category": "accepted_hardware_proven",
+      "current_status": "implemented_pending_hardware",
+      "final_status_target": "accepted_hardware_proven",
+      "current_surface": "VC4Kernel now has an explicit f16 storage conversion surface: packed f16 carriers unpack to vector<16xf32> compute fragments and vector<16xf32> compute fragments pack back to deterministic vector<16xi32> carriers using canonical 16a placement.",
+      "target_surface": "Accepted hardware-proven f16 storage conversion after the targeted P13f16 hardware fixture proves exact representable values through f32 compute.",
+      "vc4kernel_verifier_plan": "Require source/dest subword_type<f16>, packed layout, unpack_policy<to_f32> for carrier-to-f32 conversion, pack_policy<from_f32> for f32-to-carrier conversion, vector<16xi32> storage carriers, and vector<16xf32> compute carriers.",
+      "vc4kernel_to_ssavc4_plan": "Lower f16 storage conversion to ssavc4.pack/unpack with f16_storage_conversion marker and the existing 16a regfile-A pack/unpack hardware attrs.",
+      "ssavc4_to_vc4_plan": "Emit fadd with +0.0 while applying f16a_or_i16a unpack or to_16a pack so the shared hardware field is interpreted as Float16 conversion, not signed-int conversion. Preserve carrier high bits by zeroing the result carrier before f16 pack.",
+      "hardware_or_reject_verification_plan": "Local verifier, conversion, and SSAVC4ToVC4 FileCheck coverage lands in P13f16b; targeted hardware proof lands in P13f16c before final status changes to accepted_hardware_proven.",
+      "upstream_use": "Producer-layer follow-on vector and Triton lowering can represent f16 storage values through f32 VC4Kernel compute carriers.",
+      "migration_or_removal": "No integer s16/u16 alias is used for f16; no first-class 16b high-level VC4Kernel operation is introduced.",
+      "dependencies": [
+        "p9_fragment_pack",
+        "p9_fragment_unpack",
+        "p12_dynamic_vpm_read_write_coordinates",
+        "p12_dynamic_vdr_vdw_coordinates"
+      ],
+      "acceptance_line": "implemented_pending_hardware",
+      "proof_links": {
+        "verifier_lit": "compiler/test/Dialect/VC4Kernel/fragment-pack-unpack-roundtrip.mlir",
+        "conversion_lit": "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-pack-unpack-lowering.mlir",
+        "ssavc4_verifier_lit": "compiler/test/Dialect/SSAVC4/pack-unpack-f16-storage.mlir",
+        "ssavc4_to_vc4_lit": "compiler/test/Conversion/SSAVC4ToVC4/f16-pack-unpack-storage.mlir"
+      },
+      "reject_category": ""
+    },
+    {
+      "id": "p13f16_native_f16_arithmetic_reject",
+      "phase": "P13",
+      "category": "deterministic_reject",
+      "current_status": "deterministic_reject",
+      "final_status_target": "deterministic_reject",
+      "current_surface": "Native vector<16xf16> executable fragment arithmetic is not part of the VC4Kernel surface; f16 values must convert to vector<16xf32> before compute.",
+      "target_surface": "Rejected in the final VC4Kernel surface with stable parser or verifier diagnostics.",
+      "vc4kernel_verifier_plan": "Reject vector<16xf16> operands/results on fragment_alu, fragment_cmp, and fragment_reduce by the final vector<16xi32>/vector<16xf32> carrier type contract.",
+      "vc4kernel_to_ssavc4_plan": "No native f16 arithmetic lowering exists.",
+      "ssavc4_to_vc4_plan": "No native f16 ALU path exists because VC4 ALUs execute 32-bit integer or f32 operations.",
+      "hardware_or_reject_verification_plan": "Rejected by proof_links verifier coverage.",
+      "upstream_use": "Producer-layer follow-on f16 arithmetic must explicitly lower as f16 storage conversion plus f32 compute.",
+      "migration_or_removal": "No alias maps native f16 arithmetic to integer subword operations.",
+      "dependencies": [
+        "p13f16_f16_storage_conversion"
+      ],
+      "acceptance_line": "deterministic_reject:hardware_forbidden",
+      "reject_category": "hardware_forbidden",
+      "proof_links": {
+        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-bf16-fp8-storage.mlir"
+      }
+    },
+    {
+      "id": "p13f16_bf16_fp8_native_reject",
+      "phase": "P13",
+      "category": "deterministic_reject",
+      "current_status": "deterministic_reject",
+      "final_status_target": "deterministic_reject",
+      "current_surface": "Native bf16 and fp8 arithmetic or conversion are not accepted VC4Kernel hardware semantics.",
+      "target_surface": "Rejected in the final VC4Kernel surface with stable parser, verifier, or audit diagnostics.",
+      "vc4kernel_verifier_plan": "Do not add bf16 or fp8 subword types or conversion policies. Reject attempts to spell them as VC4Kernel fragment pack/unpack storage modes.",
+      "vc4kernel_to_ssavc4_plan": "No bf16 or fp8 lowering exists and they must not pass through f16 or u16 aliases.",
+      "ssavc4_to_vc4_plan": "No bf16 or fp8 lower-half pack/unpack interpretation exists on VC4.",
+      "hardware_or_reject_verification_plan": "Rejected by proof_links verifier coverage.",
+      "upstream_use": "Producer-layer follow-on bf16/fp8 values require a separate explicitly proven design outside this f16 storage closure.",
+      "migration_or_removal": "No alias maps bf16 or fp8 to f16/u16 conversion.",
+      "dependencies": [],
+      "acceptance_line": "deterministic_reject:hardware_forbidden",
+      "reject_category": "hardware_forbidden",
+      "proof_links": {
+        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-f16-storage.mlir"
+      }
+    },
+    {
       "id": "p13_surface_support_matrix_final",
       "phase": "P13",
       "category": "internal_only",

@@ -5,6 +5,8 @@
 // CHECK: ssavc4.unpack {{.*}} {mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>} : vector<16xi32> -> vector<16xi32>
 // CHECK: ssavc4.pack {{.*}} {mode = #vc4.regfile_a_pack_mode<to_8a>} : vector<16xi32> -> vector<16xi32>
 // CHECK: ssavc4.pack {{.*}} {mode = #vc4.regfile_a_pack_mode<to_16a>} : vector<16xi32> -> vector<16xi32>
+// CHECK: ssavc4.unpack {{.*}} {f16_storage_conversion, mode = #vc4.regfile_a_unpack_mode<f16a_or_i16a>} : vector<16xi32> -> vector<16xf32>
+// CHECK: ssavc4.pack {{.*}} {f16_storage_conversion, mode = #vc4.regfile_a_pack_mode<to_16a>} : vector<16xf32> -> vector<16xi32>
 // CHECK-NOT: vc4.qpu
 // CHECK-NOT: vc4kernel.
 module {
@@ -19,6 +21,8 @@ module {
     %s16 = vc4kernel.fragment_unpack %v {source = #vc4kernel.subword_type<s16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.unpack_policy<sign_extend>} : vector<16xi32> -> vector<16xi32>
     %p8 = vc4kernel.fragment_pack %u8 {dest = #vc4kernel.subword_type<u8>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.pack_policy<truncate>} : vector<16xi32> -> vector<16xi32>
     %p16 = vc4kernel.fragment_pack %s16 {dest = #vc4kernel.subword_type<u16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.pack_policy<truncate>} : vector<16xi32> -> vector<16xi32>
+    %f16 = vc4kernel.fragment_unpack %v {source = #vc4kernel.subword_type<f16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.unpack_policy<to_f32>} : vector<16xi32> -> vector<16xf32>
+    %pf16 = vc4kernel.fragment_pack %f16 {dest = #vc4kernel.subword_type<f16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.pack_policy<from_f32>} : vector<16xf32> -> vector<16xi32>
     vc4kernel.return
   }
 }

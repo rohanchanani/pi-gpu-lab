@@ -208,7 +208,7 @@ def VC4Kernel_FragmentUnpackOp : VC4Kernel_PureOp<"fragment_unpack"> {
     VC4Kernel_SubwordLayoutAttr:$layout,
     VC4Kernel_UnpackPolicyAttr:$policy
   );
-  let results = (outs VC4Kernel_Vector16I32:$result);
+  let results = (outs VC4Kernel_Vector16Data:$result);
   let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
   let hasVerifier = 1;
 }
@@ -216,7 +216,7 @@ def VC4Kernel_FragmentUnpackOp : VC4Kernel_PureOp<"fragment_unpack"> {
 def VC4Kernel_FragmentPackOp : VC4Kernel_PureOp<"fragment_pack"> {
   let summary = "hardware-faithful VC4 fragment subword pack";
   let arguments = (ins
-    VC4Kernel_Vector16I32:$input,
+    VC4Kernel_Vector16Data:$input,
     VC4Kernel_SubwordTypeAttr:$dest,
     VC4Kernel_SubwordLayoutAttr:$layout,
     VC4Kernel_PackPolicyAttr:$policy

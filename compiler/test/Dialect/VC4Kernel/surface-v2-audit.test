@@ -15,7 +15,7 @@
 # RUN: python3 %vc4_repo_root/compiler/test/Dialect/VC4Kernel/Support/audit_vc4kernel_surface_v2.py --repo-root %vc4_repo_root --matrix compiler/docs/vc4kernel_surface_v2_support_matrix.json --mode p13-final-verifier-reject-corpus | FileCheck %s --check-prefix=P13E
 
 # P1: PASS VC4Kernel Surface v2 audit: mode=p1-general-alu-lock
-# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P1: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P1: migration_targets:
 # P1-SAME: removed_special_case_ops=4
 # P1-SAME: special_case_migration_targets=4
@@ -31,7 +31,7 @@
 # P1-SAME: removed_legacy_hits=0
 
 # P2: PASS VC4Kernel Surface v2 audit: mode=p2-bitcast-const-lock
-# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P2: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P2: migration_targets:
 # P2-SAME: p2_locked_status_entries=2
 # P2-SAME: removed_special_case_ops=4
@@ -49,10 +49,10 @@
 # P2-SAME: static_const_splat_hits=0
 
 # P3: PASS VC4Kernel Surface v2 audit: mode=p3-general-cmp-lock
-# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P3: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P3: migration_targets:
 # P3-SAME: p3_locked_status_entries=2
-# P3-SAME: p3_post_phase_planned_entries=24
+# P3-SAME: p3_post_phase_planned_entries=27
 # P3-SAME: special_case_removed_in_p1=4
 # P3: fixture_purity:
 # P3-SAME: hardware_inputs=153
@@ -70,7 +70,7 @@
 # P3-SAME: unordered_active_hits=0
 
 # P4: PASS VC4Kernel Surface v2 audit: mode=p4-general-reduce-lock
-# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P4: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P4: migration_targets:
 # P4-SAME: removed_special_case_ops=4
 # P4-SAME: special_case_removed_in_p1=4
@@ -90,10 +90,10 @@
 # P4-SAME: stale_add_only_source_hits=0
 
 # P5: PASS VC4Kernel Surface v2 audit: mode=p5-scalar-arith-lock
-# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P5: migration_targets:
 # P5-SAME: p5_locked_status_entries=1
-# P5-SAME: p5_post_phase_planned_entries=21
+# P5-SAME: p5_post_phase_planned_entries=24
 # P5-SAME: special_case_removed_in_p1=4
 # P5: fixture_purity:
 # P5-SAME: hardware_inputs=153
@@ -108,7 +108,7 @@
 # P5-SAME: vector_arith_hits=0
 
 # P6: PASS VC4Kernel Surface v2 audit: mode=p6-memory-policy-lock
-# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P6: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P6: migration_targets:
 # P6-SAME: special_case_removed_in_p1=4
 # P6: fixture_purity:
@@ -127,7 +127,7 @@
 # P6-SAME: source_lower_half_fixture_hits=0
 
 # P7: PASS VC4Kernel Surface v2 audit: mode=p7-tmu-safe-load-lock
-# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P7: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P7: migration_targets:
 # P7-SAME: removed_special_case_ops=4
 # P7-SAME: special_case_migration_targets=4
@@ -147,7 +147,7 @@
 # P7-SAME: tmu_source_policy_hits=0
 
 # P8: PASS VC4Kernel Surface v2 audit: mode=p8-vdw-store-policy-lock
-# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P8: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P8: migration_targets:
 # P8-SAME: removed_special_case_ops=4
 # P8-SAME: special_case_migration_targets=4
@@ -167,7 +167,7 @@
 # P8-SAME: vdw_sparse_rmw_fallback_hits=0
 
 # P8_5: PASS VC4Kernel Surface v2 audit: mode=p8-5-mixed-acceptance-lock
-# P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P8_5: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P8_5: fixture_purity:
 # P8_5-SAME: hardware_inputs=153
 # P8_5-SAME: producer_or_lower_half_hits=0
@@ -185,7 +185,7 @@
 # P8_5-SAME: sparse_vdw_active_hits=0
 
 # P9: PASS VC4Kernel Surface v2 audit: mode=p9-pack-unpack-subword-lock
-# P9: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P9: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P9: fixture_purity:
 # P9-SAME: hardware_inputs=153
 # P9-SAME: producer_or_lower_half_hits=0
@@ -202,7 +202,7 @@
 # P9-SAME: sparse_vdw_active_hits=0
 
 # P10: PASS VC4Kernel Surface v2 audit: mode=p10-sfu-fastmath-lock
-# P10: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P10: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P10: fixture_purity:
 # P10-SAME: hardware_inputs=153
 # P10-SAME: producer_or_lower_half_hits=0
@@ -226,7 +226,7 @@
 # P10-SAME: sparse_vdw_active_hits=0
 
 # P11: PASS VC4Kernel Surface v2 audit: mode=p11-dynamic-rotate-shuffle-lock
-# P11: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P11: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P11: migration_targets:
 # P11-SAME: special_case_removed_in_p1=4
 # P11: fixture_purity:
@@ -253,7 +253,7 @@
 # P11-SAME: sparse_vdw_active_hits=0
 
 # P12: PASS VC4Kernel Surface v2 audit: mode=p12-dynamic-vpm-coord-lock
-# P12: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P12: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P12: fixture_purity:
 # P12-SAME: hardware_inputs=153
 # P12-SAME: producer_or_lower_half_hits=0
@@ -273,7 +273,7 @@
 # P12-SAME: sparse_vdw_active_hits=0
 
 # P13: PASS VC4Kernel Surface v2 audit: mode=p13-final-surface-lock
-# P13: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=41
+# P13: matrix_checker: PASS VC4Kernel Surface v2 matrix: features=44
 # P13: fixture_purity:
 # P13-SAME: hardware_inputs=153
 # P13-SAME: producer_or_lower_half_hits=0
@@ -292,8 +292,9 @@
 # P13-SAME: claim_audit_claims=276
 # P13-SAME: claim_audit_fixtures=24
 # P13-SAME: matrix_accepted_hardware_proven=29
-# P13-SAME: matrix_deterministic_reject=10
-# P13-SAME: matrix_final_features=41
+# P13-SAME: matrix_deterministic_reject=12
+# P13-SAME: matrix_final_features=44
+# P13-SAME: matrix_p13f16_pending_hardware=1
 # P13-SAME: mixed_fixture_purity_hits=0
 # P13-SAME: p13_final_fixture_mode=1
 # P13-SAME: p13f_recorded_gap_list=0

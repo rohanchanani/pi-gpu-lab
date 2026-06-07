@@ -525,6 +525,8 @@ P13_FINAL_SURFACE_STATUSES = {
     "out_of_scope_non_compute_hardware",
     "producer_layer_future_work",
 }
+P13F16_PENDING_HARDWARE_FEATURE_ID = "p13f16_f16_storage_conversion"
+P13F16_PENDING_HARDWARE_STATUS = "implemented_pending_hardware"
 P13_FINAL_REJECT_CATEGORIES = {
     "hardware_forbidden",
     "static_surface_policy",
@@ -680,6 +682,9 @@ P5_POST_PHASE_ALLOWED_STATUSES = {
 }
 
 P5_POST_PHASE_STAGED_STATUSES = {
+    P13F16_PENDING_HARDWARE_FEATURE_ID: {
+        P13F16_PENDING_HARDWARE_STATUS,
+    },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
@@ -4398,9 +4403,19 @@ def audit_p13_matrix_final_contract(matrix):
         ident = feature.get("id", "<missing id>")
         status = feature.get("current_status")
         status_counts[status] += 1
-        if status not in P13_FINAL_SURFACE_STATUSES:
+        is_p13f16_pending = (
+            ident == P13F16_PENDING_HARDWARE_FEATURE_ID
+            and status == P13F16_PENDING_HARDWARE_STATUS
+        )
+        if status not in P13_FINAL_SURFACE_STATUSES and not is_p13f16_pending:
             bad_status.append(f"{ident}:{status}")
-        if feature.get("final_status_target") != status:
+        if is_p13f16_pending:
+            if feature.get("final_status_target") != "accepted_hardware_proven":
+                bad_status.append(
+                    f"{ident}:final_status_target="
+                    f"{feature.get('final_status_target')}"
+                )
+        elif feature.get("final_status_target") != status:
             bad_status.append(f"{ident}:final_status_target={feature.get('final_status_target')}")
         proof_links = feature.get("proof_links")
         if not isinstance(proof_links, dict) or not proof_links:
@@ -4412,6 +4427,14 @@ def audit_p13_matrix_final_contract(matrix):
                 "isolated_hardware_fixture",
                 "mixed_hardware_fixture_or_feature",
                 "mixed_claim_contract",
+            ]:
+                if not proof_links.get(key):
+                    missing_proof.append(f"{ident}:{key}")
+        if is_p13f16_pending:
+            for key in [
+                "verifier_lit",
+                "conversion_lit",
+                "ssavc4_to_vc4_lit",
             ]:
                 if not proof_links.get(key):
                     missing_proof.append(f"{ident}:{key}")
@@ -4429,7 +4452,13 @@ def audit_p13_matrix_final_contract(matrix):
     if missing_proof:
         fail("P13 final matrix found missing proof links: " + ", ".join(missing_proof[:20]))
 
-    matrix_text = "\n".join(walk_json_strings(matrix))
+    matrix_for_transitional_scan = dict(matrix)
+    matrix_for_transitional_scan["features"] = [
+        feature
+        for feature in features
+        if feature.get("id") != P13F16_PENDING_HARDWARE_FEATURE_ID
+    ]
+    matrix_text = "\n".join(walk_json_strings(matrix_for_transitional_scan))
     for token in [
         "implemented_pending_hardware",
         "pending_hardware",
@@ -4443,6 +4472,9 @@ def audit_p13_matrix_final_contract(matrix):
         "matrix_accepted_hardware_proven": status_counts["accepted_hardware_proven"],
         "matrix_deterministic_reject": status_counts["deterministic_reject"],
         "matrix_internal_only": status_counts["internal_only"],
+        "matrix_p13f16_pending_hardware": status_counts[
+            P13F16_PENDING_HARDWARE_STATUS
+        ],
         "matrix_reject_static_surface_policy": reject_counts["static_surface_policy"],
     }
 
@@ -4458,6 +4490,14 @@ def audit_p13_active_docs(repo_root):
             continue
         scanned += 1
         text = read_text(path)
+        if rel_path == Path("compiler/docs/vc4kernel_surface_v2_support_matrix.json"):
+            matrix = load_matrix(path)
+            matrix["features"] = [
+                feature
+                for feature in matrix.get("features", [])
+                if feature.get("id") != P13F16_PENDING_HARDWARE_FEATURE_ID
+            ]
+            text = json.dumps(matrix)
         for label, pattern in P13_ACTIVE_DOC_TRANSITIONAL_PATTERNS:
             for match in pattern.finditer(text):
                 line_no = text.count("\n", 0, match.start()) + 1

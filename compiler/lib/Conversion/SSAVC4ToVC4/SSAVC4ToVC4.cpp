@@ -392,6 +392,15 @@ static bool isVector16F32Type(Type type) {
          vectorType.getDimSize(0) == 16 && vectorType.getElementType().isF32();
 }
 
+static bool hasSameVector16Shape(Type lhs, Type rhs) {
+  return (isVector16I32Type(lhs) || isVector16F32Type(lhs)) &&
+         (isVector16I32Type(rhs) || isVector16F32Type(rhs));
+}
+
+static bool hasF16StorageConversion(Operation *op) {
+  return static_cast<bool>(op->getAttr("f16_storage_conversion"));
+}
+
 static bool isScalarI32OrVector16I32(Type type) {
   return type.isSignlessInteger(32) || isVector16I32Type(type);
 }
@@ -2742,13 +2751,30 @@ selectInstructionTemplates(Operation *func,
           return op.emitOpError(
               "requires one input operand, optional rotate amount, and one "
               "result for M3 lowering");
-        if (op.getOperand(0).getType() != op.getResult(0).getType())
-          return op.emitOpError("requires identical input and result carrier "
-                                "types for M3 lowering");
-        if (!isVector16I32Type(op.getResult(0).getType()) &&
-            !isVector16F32Type(op.getResult(0).getType()))
+        bool f16Conversion =
+            !hasName(&op, kSSAVC4RotateOpName) && hasF16StorageConversion(&op);
+        Type inputType = op.getOperand(0).getType();
+        Type resultType = op.getResult(0).getType();
+        if (!hasSameVector16Shape(inputType, resultType))
           return op.emitOpError("supports only vector<16xi32> or "
                                 "vector<16xf32> values in M3 lowering");
+        if (f16Conversion) {
+          if (hasName(&op, kSSAVC4PackOpName)) {
+            if (!isVector16F32Type(inputType) || !isVector16I32Type(resultType))
+              return op.emitOpError("f16 storage conversion pack requires "
+                                    "vector<16xf32> input and vector<16xi32> "
+                                    "result for M3 lowering");
+          } else if (!isVector16I32Type(inputType) ||
+                     !isVector16F32Type(resultType)) {
+            return op.emitOpError("f16 storage conversion unpack requires "
+                                  "vector<16xi32> input and vector<16xf32> "
+                                  "result for M3 lowering");
+          }
+        } else if (inputType != resultType) {
+          return op.emitOpError("requires identical input and result carrier "
+                                "types for M3 lowering unless "
+                                "f16_storage_conversion is present");
+        }
         if (hasName(&op, kSSAVC4RotateOpName)) {
           bool hasStaticAmount =
               static_cast<bool>(op.getAttrOfType<IntegerAttr>("amount"));
@@ -3692,6 +3718,36 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
                           mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     createNopLDISlot(builder, source->getLoc());
     packInputReg = kPackSourceScratchReg;
+  }
+
+  if (hasF16StorageConversion(source)) {
+    if (templ.kind == InstructionTemplate::Kind::Unpack) {
+      Operation *bundle = createScheduledBundle(
+          builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+          mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+          /*waddrMul=*/32, mlir::vc4::AddOpcode::fadd,
+          mlir::vc4::MulOpcode::nop, *inputReg, /*raddrB=*/0,
+          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+          /*smallImm=*/0);
+      if (Attribute mode = source->getAttr("mode"))
+        bundle->setAttr("unpack", mode);
+      emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+      return success();
+    }
+
+    createSplat32LDI(builder, source->getLoc(), 0, *resultReg);
+    Operation *bundle = createScheduledBundle(
+        builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::fadd,
+        mlir::vc4::MulOpcode::nop, packInputReg, /*raddrB=*/0,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+    if (Attribute mode = source->getAttr("mode"))
+      bundle->setAttr("pack", mode);
+    emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+    return success();
   }
 
   if (templ.kind == InstructionTemplate::Kind::Pack)

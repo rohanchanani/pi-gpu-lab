@@ -25,6 +25,14 @@ module {
     // CHECK-SAME: dest = #vc4kernel.subword_type<u16>
     // CHECK-SAME: policy = #vc4kernel.pack_policy<truncate>
     %p16 = vc4kernel.fragment_pack %s16 {dest = #vc4kernel.subword_type<u16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.pack_policy<truncate>} : vector<16xi32> -> vector<16xi32>
+    // CHECK: vc4kernel.fragment_unpack
+    // CHECK-SAME: policy = #vc4kernel.unpack_policy<to_f32>
+    // CHECK-SAME: source = #vc4kernel.subword_type<f16>
+    %f16 = vc4kernel.fragment_unpack %v {source = #vc4kernel.subword_type<f16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.unpack_policy<to_f32>} : vector<16xi32> -> vector<16xf32>
+    // CHECK: vc4kernel.fragment_pack
+    // CHECK-SAME: dest = #vc4kernel.subword_type<f16>
+    // CHECK-SAME: policy = #vc4kernel.pack_policy<from_f32>
+    %pf16 = vc4kernel.fragment_pack %f16 {dest = #vc4kernel.subword_type<f16>, layout = #vc4kernel.subword_layout<packed>, policy = #vc4kernel.pack_policy<from_f32>} : vector<16xf32> -> vector<16xi32>
     vc4kernel.return
   }
 }

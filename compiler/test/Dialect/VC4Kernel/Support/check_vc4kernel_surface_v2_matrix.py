@@ -83,6 +83,9 @@ REQUIRED_FEATURE_IDS = {
     "p12_dynamic_vpm_read_write_coordinates",
     "p12_dynamic_vdr_vdw_coordinates",
     "p13_surface_support_matrix_final",
+    "p13f16_f16_storage_conversion",
+    "p13f16_native_f16_arithmetic_reject",
+    "p13f16_bf16_fp8_native_reject",
     "sparse_vdw_store_general_masks_reject",
 }
 
@@ -131,6 +134,14 @@ FINAL_STATUSES = {
     "internal_only",
     "out_of_scope_non_compute_hardware",
     "producer_layer_future_work",
+}
+
+P13F16_TRANSITIONAL_FEATURE_IDS = {
+    "p13f16_f16_storage_conversion",
+}
+
+P13F16_TRANSITIONAL_STATUSES = {
+    "implemented_pending_hardware",
 }
 
 REJECT_CATEGORIES = {
@@ -204,8 +215,17 @@ def validate_top_level(matrix):
         fail("mixed fixture claim contract is not required")
 
 
+def is_allowed_p13f16_transitional_text(feature_id, token):
+    return (
+        feature_id in P13F16_TRANSITIONAL_FEATURE_IDS
+        and token in {"implemented_pending_hardware", "pending_hardware"}
+    )
+
+
 def validate_no_ambiguous_text(matrix):
-    for text in walk_strings(matrix):
+    matrix_without_features = dict(matrix)
+    matrix_without_features["features"] = []
+    for text in walk_strings(matrix_without_features):
         lowered = text.lower()
         for token in AMBIGUOUS_TOKENS:
             if token.lower() in lowered:
@@ -232,15 +252,35 @@ def validate_feature(feature, phases):
                 f"current special-case {feature['id']} must be a deterministic reject"
             )
     text = "\n".join(walk_strings(feature))
+    for feature_text in walk_strings(feature):
+        lowered = feature_text.lower()
+        for token in AMBIGUOUS_TOKENS:
+            if token.lower() not in lowered:
+                continue
+            if is_allowed_p13f16_transitional_text(feature["id"], token):
+                continue
+            fail(
+                f'ambiguous token "{token}" appears in feature '
+                f"{feature['id']}: {feature_text}"
+            )
     if any(term in text for term in FORBIDDEN_TILE_TERMS):
         if feature["current_status"] in {
             "accepted_hardware_proven",
             "implemented",
         }:
             fail(f"forbidden tile DSL feature appears planned or accepted: {feature['id']}")
-    if feature["current_status"] not in FINAL_STATUSES:
+    allowed_statuses = set(FINAL_STATUSES)
+    if feature["id"] in P13F16_TRANSITIONAL_FEATURE_IDS:
+        allowed_statuses.update(P13F16_TRANSITIONAL_STATUSES)
+    if feature["current_status"] not in allowed_statuses:
         fail(f"feature {feature['id']} has non-final status {feature['current_status']}")
-    if feature["final_status_target"] != feature["current_status"]:
+    if feature["id"] in P13F16_TRANSITIONAL_FEATURE_IDS:
+        if feature["final_status_target"] != "accepted_hardware_proven":
+            fail(
+                f"feature {feature['id']} final_status_target must be "
+                "accepted_hardware_proven"
+            )
+    elif feature["final_status_target"] != feature["current_status"]:
         fail(f"feature {feature['id']} final_status_target must equal current_status")
     proof_links = require_dict(feature["proof_links"], f"feature {feature['id']} proof_links")
     if feature["current_status"] == "accepted_hardware_proven":
@@ -259,6 +299,13 @@ def validate_feature(feature, phases):
             fail(f"feature {feature['id']} has invalid reject_category")
         if not proof_links:
             fail(f"deterministic reject {feature['id']} lacks proof_links")
+    elif feature["current_status"] in P13F16_TRANSITIONAL_STATUSES:
+        for key in (
+            "verifier_lit",
+            "conversion_lit",
+            "ssavc4_to_vc4_lit",
+        ):
+            require_string(proof_links.get(key), f"feature {feature['id']} proof_links {key}")
     elif feature["current_status"] == "internal_only":
         if not proof_links:
             fail(f"internal feature {feature['id']} lacks proof_links")

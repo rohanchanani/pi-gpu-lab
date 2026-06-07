@@ -74,6 +74,17 @@ static LogicalResult verifySameShapeAndDomain(Operation *op, Type lhs, Type rhs,
                            << lhs << " and " << rhs;
 }
 
+static bool hasF16StorageConversion(Operation *op) {
+  return static_cast<bool>(op->getAttr("f16_storage_conversion"));
+}
+
+static LogicalResult verifyF16StorageConversionMarker(Operation *op) {
+  Attribute attr = op->getAttr("f16_storage_conversion");
+  if (!attr || isa<UnitAttr>(attr))
+    return success();
+  return op->emitOpError("f16_storage_conversion must be a unit attribute");
+}
+
 static LogicalResult verifyVector16(Operation *op, Type type, StringRef role) {
   if (isSSAVC4Vector16(type))
     return success();
@@ -825,12 +836,28 @@ LogicalResult PackOp::verify() {
   if (failed(verifyValueType(op, inputType, "input")) ||
       failed(verifyValueType(op, resultType, "result")))
     return failure();
+  if (failed(verifyF16StorageConversionMarker(op)))
+    return failure();
   Attribute mode = getModeAttr();
   if (mode && !isa<mlir::vc4::RegfileAPackModeAttr>(mode) &&
       !isa<mlir::vc4::MulPackModeAttr>(mode)) {
     return emitOpError("'mode' must be a live VC4 pack attribute");
   }
-  return verifySameShape(op, inputType, resultType, "input", "result");
+  if (hasF16StorageConversion(op)) {
+    auto packMode = dyn_cast_or_null<mlir::vc4::RegfileAPackModeAttr>(mode);
+    if (!packMode ||
+        packMode.getValue() != mlir::vc4::RegfileAPackMode::to_16a)
+      return emitOpError(
+          "f16 storage conversion pack requires regfile-A mode to_16a");
+    if (failed(verifySameShape(op, inputType, resultType, "input", "result")))
+      return failure();
+    if (failed(verifyFloatCarrier(op, inputType, "input")) ||
+        failed(verifyIntCarrier(op, resultType, "result")))
+      return failure();
+    return success();
+  }
+  return verifySameShapeAndDomain(op, inputType, resultType, "input",
+                                  "result");
 }
 
 LogicalResult UnpackOp::verify() {
@@ -840,12 +867,29 @@ LogicalResult UnpackOp::verify() {
   if (failed(verifyValueType(op, inputType, "input")) ||
       failed(verifyValueType(op, resultType, "result")))
     return failure();
+  if (failed(verifyF16StorageConversionMarker(op)))
+    return failure();
   Attribute mode = getModeAttr();
   if (mode && !isa<mlir::vc4::RegfileAUnpackModeAttr>(mode) &&
       !isa<mlir::vc4::R4UnpackModeAttr>(mode)) {
     return emitOpError("'mode' must be a live VC4 unpack attribute");
   }
-  return verifySameShape(op, inputType, resultType, "input", "result");
+  if (hasF16StorageConversion(op)) {
+    auto unpackMode =
+        dyn_cast_or_null<mlir::vc4::RegfileAUnpackModeAttr>(mode);
+    if (!unpackMode ||
+        unpackMode.getValue() != mlir::vc4::RegfileAUnpackMode::f16a_or_i16a)
+      return emitOpError("f16 storage conversion unpack requires regfile-A "
+                         "mode f16a_or_i16a");
+    if (failed(verifySameShape(op, inputType, resultType, "input", "result")))
+      return failure();
+    if (failed(verifyIntCarrier(op, inputType, "input")) ||
+        failed(verifyFloatCarrier(op, resultType, "result")))
+      return failure();
+    return success();
+  }
+  return verifySameShapeAndDomain(op, inputType, resultType, "input",
+                                  "result");
 }
 
 LogicalResult RotateOp::verify() {

@@ -265,6 +265,11 @@ static FailureOr<Attribute> getFragmentUnpackMode(OpBuilder &builder,
     return mlir::vc4::RegfileAUnpackModeAttr::get(
         ctx, mlir::vc4::RegfileAUnpackMode::f16a_or_i16a);
   }
+  if (source.getValue() == mlir::vc4kernel::SubwordType::f16 &&
+      policy.getValue() == mlir::vc4kernel::UnpackPolicy::to_f32) {
+    return mlir::vc4::RegfileAUnpackModeAttr::get(
+        ctx, mlir::vc4::RegfileAUnpackMode::f16a_or_i16a);
+  }
   return op->emitOpError("unsupported VC4Kernel fragment unpack mode");
 }
 
@@ -275,11 +280,17 @@ static FailureOr<Attribute> getFragmentPackMode(OpBuilder &builder,
   auto policy = op->getAttrOfType<mlir::vc4kernel::PackPolicyAttr>("policy");
   if (!dest || !layout || !policy)
     return op->emitOpError("requires explicit fragment pack mode attrs");
-  if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed ||
-      policy.getValue() != mlir::vc4kernel::PackPolicy::truncate)
+  if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed)
     return op->emitOpError("unsupported VC4Kernel fragment pack mode");
 
   MLIRContext *ctx = builder.getContext();
+  if (dest.getValue() == mlir::vc4kernel::SubwordType::f16 &&
+      policy.getValue() == mlir::vc4kernel::PackPolicy::from_f32) {
+    return mlir::vc4::RegfileAPackModeAttr::get(
+        ctx, mlir::vc4::RegfileAPackMode::to_16a);
+  }
+  if (policy.getValue() != mlir::vc4kernel::PackPolicy::truncate)
+    return op->emitOpError("unsupported VC4Kernel fragment pack mode");
   if (dest.getValue() == mlir::vc4kernel::SubwordType::u8) {
     return mlir::vc4::RegfileAPackModeAttr::get(
         ctx, mlir::vc4::RegfileAPackMode::to_8a);
@@ -289,6 +300,21 @@ static FailureOr<Attribute> getFragmentPackMode(OpBuilder &builder,
         ctx, mlir::vc4::RegfileAPackMode::to_16a);
   }
   return op->emitOpError("unsupported VC4Kernel fragment pack mode");
+}
+
+static bool isF16FragmentUnpack(Operation *op) {
+  auto source = op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("source");
+  auto policy = op->getAttrOfType<mlir::vc4kernel::UnpackPolicyAttr>("policy");
+  return source && policy &&
+         source.getValue() == mlir::vc4kernel::SubwordType::f16 &&
+         policy.getValue() == mlir::vc4kernel::UnpackPolicy::to_f32;
+}
+
+static bool isF16FragmentPack(Operation *op) {
+  auto dest = op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("dest");
+  auto policy = op->getAttrOfType<mlir::vc4kernel::PackPolicyAttr>("policy");
+  return dest && policy && dest.getValue() == mlir::vc4kernel::SubwordType::f16 &&
+         policy.getValue() == mlir::vc4kernel::PackPolicy::from_f32;
 }
 
 static StringAttr getSymbolNameAttr(Operation *op) {
@@ -2887,9 +2913,14 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     FailureOr<Attribute> mode = getFragmentUnpackMode(builder, op);
     if (failed(mode))
       return failure();
+    SmallVector<NamedAttribute, 2> attrs = {
+        builder.getNamedAttr("mode", *mode)};
+    if (isF16FragmentUnpack(op))
+      attrs.push_back(builder.getNamedAttr("f16_storage_conversion",
+                                           builder.getUnitAttr()));
     state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4UnpackOpName, input,
-        {builder.getNamedAttr("mode", *mode)}, op->getResult(0).getType())};
+        builder, op->getLoc(), kSSAVC4UnpackOpName, input, attrs,
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentPackOpName)) {
@@ -2899,9 +2930,14 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     FailureOr<Attribute> mode = getFragmentPackMode(builder, op);
     if (failed(mode))
       return failure();
+    SmallVector<NamedAttribute, 2> attrs = {
+        builder.getNamedAttr("mode", *mode)};
+    if (isF16FragmentPack(op))
+      attrs.push_back(builder.getNamedAttr("f16_storage_conversion",
+                                           builder.getUnitAttr()));
     state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4PackOpName, input,
-        {builder.getNamedAttr("mode", *mode)}, op->getResult(0).getType())};
+        builder, op->getLoc(), kSSAVC4PackOpName, input, attrs,
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentSFUOpName)) {

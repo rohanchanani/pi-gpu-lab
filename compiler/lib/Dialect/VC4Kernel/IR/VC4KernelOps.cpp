@@ -1495,10 +1495,21 @@ LogicalResult FragmentConstOp::verify() {
 
 LogicalResult FragmentUnpackOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyVector16I32(op, getInput().getType(), "input")) ||
-      failed(verifyVector16I32(op, getResult().getType(), "result")))
+  if (failed(verifyVector16I32(op, getInput().getType(), "input")))
     return failure();
 
+  if (getSource() == SubwordType::f16) {
+    if (failed(verifyVector16F32(op, getResult().getType(), "result")))
+      return failure();
+    if (getLayout() == SubwordLayout::packed &&
+        getPolicy() == UnpackPolicy::to_f32)
+      return success();
+    return emitOpError(
+        "f16 fragment unpack requires packed layout and to_f32 policy");
+  }
+
+  if (failed(verifyVector16I32(op, getResult().getType(), "result")))
+    return failure();
   bool accepted = getLayout() == SubwordLayout::packed &&
                   ((getSource() == SubwordType::u8 &&
                     getPolicy() == UnpackPolicy::zero_extend) ||
@@ -1511,10 +1522,21 @@ LogicalResult FragmentUnpackOp::verify() {
 
 LogicalResult FragmentPackOp::verify() {
   Operation *op = getOperation();
-  if (failed(verifyVector16I32(op, getInput().getType(), "input")) ||
-      failed(verifyVector16I32(op, getResult().getType(), "result")))
+  if (failed(verifyVector16I32(op, getResult().getType(), "result")))
     return failure();
 
+  if (getDest() == SubwordType::f16) {
+    if (failed(verifyVector16F32(op, getInput().getType(), "input")))
+      return failure();
+    if (getLayout() == SubwordLayout::packed &&
+        getPolicy() == PackPolicy::from_f32)
+      return success();
+    return emitOpError(
+        "f16 fragment pack requires packed layout and from_f32 policy");
+  }
+
+  if (failed(verifyVector16I32(op, getInput().getType(), "input")))
+    return failure();
   bool accepted =
       getLayout() == SubwordLayout::packed &&
       getPolicy() == PackPolicy::truncate &&
