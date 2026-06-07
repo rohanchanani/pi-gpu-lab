@@ -291,12 +291,16 @@
 # P13-SAME: checked_pingpong_qpu_read=1
 # P13-SAME: claim_audit_claims=289
 # P13-SAME: claim_audit_fixtures=25
-# P13-SAME: matrix_accepted_hardware_proven=29
+# P13-SAME: matrix_accepted_hardware_proven=30
 # P13-SAME: matrix_deterministic_reject=12
 # P13-SAME: matrix_final_features=44
-# P13-SAME: matrix_p13f16_hardware_proven_pending_final_lock=1
 # P13-SAME: mixed_fixture_purity_hits=0
 # P13-SAME: p13_final_fixture_mode=1
+# P13-SAME: p13f16_bf16_fp8_reject_tests=2
+# P13-SAME: p13f16_float_lowering_audit=1
+# P13-SAME: p13f16_mixed_fixture_claims=6
+# P13-SAME: p13f16_native_reject_tests=3
+# P13-SAME: p13f16_storage_conversion_locked=1
 # P13-SAME: p13f_recorded_gap_list=0
 
 # P13E: PASS VC4Kernel Surface v2 audit: mode=p13-final-verifier-reject-corpus

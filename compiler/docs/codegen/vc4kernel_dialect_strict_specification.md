@@ -87,6 +87,16 @@ VDW selector proof is separate from VDR proof. VDW uses its own setup compositio
 
 Pack/unpack operations use explicit modes and are covered by verifier, conversion, isolated hardware fixtures, mixed fixtures, and mixed claim entries. Subword selector fields never change the static element width or orientation of an operation.
 
+### f16 Storage Conversion
+
+VC4Kernel accepts f16 only as packed storage conversion between f16 carriers and f32 fragment compute. The surface spelling is `fragment_unpack` with `subword_type<f16>` and `unpack_policy<to_f32>` from `vector<16xi32>` to `vector<16xf32>`, and `fragment_pack` with `subword_type<f16>` and `pack_policy<from_f32>` from `vector<16xf32>` to `vector<16xi32>`.
+
+The VC4Kernel carrier convention is canonical low-halfword `16a` for fragment pack/unpack. P12 row, word-X, and dynamic subword selector fields control storage placement in VPM, VDR, and VDW paths; `16b` is a lower-half hardware mode and is not a separate VC4Kernel operation or feature row.
+
+The lower-half conversion must force the VC4 floating interpretation of the shared 16-bit pack/unpack field. SSAVC4ToVC4 emits a floating add with zero while applying `f16a_or_i16a` unpack or `to_16a` pack, rather than an integer move/or path. The proven precision contract is target hardware conversion on finite exactly representable fixture values; NaN, infinity, exception flags, and full IEEE rounding behavior are not claimed by the final VC4Kernel surface.
+
+Native executable `vector<16xf16>` fragment ALU, compare, and reduce operations are deterministic rejects. Native bf16 and fp8 arithmetic or conversion are deterministic rejects and are not aliases for f16, u16, or s16. Producer-layer follow-on vector lowering may reject source f16 while that producer lowering is being proved; when source f16 is admitted above VC4Kernel, it lowers through this f16 storage conversion plus f32 compute model.
+
 ## SFU Policy
 
 SFU-backed math is accepted only through explicit approximate/fastmath operations. Exact/default math does not lower to SFU. NaN, infinity, denormal, exception flag, exact rounding, and signed-zero behavior are outside the approximate SFU contract unless an accepted operation states otherwise.

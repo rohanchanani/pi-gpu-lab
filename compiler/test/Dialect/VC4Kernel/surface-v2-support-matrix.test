@@ -4,7 +4,6 @@
 # CHECK: phase_counts:
 # CHECK: P13=4
 # CHECK: current_status_counts:
-# CHECK: accepted_hardware_proven=29
+# CHECK: accepted_hardware_proven=30
 # CHECK: deterministic_reject=12
-# CHECK: hardware_proven_pending_final_lock=1
 # CHECK: internal_only=2

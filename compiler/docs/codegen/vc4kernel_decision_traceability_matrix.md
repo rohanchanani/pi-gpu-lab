@@ -20,6 +20,7 @@ This traceability document points from each final Surface v2 decision to the can
 | VDR to VPM w32, subword, dynamic coords/selectors | `accepted_hardware_proven` | Support matrix rows `p9_vdr_vdw_subword_modes`, `p12_dynamic_vdr_vdw_coordinates` |
 | VDW from VPM w32, subword, dynamic coords/selectors | `accepted_hardware_proven` | Support matrix rows `p8_vdw_fragment_store_preserve_full_tail_rect`, `p9_vdr_vdw_subword_modes`, `p12_dynamic_vdr_vdw_coordinates` |
 | Pack/unpack | `accepted_hardware_proven` | Support matrix rows `p9_pack_unpack_subword_ops`, `p9_vpm_subword_modes` |
+| f16 packed storage conversion through f32 compute carriers | `accepted_hardware_proven` | Support matrix row `p13f16_f16_storage_conversion` plus mixed fixture `mixed_f16_storage_conversion_vc4kernel` |
 | SFU approximate policy | `accepted_hardware_proven` | Support matrix row `p10_fastmath_approx_contract` |
 | Dynamic rotate and rotate-derived shuffle policy | `accepted_hardware_proven` | Support matrix rows `p11_dynamic_rotate`, `p11_fragment_broadcast_lane_if_supported` |
 | Barriers, semaphores, cooperative resource metadata | `accepted_hardware_proven` | Support matrix rows `p6_memory_resource_metadata`, `p8_5_mixed_acceptance_policy` |
@@ -35,6 +36,8 @@ This traceability document points from each final Surface v2 decision to the can
 | Vector or lane-varying coordinate operands | `static_surface_policy` | Support matrix rows `p12_dynamic_vpm_read_write_coordinates`, `p12_dynamic_vdr_vdw_coordinates` |
 | QPU horizontal w32 dynamic word-X | `not_meaningful` | P12 verifier and audit proofs |
 | DMA laned selector modes | `hardware_forbidden` | P12 verifier and audit proofs |
+| Native f16 fragment ALU/cmp/reduce | `hardware_forbidden` | Support matrix row `p13f16_native_f16_arithmetic_reject` |
+| Native bf16/fp8 conversion or arithmetic | `hardware_forbidden` | Support matrix row `p13f16_bf16_fp8_native_reject` |
 | Sparse VDW general-mask stores | `static_surface_policy` | Support matrix rows `p8_sparse_vdw_store_deterministic_reject`, `sparse_vdw_store_general_masks_reject` |
 | Exact/default SFU math | `static_surface_policy` | Support matrix row `p10_exact_default_math_no_sfu` |
 | Arbitrary shuffle/permutation | `static_surface_policy` | Support matrix row `p11_arbitrary_shuffle_permutation_reject` |

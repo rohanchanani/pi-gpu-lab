@@ -77,3 +77,36 @@ module {
     vc4kernel.return
   }
 }
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_native_f16_cmp() attributes {
+    public_name = "bad_native_f16_cmp",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [],
+    warps_per_block = 1 : i32
+  } {
+    %v = arith.constant dense<0.000000e+00> : vector<16xf16>
+    // expected-error@+1 {{operand #0 must be vector<16xi32> or vector<16xf32>}}
+    %bad = vc4kernel.fragment_cmp %v, %v {predicate = #vc4kernel.cmp<oeq>, fp_policy = #vc4kernel.fp_cmp_policy<finite_only>} : vector<16xf16>, vector<16xf16> -> !vc4kernel.pred<16>
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @bad_native_f16_reduce() attributes {
+    public_name = "bad_native_f16_reduce",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [],
+    warps_per_block = 1 : i32
+  } {
+    %full = vc4kernel.pred.full : !vc4kernel.pred<16>
+    %v = arith.constant dense<0.000000e+00> : vector<16xf16>
+    // expected-error@+1 {{operand #0 must be vector<16xi32> or vector<16xf32>}}
+    %bad = vc4kernel.fragment_reduce %v, %full {kind = #vc4kernel.reduce<add>, fp_policy = #vc4kernel.fp_reduce_policy<finite_tree>} : vector<16xf16>, !vc4kernel.pred<16> -> vector<16xf16>
+    vc4kernel.return
+  }
+}

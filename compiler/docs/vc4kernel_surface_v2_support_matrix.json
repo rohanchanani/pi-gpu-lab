@@ -1071,23 +1071,23 @@
       "id": "p13f16_f16_storage_conversion",
       "phase": "P13",
       "category": "accepted_hardware_proven",
-      "current_status": "hardware_proven_pending_final_lock",
+      "current_status": "accepted_hardware_proven",
       "final_status_target": "accepted_hardware_proven",
-      "current_surface": "VC4Kernel now has an explicit f16 storage conversion surface: packed f16 carriers unpack to vector<16xf32> compute fragments and vector<16xf32> compute fragments pack back to deterministic vector<16xi32> carriers using canonical 16a placement.",
-      "target_surface": "Accepted hardware-proven f16 storage conversion after the targeted P13f16 hardware fixtures prove exact representable values through f32 compute and the mixed fixture proves the VDR/VPM/VDW storage path.",
+      "current_surface": "Accepted hardware-proven f16 storage conversion surface: packed f16 carriers unpack to vector<16xf32> compute fragments and vector<16xf32> compute fragments pack back to deterministic vector<16xi32> carriers using canonical 16a placement.",
+      "target_surface": "Final accepted f16 packed storage conversion through f32 compute carriers; P12 dynamic subword selectors control storage placement.",
       "vc4kernel_verifier_plan": "Require source/dest subword_type<f16>, packed layout, unpack_policy<to_f32> for carrier-to-f32 conversion, pack_policy<from_f32> for f32-to-carrier conversion, vector<16xi32> storage carriers, and vector<16xf32> compute carriers.",
       "vc4kernel_to_ssavc4_plan": "Lower f16 storage conversion to ssavc4.pack/unpack with f16_storage_conversion marker and the existing 16a regfile-A pack/unpack hardware attrs.",
       "ssavc4_to_vc4_plan": "Emit fadd with +0.0 while applying f16a_or_i16a unpack or to_16a pack so the shared hardware field is interpreted as Float16 conversion, not signed-int conversion. Preserve carrier high bits by zeroing the result carrier before f16 pack.",
-      "hardware_or_reject_verification_plan": "P13f16c targeted hardware proof passed for f16 unpack-to-f32, f32-to-f16 pack, and f32-to-f16-to-f32 roundtrip over exact representable values. P13f16d mixed hardware proof covers VDR w16 packed load to dynamic VPM placement, QPU w16 dynamic readback, f16-to-f32 compute, f32-to-f16 pack, QPU VPM writeback, and VDW w16 packed preserve output. P13f16e performs final docs/audit promotion to accepted_hardware_proven.",
-      "upstream_use": "Producer-layer follow-on vector and Triton lowering can represent f16 storage values through f32 VC4Kernel compute carriers.",
-      "migration_or_removal": "No integer s16/u16 alias is used for f16; no first-class 16b high-level VC4Kernel operation is introduced.",
+      "hardware_or_reject_verification_plan": "P13f16c targeted hardware proof passed for f16 unpack-to-f32, f32-to-f16 pack, and f32-to-f16-to-f32 roundtrip over finite exactly representable values. P13f16d mixed hardware proof covers VDR w16 packed load to dynamic VPM placement, QPU w16 dynamic readback, f16-to-f32 compute, f32-to-f16 pack, QPU VPM writeback, and VDW w16 packed preserve output.",
+      "upstream_use": "Producer-layer follow-on vector and Triton lowering can represent source f16 storage values through this f32 VC4Kernel compute-carrier model. A producer-layer subset may reject source f16 while that producer lowering is being proved; that is not a VC4Kernel surface gap.",
+      "migration_or_removal": "No integer s16/u16 alias is used for f16; 16b regfile mode is internal lower-half hardware capability and not a separate VC4Kernel surface feature because P12 selectors provide storage placement.",
       "dependencies": [
         "p9_fragment_pack",
         "p9_fragment_unpack",
         "p12_dynamic_vpm_read_write_coordinates",
         "p12_dynamic_vdr_vdw_coordinates"
       ],
-      "acceptance_line": "hardware_proven_pending_final_lock",
+      "acceptance_line": "accepted_hardware_proven",
       "proof_links": {
         "verifier_lit": "compiler/test/Dialect/VC4Kernel/fragment-pack-unpack-roundtrip.mlir",
         "conversion_lit": "compiler/test/Conversion/VC4KernelToSSAVC4/fragment-pack-unpack-lowering.mlir",
@@ -1119,7 +1119,7 @@
       "acceptance_line": "deterministic_reject:hardware_forbidden",
       "reject_category": "hardware_forbidden",
       "proof_links": {
-        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-bf16-fp8-storage.mlir"
+        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-f16-storage.mlir"
       }
     },
     {
@@ -1140,7 +1140,7 @@
       "acceptance_line": "deterministic_reject:hardware_forbidden",
       "reject_category": "hardware_forbidden",
       "proof_links": {
-        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-f16-storage.mlir"
+        "verifier_or_audit_lit": "compiler/test/Dialect/VC4Kernel/invalid-fragment-bf16-fp8-storage.mlir"
       }
     },
     {

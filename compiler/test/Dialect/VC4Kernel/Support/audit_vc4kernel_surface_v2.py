@@ -195,11 +195,6 @@ P3_POST_PHASE_ALLOWED_STATUSES = {
 }
 
 P3_POST_PHASE_STAGED_STATUSES = {
-    "p13f16_f16_storage_conversion": {
-        "implemented_pending_hardware",
-        "hardware_proven_pending_mixed_lock",
-        "hardware_proven_pending_final_lock",
-    },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
@@ -530,19 +525,6 @@ P13_FINAL_SURFACE_STATUSES = {
     "out_of_scope_non_compute_hardware",
     "producer_layer_future_work",
 }
-P13F16_PENDING_HARDWARE_FEATURE_ID = "p13f16_f16_storage_conversion"
-P13F16_PENDING_HARDWARE_STATUS = "implemented_pending_hardware"
-P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS = (
-    "hardware_proven_pending_mixed_lock"
-)
-P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS = (
-    "hardware_proven_pending_final_lock"
-)
-P13F16_TRANSITIONAL_STATUSES = {
-    P13F16_PENDING_HARDWARE_STATUS,
-    P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS,
-    P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS,
-}
 P13_FINAL_REJECT_CATEGORIES = {
     "hardware_forbidden",
     "static_surface_policy",
@@ -698,9 +680,6 @@ P5_POST_PHASE_ALLOWED_STATUSES = {
 }
 
 P5_POST_PHASE_STAGED_STATUSES = {
-    P13F16_PENDING_HARDWARE_FEATURE_ID: {
-        *P13F16_TRANSITIONAL_STATUSES,
-    },
     "p6_memory_path_coherency_policy": {
         "implemented_pending_migration",
         "hardware_proven_pending_full_migration",
@@ -4419,19 +4398,9 @@ def audit_p13_matrix_final_contract(matrix):
         ident = feature.get("id", "<missing id>")
         status = feature.get("current_status")
         status_counts[status] += 1
-        is_p13f16_transitional = (
-            ident == P13F16_PENDING_HARDWARE_FEATURE_ID
-            and status in P13F16_TRANSITIONAL_STATUSES
-        )
-        if status not in P13_FINAL_SURFACE_STATUSES and not is_p13f16_transitional:
+        if status not in P13_FINAL_SURFACE_STATUSES:
             bad_status.append(f"{ident}:{status}")
-        if is_p13f16_transitional:
-            if feature.get("final_status_target") != "accepted_hardware_proven":
-                bad_status.append(
-                    f"{ident}:final_status_target="
-                    f"{feature.get('final_status_target')}"
-                )
-        elif feature.get("final_status_target") != status:
+        if feature.get("final_status_target") != status:
             bad_status.append(f"{ident}:final_status_target={feature.get('final_status_target')}")
         proof_links = feature.get("proof_links")
         if not isinstance(proof_links, dict) or not proof_links:
@@ -4446,26 +4415,6 @@ def audit_p13_matrix_final_contract(matrix):
             ]:
                 if not proof_links.get(key):
                     missing_proof.append(f"{ident}:{key}")
-        if is_p13f16_transitional:
-            for key in [
-                "verifier_lit",
-                "conversion_lit",
-                "ssavc4_to_vc4_lit",
-            ]:
-                if not proof_links.get(key):
-                    missing_proof.append(f"{ident}:{key}")
-            if (
-                status == P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS
-                and not proof_links.get("isolated_hardware_fixture")
-            ):
-                missing_proof.append(f"{ident}:isolated_hardware_fixture")
-            if status == P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS:
-                if not proof_links.get("isolated_hardware_fixture"):
-                    missing_proof.append(f"{ident}:isolated_hardware_fixture")
-                if not proof_links.get("mixed_hardware_fixture_or_feature"):
-                    missing_proof.append(f"{ident}:mixed_hardware_fixture_or_feature")
-                if not proof_links.get("mixed_claim_contract"):
-                    missing_proof.append(f"{ident}:mixed_claim_contract")
         if status == "deterministic_reject":
             category = feature.get("reject_category")
             reject_counts[category] += 1
@@ -4480,13 +4429,7 @@ def audit_p13_matrix_final_contract(matrix):
     if missing_proof:
         fail("P13 final matrix found missing proof links: " + ", ".join(missing_proof[:20]))
 
-    matrix_for_transitional_scan = dict(matrix)
-    matrix_for_transitional_scan["features"] = [
-        feature
-        for feature in features
-        if feature.get("id") != P13F16_PENDING_HARDWARE_FEATURE_ID
-    ]
-    matrix_text = "\n".join(walk_json_strings(matrix_for_transitional_scan))
+    matrix_text = "\n".join(walk_json_strings(matrix))
     for token in [
         "implemented_pending_hardware",
         "pending_hardware",
@@ -4500,12 +4443,6 @@ def audit_p13_matrix_final_contract(matrix):
         "matrix_accepted_hardware_proven": status_counts["accepted_hardware_proven"],
         "matrix_deterministic_reject": status_counts["deterministic_reject"],
         "matrix_internal_only": status_counts["internal_only"],
-        "matrix_p13f16_hardware_proven_pending_mixed_lock": status_counts[
-            P13F16_HARDWARE_PROVEN_PENDING_MIXED_LOCK_STATUS
-        ],
-        "matrix_p13f16_hardware_proven_pending_final_lock": status_counts[
-            P13F16_HARDWARE_PROVEN_PENDING_FINAL_LOCK_STATUS
-        ],
         "matrix_reject_static_surface_policy": reject_counts["static_surface_policy"],
     }
 
@@ -4521,14 +4458,6 @@ def audit_p13_active_docs(repo_root):
             continue
         scanned += 1
         text = read_text(path)
-        if rel_path == Path("compiler/docs/vc4kernel_surface_v2_support_matrix.json"):
-            matrix = load_matrix(path)
-            matrix["features"] = [
-                feature
-                for feature in matrix.get("features", [])
-                if feature.get("id") != P13F16_PENDING_HARDWARE_FEATURE_ID
-            ]
-            text = json.dumps(matrix)
         for label, pattern in P13_ACTIVE_DOC_TRANSITIONAL_PATTERNS:
             for match in pattern.finditer(text):
                 line_no = text.count("\n", 0, match.start()) + 1
@@ -4676,6 +4605,123 @@ def audit_p13_fixture_mode(repo_root, manifest, mode):
     return {"p13f_recorded_gap_list": 0, "p13_final_fixture_mode": 1}
 
 
+def audit_p13f16_final_policy(repo_root, matrix, manifest):
+    features = {feature.get("id"): feature for feature in matrix.get("features", [])}
+    storage = features.get("p13f16_f16_storage_conversion")
+    native_reject = features.get("p13f16_native_f16_arithmetic_reject")
+    bf16_fp8_reject = features.get("p13f16_bf16_fp8_native_reject")
+    if not storage:
+        fail("P13 fp16 final policy missing f16 storage conversion matrix row")
+    if storage.get("current_status") != "accepted_hardware_proven":
+        fail("P13 fp16 storage conversion must be accepted_hardware_proven")
+    storage_proofs = storage.get("proof_links", {})
+    for key in [
+        "verifier_lit",
+        "conversion_lit",
+        "ssavc4_verifier_lit",
+        "ssavc4_to_vc4_lit",
+        "isolated_hardware_fixture",
+        "mixed_hardware_fixture_or_feature",
+        "mixed_claim_contract",
+    ]:
+        if not storage_proofs.get(key):
+            fail(f"P13 fp16 storage conversion missing proof link {key}")
+    for ident, row in [
+        ("p13f16_native_f16_arithmetic_reject", native_reject),
+        ("p13f16_bf16_fp8_native_reject", bf16_fp8_reject),
+    ]:
+        if not row:
+            fail(f"P13 fp16 final policy missing matrix row {ident}")
+        if row.get("current_status") != "deterministic_reject":
+            fail(f"P13 fp16 reject row {ident} must be deterministic_reject")
+        if row.get("reject_category") != "hardware_forbidden":
+            fail(f"P13 fp16 reject row {ident} must be hardware_forbidden")
+        if not row.get("proof_links", {}).get("verifier_or_audit_lit"):
+            fail(f"P13 fp16 reject row {ident} lacks verifier proof")
+
+    invalid_f16 = read_text(
+        repo_root / "compiler/test/Dialect/VC4Kernel/invalid-fragment-f16-storage.mlir"
+    )
+    for token in [
+        "bad_native_f16_alu",
+        "bad_native_f16_cmp",
+        "bad_native_f16_reduce",
+        "vector<16xf16>",
+        "f16 fragment unpack requires packed layout and to_f32 policy",
+        "f16 fragment pack requires packed layout and from_f32 policy",
+    ]:
+        if token not in invalid_f16:
+            fail(f"P13 fp16 invalid corpus missing {token}")
+    invalid_bf16_fp8 = read_text(
+        repo_root
+        / "compiler/test/Dialect/VC4Kernel/invalid-fragment-bf16-fp8-storage.mlir"
+    )
+    for token in ["subword_type<bf16>", "subword_type<fp8>"]:
+        if token not in invalid_bf16_fp8:
+            fail(f"P13 bf16/fp8 invalid corpus missing {token}")
+
+    vc4kernel_attrs = read_text(
+        repo_root / "compiler/include/vc4/Dialect/VC4Kernel/IR/VC4KernelAttrs.td"
+    )
+    if "bf16" in vc4kernel_attrs or "fp8" in vc4kernel_attrs:
+        fail("P13 fp16 final policy forbids native bf16/fp8 VC4Kernel attrs")
+
+    lowering = read_text(
+        repo_root / "compiler/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp"
+    )
+    start = lowering.find("if (hasF16StorageConversion(source))")
+    end = lowering.find("if (templ.kind == InstructionTemplate::Kind::Pack)", start + 1)
+    if start < 0 or end < 0:
+        fail("P13 fp16 final policy cannot find f16 pack/unpack lowering block")
+    f16_block = lowering[start:end]
+    if "mlir::vc4::AddOpcode::fadd" not in f16_block:
+        fail("P13 fp16 lowering must force float interpretation with fadd")
+    if "mlir::vc4::AddOpcode::bit_or" in f16_block:
+        fail("P13 fp16 lowering must not use integer bit_or/mov path")
+    for token in ["createSplat32LDI", "bundle->setAttr(\"unpack\"", "bundle->setAttr(\"pack\""]:
+        if token not in f16_block:
+            fail(f"P13 fp16 lowering missing {token}")
+
+    lowering_lit = read_text(
+        repo_root / "compiler/test/Conversion/SSAVC4ToVC4/f16-pack-unpack-storage.mlir"
+    )
+    for token in [
+        "op_add = #vc4.add_opcode<fadd>",
+        "unpack = #vc4.regfile_a_unpack_mode<f16a_or_i16a>",
+        "pack = #vc4.regfile_a_pack_mode<to_16a>",
+    ]:
+        if token not in lowering_lit:
+            fail(f"P13 fp16 SSAVC4ToVC4 lit missing {token}")
+
+    fixtures = {fixture["name"]: fixture for fixture in manifest.get("fixtures", [])}
+    if "mixed_f16_storage_conversion_vc4kernel" not in fixtures:
+        fail("P13 fp16 mixed fixture missing from manifest")
+    expected = json.loads(
+        read_text(
+            repo_root
+            / fixtures["mixed_f16_storage_conversion_vc4kernel"]["path"]
+            / "expected.json"
+        )
+    ).get("required", {})
+    for field in [
+        "saw_f16_storage_conversion",
+        "saw_f16_unpack_to_f32",
+        "saw_f16_pack_from_f32",
+        "saw_f32_compute",
+        "no_native_f16_arith",
+        "no_bf16_fp8",
+    ]:
+        if expected.get(field) != 1:
+            fail(f"P13 fp16 mixed fixture expected.json missing {field}=1")
+    return {
+        "p13f16_storage_conversion_locked": 1,
+        "p13f16_native_reject_tests": 3,
+        "p13f16_bf16_fp8_reject_tests": 2,
+        "p13f16_float_lowering_audit": 1,
+        "p13f16_mixed_fixture_claims": 6,
+    }
+
+
 def audit_p13_final_surface_lock(repo_root, matrix, mode):
     manifest = load_mixed_manifest(repo_root)
     counts = {}
@@ -4685,6 +4731,7 @@ def audit_p13_final_surface_lock(repo_root, matrix, mode):
     counts.update(audit_p13_mixed_fixture_purity(repo_root, manifest))
     counts.update(audit_p13_selector_claim_contract(repo_root, manifest))
     counts.update(audit_p13_fixture_mode(repo_root, manifest, mode))
+    counts.update(audit_p13f16_final_policy(repo_root, matrix, manifest))
     return counts
 
 
