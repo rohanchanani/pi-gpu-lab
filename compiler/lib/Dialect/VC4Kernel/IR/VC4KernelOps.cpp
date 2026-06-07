@@ -8,8 +8,8 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
-#include "mlir/IR/Operation.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/Operation.h"
 #include "mlir/IR/SymbolTable.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSet.h"
@@ -54,8 +54,7 @@ static LogicalResult verifyVector16Data(Operation *op, Type type,
                                         StringRef role) {
   if (isVC4KernelVector16DataType(type))
     return success();
-  return emitTypeError(op, type, role,
-                       "vector<16xi32> or vector<16xf32>");
+  return emitTypeError(op, type, role, "vector<16xi32> or vector<16xf32>");
 }
 
 static LogicalResult verifyVector16I32(Operation *op, Type type,
@@ -162,8 +161,7 @@ static SmallVector<int64_t, 16> getDenseI32Values(DenseElementsAttr attr) {
 }
 
 static bool isDenseI32Splat(DenseElementsAttr attr) {
-  return attr && attr.isSplat() &&
-         attr.getElementType().isSignlessInteger(32);
+  return attr && attr.isSplat() && attr.getElementType().isSignlessInteger(32);
 }
 
 static bool isDenseF32Splat(DenseElementsAttr attr) {
@@ -205,15 +203,13 @@ static bool isI32LaneAffine(ArrayRef<int64_t> values) {
 }
 
 static bool isPerLaneU2(ArrayRef<int64_t> values) {
-  return values.size() == 16 &&
-         llvm::all_of(values, [](int64_t value) {
+  return values.size() == 16 && llvm::all_of(values, [](int64_t value) {
            return value >= 0 && value <= 3;
          });
 }
 
 static bool isPerLaneS2(ArrayRef<int64_t> values) {
-  return values.size() == 16 &&
-         llvm::all_of(values, [](int64_t value) {
+  return values.size() == 16 && llvm::all_of(values, [](int64_t value) {
            return value >= -2 && value <= 1;
          });
 }
@@ -281,10 +277,8 @@ static std::optional<int64_t> getFragmentConstSplatI32(Value value) {
   return first;
 }
 
-static bool isKnownScalarByteOffsetAligned4Impl(Value value,
-                                                unsigned depth);
-static bool isKnownVectorByteOffsetsAligned4Impl(Value value,
-                                                 unsigned depth);
+static bool isKnownScalarByteOffsetAligned4Impl(Value value, unsigned depth);
+static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth);
 
 static bool isKnownScalarByteOffsetAligned4(Value value) {
   return isKnownScalarByteOffsetAligned4Impl(value, 0);
@@ -367,9 +361,8 @@ static bool isKnownVectorByteOffsetsAligned4Impl(Value value, unsigned depth) {
   if (depth > 16)
     return false;
   if (auto values = getFragmentConstI32Values(value)) {
-    return llvm::all_of(*values, [](int64_t offset) {
-      return offset % 4 == 0;
-    });
+    return llvm::all_of(*values,
+                        [](int64_t offset) { return offset % 4 == 0; });
   }
   if (isLaneBytesOrGreater(value))
     return true;
@@ -472,8 +465,7 @@ static PredicateClass classifyPredicate(Value pred) {
       return PredicateClass::Full;
     return PredicateClass::GeneralMask;
   }
-  if (hasName(def, "vc4kernel.pred.and") ||
-      hasName(def, "vc4kernel.pred.or")) {
+  if (hasName(def, "vc4kernel.pred.and") || hasName(def, "vc4kernel.pred.or")) {
     if (def->getNumOperands() != 2)
       return PredicateClass::Unknown;
     Value lhs = def->getOperand(0);
@@ -503,8 +495,7 @@ static PredicateClass classifyPredicate(Value pred) {
         return PredicateClass::TailPrefix;
       return PredicateClass::GeneralMask;
     }
-    if (lhsClass == PredicateClass::Full ||
-        rhsClass == PredicateClass::Full)
+    if (lhsClass == PredicateClass::Full || rhsClass == PredicateClass::Full)
       return PredicateClass::Full;
     if (lhsClass == PredicateClass::Empty)
       return rhsClass;
@@ -552,7 +543,7 @@ static LogicalResult verifyVDWInactiveStorePolicy(Operation *op) {
 }
 
 static LogicalResult verifyExplicitVDWFragmentPredicate(Operation *op,
-                                                       Value pred) {
+                                                        Value pred) {
   PredicateClass predClass = classifyPredicate(pred);
   switch (predClass) {
   case PredicateClass::Full:
@@ -682,13 +673,11 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
     if (width.getValue() != VPMWidth::w32 &&
         orientation.getValue() == VPMOrientation::vertical)
       return op->emitOpError()
-             << "vertical subword " << dmaRole
-             << " is not supported in P9";
+             << "vertical subword " << dmaRole << " is not supported in P9";
   } else {
     if (width.getValue() == VPMWidth::w32 &&
         subword.getValue() != VPMSubword::none)
-      return op->emitOpError(
-          "32-bit VPM QPU access requires subword<none>");
+      return op->emitOpError("32-bit VPM QPU access requires subword<none>");
     if (width.getValue() != VPMWidth::w32 &&
         subword.getValue() == VPMSubword::none)
       return op->emitOpError(
@@ -701,16 +690,15 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
   int64_t x = xAttr.getInt();
   if (x < 0 || x > 15)
     return qpuSubwordModes || dmaSubwordModes
-               ? op->emitOpError() << xAttrName
-                                    << " must be in VPM ADDR range [0, 15]"
+               ? op->emitOpError()
+                     << xAttrName << " must be in VPM ADDR range [0, 15]"
                : op->emitOpError("vertical VPM x must be in range [0, 15]");
   if (orientation.getValue() == VPMOrientation::horizontal &&
       width.getValue() == VPMWidth::w32 && x != 0)
     return qpuSubwordModes || dmaSubwordModes
-               ? op->emitOpError(
-                     "horizontal 32-bit VPM access requires x = 0")
-               : op->emitOpError(
-                     "horizontal 32-bit VPM access requires x = 0 in vc4kernel v1");
+               ? op->emitOpError("horizontal 32-bit VPM access requires x = 0")
+               : op->emitOpError("horizontal 32-bit VPM access requires x = 0 "
+                                 "in vc4kernel v1");
   if (orientation.getValue() == VPMOrientation::horizontal &&
       width.getValue() == VPMWidth::w16 && x > 1)
     return op->emitOpError(
@@ -758,9 +746,8 @@ static LogicalResult verifyElemBytesMatchesWidth(Operation *op,
   if (!expected)
     return op->emitOpError("width attribute is required");
   if (elemBytes != *expected)
-    return op->emitOpError()
-           << "elem_bytes must match VPM width (" << *expected
-           << " for this mode)";
+    return op->emitOpError() << "elem_bytes must match VPM width (" << *expected
+                             << " for this mode)";
   return success();
 }
 
@@ -776,13 +763,15 @@ static bool isKnownScalarByteOffsetAlignedTo(Value value, int64_t elemBytes) {
 }
 
 static LogicalResult verifyDynamicRectShape(Operation *op) {
-  auto maxRows = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_rows"));
+  auto maxRows =
+      llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_rows"));
   if (!maxRows)
     return op->emitOpError("max_rows attribute is required");
   if (maxRows.getInt() < 1 || maxRows.getInt() > 16)
     return op->emitOpError("max_rows must be in range [1, 16]");
 
-  auto maxCols = llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_cols"));
+  auto maxCols =
+      llvm::dyn_cast_if_present<IntegerAttr>(op->getAttr("max_cols"));
   if (!maxCols)
     return op->emitOpError("max_cols attribute is required");
   if (maxCols.getInt() < 1 || maxCols.getInt() > 16)
@@ -816,7 +805,8 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
   if (!argAttrs)
     return kernel.emitOpError("arg_attrs must be an array of dictionaries");
   if (argAttrs.size() != entry.getNumArguments())
-    return kernel.emitOpError("arg_attrs length must match formal argument count");
+    return kernel.emitOpError(
+        "arg_attrs length must match formal argument count");
 
   llvm::StringSet<> names;
   for (auto indexed : llvm::enumerate(argAttrs)) {
@@ -832,11 +822,10 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
     if (!name || name.getValue().empty())
       return kernel.emitOpError("arg_attrs entries require non-empty name");
     if (!names.insert(name.getValue()).second)
-      return kernel.emitOpError() << "duplicate arg_attrs name '"
-                                  << name.getValue() << "'";
+      return kernel.emitOpError()
+             << "duplicate arg_attrs name '" << name.getValue() << "'";
     if (!kind || (kind.getValue() != "scalar" && kind.getValue() != "buffer"))
-      return kernel.emitOpError(
-          "arg_attrs kind must be 'scalar' or 'buffer'");
+      return kernel.emitOpError("arg_attrs kind must be 'scalar' or 'buffer'");
     if (!direction ||
         (direction.getValue() != "by_value" && direction.getValue() != "in" &&
          direction.getValue() != "out" && direction.getValue() != "inout"))
@@ -846,7 +835,8 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
     Type formalType = entry.getArgument(indexed.index()).getType();
     if (kind.getValue() == "buffer") {
       if (!formalType.isSignlessInteger(32))
-        return kernel.emitOpError("buffer args must be i32 raw device pointers");
+        return kernel.emitOpError(
+            "buffer args must be i32 raw device pointers");
       if (!getStringAttr(dict, "elem_type") || getStringAttr(dict, "type"))
         return kernel.emitOpError(
             "buffer arg_attrs require elem_type and must not use type");
@@ -862,7 +852,8 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
         return kernel.emitOpError("scalar f32 arg must have f32 formal type");
     } else if (type.getValue() == "i32" || type.getValue() == "u32") {
       if (!formalType.isSignlessInteger(32))
-        return kernel.emitOpError("scalar i32/u32 arg must have i32 formal type");
+        return kernel.emitOpError(
+            "scalar i32/u32 arg must have i32 formal type");
     } else {
       return kernel.emitOpError("scalar type must be u32, i32, or f32");
     }
@@ -873,8 +864,8 @@ static LogicalResult verifyArgAttrs(KernelOp kernel, Block &entry) {
 
 static LogicalResult verifyScheduleShape(KernelOp kernel) {
   if (kernel->getAttr("resource"))
-    return kernel.emitOpError(
-        "resource metadata is compiler-computed and must not be authored on vc4kernel.kernel");
+    return kernel.emitOpError("resource metadata is compiler-computed and must "
+                              "not be authored on vc4kernel.kernel");
 
   ScheduleModeAttr scheduleMode = getKernelScheduleModeAttr(kernel);
   if (!scheduleMode)
@@ -915,7 +906,8 @@ struct VC4KernelResourceSummary {
   bool requires_semaphore_base_builtin = false;
 };
 
-static VC4KernelResourceSummary computeVC4KernelResourceSummary(KernelOp kernel) {
+static VC4KernelResourceSummary
+computeVC4KernelResourceSummary(KernelOp kernel) {
   VC4KernelResourceSummary summary;
   if (ScheduleModeAttr scheduleMode = getKernelScheduleModeAttr(kernel))
     summary.schedule_mode = scheduleMode.getValue();
@@ -982,8 +974,7 @@ static VC4KernelResourceSummary computeVC4KernelResourceSummary(KernelOp kernel)
       summary.user_vpm_rows_per_block +
       summary.compiler_vpm_staging_rows_per_block +
       summary.warps_per_block * summary.compiler_vpm_staging_rows_per_warp;
-  summary.requires_vpm_base_row_builtin =
-      summary.total_vpm_rows_per_block > 0;
+  summary.requires_vpm_base_row_builtin = summary.total_vpm_rows_per_block > 0;
   return summary;
 }
 
@@ -997,7 +988,8 @@ static LogicalResult verifyComputedResourceSummary(KernelOp kernel) {
     return kernel.emitOpError(
         "vc4kernel.barrier requires schedule_mode = cooperative_block");
   if (summary.uses_barrier && summary.semaphore_count_per_block != 4)
-    return kernel.emitOpError("vc4kernel.barrier requires 4 semaphores per block");
+    return kernel.emitOpError(
+        "vc4kernel.barrier requires 4 semaphores per block");
   if (summary.semaphore_count_per_block > 16)
     return kernel.emitOpError("computed semaphore requirement exceeds 16");
   return success();
@@ -1255,12 +1247,11 @@ LogicalResult FragmentUnpackOp::verify() {
       failed(verifyVector16I32(op, getResult().getType(), "result")))
     return failure();
 
-  bool accepted =
-      getLayout() == SubwordLayout::packed &&
-      ((getSource() == SubwordType::u8 &&
-        getPolicy() == UnpackPolicy::zero_extend) ||
-       (getSource() == SubwordType::s16 &&
-        getPolicy() == UnpackPolicy::sign_extend));
+  bool accepted = getLayout() == SubwordLayout::packed &&
+                  ((getSource() == SubwordType::u8 &&
+                    getPolicy() == UnpackPolicy::zero_extend) ||
+                   (getSource() == SubwordType::s16 &&
+                    getPolicy() == UnpackPolicy::sign_extend));
   if (accepted)
     return success();
   return emitOpError("unsupported VC4Kernel fragment unpack mode");
@@ -1272,13 +1263,45 @@ LogicalResult FragmentPackOp::verify() {
       failed(verifyVector16I32(op, getResult().getType(), "result")))
     return failure();
 
-  bool accepted = getLayout() == SubwordLayout::packed &&
-                  getPolicy() == PackPolicy::truncate &&
-                  (getDest() == SubwordType::u8 ||
-                   getDest() == SubwordType::u16);
+  bool accepted =
+      getLayout() == SubwordLayout::packed &&
+      getPolicy() == PackPolicy::truncate &&
+      (getDest() == SubwordType::u8 || getDest() == SubwordType::u16);
   if (accepted)
     return success();
   return emitOpError("unsupported VC4Kernel fragment pack mode");
+}
+
+LogicalResult FragmentSFUOp::verify() {
+  Operation *op = getOperation();
+  if (failed(verifyVector16F32(op, getInput().getType(), "input")) ||
+      failed(verifyVector16F32(op, getResult().getType(), "result")))
+    return failure();
+
+  std::optional<FPMathPolicy> policy = getFpPolicy();
+  if (!policy)
+    return emitOpError(
+        "fragment_sfu requires explicit approximate SFU math policy");
+  if (*policy != FPMathPolicy::approx_sfu)
+    return emitOpError(
+        "exact floating-point math cannot be lowered to VC4 SFU");
+
+  FPDomain expectedDomain;
+  switch (getKind()) {
+  case SFUKind::recip:
+    expectedDomain = FPDomain::finite_nonzero;
+    break;
+  case SFUKind::rsqrt:
+  case SFUKind::log:
+    expectedDomain = FPDomain::finite_positive;
+    break;
+  case SFUKind::exp:
+    expectedDomain = FPDomain::finite;
+    break;
+  }
+  if (getDomain() != expectedDomain)
+    return emitOpError("fragment_sfu domain does not match SFU kind contract");
+  return success();
 }
 
 LogicalResult FragmentALUAddOp::verify() {
@@ -1293,26 +1316,24 @@ LogicalResult FragmentALUAddOp::verify() {
   if (isUnaryAddALUOpcode(opcode) && arity != 1)
     return emitOpError("selected ADD-pipe opcode requires exactly one operand");
   if (!isUnaryAddALUOpcode(opcode) && arity != 2)
-    return emitOpError("selected ADD-pipe opcode requires exactly two operands");
+    return emitOpError(
+        "selected ADD-pipe opcode requires exactly two operands");
 
   Type resultType = getResult().getType();
   if (opcode == AddALUOpcode::ftoi) {
     Type inputType = getInputs().front().getType();
-    return failure(
-        failed(verifyVector16F32(op, inputType, "operand")) ||
-        failed(verifyVector16I32(op, resultType, "result")));
+    return failure(failed(verifyVector16F32(op, inputType, "operand")) ||
+                   failed(verifyVector16I32(op, resultType, "result")));
   }
   if (opcode == AddALUOpcode::itof) {
     Type inputType = getInputs().front().getType();
-    return failure(
-        failed(verifyVector16I32(op, inputType, "operand")) ||
-        failed(verifyVector16F32(op, resultType, "result")));
+    return failure(failed(verifyVector16I32(op, inputType, "operand")) ||
+                   failed(verifyVector16F32(op, resultType, "result")));
   }
   if (opcode == AddALUOpcode::bit_not || opcode == AddALUOpcode::clz) {
     Type inputType = getInputs().front().getType();
-    return failure(
-        failed(verifyVector16I32(op, inputType, "operand")) ||
-        failed(verifyVector16I32(op, resultType, "result")));
+    return failure(failed(verifyVector16I32(op, inputType, "operand")) ||
+                   failed(verifyVector16I32(op, resultType, "result")));
   }
 
   if (isFloatBinaryAddALUOpcode(opcode)) {
@@ -1342,7 +1363,8 @@ LogicalResult FragmentALUMulOp::verify() {
   if (opcode == MulALUOpcode::nop)
     return emitOpError("nop has no fragment value result in VC4Kernel P1");
   if (getInputs().size() != 2)
-    return emitOpError("selected MUL-pipe opcode requires exactly two operands");
+    return emitOpError(
+        "selected MUL-pipe opcode requires exactly two operands");
 
   Type resultType = getResult().getType();
   if (opcode == MulALUOpcode::fmul) {
@@ -1411,8 +1433,7 @@ LogicalResult FragmentCmpOp::verify() {
     return emitOpError("unordered f32 fragment_cmp is not supported in P3");
 
   if (failed(verifySameType(getOperation(), getLhs().getType(),
-                            getRhs().getType(),
-                            "fragment_cmp operands")))
+                            getRhs().getType(), "fragment_cmp operands")))
     return failure();
   if (failed(verifyPred16(getOperation(), getResult().getType(), "result")))
     return failure();
@@ -1428,11 +1449,11 @@ LogicalResult FragmentCmpOp::verify() {
 
   if (isVC4KernelVector16F32Type(getLhs().getType())) {
     if (!isOrderedF32Predicate(predicate))
-      return emitOpError("integer fragment_cmp predicate requires i32 operands");
+      return emitOpError(
+          "integer fragment_cmp predicate requires i32 operands");
     auto policy = getFpPolicy();
     if (!policy || *policy != mlir::vc4kernel::FPCmpPolicy::finite_only)
-      return emitOpError(
-          "f32 fragment_cmp requires finite_only policy in P3");
+      return emitOpError("f32 fragment_cmp requires finite_only policy in P3");
     return success();
   }
 
@@ -1477,7 +1498,8 @@ LogicalResult FragmentReduceOp::verify() {
     if (!isF32ReduceKind(kind))
       return emitOpError("integer reduce kind requires vector<16xi32>");
     if (!getFpPolicy())
-      return emitOpError("f32 fragment_reduce requires finite_tree policy in P4");
+      return emitOpError(
+          "f32 fragment_reduce requires finite_tree policy in P4");
     return success();
   }
   return emitOpError("fragment_reduce input must be vector<16xi32> or "
@@ -1485,12 +1507,13 @@ LogicalResult FragmentReduceOp::verify() {
 }
 
 LogicalResult TMULoadFragmentOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::tmu_global_read,
-          Coherency::readonly_tmu)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::tmu_global_read,
+                                        Coherency::readonly_tmu)))
     return failure();
   if (getInactiveLoad() != InactiveLoad::zero)
-    return emitOpError("tmu_load_fragment supports only inactive_load<zero> in P7");
+    return emitOpError(
+        "tmu_load_fragment supports only inactive_load<zero> in P7");
   if (!isVC4KernelVector16DataType(getResult().getType()))
     return emitOpError(
         "tmu_load_fragment result must be vector<16xi32> or vector<16xf32>");
@@ -1500,15 +1523,16 @@ LogicalResult TMULoadFragmentOp::verify() {
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDWStoreFragmentOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::vdw_global_store,
-          Coherency::dma_ordered)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::vdw_global_store,
+                                        Coherency::dma_ordered)))
     return failure();
   if (failed(verifyVDWInactiveStorePolicy(getOperation())))
     return failure();
   if (!isContiguousByteOffsets(getByteOffsets()))
-    return emitOpError(
-        "VDW preserve store requires dense contiguous/rectangular address mapping");
+    // clang-format off
+    return emitOpError("VDW preserve store requires dense contiguous/rectangular address mapping");
+  // clang-format on
   if (!isKnownVectorByteOffsetsAligned4(getByteOffsets()))
     return emitOpError(
         "vdw_store_fragment byte_offsets must be statically 4-byte aligned");
@@ -1542,9 +1566,9 @@ LogicalResult VPMReadFragmentOp::verify() {
   return verifyPredicateForZeroFill(getOperation(), getPred());
 }
 LogicalResult VDRLoadToVPMOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::vdr_global_to_vpm,
-          Coherency::dma_ordered)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::vdr_global_to_vpm,
+                                        Coherency::dma_ordered)))
     return failure();
   if (getOperation()->getNumOperands() != 4)
     return emitOpError("does not accept a predicate operand");
@@ -1565,12 +1589,13 @@ LogicalResult VDRLoadToVPMOp::verify() {
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDR DMA")))
     return failure();
-  return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(), getRows());
+  return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(),
+                              getRows());
 }
 LogicalResult VDRLoadRectToVPMOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::vdr_global_to_vpm,
-          Coherency::dma_ordered)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::vdr_global_to_vpm,
+                                        Coherency::dma_ordered)))
     return failure();
   if (failed(verifyDynamicRectShape(getOperation())))
     return failure();
@@ -1579,24 +1604,23 @@ LogicalResult VDRLoadRectToVPMOp::verify() {
                                      /*dmaSubwordModes=*/true, "VDR DMA")))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryPitchBytes(),
-                                        "memory_pitch_bytes",
-                                        getElemBytes())))
+                                        "memory_pitch_bytes", getElemBytes())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getDstRow(),
                               getMaxRows());
 }
 LogicalResult VDWStoreVPMFragmentOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::vdw_global_store,
-          Coherency::dma_ordered)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::vdw_global_store,
+                                        Coherency::dma_ordered)))
     return failure();
   if (failed(verifyVDWInactiveStorePolicy(getOperation())))
     return failure();
   if (failed(verifyElemBytesMatchesWidth(getOperation(), getElemBytes())))
     return failure();
   if (!isKnownScalarByteOffsetAlignedTo(getByteOffset(), getElemBytes()))
-    return emitOpError(
-        "vdw_store_vpm_fragment byte_offset must be statically aligned to elem_bytes");
+    return emitOpError("vdw_store_vpm_fragment byte_offset must be statically "
+                       "aligned to elem_bytes");
   if (failed(verifyVPMExecutableMode(getOperation(), "src_x", "vpm_pitch",
                                      /*qpuSubwordModes=*/false,
                                      /*dmaSubwordModes=*/true, "VDW DMA")))
@@ -1606,9 +1630,9 @@ LogicalResult VDWStoreVPMFragmentOp::verify() {
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow());
 }
 LogicalResult VDWStoreRectFromVPMOp::verify() {
-  if (failed(verifyRequiredMemoryPolicy(
-          getOperation(), MemoryPath::vdw_global_store,
-          Coherency::dma_ordered)))
+  if (failed(verifyRequiredMemoryPolicy(getOperation(),
+                                        MemoryPath::vdw_global_store,
+                                        Coherency::dma_ordered)))
     return failure();
   if (failed(verifyVDWInactiveStorePolicy(getOperation())))
     return failure();
@@ -1619,8 +1643,7 @@ LogicalResult VDWStoreRectFromVPMOp::verify() {
                                      /*dmaSubwordModes=*/true, "VDW DMA")))
     return failure();
   if (failed(verifyRuntimePitchOrStride(getOperation(), getMemoryStrideBytes(),
-                                        "memory_stride_bytes",
-                                        getElemBytes())))
+                                        "memory_stride_bytes", getElemBytes())))
     return failure();
   return verifyVPMRowInBounds(getOperation(), getTile(), getSrcRow(),
                               getMaxRows());

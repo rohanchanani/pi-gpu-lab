@@ -202,8 +202,7 @@ static mlir::StringAttr getDictionaryStringAttr(mlir::DictionaryAttr dict,
 }
 
 static std::optional<int64_t>
-getDictionaryIntegerAttrValue(mlir::DictionaryAttr dict,
-                              llvm::StringRef name) {
+getDictionaryIntegerAttrValue(mlir::DictionaryAttr dict, llvm::StringRef name) {
   auto integerAttr = llvm::dyn_cast_or_null<mlir::IntegerAttr>(dict.get(name));
   if (!integerAttr)
     return std::nullopt;
@@ -238,8 +237,8 @@ static std::optional<std::string> getElementCType(llvm::StringRef elemType) {
   return std::nullopt;
 }
 
-static std::optional<std::string>
-getBufferCType(llvm::StringRef direction, llvm::StringRef elemType) {
+static std::optional<std::string> getBufferCType(llvm::StringRef direction,
+                                                 llvm::StringRef elemType) {
   if (!getElementCType(elemType))
     return std::nullopt;
   if (direction == "in" || direction == "out" || direction == "inout")
@@ -267,8 +266,8 @@ static bool isRuntimeLaunchABIName(llvm::StringRef name) {
          name == "barrier_arrive_sem" || name == "barrier_go_sem" ||
          name == "barrier_depart_sem" || name == "barrier_reset_sem" ||
          name == "resident_request_id" || name == "spill_frame_base" ||
-         name == "spill_frame_bytes" ||
-         name == "spill_frame_stride_bytes" || name == "spill_vpm_row";
+         name == "spill_frame_bytes" || name == "spill_frame_stride_bytes" ||
+         name == "spill_vpm_row";
 }
 
 static bool isLaneIdentityLaunchABIName(llvm::StringRef name) {
@@ -327,15 +326,15 @@ static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
   llvm::StringRef kind = kindAttr.getValue();
   if (kind == "scalar") {
     if (directionAttr.getValue() != "by_value") {
-      return emitLaunchABIModelError(
-          func, llvm::Twine("scalar argument '") + name +
-                    "' requires direction = \"by_value\"");
+      return emitLaunchABIModelError(func,
+                                     llvm::Twine("scalar argument '") + name +
+                                         "' requires direction = \"by_value\"");
     }
     auto typeAttr = getDictionaryStringAttr(argDict, "type");
     if (!typeAttr) {
-      return emitLaunchABIModelError(
-          func, llvm::Twine("scalar argument '") + name +
-                    "' requires string 'type'");
+      return emitLaunchABIModelError(func, llvm::Twine("scalar argument '") +
+                                               name +
+                                               "' requires string 'type'");
     }
     std::optional<std::string> cType = getScalarCType(typeAttr.getValue());
     if (!cType) {
@@ -353,9 +352,9 @@ static LogicalResult parseLaunchABIArgument(mlir::vc4::FuncOp func,
   if (kind == "buffer") {
     auto elemTypeAttr = getDictionaryStringAttr(argDict, "elem_type");
     if (!elemTypeAttr) {
-      return emitLaunchABIModelError(
-          func, llvm::Twine("buffer argument '") + name +
-                    "' requires string 'elem_type'");
+      return emitLaunchABIModelError(func, llvm::Twine("buffer argument '") +
+                                               name +
+                                               "' requires string 'elem_type'");
     }
     std::optional<std::string> cType =
         getBufferCType(directionAttr.getValue(), elemTypeAttr.getValue());
@@ -440,7 +439,8 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
   if (!nameAttr || nameAttr.getValue().empty() || !materializationAttr ||
       !kindAttr) {
     return emitLaunchABIModelError(
-        func, "builtin entry requires name, kind, and materialization metadata");
+        func,
+        "builtin entry requires name, kind, and materialization metadata");
   }
 
   LaunchABIBuiltinModel parsed;
@@ -452,8 +452,8 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
         func, llvm::Twine("builtin '") + parsed.name +
                   "' requires materialization = \"uniform_suffix\"");
   }
-  parsed.uniformIndex = getDictionaryIntegerAttrValue(builtinDict,
-                                                      "uniform_index");
+  parsed.uniformIndex =
+      getDictionaryIntegerAttrValue(builtinDict, "uniform_index");
   launchABI.builtins.push_back(std::move(parsed));
   return success();
 }
@@ -480,8 +480,8 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
                                          LaunchABIModel &launchABI) {
   auto publicName = getDictionaryStringAttr(launchABIDict, "public_name");
   if (!publicName || publicName.getValue().empty()) {
-    return emitLaunchABIModelError(
-        func, "requires non-empty string 'public_name'");
+    return emitLaunchABIModelError(func,
+                                   "requires non-empty string 'public_name'");
   }
   if (!isCIdentifier(publicName.getValue())) {
     return emitLaunchABIModelError(
@@ -513,7 +513,8 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
         func, "requires non-negative signless i32 'uniform_words_per_qpu'");
   }
 
-  auto args = llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("args"));
+  auto args =
+      llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("args"));
   auto builtins =
       llvm::dyn_cast_or_null<mlir::ArrayAttr>(launchABIDict.get("builtins"));
   if (!args || !builtins) {
@@ -523,8 +524,8 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
 
   LaunchABIModel parsed;
   parsed.publicName = canonicalizeKernelPublicName(publicName.getValue());
-  parsed.codeSymbol = codeSymbol ? codeSymbol.getValue().str()
-                                 : parsed.publicName + "_shader";
+  parsed.codeSymbol =
+      codeSymbol ? codeSymbol.getValue().str() : parsed.publicName + "_shader";
   parsed.tailPolicy = tailPolicy.getValue().str();
   parsed.uniformWordsPerQPU = *uniformWords;
 
@@ -552,14 +553,15 @@ static LogicalResult parseLaunchABIModel(mlir::vc4::FuncOp func,
   return success();
 }
 
-static LogicalResult markLaunchABIUniformIndex(
-    mlir::vc4::FuncOp func, const llvm::Twine &ownerName,
-    int64_t uniformIndex, llvm::SmallVectorImpl<char> &seenUniformIndices) {
+static LogicalResult
+markLaunchABIUniformIndex(mlir::vc4::FuncOp func, const llvm::Twine &ownerName,
+                          int64_t uniformIndex,
+                          llvm::SmallVectorImpl<char> &seenUniformIndices) {
   if (uniformIndex < 0 ||
       uniformIndex >= static_cast<int64_t>(seenUniformIndices.size())) {
     return emitLaunchABIModelError(
-        func, ownerName +
-                  " uniform_index is outside [0, uniform_words_per_qpu)");
+        func,
+        ownerName + " uniform_index is outside [0, uniform_words_per_qpu)");
   }
 
   if (seenUniformIndices[uniformIndex]) {
@@ -571,18 +573,18 @@ static LogicalResult markLaunchABIUniformIndex(
   return success();
 }
 
-static LogicalResult validateLaunchABIUniformPacking(
-    mlir::vc4::FuncOp func, const LaunchABIModel &launchABI) {
+static LogicalResult
+validateLaunchABIUniformPacking(mlir::vc4::FuncOp func,
+                                const LaunchABIModel &launchABI) {
   llvm::SmallVector<char, 16> seenUniformIndices;
-  seenUniformIndices.resize(
-      static_cast<size_t>(launchABI.uniformWordsPerQPU));
+  seenUniformIndices.resize(static_cast<size_t>(launchABI.uniformWordsPerQPU));
   for (char &seen : seenUniformIndices)
     seen = 0;
 
   for (const LaunchABIArgumentModel &arg : launchABI.arguments) {
     if (failed(markLaunchABIUniformIndex(
-            func, llvm::Twine("argument '") + arg.name + "'",
-            arg.uniformIndex, seenUniformIndices)))
+            func, llvm::Twine("argument '") + arg.name + "'", arg.uniformIndex,
+            seenUniformIndices)))
       return failure();
   }
 
@@ -662,17 +664,15 @@ static LogicalResult parseResourceModel(mlir::vc4::FuncOp func,
   parsed.warpsPerBlock = info.warpsPerBlock;
   parsed.semaphoreCountPerBlock = info.semaphoreCountPerBlock;
   parsed.userVPMRowsPerBlock = info.userVPMRowsPerBlock;
-  parsed.compilerVPMStagingRowsPerWarp =
-      info.compilerVPMStagingRowsPerWarp;
-  parsed.compilerVPMStagingRowsPerBlock =
-      info.compilerVPMStagingRowsPerBlock;
+  parsed.compilerVPMStagingRowsPerWarp = info.compilerVPMStagingRowsPerWarp;
+  parsed.compilerVPMStagingRowsPerBlock = info.compilerVPMStagingRowsPerBlock;
   parsed.spillVPMRowsPerBlock = info.spillVPMRowsPerBlock;
   parsed.totalVPMRowsPerBlock = info.totalVPMRowsPerBlock;
   parsed.vpmBytesPerBlock = parsed.totalVPMRowsPerBlock * kVC4VPMRowBytes;
 
-  int64_t spillFrameBytes =
-      getDictionaryIntegerAttrValue(func->getAttrDictionary(), "spill_frame_bytes")
-          .value_or(0);
+  int64_t spillFrameBytes = getDictionaryIntegerAttrValue(
+                                func->getAttrDictionary(), "spill_frame_bytes")
+                                .value_or(0);
   if (parsed.scheduleMode == "cooperative_block" && spillFrameBytes > 0 &&
       parsed.spillVPMRowsPerBlock == 0) {
     parsed.spillVPMRowsPerBlock = parsed.warpsPerBlock;
@@ -689,14 +689,18 @@ static LogicalResult parseResourceModel(mlir::vc4::FuncOp func,
                                    parsed.totalVPMRowsPerBlock);
   parsed.maxResidentBlocks = min3(byQPU, bySem, byVPM);
   if (parsed.maxResidentBlocks <= 0)
-    return emitResourceModelError(func, "resource request leaves zero resident_blocks; check warps_per_block, total_vpm_rows_per_block, and semaphore_count_per_block");
+    return emitResourceModelError(
+        func,
+        "resource request leaves zero resident_blocks; check warps_per_block, "
+        "total_vpm_rows_per_block, and semaphore_count_per_block");
 
   resources = std::move(parsed);
   return success();
 }
 
 static LogicalResult populateResourceInfo(KernelRecord &kernel) {
-  auto resource = kernel.func->getAttrOfType<mlir::DictionaryAttr>("vc4.resource");
+  auto resource =
+      kernel.func->getAttrOfType<mlir::DictionaryAttr>("vc4.resource");
   return parseResourceModel(kernel.func, resource, kernel.resources);
 }
 
@@ -745,36 +749,35 @@ static void appendJSONEscapedString(llvm::raw_ostream &os,
   os << '"';
 }
 
-static LogicalResult appendScheduledSinkOp(
-    mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream);
+static LogicalResult
+appendScheduledSinkOp(mlir::Operation *op,
+                      llvm::SmallVectorImpl<mlir::Operation *> &stream);
 
 static bool isThreadEndScheduledOp(mlir::Operation *op) {
   auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op);
   return bundle && bundle.getSig() == mlir::vc4::QPUSignal::thrend;
 }
 
-static bool isNonBranchScheduledDelaySlotOpWithoutThreadEnd(
-    mlir::Operation *op) {
+static bool
+isNonBranchScheduledDelaySlotOpWithoutThreadEnd(mlir::Operation *op) {
   if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op))
     return bundle.getSig() != mlir::vc4::QPUSignal::thrend;
   return llvm::isa<mlir::vc4::QPULDIOp, mlir::vc4::QPUSemaOp,
-                   mlir::vc4::QPUVPMVCDSetupOp,
-                   mlir::vc4::QPUVPMVCDSetupLDIOp,
-                   mlir::vc4::QPUVPMVCDAddrOp,
-                   mlir::vc4::QPUVPMVCDWaitOp>(op);
+                   mlir::vc4::QPUVPMVCDSetupOp, mlir::vc4::QPUVPMVCDSetupLDIOp,
+                   mlir::vc4::QPUVPMVCDAddrOp, mlir::vc4::QPUVPMVCDWaitOp>(op);
 }
 
-static mlir::InFlightDiagnostic emitInvalidQASMEpilogueDiag(
-    mlir::vc4::FuncOp func) {
+static mlir::InFlightDiagnostic
+emitInvalidQASMEpilogueDiag(mlir::vc4::FuncOp func) {
   return func.emitOpError(
       "is not directly emittable: qasm input requires an explicit thrend plus "
       "two delay-slot instructions at the end of the flattened scheduled "
       "instruction stream");
 }
 
-static LogicalResult appendBranchDelaySlotSinkOps(
-    mlir::vc4::QPUBranchOp branch,
-    llvm::SmallVectorImpl<mlir::Operation *> &stream) {
+static LogicalResult
+appendBranchDelaySlotSinkOps(mlir::vc4::QPUBranchOp branch,
+                             llvm::SmallVectorImpl<mlir::Operation *> &stream) {
   if (!branch.getDelaySlots().hasOneBlock()) {
     return branch.emitOpError()
            << "requires exactly one delay-slot block for artifact emission";
@@ -787,12 +790,12 @@ static LogicalResult appendBranchDelaySlotSinkOps(
   return success();
 }
 
-static LogicalResult appendScheduledSinkOp(
-    mlir::Operation *op, llvm::SmallVectorImpl<mlir::Operation *> &stream) {
+static LogicalResult
+appendScheduledSinkOp(mlir::Operation *op,
+                      llvm::SmallVectorImpl<mlir::Operation *> &stream) {
   if (llvm::isa<mlir::vc4::QPUBundleOp, mlir::vc4::QPULDIOp,
                 mlir::vc4::QPUSemaOp, mlir::vc4::QPUVPMVCDSetupOp,
-                mlir::vc4::QPUVPMVCDSetupLDIOp,
-                mlir::vc4::QPUVPMVCDAddrOp,
+                mlir::vc4::QPUVPMVCDSetupLDIOp, mlir::vc4::QPUVPMVCDAddrOp,
                 mlir::vc4::QPUVPMVCDWaitOp>(op)) {
     stream.push_back(op);
     return success();
@@ -808,8 +811,9 @@ static LogicalResult appendScheduledSinkOp(
             "artifact emission";
 }
 
-static LogicalResult verifyThreadEndEpilogue(
-    mlir::vc4::FuncOp func, llvm::ArrayRef<mlir::Operation *> stream) {
+static LogicalResult
+verifyThreadEndEpilogue(mlir::vc4::FuncOp func,
+                        llvm::ArrayRef<mlir::Operation *> stream) {
   if (stream.size() < 3) {
     auto diag = emitInvalidQASMEpilogueDiag(func);
     diag << "; found only " << static_cast<unsigned>(stream.size())
@@ -916,18 +920,16 @@ static LogicalResult emitSpillFrameModelError(mlir::vc4::FuncOp func,
 }
 
 static LogicalResult populateSpillFrameInfo(KernelRecord &kernel) {
-  std::optional<int64_t> frameBytes =
-      getDictionaryIntegerAttrValue(kernel.func->getAttrDictionary(),
-                                    "spill_frame_bytes");
-  std::optional<int64_t> explicitStride =
-      getDictionaryIntegerAttrValue(kernel.func->getAttrDictionary(),
-                                    "spill_frame_stride_bytes");
+  std::optional<int64_t> frameBytes = getDictionaryIntegerAttrValue(
+      kernel.func->getAttrDictionary(), "spill_frame_bytes");
+  std::optional<int64_t> explicitStride = getDictionaryIntegerAttrValue(
+      kernel.func->getAttrDictionary(), "spill_frame_stride_bytes");
 
   KernelSpillFrameModel parsed;
   if (frameBytes) {
     if (*frameBytes < 0)
-      return emitSpillFrameModelError(kernel.func,
-                                      "requires non-negative spill_frame_bytes");
+      return emitSpillFrameModelError(
+          kernel.func, "requires non-negative spill_frame_bytes");
     parsed.frameBytes = static_cast<uint64_t>(*frameBytes);
   }
 
@@ -938,8 +940,7 @@ static LogicalResult populateSpillFrameInfo(KernelRecord &kernel) {
   if (explicitStride) {
     if (*explicitStride < 0)
       return emitSpillFrameModelError(
-          kernel.func,
-          "requires non-negative spill_frame_stride_bytes");
+          kernel.func, "requires non-negative spill_frame_stride_bytes");
     if (static_cast<uint64_t>(*explicitStride) != computedStride) {
       return emitSpillFrameModelError(
           kernel.func,
@@ -950,8 +951,7 @@ static LogicalResult populateSpillFrameInfo(KernelRecord &kernel) {
   }
 
   parsed.strideBytes = computedStride;
-  parsed.frameCount =
-      parsed.frameBytes == 0 ? 0 : kVC4MaxRequestsPerWave;
+  parsed.frameCount = parsed.frameBytes == 0 ? 0 : kVC4MaxRequestsPerWave;
   parsed.arenaBytes = parsed.strideBytes * parsed.frameCount;
   kernel.spill = parsed;
   kernel.info.spillFrameBytes = parsed.frameBytes;
@@ -973,11 +973,10 @@ static std::string getKernelUnifPtrRegionName(const KernelRecord &kernel) {
   return kernel.info.publicName + ".unif_ptrs";
 }
 
-static void appendProgramLayoutRegion(ProgramLayoutModel &layout,
-                                      llvm::StringRef name,
-                                      llvm::StringRef kind,
-                                      uint64_t offset, uint64_t size,
-                                      std::optional<unsigned> kernelId = std::nullopt) {
+static void
+appendProgramLayoutRegion(ProgramLayoutModel &layout, llvm::StringRef name,
+                          llvm::StringRef kind, uint64_t offset, uint64_t size,
+                          std::optional<unsigned> kernelId = std::nullopt) {
   ProgramLayoutRegion region;
   region.name = name.str();
   region.kind = kind.str();
@@ -999,8 +998,8 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
 
   uint64_t offset = 0;
   offset = alignUpTo(offset, layout.alignment);
-  appendProgramLayoutRegion(layout, "program_header", "program_header",
-                            offset, kVC4ProgramHeaderBytes);
+  appendProgramLayoutRegion(layout, "program_header", "program_header", offset,
+                            kVC4ProgramHeaderBytes);
   offset += kVC4ProgramHeaderBytes;
 
   offset = alignUpTo(offset, layout.alignment);
@@ -1032,8 +1031,8 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
         static_cast<uint64_t>(kernel.info.scheduledOpCount) * 2u;
     kernelLayout.codeSize = kernelLayout.codeWords * sizeof(uint32_t);
     appendProgramLayoutRegion(layout, getKernelCodeRegionName(kernel), "code",
-                              kernelLayout.codeOffset,
-                              kernelLayout.codeSize, kernel.kernelId);
+                              kernelLayout.codeOffset, kernelLayout.codeSize,
+                              kernel.kernelId);
     offset += kernelLayout.codeSize;
 
     offset = alignUpTo(offset, layout.alignment);
@@ -1083,8 +1082,9 @@ buildProgramLayoutModel(llvm::ArrayRef<KernelRecord> kernels) {
   return layout;
 }
 
-static LogicalResult rejectDuplicateKernelPublicNames(
-    mlir::vc4::ModuleOp vc4Module, llvm::ArrayRef<KernelRecord> kernels) {
+static LogicalResult
+rejectDuplicateKernelPublicNames(mlir::vc4::ModuleOp vc4Module,
+                                 llvm::ArrayRef<KernelRecord> kernels) {
   for (size_t i = 0; i != kernels.size(); ++i) {
     for (size_t j = 0; j != i; ++j) {
       if (kernels[i].info.publicName != kernels[j].info.publicName)
@@ -1097,8 +1097,9 @@ static LogicalResult rejectDuplicateKernelPublicNames(
   return success();
 }
 
-static LogicalResult rejectDuplicateKernelCodeSymbols(
-    mlir::vc4::ModuleOp vc4Module, llvm::ArrayRef<KernelRecord> kernels) {
+static LogicalResult
+rejectDuplicateKernelCodeSymbols(mlir::vc4::ModuleOp vc4Module,
+                                 llvm::ArrayRef<KernelRecord> kernels) {
   for (size_t i = 0; i != kernels.size(); ++i) {
     for (size_t j = 0; j != i; ++j) {
       if (kernels[i].launchABI.codeSymbol != kernels[j].launchABI.codeSymbol)
@@ -1150,16 +1151,15 @@ collectProgramKernels(mlir::vc4::ModuleOp vc4Module,
   return success();
 }
 
-static LogicalResult writeTextFile(
-    mlir::Operation *diagOp, llvm::StringRef path,
-    llvm::function_ref<void(llvm::raw_ostream &)> emit) {
+static LogicalResult
+writeTextFile(mlir::Operation *diagOp, llvm::StringRef path,
+              llvm::function_ref<void(llvm::raw_ostream &)> emit) {
   std::error_code ec;
   llvm::raw_fd_ostream os(path, ec, llvm::sys::fs::CD_CreateAlways,
                           llvm::sys::fs::FA_Write, llvm::sys::fs::OF_Text);
   if (ec) {
     return diagOp->emitError()
-           << "failed to open artifact file '" << path << "': "
-           << ec.message();
+           << "failed to open artifact file '" << path << "': " << ec.message();
   }
 
   emit(os);
@@ -1167,17 +1167,17 @@ static LogicalResult writeTextFile(
   if (os.has_error()) {
     std::error_code writeError = os.error();
     os.clear_error();
-    return diagOp->emitError()
-           << "failed to write artifact file '" << path << "': "
-           << writeError.message();
+    return diagOp->emitError() << "failed to write artifact file '" << path
+                               << "': " << writeError.message();
   }
 
   return success();
 }
 
-static LogicalResult writeBundleFile(
-    mlir::Operation *diagOp, llvm::StringRef bundleDir, llvm::StringRef fileName,
-    llvm::function_ref<void(llvm::raw_ostream &)> emit) {
+static LogicalResult
+writeBundleFile(mlir::Operation *diagOp, llvm::StringRef bundleDir,
+                llvm::StringRef fileName,
+                llvm::function_ref<void(llvm::raw_ostream &)> emit) {
   llvm::SmallString<256> path(bundleDir);
   llvm::sys::path::append(path, fileName);
 
@@ -1185,9 +1185,8 @@ static LogicalResult writeBundleFile(
   llvm::sys::path::remove_filename(parent);
   std::error_code ec = llvm::sys::fs::create_directories(parent);
   if (ec) {
-    return diagOp->emitError()
-           << "failed to create artifact directory '" << parent << "': "
-           << ec.message();
+    return diagOp->emitError() << "failed to create artifact directory '"
+                               << parent << "': " << ec.message();
   }
 
   return writeTextFile(diagOp, path, emit);
@@ -1201,9 +1200,8 @@ static LogicalResult ensureAdjacentVC4ASMTemplates(mlir::Operation *diagOp,
 
   std::error_code ec = llvm::sys::fs::create_directories(templateDir);
   if (ec) {
-    return diagOp->emitError()
-           << "failed to create vc4asm template directory '" << templateDir
-           << "': " << ec.message();
+    return diagOp->emitError() << "failed to create vc4asm template directory '"
+                               << templateDir << "': " << ec.message();
   }
 
   llvm::SmallString<256> templateHeader(templateDir);
@@ -1268,14 +1266,13 @@ static LogicalResult ensureAdjacentVC4ASMTemplates(mlir::Operation *diagOp,
   return success();
 }
 
-
 static int64_t getIntegerAttrValue(mlir::Operation *op,
                                    llvm::StringRef attrName) {
   return llvm::cast<mlir::IntegerAttr>(op->getAttr(attrName)).getInt();
 }
 
-static std::optional<int64_t> getOptionalIntegerAttrValue(
-    mlir::Operation *op, llvm::StringRef attrName) {
+static std::optional<int64_t>
+getOptionalIntegerAttrValue(mlir::Operation *op, llvm::StringRef attrName) {
   auto attr = op->getAttrOfType<mlir::IntegerAttr>(attrName);
   if (!attr)
     return std::nullopt;
@@ -1465,14 +1462,21 @@ static std::string formatWriteAddress(int64_t address, bool forAddALU,
     return "vpm";
   case 51:
     return "mutex_rel";
+  case 52:
+    return "recip";
+  case 53:
+    return "rsqrt";
+  case 54:
+    return "exp";
+  case 55:
+    return "log";
   case 56:
     return "t0s";
   default:
     break;
   }
 
-  char regFile = forAddALU ? (writeSwap ? 'b' : 'a')
-                           : (writeSwap ? 'a' : 'b');
+  char regFile = forAddALU ? (writeSwap ? 'b' : 'a') : (writeSwap ? 'a' : 'b');
   return formatRegFileAddress(regFile, address);
 }
 
@@ -1590,8 +1594,7 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
             formatVectorRotateSmallImmSource(bundle, *smallImm);
         if (!rotated) {
           return bundle.emitOpError()
-                 << "cannot emit vector-rotate small_imm selector "
-                 << *smallImm
+                 << "cannot emit vector-rotate small_imm selector " << *smallImm
                  << "; expected matching MUL accumulator operands r0-r3";
         }
         out = *rotated;
@@ -1611,7 +1614,8 @@ static LogicalResult formatMuxSource(mlir::vc4::QPUBundleOp bundle,
   return bundle.emitOpError() << "cannot emit unknown qpu source mux";
 }
 
-static std::optional<unsigned> getAccumulatorIndexForMux(mlir::vc4::QPUMux mux) {
+static std::optional<unsigned>
+getAccumulatorIndexForMux(mlir::vc4::QPUMux mux) {
   switch (mux) {
   case mlir::vc4::QPUMux::r0:
     return 0;
@@ -1645,7 +1649,8 @@ formatVectorRotateSmallImmSource(mlir::vc4::QPUBundleOp bundle,
   if (bundle.getMulA() != bundle.getMulB())
     return std::nullopt;
 
-  std::optional<unsigned> accumulator = getAccumulatorIndexForMux(bundle.getMulA());
+  std::optional<unsigned> accumulator =
+      getAccumulatorIndexForMux(bundle.getMulA());
   if (!accumulator || *accumulator > 3)
     return std::nullopt;
 
@@ -1671,10 +1676,11 @@ formatAccumulatorVectorRotateSource(mlir::vc4::QPUMux sourceMux,
   return source + " << " + std::to_string(selector - 48);
 }
 
-static LogicalResult
-formatPseudoVPMVCDMuxSource(mlir::Operation *op, mlir::vc4::QPUMux mux,
-                            mlir::vc4::QPUMux mulA,
-                            mlir::vc4::QPUMux mulB, std::string &out) {
+static LogicalResult formatPseudoVPMVCDMuxSource(mlir::Operation *op,
+                                                 mlir::vc4::QPUMux mux,
+                                                 mlir::vc4::QPUMux mulA,
+                                                 mlir::vc4::QPUMux mulB,
+                                                 std::string &out) {
   switch (mux) {
   case mlir::vc4::QPUMux::r0:
     out = "r0";
@@ -1703,8 +1709,7 @@ formatPseudoVPMVCDMuxSource(mlir::Operation *op, mlir::vc4::QPUMux mux,
       if (isVectorRotateSmallImm(*smallImm)) {
         if (mulA != mulB)
           return op->emitOpError()
-                 << "cannot emit vector-rotate small_imm selector "
-                 << *smallImm
+                 << "cannot emit vector-rotate small_imm selector " << *smallImm
                  << "; expected matching MUL accumulator operands r0-r3";
         if (std::optional<std::string> rotated =
                 formatAccumulatorVectorRotateSource(mulA, *smallImm)) {
@@ -1792,7 +1797,8 @@ formatStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
   return formatAccumulatorVectorRotateSource(bundle.getAddA(), *selector);
 }
 
-static bool canEmitStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
+static bool
+canEmitStandaloneAddVectorRotateMove(mlir::vc4::QPUBundleOp bundle) {
   return formatStandaloneAddVectorRotateMove(bundle).has_value();
 }
 
@@ -1805,9 +1811,10 @@ static bool accumulatorIsForbidden(unsigned accumulator,
   return false;
 }
 
-static void forbidNonRotateAddAccumulator(mlir::vc4::QPUBundleOp bundle,
-                                          mlir::vc4::QPUMux mux,
-                                          llvm::SmallVectorImpl<unsigned> &forbidden) {
+static void
+forbidNonRotateAddAccumulator(mlir::vc4::QPUBundleOp bundle,
+                              mlir::vc4::QPUMux mux,
+                              llvm::SmallVectorImpl<unsigned> &forbidden) {
   if (mux == mlir::vc4::QPUMux::b &&
       getVectorRotateSmallImmSelectorForMux(bundle, mux))
     return;
@@ -1859,7 +1866,8 @@ static LogicalResult emitVectorRotatePrepBundle(mlir::vc4::QPUBundleOp spacer,
                                                 llvm::raw_ostream &os) {
   std::optional<int64_t> selector = getAddVectorRotateSmallImmSelector(next);
   std::optional<unsigned> source = getAccumulatorIndexForMux(next.getMulA());
-  std::optional<unsigned> destination = getPreparedVectorRotateDestination(next);
+  std::optional<unsigned> destination =
+      getPreparedVectorRotateDestination(next);
   if (!selector || !source || !destination) {
     return spacer.emitOpError()
            << "cannot prepare vector-rotate small_imm operand for following "
@@ -1916,11 +1924,11 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
     if (bundle.getCondAdd() != mlir::vc4::Cond::never)
       line += getConditionSuffix(bundle.getCondAdd());
     line += " ";
-    line += formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_add"),
-                               /*forAddALU=*/true,
-                               bundle.getOperation()->hasAttr("write_swap")) +
-            *packSuffix;
+    line +=
+        formatWriteAddress(
+            getIntegerAttrValue(bundle.getOperation(), "waddr_add"),
+            /*forAddALU=*/true, bundle.getOperation()->hasAttr("write_swap")) +
+        *packSuffix;
     line += ", ";
     line += *rotateMove;
     state.preparedVectorRotateDest = std::nullopt;
@@ -1932,35 +1940,35 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   std::string src1;
   bool printUnpackOnSecondSource =
       !unpackSuffix->empty() && !isUnaryAddOpcode(opcode);
-  if (failed(formatMuxSource(bundle, bundle.getAddA(),
-                             printUnpackOnSecondSource ? std::string()
-                                                       : *unpackSuffix,
-                             src0)))
+  if (failed(formatMuxSource(
+          bundle, bundle.getAddA(),
+          printUnpackOnSecondSource ? std::string() : *unpackSuffix, src0)))
     return failure();
   if (!isUnaryAddOpcode(opcode) &&
-      failed(formatMuxSource(bundle, bundle.getAddB(),
-                             printUnpackOnSecondSource ? *unpackSuffix
-                                                       : std::string(),
-                             src1)))
+      failed(formatMuxSource(
+          bundle, bundle.getAddB(),
+          printUnpackOnSecondSource ? *unpackSuffix : std::string(), src1)))
     return failure();
 
   if (std::optional<int64_t> rotateSelector =
           getAddVectorRotateSmallImmSelector(bundle)) {
     if (!canEmitStandaloneAddVectorRotateMove(bundle)) {
-      std::optional<unsigned> destination = getPreparedVectorRotateDestination(bundle);
+      std::optional<unsigned> destination =
+          getPreparedVectorRotateDestination(bundle);
       if (!destination || !state.preparedVectorRotateDest ||
           !state.preparedVectorRotateSelector ||
           *state.preparedVectorRotateDest != *destination ||
           *state.preparedVectorRotateSelector != *rotateSelector) {
         return bundle.emitOpError()
-               << "ADD-side vector-rotate small_imm selector " << *rotateSelector
-               << " requires a prepared MUL-side rotate in the preceding spacer";
+               << "ADD-side vector-rotate small_imm selector "
+               << *rotateSelector
+               << " requires a prepared MUL-side rotate in the preceding "
+                  "spacer";
       }
       std::string preparedSource = "r" + std::to_string(*destination);
       if (bundle.getAddA() == mlir::vc4::QPUMux::b)
         src0 = preparedSource;
-      if (!isUnaryAddOpcode(opcode) &&
-          bundle.getAddB() == mlir::vc4::QPUMux::b)
+      if (!isUnaryAddOpcode(opcode) && bundle.getAddB() == mlir::vc4::QPUMux::b)
         src1 = preparedSource;
       state.preparedVectorRotateDest = std::nullopt;
       state.preparedVectorRotateSelector = std::nullopt;
@@ -2003,8 +2011,8 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   bool useMovAlias = false;
   std::string movAliasSource = src0;
   if (cond == mlir::vc4::Cond::always && !op->hasAttr("set_flags")) {
-    if (opcode == mlir::vc4::AddOpcode::bit_or &&
-        !unpackSuffix->empty() && bundle.getAddA() == bundle.getAddB()) {
+    if (opcode == mlir::vc4::AddOpcode::bit_or && !unpackSuffix->empty() &&
+        bundle.getAddA() == bundle.getAddB()) {
       useMovAlias = true;
       movAliasSource = src1;
     } else if (opcode == mlir::vc4::AddOpcode::bit_or && src0 == src1) {
@@ -2034,10 +2042,10 @@ static LogicalResult appendAddInstruction(mlir::vc4::QPUBundleOp bundle,
   std::string dest =
       cond == mlir::vc4::Cond::never
           ? std::string("-")
-          : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_add"),
-                               /*forAddALU=*/true,
-                               bundle.getOperation()->hasAttr("write_swap")) +
+          : formatWriteAddress(
+                getIntegerAttrValue(bundle.getOperation(), "waddr_add"),
+                /*forAddALU=*/true,
+                bundle.getOperation()->hasAttr("write_swap")) +
                 *packSuffix;
   line += " ";
   line += dest;
@@ -2098,10 +2106,10 @@ static LogicalResult appendMulInstruction(mlir::vc4::QPUBundleOp bundle,
   std::string dest =
       cond == mlir::vc4::Cond::never
           ? std::string("-")
-          : formatWriteAddress(getIntegerAttrValue(bundle.getOperation(),
-                                                   "waddr_mul"),
-                               /*forAddALU=*/false,
-                               bundle.getOperation()->hasAttr("write_swap")) +
+          : formatWriteAddress(
+                getIntegerAttrValue(bundle.getOperation(), "waddr_mul"),
+                /*forAddALU=*/false,
+                bundle.getOperation()->hasAttr("write_swap")) +
                 *packSuffix;
   line += " ";
   line += dest;
@@ -2179,7 +2187,8 @@ formatReadOnlyRegisterAccess(mlir::vc4::QPUBundleOp bundle) {
     }
   };
 
-  if (std::optional<int64_t> raddrB = getOptionalIntegerAttrValue(op, "raddr_b")) {
+  if (std::optional<int64_t> raddrB =
+          getOptionalIntegerAttrValue(op, "raddr_b")) {
     if (std::optional<std::string> read = formatPseudoRead(*raddrB))
       return read;
   }
@@ -2233,8 +2242,7 @@ static LogicalResult emitQPUBundleQASM(mlir::vc4::QPUBundleOp bundle,
 
 static LogicalResult emitQPUVPMVCDWritePseudoQASM(
     mlir::Operation *op, mlir::vc4::Cond cond, mlir::vc4::AddOpcode opcode,
-    mlir::vc4::QPUMux addA,
-    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
     mlir::vc4::QPUMux mulB, llvm::StringRef destination,
     llvm::raw_ostream &os) {
   if (cond == mlir::vc4::Cond::never || opcode == mlir::vc4::AddOpcode::nop) {
@@ -2270,25 +2278,24 @@ static LogicalResult emitQPUVPMVCDWritePseudoQASM(
     os << ".setf";
   if (cond != mlir::vc4::Cond::never)
     os << getConditionSuffix(cond);
-  os << " " << destination << ", "
-     << (useMovAlias ? movAliasSource : src0);
+  os << " " << destination << ", " << (useMovAlias ? movAliasSource : src0);
   if (!useMovAlias && !isUnaryAddOpcode(opcode))
     os << ", " << src1;
   os << "\n";
   return success();
 }
 
-static LogicalResult emitQPUVPMVCDSetupQASM(
-    mlir::vc4::QPUVPMVCDSetupOp setup,
-    llvm::raw_ostream &os) {
+static LogicalResult emitQPUVPMVCDSetupQASM(mlir::vc4::QPUVPMVCDSetupOp setup,
+                                            llvm::raw_ostream &os) {
   return emitQPUVPMVCDWritePseudoQASM(
       setup.getOperation(), setup.getCondAdd(), setup.getOpAdd(),
-      setup.getAddA(), setup.getAddB(), setup.getMulA(),
-      setup.getMulB(), getVPMSetupName(setup.getSide()), os);
+      setup.getAddA(), setup.getAddB(), setup.getMulA(), setup.getMulB(),
+      getVPMSetupName(setup.getSide()), os);
 }
 
-static LogicalResult emitQPUVPMVCDSetupLDIQASM(
-    mlir::vc4::QPUVPMVCDSetupLDIOp setup, llvm::raw_ostream &os) {
+static LogicalResult
+emitQPUVPMVCDSetupLDIQASM(mlir::vc4::QPUVPMVCDSetupLDIOp setup,
+                          llvm::raw_ostream &os) {
   if (setup.getCondAdd() == mlir::vc4::Cond::never) {
     return setup.emitOpError()
            << "cannot emit inactive VPM/VCD/VDW setup LDI pseudo-op";
@@ -2309,17 +2316,16 @@ static LogicalResult emitQPUVPMVCDSetupLDIQASM(
   return success();
 }
 
-static LogicalResult emitQPUVPMVCDAddrQASM(
-    mlir::vc4::QPUVPMVCDAddrOp addr,
-    llvm::raw_ostream &os) {
+static LogicalResult emitQPUVPMVCDAddrQASM(mlir::vc4::QPUVPMVCDAddrOp addr,
+                                           llvm::raw_ostream &os) {
   return emitQPUVPMVCDWritePseudoQASM(
-      addr.getOperation(), addr.getCondAdd(), addr.getOpAdd(),
-      addr.getAddA(), addr.getAddB(), addr.getMulA(), addr.getMulB(),
+      addr.getOperation(), addr.getCondAdd(), addr.getOpAdd(), addr.getAddA(),
+      addr.getAddB(), addr.getMulA(), addr.getMulB(),
       getVPMAddressName(addr.getSide()), os);
 }
 
-static LogicalResult emitQPUVPMVCDWaitQASM(
-    mlir::vc4::QPUVPMVCDWaitOp wait, llvm::raw_ostream &os) {
+static LogicalResult emitQPUVPMVCDWaitQASM(mlir::vc4::QPUVPMVCDWaitOp wait,
+                                           llvm::raw_ostream &os) {
   os << "read " << getVPMWaitName(wait.getSide()) << "\n";
   return success();
 }
@@ -2345,10 +2351,11 @@ formatPerElementLDIImmediate(llvm::ArrayRef<int32_t> values) {
   return result;
 }
 
-static LogicalResult buildLoadLikeDestinationList(
-    mlir::Operation *op, mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
-    bool pm, llvm::StringRef packSuffix, std::string &destList,
-    mlir::vc4::Cond &emittedCond) {
+static LogicalResult
+buildLoadLikeDestinationList(mlir::Operation *op, mlir::vc4::Cond condAdd,
+                             mlir::vc4::Cond condMul, bool pm,
+                             llvm::StringRef packSuffix, std::string &destList,
+                             mlir::vc4::Cond &emittedCond) {
   const bool addWrites = condAdd != mlir::vc4::Cond::never;
   const bool mulWrites = condMul != mlir::vc4::Cond::never;
   const bool writeSwap = op->hasAttr("write_swap");
@@ -2366,13 +2373,13 @@ static LogicalResult buildLoadLikeDestinationList(
               "instructions before the artifact boundary";
   }
 
-  std::string addDest = formatWriteAddress(
-      getIntegerAttrValue(op, "waddr_add"), /*forAddALU=*/true, writeSwap);
+  std::string addDest = formatWriteAddress(getIntegerAttrValue(op, "waddr_add"),
+                                           /*forAddALU=*/true, writeSwap);
   if (!pm)
     addDest += packSuffix.str();
 
-  std::string mulDest = formatWriteAddress(
-      getIntegerAttrValue(op, "waddr_mul"), /*forAddALU=*/false, writeSwap);
+  std::string mulDest = formatWriteAddress(getIntegerAttrValue(op, "waddr_mul"),
+                                           /*forAddALU=*/false, writeSwap);
   if (pm)
     mulDest += packSuffix.str();
 
@@ -2416,10 +2423,9 @@ static LogicalResult emitQPULDIQASM(mlir::vc4::QPULDIOp ldi,
 
   std::string destinations;
   mlir::vc4::Cond emittedCond = mlir::vc4::Cond::always;
-  if (failed(buildLoadLikeDestinationList(ldi.getOperation(), ldi.getCondAdd(),
-                                          ldi.getCondMul(), ldi.getPm(),
-                                          *packSuffix, destinations,
-                                          emittedCond)))
+  if (failed(buildLoadLikeDestinationList(
+          ldi.getOperation(), ldi.getCondAdd(), ldi.getCondMul(), ldi.getPm(),
+          *packSuffix, destinations, emittedCond)))
     return failure();
 
   std::string opcode = "ldi";
@@ -2628,11 +2634,10 @@ resolveRelativeBranchImmediateToSlot(unsigned slotIndex, int64_t immediate,
   return static_cast<unsigned>(targetSlot);
 }
 
-static std::string formatBranchTargetExpression(bool relative, bool useReg,
-                                                int64_t immediate,
-                                                unsigned slotIndex,
-                                                unsigned streamSize,
-                                                std::optional<unsigned> &targetSlot) {
+static std::string
+formatBranchTargetExpression(bool relative, bool useReg, int64_t immediate,
+                             unsigned slotIndex, unsigned streamSize,
+                             std::optional<unsigned> &targetSlot) {
   targetSlot = std::nullopt;
   if (relative && !useReg) {
     targetSlot =
@@ -2645,8 +2650,7 @@ static std::string formatBranchTargetExpression(bool relative, bool useReg,
 }
 
 static LogicalResult emitQPUBranchQASM(mlir::vc4::QPUBranchOp branch,
-                                       unsigned slotIndex,
-                                       unsigned streamSize,
+                                       unsigned slotIndex, unsigned streamSize,
                                        llvm::raw_ostream &os) {
   mlir::Operation *op = branch.getOperation();
   const bool relative = getBoolAttrValue(op, "relative");
@@ -2683,8 +2687,7 @@ static LogicalResult emitQPUBranchQASM(mlir::vc4::QPUBranchOp branch,
   }
 
   os << " # qpu.branch label=" << getQPUInstructionLabel(slotIndex)
-     << " target=" << (relative ? "relative" : "absolute") << ":"
-     << immediate;
+     << " target=" << (relative ? "relative" : "absolute") << ":" << immediate;
   if (targetSlot)
     os << " target_label=" << getQPUInstructionLabel(*targetSlot);
   os << " delay_slots=3\n";
@@ -2696,7 +2699,8 @@ static LogicalResult writeQASM(KernelRecord &kernel,
   std::string qasm;
   llvm::raw_string_ostream qasmOS(qasm);
   QASMEmissionState qasmState;
-  const bool emitInstructionLabels = hasBranchInstruction(kernel.scheduledStream);
+  const bool emitInstructionLabels =
+      hasBranchInstruction(kernel.scheduledStream);
 
   for (unsigned slotIndex = 0; slotIndex != kernel.scheduledStream.size();
        ++slotIndex) {
@@ -2706,7 +2710,9 @@ static LogicalResult writeQASM(KernelRecord &kernel,
       qasmOS << ":" << getQPUInstructionLabel(slotIndex) << "\n";
 
     if (auto branch = llvm::dyn_cast<mlir::vc4::QPUBranchOp>(op)) {
-      if (failed(emitQPUBranchQASM(branch, slotIndex, static_cast<unsigned>(kernel.scheduledStream.size()), qasmOS)))
+      if (failed(emitQPUBranchQASM(
+              branch, slotIndex,
+              static_cast<unsigned>(kernel.scheduledStream.size()), qasmOS)))
         return failure();
       continue;
     }
@@ -2737,10 +2743,11 @@ static LogicalResult writeQASM(KernelRecord &kernel,
 
     if (auto bundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(op)) {
       if (slotIndex + 1 < kernel.scheduledStream.size()) {
-        if (auto nextBundle =
-                llvm::dyn_cast<mlir::vc4::QPUBundleOp>(kernel.scheduledStream[slotIndex + 1])) {
+        if (auto nextBundle = llvm::dyn_cast<mlir::vc4::QPUBundleOp>(
+                kernel.scheduledStream[slotIndex + 1])) {
           if (canPrepareVectorRotateFromSpacer(bundle, nextBundle)) {
-            if (failed(emitVectorRotatePrepBundle(bundle, nextBundle, qasmState, qasmOS)))
+            if (failed(emitVectorRotatePrepBundle(bundle, nextBundle, qasmState,
+                                                  qasmOS)))
               return failure();
             continue;
           }
@@ -2768,8 +2775,7 @@ static LogicalResult writeQASM(KernelRecord &kernel,
   }
   qasmOS.flush();
 
-  return writeBundleFile(kernel.func.getOperation(), bundleDir,
-                         kernel.qasmPath,
+  return writeBundleFile(kernel.func.getOperation(), bundleDir, kernel.qasmPath,
                          [&](llvm::raw_ostream &os) { os << qasm; });
 }
 
@@ -2853,8 +2859,8 @@ collectLaunchABIBufferArguments(const LaunchABIModel &launchABI) {
   return buffers;
 }
 
-static std::string getBufferElementCTypeForCodegen(
-    const LaunchABIArgumentModel &arg) {
+static std::string
+getBufferElementCTypeForCodegen(const LaunchABIArgumentModel &arg) {
   std::optional<std::string> elemType = getElementCType(arg.elementType);
   if (elemType)
     return *elemType;
@@ -2911,7 +2917,8 @@ getRuntimeBuiltinRequestInfoField(llvm::StringRef kind) {
 }
 
 static void appendRuntimeAPIDeclarations(llvm::raw_ostream &os) {
-  os << "int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes);\n";
+  os << "int vc4_program_create(struct vc4_program **out, uint32_t "
+        "requested_bytes);\n";
   os << "\n";
 }
 
@@ -2920,41 +2927,42 @@ static LogicalResult writeLauncherHeader(llvm::ArrayRef<KernelRecord> kernels,
   if (kernels.empty())
     return failure();
   mlir::vc4::FuncOp firstFunc = kernels.front().func;
-  return writeBundleFile(firstFunc.getOperation(), bundleDir,
-                         "kernel_launch.h", [&](llvm::raw_ostream &os) {
-                           os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_H\n";
-                           os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
-                           os << "#include <stdint.h>\n";
-                           os << "#include \"vc4_runtime.h\"\n\n";
-                           os << "#ifdef __cplusplus\n";
-                           os << "extern \"C\" {\n";
-                           os << "#endif\n\n";
-                           appendRuntimeAPIDeclarations(os);
-                           for (const KernelRecord &kernel : kernels) {
-                             appendLauncherPrototype(os, kernel.launchABI);
-                             os << ";\n";
-                           }
-                           os << "\n";
-                           os << "uint32_t "
-                              << getRuntimeAllocationsFunctionName(kernels.front().launchABI)
-                              << "(void);\n";
-                           os << "uint32_t "
-                              << getRuntimeLaunchesFunctionName(kernels.front().launchABI)
-                              << "(void);\n";
-                           os << "uint32_t "
-                              << getRuntimeCapacityFunctionName(kernels.front().launchABI)
-                              << "(void);\n";
-                           os << "uint32_t "
-                              << getRuntimeCodeUploadsFunctionName(kernels.front().launchABI)
-                              << "(void);\n";
-                           os << "uint32_t "
-                              << getRuntimeLaunchFailuresFunctionName(kernels.front().launchABI)
-                              << "(void);\n\n";
-                           os << "#ifdef __cplusplus\n";
-                           os << "}\n";
-                           os << "#endif\n\n";
-                           os << "#endif // VC4_CODEGEN_KERNEL_LAUNCH_H\n";
-                         });
+  return writeBundleFile(
+      firstFunc.getOperation(), bundleDir, "kernel_launch.h",
+      [&](llvm::raw_ostream &os) {
+        os << "#ifndef VC4_CODEGEN_KERNEL_LAUNCH_H\n";
+        os << "#define VC4_CODEGEN_KERNEL_LAUNCH_H\n\n";
+        os << "#include <stdint.h>\n";
+        os << "#include \"vc4_runtime.h\"\n\n";
+        os << "#ifdef __cplusplus\n";
+        os << "extern \"C\" {\n";
+        os << "#endif\n\n";
+        appendRuntimeAPIDeclarations(os);
+        for (const KernelRecord &kernel : kernels) {
+          appendLauncherPrototype(os, kernel.launchABI);
+          os << ";\n";
+        }
+        os << "\n";
+        os << "uint32_t "
+           << getRuntimeAllocationsFunctionName(kernels.front().launchABI)
+           << "(void);\n";
+        os << "uint32_t "
+           << getRuntimeLaunchesFunctionName(kernels.front().launchABI)
+           << "(void);\n";
+        os << "uint32_t "
+           << getRuntimeCapacityFunctionName(kernels.front().launchABI)
+           << "(void);\n";
+        os << "uint32_t "
+           << getRuntimeCodeUploadsFunctionName(kernels.front().launchABI)
+           << "(void);\n";
+        os << "uint32_t "
+           << getRuntimeLaunchFailuresFunctionName(kernels.front().launchABI)
+           << "(void);\n\n";
+        os << "#ifdef __cplusplus\n";
+        os << "}\n";
+        os << "#endif\n\n";
+        os << "#endif // VC4_CODEGEN_KERNEL_LAUNCH_H\n";
+      });
 }
 
 static bool launchABIRequiresF32Packing(const LaunchABIModel &launchABI) {
@@ -2986,8 +2994,9 @@ findLaunchABIBuiltinForUniformIndex(const LaunchABIModel &launchABI,
   return nullptr;
 }
 
-static void appendLauncherUniformLayoutComment(
-    llvm::raw_ostream &os, const LaunchABIModel &launchABI) {
+static void
+appendLauncherUniformLayoutComment(llvm::raw_ostream &os,
+                                   const LaunchABIModel &launchABI) {
   os << "  /*\n";
   os << "   * Dense physical uniform layout per logical request, ordered by ";
   os << "vc4.launch_abi uniform_index:\n";
@@ -3017,10 +3026,12 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   const LaunchABIModel &firstABI = firstKernel.launchABI;
   const std::string apiBase = getLaunchAPIBaseName(firstABI);
   const std::string stateName = apiBase + "_program_state";
-  const std::string allocationsName = getRuntimeAllocationsFunctionName(firstABI);
+  const std::string allocationsName =
+      getRuntimeAllocationsFunctionName(firstABI);
   const std::string launchesName = getRuntimeLaunchesFunctionName(firstABI);
   const std::string capacityName = getRuntimeCapacityFunctionName(firstABI);
-  const std::string codeUploadsName = getRuntimeCodeUploadsFunctionName(firstABI);
+  const std::string codeUploadsName =
+      getRuntimeCodeUploadsFunctionName(firstABI);
   const std::string launchFailuresName =
       getRuntimeLaunchFailuresFunctionName(firstABI);
 
@@ -3049,10 +3060,10 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "#include <stddef.h>\n";
   os << "#include <stdint.h>\n";
   os << "#include <string.h>\n\n";
-  os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES "
-     << programLayout.heapBytes << "u\n";
-  os << "#define VC4_CODEGEN_SPILL_FRAME_ALIGNMENT "
-     << kVC4SpillFrameAlignment << "u\n";
+  os << "#define VC4_CODEGEN_PROGRAM_HEAP_BYTES " << programLayout.heapBytes
+     << "u\n";
+  os << "#define VC4_CODEGEN_SPILL_FRAME_ALIGNMENT " << kVC4SpillFrameAlignment
+     << "u\n";
   os << "#define VC4_CODEGEN_SPILL_ARENA_BYTES "
      << programLayout.spillArenaBytes << "u\n";
   os << "#define VC4_CODEGEN_TARGET_VPM_BYTES 4096u\n";
@@ -3063,15 +3074,16 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_FRAME_BYTES "
        << macroKernel.spill.frameBytes << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId
-       << "_SPILL_FRAME_STRIDE_BYTES "
-       << macroKernel.spill.strideBytes << "u\n";
+       << "_SPILL_FRAME_STRIDE_BYTES " << macroKernel.spill.strideBytes
+       << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_FRAME_COUNT "
        << macroKernel.spill.frameCount << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_SPILL_ARENA_BYTES "
        << macroKernel.spill.arenaBytes << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_WARPS_PER_BLOCK "
        << macroKernel.resources.warpsPerBlock << "u\n";
-    os << "#define KERNEL_" << macroKernel.kernelId << "_SEMAPHORE_COUNT_PER_BLOCK "
+    os << "#define KERNEL_" << macroKernel.kernelId
+       << "_SEMAPHORE_COUNT_PER_BLOCK "
        << macroKernel.resources.semaphoreCountPerBlock << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId
        << "_USER_VPM_ROWS_PER_BLOCK "
@@ -3085,7 +3097,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "#define KERNEL_" << macroKernel.kernelId
        << "_SPILL_VPM_ROWS_PER_BLOCK "
        << macroKernel.resources.spillVPMRowsPerBlock << "u\n";
-    os << "#define KERNEL_" << macroKernel.kernelId << "_TOTAL_VPM_ROWS_PER_BLOCK "
+    os << "#define KERNEL_" << macroKernel.kernelId
+       << "_TOTAL_VPM_ROWS_PER_BLOCK "
        << macroKernel.resources.totalVPMRowsPerBlock << "u\n";
     os << "#define KERNEL_" << macroKernel.kernelId << "_MAX_RESIDENT_BLOCKS "
        << macroKernel.resources.maxResidentBlocks << "u\n";
@@ -3116,7 +3129,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "}\n\n";
   }
 
-  os << "static uint32_t vc4_codegen_ceil_div_u32(uint32_t value, uint32_t divisor) {\n";
+  os << "static uint32_t vc4_codegen_ceil_div_u32(uint32_t value, uint32_t "
+        "divisor) {\n";
   os << "  if (value == 0u)\n";
   os << "    return 0u;\n";
   os << "  if (divisor == 0u)\n";
@@ -3125,7 +3139,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "}\n\n";
 
   if (requiresSaturatingMul) {
-    os << "static uint32_t vc4_codegen_saturating_mul_u32(uint32_t lhs, uint32_t rhs) {\n";
+    os << "static uint32_t vc4_codegen_saturating_mul_u32(uint32_t lhs, "
+          "uint32_t rhs) {\n";
     os << "  if (lhs != 0u && rhs > 0xffffffffu / lhs)\n";
     os << "    return 0xffffffffu;\n";
     os << "  return lhs * rhs;\n";
@@ -3133,7 +3148,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   }
 
   if (requiresLaunchElements) {
-    os << "static uint32_t vc4_codegen_launch_elements(vc4_dim3 grid, vc4_dim3 block) {\n";
+    os << "static uint32_t vc4_codegen_launch_elements(vc4_dim3 grid, vc4_dim3 "
+          "block) {\n";
     os << "  uint32_t total = 1u;\n";
     os << "  total = vc4_codegen_saturating_mul_u32(total, grid.x);\n";
     os << "  total = vc4_codegen_saturating_mul_u32(total, grid.y);\n";
@@ -3205,8 +3221,7 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "      .semaphore_count_per_block = KERNEL_" << kernel.kernelId
        << "_SEMAPHORE_COUNT_PER_BLOCK,\n";
     os << "      .requires_vpm_base_row_builtin = "
-       << (kernel.resources.requiresVPMBaseRowBuiltin ? "1u" : "0u")
-       << ",\n";
+       << (kernel.resources.requiresVPMBaseRowBuiltin ? "1u" : "0u") << ",\n";
     os << "      .requires_semaphore_base_builtin = "
        << (kernel.resources.requiresSemaphoreBaseBuiltin ? "1u" : "0u")
        << ",\n";
@@ -3228,14 +3243,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
        << " schedule_mode=" << resourceKernel.resources.scheduleMode
        << " resident_blocks=" << resourceKernel.resources.maxResidentBlocks
        << " warps_per_block=" << resourceKernel.resources.warpsPerBlock
-       << " semaphore_base=resident_slot*" << resourceKernel.resources.semaphoreCountPerBlock
-       << " vpm_base_row=resident_slot*" << resourceKernel.resources.totalVPMRowsPerBlock
-       << " user_vpm_rows="
-       << resourceKernel.resources.userVPMRowsPerBlock
+       << " semaphore_base=resident_slot*"
+       << resourceKernel.resources.semaphoreCountPerBlock
+       << " vpm_base_row=resident_slot*"
+       << resourceKernel.resources.totalVPMRowsPerBlock
+       << " user_vpm_rows=" << resourceKernel.resources.userVPMRowsPerBlock
        << " compiler_vpm_staging_rows="
        << resourceKernel.resources.compilerVPMStagingRowsPerBlock
-       << " spill_vpm_rows="
-       << resourceKernel.resources.spillVPMRowsPerBlock
+       << " spill_vpm_rows=" << resourceKernel.resources.spillVPMRowsPerBlock
        << " resident_wave_wait_before_resource_reuse="
        << (resourceKernel.resources.scheduleMode == "cooperative_block" ? 1 : 0)
        << " */\n";
@@ -3273,12 +3288,15 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
   os << "\n";
   os << "static const struct vc4_module_image vc4_codegen_module = {\n";
   os << "  VC4_RUNTIME_MODULE_VERSION,\n";
-  os << "  (uint32_t)(sizeof(vc4_codegen_kernels) / sizeof(vc4_codegen_kernels[0])),\n";
+  os << "  (uint32_t)(sizeof(vc4_codegen_kernels) / "
+        "sizeof(vc4_codegen_kernels[0])),\n";
   os << "  VC4_CODEGEN_PROGRAM_HEAP_BYTES,\n";
   os << "  vc4_codegen_kernels,\n";
   os << "};\n\n";
-  os << "int vc4_program_create(struct vc4_program **out, uint32_t requested_bytes) {\n";
-  os << "  return vc4ProgramCreateFromImage(out, &vc4_codegen_module, requested_bytes);\n";
+  os << "int vc4_program_create(struct vc4_program **out, uint32_t "
+        "requested_bytes) {\n";
+  os << "  return vc4ProgramCreateFromImage(out, &vc4_codegen_module, "
+        "requested_bytes);\n";
   os << "}\n\n";
 
   for (const KernelRecord &launchKernel : kernels) {
@@ -3302,11 +3320,13 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
     os << "};\n\n";
 
     os << "static int " << kernelBase
-       << "_pack_uniforms(void *opaque, const struct vc4_launch_request_info *requestInfo, "
+       << "_pack_uniforms(void *opaque, const struct vc4_launch_request_info "
+          "*requestInfo, "
           "uint32_t *uniformWords, uint32_t uniformWordsPerRequest) {\n";
-    os << "  struct " << kernelBase
-       << "_pack_ctx *ctx = (struct " << kernelBase << "_pack_ctx *)opaque;\n";
-    os << "  if (!ctx || !requestInfo || !uniformWords || uniformWordsPerRequest < KERNEL_"
+    os << "  struct " << kernelBase << "_pack_ctx *ctx = (struct " << kernelBase
+       << "_pack_ctx *)opaque;\n";
+    os << "  if (!ctx || !requestInfo || !uniformWords || "
+          "uniformWordsPerRequest < KERNEL_"
        << launchKernel.kernelId << "_NUM_UNIFS)\n";
     os << "    return -1;\n";
     appendLauncherUniformLayoutComment(os, kernelABI);
@@ -3314,14 +3334,14 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       if (const LaunchABIArgumentModel *arg =
               findLaunchABIArgumentForUniformIndex(kernelABI, index)) {
         if (arg->kind == LaunchABIArgumentKind::Buffer) {
-          os << "  uniformWords[" << index << "] = (uint32_t)ctx->"
-             << arg->name << "; /* arg " << arg->name << " */\n";
+          os << "  uniformWords[" << index << "] = (uint32_t)ctx->" << arg->name
+             << "; /* arg " << arg->name << " */\n";
         } else if (arg->scalarType == "f32") {
           os << "  uniformWords[" << index << "] = vc4_codegen_pack_f32(ctx->"
              << arg->name << "); /* arg " << arg->name << " */\n";
         } else {
-          os << "  uniformWords[" << index << "] = (uint32_t)ctx->"
-             << arg->name << "; /* arg " << arg->name << " */\n";
+          os << "  uniformWords[" << index << "] = (uint32_t)ctx->" << arg->name
+             << "; /* arg " << arg->name << " */\n";
         }
         continue;
       }
@@ -3332,24 +3352,21 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
           if (launchKernel.resources.scheduleMode == "cooperative_block") {
             os << "  uniformWords[" << index
                << "] = requestInfo->vpm_base_row + KERNEL_"
-               << launchKernel.kernelId
-               << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
                << launchKernel.kernelId
                << "_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId << "_WARPS_PER_BLOCK * KERNEL_"
                << launchKernel.kernelId
-               << "_WARPS_PER_BLOCK * KERNEL_"
-               << launchKernel.kernelId
-               << "_COMPILER_VPM_STAGING_ROWS_PER_WARP + requestInfo->logical_warp_id; /* builtin "
+               << "_COMPILER_VPM_STAGING_ROWS_PER_WARP + "
+                  "requestInfo->logical_warp_id; /* builtin "
                << builtin->name << " */\n";
           } else {
             os << "  uniformWords[" << index
                << "] = requestInfo->vpm_base_row + KERNEL_"
-               << launchKernel.kernelId
-               << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
+               << launchKernel.kernelId << "_USER_VPM_ROWS_PER_BLOCK + KERNEL_"
                << launchKernel.kernelId
                << "_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_"
-               << launchKernel.kernelId
-               << "_WARPS_PER_BLOCK * KERNEL_"
+               << launchKernel.kernelId << "_WARPS_PER_BLOCK * KERNEL_"
                << launchKernel.kernelId
                << "_COMPILER_VPM_STAGING_ROWS_PER_WARP; /* builtin "
                << builtin->name << " */\n";
@@ -3360,8 +3377,9 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
             getRuntimeBuiltinRequestInfoField(builtin->kind);
         if (!field) {
           return emitLaunchABIModelError(
-              launchKernel.func, llvm::Twine("builtin '") + builtin->name +
-                                    "' has unsupported kind for launcher uniform packing");
+              launchKernel.func,
+              llvm::Twine("builtin '") + builtin->name +
+                  "' has unsupported kind for launcher uniform packing");
         }
         os << "  uniformWords[" << index << "] = requestInfo->" << *field
            << "; /* builtin " << builtin->name << " */\n";
@@ -3389,15 +3407,21 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       os << "  uint32_t gridBlocks = vc4_codegen_grid_blocks(grid);\n";
       os << "  uint32_t warpsPerBlock = vc4_codegen_block_warps(block);\n";
       os << "  uint32_t logicalN = gridBlocks;\n";
-      os << "  if (warpsPerBlock == 0u || warpsPerBlock > KERNEL_" << launchKernel.kernelId << "_WARPS_PER_BLOCK || warpsPerBlock > VC4_RUNTIME_MAX_QPUS) {\n";
+      os << "  if (warpsPerBlock == 0u || warpsPerBlock > KERNEL_"
+         << launchKernel.kernelId
+         << "_WARPS_PER_BLOCK || warpsPerBlock > VC4_RUNTIME_MAX_QPUS) {\n";
       os << "    vc4ProgramRecordLaunchFailure(program);\n";
       os << "    return -1;\n";
       os << "  }\n";
-      os << "  /* schedule_mode=cooperative_block; runtime computes resident_blocks and waits before VPM/semaphore resource reuse. */\n";
-      os << "  uint32_t totalRequests = vc4_codegen_saturating_mul_u32(gridBlocks, warpsPerBlock);\n";
+      os << "  /* schedule_mode=cooperative_block; runtime computes "
+            "resident_blocks and waits before VPM/semaphore resource reuse. "
+            "*/\n";
+      os << "  uint32_t totalRequests = "
+            "vc4_codegen_saturating_mul_u32(gridBlocks, warpsPerBlock);\n";
     } else {
       os << "  uint32_t logicalN = vc4_codegen_launch_elements(grid, block);\n";
-      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, VC4_RUNTIME_LANE_WIDTH);\n";
+      os << "  uint32_t totalRequests = vc4_codegen_ceil_div_u32(logicalN, "
+            "VC4_RUNTIME_LANE_WIDTH);\n";
       os << "  uint32_t warpsPerBlock = 1u;\n";
       os << "  (void)grid;\n";
       os << "  (void)block;\n";
@@ -3407,7 +3431,8 @@ static LogicalResult writeLauncherSource(llvm::ArrayRef<KernelRecord> kernels,
       std::string elemType = getBufferElementCTypeForCodegen(*arg);
       os << "  if (totalRequests != 0u) {\n";
       os << "    size_t arg_bytes = sizeof(" << elemType << ");\n";
-      os << "    if (arg_bytes > 0xffffffffu || !vc4DeviceRangeIsAllocated(program, "
+      os << "    if (arg_bytes > 0xffffffffu || "
+            "!vc4DeviceRangeIsAllocated(program, "
          << arg->name << ", (uint32_t)arg_bytes)) {\n";
       os << "      vc4ProgramRecordLaunchFailure(program);\n";
       os << "      return -1;\n";
@@ -3456,9 +3481,8 @@ static void appendManifestLaunchABIArgument(llvm::raw_ostream &os,
   os << "      {\"name\": ";
   appendJSONEscapedString(os, arg.name);
   os << ", \"kind\": ";
-  appendJSONEscapedString(os, arg.kind == LaunchABIArgumentKind::Scalar
-                                  ? "scalar"
-                                  : "buffer");
+  appendJSONEscapedString(
+      os, arg.kind == LaunchABIArgumentKind::Scalar ? "scalar" : "buffer");
   os << ", \"direction\": ";
   appendJSONEscapedString(os, arg.direction);
   if (arg.kind == LaunchABIArgumentKind::Scalar) {
@@ -3526,21 +3550,18 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "      \"code_symbol\": ";
   appendJSONEscapedString(os, kernel.launchABI.codeSymbol);
   os << ",\n";
-  os << "      \"scheduled_sink_ops\": "
-     << kernel.info.scheduledOpCount << ",\n";
+  os << "      \"scheduled_sink_ops\": " << kernel.info.scheduledOpCount
+     << ",\n";
   os << "      \"uniform_words_per_request\": "
      << kernel.info.uniformWordsPerQPU << ",\n";
-  os << "      \"uniform_words_per_qpu\": "
-     << kernel.info.uniformWordsPerQPU << ",\n";
+  os << "      \"uniform_words_per_qpu\": " << kernel.info.uniformWordsPerQPU
+     << ",\n";
   os << "      \"max_requests_per_wave\": 12,\n";
-  os << "      \"spill_frame_bytes\": "
-     << kernel.info.spillFrameBytes << ",\n";
+  os << "      \"spill_frame_bytes\": " << kernel.info.spillFrameBytes << ",\n";
   os << "      \"spill_frame_stride_bytes\": "
      << kernel.info.spillFrameStrideBytes << ",\n";
-  os << "      \"spill_frame_count\": "
-     << kernel.info.spillFrameCount << ",\n";
-  os << "      \"spill_arena_bytes\": "
-     << kernel.info.spillArenaBytes << ",\n";
+  os << "      \"spill_frame_count\": " << kernel.info.spillFrameCount << ",\n";
+  os << "      \"spill_arena_bytes\": " << kernel.info.spillArenaBytes << ",\n";
   os << "      \"tail_policy\": ";
   appendJSONEscapedString(os, kernel.launchABI.tailPolicy);
   os << ",\n";
@@ -3557,30 +3578,48 @@ static void appendManifestKernelEntry(llvm::raw_ostream &os,
   os << "        \"schedule_mode\": ";
   appendJSONEscapedString(os, kernel.resources.scheduleMode);
   os << ",\n";
-  os << "        \"warps_per_block\": " << kernel.resources.warpsPerBlock << ",\n";
-  os << "        \"user_vpm_rows_per_block\": " << kernel.resources.userVPMRowsPerBlock << ",\n";
-  os << "        \"compiler_vpm_staging_rows_per_warp\": " << kernel.resources.compilerVPMStagingRowsPerWarp << ",\n";
-  os << "        \"compiler_vpm_staging_rows_per_block\": " << kernel.resources.compilerVPMStagingRowsPerBlock << ",\n";
-  os << "        \"spill_vpm_rows_per_block\": " << kernel.resources.spillVPMRowsPerBlock << ",\n";
-  os << "        \"total_vpm_rows_per_block\": " << kernel.resources.totalVPMRowsPerBlock << ",\n";
-  os << "        \"uses_tmu\": " << (kernel.resources.usesTMU ? "true" : "false") << ",\n";
-  os << "        \"uses_vpm\": " << (kernel.resources.usesVPM ? "true" : "false") << ",\n";
-  os << "        \"uses_vpm_qpu_read\": " << (kernel.resources.usesVPMQPURead ? "true" : "false") << ",\n";
-  os << "        \"uses_vpm_qpu_write\": " << (kernel.resources.usesVPMQPUWrite ? "true" : "false") << ",\n";
-  os << "        \"uses_vdr\": " << (kernel.resources.usesVDR ? "true" : "false") << ",\n";
-  os << "        \"uses_vdw\": " << (kernel.resources.usesVDW ? "true" : "false") << ",\n";
-  os << "        \"uses_barrier\": " << (kernel.resources.usesBarrier ? "true" : "false") << ",\n";
-  os << "        \"semaphore_count_per_block\": " << kernel.resources.semaphoreCountPerBlock << ",\n";
-  os << "        \"requires_vpm_base_row_builtin\": " << (kernel.resources.requiresVPMBaseRowBuiltin ? "true" : "false") << ",\n";
-  os << "        \"requires_semaphore_base_builtin\": " << (kernel.resources.requiresSemaphoreBaseBuiltin ? "true" : "false") << ",\n";
-  os << "        \"max_resident_blocks\": " << kernel.resources.maxResidentBlocks << "\n";
+  os << "        \"warps_per_block\": " << kernel.resources.warpsPerBlock
+     << ",\n";
+  os << "        \"user_vpm_rows_per_block\": "
+     << kernel.resources.userVPMRowsPerBlock << ",\n";
+  os << "        \"compiler_vpm_staging_rows_per_warp\": "
+     << kernel.resources.compilerVPMStagingRowsPerWarp << ",\n";
+  os << "        \"compiler_vpm_staging_rows_per_block\": "
+     << kernel.resources.compilerVPMStagingRowsPerBlock << ",\n";
+  os << "        \"spill_vpm_rows_per_block\": "
+     << kernel.resources.spillVPMRowsPerBlock << ",\n";
+  os << "        \"total_vpm_rows_per_block\": "
+     << kernel.resources.totalVPMRowsPerBlock << ",\n";
+  os << "        \"uses_tmu\": "
+     << (kernel.resources.usesTMU ? "true" : "false") << ",\n";
+  os << "        \"uses_vpm\": "
+     << (kernel.resources.usesVPM ? "true" : "false") << ",\n";
+  os << "        \"uses_vpm_qpu_read\": "
+     << (kernel.resources.usesVPMQPURead ? "true" : "false") << ",\n";
+  os << "        \"uses_vpm_qpu_write\": "
+     << (kernel.resources.usesVPMQPUWrite ? "true" : "false") << ",\n";
+  os << "        \"uses_vdr\": "
+     << (kernel.resources.usesVDR ? "true" : "false") << ",\n";
+  os << "        \"uses_vdw\": "
+     << (kernel.resources.usesVDW ? "true" : "false") << ",\n";
+  os << "        \"uses_barrier\": "
+     << (kernel.resources.usesBarrier ? "true" : "false") << ",\n";
+  os << "        \"semaphore_count_per_block\": "
+     << kernel.resources.semaphoreCountPerBlock << ",\n";
+  os << "        \"requires_vpm_base_row_builtin\": "
+     << (kernel.resources.requiresVPMBaseRowBuiltin ? "true" : "false")
+     << ",\n";
+  os << "        \"requires_semaphore_base_builtin\": "
+     << (kernel.resources.requiresSemaphoreBaseBuiltin ? "true" : "false")
+     << ",\n";
+  os << "        \"max_resident_blocks\": "
+     << kernel.resources.maxResidentBlocks << "\n";
   os << "      }\n";
   os << "    }";
   if (trailingComma)
     os << ",";
   os << "\n";
 }
-
 
 static void appendLayoutRegionJSON(llvm::raw_ostream &os,
                                    const ProgramLayoutRegion &region,
@@ -3636,18 +3675,15 @@ static void appendKernelLayoutJSON(llvm::raw_ostream &os,
   appendLayoutByteRange(os, kernel.unifPtrOffset, kernel.unifPtrSize);
   os << ",\n";
   os << "      \"code_words\": " << kernel.codeWords << ",\n";
-  os << "      \"uniform_words_per_request\": "
-     << kernel.uniformWordsPerRequest << ",\n";
-  os << "      \"max_requests_per_wave\": "
-     << kernel.maxRequestsPerWave << ",\n";
-  os << "      \"spill_frame_bytes\": "
-     << kernel.spillFrameBytes << ",\n";
-  os << "      \"spill_frame_stride_bytes\": "
-     << kernel.spillFrameStrideBytes << ",\n";
-  os << "      \"spill_frame_count\": "
-     << kernel.spillFrameCount << ",\n";
-  os << "      \"spill_arena_bytes\": "
-     << kernel.spillArenaBytes << "\n";
+  os << "      \"uniform_words_per_request\": " << kernel.uniformWordsPerRequest
+     << ",\n";
+  os << "      \"max_requests_per_wave\": " << kernel.maxRequestsPerWave
+     << ",\n";
+  os << "      \"spill_frame_bytes\": " << kernel.spillFrameBytes << ",\n";
+  os << "      \"spill_frame_stride_bytes\": " << kernel.spillFrameStrideBytes
+     << ",\n";
+  os << "      \"spill_frame_count\": " << kernel.spillFrameCount << ",\n";
+  os << "      \"spill_arena_bytes\": " << kernel.spillArenaBytes << "\n";
   os << "    }";
   if (trailingComma)
     os << ",";
@@ -3658,102 +3694,93 @@ static LogicalResult writeProgramLayout(mlir::vc4::ModuleOp vc4Module,
                                         llvm::ArrayRef<KernelRecord> kernels,
                                         llvm::StringRef bundleDir) {
   ProgramLayoutModel layout = buildProgramLayoutModel(kernels);
-  return writeBundleFile(vc4Module.getOperation(), bundleDir, "layout.json",
-                         [&](llvm::raw_ostream &os) {
-                           os << "{\n";
-                           os << "  \"schema_version\": 1,\n";
-                           os << "  \"kind\": \"vc4-program-layout\",\n";
-                           os << "  \"program_name\": ";
-                           appendJSONEscapedString(os, vc4Module.getSymName());
-                           os << ",\n";
-                           os << "  \"alignment\": " << layout.alignment << ",\n";
-                           os << "  \"kernel_count\": " << kernels.size() << ",\n";
-                           os << "  \"max_active_qpus\": "
-                              << kVC4MaxRequestsPerWave << ",\n";
-                           os << "  \"program_bytes\": "
-                              << layout.programBytes << ",\n";
-                           os << "  \"static_bytes\": "
-                              << layout.staticBytes << ",\n";
-                           os << "  \"spill_frame_alignment_bytes\": "
-                              << kVC4SpillFrameAlignment << ",\n";
-                           os << "  \"max_spill_arena_bytes\": "
-                              << layout.spillArenaBytes << ",\n";
-                           os << "  \"hidden_spill_arena_bytes\": "
-                              << layout.spillArenaBytes << ",\n";
-                           os << "  \"hidden_spill_arena\": ";
-                           appendLayoutByteRange(os, layout.spillArenaOffset,
-                                                 layout.spillArenaBytes);
-                           os << ",\n";
-                           os << "  \"heap_offset\": "
-                              << layout.heapOffset << ",\n";
-                           os << "  \"heap_offset_bytes\": "
-                              << layout.heapOffset << ",\n";
-                           os << "  \"heap_bytes\": "
-                              << layout.heapBytes << ",\n";
-                           os << "  \"heap_size_bytes\": "
-                              << layout.heapBytes << ",\n";
-                           os << "  \"heap\": ";
-                           appendLayoutByteRange(os, layout.heapOffset,
-                                                 layout.heapBytes);
-                           os << ",\n";
-                           os << "  \"regions\": [\n";
-                           for (size_t i = 0; i != layout.regions.size(); ++i) {
-                             appendLayoutRegionJSON(
-                                 os, layout.regions[i],
+  return writeBundleFile(
+      vc4Module.getOperation(), bundleDir, "layout.json",
+      [&](llvm::raw_ostream &os) {
+        os << "{\n";
+        os << "  \"schema_version\": 1,\n";
+        os << "  \"kind\": \"vc4-program-layout\",\n";
+        os << "  \"program_name\": ";
+        appendJSONEscapedString(os, vc4Module.getSymName());
+        os << ",\n";
+        os << "  \"alignment\": " << layout.alignment << ",\n";
+        os << "  \"kernel_count\": " << kernels.size() << ",\n";
+        os << "  \"max_active_qpus\": " << kVC4MaxRequestsPerWave << ",\n";
+        os << "  \"program_bytes\": " << layout.programBytes << ",\n";
+        os << "  \"static_bytes\": " << layout.staticBytes << ",\n";
+        os << "  \"spill_frame_alignment_bytes\": " << kVC4SpillFrameAlignment
+           << ",\n";
+        os << "  \"max_spill_arena_bytes\": " << layout.spillArenaBytes
+           << ",\n";
+        os << "  \"hidden_spill_arena_bytes\": " << layout.spillArenaBytes
+           << ",\n";
+        os << "  \"hidden_spill_arena\": ";
+        appendLayoutByteRange(os, layout.spillArenaOffset,
+                              layout.spillArenaBytes);
+        os << ",\n";
+        os << "  \"heap_offset\": " << layout.heapOffset << ",\n";
+        os << "  \"heap_offset_bytes\": " << layout.heapOffset << ",\n";
+        os << "  \"heap_bytes\": " << layout.heapBytes << ",\n";
+        os << "  \"heap_size_bytes\": " << layout.heapBytes << ",\n";
+        os << "  \"heap\": ";
+        appendLayoutByteRange(os, layout.heapOffset, layout.heapBytes);
+        os << ",\n";
+        os << "  \"regions\": [\n";
+        for (size_t i = 0; i != layout.regions.size(); ++i) {
+          appendLayoutRegionJSON(os, layout.regions[i],
                                  i + 1 != layout.regions.size());
-                           }
-                           os << "  ],\n";
-                           os << "  \"kernels\": [\n";
-                           for (size_t i = 0; i != layout.kernels.size(); ++i) {
-                             appendKernelLayoutJSON(
-                                 os, layout.kernels[i],
+        }
+        os << "  ],\n";
+        os << "  \"kernels\": [\n";
+        for (size_t i = 0; i != layout.kernels.size(); ++i) {
+          appendKernelLayoutJSON(os, layout.kernels[i],
                                  i + 1 != layout.kernels.size());
-                           }
-                           os << "  ]\n";
-                           os << "}\n";
-                         });
+        }
+        os << "  ]\n";
+        os << "}\n";
+      });
 }
 
 static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
                                    llvm::ArrayRef<KernelRecord> kernels,
                                    llvm::StringRef bundleDir) {
   ProgramLayoutModel layout = buildProgramLayoutModel(kernels);
-  return writeBundleFile(vc4Module.getOperation(), bundleDir, "manifest.json",
-                         [&](llvm::raw_ostream &os) {
-                           os << "{\n";
-                           os << "  \"schema_version\": 2,\n";
-                           os << "  \"kind\": \"vc4-codegen-artifact-bundle\",\n";
-                           os << "  \"program_name\": ";
-                           appendJSONEscapedString(os, vc4Module.getSymName());
-                           os << ",\n";
-                           os << "  \"target\": {\n";
-                           os << "    \"name\": \"vc4-bcm2835-user-qpu\",\n";
-                           os << "    \"warp_size\": 16,\n";
-                           os << "    \"max_active_qpus\": 12,\n";
-                           os << "    \"total_vpm_bytes\": 4096,\n";
-                           os << "    \"semaphores\": 16\n";
-                           os << "  },\n";
-                           os << "  \"spill_frame_alignment_bytes\": "
-                              << kVC4SpillFrameAlignment << ",\n";
-                           os << "  \"max_spill_arena_bytes\": "
-                              << layout.spillArenaBytes << ",\n";
-                           os << "  \"kernels\": [\n";
-                           for (size_t i = 0; i != kernels.size(); ++i) {
-                             appendManifestKernelEntry(
-                                 os, kernels[i], i + 1 != kernels.size());
-                           }
-                           os << "  ],\n";
-                           os << "  \"artifacts\": [\n";
-                           os << "    \"kernel_launch.c\",\n";
-                           os << "    \"kernel_launch.h\",\n";
-                           os << "    \"layout.json\"";
-                           for (const KernelRecord &kernel : kernels) {
-                             os << ",\n    ";
-                             appendJSONEscapedString(os, kernel.qasmPath);
-                           }
-                           os << "\n  ]\n";
-                           os << "}\n";
-                         });
+  return writeBundleFile(
+      vc4Module.getOperation(), bundleDir, "manifest.json",
+      [&](llvm::raw_ostream &os) {
+        os << "{\n";
+        os << "  \"schema_version\": 2,\n";
+        os << "  \"kind\": \"vc4-codegen-artifact-bundle\",\n";
+        os << "  \"program_name\": ";
+        appendJSONEscapedString(os, vc4Module.getSymName());
+        os << ",\n";
+        os << "  \"target\": {\n";
+        os << "    \"name\": \"vc4-bcm2835-user-qpu\",\n";
+        os << "    \"warp_size\": 16,\n";
+        os << "    \"max_active_qpus\": 12,\n";
+        os << "    \"total_vpm_bytes\": 4096,\n";
+        os << "    \"semaphores\": 16\n";
+        os << "  },\n";
+        os << "  \"spill_frame_alignment_bytes\": " << kVC4SpillFrameAlignment
+           << ",\n";
+        os << "  \"max_spill_arena_bytes\": " << layout.spillArenaBytes
+           << ",\n";
+        os << "  \"kernels\": [\n";
+        for (size_t i = 0; i != kernels.size(); ++i) {
+          appendManifestKernelEntry(os, kernels[i], i + 1 != kernels.size());
+        }
+        os << "  ],\n";
+        os << "  \"artifacts\": [\n";
+        os << "    \"kernel_launch.c\",\n";
+        os << "    \"kernel_launch.h\",\n";
+        os << "    \"layout.json\"";
+        for (const KernelRecord &kernel : kernels) {
+          os << ",\n    ";
+          appendJSONEscapedString(os, kernel.qasmPath);
+        }
+        os << "\n  ]\n";
+        os << "}\n";
+      });
 }
 
 } // namespace
@@ -3761,9 +3788,8 @@ static LogicalResult writeManifest(mlir::vc4::ModuleOp vc4Module,
 LogicalResult mlir::vc4::emitVC4ArtifactBundle(mlir::ModuleOp module,
                                                llvm::StringRef bundleDir) {
   llvm::SmallVector<mlir::vc4::ModuleOp, 1> vc4Modules;
-  module.walk([&](mlir::vc4::ModuleOp vc4Module) {
-    vc4Modules.push_back(vc4Module);
-  });
+  module.walk(
+      [&](mlir::vc4::ModuleOp vc4Module) { vc4Modules.push_back(vc4Module); });
   if (vc4Modules.size() != 1) {
     return module.emitError()
            << "expected exactly one vc4.module for artifact emission";

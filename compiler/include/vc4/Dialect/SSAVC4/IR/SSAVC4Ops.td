@@ -145,6 +145,25 @@ def SSAVC4_ALUMulOp : SSAVC4_PureOp<"alu.mul"> {
   let hasVerifier = 1;
 }
 
+def SSAVC4_SFUOp : SSAVC4_Op<"sfu"> {
+  let summary = "SSAVC4 ordered VC4 special-functions unit operation";
+  let description = [{
+    Issues one finite-domain approximate VC4 SFU operation and returns the
+    result delivered through accumulator r4 after the architectural two-slot
+    hazard window.  The operation preserves the approximate policy and domain
+    contract from VC4Kernel instead of becoming a raw scheduled register write.
+  }];
+  let arguments = (ins
+    AnyType:$input,
+    SSAVC4_SFUKindAttr:$kind,
+    SSAVC4_FPMathPolicyAttr:$fp_policy,
+    SSAVC4_FPDomainAttr:$domain
+  );
+  let results = (outs AnyType:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def SSAVC4_PackOp : SSAVC4_PureOp<"pack"> {
   let summary = "SSAVC4 pack value transform";
   let arguments = (ins AnyType:$input, OptionalAttr<AnyAttr>:$mode);

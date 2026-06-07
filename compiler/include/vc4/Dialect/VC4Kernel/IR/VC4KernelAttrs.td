@@ -70,6 +70,27 @@ def VC4Kernel_FPReducePolicy : VC4Kernel_DialectI32Enum<"FPReducePolicy",
       I32EnumAttrCase<"finite_tree", 0>
     ]>;
 
+def VC4Kernel_SFUKind : VC4Kernel_DialectI32Enum<"SFUKind",
+    "VC4Kernel hardware special-functions unit kind", [
+      I32EnumAttrCase<"recip", 52>,
+      I32EnumAttrCase<"rsqrt", 53>,
+      I32EnumAttrCase<"exp", 54>,
+      I32EnumAttrCase<"log", 55>
+    ]>;
+
+def VC4Kernel_FPMathPolicy : VC4Kernel_DialectI32Enum<"FPMathPolicy",
+    "VC4Kernel explicit approximate floating-point math policy", [
+      I32EnumAttrCase<"approx_sfu", 0>,
+      I32EnumAttrCase<"exact", 1>
+    ]>;
+
+def VC4Kernel_FPDomain : VC4Kernel_DialectI32Enum<"FPDomain",
+    "VC4Kernel explicit finite floating-point domain contract", [
+      I32EnumAttrCase<"finite", 0>,
+      I32EnumAttrCase<"finite_nonzero", 1>,
+      I32EnumAttrCase<"finite_positive", 2>
+    ]>;
+
 def VC4Kernel_AddALUOpcode : VC4Kernel_DialectI32Enum<"AddALUOpcode",
     "VC4Kernel ADD-pipe fragment ALU opcode", [
       I32EnumAttrCase<"nop", 0>,
@@ -195,6 +216,12 @@ def VC4Kernel_FPCmpPolicyAttr
     : VC4Kernel_EnumAttr<VC4Kernel_FPCmpPolicy, "fp_cmp_policy">;
 def VC4Kernel_FPReducePolicyAttr
     : VC4Kernel_EnumAttr<VC4Kernel_FPReducePolicy, "fp_reduce_policy">;
+def VC4Kernel_SFUKindAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_SFUKind, "sfu_kind">;
+def VC4Kernel_FPMathPolicyAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_FPMathPolicy, "fp_math_policy">;
+def VC4Kernel_FPDomainAttr
+    : VC4Kernel_EnumAttr<VC4Kernel_FPDomain, "fp_domain">;
 def VC4Kernel_AddALUOpcodeAttr
     : VC4Kernel_EnumAttr<VC4Kernel_AddALUOpcode, "add_alu_opcode">;
 def VC4Kernel_MulALUOpcodeAttr

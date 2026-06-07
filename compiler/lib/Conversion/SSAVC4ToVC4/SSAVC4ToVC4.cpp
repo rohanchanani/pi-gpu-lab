@@ -50,12 +50,14 @@ constexpr llvm::StringLiteral kSSAVC4ModuleOpName("ssavc4.module");
 constexpr llvm::StringLiteral kSSAVC4FuncOpName("ssavc4.func");
 constexpr llvm::StringLiteral kSSAVC4ThreadEndOpName("ssavc4.thread_end");
 constexpr llvm::StringLiteral kSSAVC4LoadImmOpName("ssavc4.load_imm");
-constexpr llvm::StringLiteral kSSAVC4ElementNumberOpName("ssavc4.element_number");
+constexpr llvm::StringLiteral
+    kSSAVC4ElementNumberOpName("ssavc4.element_number");
 constexpr llvm::StringLiteral kSSAVC4UniformReadOpName("ssavc4.uniform.read");
 constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
+constexpr llvm::StringLiteral kSSAVC4SFUOpName("ssavc4.sfu");
 constexpr llvm::StringLiteral kSSAVC4MakeFlagsOpName("ssavc4.make_flags");
 constexpr llvm::StringLiteral kSSAVC4CondSelectOpName("ssavc4.cond_select");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
@@ -78,8 +80,7 @@ constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 
-static std::optional<int64_t>
-getDMAElemBytes(mlir::ssavc4::VPMElemWidth width);
+static std::optional<int64_t> getDMAElemBytes(mlir::ssavc4::VPMElemWidth width);
 
 constexpr int64_t kMaxVDWStrideGapBytes = 0x1fff;
 constexpr int64_t kMaxVDRMPITCHBBytes = 0x1fff;
@@ -105,7 +106,8 @@ static StringAttr getSymbolNameAttr(Operation *op) {
 }
 
 static FunctionType getFunctionType(Operation *op, MLIRContext *ctx) {
-  if (auto typeAttr = llvm::dyn_cast_or_null<TypeAttr>(op->getAttr("function_type"))) {
+  if (auto typeAttr =
+          llvm::dyn_cast_or_null<TypeAttr>(op->getAttr("function_type"))) {
     if (auto fnType = llvm::dyn_cast<FunctionType>(typeAttr.getValue()))
       return fnType;
   }
@@ -118,18 +120,13 @@ static void addAttrIfPresent(Operation *source, OperationState &state,
     state.addAttribute(name, attr);
 }
 
-static void addCommonBundleAttrs(OpBuilder &builder, OperationState &state,
-                                 mlir::vc4::QPUSignal signal,
-                                 mlir::vc4::Cond condAdd,
-                                 mlir::vc4::Cond condMul,
-                                 int64_t waddrAdd, int64_t waddrMul,
-                                 mlir::vc4::AddOpcode addOpcode,
-                                 mlir::vc4::MulOpcode mulOpcode,
-                                 int64_t raddrA, int64_t raddrB,
-                                 mlir::vc4::QPUMux addA,
-                                 mlir::vc4::QPUMux addB,
-                                 mlir::vc4::QPUMux mulA,
-                                 mlir::vc4::QPUMux mulB) {
+static void addCommonBundleAttrs(
+    OpBuilder &builder, OperationState &state, mlir::vc4::QPUSignal signal,
+    mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul, int64_t waddrAdd,
+    int64_t waddrMul, mlir::vc4::AddOpcode addOpcode,
+    mlir::vc4::MulOpcode mulOpcode, int64_t raddrA, int64_t raddrB,
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB) {
   MLIRContext *ctx = builder.getContext();
   state.addAttribute("sig", mlir::vc4::QPUSignalAttr::get(ctx, signal));
   state.addAttribute("pm", builder.getBoolAttr(false));
@@ -179,8 +176,7 @@ static void createThreadEndSequence(OpBuilder &builder, Location loc) {
 
 static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
                                         mlir::vc4::BranchCond cond,
-                                        int64_t immediate,
-                                        int64_t raddrA = 14,
+                                        int64_t immediate, int64_t raddrA = 14,
                                         int64_t waddrAdd = 31,
                                         int64_t waddrMul = 30) {
   MLIRContext *ctx = builder.getContext();
@@ -202,7 +198,6 @@ static Operation *createScheduledBranch(OpBuilder &builder, Location loc,
     createNopBundle(delayBuilder, loc);
   return branch;
 }
-
 
 static Operation *createScheduledBundle(
     OpBuilder &builder, Location loc, mlir::vc4::QPUSignal signal,
@@ -243,9 +238,8 @@ static Operation *createVPMVCDWritePseudoOp(
     mlir::vc4::VPMVCDSide side, mlir::vc4::Cond condAdd,
     mlir::vc4::Cond condMul, mlir::vc4::AddOpcode addOpcode,
     mlir::vc4::MulOpcode mulOpcode, int64_t raddrA, int64_t raddrB,
-    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB,
-    mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
-    std::optional<int64_t> smallImm = std::nullopt) {
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt) {
   MLIRContext *ctx = builder.getContext();
   OperationState state(loc, opName);
   state.addAttribute("side", mlir::vc4::VPMVCDSideAttr::get(ctx, side));
@@ -266,37 +260,26 @@ static Operation *createVPMVCDWritePseudoOp(
   return builder.create(state);
 }
 
-static Operation *createVPMVCDSetup(OpBuilder &builder, Location loc,
-                                    mlir::vc4::VPMVCDSide side,
-                                    mlir::vc4::Cond condAdd,
-                                    mlir::vc4::Cond condMul,
-                                    mlir::vc4::AddOpcode addOpcode,
-                                    mlir::vc4::MulOpcode mulOpcode,
-                                    int64_t raddrA, int64_t raddrB,
-                                    mlir::vc4::QPUMux addA,
-                                    mlir::vc4::QPUMux addB,
-                                    mlir::vc4::QPUMux mulA,
-                                    mlir::vc4::QPUMux mulB,
-                                    std::optional<int64_t> smallImm =
-                                        std::nullopt) {
+static Operation *createVPMVCDSetup(
+    OpBuilder &builder, Location loc, mlir::vc4::VPMVCDSide side,
+    mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
+    mlir::vc4::AddOpcode addOpcode, mlir::vc4::MulOpcode mulOpcode,
+    int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
+    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
+    std::optional<int64_t> smallImm = std::nullopt) {
   return createVPMVCDWritePseudoOp(
-      builder, loc, "vc4.qpu.vpmvcd_setup", side, condAdd, condMul,
-      addOpcode, mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm);
+      builder, loc, "vc4.qpu.vpmvcd_setup", side, condAdd, condMul, addOpcode,
+      mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm);
 }
 
-static Operation *createVPMVCDAddr(OpBuilder &builder, Location loc,
-                                   mlir::vc4::VPMVCDSide side,
-                                   mlir::vc4::Cond condAdd,
-                                   mlir::vc4::Cond condMul,
-                                   mlir::vc4::AddOpcode addOpcode,
-                                   mlir::vc4::MulOpcode mulOpcode,
-                                   int64_t raddrA, int64_t raddrB,
-                                   mlir::vc4::QPUMux addA,
-                                   mlir::vc4::QPUMux addB,
-                                   mlir::vc4::QPUMux mulA,
-                                   mlir::vc4::QPUMux mulB,
-                                   std::optional<int64_t> smallImm =
-                                       std::nullopt) {
+static Operation *
+createVPMVCDAddr(OpBuilder &builder, Location loc, mlir::vc4::VPMVCDSide side,
+                 mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
+                 mlir::vc4::AddOpcode addOpcode, mlir::vc4::MulOpcode mulOpcode,
+                 int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
+                 mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+                 mlir::vc4::QPUMux mulB,
+                 std::optional<int64_t> smallImm = std::nullopt) {
   return createVPMVCDWritePseudoOp(
       builder, loc, "vc4.qpu.vpmvcd_addr", side, condAdd, condMul, addOpcode,
       mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm);
@@ -315,14 +298,16 @@ static Operation *createSplat32LDIWithMul(OpBuilder &builder, Location loc,
                                           int64_t waddrMul) {
   MLIRContext *ctx = builder.getContext();
   OperationState state(loc, "vc4.qpu.ldi");
-  state.addAttribute("mode", mlir::vc4::LoadImmModeAttr::get(ctx, mlir::vc4::LoadImmMode::splat32));
+  state.addAttribute("mode", mlir::vc4::LoadImmModeAttr::get(
+                                 ctx, mlir::vc4::LoadImmMode::splat32));
   state.addAttribute("value", builder.getI32IntegerAttr(value));
   state.addAttribute("pm", builder.getBoolAttr(false));
-  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
-  state.addAttribute("cond_mul",
-                     mlir::vc4::CondAttr::get(
-                         ctx, waddrMul == 32 ? mlir::vc4::Cond::never
-                                             : mlir::vc4::Cond::always));
+  state.addAttribute("cond_add",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
+  state.addAttribute(
+      "cond_mul",
+      mlir::vc4::CondAttr::get(ctx, waddrMul == 32 ? mlir::vc4::Cond::never
+                                                   : mlir::vc4::Cond::always));
   state.addAttribute("waddr_add", builder.getI32IntegerAttr(waddrAdd));
   state.addAttribute("waddr_mul", builder.getI32IntegerAttr(waddrMul));
   return builder.create(state);
@@ -330,7 +315,8 @@ static Operation *createSplat32LDIWithMul(OpBuilder &builder, Location loc,
 
 static Operation *createSplat32LDI(OpBuilder &builder, Location loc,
                                    int64_t value, int64_t waddrAdd) {
-  return createSplat32LDIWithMul(builder, loc, value, waddrAdd, /*waddrMul=*/32);
+  return createSplat32LDIWithMul(builder, loc, value, waddrAdd,
+                                 /*waddrMul=*/32);
 }
 
 static Operation *createNopLDISlot(OpBuilder &builder, Location loc) {
@@ -350,16 +336,14 @@ static Operation *createNopLDISlot(OpBuilder &builder, Location loc) {
 }
 
 static Operation *emitMutexRelease(OpBuilder &builder, Location loc) {
-  return createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                               mlir::vc4::Cond::always,
-                               mlir::vc4::Cond::never,
-                               /*waddrAdd=*/51, /*waddrMul=*/32,
-                               mlir::vc4::AddOpcode::add,
-                               mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                               /*raddrB=*/0, mlir::vc4::QPUMux::b,
-                               mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                               mlir::vc4::QPUMux::r1,
-                               /*smallImm=*/0);
+  return createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/51, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/0);
 }
 
 static int64_t getI32IntegerAttrOr(Operation *op, llvm::StringRef name,
@@ -372,14 +356,15 @@ static int64_t getI32IntegerAttrOr(Operation *op, llvm::StringRef name,
 
 static bool isVector16I32Type(Type type) {
   auto vectorType = llvm::dyn_cast<VectorType>(type);
-  return vectorType && vectorType.getRank() == 1 && vectorType.getDimSize(0) == 16 &&
+  return vectorType && vectorType.getRank() == 1 &&
+         vectorType.getDimSize(0) == 16 &&
          vectorType.getElementType().isSignlessInteger(32);
 }
 
 static bool isVector16F32Type(Type type) {
   auto vectorType = llvm::dyn_cast<VectorType>(type);
-  return vectorType && vectorType.getRank() == 1 && vectorType.getDimSize(0) == 16 &&
-         vectorType.getElementType().isF32();
+  return vectorType && vectorType.getRank() == 1 &&
+         vectorType.getDimSize(0) == 16 && vectorType.getElementType().isF32();
 }
 
 static bool isScalarI32OrVector16I32(Type type) {
@@ -416,6 +401,7 @@ struct InstructionTemplate {
     Mov,
     ALUAdd,
     ALUMul,
+    SFU,
     MakeFlags,
     CondSelect,
     EdgeCopy,
@@ -512,8 +498,8 @@ static bool isAllocatableSSAValue(Value value,
   return false;
 }
 
-static LivenessSummary computeLiveness(
-    ArrayRef<InstructionTemplate> templates, ArrayRef<VirtualValue> virtualValues) {
+static LivenessSummary computeLiveness(ArrayRef<InstructionTemplate> templates,
+                                       ArrayRef<VirtualValue> virtualValues) {
   LivenessSummary summary;
   summary.virtualValueCount = virtualValues.size();
   DenseMap<Block *, unsigned> blockOrder;
@@ -574,7 +560,8 @@ static LivenessSummary computeLiveness(
   return summary;
 }
 
-static bool hasSuccessorOperandsForEdge(Operation *op, unsigned successorIndex) {
+static bool hasSuccessorOperandsForEdge(Operation *op,
+                                        unsigned successorIndex) {
   if (auto branch = llvm::dyn_cast<mlir::ssavc4::BranchOp>(op))
     return successorIndex == 0 && !branch.getTargetOperands().empty();
   if (auto condBranch = llvm::dyn_cast<mlir::ssavc4::CondBranchOp>(op)) {
@@ -693,7 +680,8 @@ private:
       if (regIt == registers.end())
         return;
       auto lastUseIt = liveness.lastUseIndex.find(value);
-      if (lastUseIt == liveness.lastUseIndex.end() || lastUseIt->second != index)
+      if (lastUseIt == liveness.lastUseIndex.end() ||
+          lastUseIt->second != index)
         return;
       freeRegisters.push_back(regIt->second);
       releasedValues[value] = true;
@@ -727,8 +715,9 @@ private:
     return success();
   }
 
-  LogicalResult verifyS3SpillingSupported(
-      Operation *diagnosticAnchor, ArrayRef<InstructionTemplate> templates) const {
+  LogicalResult
+  verifyS3SpillingSupported(Operation *diagnosticAnchor,
+                            ArrayRef<InstructionTemplate> templates) const {
     bool sawNonUniform = false;
     DenseMap<Block *, unsigned> blockOrder;
     for (const InstructionTemplate &templ : templates) {
@@ -800,7 +789,8 @@ private:
                      << "S3 spilling requires explicit successor operands for "
                         "loop/backedge branches to block arguments";
             if (!dominates(successor, templ.sourceBlock))
-              return templ.source->emitOpError() << kP3UnsupportedLoopDiagnostic;
+              return templ.source->emitOpError()
+                     << kP3UnsupportedLoopDiagnostic;
           }
         }
         sawNonUniform = true;
@@ -879,7 +869,8 @@ private:
       freeRegisters.clear();
       for (int64_t reg = 31; reg >= 0; --reg)
         if (!isReservedInSpillMode(reg) &&
-            std::find(reservedRegisterHomes.begin(), reservedRegisterHomes.end(),
+            std::find(reservedRegisterHomes.begin(),
+                      reservedRegisterHomes.end(),
                       reg) == reservedRegisterHomes.end())
           freeRegisters.push_back(reg);
     };
@@ -1048,9 +1039,8 @@ private:
             SpillSlot slot = getOrCreateSpillSlot(value);
             if (slotValid[value])
               continue;
-            actions.push_back(
-                SpillAction{SpillAction::Kind::Store, value, slot,
-                            activeIt->second});
+            actions.push_back(SpillAction{SpillAction::Kind::Store, value, slot,
+                                          activeIt->second});
             slotValid[value] = true;
           }
         };
@@ -1118,8 +1108,7 @@ private:
         spillPlan.locations[destination] =
             ValueLocation{LocationKind::Register, endpoint.physicalReg, 0};
         slotValid[destination] = false;
-      } else if (auto blockArgHomeIt =
-                     blockArgumentHomeSlots.find(destination);
+      } else if (auto blockArgHomeIt = blockArgumentHomeSlots.find(destination);
                  blockArgHomeIt != blockArgumentHomeSlots.end()) {
         EdgeCopyEndpoint endpoint;
         endpoint.kind = LocationKind::SpillSlot;
@@ -1143,8 +1132,8 @@ private:
           endpoint.kind = LocationKind::SpillSlot;
           endpoint.slot = existingDestSlot->second;
           destinationEndpoint = endpoint;
-          spillPlan.locations[destination] = ValueLocation{
-              LocationKind::SpillSlot, -1, endpoint.slot.index};
+          spillPlan.locations[destination] =
+              ValueLocation{LocationKind::SpillSlot, -1, endpoint.slot.index};
           slotValid[destination] = true;
         }
       }
@@ -1192,8 +1181,8 @@ private:
         slotValid[destination] = true;
       }
 
-      allocation.edgeCopy = EdgeCopyAllocation{*sourceEndpoint,
-                                               *destinationEndpoint};
+      allocation.edgeCopy =
+          EdgeCopyAllocation{*sourceEndpoint, *destinationEndpoint};
       if (destinationEndpoint->kind == LocationKind::Register)
         allocation.resultRegister = destinationEndpoint->physicalReg;
       if (sourceEndpoint->kind == LocationKind::Register)
@@ -1214,11 +1203,11 @@ private:
         if (activeLayoutBlockId && templ.sourceBlock && activeSourceBlock) {
           auto predIt = predecessors.find(templ.sourceBlock);
           auto naturalIt = naturalBlockIds.find(activeSourceBlock);
-          keepActiveState =
-              predIt != predecessors.end() && predIt->second.size() == 1 &&
-              predIt->second.front() == activeSourceBlock &&
-              naturalIt != naturalBlockIds.end() &&
-              *activeLayoutBlockId == naturalIt->second;
+          keepActiveState = predIt != predecessors.end() &&
+                            predIt->second.size() == 1 &&
+                            predIt->second.front() == activeSourceBlock &&
+                            naturalIt != naturalBlockIds.end() &&
+                            *activeLayoutBlockId == naturalIt->second;
         }
         if (activeLayoutBlockId && !keepActiveState) {
           activeRegisters.clear();
@@ -1284,7 +1273,8 @@ private:
       if (templ.kind == InstructionTemplate::Kind::Branch) {
         ensureFutureLiveValuesHaveBranchSlots(index, allocation.preActions);
       } else if (templ.kind == InstructionTemplate::Kind::CondBranch) {
-        SmallVectorImpl<SpillAction> *branchSlotActions = &allocation.preActions;
+        SmallVectorImpl<SpillAction> *branchSlotActions =
+            &allocation.preActions;
         if (index > 0 &&
             templates[index - 1].kind == InstructionTemplate::Kind::MakeFlags &&
             templates[index - 1].sourceBlock == templ.sourceBlock)
@@ -1342,8 +1332,9 @@ static bool isPhysicalRegFileWriteAddress(int64_t waddr) {
   return waddr >= 0 && waddr < 32;
 }
 
-static bool emitsPhysicalRegFileResultWrite(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+static bool
+emitsPhysicalRegFileResultWrite(const InstructionTemplate &templ,
+                                const SpillAwareAllocator &allocator) {
   if (!templ.result)
     return false;
   if (templ.result->use_empty())
@@ -1360,8 +1351,9 @@ struct ResultSpacerSequence {
       createNopLDISlot(builder, loc);
   }
 
-  static ResultSpacerSequence forTemplate(
-      const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+  static ResultSpacerSequence
+  forTemplate(const InstructionTemplate &templ,
+              const SpillAwareAllocator &allocator) {
     return ResultSpacerSequence{
         emitsPhysicalRegFileResultWrite(templ, allocator)};
   }
@@ -1386,8 +1378,7 @@ struct RawVDRSpillReloadSequence {
   static constexpr bool kUseMutex = true;
   static constexpr int64_t kVPMReadSetup = (1 << 20) | 0xa00;
   static constexpr int64_t kVDRSetup =
-      static_cast<int32_t>(0x80000000u | (3u << 24) | (1u << 16) |
-                           (1u << 12));
+      static_cast<int32_t>(0x80000000u | (3u << 24) | (1u << 16) | (1u << 12));
 
   int64_t valueReg = -1;
 
@@ -1419,9 +1410,8 @@ struct EdgeCopySequence {
     bool sourceReg = edgeCopy->source.kind == LocationKind::Register;
     bool destReg = edgeCopy->destination.kind == LocationKind::Register;
     if (sourceReg && destReg) {
-      sequence.registerMove =
-          std::make_pair(edgeCopy->destination.physicalReg,
-                         edgeCopy->source.physicalReg);
+      sequence.registerMove = std::make_pair(edgeCopy->destination.physicalReg,
+                                             edgeCopy->source.physicalReg);
       return sequence;
     }
     if (sourceReg && !destReg) {
@@ -1494,23 +1484,26 @@ struct LayoutSummary {
   DenseMap<unsigned, int64_t> branchImmediates;
 };
 
-static bool canUseMirroredSecondOperandForALU(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator,
-    bool smallImm);
+static bool
+canUseMirroredSecondOperandForALU(const InstructionTemplate &templ,
+                                  const SpillAwareAllocator &allocator,
+                                  bool smallImm);
 static bool hasStringAttr(Operation *op, llvm::StringRef name,
                           llvm::StringRef expected);
-static bool aluNeedsSecondOperandAccumulatorMove(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
-static bool canUseMirroredSecondOperandForMakeFlags(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
+static bool
+aluNeedsSecondOperandAccumulatorMove(const InstructionTemplate &templ,
+                                     const SpillAwareAllocator &allocator);
+static bool
+canUseMirroredSecondOperandForMakeFlags(const InstructionTemplate &templ,
+                                        const SpillAwareAllocator &allocator);
 static bool makeFlagsNeedsSecondOperandAccumulatorMove(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
 static FailureOr<unsigned>
 countTemplateSlotsByEmission(const InstructionTemplate &templ,
                              const SpillAwareAllocator &allocator);
 static FailureOr<unsigned>
-countTemplateBranchPreludeSlotsByEmission(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator);
+countTemplateBranchPreludeSlotsByEmission(const InstructionTemplate &templ,
+                                          const SpillAwareAllocator &allocator);
 static std::optional<uint32_t> encodeVDRMemoryPitchBytes(int64_t bytes);
 
 class BranchLayoutPlanner {
@@ -1530,8 +1523,8 @@ public:
                << "internal lowering error: failed to derive branch layout "
                   "prelude by scheduled emission";
       if (templ.source)
-        layout.opStartSlots.try_emplace(
-            templ.source, slot + *instructionPreludeSlots);
+        layout.opStartSlots.try_emplace(templ.source,
+                                        slot + *instructionPreludeSlots);
       layout.templateStartSlots.try_emplace(templ.ordinal,
                                             slot + *instructionPreludeSlots);
       FailureOr<unsigned> templateSlots =
@@ -1558,8 +1551,8 @@ public:
       auto targetIt = layout.blockStartSlots.find(*templ.branchTargetBlockId);
       if (sourceIt == layout.templateStartSlots.end() ||
           targetIt == layout.blockStartSlots.end())
-        return branchOp->emitError()
-               << "could not compute final scheduled branch layout for successor";
+        return branchOp->emitError() << "could not compute final scheduled "
+                                        "branch layout for successor";
 
       int64_t sourceSlot = static_cast<int64_t>(sourceIt->second);
       int64_t targetSlot = static_cast<int64_t>(targetIt->second);
@@ -1590,9 +1583,8 @@ static std::optional<int64_t> getConstantI32FromLoadImm(Value value) {
 }
 
 static bool isVerticalVPMOp(Operation *op) {
-  auto orientation =
-      llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
-          op->getAttr("orientation"));
+  auto orientation = llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
+      op->getAttr("orientation"));
   return orientation &&
          orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
 }
@@ -1627,8 +1619,7 @@ static DMARectPlan getDMARectPlan(Operation *op, llvm::StringRef xAttrName) {
   return plan;
 }
 
-static LogicalResult verifyDMARectXSpan(Operation *op,
-                                        const DMARectPlan &plan,
+static LogicalResult verifyDMARectXSpan(Operation *op, const DMARectPlan &plan,
                                         llvm::StringRef opName,
                                         llvm::StringRef xAttrName) {
   if (plan.vertical && plan.baseX + plan.maxRows > 16)
@@ -1645,15 +1636,17 @@ static std::optional<int64_t> getSmallImmLiteralSelector(Value value) {
   return constant;
 }
 
-static bool canUseMirroredSecondOperandForALU(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator,
-    bool smallImm) {
+static bool
+canUseMirroredSecondOperandForALU(const InstructionTemplate &templ,
+                                  const SpillAwareAllocator &allocator,
+                                  bool smallImm) {
   return !allocator.hasSpills() && !smallImm && templ.operands.size() == 2 &&
          isMirroredLoadImm(templ.operands[1]);
 }
 
-static bool aluNeedsSecondOperandAccumulatorMove(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+static bool
+aluNeedsSecondOperandAccumulatorMove(const InstructionTemplate &templ,
+                                     const SpillAwareAllocator &allocator) {
   if (templ.operands.size() != 2)
     return false;
   bool smallImm = templ.kind == InstructionTemplate::Kind::ALUAdd &&
@@ -1662,8 +1655,9 @@ static bool aluNeedsSecondOperandAccumulatorMove(
          !canUseMirroredSecondOperandForALU(templ, allocator, smallImm);
 }
 
-static bool canUseMirroredSecondOperandForMakeFlags(
-    const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
+static bool
+canUseMirroredSecondOperandForMakeFlags(const InstructionTemplate &templ,
+                                        const SpillAwareAllocator &allocator) {
   unsigned flagOperandCount =
       templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
   return !allocator.hasSpills() && flagOperandCount == 2 &&
@@ -1677,6 +1671,20 @@ static bool makeFlagsNeedsSecondOperandAccumulatorMove(
   if (flagOperandCount != 2)
     return false;
   return !canUseMirroredSecondOperandForMakeFlags(templ, allocator);
+}
+
+static int64_t getSFUWriteAddress(mlir::ssavc4::SFUKind kind) {
+  switch (kind) {
+  case mlir::ssavc4::SFUKind::recip:
+    return 52;
+  case mlir::ssavc4::SFUKind::rsqrt:
+    return 53;
+  case mlir::ssavc4::SFUKind::exp:
+    return 54;
+  case mlir::ssavc4::SFUKind::log:
+    return 55;
+  }
+  llvm_unreachable("unhandled SSAVC4 SFU kind");
 }
 
 static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
@@ -1694,8 +1702,8 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
         int64_t depart = getI32IntegerAttrOr(&op, "depart_offset", -1);
         int64_t reset = getI32IntegerAttrOr(&op, "reset_offset", -1);
         if (arrive < 0 || go < 0 || depart < 0 || reset < 0)
-          return op.emitOpError()
-                 << "requires non-negative arrive/go/depart/reset semaphore offsets";
+          return op.emitOpError() << "requires non-negative "
+                                     "arrive/go/depart/reset semaphore offsets";
         requiredSemaphores = std::max(requiredSemaphores, arrive + 1);
         requiredSemaphores = std::max(requiredSemaphores, go + 1);
         requiredSemaphores = std::max(requiredSemaphores, depart + 1);
@@ -1708,10 +1716,11 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
           return op.emitOpError("requires exactly one semaphore id operand");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
           return op.emitOpError("requires an i32 semaphore id operand");
-        if (std::optional<int64_t> sem = getConstantI32FromLoadImm(op.getOperand(0))) {
+        if (std::optional<int64_t> sem =
+                getConstantI32FromLoadImm(op.getOperand(0))) {
           if (*sem < 0 || *sem > 15)
-            return op.emitOpError()
-                   << "requires compile-time semaphore id in hardware range [0, 15]";
+            return op.emitOpError() << "requires compile-time semaphore id in "
+                                       "hardware range [0, 15]";
           requiredSemaphores = std::max(requiredSemaphores, *sem + 1);
         }
       }
@@ -1720,9 +1729,8 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
 
   DictionaryAttr resource = getResourceMetadata(func);
   mlir::vc4::SemanticResourceInfo resourceInfo;
-  if (resource &&
-      failed(mlir::vc4::parseSemanticResourceMetadata(
-          func, resource, resourceInfo, /*allowAbsent=*/false)))
+  if (resource && failed(mlir::vc4::parseSemanticResourceMetadata(
+                      func, resource, resourceInfo, /*allowAbsent=*/false)))
     return failure();
   if (sawBarrier) {
     if (!resource)
@@ -1731,7 +1739,8 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
 
     if (resourceInfo.scheduleMode != "cooperative_block")
       return func->emitOpError()
-             << "uses ssavc4.barrier and requires vc4.resource schedule_mode = \"cooperative_block\"";
+             << "uses ssavc4.barrier and requires vc4.resource schedule_mode = "
+                "\"cooperative_block\"";
 
     if (!resourceInfo.usesBarrier)
       return func->emitOpError()
@@ -1743,12 +1752,12 @@ static LogicalResult verifyCooperativeBarrierResources(Operation *func) {
   if (resource && requiredSemaphores > 0) {
     if (resourceInfo.semaphoreCountPerBlock < requiredSemaphores)
       return func->emitOpError()
-             << "vc4.resource semaphore_count_per_block is too small for SSAVC4 semaphore/barrier use";
+             << "vc4.resource semaphore_count_per_block is too small for "
+                "SSAVC4 semaphore/barrier use";
   }
 
   return success();
 }
-
 
 static LogicalResult verifyVPMResource(Operation *func, Operation *vpmOp) {
   DictionaryAttr resource = getResourceMetadata(func);
@@ -1770,13 +1779,13 @@ static LogicalResult verifyVPMResource(Operation *func, Operation *vpmOp) {
 static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
   int64_t lanes = getI32IntegerAttrOr(op, "lanes", -1);
   if (lanes != 16)
-    return op->emitOpError("supports only full 16-lane VPM vectors in M3 lowering");
-  if (!isVector16I32Type(valueType) && !isVector16F32Type(valueType))
     return op->emitOpError(
-        "supports only vector<16xi32> or vector<16xf32> VPM values in M3 lowering");
-  auto orientation =
-      llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
-          op->getAttr("orientation"));
+        "supports only full 16-lane VPM vectors in M3 lowering");
+  if (!isVector16I32Type(valueType) && !isVector16F32Type(valueType))
+    return op->emitOpError("supports only vector<16xi32> or vector<16xf32> VPM "
+                           "values in M3 lowering");
+  auto orientation = llvm::dyn_cast_or_null<mlir::ssavc4::VPMOrientationAttr>(
+      op->getAttr("orientation"));
   if (!orientation)
     return op->emitOpError("requires typed VPM orientation attr");
   auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
@@ -1794,36 +1803,35 @@ static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
   if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
       subword.getValue() == mlir::ssavc4::VPMSubword::none)
     return op->emitOpError(
-        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> "
+        "or #ssavc4.vpm_subword<laned>");
   int64_t x = getI32IntegerAttrOr(op, "x", -1);
   int64_t stride = getI32IntegerAttrOr(op, "stride", -1);
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
       width.getValue() == mlir::ssavc4::VPMElemWidth::w32 && x != 0)
-    return op->emitOpError(
-        "horizontal 32-bit VPM QPU access requires x = 0");
+    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
       width.getValue() == mlir::ssavc4::VPMElemWidth::w16 && x > 1)
-    return op->emitOpError(
-        "horizontal 16-bit VPM QPU access requires halfword selector x in range [0, 1]");
+    return op->emitOpError("horizontal 16-bit VPM QPU access requires halfword "
+                           "selector x in range [0, 1]");
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
       width.getValue() == mlir::ssavc4::VPMElemWidth::w8 && x > 3)
-    return op->emitOpError(
-        "horizontal 8-bit VPM QPU access requires byte selector x in range [0, 3]");
+    return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
+                           "selector x in range [0, 3]");
   if (stride <= 0 || stride > 63)
     return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
 }
 
 static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
-      source->getAttr("width"));
-  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
-      source->getAttr("subword"));
+  auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+      source->getAttr("orientation"));
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
   int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
   int64_t x = getI32IntegerAttrOr(source, "x", 0);
   if (stride < 1 || stride > 63 || x < 0 || x > 15)
@@ -1836,7 +1844,8 @@ static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
   if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32 &&
       subword.getValue() == mlir::ssavc4::VPMSubword::none)
     return source->emitOpError(
-        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> "
+        "or #ssavc4.vpm_subword<laned>");
   int64_t sizeBits = 0;
   switch (width.getValue()) {
   case mlir::ssavc4::VPMElemWidth::w8:
@@ -1858,8 +1867,9 @@ static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
   return (1 << 20) | (stride << 12) | modeBits;
 }
 
-static int64_t getPackedSubwordLogicalRowScale(
-    mlir::ssavc4::VPMElemWidth width, mlir::ssavc4::VPMSubword subword) {
+static int64_t
+getPackedSubwordLogicalRowScale(mlir::ssavc4::VPMElemWidth width,
+                                mlir::ssavc4::VPMSubword subword) {
   if (subword != mlir::ssavc4::VPMSubword::packed)
     return 1;
   switch (width) {
@@ -1876,27 +1886,25 @@ static int64_t getPackedSubwordLogicalRowScale(
 static std::pair<int64_t, mlir::vc4::QPUMux>
 emitVPMQPUAddressRow(OpBuilder &builder, Location loc, Operation *source,
                      int64_t rowReg) {
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
-  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
-      source->getAttr("width"));
-  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
-      source->getAttr("subword"));
+  auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+      source->getAttr("orientation"));
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
   int64_t scale = 1;
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal)
-    scale = getPackedSubwordLogicalRowScale(width.getValue(),
-                                            subword.getValue());
+    scale =
+        getPackedSubwordLogicalRowScale(width.getValue(), subword.getValue());
   if (scale == 1)
     return {rowReg, mlir::vc4::QPUMux::a};
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, rowReg, /*raddrB=*/0,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/scale == 4 ? 2 : 1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/scale == 4 ? 2 : 1);
   return {0, mlir::vc4::QPUMux::r1};
 }
 
@@ -1926,16 +1934,16 @@ static LogicalResult verifyRestrictedFlagUses(Operation *func) {
         auto condBranch = llvm::cast<mlir::ssavc4::CondBranchOp>(op);
         Operation *definingOp = condBranch.getFlags().getDefiningOp();
         if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
-          return op.emitOpError()
-                 << "requires flags produced directly by ssavc4.make_flags in M3 v1";
+          return op.emitOpError() << "requires flags produced directly by "
+                                     "ssavc4.make_flags in M3 v1";
       }
 
       if (hasName(&op, kSSAVC4CondSelectOpName)) {
         auto condSelect = llvm::cast<mlir::ssavc4::CondSelectOp>(op);
         Operation *definingOp = condSelect.getFlags().getDefiningOp();
         if (!hasName(definingOp, kSSAVC4MakeFlagsOpName))
-          return op.emitOpError()
-                 << "requires flags produced directly by ssavc4.make_flags in M5";
+          return op.emitOpError() << "requires flags produced directly by "
+                                     "ssavc4.make_flags in M5";
       }
     }
   }
@@ -1957,9 +1965,9 @@ static LogicalResult verifyP2BlockArgumentType(Operation *op, Value value,
          << role << " values";
 }
 
-static DenseMap<Block *, BitVector>
-computeDominance(ArrayRef<Block *> blocks,
-                 const DenseMap<Block *, SmallVector<Block *, 4>> &predecessors) {
+static DenseMap<Block *, BitVector> computeDominance(
+    ArrayRef<Block *> blocks,
+    const DenseMap<Block *, SmallVector<Block *, 4>> &predecessors) {
   DenseMap<Block *, BitVector> dominators;
   if (blocks.empty())
     return dominators;
@@ -2011,8 +2019,9 @@ computeDominance(ArrayRef<Block *> blocks,
   return dominators;
 }
 
-static BitVector computeReachableBlocks(ArrayRef<Block *> blocks,
-                                        const DenseMap<Block *, unsigned> &blockOrder) {
+static BitVector
+computeReachableBlocks(ArrayRef<Block *> blocks,
+                       const DenseMap<Block *, unsigned> &blockOrder) {
   BitVector reachable(blocks.size(), false);
   if (blocks.empty())
     return reachable;
@@ -2047,7 +2056,8 @@ static LogicalResult verifySuccessorOperandLoopShape(
     Operation *op, Block *sourceBlock, Block *targetBlock,
     ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder,
     const DenseMap<Block *, BitVector> &dominators) {
-  if (successorOperands.empty() || !isBackedge(sourceBlock, targetBlock, blockOrder))
+  if (successorOperands.empty() ||
+      !isBackedge(sourceBlock, targetBlock, blockOrder))
     return success();
 
   auto sourceIt = blockOrder.find(sourceBlock);
@@ -2062,9 +2072,10 @@ static LogicalResult verifySuccessorOperandLoopShape(
   return success();
 }
 
-static LogicalResult verifyParallelEdgeCopyGroup(
-    Operation *op, Block *sourceBlock, Block *targetBlock,
-    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder) {
+static LogicalResult
+verifyParallelEdgeCopyGroup(Operation *op, Block *sourceBlock,
+                            Block *targetBlock, ValueRange successorOperands,
+                            const DenseMap<Block *, unsigned> &blockOrder) {
   bool loopBackedge = !successorOperands.empty() &&
                       isBackedge(sourceBlock, targetBlock, blockOrder);
   for (auto [index, successorOperand] : llvm::enumerate(successorOperands)) {
@@ -2076,7 +2087,8 @@ static LogicalResult verifyParallelEdgeCopyGroup(
       if (loopBackedge)
         return op->emitOpError() << kP3CyclicLoopCopyDiagnostic;
       return op->emitOpError()
-             << "SSAVC4 block-argument lowering requires a scratch register for "
+             << "SSAVC4 block-argument lowering requires a scratch register "
+                "for "
                 "overlapping parallel edge copies, but a scratch register is "
                 "unavailable";
     }
@@ -2084,10 +2096,11 @@ static LogicalResult verifyParallelEdgeCopyGroup(
   return success();
 }
 
-static LogicalResult verifySuccessorOperandEdge(
-    Operation *op, Block *sourceBlock, Block *targetBlock,
-    ValueRange successorOperands, const DenseMap<Block *, unsigned> &blockOrder,
-    const DenseMap<Block *, BitVector> &dominators) {
+static LogicalResult
+verifySuccessorOperandEdge(Operation *op, Block *sourceBlock,
+                           Block *targetBlock, ValueRange successorOperands,
+                           const DenseMap<Block *, unsigned> &blockOrder,
+                           const DenseMap<Block *, BitVector> &dominators) {
   if (successorOperands.size() != targetBlock->getNumArguments())
     return op->emitOpError()
            << "successor operand count does not match target block argument "
@@ -2111,9 +2124,10 @@ static LogicalResult verifySuccessorOperandEdge(
                                      successorOperands, blockOrder);
 }
 
-static LogicalResult selectInstructionTemplates(
-    Operation *func, SmallVectorImpl<InstructionTemplate> &templates,
-    SmallVectorImpl<VirtualValue> &virtualValues) {
+static LogicalResult
+selectInstructionTemplates(Operation *func,
+                           SmallVectorImpl<InstructionTemplate> &templates,
+                           SmallVectorImpl<VirtualValue> &virtualValues) {
   if (func->getNumRegions() == 0 || func->getRegion(0).empty())
     return success();
 
@@ -2155,9 +2169,9 @@ static LogicalResult selectInstructionTemplates(
     if (!reachableBlocks.test(index))
       continue;
     unsigned blockIndex = static_cast<unsigned>(index);
-    maxReachableBlockOrder =
-        maxReachableBlockOrder ? std::max(*maxReachableBlockOrder, blockIndex)
-                               : blockIndex;
+    maxReachableBlockOrder = maxReachableBlockOrder
+                                 ? std::max(*maxReachableBlockOrder, blockIndex)
+                                 : blockIndex;
   }
 
   unsigned threadEndOpCount = 0;
@@ -2180,7 +2194,7 @@ static LogicalResult selectInstructionTemplates(
     for (BlockArgument argument : block->getArguments()) {
       if (!isP2BlockArgumentType(argument.getType()))
         return func->emitError()
-              << "SSAVC4 block-argument lowering supports only i32, f32, "
+               << "SSAVC4 block-argument lowering supports only i32, f32, "
                   "vector<16xi32>, or vector<16xf32> block arguments";
       virtualValues.push_back({argument, nextVirtualOrdinal++});
     }
@@ -2300,9 +2314,8 @@ static LogicalResult selectInstructionTemplates(
         if (op.getNumSuccessors() != 2)
           return op.emitOpError("requires true and false successors");
         auto condBranch = llvm::cast<mlir::ssavc4::CondBranchOp>(op);
-        bool hasSuccessorOperands =
-            !condBranch.getTrueDestOperands().empty() ||
-            !condBranch.getFalseDestOperands().empty();
+        bool hasSuccessorOperands = !condBranch.getTrueDestOperands().empty() ||
+                                    !condBranch.getFalseDestOperands().empty();
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::CondBranch;
         templ.source = &op;
@@ -2382,7 +2395,8 @@ static LogicalResult selectInstructionTemplates(
         if (op.getNumOperands() != 0 || op.getNumResults() != 1)
           return op.emitOpError("requires exactly one result for M3 lowering");
         if (!isVector16I32Type(op.getResult(0).getType()))
-          return op.emitOpError("supports only vector<16xi32> element numbers in M3 lowering");
+          return op.emitOpError(
+              "supports only vector<16xi32> element numbers in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2400,9 +2414,9 @@ static LogicalResult selectInstructionTemplates(
           return op.emitOpError("requires exactly one result for M3 lowering");
         Type resultType = op.getResult(0).getType();
         if (!resultType.isSignlessInteger(32) && !resultType.isF32() &&
-            !isVector16I32Type(resultType) &&
-            !isVector16F32Type(resultType))
-          return op.emitOpError("supports only i32, f32, vector<16xi32>, or vector<16xf32> uniform reads in M3 lowering");
+            !isVector16I32Type(resultType) && !isVector16F32Type(resultType))
+          return op.emitOpError("supports only i32, f32, vector<16xi32>, or "
+                                "vector<16xf32> uniform reads in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2417,18 +2431,22 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4SplatOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one input operand and one result for M3 lowering");
+          return op.emitOpError(
+              "requires one input operand and one result for M3 lowering");
         Type inputType = op.getOperand(0).getType();
         Type resultType = op.getResult(0).getType();
         bool inputI32 = inputType.isSignlessInteger(32);
         bool inputF32 = inputType.isF32();
         if (!inputI32 && !inputF32)
-          return op.emitOpError("requires an i32 or f32 scalar input for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 or f32 scalar input for M3 lowering");
         if (!isVector16I32Type(resultType) && !isVector16F32Type(resultType))
-          return op.emitOpError("supports only vector<16xi32> or vector<16xf32> splat results in M3 lowering");
+          return op.emitOpError("supports only vector<16xi32> or "
+                                "vector<16xf32> splat results in M3 lowering");
         if ((inputI32 && !isVector16I32Type(resultType)) ||
             (inputF32 && !isVector16F32Type(resultType)))
-          return op.emitOpError("requires input and result to have the same SSAVC4 element domain in M3 lowering");
+          return op.emitOpError("requires input and result to have the same "
+                                "SSAVC4 element domain in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2444,7 +2462,8 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4MovOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one input operand and one result for M3 lowering");
+          return op.emitOpError(
+              "requires one input operand and one result for M3 lowering");
         Type inputType = op.getOperand(0).getType();
         Type resultType = op.getResult(0).getType();
         bool sameType = inputType == resultType;
@@ -2474,18 +2493,18 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4CondSelectOpName)) {
         if (op.getNumOperands() != 3 || op.getNumResults() != 1)
-          return op.emitOpError(
-              "requires flags, true_value, false_value, and one result for M5 lowering");
+          return op.emitOpError("requires flags, true_value, false_value, and "
+                                "one result for M5 lowering");
         if (op.getOperand(1).getType() != op.getOperand(2).getType() ||
             op.getOperand(1).getType() != op.getResult(0).getType())
-          return op.emitOpError(
-              "requires identical true_value, false_value, and result types for M5 lowering");
+          return op.emitOpError("requires identical true_value, false_value, "
+                                "and result types for M5 lowering");
         if (!isVector16I32Type(op.getResult(0).getType()) &&
             !isVector16F32Type(op.getResult(0).getType()) &&
             !op.getResult(0).getType().isSignlessInteger(32) &&
             !op.getResult(0).getType().isF32())
-          return op.emitOpError(
-              "supports only i32, f32, vector<16xi32>, or vector<16xf32> values in M5 lowering");
+          return op.emitOpError("supports only i32, f32, vector<16xi32>, or "
+                                "vector<16xf32> values in M5 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2502,11 +2521,13 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
-      if (hasName(&op, kSSAVC4ALUAddOpName) || hasName(&op, kSSAVC4ALUMulOpName)) {
+      if (hasName(&op, kSSAVC4ALUAddOpName) ||
+          hasName(&op, kSSAVC4ALUMulOpName)) {
         if (op.getNumResults() != 1)
           return op.emitOpError("requires exactly one result for M3 lowering");
         if (op.getNumOperands() == 0 || op.getNumOperands() > 2)
-          return op.emitOpError("supports only unary/binary ALU operations in M3 lowering");
+          return op.emitOpError(
+              "supports only unary/binary ALU operations in M3 lowering");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2522,30 +2543,66 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
+      if (hasName(&op, kSSAVC4SFUOpName)) {
+        if (op.getNumOperands() != 1 || op.getNumResults() != 1)
+          return op.emitOpError("requires one input operand and one result");
+        if (!isVector16F32Type(op.getOperand(0).getType()) ||
+            !isVector16F32Type(op.getResult(0).getType()))
+          return op.emitOpError(
+              "supports only vector<16xf32> operands and results in P10");
+        auto policy = llvm::dyn_cast_or_null<mlir::ssavc4::FPMathPolicyAttr>(
+            op.getAttr("fp_policy"));
+        if (!policy ||
+            policy.getValue() != mlir::ssavc4::FPMathPolicy::approx_sfu)
+          return op.emitOpError(
+              "exact floating-point math cannot be lowered to VC4 SFU");
+        if (!op.getAttrOfType<mlir::ssavc4::SFUKindAttr>("kind"))
+          return op.emitOpError("requires SFU kind");
+        if (!op.getAttrOfType<mlir::ssavc4::FPDomainAttr>("domain"))
+          return op.emitOpError("requires SFU domain");
+        Value result = op.getResult(0);
+        virtualValues.push_back({result, nextVirtualOrdinal++});
+        InstructionTemplate templ;
+        templ.kind = InstructionTemplate::Kind::SFU;
+        templ.source = &op;
+        templ.sourceBlock = block;
+        templ.layoutBlockId = blockIds[block];
+        templ.operands.append(op.operand_begin(), op.operand_end());
+        templ.result = result;
+        appendTemplate(std::move(templ));
+        continue;
+      }
+
       if (hasName(&op, kSSAVC4MakeFlagsOpName)) {
         if (op.getNumResults() != 1)
           return op.emitOpError("requires exactly one flag result");
         if (op.getNumOperands() == 0 || op.getNumOperands() > 2)
-          return op.emitOpError("supports only unary/binary flag compares in M3 v1");
+          return op.emitOpError(
+              "supports only unary/binary flag compares in M3 v1");
         // !ssavc4.flags is pseudo-SSA for transient physical condition
         // state.  It is rematerialized immediately before its single
         // conditional consumer rather than scheduled as an independent value.
         continue;
       }
 
-      if (hasName(&op, kSSAVC4PackOpName) || hasName(&op, kSSAVC4UnpackOpName) ||
+      if (hasName(&op, kSSAVC4PackOpName) ||
+          hasName(&op, kSSAVC4UnpackOpName) ||
           hasName(&op, kSSAVC4RotateOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one input operand and one result for M3 lowering");
+          return op.emitOpError(
+              "requires one input operand and one result for M3 lowering");
         if (op.getOperand(0).getType() != op.getResult(0).getType())
-          return op.emitOpError("requires identical input and result carrier types for M3 lowering");
+          return op.emitOpError("requires identical input and result carrier "
+                                "types for M3 lowering");
         if (!isVector16I32Type(op.getResult(0).getType()) &&
             !isVector16F32Type(op.getResult(0).getType()))
-          return op.emitOpError("supports only vector<16xi32> or vector<16xf32> values in M3 lowering");
+          return op.emitOpError("supports only vector<16xi32> or "
+                                "vector<16xf32> values in M3 lowering");
         if (hasName(&op, kSSAVC4RotateOpName)) {
           int64_t amount = getI32IntegerAttrOr(&op, "amount", -1);
           if (amount < 0 || amount > 15)
-            return op.emitOpError("requires immediate rotate amount in [0, 15]");
+            return op.emitOpError(
+                "requires immediate rotate amount in [0, 15]");
         }
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
@@ -2566,9 +2623,11 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4TMURequestOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one address operand and one async token result");
+          return op.emitOpError(
+              "requires one address operand and one async token result");
         if (!isScalarI32OrVector16I32(op.getOperand(0).getType()))
-          return op.emitOpError("supports only i32 or vector<16xi32> direct addresses in M3 v1");
+          return op.emitOpError(
+              "supports only i32 or vector<16xi32> direct addresses in M3 v1");
         if (!hasStringAttr(&op, "unit", "tmu0"))
           return op.emitOpError("supports only unit = \"tmu0\" in M3 v1");
         if (!hasStringAttr(&op, "mode", "direct"))
@@ -2586,19 +2645,23 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4TMUReadOpName)) {
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one async token operand and one data result");
+          return op.emitOpError(
+              "requires one async token operand and one data result");
         if (!hasStringAttr(&op, "unit", "tmu0"))
           return op.emitOpError("supports only unit = \"tmu0\" in M3 v1");
         if (!hasStringAttr(&op, "part", "raw32"))
           return op.emitOpError("supports only part = \"raw32\" in M3 v1");
         Operation *request = op.getOperand(0).getDefiningOp();
         if (!hasName(request, kSSAVC4TMURequestOpName))
-          return op.emitOpError("requires a token produced directly by ssavc4.tmu.request in M3 v1");
+          return op.emitOpError("requires a token produced directly by "
+                                "ssavc4.tmu.request in M3 v1");
         if (!hasStringAttr(request, "unit", "tmu0"))
-          return op.emitOpError("requires a token from a matching tmu0 request");
+          return op.emitOpError(
+              "requires a token from a matching tmu0 request");
         Type resultType = op.getResult(0).getType();
         if (!isVector16I32Type(resultType) && !isVector16F32Type(resultType))
-          return op.emitOpError("supports only vector<16xi32> or vector<16xf32> raw32 results in M3 v1");
+          return op.emitOpError("supports only vector<16xi32> or "
+                                "vector<16xf32> raw32 results in M3 v1");
         Value result = op.getResult(0);
         virtualValues.push_back({result, nextVirtualOrdinal++});
         InstructionTemplate templ;
@@ -2620,7 +2683,8 @@ static LogicalResult selectInstructionTemplates(
           return op.emitOpError("requires an i32 semaphore id operand");
         if (!getConstantI32FromLoadImm(op.getOperand(0)))
           return op.emitOpError()
-                 << "requires semaphore id produced by ssavc4.load_imm with an integer value in M3 v1";
+                 << "requires semaphore id produced by ssavc4.load_imm with an "
+                    "integer value in M3 v1";
         InstructionTemplate templ;
         templ.kind = hasName(&op, kSSAVC4SemaAcquireOpName)
                          ? InstructionTemplate::Kind::SemaAcquire
@@ -2647,30 +2711,29 @@ static LogicalResult selectInstructionTemplates(
                     "warps_per_block, and semaphore_base operands";
         templ.operands.append(op.operand_begin(), op.operand_end());
         if (templ.operands.empty()) {
-          auto logicalIndex =
-              llvm::dyn_cast_or_null<IntegerAttr>(op.getAttr("logical_warp_id_uniform"));
-          auto warpsIndex =
-              llvm::dyn_cast_or_null<IntegerAttr>(op.getAttr("warps_per_block_uniform"));
+          auto logicalIndex = llvm::dyn_cast_or_null<IntegerAttr>(
+              op.getAttr("logical_warp_id_uniform"));
+          auto warpsIndex = llvm::dyn_cast_or_null<IntegerAttr>(
+              op.getAttr("warps_per_block_uniform"));
           if (logicalIndex || warpsIndex) {
-          if (!logicalIndex || !warpsIndex)
-            return op.emitOpError()
-                   << "requires both logical_warp_id_uniform and "
-                      "warps_per_block_uniform when either is present";
-          auto logicalIt = uniformReadByIndex.find(logicalIndex.getInt());
-          auto warpsIt = uniformReadByIndex.find(warpsIndex.getInt());
-          if (logicalIt == uniformReadByIndex.end() ||
-              warpsIt == uniformReadByIndex.end())
-            return op.emitOpError()
-                   << "requires barrier uniform-index attrs to reference prior "
-                      "ssavc4.uniform.read results";
-          templ.operands.push_back(logicalIt->second);
-          templ.operands.push_back(warpsIt->second);
+            if (!logicalIndex || !warpsIndex)
+              return op.emitOpError()
+                     << "requires both logical_warp_id_uniform and "
+                        "warps_per_block_uniform when either is present";
+            auto logicalIt = uniformReadByIndex.find(logicalIndex.getInt());
+            auto warpsIt = uniformReadByIndex.find(warpsIndex.getInt());
+            if (logicalIt == uniformReadByIndex.end() ||
+                warpsIt == uniformReadByIndex.end())
+              return op.emitOpError() << "requires barrier uniform-index attrs "
+                                         "to reference prior "
+                                         "ssavc4.uniform.read results";
+            templ.operands.push_back(logicalIt->second);
+            templ.operands.push_back(warpsIt->second);
           }
         }
         appendTemplate(std::move(templ));
         continue;
       }
-
 
       if (hasName(&op, kSSAVC4VPMWriteOpName)) {
         if (failed(verifyVPMResource(func, &op)))
@@ -2678,7 +2741,8 @@ static LogicalResult selectInstructionTemplates(
         if (op.getNumOperands() != 2)
           return op.emitOpError("requires row and vector value operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 VPM row operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 VPM row operand for M3 lowering");
         if (failed(verifyVPMSubset(&op, op.getOperand(1).getType())))
           return failure();
         InstructionTemplate templ;
@@ -2695,9 +2759,11 @@ static LogicalResult selectInstructionTemplates(
         if (failed(verifyVPMResource(func, &op)))
           return failure();
         if (op.getNumOperands() != 1 || op.getNumResults() != 1)
-          return op.emitOpError("requires one row operand and one vector result");
+          return op.emitOpError(
+              "requires one row operand and one vector result");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 VPM row operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 VPM row operand for M3 lowering");
         if (failed(verifyVPMSubset(&op, op.getResult(0).getType())))
           return failure();
         Value result = op.getResult(0);
@@ -2713,19 +2779,22 @@ static LogicalResult selectInstructionTemplates(
         continue;
       }
 
-
       if (hasName(&op, kSSAVC4VDRLoadOpName)) {
         if (failed(verifyVPMResource(func, &op)))
           return failure();
         if (op.getNumOperands() != 2)
-          return op.emitOpError("requires i32 global base address and VPM base row operands");
+          return op.emitOpError(
+              "requires i32 global base address and VPM base row operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 global base address operand for M5 lowering");
+          return op.emitOpError(
+              "requires an i32 global base address operand for M5 lowering");
         if (!op.getOperand(1).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 VPM base row operand for M5 lowering");
+          return op.emitOpError(
+              "requires an i32 VPM base row operand for M5 lowering");
         int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
         int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
-        int64_t memoryPitchBytes = getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
+        int64_t memoryPitchBytes =
+            getI32IntegerAttrOr(&op, "memory_pitch_bytes", -1);
         int64_t vpmX = getI32IntegerAttrOr(&op, "vpm_x", -1);
         int64_t vpmPitch = getI32IntegerAttrOr(&op, "vpm_pitch", -1);
         auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
@@ -2744,21 +2813,26 @@ static LogicalResult selectInstructionTemplates(
         if (!elemBytes)
           return op.emitOpError("has unknown VDR DMA width");
         if (rowLen <= 0 || rowLen > 16)
-          return op.emitOpError("requires row_len in range [1, 16] for M5 lowering");
+          return op.emitOpError(
+              "requires row_len in range [1, 16] for M5 lowering");
         if (nrows <= 0 || nrows > 16)
-          return op.emitOpError("requires nrows in range [1, 16] for M5 lowering");
-        if (memoryPitchBytes <= 0 ||
-            memoryPitchBytes % *elemBytes != 0 ||
+          return op.emitOpError(
+              "requires nrows in range [1, 16] for M5 lowering");
+        if (memoryPitchBytes <= 0 || memoryPitchBytes % *elemBytes != 0 ||
             memoryPitchBytes < rowLen * *elemBytes)
           return op.emitOpError(
               "requires memory_pitch_bytes to cover whole DMA rows");
         if (vpmX < 0 || vpmX > 15)
-          return op.emitOpError("requires vpm_x in range [0, 15] for M5 lowering");
+          return op.emitOpError(
+              "requires vpm_x in range [0, 15] for M5 lowering");
         if (vpmPitch <= 0 || vpmPitch > 16)
-          return op.emitOpError("requires vpm_pitch in range [1, 16] for M5 lowering");
-        if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
+          return op.emitOpError(
+              "requires vpm_pitch in range [1, 16] for M5 lowering");
+        if (auto serialize =
+                llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
-            return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M5 VDR lowering");
+            return op.emitOpError("supports only serialize = \"mutex\" or "
+                                  "\"none\" in M5 VDR lowering");
         }
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::VDRLoad;
@@ -2797,8 +2871,8 @@ static LogicalResult selectInstructionTemplates(
         auto zeroFill =
             llvm::dyn_cast_or_null<BoolAttr>(op.getAttr("zero_fill"));
         if (!orientation || !width || !subword || !zeroFill)
-          return op.emitOpError()
-                 << "requires typed orientation/width/subword and zero_fill attrs";
+          return op.emitOpError() << "requires typed orientation/width/subword "
+                                     "and zero_fill attrs";
         if (!zeroFill.getValue())
           return op.emitOpError(
               "requires zero_fill = true for executable lowering");
@@ -2840,12 +2914,15 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4VDWStoreOpName)) {
         if (op.getNumOperands() < 2 || op.getNumOperands() > 4)
-          return op.emitOpError("requires address, vector value, and optional active-lane and VPM row operands");
+          return op.emitOpError("requires address, vector value, and optional "
+                                "active-lane and VPM row operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 global address operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 global address operand for M3 lowering");
         if (!isVector16I32Type(op.getOperand(1).getType()) &&
             !isVector16F32Type(op.getOperand(1).getType()))
-          return op.emitOpError("requires a vector<16xi32> or vector<16xf32> value operand for M3 lowering");
+          return op.emitOpError("requires a vector<16xi32> or vector<16xf32> "
+                                "value operand for M3 lowering");
         int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
         auto width = llvm::dyn_cast_or_null<mlir::ssavc4::VPMElemWidthAttr>(
             op.getAttr("width"));
@@ -2854,23 +2931,30 @@ static LogicalResult selectInstructionTemplates(
         if (!width || !subword)
           return op.emitOpError("requires typed VDW width and subword attrs");
         if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
-          return op.emitOpError("supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
+          return op.emitOpError("supports only width = "
+                                "#ssavc4.vpm_elem_width<w32> in executable v1");
         if (subword.getValue() != mlir::ssavc4::VPMSubword::none)
-          return op.emitOpError("supports only subword = #ssavc4.vpm_subword<none> in executable v1");
+          return op.emitOpError("supports only subword = "
+                                "#ssavc4.vpm_subword<none> in executable v1");
         if (op.getNumOperands() == 3) {
           if (!op.getOperand(2).getType().isSignlessInteger(32))
-            return op.emitOpError("requires an i32 dynamic active-lane operand");
+            return op.emitOpError(
+                "requires an i32 dynamic active-lane operand");
         } else if (op.getNumOperands() == 4) {
           if (!op.getOperand(2).getType().isSignlessInteger(32))
-            return op.emitOpError("requires an i32 dynamic active-lane operand");
+            return op.emitOpError(
+                "requires an i32 dynamic active-lane operand");
           if (!op.getOperand(3).getType().isSignlessInteger(32))
             return op.emitOpError("requires an i32 dynamic VPM row operand");
         } else if (activeLanes != 16) {
-          return op.emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
+          return op.emitOpError(
+              "supports only full 16-lane static VDW stores in M3 lowering");
         }
-        if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
+        if (auto serialize =
+                llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
-            return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M3 lowering");
+            return op.emitOpError("supports only serialize = \"mutex\" or "
+                                  "\"none\" in M3 lowering");
         }
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::VDWStore;
@@ -2884,14 +2968,17 @@ static LogicalResult selectInstructionTemplates(
 
       if (hasName(&op, kSSAVC4VDWStoreVPMOpName)) {
         if (op.getNumOperands() < 3 || op.getNumOperands() > 4)
-          return op.emitOpError(
-              "requires address, VPM y, VPM x, and optional active-lane operand");
+          return op.emitOpError("requires address, VPM y, VPM x, and optional "
+                                "active-lane operand");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 global address operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 global address operand for M3 lowering");
         if (!op.getOperand(1).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 VPM y-coordinate operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 VPM y-coordinate operand for M3 lowering");
         if (!op.getOperand(2).getType().isSignlessInteger(32))
-          return op.emitOpError("requires an i32 VPM x-coordinate operand for M3 lowering");
+          return op.emitOpError(
+              "requires an i32 VPM x-coordinate operand for M3 lowering");
         int64_t activeLanes = getI32IntegerAttrOr(&op, "active_lanes", -1);
         int64_t rowLen = getI32IntegerAttrOr(&op, "row_len", -1);
         int64_t nrows = getI32IntegerAttrOr(&op, "nrows", -1);
@@ -2913,22 +3000,28 @@ static LogicalResult selectInstructionTemplates(
         if (!elemBytes)
           return op.emitOpError("has unknown VDW DMA width");
         if (rowLen < 1 || rowLen > 16)
-          return op.emitOpError("requires row_len in range [1, 16] for M3 lowering");
+          return op.emitOpError(
+              "requires row_len in range [1, 16] for M3 lowering");
         if (nrows < 1 || nrows > 16)
-          return op.emitOpError("requires nrows in range [1, 16] for M3 lowering");
+          return op.emitOpError(
+              "requires nrows in range [1, 16] for M3 lowering");
         if (memoryPitchBytes < rowLen * *elemBytes ||
             memoryPitchBytes % *elemBytes != 0)
           return op.emitOpError(
               "requires memory_pitch_bytes to cover whole DMA rows");
         if (op.getNumOperands() == 4) {
           if (!op.getOperand(3).getType().isSignlessInteger(32))
-            return op.emitOpError("requires an i32 dynamic active-lane operand");
+            return op.emitOpError(
+                "requires an i32 dynamic active-lane operand");
         } else if (activeLanes != -1 && activeLanes != rowLen) {
-          return op.emitOpError("requires static active_lanes to match row_len in M3 lowering");
+          return op.emitOpError(
+              "requires static active_lanes to match row_len in M3 lowering");
         }
-        if (auto serialize = llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
+        if (auto serialize =
+                llvm::dyn_cast_or_null<StringAttr>(op.getAttr("serialize"))) {
           if (serialize.getValue() != "mutex" && serialize.getValue() != "none")
-            return op.emitOpError("supports only serialize = \"mutex\" or \"none\" in M3 lowering");
+            return op.emitOpError("supports only serialize = \"mutex\" or "
+                                  "\"none\" in M3 lowering");
         }
         InstructionTemplate templ;
         templ.kind = InstructionTemplate::Kind::VDWStoreVPM;
@@ -3010,10 +3103,11 @@ static LogicalResult selectInstructionTemplates(
       }
 
       return op.emitOpError()
-             << "is not supported by the M3 SSAVC4 lowering; supported operations are "
+             << "is not supported by the M3 SSAVC4 lowering; supported "
+                "operations are "
                 "ssavc4.load_imm, ssavc4.element_number, ssavc4.uniform.read, "
                 "ssavc4.splat, ssavc4.mov, "
-                "ssavc4.alu.add, ssavc4.alu.mul, "
+                "ssavc4.alu.add, ssavc4.alu.mul, ssavc4.sfu, "
                 "ssavc4.make_flags, ssavc4.cond_select, ssavc4.br, "
                 "ssavc4.cond_br, "
                 "ssavc4.pack, ssavc4.unpack, ssavc4.rotate, "
@@ -3043,19 +3137,21 @@ static LogicalResult emitLoadImm(OpBuilder &builder,
   Operation *source = templ.source;
   std::optional<int64_t> destination = allocator.lookup(templ, *templ.result);
   if (!destination)
-    return source->emitError("internal lowering error: result register was not allocated");
+    return source->emitError(
+        "internal lowering error: result register was not allocated");
 
   OperationState state(source->getLoc(), "vc4.qpu.ldi");
   MLIRContext *ctx = builder.getContext();
   Attribute mode = source->getAttr("mode");
   if (!mode)
-    mode = mlir::vc4::LoadImmModeAttr::get(ctx, mlir::vc4::LoadImmMode::splat32);
+    mode =
+        mlir::vc4::LoadImmModeAttr::get(ctx, mlir::vc4::LoadImmMode::splat32);
   Attribute value = source->getAttr("value");
   if (!value)
     value = builder.getI32IntegerAttr(0);
   if (auto floatValue = dyn_cast<FloatAttr>(value))
-    value = builder.getIntegerAttr(
-        builder.getI32Type(), floatValue.getValue().bitcastToAPInt());
+    value = builder.getIntegerAttr(builder.getI32Type(),
+                                   floatValue.getValue().bitcastToAPInt());
 
   state.addAttribute("mode", mode);
   if (Attribute values = source->getAttr("values"))
@@ -3063,8 +3159,10 @@ static LogicalResult emitLoadImm(OpBuilder &builder,
   else
     state.addAttribute("value", value);
   state.addAttribute("pm", builder.getBoolAttr(false));
-  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
-  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
+  state.addAttribute("cond_add",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
+  state.addAttribute("cond_mul",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::always));
   state.addAttribute("waddr_add", builder.getI32IntegerAttr(*destination));
   state.addAttribute("waddr_mul", builder.getI32IntegerAttr(*destination));
   builder.create(state);
@@ -3078,16 +3176,16 @@ static LogicalResult emitElementNumber(OpBuilder &builder,
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
-    return source->emitError("internal lowering error: result register was not allocated");
+    return source->emitError(
+        "internal lowering error: result register was not allocated");
 
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/38,
-                        /*raddrB=*/38, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/38,
+      /*raddrB=*/38, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -3098,17 +3196,17 @@ static LogicalResult emitUniformRead(OpBuilder &builder,
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
-    return source->emitError("internal lowering error: result register was not allocated");
+    return source->emitError(
+        "internal lowering error: result register was not allocated");
 
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/32,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/0);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/32,
+      /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/0);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -3118,18 +3216,18 @@ static LogicalResult emitMov(OpBuilder &builder,
                              const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
+  std::optional<int64_t> inputReg =
+      allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
 
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      *inputReg, *inputReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -3163,17 +3261,15 @@ static LogicalResult emitCondSelect(OpBuilder &builder,
   if (failed(emitMakeFlags(builder, templ, allocator)))
     return failure();
 
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      *falseReg, *falseReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *falseReg, *falseReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        condAttr.getValue(), mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
+                        condAttr.getValue(), mlir::vc4::Cond::never, *resultReg,
+                        /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
                         mlir::vc4::MulOpcode::nop, *trueReg, *trueReg,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
@@ -3196,12 +3292,14 @@ static LogicalResult emitEdgeCopy(OpBuilder &builder,
   return success();
 }
 
-static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &templ,
+static LogicalResult emitALU(OpBuilder &builder,
+                             const InstructionTemplate &templ,
                              const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
-    return source->emitError("internal lowering error: result register was not allocated");
+    return source->emitError(
+        "internal lowering error: result register was not allocated");
 
   SmallVector<int64_t, 2> operandRegs;
   for (Value operand : templ.operands) {
@@ -3220,14 +3318,16 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
   mlir::vc4::Cond condMul = mlir::vc4::Cond::never;
 
   if (templ.kind == InstructionTemplate::Kind::ALUAdd) {
-    if (auto attr = llvm::dyn_cast_or_null<mlir::vc4::AddOpcodeAttr>(source->getAttr("opcode")))
+    if (auto attr = llvm::dyn_cast_or_null<mlir::vc4::AddOpcodeAttr>(
+            source->getAttr("opcode")))
       addOpcode = attr.getValue();
     else
       addOpcode = mlir::vc4::AddOpcode::bit_or;
     condAdd = mlir::vc4::Cond::always;
     waddrAdd = *resultReg;
   } else {
-    if (auto attr = llvm::dyn_cast_or_null<mlir::vc4::MulOpcodeAttr>(source->getAttr("opcode")))
+    if (auto attr = llvm::dyn_cast_or_null<mlir::vc4::MulOpcodeAttr>(
+            source->getAttr("opcode")))
       mulOpcode = attr.getValue();
     else
       mulOpcode = mlir::vc4::MulOpcode::mul24;
@@ -3240,29 +3340,28 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
       templ.operands.size() == 2)
     smallImm = getSmallImmLiteralSelector(templ.operands[1]);
 
-  bool useMirroredSecond = canUseMirroredSecondOperandForALU(
-      templ, allocator, smallImm.has_value());
+  bool useMirroredSecond =
+      canUseMirroredSecondOperandForALU(templ, allocator, smallImm.has_value());
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
   int64_t raddrB = operandRegs.size() < 2 ? raddrA
-                  : useMirroredSecond   ? operandRegs[1]
-                                        : 0;
+                   : useMirroredSecond    ? operandRegs[1]
+                                          : 0;
   mlir::vc4::QPUMux addB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
-                         : (useMirroredSecond || smallImm)
-                             ? mlir::vc4::QPUMux::b
-                             : mlir::vc4::QPUMux::r1;
+                           : (useMirroredSecond || smallImm)
+                               ? mlir::vc4::QPUMux::b
+                               : mlir::vc4::QPUMux::r1;
   mlir::vc4::QPUMux mulB = operandRegs.size() < 2 ? mlir::vc4::QPUMux::a
-                         : useMirroredSecond     ? mlir::vc4::QPUMux::b
+                           : useMirroredSecond    ? mlir::vc4::QPUMux::b
                                                   : mlir::vc4::QPUMux::r1;
 
   if (aluNeedsSecondOperandAccumulatorMove(templ, allocator)) {
-    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, operandRegs[1],
-                          operandRegs[1], mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, operandRegs[1], operandRegs[1],
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
   }
 
   mlir::vc4::QPUSignal signal =
@@ -3277,32 +3376,76 @@ static LogicalResult emitALU(OpBuilder &builder, const InstructionTemplate &temp
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           *resultReg, /*waddrMul=*/32,
                           mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          *resultReg, mlir::vc4::QPUMux::b,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0, *resultReg,
+                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::b,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   }
   return success();
 }
 
+static LogicalResult emitSFU(OpBuilder &builder,
+                             const InstructionTemplate &templ,
+                             const SpillAwareAllocator &allocator) {
+  Operation *source = templ.source;
+  std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
+  std::optional<int64_t> inputReg =
+      allocator.lookup(templ, templ.operands.front());
+  if (!resultReg)
+    return source->emitError(
+        "internal lowering error: SFU result register was not allocated");
+  if (!inputReg)
+    return source->emitOpError()
+           << "uses a value that is not defined by a lowerable SSAVC4 op in "
+              "the current M3 slice 3 skeleton";
+
+  auto kind = llvm::dyn_cast_or_null<mlir::ssavc4::SFUKindAttr>(
+      source->getAttr("kind"));
+  if (!kind)
+    return source->emitOpError("requires SFU kind");
+  int64_t sfuWriteAddress = getSFUWriteAddress(kind.getValue());
+
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, sfuWriteAddress,
+      /*waddrMul=*/39, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      *inputReg, *inputReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+
+  // SFU results are delivered through r4 at N+3.  The two intervening slots
+  // must not read r4 or trigger any other r4-producing hardware event.
+  createNopBundle(builder, source->getLoc());
+  createNopBundle(builder, source->getLoc());
+
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/39, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0,
+      /*raddrB=*/1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
+  return success();
+}
 
 static LogicalResult emitPackOrUnpack(OpBuilder &builder,
                                       const InstructionTemplate &templ,
                                       const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
+  std::optional<int64_t> inputReg =
+      allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
 
   int64_t packInputReg = *inputReg;
-  if (templ.kind == InstructionTemplate::Kind::Pack && *resultReg == *inputReg) {
+  if (templ.kind == InstructionTemplate::Kind::Pack &&
+      *resultReg == *inputReg) {
     static constexpr int64_t kPackSourceScratchReg = 31;
     if (*inputReg == kPackSourceScratchReg)
-      return source->emitOpError()
-             << "requires a distinct scratch register for aliased pack lowering";
+      return source->emitOpError() << "requires a distinct scratch register "
+                                      "for aliased pack lowering";
     createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/kPackSourceScratchReg,
@@ -3318,13 +3461,12 @@ static LogicalResult emitPackOrUnpack(OpBuilder &builder,
     createSplat32LDI(builder, source->getLoc(), 0, *resultReg);
 
   OperationState state(source->getLoc(), "vc4.qpu.bundle");
-  addCommonBundleAttrs(builder, state, mlir::vc4::QPUSignal::none,
-                       mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                       *resultReg, /*waddrMul=*/32,
-                       mlir::vc4::AddOpcode::bit_or,
-                       mlir::vc4::MulOpcode::nop, packInputReg, packInputReg,
-                       mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  addCommonBundleAttrs(
+      builder, state, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, *resultReg, /*waddrMul=*/32,
+      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, packInputReg,
+      packInputReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (Attribute mode = source->getAttr("mode")) {
     if (templ.kind == InstructionTemplate::Kind::Pack)
       state.addAttribute("pack", mode);
@@ -3341,7 +3483,8 @@ static LogicalResult emitRotate(OpBuilder &builder,
                                 const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  std::optional<int64_t> inputReg = allocator.lookup(templ, templ.operands.front());
+  std::optional<int64_t> inputReg =
+      allocator.lookup(templ, templ.operands.front());
   if (!resultReg || !inputReg)
     return source->emitOpError()
            << "uses a value that is not defined by a lowerable SSAVC4 op in M3";
@@ -3351,23 +3494,21 @@ static LogicalResult emitRotate(OpBuilder &builder,
 
   // VC4's small-immediate vector rotate path rotates an accumulator source.
   // Copy the SSA input to r2, then emit the rotate selector 48 + amount.
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *inputReg, *inputReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+      mlir::vc4::MulOpcode::nop, *inputReg, *inputReg, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createNopBundle(builder, source->getLoc());
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/48 + amount);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::small_imm,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/48 + amount);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -3377,20 +3518,22 @@ static LogicalResult emitTMURequest(OpBuilder &builder,
                                     const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.empty())
-    return source->emitError("internal lowering error: TMU request has no address operand");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands.front());
+    return source->emitError(
+        "internal lowering error: TMU request has no address operand");
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands.front());
   if (!addressReg)
-    return source->emitOpError()
-           << "uses a direct TMU address value that is not defined by a lowerable SSAVC4 op";
+    return source->emitOpError() << "uses a direct TMU address value that is "
+                                    "not defined by a lowerable SSAVC4 op";
 
   // Direct TMU0 requests are issued by writing the per-lane address to t0s.
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/56, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *addressReg, /*raddrB=*/0,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        *addressReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
+                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
 
   // M3 v1 is deliberately non-overlapped: leave a conservative spacer before
   // the matching receive signal.
@@ -3417,7 +3560,8 @@ static LogicalResult emitTMURead(OpBuilder &builder,
   Operation *source = templ.source;
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!resultReg)
-    return source->emitError("internal lowering error: TMU result register was not allocated");
+    return source->emitError(
+        "internal lowering error: TMU result register was not allocated");
 
   createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::ldtmu0,
                         mlir::vc4::Cond::never, mlir::vc4::Cond::never,
@@ -3430,14 +3574,13 @@ static LogicalResult emitTMURead(OpBuilder &builder,
   // The TMU receive value is only valid in r4 for the following instruction.
   // Copy it immediately into the allocated SSA value register before any other
   // instruction can clobber the r4 lifetime.
-  createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/39,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/1, mlir::vc4::QPUMux::r4,
-                        mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never, *resultReg,
+      /*waddrMul=*/39, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0,
+      /*raddrB=*/1, mlir::vc4::QPUMux::r4, mlir::vc4::QPUMux::r4,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   emitRegfileResultSpacer(builder, source->getLoc(), templ, allocator);
   return success();
 }
@@ -3450,8 +3593,10 @@ static Operation *createScheduledSema(OpBuilder &builder, Location loc,
   state.addAttribute("mode", mlir::vc4::SemaphoreModeAttr::get(ctx, mode));
   state.addAttribute("id", builder.getI32IntegerAttr(id));
   state.addAttribute("pm", builder.getBoolAttr(false));
-  state.addAttribute("cond_add", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
-  state.addAttribute("cond_mul", mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_add",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
+  state.addAttribute("cond_mul",
+                     mlir::vc4::CondAttr::get(ctx, mlir::vc4::Cond::never));
   state.addAttribute("waddr_add", builder.getI32IntegerAttr(32));
   state.addAttribute("waddr_mul", builder.getI32IntegerAttr(33));
   return builder.create(state);
@@ -3461,7 +3606,8 @@ static LogicalResult emitSema(OpBuilder &builder,
                               const InstructionTemplate &templ) {
   Operation *source = templ.source;
   if (templ.operands.size() != 1)
-    return source->emitError("internal lowering error: semaphore template has no id operand");
+    return source->emitError(
+        "internal lowering error: semaphore template has no id operand");
   std::optional<int64_t> id = getConstantI32FromLoadImm(templ.operands.front());
   if (!id)
     return source->emitOpError()
@@ -3494,61 +3640,65 @@ static LogicalResult emitBarrier(OpBuilder &builder,
     // Degenerate barrier form retained for explicit semaphore smoke tests.
     // Cooperative shared-memory kernels should provide logical warp and block
     // size operands through the barrier uniform-index attrs below.
-    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, arrive);
-    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, arrive);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release,
+                        arrive);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire,
+                        arrive);
     createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, go);
     createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, go);
-    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, depart);
-    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, depart);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release,
+                        depart);
+    createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire,
+                        depart);
     createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::release, reset);
     createScheduledSema(builder, loc, mlir::vc4::SemaphoreMode::acquire, reset);
     return success();
   }
 
   if (templ.operands.size() != 2 && templ.operands.size() != 3)
-    return source->emitError("internal lowering error: barrier has wrong operand count");
-  std::optional<int64_t> logicalWarpReg = allocator.lookup(templ, templ.operands[0]);
-  std::optional<int64_t> warpsPerBlockReg = allocator.lookup(templ, templ.operands[1]);
+    return source->emitError(
+        "internal lowering error: barrier has wrong operand count");
+  std::optional<int64_t> logicalWarpReg =
+      allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> warpsPerBlockReg =
+      allocator.lookup(templ, templ.operands[1]);
   std::optional<int64_t> semaphoreBaseReg;
   if (templ.operands.size() == 3)
     semaphoreBaseReg = allocator.lookup(templ, templ.operands[2]);
   if (!logicalWarpReg || !warpsPerBlockReg)
-    return source->emitOpError()
-           << "uses barrier metadata values that are not defined by lowerable SSAVC4 ops";
+    return source->emitOpError() << "uses barrier metadata values that are not "
+                                    "defined by lowerable SSAVC4 ops";
   if (templ.operands.size() == 3 && !semaphoreBaseReg)
-    return source->emitOpError()
-           << "uses a semaphore_base value that is not defined by lowerable SSAVC4 ops";
+    return source->emitOpError() << "uses a semaphore_base value that is not "
+                                    "defined by lowerable SSAVC4 ops";
 
   auto subSetFlagsSmallImm = [&](mlir::vc4::QPUMux lhs, int64_t raddrA,
                                  int64_t smallImm) {
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::sub,
-                          mlir::vc4::MulOpcode::nop, raddrA, /*raddrB=*/0,
-                          lhs, mlir::vc4::QPUMux::b,
+                          mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop,
+                          raddrA, /*raddrB=*/0, lhs, mlir::vc4::QPUMux::b,
                           mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
                           smallImm, /*setFlags=*/true);
   };
   auto moveRegToR3 = [&](int64_t reg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/35, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, reg, reg,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/35, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, reg, reg, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   };
   auto decrementR3 = [&]() {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/35, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::sub,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                          mlir::vc4::QPUMux::b,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                          /*smallImm=*/1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/35, /*waddrMul=*/32, mlir::vc4::AddOpcode::sub,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/1);
   };
   auto branch = [&](mlir::vc4::BranchCond cond, int64_t slotDelta) {
     createScheduledBranch(builder, loc, cond, slotDelta * 8,
@@ -3624,8 +3774,8 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
   Operation *source = templ.flagSource ? templ.flagSource : templ.source;
   unsigned flagOperandCount =
       templ.flagOperandCount ? templ.flagOperandCount : templ.operands.size();
-  auto kindAttr =
-      llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(source->getAttr("kind"));
+  auto kindAttr = llvm::dyn_cast_or_null<mlir::ssavc4::FlagKindAttr>(
+      source->getAttr("kind"));
   mlir::vc4::AddOpcode flagOpcode = mlir::vc4::AddOpcode::sub;
   if (kindAttr && kindAttr.getValue() == mlir::ssavc4::FlagKind::fsub)
     flagOpcode = mlir::vc4::AddOpcode::fsub;
@@ -3634,23 +3784,22 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
     Value operand = templ.operands[index];
     std::optional<int64_t> reg = allocator.lookup(templ, operand);
     if (!reg)
-      return source->emitOpError()
-             << "uses a value that is not defined by a lowerable SSAVC4 op in M3 v1";
+      return source->emitOpError() << "uses a value that is not defined by a "
+                                      "lowerable SSAVC4 op in M3 v1";
     operandRegs.push_back(*reg);
   }
   bool useMirroredSecond =
       canUseMirroredSecondOperandForMakeFlags(templ, allocator);
   int64_t raddrA = operandRegs.empty() ? 0 : operandRegs.front();
   int64_t raddrB = flagOperandCount < 2 ? raddrA
-                  : useMirroredSecond   ? operandRegs[1]
+                   : useMirroredSecond  ? operandRegs[1]
                                         : 0;
   mlir::vc4::QPUMux addB = flagOperandCount < 2 ? mlir::vc4::QPUMux::a
-                         : useMirroredSecond     ? mlir::vc4::QPUMux::b
-                                                  : mlir::vc4::QPUMux::r1;
+                           : useMirroredSecond  ? mlir::vc4::QPUMux::b
+                                                : mlir::vc4::QPUMux::r1;
   std::optional<int64_t> smallImm;
   if (flagOperandCount == 1) {
-    if (!kindAttr ||
-        kindAttr.getValue() != mlir::ssavc4::FlagKind::zero_test)
+    if (!kindAttr || kindAttr.getValue() != mlir::ssavc4::FlagKind::zero_test)
       return source->emitOpError(
           "one-operand make_flags must be kind zero_test in M5 lowering");
     raddrB = 0;
@@ -3659,25 +3808,23 @@ static LogicalResult emitMakeFlags(OpBuilder &builder,
   }
 
   if (makeFlagsNeedsSecondOperandAccumulatorMove(templ, allocator)) {
-    createScheduledBundle(builder, source->getLoc(), mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, operandRegs[1],
-                          operandRegs[1], mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, source->getLoc(), mlir::vc4::QPUSignal::none,
+        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, operandRegs[1], operandRegs[1],
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
   }
 
-  createScheduledBundle(builder, source->getLoc(),
-                        smallImm ? mlir::vc4::QPUSignal::small_imm
-                                 : mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/31, /*waddrMul=*/32,
-                        flagOpcode, mlir::vc4::MulOpcode::nop, raddrA,
-                        raddrB, mlir::vc4::QPUMux::a, addB,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, smallImm,
-                        /*setFlags=*/true);
+  createScheduledBundle(
+      builder, source->getLoc(),
+      smallImm ? mlir::vc4::QPUSignal::small_imm : mlir::vc4::QPUSignal::none,
+      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+      /*waddrAdd=*/31, /*waddrMul=*/32, flagOpcode, mlir::vc4::MulOpcode::nop,
+      raddrA, raddrB, mlir::vc4::QPUMux::a, addB, mlir::vc4::QPUMux::r0,
+      mlir::vc4::QPUMux::r1, smallImm,
+      /*setFlags=*/true);
   return success();
 }
 
@@ -3687,13 +3834,16 @@ static LogicalResult emitScheduledBranch(OpBuilder &builder,
   Operation *source = templ.source;
   auto immediateIt = layout.branchImmediates.find(templ.ordinal);
   if (immediateIt == layout.branchImmediates.end())
-    return source->emitError("internal lowering error: missing scheduled branch immediate");
+    return source->emitError(
+        "internal lowering error: missing scheduled branch immediate");
 
   mlir::vc4::BranchCond cond = mlir::vc4::BranchCond::always;
   if (templ.kind == InstructionTemplate::Kind::CondBranch) {
-    auto condAttr = llvm::dyn_cast_or_null<mlir::vc4::BranchCondAttr>(source->getAttr("cond"));
+    auto condAttr = llvm::dyn_cast_or_null<mlir::vc4::BranchCondAttr>(
+        source->getAttr("cond"));
     if (!condAttr)
-      return source->emitOpError("requires a vc4.branch_cond condition attribute");
+      return source->emitOpError(
+          "requires a vc4.branch_cond condition attribute");
     cond = condAttr.getValue();
   }
 
@@ -3706,18 +3856,18 @@ static LogicalResult emitScheduledBranch(OpBuilder &builder,
   return success();
 }
 
-
 static LogicalResult emitVPMWrite(OpBuilder &builder,
                                   const InstructionTemplate &templ,
                                   const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 2)
-    return source->emitError("internal lowering error: VPM write has wrong operand count");
+    return source->emitError(
+        "internal lowering error: VPM write has wrong operand count");
   std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> valueReg = allocator.lookup(templ, templ.operands[1]);
   if (!rowReg || !valueReg)
-    return source->emitOpError()
-           << "uses a VPM row/value that is not defined by a lowerable SSAVC4 op";
+    return source->emitOpError() << "uses a VPM row/value that is not defined "
+                                    "by a lowerable SSAVC4 op";
 
   FailureOr<int64_t> setupBase = buildVPMQPUSetupBase(source);
   if (failed(setupBase))
@@ -3726,14 +3876,13 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
   auto [addressRowReg, addressRowMux] =
@@ -3744,13 +3893,12 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                     addressRowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                     addressRowMux, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/48, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, *valueReg, *valueReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/48, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+      mlir::vc4::MulOpcode::nop, *valueReg, *valueReg, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (useMutex) {
     createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
     emitMutexRelease(builder, loc);
@@ -3763,12 +3911,13 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                                  const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 1 || !templ.result)
-    return source->emitError("internal lowering error: VPM read template is malformed");
+    return source->emitError(
+        "internal lowering error: VPM read template is malformed");
   std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
   if (!rowReg || !resultReg)
-    return source->emitOpError()
-           << "uses a VPM row/result that is not defined by a lowerable SSAVC4 op";
+    return source->emitOpError() << "uses a VPM row/result that is not defined "
+                                    "by a lowerable SSAVC4 op";
 
   FailureOr<int64_t> setupBase = buildVPMQPUSetupBase(source);
   if (failed(setupBase))
@@ -3777,14 +3926,13 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
   Location loc = source->getLoc();
   bool useMutex = hasStringAttr(source, "serialize", "mutex");
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
   auto [addressRowReg, addressRowMux] =
@@ -3798,14 +3946,12 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        *resultReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
-                        /*raddrB=*/48, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, *resultReg, /*waddrMul=*/32,
+      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
+      /*raddrB=*/48, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
   emitRegfileResultSpacer(builder, loc, templ, allocator);
   if (useMutex)
@@ -3820,37 +3966,34 @@ static void emitRawVDWStore(OpBuilder &builder, Location loc,
                             int64_t activeLanes, int64_t vpmRow,
                             bool useMutex) {
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
 
   // Stage the SSA vector value into the requested VPM row.
   createSplat32LDI(builder, loc, 1055232, 35);
   if (dynamicVPMRowReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg,
-                          *dynamicVPMRowReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg, *dynamicVPMRowReg,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
     if (vpmRow != 0) {
       createSplat32LDI(builder, loc, vpmRow, 34);
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::add,
-                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::r2,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r2,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     }
   } else {
     createSplat32LDI(builder, loc, vpmRow, 33);
@@ -3861,13 +4004,12 @@ static void emitRawVDWStore(OpBuilder &builder, Location loc,
                     /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
                     mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/48, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, valueReg, valueReg,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/48, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+      mlir::vc4::MulOpcode::nop, valueReg, valueReg, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
 
   // VDW store setup: depth in bits 16..23, VPM row in bits 7.., and the
@@ -3880,88 +4022,80 @@ static void emitRawVDWStore(OpBuilder &builder, Location loc,
                     mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
   if (dynamicActiveLanesReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
-                          *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
+        *dynamicActiveLanesReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   } else {
     createSplat32LDI(builder, loc, activeLanes, 33);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/8);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/8);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/8);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/8);
   createSplat32LDI(builder, loc, -2139078656, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (dynamicVPMRowReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg,
-                          *dynamicVPMRowReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *dynamicVPMRowReg, *dynamicVPMRowReg,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
     if (vpmRow != 0) {
       createSplat32LDI(builder, loc, vpmRow, 36);
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::add,
-                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::r4,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r4,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     }
   } else {
     createSplat32LDI(builder, loc, vpmRow, 33);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/7);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/7);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
                     /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
                     mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
-  createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
-                   mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                   mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-                   addressReg, addressReg, mlir::vc4::QPUMux::a,
-                   mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                   mlir::vc4::QPUMux::r1);
+  createVPMVCDAddr(
+      builder, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
+      mlir::vc4::MulOpcode::nop, addressReg, addressReg, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
   if (useMutex)
     emitMutexRelease(builder, loc);
@@ -3976,93 +4110,72 @@ static void emitVDWVPMBase(OpBuilder &builder, Location loc, int64_t vpmYReg,
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::add,
-                          mlir::vc4::MulOpcode::nop, vpmYReg, /*raddrB=*/0,
-                          vpmYMux, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                          vpmYReg, /*raddrB=*/0, vpmYMux, mlir::vc4::QPUMux::r1,
                           mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, vpmYReg, vpmYReg,
-                          vpmYMux, vpmYMux,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, vpmYReg, vpmYReg, vpmYMux, vpmYMux,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/7);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/7);
   if (staticVpmX) {
     createSplat32LDI(builder, loc, *staticVpmX, 35);
   } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/35, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg,
-                          vpmXMux, vpmXMux, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/35, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, vpmXReg, vpmXReg, vpmXMux, vpmXMux,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/35, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/3);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/35, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/3);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
 }
 
-static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
-                                   int64_t addressReg,
-                                   int64_t vpmYReg,
-                                   int64_t vpmXReg,
-                                   std::optional<int64_t> dynamicActiveLanesReg,
-                                   int64_t activeLanes,
-                                   int64_t rowLen,
-                                   int64_t nrows,
-                                   int64_t memoryPitchBytes,
-                                   int64_t elemBytes,
-                                   uint32_t modew,
-                                   bool vertical,
-                                   bool useMutex,
-                                   mlir::vc4::QPUMux addressMux =
-                                       mlir::vc4::QPUMux::a,
-                                   mlir::vc4::QPUMux vpmYMux =
-                                       mlir::vc4::QPUMux::a,
-                                   mlir::vc4::QPUMux vpmXMux =
-                                       mlir::vc4::QPUMux::a,
-                                   std::optional<int64_t> addressAddReg =
-                                       std::nullopt,
-                                   int64_t addressAddMultiplier = 1,
-                                   int64_t vpmRowOffset = 0,
-                                   std::optional<int64_t> staticVpmX =
-                                       std::nullopt) {
+static void emitRawVDWStoreFromVPM(
+    OpBuilder &builder, Location loc, int64_t addressReg, int64_t vpmYReg,
+    int64_t vpmXReg, std::optional<int64_t> dynamicActiveLanesReg,
+    int64_t activeLanes, int64_t rowLen, int64_t nrows,
+    int64_t memoryPitchBytes, int64_t elemBytes, uint32_t modew, bool vertical,
+    bool useMutex, mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
+    mlir::vc4::QPUMux vpmYMux = mlir::vc4::QPUMux::a,
+    mlir::vc4::QPUMux vpmXMux = mlir::vc4::QPUMux::a,
+    std::optional<int64_t> addressAddReg = std::nullopt,
+    int64_t addressAddMultiplier = 1, int64_t vpmRowOffset = 0,
+    std::optional<int64_t> staticVpmX = std::nullopt) {
   (void)activeLanes;
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
 
   // VDW store setup: the source coordinate uses the DMA descriptor layout
@@ -4072,81 +4185,72 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
   int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
 
   if (dynamicActiveLanesReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
-                          *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::max,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                          mlir::vc4::QPUMux::b,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                          /*smallImm=*/0);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *dynamicActiveLanesReg,
+        *dynamicActiveLanesReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::max,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/0);
     if (rowLen == 16) {
       createSplat32LDI(builder, loc, 16, 32);
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always,
-                            mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::min,
-                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::r0,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::min,
+          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     } else {
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                            mlir::vc4::Cond::always,
-                            mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::min,
-                            mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::b,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                            /*smallImm=*/static_cast<int32_t>(rowLen));
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::small_imm,
+          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::min,
+          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+          /*smallImm=*/static_cast<int32_t>(rowLen));
     }
   } else {
     createSplat32LDI(builder, loc, rowLen, 33);
   }
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/8);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/33, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::shl,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/8);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/8);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
                        (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   createSplat32LDI(builder, loc, static_cast<int32_t>(setupBase), 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-                        mlir::vc4::QPUMux::r1,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-  emitVDWVPMBase(builder, loc, vpmYReg, vpmXReg, vpmYMux, vpmXMux,
-                 vpmRowOffset, staticVpmX);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  emitVDWVPMBase(builder, loc, vpmYReg, vpmXReg, vpmYMux, vpmXMux, vpmRowOffset,
+                 staticVpmX);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -4166,43 +4270,38 @@ static void emitRawVDWStoreFromVPM(OpBuilder &builder, Location loc,
                     mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
                     mlir::vc4::QPUMux::r1);
   if (addressAddReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *addressAddReg,
-                          *addressAddReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *addressAddReg, *addressAddReg,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
     for (int64_t i = 1; i < addressAddMultiplier; ++i) {
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::add,
-                            mlir::vc4::MulOpcode::nop, *addressAddReg,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::a,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+          mlir::vc4::MulOpcode::nop, *addressAddReg,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::a,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     }
-    createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
-                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                     addressReg, /*raddrB=*/0, addressMux,
-                     mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
-                     mlir::vc4::QPUMux::r1);
+    createVPMVCDAddr(
+        builder, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
+        mlir::vc4::MulOpcode::nop, addressReg, /*raddrB=*/0, addressMux,
+        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   } else {
     createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::write,
                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                     mlir::vc4::AddOpcode::bit_or,
-                     mlir::vc4::MulOpcode::nop, addressReg, addressReg,
-                     addressMux, addressMux, mlir::vc4::QPUMux::r0,
-                     mlir::vc4::QPUMux::r1);
+                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                     addressReg, addressReg, addressMux, addressMux,
+                     mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::write);
   if (useMutex)
     emitMutexRelease(builder, loc);
 }
-
 
 static uint32_t encodeVDRCount16(int64_t value) {
   return value == 16 ? 0u : static_cast<uint32_t>(value & 0x0f);
@@ -4264,18 +4363,17 @@ static LogicalResult getDMAModeW(Operation *source, int64_t vpmX,
 }
 
 static LogicalResult buildVDRLoadSetupWordFromParts(
-    Operation *source, int64_t rowLen, int64_t nrows,
-    int64_t memoryPitchBytes, int64_t vpmX, int64_t vpmPitch, bool vertical,
-    int64_t &setupWord) {
-  if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 ||
-      vpmX < 0 || vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
+    Operation *source, int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes,
+    int64_t vpmX, int64_t vpmPitch, bool vertical, int64_t &setupWord) {
+  if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 || vpmX < 0 ||
+      vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
     return source->emitOpError(
         "has invalid VDR setup attributes after verification");
 
   std::optional<uint32_t> mpitch = encodeVDRMemoryPitchBytes(memoryPitchBytes);
   if (!mpitch)
-    return source->emitOpError()
-           << "requires memory_pitch_bytes encodable as VDR MPITCH = 8 * 2^n bytes";
+    return source->emitOpError() << "requires memory_pitch_bytes encodable as "
+                                    "VDR MPITCH = 8 * 2^n bytes";
   uint32_t modew = 0;
   if (failed(getDMAModeW(source, vpmX, modew)))
     return failure();
@@ -4283,14 +4381,12 @@ static LogicalResult buildVDRLoadSetupWordFromParts(
       llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
   auto subword =
       llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
-  int64_t hardwareVPitch =
-      vpmPitch * getPackedSubwordLogicalRowScale(width.getValue(),
-                                                 subword.getValue());
+  int64_t hardwareVPitch = vpmPitch * getPackedSubwordLogicalRowScale(
+                                          width.getValue(), subword.getValue());
   if (hardwareVPitch < 1 || hardwareVPitch > 16)
     return source->emitOpError()
            << "VDR logical vpm_pitch " << vpmPitch
-           << " is not encodable as 4-bit hardware VPITCH "
-           << hardwareVPitch;
+           << " is not encodable as 4-bit hardware VPITCH " << hardwareVPitch;
 
   // VPMVCD_RD_SETUP basic DMA-load setup:
   //   bit 31 marks the read/DMA setup word, MPITCH encodes 8*2^n byte source
@@ -4313,9 +4409,10 @@ static LogicalResult buildVDRLoadSetupWordFromParts(
 static LogicalResult buildVDRLoadSetupWordWithExtendedPitch(
     Operation *source, int64_t rowLen, int64_t nrows, int64_t vpmX,
     int64_t vpmPitch, bool vertical, int64_t &setupWord) {
-  if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 ||
-      vpmX < 0 || vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
-    return source->emitOpError("has invalid VDR setup attributes after verification");
+  if (rowLen < 1 || rowLen > 16 || nrows < 1 || nrows > 16 || vpmX < 0 ||
+      vpmX > 15 || vpmPitch < 1 || vpmPitch > 16)
+    return source->emitOpError(
+        "has invalid VDR setup attributes after verification");
 
   uint32_t modew = 0;
   if (failed(getDMAModeW(source, vpmX, modew)))
@@ -4324,14 +4421,12 @@ static LogicalResult buildVDRLoadSetupWordWithExtendedPitch(
       llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
   auto subword =
       llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
-  int64_t hardwareVPitch =
-      vpmPitch * getPackedSubwordLogicalRowScale(width.getValue(),
-                                                 subword.getValue());
+  int64_t hardwareVPitch = vpmPitch * getPackedSubwordLogicalRowScale(
+                                          width.getValue(), subword.getValue());
   if (hardwareVPitch < 1 || hardwareVPitch > 16)
     return source->emitOpError()
            << "VDR logical vpm_pitch " << vpmPitch
-           << " is not encodable as 4-bit hardware VPITCH "
-           << hardwareVPitch;
+           << " is not encodable as 4-bit hardware VPITCH " << hardwareVPitch;
   uint32_t word = 0x80000000u;
   word |= (modew & 0x7u) << 28;
   word |= (encodeVDRCount16(rowLen) & 0x0fu) << 20;
@@ -4352,40 +4447,31 @@ static LogicalResult buildVDRLoadSetupWord(Operation *source,
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
   int64_t vpmX = getI32IntegerAttrOr(source, "vpm_x", -1);
   int64_t vpmPitch = getI32IntegerAttrOr(source, "vpm_pitch", -1);
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
+  auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+      source->getAttr("orientation"));
   bool vertical =
       orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
-  return buildVDRLoadSetupWordFromParts(source, rowLen, nrows,
-                                        memoryPitchBytes, vpmX, vpmPitch,
-                                        vertical, setupWord);
+  return buildVDRLoadSetupWordFromParts(source, rowLen, nrows, memoryPitchBytes,
+                                        vpmX, vpmPitch, vertical, setupWord);
 }
 
-static void emitRawVDRLoad(OpBuilder &builder, Location loc,
-                           int64_t addressReg, int64_t setupWord,
-                           int64_t vpmBaseRowReg, bool useMutex,
-                           mlir::vc4::QPUMux addressMux =
-                               mlir::vc4::QPUMux::a,
-                           mlir::vc4::QPUMux vpmBaseRowMux =
-                               mlir::vc4::QPUMux::a,
-                           std::optional<int64_t> addressAddReg =
-                               std::nullopt,
-                           int64_t addressAddMultiplier = 1,
-                           int64_t vpmRowOffset = 0,
-                           std::optional<int64_t> extendedPitchBytes =
-                               std::nullopt,
-                           std::optional<int64_t> extendedPitchReg =
-                               std::nullopt) {
+static void
+emitRawVDRLoad(OpBuilder &builder, Location loc, int64_t addressReg,
+               int64_t setupWord, int64_t vpmBaseRowReg, bool useMutex,
+               mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
+               mlir::vc4::QPUMux vpmBaseRowMux = mlir::vc4::QPUMux::a,
+               std::optional<int64_t> addressAddReg = std::nullopt,
+               int64_t addressAddMultiplier = 1, int64_t vpmRowOffset = 0,
+               std::optional<int64_t> extendedPitchBytes = std::nullopt,
+               std::optional<int64_t> extendedPitchReg = std::nullopt) {
   if (useMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   if (extendedPitchBytes) {
     createSplat32LDI(
@@ -4414,28 +4500,25 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                           /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::add,
-                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
-                          /*raddrB=*/0, vpmBaseRowMux,
-                          mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::shl,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+                          mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                          vpmBaseRowReg,
+                          /*raddrB=*/0, vpmBaseRowMux, mlir::vc4::QPUMux::r1,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::shl,
-                          mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
-                          /*raddrB=*/0, vpmBaseRowMux,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1, /*smallImm=*/4);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+        mlir::vc4::MulOpcode::nop, vpmBaseRowReg,
+        /*raddrB=*/0, vpmBaseRowMux, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   }
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
@@ -4446,37 +4529,33 @@ static void emitRawVDRLoad(OpBuilder &builder, Location loc,
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   if (addressAddReg) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/33, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, *addressAddReg,
-                          *addressAddReg, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, *addressAddReg, *addressAddReg,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
     for (int64_t i = 1; i < addressAddMultiplier; ++i) {
-      createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            /*waddrAdd=*/33, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::add,
-                            mlir::vc4::MulOpcode::nop, *addressAddReg,
-                            /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-                            mlir::vc4::QPUMux::a,
-                            mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+      createScheduledBundle(
+          builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never,
+          /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
+          mlir::vc4::MulOpcode::nop, *addressAddReg,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::a,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     }
-    createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
-                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                     addressReg, /*raddrB=*/0, addressMux,
-                     mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
-                     mlir::vc4::QPUMux::r1);
+    createVPMVCDAddr(
+        builder, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
+        mlir::vc4::MulOpcode::nop, addressReg, /*raddrB=*/0, addressMux,
+        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   } else {
     createVPMVCDAddr(builder, loc, mlir::vc4::VPMVCDSide::read,
                      mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                     mlir::vc4::AddOpcode::bit_or,
-                     mlir::vc4::MulOpcode::nop, addressReg, addressReg,
-                     addressMux, addressMux, mlir::vc4::QPUMux::r0,
-                     mlir::vc4::QPUMux::r1);
+                     mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                     addressReg, addressReg, addressMux, addressMux,
+                     mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
   if (useMutex)
@@ -4488,19 +4567,21 @@ static LogicalResult emitVDRLoad(OpBuilder &builder,
                                  const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 2)
-    return source->emitError("internal lowering error: VDR load has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+    return source->emitError(
+        "internal lowering error: VDR load has wrong operand count");
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> vpmBaseRowReg =
       allocator.lookup(templ, templ.operands[1]);
   if (!addressReg || !vpmBaseRowReg)
     return source->emitOpError()
-           << "uses a VDR base address or VPM base row that is not defined by a lowerable SSAVC4 op";
+           << "uses a VDR base address or VPM base row that is not defined by "
+              "a lowerable SSAVC4 op";
   int64_t setupWord = 0;
   if (failed(buildVDRLoadSetupWord(source, setupWord)))
     return failure();
   emitRawVDRLoad(builder, source->getLoc(), *addressReg, setupWord,
-                 *vpmBaseRowReg,
-                 hasStringAttr(source, "serialize", "mutex"));
+                 *vpmBaseRowReg, hasStringAttr(source, "serialize", "mutex"));
   return success();
 }
 
@@ -4572,9 +4653,8 @@ struct PlannedRegion {
       tags.push_back(std::move(childTag));
   }
 
-  void appendFixedSequence(
-      llvm::StringRef tag, FixedHardwareSequence kind,
-      std::function<LogicalResult(OpBuilder &)> emitter) {
+  void appendFixedSequence(llvm::StringRef tag, FixedHardwareSequence kind,
+                           std::function<LogicalResult(OpBuilder &)> emitter) {
     append(tag, getFixedHardwareSequenceSlots(kind), std::move(emitter));
   }
 
@@ -4610,19 +4690,17 @@ static void appendScheduledBundleSlot(
     mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul, int64_t waddrAdd,
     int64_t waddrMul, mlir::vc4::AddOpcode addOpcode,
     mlir::vc4::MulOpcode mulOpcode, int64_t raddrA, int64_t raddrB,
-    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB,
-    mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
-    std::optional<int64_t> smallImm = std::nullopt, bool setFlags = false,
-    bool writeSwap = false) {
+    mlir::vc4::QPUMux addA, mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
+    mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt,
+    bool setFlags = false, bool writeSwap = false) {
   appendOneSlot(region, "scheduled-bundle",
                 [loc, signal, condAdd, condMul, waddrAdd, waddrMul, addOpcode,
                  mulOpcode, raddrA, raddrB, addA, addB, mulA, mulB, smallImm,
                  setFlags, writeSwap](OpBuilder &builder) -> LogicalResult {
-                  createScheduledBundle(builder, loc, signal, condAdd, condMul,
-                                        waddrAdd, waddrMul, addOpcode,
-                                        mulOpcode, raddrA, raddrB, addA, addB,
-                                        mulA, mulB, smallImm, setFlags,
-                                        writeSwap);
+                  createScheduledBundle(
+                      builder, loc, signal, condAdd, condMul, waddrAdd,
+                      waddrMul, addOpcode, mulOpcode, raddrA, raddrB, addA,
+                      addB, mulA, mulB, smallImm, setFlags, writeSwap);
                   return success();
                 });
 }
@@ -4648,8 +4726,8 @@ static void appendVPMVCDSetupSlot(
     mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
     mlir::vc4::AddOpcode addOpcode, mlir::vc4::MulOpcode mulOpcode,
     int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
-    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
-    mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt) {
+    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
+    std::optional<int64_t> smallImm = std::nullopt) {
   appendOneSlot(region, "vpmvcd-setup",
                 [loc, side, condAdd, condMul, addOpcode, mulOpcode, raddrA,
                  raddrB, addA, addB, mulA, mulB,
@@ -4666,8 +4744,8 @@ static void appendVPMVCDAddrSlot(
     mlir::vc4::Cond condAdd, mlir::vc4::Cond condMul,
     mlir::vc4::AddOpcode addOpcode, mlir::vc4::MulOpcode mulOpcode,
     int64_t raddrA, int64_t raddrB, mlir::vc4::QPUMux addA,
-    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA,
-    mlir::vc4::QPUMux mulB, std::optional<int64_t> smallImm = std::nullopt) {
+    mlir::vc4::QPUMux addB, mlir::vc4::QPUMux mulA, mlir::vc4::QPUMux mulB,
+    std::optional<int64_t> smallImm = std::nullopt) {
   appendOneSlot(region, "vpmvcd-addr",
                 [loc, side, condAdd, condMul, addOpcode, mulOpcode, raddrA,
                  raddrB, addA, addB, mulA, mulB,
@@ -4683,34 +4761,33 @@ static void appendVPMVCDWaitSlot(PlannedRegion &region, Location loc,
                                  mlir::vc4::VPMVCDSide side) {
   appendOneSlot(region, "vpmvcd-wait",
                 [loc, side](OpBuilder &builder) -> LogicalResult {
-    createVPMVCDWait(builder, loc, side);
-    return success();
-  });
+                  createVPMVCDWait(builder, loc, side);
+                  return success();
+                });
 }
 
 static void appendMutexAcquireSlot(PlannedRegion &region, Location loc) {
-  appendScheduledBundleSlot(region, loc, mlir::vc4::QPUSignal::none,
-                            mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                            /*waddrAdd=*/31, /*waddrMul=*/32,
-                            mlir::vc4::AddOpcode::bit_or,
-                            mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                            /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                            mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                            mlir::vc4::QPUMux::r1);
+  appendScheduledBundleSlot(
+      region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+      /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
 }
 
 static void appendMutexReleaseSlot(PlannedRegion &region, Location loc) {
   appendOneSlot(region, "mutex-release",
                 [loc](OpBuilder &builder) -> LogicalResult {
-    emitMutexRelease(builder, loc);
-    return success();
-  });
+                  emitMutexRelease(builder, loc);
+                  return success();
+                });
 }
 
 static PlannedRegion planAddConstantToScratch(Location loc, int64_t baseReg,
-                                               mlir::vc4::QPUMux baseMux,
-                                               int64_t offset,
-                                               int64_t scratchWaddr) {
+                                              mlir::vc4::QPUMux baseMux,
+                                              int64_t offset,
+                                              int64_t scratchWaddr) {
   PlannedRegion region;
   appendSplat32LDISlot(region, loc, offset, 35);
   appendScheduledBundleSlot(
@@ -4722,27 +4799,26 @@ static PlannedRegion planAddConstantToScratch(Location loc, int64_t baseReg,
   return region;
 }
 
-static PlannedRegion planVPMZeroWriteRow(
-    Location loc, int64_t rowReg, int64_t x, bool vertical, bool useMutex,
-    mlir::vc4::QPUMux rowMux = mlir::vc4::QPUMux::a) {
+static PlannedRegion
+planVPMZeroWriteRow(Location loc, int64_t rowReg, int64_t x, bool vertical,
+                    bool useMutex,
+                    mlir::vc4::QPUMux rowMux = mlir::vc4::QPUMux::a) {
   PlannedRegion region;
-  int64_t setupBase =
-      (1 << 20) | (1 << 12) | (vertical ? (0x200 | x) : 0xa00);
+  int64_t setupBase = (1 << 20) | (1 << 12) | (vertical ? (0x200 | x) : 0xa00);
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendSplat32LDISlot(region, loc, setupBase, 35);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
-      mlir::vc4::MulOpcode::nop, rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-      rowMux, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::r3, rowMux,
+                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/48,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/48,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/0);
   if (useMutex) {
     appendVPMVCDWaitSlot(region, loc, mlir::vc4::VPMVCDSide::write);
     appendMutexReleaseSlot(region, loc);
@@ -4759,24 +4835,28 @@ static PlannedRegion planDMARectZeroFillRow(Location loc,
   if (yOffset == 0)
     return planVPMZeroWriteRow(loc, rowReg, x, plan.vertical, plan.useMutex);
   region.appendRegion("dma-zero-fill-row-offset",
-                      planAddConstantToScratch(
-                          loc, rowReg, mlir::vc4::QPUMux::a, yOffset,
-                          /*scratchWaddr=*/32));
-  region.appendRegion("dma-zero-fill-row-write", planVPMZeroWriteRow(
-      loc, /*rowReg=*/0, x, plan.vertical, plan.useMutex,
-      mlir::vc4::QPUMux::r0));
+                      planAddConstantToScratch(loc, rowReg,
+                                               mlir::vc4::QPUMux::a, yOffset,
+                                               /*scratchWaddr=*/32));
+  region.appendRegion("dma-zero-fill-row-write",
+                      planVPMZeroWriteRow(loc, /*rowReg=*/0, x, plan.vertical,
+                                          plan.useMutex,
+                                          mlir::vc4::QPUMux::r0));
   return region;
 }
 
 // Branch windows include the vc4.qpu.branch op, its explicit delay slots, and
 // the backend branch-window padding visible in emitted QPU slots. Dynamic DMA
-// branch windows must use payload.slots(), not a separately rederived body size.
-[[maybe_unused]] static void appendBranchWithDelaySlots(
-    PlannedRegion &region, Location loc, mlir::vc4::BranchCond cond,
-    int64_t immediateBytes, int64_t raddrA = 0, int64_t waddrAdd = 31,
-    int64_t waddrMul = 30) {
+// branch windows must use payload.slots(), not a separately rederived body
+// size.
+[[maybe_unused]] static void
+appendBranchWithDelaySlots(PlannedRegion &region, Location loc,
+                           mlir::vc4::BranchCond cond, int64_t immediateBytes,
+                           int64_t raddrA = 0, int64_t waddrAdd = 31,
+                           int64_t waddrMul = 30) {
   region.appendFixedSequence(
-      "branch-window", FixedHardwareSequence::ScheduledBranchWithDelayAndPadding,
+      "branch-window",
+      FixedHardwareSequence::ScheduledBranchWithDelayAndPadding,
       [loc, cond, immediateBytes, raddrA, waddrAdd,
        waddrMul](OpBuilder &builder) -> LogicalResult {
         createScheduledBranch(builder, loc, cond, immediateBytes, raddrA,
@@ -4851,8 +4931,7 @@ planPitchOverflowGuardedRegion(Location loc, mlir::vc4::BranchCond branchIfSkip,
 }
 
 static PlannedRegion planDMARectZeroFill(Location loc, const DMARectPlan &plan,
-                                         int64_t vpmBaseRowReg,
-                                         int64_t rows) {
+                                         int64_t vpmBaseRowReg, int64_t rows) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
     region.appendRegion("dma-rect-zero-fill-row",
@@ -4868,55 +4947,49 @@ static void emitRuntimeActiveRowsGuard(OpBuilder &builder, Location loc,
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, activeRowsReg,
-                        activeRowsReg, mlir::vc4::QPUMux::a,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        activeRowsReg, activeRowsReg, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::max,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::max,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/0);
   createSplat32LDI(builder, loc, maxRows, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::min,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::min,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (row + 1 == maxRows) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::sub,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1,
-                          /*smallImm=*/std::nullopt, /*setFlags=*/true);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::sub,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r3,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/std::nullopt, /*setFlags=*/true);
   } else {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::sub,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                          /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1,
-                          /*smallImm=*/static_cast<int32_t>(row + 1),
-                          /*setFlags=*/true);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::sub,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+        /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+        /*smallImm=*/static_cast<int32_t>(row + 1),
+        /*setFlags=*/true);
   }
-  createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
-                        static_cast<int64_t>(kPlannedBranchWindowSlots +
-                                             guardedPayloadSlots) *
-                            8,
-                        /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+  createScheduledBranch(
+      builder, loc, mlir::vc4::BranchCond::any_c_set,
+      static_cast<int64_t>(kPlannedBranchWindowSlots + guardedPayloadSlots) * 8,
+      /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -4928,42 +5001,37 @@ static void emitRuntimeActiveColsGuard(OpBuilder &builder, Location loc,
   createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                         mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                         /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, activeColsReg,
-                        activeColsReg, mlir::vc4::QPUMux::a,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        activeColsReg, activeColsReg, mlir::vc4::QPUMux::a,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
                         mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::max,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, /*smallImm=*/0);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::max,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/0);
   createSplat32LDI(builder, loc, maxCols, 35);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/34, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::min,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        /*waddrAdd=*/31, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::sub,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1, /*smallImm=*/1,
-                        /*setFlags=*/true);
-  createScheduledBranch(builder, loc, mlir::vc4::BranchCond::any_c_set,
-                        static_cast<int64_t>(kPlannedBranchWindowSlots +
-                                             guardedPayloadSlots) *
-                            8,
-                        /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/34, /*waddrMul=*/32, mlir::vc4::AddOpcode::min,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::sub,
+      mlir::vc4::MulOpcode::nop, /*raddrA=*/0,
+      /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/1,
+      /*setFlags=*/true);
+  createScheduledBranch(
+      builder, loc, mlir::vc4::BranchCond::any_c_set,
+      static_cast<int64_t>(kPlannedBranchWindowSlots + guardedPayloadSlots) * 8,
+      /*raddrA=*/0, /*waddrAdd=*/31, /*waddrMul=*/30);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
@@ -4977,22 +5045,22 @@ static void appendVDRLoadExtendedPitchSetup(PlannedRegion &region, Location loc,
         region, loc,
         static_cast<int32_t>(0x90000000u | static_cast<uint32_t>(*pitchBytes)),
         35);
-    appendVPMVCDSetupSlot(
-        region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r3,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
+                          mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r3,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     return;
   }
   if (pitchReg) {
     appendSplat32LDISlot(region, loc, static_cast<int32_t>(0x90000000u), 35);
-    appendVPMVCDSetupSlot(
-        region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-        mlir::vc4::MulOpcode::nop, *pitchReg, /*raddrB=*/0,
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r3,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                          mlir::vc4::AddOpcode::bit_or,
+                          mlir::vc4::MulOpcode::nop, *pitchReg, /*raddrB=*/0,
+                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r3,
+                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
 }
 
@@ -5009,20 +5077,19 @@ static void appendVDRVPMBaseRowSetup(PlannedRegion &region, Location loc,
         /*raddrB=*/0, vpmBaseRowMux, mlir::vc4::QPUMux::r1,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     appendScheduledBundleSlot(
-        region, loc, mlir::vc4::QPUSignal::small_imm,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+        region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, /*waddrAdd=*/33,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
     return;
   }
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, vpmBaseRowReg, /*raddrB=*/0, vpmBaseRowMux,
-      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      vpmBaseRowReg, /*raddrB=*/0, vpmBaseRowMux, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
       /*smallImm=*/4);
 }
 
@@ -5034,41 +5101,40 @@ static void appendVCDAddressWithOptionalAdd(
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/33, /*waddrMul=*/32,
-        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-        *addressAddReg, *addressAddReg, mlir::vc4::QPUMux::a,
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, *addressAddReg,
+        *addressAddReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     for (int64_t i = 1; i < addressAddMultiplier; ++i) {
       appendScheduledBundleSlot(
           region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
           mlir::vc4::Cond::never, /*waddrAdd=*/33, /*waddrMul=*/32,
-          mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-          *addressAddReg, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-          mlir::vc4::QPUMux::r1);
+          mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, *addressAddReg,
+          /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::a,
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     }
-    appendVPMVCDAddrSlot(
-        region, loc, side, mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, addressReg,
-        /*raddrB=*/0, addressMux, mlir::vc4::QPUMux::r1,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    appendVPMVCDAddrSlot(region, loc, side, mlir::vc4::Cond::always,
+                         mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
+                         mlir::vc4::MulOpcode::nop, addressReg,
+                         /*raddrB=*/0, addressMux, mlir::vc4::QPUMux::r1,
+                         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     return;
   }
-  appendVPMVCDAddrSlot(
-      region, loc, side, mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, addressReg,
-      addressReg, addressMux, addressMux, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+  appendVPMVCDAddrSlot(region, loc, side, mlir::vc4::Cond::always,
+                       mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
+                       mlir::vc4::MulOpcode::nop, addressReg, addressReg,
+                       addressMux, addressMux, mlir::vc4::QPUMux::r0,
+                       mlir::vc4::QPUMux::r1);
 }
 
-static PlannedRegion planRawVDRLoad(
-    Location loc, int64_t addressReg, int64_t setupWord, int64_t vpmBaseRowReg,
-    bool useMutex, mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
-    mlir::vc4::QPUMux vpmBaseRowMux = mlir::vc4::QPUMux::a,
-    std::optional<int64_t> addressAddReg = std::nullopt,
-    int64_t addressAddMultiplier = 1, int64_t vpmRowOffset = 0,
-    std::optional<int64_t> extendedPitchBytes = std::nullopt,
-    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+static PlannedRegion
+planRawVDRLoad(Location loc, int64_t addressReg, int64_t setupWord,
+               int64_t vpmBaseRowReg, bool useMutex,
+               mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
+               mlir::vc4::QPUMux vpmBaseRowMux = mlir::vc4::QPUMux::a,
+               std::optional<int64_t> addressAddReg = std::nullopt,
+               int64_t addressAddMultiplier = 1, int64_t vpmRowOffset = 0,
+               std::optional<int64_t> extendedPitchBytes = std::nullopt,
+               std::optional<int64_t> extendedPitchReg = std::nullopt) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
@@ -5077,12 +5143,12 @@ static PlannedRegion planRawVDRLoad(
   appendSplat32LDISlot(region, loc, setupWord, 35);
   appendVDRVPMBaseRowSetup(region, loc, vpmBaseRowReg, vpmBaseRowMux,
                            vpmRowOffset);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::read,
@@ -5104,32 +5170,28 @@ static PlannedRegion planDynamicVDRLoadOneRow(
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   appendSplat32LDISlot(region, loc, setupWord, 32);
   appendNopSlot(region, loc);
@@ -5137,20 +5199,19 @@ static PlannedRegion planDynamicVDRLoadOneRow(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVDRVPMBaseRowSetup(region, loc, vpmBaseRowReg, vpmBaseRowMux,
                            vpmRowOffset);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::read,
@@ -5162,36 +5223,33 @@ static PlannedRegion planDynamicVDRLoadOneRow(
   return region;
 }
 
-static PlannedRegion planDynamicVDRLoadRows(
-    Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
-    int64_t setupWordWithoutNRows, bool useMutex,
-    std::optional<int64_t> extendedPitchBytes = std::nullopt,
-    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+static PlannedRegion
+planDynamicVDRLoadRows(Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
+                       int64_t setupWordWithoutNRows, bool useMutex,
+                       std::optional<int64_t> extendedPitchBytes = std::nullopt,
+                       std::optional<int64_t> extendedPitchReg = std::nullopt) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendVDRLoadExtendedPitchSetup(region, loc, extendedPitchBytes,
                                   extendedPitchReg);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendSplat32LDISlot(region, loc, setupWordWithoutNRows, 32);
   appendNopSlot(region, loc);
@@ -5199,20 +5257,19 @@ static PlannedRegion planDynamicVDRLoadRows(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVDRVPMBaseRowSetup(region, loc, vpmBaseRowReg, mlir::vc4::QPUMux::a,
                            /*vpmRowOffset=*/0);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::read,
@@ -5233,12 +5290,12 @@ static void appendDynamicVDRLoadCommonTail(PlannedRegion &region, Location loc,
   appendNopSlot(region, loc);
   appendVDRVPMBaseRowSetup(region, loc, vpmBaseRowReg, mlir::vc4::QPUMux::a,
                            /*vpmRowOffset=*/0);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::read, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::read,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendNopSlot(region, loc);
   appendNopSlot(region, loc);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::read,
@@ -5249,43 +5306,39 @@ static void appendDynamicVDRLoadCommonTail(PlannedRegion &region, Location loc,
     appendMutexReleaseSlot(region, loc);
 }
 
-static PlannedRegion planDynamicVDRLoadCols(
-    Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
-    int64_t setupWordWithoutRowLen, bool useMutex,
-    std::optional<int64_t> extendedPitchBytes = std::nullopt,
-    std::optional<int64_t> extendedPitchReg = std::nullopt) {
+static PlannedRegion
+planDynamicVDRLoadCols(Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
+                       int64_t setupWordWithoutRowLen, bool useMutex,
+                       std::optional<int64_t> extendedPitchBytes = std::nullopt,
+                       std::optional<int64_t> extendedPitchReg = std::nullopt) {
   PlannedRegion region;
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendVDRLoadExtendedPitchSetup(region, loc, extendedPitchBytes,
                                   extendedPitchReg);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   appendSplat32LDISlot(region, loc, setupWordWithoutRowLen, 32);
   appendNopSlot(region, loc);
@@ -5293,9 +5346,8 @@ static PlannedRegion planDynamicVDRLoadCols(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendDynamicVDRLoadCommonTail(region, loc, addressReg, vpmBaseRowReg,
                                  useMutex);
   return region;
@@ -5312,53 +5364,46 @@ static PlannedRegion planDynamicVDRLoadRowsCols(
   appendVDRLoadExtendedPitchSetup(region, loc, extendedPitchBytes,
                                   extendedPitchReg);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/4);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/15);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendSplat32LDISlot(region, loc, setupWordWithoutRowsCols, 32);
   appendNopSlot(region, loc);
@@ -5366,16 +5411,14 @@ static PlannedRegion planDynamicVDRLoadRowsCols(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendDynamicVDRLoadCommonTail(region, loc, addressReg, vpmBaseRowReg,
                                  useMutex);
   return region;
@@ -5383,14 +5426,14 @@ static PlannedRegion planDynamicVDRLoadRowsCols(
 
 static PlannedRegion planRawVDRLoadToVPM(Location loc, int64_t addressReg,
                                          int64_t setupWord,
-                                         int64_t vpmBaseRowReg,
-                                         bool useMutex) {
+                                         int64_t vpmBaseRowReg, bool useMutex) {
   return planRawVDRLoad(loc, addressReg, setupWord, vpmBaseRowReg, useMutex);
 }
 
-static PlannedRegion planRawVDRLoadToVPMWithRuntimePitch(
-    Location loc, int64_t addressReg, int64_t setupWord,
-    int64_t vpmBaseRowReg, int64_t pitchReg, bool useMutex) {
+static PlannedRegion
+planRawVDRLoadToVPMWithRuntimePitch(Location loc, int64_t addressReg,
+                                    int64_t setupWord, int64_t vpmBaseRowReg,
+                                    int64_t pitchReg, bool useMutex) {
   return planRawVDRLoad(loc, addressReg, setupWord, vpmBaseRowReg, useMutex,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         /*addressAddReg=*/std::nullopt,
@@ -5399,9 +5442,10 @@ static PlannedRegion planRawVDRLoadToVPMWithRuntimePitch(
                         /*extendedPitchReg=*/pitchReg);
 }
 
-static PlannedRegion planRawVDRLoadToVPMWithExtendedPitch(
-    Location loc, int64_t addressReg, int64_t setupWord,
-    int64_t vpmBaseRowReg, int64_t pitchBytes, bool useMutex) {
+static PlannedRegion
+planRawVDRLoadToVPMWithExtendedPitch(Location loc, int64_t addressReg,
+                                     int64_t setupWord, int64_t vpmBaseRowReg,
+                                     int64_t pitchBytes, bool useMutex) {
   return planRawVDRLoad(loc, addressReg, setupWord, vpmBaseRowReg, useMutex,
                         mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                         /*addressAddReg=*/std::nullopt,
@@ -5409,14 +5453,11 @@ static PlannedRegion planRawVDRLoadToVPMWithExtendedPitch(
                         /*extendedPitchBytes=*/pitchBytes);
 }
 
-static PlannedRegion
-planDynamicVDRRectFastPath(Location loc, int64_t addressReg,
-                           int64_t vpmBaseRowReg,
-                           int64_t setupWordWithoutNRows, bool useMutex,
-                           std::optional<int64_t> extendedPitchBytes =
-                               std::nullopt,
-                           std::optional<int64_t> extendedPitchReg =
-                               std::nullopt) {
+static PlannedRegion planDynamicVDRRectFastPath(
+    Location loc, int64_t addressReg, int64_t vpmBaseRowReg,
+    int64_t setupWordWithoutNRows, bool useMutex,
+    std::optional<int64_t> extendedPitchBytes = std::nullopt,
+    std::optional<int64_t> extendedPitchReg = std::nullopt) {
   return planDynamicVDRLoadRows(loc, addressReg, vpmBaseRowReg,
                                 setupWordWithoutNRows, useMutex,
                                 extendedPitchBytes, extendedPitchReg);
@@ -5438,9 +5479,8 @@ static PlannedRegion planPreserveClampedRowsInR0(Location loc) {
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/32, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r2,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   return region;
 }
 
@@ -5454,10 +5494,10 @@ static PlannedRegion planDynamicVDRRectRowsColsFastPath(
                                     extendedPitchBytes, extendedPitchReg);
 }
 
-static DMARowAddress planDMARowAddress(PlannedRegion &region, Location loc,
-                                       int64_t baseAddressReg, int64_t row,
-                                       std::optional<int64_t> constantPitchBytes,
-                                       std::optional<int64_t> dynamicPitchReg) {
+static DMARowAddress
+planDMARowAddress(PlannedRegion &region, Location loc, int64_t baseAddressReg,
+                  int64_t row, std::optional<int64_t> constantPitchBytes,
+                  std::optional<int64_t> dynamicPitchReg) {
   if (row == 0)
     return {/*addressReg=*/baseAddressReg, /*addressMux=*/mlir::vc4::QPUMux::a,
             /*dynamicPitchReg=*/std::nullopt,
@@ -5488,11 +5528,13 @@ static PlannedRegion planDynamicVDRActiveColsBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, pitchBytes, pitchReg);
-  region.appendRegion("vdr-row-load", planDynamicVDRLoadOneRow(
-      loc, rowAddress.addressReg, vpmBaseRowReg, setupWord, plan.useMutex,
-      rowAddress.addressMux, mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-      rowAddress.dynamicPitchMultiplier,
-      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row)));
+  region.appendRegion("vdr-row-load",
+                      planDynamicVDRLoadOneRow(
+                          loc, rowAddress.addressReg, vpmBaseRowReg, setupWord,
+                          plan.useMutex, rowAddress.addressMux,
+                          mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
+                          rowAddress.dynamicPitchMultiplier,
+                          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row)));
   return region;
 }
 
@@ -5503,28 +5545,51 @@ static PlannedRegion planDynamicVDRPitchRowBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, pitchBytes, pitchReg);
-  region.appendRegion("vdr-raw-row-load", planRawVDRLoad(
-      loc, rowAddress.addressReg, setupWord, vpmBaseRowReg, plan.useMutex,
-      rowAddress.addressMux, mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-      rowAddress.dynamicPitchMultiplier,
-      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row)));
+  region.appendRegion("vdr-raw-row-load",
+      planRawVDRLoad(loc, rowAddress.addressReg, setupWord, vpmBaseRowReg,
+                     plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
+                     rowAddress.dynamicPitchReg,
+                     rowAddress.dynamicPitchMultiplier,
+                     /*vpmRowOffset=*/plan.logicalYOffsetForRow(row)));
   return region;
 }
 
 static LogicalResult buildVDRLoadOneRowSetup(Operation *source,
                                              const DMARectPlan &plan,
                                              int64_t maxCols, int64_t vpmPitch,
-                                             int64_t row,
-                                             int64_t &setupWord) {
+                                             int64_t row, int64_t &setupWord) {
   return buildVDRLoadSetupWordFromParts(
       source, maxCols, /*nrows=*/1, /*memoryPitchBytes=*/64,
-      plan.logicalXForRow(row),
-      vpmPitch, plan.vertical, setupWord);
+      plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord);
 }
 
 static FailureOr<PlannedRegion> planVDRRowByRowRowsColsFallback(
-    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
-    int64_t vpmBaseRowReg, int64_t activeRowsReg, int64_t activeColsReg,
+    Operation *source, Location loc, const DMARectPlan &plan,
+    int64_t addressReg, int64_t vpmBaseRowReg, int64_t activeRowsReg,
+    int64_t activeColsReg, int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
+    std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
+  PlannedRegion region;
+  for (int64_t row = 0; row < maxRows; ++row) {
+    int64_t setupWord = 0;
+    if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
+                                       setupWord)))
+      return failure();
+    PlannedRegion rowBody =
+        planDynamicVDRActiveColsBody(loc, plan, addressReg, vpmBaseRowReg, row,
+                                     setupWord, pitchBytes, pitchReg);
+    PlannedRegion colsGuarded = planActiveColsGuardedRegion(
+        loc, activeColsReg, maxCols, std::move(rowBody));
+    region.appendRegion("vdr-row-active-rows-guard",
+                        planActiveRowsGuardedRegion(loc, activeRowsReg, maxRows,
+                                                    row,
+                                                    std::move(colsGuarded)));
+  }
+  return region;
+}
+
+static FailureOr<PlannedRegion> planVDRRowByRowActiveRowsFallback(
+    Operation *source, Location loc, const DMARectPlan &plan,
+    int64_t addressReg, int64_t vpmBaseRowReg, int64_t activeRowsReg,
     int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
     std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
   PlannedRegion region;
@@ -5533,43 +5598,19 @@ static FailureOr<PlannedRegion> planVDRRowByRowRowsColsFallback(
     if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
                                        setupWord)))
       return failure();
-    PlannedRegion rowBody = planDynamicVDRActiveColsBody(
-        loc, plan, addressReg, vpmBaseRowReg, row, setupWord, pitchBytes,
-        pitchReg);
-    PlannedRegion colsGuarded =
-        planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
-                                    std::move(rowBody));
-    region.appendRegion("vdr-row-active-rows-guard",
-                        planActiveRowsGuardedRegion(
-        loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
-  }
-  return region;
-}
-
-static FailureOr<PlannedRegion> planVDRRowByRowActiveRowsFallback(
-    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
-    int64_t vpmBaseRowReg, int64_t activeRowsReg, int64_t maxRows,
-    int64_t maxCols, int64_t vpmPitch, std::optional<int64_t> pitchBytes,
-    std::optional<int64_t> pitchReg) {
-  PlannedRegion region;
-  for (int64_t row = 0; row < maxRows; ++row) {
-    int64_t setupWord = 0;
-    if (failed(buildVDRLoadOneRowSetup(source, plan, maxCols, vpmPitch, row,
-                                       setupWord)))
-      return failure();
     region.appendRegion("vdr-pitch-row-active-rows-guard",
-                        planActiveRowsGuardedRegion(
-        loc, activeRowsReg, maxRows, row,
-        planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg, row,
-                                   setupWord, pitchBytes, pitchReg)));
+        planActiveRowsGuardedRegion(
+            loc, activeRowsReg, maxRows, row,
+            planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg,
+                                       row, setupWord, pitchBytes, pitchReg)));
   }
   return region;
 }
 
 static FailureOr<PlannedRegion> planVDRRowByRowActiveColsFallback(
-    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
-    int64_t vpmBaseRowReg, int64_t activeColsReg, int64_t activeRows,
-    int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
+    Operation *source, Location loc, const DMARectPlan &plan,
+    int64_t addressReg, int64_t vpmBaseRowReg, int64_t activeColsReg,
+    int64_t activeRows, int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
     std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
   PlannedRegion region;
   int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
@@ -5579,18 +5620,18 @@ static FailureOr<PlannedRegion> planVDRRowByRowActiveColsFallback(
                                        setupWord)))
       return failure();
     region.appendRegion("vdr-row-active-cols-guard",
-                        planActiveColsGuardedRegion(
-        loc, activeColsReg, maxCols,
-        planDynamicVDRActiveColsBody(loc, plan, addressReg, vpmBaseRowReg, row,
-                                     setupWord, pitchBytes, pitchReg)));
+        planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
+                                    planDynamicVDRActiveColsBody(
+                                        loc, plan, addressReg, vpmBaseRowReg,
+                                        row, setupWord, pitchBytes, pitchReg)));
   }
   return region;
 }
 
 static FailureOr<PlannedRegion> planVDRRowByRowStaticFallback(
-    Operation *source, Location loc, const DMARectPlan &plan, int64_t addressReg,
-    int64_t vpmBaseRowReg, int64_t activeRows, int64_t activeCols,
-    int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
+    Operation *source, Location loc, const DMARectPlan &plan,
+    int64_t addressReg, int64_t vpmBaseRowReg, int64_t activeRows,
+    int64_t activeCols, int64_t maxRows, int64_t maxCols, int64_t vpmPitch,
     std::optional<int64_t> pitchBytes, std::optional<int64_t> pitchReg) {
   PlannedRegion region;
   int64_t clampedRows = std::clamp(activeRows, int64_t(0), maxRows);
@@ -5601,9 +5642,9 @@ static FailureOr<PlannedRegion> planVDRRowByRowStaticFallback(
             source, clampedCols, /*nrows=*/1, /*memoryPitchBytes=*/64,
             plan.logicalXForRow(row), vpmPitch, plan.vertical, setupWord)))
       return failure();
-    region.appendRegion("vdr-pitch-row-body", planDynamicVDRPitchRowBody(
-        loc, plan, addressReg, vpmBaseRowReg, row, setupWord, pitchBytes,
-        pitchReg));
+    region.appendRegion("vdr-pitch-row-body",
+        planDynamicVDRPitchRowBody(loc, plan, addressReg, vpmBaseRowReg, row,
+                                   setupWord, pitchBytes, pitchReg));
   }
   return region;
 }
@@ -5621,18 +5662,18 @@ static void appendCompareRuntimeVDRPitchOverflow(PlannedRegion &region,
       /*smallImm=*/std::nullopt, /*setFlags=*/true);
 }
 
-static PlannedRegion planDynamicVDRPitchFallbackDispatch(
-    Location loc, int64_t pitchReg, PlannedRegion rectangular,
-    PlannedRegion fallback) {
+static PlannedRegion
+planDynamicVDRPitchFallbackDispatch(Location loc, int64_t pitchReg,
+                                    PlannedRegion rectangular,
+                                    PlannedRegion fallback) {
   PlannedRegion region;
   appendCompareRuntimeVDRPitchOverflow(region, loc, pitchReg);
 
   PlannedRegion encodablePath;
   encodablePath.appendRegion("vdr-rectangular-path", std::move(rectangular));
-  appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(kPlannedBranchWindowSlots +
-                                                  fallback.slots()) *
-                                 8);
+  appendBranchWithDelaySlots(
+      encodablePath, loc, mlir::vc4::BranchCond::always,
+      static_cast<int64_t>(kPlannedBranchWindowSlots + fallback.slots()) * 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -5641,14 +5682,15 @@ static PlannedRegion planDynamicVDRPitchFallbackDispatch(
   return region;
 }
 
-static LogicalResult emitVDRLoadRectDynamic(
-    OpBuilder &builder, const InstructionTemplate &templ,
-    const SpillAwareAllocator &allocator) {
+static LogicalResult
+emitVDRLoadRectDynamic(OpBuilder &builder, const InstructionTemplate &templ,
+                       const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 5)
     return source->emitError(
         "internal lowering error: dynamic VDR rect has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> vpmBaseRowReg =
       allocator.lookup(templ, templ.operands[1]);
   if (!addressReg || !vpmBaseRowReg)
@@ -5676,15 +5718,15 @@ static LogicalResult emitVDRLoadRectDynamic(
 
   int64_t clampedRows =
       activeRows ? std::clamp(*activeRows, int64_t(0), maxRows) : maxRows;
-  int64_t clampedCols = activeCols ? std::clamp(*activeCols, int64_t(0), maxCols)
-                                   : maxCols;
+  int64_t clampedCols =
+      activeCols ? std::clamp(*activeCols, int64_t(0), maxCols) : maxCols;
   if (failed(verifyDMARectXSpan(source, plan, "VDR", "dst_x")))
     return failure();
 
   if (plan.vertical) {
-    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
-                                   maxRows)
-                   .emit(builder)))
+    if (failed(
+            planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg, maxRows)
+                .emit(builder)))
       return failure();
     if (pitchBytes && *pitchBytes < 0 &&
         (!encodeVDRMemoryPitchBytes(*pitchBytes) ||
@@ -5765,8 +5807,8 @@ static LogicalResult emitVDRLoadRectDynamic(
       }
       if (*pitchBytes >= 0 && *pitchBytes <= kMaxVDRMPITCHBBytes) {
         if (failed(buildVDRLoadSetupWordWithExtendedPitch(
-                source, staticCols, /*nrows=*/16, dstX, vpmPitch,
-                plan.vertical, setupWord)))
+                source, staticCols, /*nrows=*/16, dstX, vpmPitch, plan.vertical,
+                setupWord)))
           return failure();
         return planDynamicVDRRectFastPath(
             source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
@@ -5786,8 +5828,8 @@ static LogicalResult emitVDRLoadRectDynamic(
         /*extendedPitchBytes=*/std::nullopt, /*extendedPitchReg=*/*pitchReg);
     FailureOr<PlannedRegion> fallback = planVDRRowByRowActiveRowsFallback(
         source, source->getLoc(), plan, *addressReg, *vpmBaseRowReg,
-        *allocator.lookup(templ, templ.operands[2]), maxRows, staticCols, vpmPitch,
-        pitchBytes, pitchReg);
+        *allocator.lookup(templ, templ.operands[2]), maxRows, staticCols,
+        vpmPitch, pitchBytes, pitchReg);
     if (failed(fallback))
       return failure();
     return planDynamicVDRPitchFallbackDispatch(source->getLoc(), *pitchReg,
@@ -5866,15 +5908,15 @@ static LogicalResult emitVDRLoadRectDynamic(
         return failure();
       PlannedRegion payload = planPreserveClampedRowsInR0(source->getLoc());
       payload.appendRegion("vdr-active-cols-guarded-rect",
-                           planActiveColsGuardedRegion(
-          source->getLoc(), *activeColsReg, maxCols, std::move(*rectangular)));
+          planActiveColsGuardedRegion(source->getLoc(), *activeColsReg, maxCols,
+                                      std::move(*rectangular)));
       return planActiveRowsGuardedRegion(source->getLoc(), *activeRowsReg,
                                          maxRows, /*row=*/0, std::move(payload))
           .emit(builder);
     }
-    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
-                                   maxRows)
-                   .emit(builder)))
+    if (failed(
+            planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg, maxRows)
+                .emit(builder)))
       return failure();
     if (clampedCols == 0)
       return success();
@@ -5892,9 +5934,9 @@ static LogicalResult emitVDRLoadRectDynamic(
       return source->emitOpError()
              << "uses a dynamic active column value that is not defined by a "
                 "lowerable SSAVC4 op";
-    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
-                                   maxRows)
-                   .emit(builder)))
+    if (failed(
+            planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg, maxRows)
+                .emit(builder)))
       return failure();
     if (clampedRows == 0)
       return success();
@@ -5906,9 +5948,9 @@ static LogicalResult emitVDRLoadRectDynamic(
                   source, /*rowLen=*/16, clampedRows, *pitchBytes, dstX,
                   vpmPitch, plan.vertical, setupWord)))
             return failure();
-          return planDynamicVDRRectColsFastPath(
-              source->getLoc(), *addressReg, *vpmBaseRowReg, setupWord,
-              plan.useMutex);
+          return planDynamicVDRRectColsFastPath(source->getLoc(), *addressReg,
+                                                *vpmBaseRowReg, setupWord,
+                                                plan.useMutex);
         }
         if (*pitchBytes >= 0 && *pitchBytes <= kMaxVDRMPITCHBBytes) {
           if (failed(buildVDRLoadSetupWordWithExtendedPitch(
@@ -5951,9 +5993,9 @@ static LogicalResult emitVDRLoadRectDynamic(
   }
 
   if (clampedRows != maxRows || clampedCols != maxCols) {
-    if (failed(planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg,
-                                   maxRows)
-                   .emit(builder)))
+    if (failed(
+            planDMARectZeroFill(source->getLoc(), plan, *vpmBaseRowReg, maxRows)
+                .emit(builder)))
       return failure();
     if (clampedRows == 0 || clampedCols == 0)
       return success();
@@ -5978,15 +6020,15 @@ static LogicalResult emitVDRLoadRectDynamic(
             source, clampedCols, clampedRows, dstX, vpmPitch, plan.vertical,
             setupWord)))
       return failure();
-    return planRawVDRLoadToVPMWithExtendedPitch(
-               source->getLoc(), *addressReg, setupWord, *vpmBaseRowReg,
-               *pitchBytes, plan.useMutex)
+    return planRawVDRLoadToVPMWithExtendedPitch(source->getLoc(), *addressReg,
+                                                setupWord, *vpmBaseRowReg,
+                                                *pitchBytes, plan.useMutex)
         .emit(builder);
   }
 
-  if (failed(buildVDRLoadSetupWordWithExtendedPitch(
-          source, clampedCols, clampedRows, dstX, vpmPitch, plan.vertical,
-          setupWord)))
+  if (failed(buildVDRLoadSetupWordWithExtendedPitch(source, clampedCols,
+                                                    clampedRows, dstX, vpmPitch,
+                                                    plan.vertical, setupWord)))
     return failure();
   PlannedRegion rectangular = planRawVDRLoadToVPMWithRuntimePitch(
       source->getLoc(), *addressReg, setupWord, *vpmBaseRowReg, *pitchReg,
@@ -6007,33 +6049,36 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
                                   const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() < 2 || templ.operands.size() > 4)
-    return source->emitError("internal lowering error: VDW store has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+    return source->emitError(
+        "internal lowering error: VDW store has wrong operand count");
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> valueReg = allocator.lookup(templ, templ.operands[1]);
   if (!addressReg || !valueReg)
-    return source->emitOpError()
-           << "uses a VDW address/value that is not defined by a lowerable SSAVC4 op";
+    return source->emitOpError() << "uses a VDW address/value that is not "
+                                    "defined by a lowerable SSAVC4 op";
   std::optional<int64_t> dynamicActiveLanesReg;
   if (templ.operands.size() >= 3) {
     dynamicActiveLanesReg = allocator.lookup(templ, templ.operands[2]);
     if (!dynamicActiveLanesReg)
       return source->emitOpError()
-             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
+             << "uses a dynamic VDW active-lane value that is not defined by a "
+                "lowerable SSAVC4 op";
   }
   std::optional<int64_t> dynamicVPMRowReg;
   if (templ.operands.size() == 4) {
     dynamicVPMRowReg = allocator.lookup(templ, templ.operands[3]);
     if (!dynamicVPMRowReg)
-      return source->emitOpError()
-             << "uses a dynamic VPM row value that is not defined by a lowerable SSAVC4 op";
+      return source->emitOpError() << "uses a dynamic VPM row value that is "
+                                      "not defined by a lowerable SSAVC4 op";
   }
 
   int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
   int64_t vpmRow = getI32IntegerAttrOr(source, "vpm_row", 0);
-  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
-      source->getAttr("width"));
-  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
-      source->getAttr("subword"));
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
   if (width.getValue() != mlir::ssavc4::VPMElemWidth::w32)
     return source->emitOpError(
         "supports only width = #ssavc4.vpm_elem_width<w32> in executable v1");
@@ -6041,46 +6086,49 @@ static LogicalResult emitVDWStore(OpBuilder &builder,
     return source->emitOpError(
         "supports only subword = #ssavc4.vpm_subword<none> in executable v1");
   if (!dynamicActiveLanesReg && activeLanes != 16)
-    return source->emitOpError("supports only full 16-lane static VDW stores in M3 lowering");
+    return source->emitOpError(
+        "supports only full 16-lane static VDW stores in M3 lowering");
   if (vpmRow < 0)
-    return source->emitOpError("requires a non-negative VPM row in M3 lowering");
+    return source->emitOpError(
+        "requires a non-negative VPM row in M3 lowering");
 
   emitRawVDWStore(builder, source->getLoc(), *addressReg, *valueReg,
-                  dynamicActiveLanesReg, dynamicVPMRowReg, activeLanes,
-                  vpmRow, hasStringAttr(source, "serialize", "mutex"));
+                  dynamicActiveLanesReg, dynamicVPMRowReg, activeLanes, vpmRow,
+                  hasStringAttr(source, "serialize", "mutex"));
   return success();
 }
 
 static PlannedRegion planRawVDWStoreFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t vpmXReg,
     std::optional<int64_t> dynamicActiveLanesReg, int64_t activeLanes,
-    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes,
-    int64_t elemBytes, uint32_t modew, bool vertical, bool useMutex,
-    mlir::vc4::QPUMux addressMux, mlir::vc4::QPUMux vpmYMux,
-    mlir::vc4::QPUMux vpmXMux,
-    std::optional<int64_t> addressAddReg,
-    int64_t addressAddMultiplier, int64_t vpmRowOffset,
-    std::optional<int64_t> staticVpmX);
+    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes, int64_t elemBytes,
+    uint32_t modew, bool vertical, bool useMutex, mlir::vc4::QPUMux addressMux,
+    mlir::vc4::QPUMux vpmYMux, mlir::vc4::QPUMux vpmXMux,
+    std::optional<int64_t> addressAddReg, int64_t addressAddMultiplier,
+    int64_t vpmRowOffset, std::optional<int64_t> staticVpmX);
 
 static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
                                      const InstructionTemplate &templ,
                                      const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() < 3 || templ.operands.size() > 4)
-    return source->emitError("internal lowering error: VPM-source VDW store has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+    return source->emitError("internal lowering error: VPM-source VDW store "
+                             "has wrong operand count");
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> vpmYReg = allocator.lookup(templ, templ.operands[1]);
   std::optional<int64_t> vpmXReg = allocator.lookup(templ, templ.operands[2]);
   if (!addressReg || !vpmYReg || !vpmXReg)
-    return source->emitOpError()
-           << "uses a VDW address/VPM coordinate that is not defined by a lowerable SSAVC4 op";
+    return source->emitOpError() << "uses a VDW address/VPM coordinate that is "
+                                    "not defined by a lowerable SSAVC4 op";
 
   std::optional<int64_t> dynamicActiveLanesReg;
   if (templ.operands.size() == 4) {
     dynamicActiveLanesReg = allocator.lookup(templ, templ.operands[3]);
     if (!dynamicActiveLanesReg)
       return source->emitOpError()
-             << "uses a dynamic VDW active-lane value that is not defined by a lowerable SSAVC4 op";
+             << "uses a dynamic VDW active-lane value that is not defined by a "
+                "lowerable SSAVC4 op";
   }
 
   int64_t activeLanes = getI32IntegerAttrOr(source, "active_lanes", -1);
@@ -6088,11 +6136,12 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
   int64_t nrows = getI32IntegerAttrOr(source, "nrows", -1);
   int64_t memoryPitchBytes =
       getI32IntegerAttrOr(source, "memory_pitch_bytes", -1);
-  std::optional<int64_t> staticVpmX = getConstantI32FromLoadImm(templ.operands[2]);
-  auto width = llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(
-      source->getAttr("width"));
-  auto subword = llvm::cast<mlir::ssavc4::VPMSubwordAttr>(
-      source->getAttr("subword"));
+  std::optional<int64_t> staticVpmX =
+      getConstantI32FromLoadImm(templ.operands[2]);
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  auto subword =
+      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
   if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
       subword.getValue() != mlir::ssavc4::VPMSubword::none)
     return source->emitOpError("32-bit VDW DMA requires subword<none>");
@@ -6109,9 +6158,11 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
   if (failed(getDMAModeW(source, staticVpmX.value_or(0), modew)))
     return failure();
   if (rowLen < 1 || rowLen > 16)
-    return source->emitOpError("requires row_len in range [1, 16] for M3 lowering");
+    return source->emitOpError(
+        "requires row_len in range [1, 16] for M3 lowering");
   if (nrows < 1 || nrows > 16)
-    return source->emitOpError("requires nrows in range [1, 16] for M3 lowering");
+    return source->emitOpError(
+        "requires nrows in range [1, 16] for M3 lowering");
   int64_t strideBytes = memoryPitchBytes - rowLen * *elemBytes;
   if (strideBytes < 0 || strideBytes > kMaxVDWStrideGapBytes ||
       memoryPitchBytes % *elemBytes != 0)
@@ -6119,22 +6170,24 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
         "requires memory_pitch_bytes to produce an encodable 13-bit VDW "
         "stride gap");
   if (dynamicActiveLanesReg && nrows != 1)
-    return source->emitOpError("supports dynamic active_lanes only for single-row VDW stores");
+    return source->emitOpError(
+        "supports dynamic active_lanes only for single-row VDW stores");
   if (!dynamicActiveLanesReg && activeLanes != -1 && activeLanes != rowLen)
-    return source->emitOpError("requires static active_lanes to match row_len in M3 lowering");
+    return source->emitOpError(
+        "requires static active_lanes to match row_len in M3 lowering");
 
-  auto orientation =
-      llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-          source->getAttr("orientation"));
+  auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
+      source->getAttr("orientation"));
   bool vertical =
       orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
   if (dynamicActiveLanesReg) {
     PlannedRegion store = planRawVDWStoreFromVPM(
         source->getLoc(), *addressReg, *vpmYReg, *vpmXReg,
         dynamicActiveLanesReg, activeLanes, rowLen, nrows, memoryPitchBytes,
-        *elemBytes, modew, vertical, hasStringAttr(source, "serialize", "mutex"),
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-        std::nullopt, 1, 0, std::nullopt);
+        *elemBytes, modew, vertical,
+        hasStringAttr(source, "serialize", "mutex"), mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, std::nullopt, 1, 0,
+        std::nullopt);
     return planActiveColsGuardedRegion(source->getLoc(), *dynamicActiveLanesReg,
                                        rowLen, std::move(store))
         .emit(builder);
@@ -6149,8 +6202,7 @@ static LogicalResult emitVDWStoreVPM(OpBuilder &builder,
 static void appendVDWVPMBase(PlannedRegion &region, Location loc,
                              int64_t vpmYReg, int64_t vpmXReg,
                              mlir::vc4::QPUMux vpmYMux,
-                             mlir::vc4::QPUMux vpmXMux,
-                             int64_t vpmRowOffset,
+                             mlir::vc4::QPUMux vpmXMux, int64_t vpmRowOffset,
                              std::optional<int64_t> staticVpmX) {
   if (vpmRowOffset != 0) {
     appendSplat32LDISlot(region, loc, vpmRowOffset, 33);
@@ -6158,8 +6210,8 @@ static void appendVDWVPMBase(PlannedRegion &region, Location loc,
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/33, /*waddrMul=*/32,
         mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, vpmYReg,
-        /*raddrB=*/0, vpmYMux, mlir::vc4::QPUMux::r1,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+        /*raddrB=*/0, vpmYMux, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r1);
   } else {
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6169,11 +6221,10 @@ static void appendVDWVPMBase(PlannedRegion &region, Location loc,
         mlir::vc4::QPUMux::r1);
   }
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/7);
   if (staticVpmX) {
     appendSplat32LDISlot(region, loc, *staticVpmX, 35);
@@ -6186,11 +6237,10 @@ static void appendVDWVPMBase(PlannedRegion &region, Location loc,
         mlir::vc4::QPUMux::r1);
   }
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/3);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6200,23 +6250,22 @@ static void appendVDWVPMBase(PlannedRegion &region, Location loc,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
 }
 
-static void appendRawVDWActiveLaneSetup(
-    PlannedRegion &region, Location loc,
-    std::optional<int64_t> dynamicActiveLanesReg, int64_t rowLen) {
+static void
+appendRawVDWActiveLaneSetup(PlannedRegion &region, Location loc,
+                            std::optional<int64_t> dynamicActiveLanesReg,
+                            int64_t rowLen) {
   if (dynamicActiveLanesReg) {
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/33, /*waddrMul=*/32,
         mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
         *dynamicActiveLanesReg, *dynamicActiveLanesReg, mlir::vc4::QPUMux::a,
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     appendScheduledBundleSlot(
-        region, loc, mlir::vc4::QPUSignal::small_imm,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-        /*waddrMul=*/32, mlir::vc4::AddOpcode::max,
-        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+        region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, /*waddrAdd=*/33,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::max, mlir::vc4::MulOpcode::nop,
+        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/0);
     if (rowLen == 16) {
       appendSplat32LDISlot(region, loc, 16, 32);
@@ -6225,16 +6274,14 @@ static void appendRawVDWActiveLaneSetup(
           mlir::vc4::Cond::never, /*waddrAdd=*/33, /*waddrMul=*/32,
           mlir::vc4::AddOpcode::min, mlir::vc4::MulOpcode::nop,
           /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
-          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
-          mlir::vc4::QPUMux::r1);
+          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     } else {
       appendScheduledBundleSlot(
-          region, loc, mlir::vc4::QPUSignal::small_imm,
-          mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-          /*waddrMul=*/32, mlir::vc4::AddOpcode::min,
-          mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-          mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
-          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+          region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+          mlir::vc4::Cond::never, /*waddrAdd=*/33,
+          /*waddrMul=*/32, mlir::vc4::AddOpcode::min, mlir::vc4::MulOpcode::nop,
+          /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1,
+          mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
           /*smallImm=*/static_cast<int32_t>(rowLen));
     }
   } else {
@@ -6245,8 +6292,8 @@ static void appendRawVDWActiveLaneSetup(
 static PlannedRegion planRawVDWStoreFromVPM(
     Location loc, int64_t addressReg, int64_t vpmYReg, int64_t vpmXReg,
     std::optional<int64_t> dynamicActiveLanesReg, int64_t activeLanes,
-    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes,
-    int64_t elemBytes, uint32_t modew, bool vertical, bool useMutex,
+    int64_t rowLen, int64_t nrows, int64_t memoryPitchBytes, int64_t elemBytes,
+    uint32_t modew, bool vertical, bool useMutex,
     mlir::vc4::QPUMux addressMux = mlir::vc4::QPUMux::a,
     mlir::vc4::QPUMux vpmYMux = mlir::vc4::QPUMux::a,
     mlir::vc4::QPUMux vpmXMux = mlir::vc4::QPUMux::a,
@@ -6260,18 +6307,16 @@ static PlannedRegion planRawVDWStoreFromVPM(
   int64_t strideBytes = memoryPitchBytes - rowLen * elemBytes;
   appendRawVDWActiveLaneSetup(region, loc, dynamicActiveLanesReg, rowLen);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
@@ -6285,22 +6330,22 @@ static PlannedRegion planRawVDWStoreFromVPM(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWVPMBase(region, loc, vpmYReg, vpmXReg, vpmYMux, vpmXMux,
                    vpmRowOffset, staticVpmX);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendSplat32LDISlot(
       region, loc,
       static_cast<int32_t>(0xc0000000u | static_cast<uint32_t>(strideBytes)),
       35);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r3,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, addressMux, addressAddReg,
                                   addressAddMultiplier);
@@ -6321,43 +6366,37 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
   int64_t rowBytes = rowLen * elemBytes;
   int64_t strideBytes = memoryPitchBytes ? *memoryPitchBytes - rowBytes : 0;
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/7);
   appendSplat32LDISlot(region, loc, rowLen, 33);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
-  uint32_t setupBase =
-      0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
+  uint32_t setupBase = 0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6369,46 +6408,42 @@ static PlannedRegion planDynamicVDWStoreRowsFromVPM(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never, /*waddrAdd=*/34, /*waddrMul=*/32,
       mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
-      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-      mlir::vc4::QPUMux::r1);
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r3,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWVPMBase(region, loc, vpmYReg, vpmYReg, mlir::vc4::QPUMux::a,
                    mlir::vc4::QPUMux::a, /*vpmRowOffset=*/0, staticVpmX);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   if (memoryPitchReg) {
     appendSplat32LDISlot(region, loc, rowBytes, 32);
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/35, /*waddrMul=*/32,
-        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop,
-        *memoryPitchReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop, *memoryPitchReg,
+        /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     appendSplat32LDISlot(region, loc, static_cast<int32_t>(0xc0000000u), 32);
     appendVPMVCDSetupSlot(
-        region, loc, mlir::vc4::VPMVCDSide::write,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+        region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop,
         /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   } else {
     appendSplat32LDISlot(
         region, loc,
         static_cast<int32_t>(0xc0000000u | static_cast<uint32_t>(strideBytes)),
         35);
     appendVPMVCDSetupSlot(
-        region, loc, mlir::vc4::VPMVCDSide::write,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+        region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop,
         /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3,
-        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, mlir::vc4::QPUMux::a,
@@ -6436,11 +6471,10 @@ static void appendVDWRuntimeStrideGapSetup(
       activeColsReg, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::max,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::max, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/0);
   appendSplat32LDISlot(region, loc, maxCols, 33);
   appendScheduledBundleSlot(
@@ -6451,11 +6485,10 @@ static void appendVDWRuntimeStrideGapSetup(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   if (elemBytes != 1) {
     appendScheduledBundleSlot(
-        region, loc, mlir::vc4::QPUSignal::small_imm,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+        region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, /*waddrAdd=*/35,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
         /*smallImm=*/elemBytes == 2 ? 1 : 2);
   }
@@ -6471,18 +6504,17 @@ static void appendVDWRuntimeStrideGapSetup(
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/35, /*waddrMul=*/32,
-        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop,
-        *memoryStrideReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
-        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1);
+        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop, *memoryStrideReg,
+        /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r3,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(0xc0000000u), 32);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::bit_or,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r3,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
 }
 
 static PlannedRegion planDynamicVDWStoreColsFromVPM(
@@ -6495,18 +6527,16 @@ static PlannedRegion planDynamicVDWStoreColsFromVPM(
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   uint32_t setupBase = 0x80000000u |
                        ((static_cast<uint32_t>(nrows) & 0x7fu) << 23) |
@@ -6520,15 +6550,14 @@ static PlannedRegion planDynamicVDWStoreColsFromVPM(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWVPMBase(region, loc, vpmYReg, vpmYReg, mlir::vc4::QPUMux::a,
                    mlir::vc4::QPUMux::a, /*vpmRowOffset=*/0, staticVpmX);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendVDWRuntimeStrideGapSetup(region, loc, activeColsReg, maxCols,
-                                 memoryStrideBytes, memoryStrideReg,
-                                 elemBytes);
+                                 memoryStrideBytes, memoryStrideReg, elemBytes);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, mlir::vc4::QPUMux::a,
                                   std::nullopt, /*addressAddMultiplier=*/1);
@@ -6548,42 +6577,36 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
   if (useMutex)
     appendMutexAcquireSlot(region, loc);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/35,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/8);
   appendScheduledBundleSlot(
-      region, loc, mlir::vc4::QPUSignal::small_imm,
-      mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/33,
-      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
+      region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, /*waddrAdd=*/33,
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+      /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::b,
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/7);
-  uint32_t setupBase =
-      0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
+  uint32_t setupBase = 0x80000000u | (vertical ? 0u : 0x4000u) | (modew & 0x7u);
   appendSplat32LDISlot(region, loc, static_cast<int32_t>(setupBase), 32);
   appendScheduledBundleSlot(
       region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
@@ -6599,15 +6622,14 @@ static PlannedRegion planDynamicVDWStoreRowsColsFromVPM(
       mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   appendVDWVPMBase(region, loc, vpmYReg, vpmYReg, mlir::vc4::QPUMux::a,
                    mlir::vc4::QPUMux::a, /*vpmRowOffset=*/0, staticVpmX);
-  appendVPMVCDSetupSlot(
-      region, loc, mlir::vc4::VPMVCDSide::write, mlir::vc4::Cond::always,
-      mlir::vc4::Cond::never, mlir::vc4::AddOpcode::add,
-      mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-      mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::r1,
-      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  appendVPMVCDSetupSlot(region, loc, mlir::vc4::VPMVCDSide::write,
+                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
+                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+                        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2,
+                        mlir::vc4::QPUMux::r1, mlir::vc4::QPUMux::r0,
+                        mlir::vc4::QPUMux::r1);
   appendVDWRuntimeStrideGapSetup(region, loc, activeColsReg, maxCols,
-                                 memoryStrideBytes, memoryStrideReg,
-                                 elemBytes);
+                                 memoryStrideBytes, memoryStrideReg, elemBytes);
   appendVCDAddressWithOptionalAdd(region, loc, mlir::vc4::VPMVCDSide::write,
                                   addressReg, mlir::vc4::QPUMux::a,
                                   std::nullopt, /*addressAddMultiplier=*/1);
@@ -6636,9 +6658,8 @@ static bool isVDWStrideGapAlwaysEncodableForDynamicCols(int64_t strideBytes,
          isEncodableVDWStrideGap(strideBytes - elemBytes);
 }
 
-static bool
-isVDWRectangularVPMSourceLayoutEncodable(const DMARectPlan &plan,
-                                         int64_t elemBytes) {
+static bool isVDWRectangularVPMSourceLayoutEncodable(const DMARectPlan &plan,
+                                                     int64_t elemBytes) {
   // Subword VDW block modes do not preserve the VC4Kernel logical row-major
   // VPM tile contract for multi-row rectangles. Use the dense row fallback so
   // each hardware VDW setup starts from the exact logical VPM row.
@@ -6677,15 +6698,15 @@ static void appendCompareRuntimeVDWStrideGapOverflow(PlannedRegion &region,
 }
 
 static void appendCompareVDWStrideGapNegativeDynamicCols(
-    PlannedRegion &region, Location loc, std::optional<int64_t> memoryStrideBytes,
+    PlannedRegion &region, Location loc,
+    std::optional<int64_t> memoryStrideBytes,
     std::optional<int64_t> memoryStrideReg, int64_t elemBytes) {
   if (elemBytes != 1) {
     appendScheduledBundleSlot(
-        region, loc, mlir::vc4::QPUSignal::small_imm,
-        mlir::vc4::Cond::always, mlir::vc4::Cond::never, /*waddrAdd=*/35,
-        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
-        mlir::vc4::MulOpcode::nop, /*raddrA=*/0, /*raddrB=*/0,
-        mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
+        region, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, /*waddrAdd=*/35,
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::shl, mlir::vc4::MulOpcode::nop,
+        /*raddrA=*/0, /*raddrB=*/0, mlir::vc4::QPUMux::r2, mlir::vc4::QPUMux::b,
         mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
         /*smallImm=*/elemBytes == 2 ? 1 : 2);
   }
@@ -6702,10 +6723,9 @@ static void appendCompareVDWStrideGapNegativeDynamicCols(
     appendScheduledBundleSlot(
         region, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
         mlir::vc4::Cond::never, /*waddrAdd=*/35, /*waddrMul=*/32,
-        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop,
-        *memoryStrideReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
-        mlir::vc4::QPUMux::r3, mlir::vc4::QPUMux::r0,
-        mlir::vc4::QPUMux::r1, /*smallImm=*/std::nullopt,
+        mlir::vc4::AddOpcode::sub, mlir::vc4::MulOpcode::nop, *memoryStrideReg,
+        /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r3,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1, /*smallImm=*/std::nullopt,
         /*setFlags=*/true);
   }
 }
@@ -6722,10 +6742,9 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatch(
 
   PlannedRegion encodablePath;
   encodablePath.appendRegion("vdw-rectangular-path", std::move(rectangular));
-  appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(kPlannedBranchWindowSlots +
-                                                  fallback.slots()) *
-                                 8);
+  appendBranchWithDelaySlots(
+      encodablePath, loc, mlir::vc4::BranchCond::always,
+      static_cast<int64_t>(kPlannedBranchWindowSlots + fallback.slots()) * 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -6753,10 +6772,9 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
   PlannedRegion encodablePath;
   encodablePath.appendRegion("vdw-dynamic-cols-rectangular-path",
                              std::move(rectangular));
-  appendBranchWithDelaySlots(encodablePath, loc, mlir::vc4::BranchCond::always,
-                             static_cast<int64_t>(kPlannedBranchWindowSlots +
-                                                  fallback.slots()) *
-                                 8);
+  appendBranchWithDelaySlots(
+      encodablePath, loc, mlir::vc4::BranchCond::always,
+      static_cast<int64_t>(kPlannedBranchWindowSlots + fallback.slots()) * 8);
 
   PlannedRegion overflowGuarded = planBranchAroundRegion(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(encodablePath));
@@ -6767,8 +6785,7 @@ static PlannedRegion planDynamicVDWStrideGapFallbackDispatchDynamicCols(
       loc, mlir::vc4::BranchCond::any_c_set, std::move(nonNegativePath));
   region.appendRegion("vdw-dynamic-cols-stride-negative-guard",
                       std::move(negativeGuarded));
-  region.appendRegion("vdw-dynamic-cols-stride-fallback",
-                      std::move(fallback));
+  region.appendRegion("vdw-dynamic-cols-stride-fallback", std::move(fallback));
   return region;
 }
 
@@ -6780,37 +6797,40 @@ static PlannedRegion planDynamicVDWActiveColsBody(
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
-  region.appendRegion("vdw-row-store-from-vpm", planRawVDWStoreFromVPM(
-      loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
-      activeColsReg, /*activeLanes=*/maxCols, /*rowLen=*/maxCols,
-      /*nrows=*/1, /*memoryPitchBytes=*/maxCols * elemBytes, elemBytes,
-      modew, plan.vertical, plan.useMutex, rowAddress.addressMux, mlir::vc4::QPUMux::a,
-      mlir::vc4::QPUMux::a, rowAddress.dynamicPitchReg,
-      rowAddress.dynamicPitchMultiplier,
-      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
-      /*staticVpmX=*/plan.logicalXForRow(row)));
+  region.appendRegion("vdw-row-store-from-vpm",
+      planRawVDWStoreFromVPM(
+          loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
+          activeColsReg, /*activeLanes=*/maxCols, /*rowLen=*/maxCols,
+          /*nrows=*/1, /*memoryPitchBytes=*/maxCols * elemBytes, elemBytes,
+          modew, plan.vertical, plan.useMutex, rowAddress.addressMux,
+          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
+          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+          /*staticVpmX=*/plan.logicalXForRow(row)));
   return region;
 }
 
-static PlannedRegion planStaticVDWRowBody(
-    Location loc, int64_t addressReg, int64_t vpmSourceRowReg,
-    int64_t staticCols, int64_t row, std::optional<int64_t> strideBytes,
-    std::optional<int64_t> strideReg, const DMARectPlan &plan,
-    int64_t elemBytes, uint32_t modew) {
+static PlannedRegion planStaticVDWRowBody(Location loc, int64_t addressReg,
+                                          int64_t vpmSourceRowReg,
+                                          int64_t staticCols, int64_t row,
+                                          std::optional<int64_t> strideBytes,
+                                          std::optional<int64_t> strideReg,
+                                          const DMARectPlan &plan,
+                                          int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   DMARowAddress rowAddress =
       planDMARowAddress(region, loc, addressReg, row, strideBytes, strideReg);
   region.appendRegion("vdw-static-cols-row-store-from-vpm",
-                      planRawVDWStoreFromVPM(
-      loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
-      /*dynamicActiveLanesReg=*/std::nullopt,
-      /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
-      /*memoryPitchBytes=*/staticCols * elemBytes, elemBytes, modew,
-      plan.vertical, plan.useMutex,
-      rowAddress.addressMux, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-      rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
-      /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
-      /*staticVpmX=*/plan.logicalXForRow(row)));
+      planRawVDWStoreFromVPM(
+          loc, rowAddress.addressReg, vpmSourceRowReg, vpmSourceRowReg,
+          /*dynamicActiveLanesReg=*/std::nullopt,
+          /*activeLanes=*/staticCols, /*rowLen=*/staticCols, /*nrows=*/1,
+          /*memoryPitchBytes=*/staticCols * elemBytes, elemBytes, modew,
+          plan.vertical, plan.useMutex, rowAddress.addressMux,
+          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+          rowAddress.dynamicPitchReg, rowAddress.dynamicPitchMultiplier,
+          /*vpmRowOffset=*/plan.logicalYOffsetForRow(row),
+          /*staticVpmX=*/plan.logicalXForRow(row)));
   return region;
 }
 
@@ -6822,10 +6842,8 @@ static PlannedRegion planVDWStaticRowsFallback(
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
     region.appendRegion("vdw-static-row-body",
-                        planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg,
-                                             staticCols, row, strideBytes,
-                                             strideReg, plan, elemBytes,
-                                             modew));
+        planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
+                             strideBytes, strideReg, plan, elemBytes, modew));
   }
   return region;
 }
@@ -6841,8 +6859,8 @@ static PlannedRegion planVDWDynamicActiveRowsFallback(
         planStaticVDWRowBody(loc, addressReg, vpmSourceRowReg, staticCols, row,
                              strideBytes, strideReg, plan, elemBytes, modew);
     region.appendRegion("vdw-row-active-rows-guard",
-                        planActiveRowsGuardedRegion(
-        loc, activeRowsReg, maxRows, row, std::move(body)));
+                        planActiveRowsGuardedRegion(loc, activeRowsReg, maxRows,
+                                                    row, std::move(body)));
   }
   return region;
 }
@@ -6854,13 +6872,12 @@ static PlannedRegion planVDWStaticRowsDynamicColsFallback(
     const DMARectPlan &plan, int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < rows; ++row) {
-    PlannedRegion body =
-        planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
-                                     activeColsReg, maxCols, row, strideBytes,
-                                     strideReg, plan, elemBytes, modew);
+    PlannedRegion body = planDynamicVDWActiveColsBody(
+        loc, addressReg, vpmSourceRowReg, activeColsReg, maxCols, row,
+        strideBytes, strideReg, plan, elemBytes, modew);
     region.appendRegion("vdw-row-active-cols-guard",
-                        planActiveColsGuardedRegion(
-        loc, activeColsReg, maxCols, std::move(body)));
+                        planActiveColsGuardedRegion(loc, activeColsReg, maxCols,
+                                                    std::move(body)));
   }
   return region;
 }
@@ -6873,27 +6890,28 @@ static PlannedRegion planVDWRowsColsFallback(
     int64_t elemBytes, uint32_t modew) {
   PlannedRegion region;
   for (int64_t row = 0; row < maxRows; ++row) {
-    PlannedRegion body =
-        planDynamicVDWActiveColsBody(loc, addressReg, vpmSourceRowReg,
-                                     activeColsReg, maxCols, row, strideBytes,
-                                     strideReg, plan, elemBytes, modew);
+    PlannedRegion body = planDynamicVDWActiveColsBody(
+        loc, addressReg, vpmSourceRowReg, activeColsReg, maxCols, row,
+        strideBytes, strideReg, plan, elemBytes, modew);
     PlannedRegion colsGuarded = planActiveColsGuardedRegion(
         loc, activeColsReg, maxCols, std::move(body));
     region.appendRegion("vdw-row-cols-active-rows-guard",
-                        planActiveRowsGuardedRegion(
-        loc, activeRowsReg, maxRows, row, std::move(colsGuarded)));
+                        planActiveRowsGuardedRegion(loc, activeRowsReg, maxRows,
+                                                    row,
+                                                    std::move(colsGuarded)));
   }
   return region;
 }
 
-static LogicalResult emitVDWStoreRectDynamic(
-    OpBuilder &builder, const InstructionTemplate &templ,
-    const SpillAwareAllocator &allocator) {
+static LogicalResult
+emitVDWStoreRectDynamic(OpBuilder &builder, const InstructionTemplate &templ,
+                        const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
   if (templ.operands.size() != 5)
     return source->emitError(
         "internal lowering error: dynamic VDW rect has wrong operand count");
-  std::optional<int64_t> addressReg = allocator.lookup(templ, templ.operands[0]);
+  std::optional<int64_t> addressReg =
+      allocator.lookup(templ, templ.operands[0]);
   std::optional<int64_t> vpmSourceRowReg =
       allocator.lookup(templ, templ.operands[1]);
   if (!addressReg || !vpmSourceRowReg)
@@ -6954,15 +6972,14 @@ static LogicalResult emitVDWStoreRectDynamic(
             source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
             *activeColsReg, maxCols, strideBytes, strideReg, elemBytes, modew,
             plan.vertical, plan.useMutex);
-        if (strideBytes &&
-            isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols,
-                                                        elemBytes)) {
+        if (strideBytes && isVDWStrideGapAlwaysEncodableForDynamicCols(
+                               *strideBytes, maxCols, elemBytes)) {
           payload = std::move(rectangular);
         } else {
           PlannedRegion fallback = planVDWRowsColsFallback(
-            source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
-            *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan,
-            elemBytes, modew);
+              source->getLoc(), *addressReg, *vpmSourceRowReg, *activeRowsReg,
+              *activeColsReg, maxRows, maxCols, strideBytes, strideReg, plan,
+              elemBytes, modew);
           payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
               source->getLoc(), strideBytes, strideReg, std::move(rectangular),
               std::move(fallback), elemBytes);
@@ -7018,8 +7035,8 @@ static LogicalResult emitVDWStoreRectDynamic(
   int64_t clampedRows = std::clamp(*activeRows, int64_t(0), maxRows);
   if (clampedRows == 0)
     return success();
-  int64_t staticCols = activeCols ? std::clamp(*activeCols, int64_t(0), maxCols)
-                                  : maxCols;
+  int64_t staticCols =
+      activeCols ? std::clamp(*activeCols, int64_t(0), maxCols) : maxCols;
   if (staticCols == 0)
     return success();
   std::optional<int64_t> dynamicActiveColsReg;
@@ -7047,15 +7064,14 @@ static LogicalResult emitVDWStoreRectDynamic(
           source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
           clampedRows, *dynamicActiveColsReg, maxCols, strideBytes, strideReg,
           elemBytes, modew, plan.vertical, plan.useMutex);
-      if (strideBytes &&
-          isVDWStrideGapAlwaysEncodableForDynamicCols(*strideBytes, maxCols,
-                                                      elemBytes)) {
+      if (strideBytes && isVDWStrideGapAlwaysEncodableForDynamicCols(
+                             *strideBytes, maxCols, elemBytes)) {
         payload = std::move(rectangular);
       } else {
         PlannedRegion fallback = planVDWStaticRowsDynamicColsFallback(
-          source->getLoc(), *addressReg, *vpmSourceRowReg,
-          *dynamicActiveColsReg, maxCols, clampedRows, strideBytes, strideReg,
-          plan, elemBytes, modew);
+            source->getLoc(), *addressReg, *vpmSourceRowReg,
+            *dynamicActiveColsReg, maxCols, clampedRows, strideBytes, strideReg,
+            plan, elemBytes, modew);
         payload = planDynamicVDWStrideGapFallbackDispatchDynamicCols(
             source->getLoc(), strideBytes, strideReg, std::move(rectangular),
             std::move(fallback), elemBytes);
@@ -7068,14 +7084,14 @@ static LogicalResult emitVDWStoreRectDynamic(
   std::optional<int64_t> strideGapBytes =
       getStaticVDWStrideGapBytes(strideBytes, staticCols, elemBytes);
   if (clampedRows > 1 && vpmSourceLayoutEncodable && !strideBytes) {
-    PlannedRegion rectangular = planStaticRowsCountInR2(source->getLoc(),
-                                                        clampedRows);
+    PlannedRegion rectangular =
+        planStaticRowsCountInR2(source->getLoc(), clampedRows);
     rectangular.appendRegion("vdw-dynamic-rows-rectangular",
-                             planDynamicVDWStoreRowsFromVPM(
-        source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
-        /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
-        /*memoryPitchReg=*/strideReg, elemBytes, modew, plan.vertical,
-        plan.useMutex));
+        planDynamicVDWStoreRowsFromVPM(
+            source->getLoc(), *addressReg, *vpmSourceRowReg, plan.baseX,
+            /*rowLen=*/staticCols, /*memoryPitchBytes=*/std::nullopt,
+            /*memoryPitchReg=*/strideReg, elemBytes, modew, plan.vertical,
+            plan.useMutex));
     PlannedRegion fallback = planVDWStaticRowsFallback(
         source->getLoc(), *addressReg, *vpmSourceRowReg, staticCols,
         clampedRows, strideBytes, strideReg, plan, elemBytes, modew);
@@ -7089,10 +7105,9 @@ static LogicalResult emitVDWStoreRectDynamic(
       (!vpmSourceLayoutEncodable ||
        (strideGapBytes && !isEncodableVDWStrideGap(*strideGapBytes)));
   if (useStaticRowsFallback)
-    return planVDWStaticRowsFallback(source->getLoc(), *addressReg,
-                                     *vpmSourceRowReg, staticCols, clampedRows,
-                                     strideBytes, strideReg, plan, elemBytes,
-                                     modew)
+    return planVDWStaticRowsFallback(
+               source->getLoc(), *addressReg, *vpmSourceRowReg, staticCols,
+               clampedRows, strideBytes, strideReg, plan, elemBytes, modew)
         .emit(builder);
   emitRawVDWStoreFromVPM(
       builder, source->getLoc(), *addressReg, *vpmSourceRowReg,
@@ -7100,8 +7115,8 @@ static LogicalResult emitVDWStoreRectDynamic(
       /*activeLanes=*/staticCols, /*rowLen=*/staticCols,
       /*nrows=*/clampedRows,
       /*memoryPitchBytes=*/strideBytes ? *strideBytes : maxCols * elemBytes,
-      elemBytes, modew, plan.vertical, plan.useMutex,
-      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      elemBytes, modew, plan.vertical, plan.useMutex, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
       /*addressAddReg=*/std::nullopt, /*addressAddMultiplier=*/1,
       /*vpmRowOffset=*/0, /*staticVpmX=*/plan.baseX);
   return success();
@@ -7132,8 +7147,7 @@ static unsigned countScheduledVC4Slots(Block &block) {
   return slots;
 }
 
-static FailureOr<unsigned>
-countTemplateBranchPreludeSlotsByEmission(
+static FailureOr<unsigned> countTemplateBranchPreludeSlotsByEmission(
     const InstructionTemplate &templ, const SpillAwareAllocator &allocator) {
   Block scratch;
   OpBuilder builder(templ.source->getContext());
@@ -7160,15 +7174,15 @@ countTemplateSlotsByEmission(const InstructionTemplate &templ,
       templ.kind == InstructionTemplate::Kind::CondBranch)
     scratchLayout.branchImmediates[templ.ordinal] = 0;
 
-  if (failed(emitScheduledTemplateBody(builder, templ, allocator,
-                                       scratchLayout)))
+  if (failed(
+          emitScheduledTemplateBody(builder, templ, allocator, scratchLayout)))
     return failure();
   return countScheduledVC4Slots(scratch);
 }
 
 static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {
-  auto launchABI =
-      llvm::dyn_cast_or_null<DictionaryAttr>(sourceFunc->getAttr("vc4.launch_abi"));
+  auto launchABI = llvm::dyn_cast_or_null<DictionaryAttr>(
+      sourceFunc->getAttr("vc4.launch_abi"));
   if (!launchABI)
     return 0;
   auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
@@ -7180,29 +7194,25 @@ static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {
 
 static void emitUniformReadToReg(OpBuilder &builder, Location loc,
                                  int64_t destinationReg) {
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::small_imm,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        destinationReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/32,
-                        /*raddrB=*/0, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1,
-                        /*smallImm=*/0);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, destinationReg, /*waddrMul=*/32,
+      mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop, /*raddrA=*/32,
+      /*raddrB=*/0, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/0);
   createNopLDISlot(builder, loc);
 }
 
 void SpillSlotBaseSequence::emit(OpBuilder &builder, Location loc) const {
   if (slot.offsetBytes == 0) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop,
-                          SpillAwareAllocator::spillBaseReg(),
-                          SpillAwareAllocator::spillBaseReg(),
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never, SpillAwareAllocator::spillAddrReg(),
+        /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, SpillAwareAllocator::spillBaseReg(),
+        SpillAwareAllocator::spillBaseReg(), mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
     createNopLDISlot(builder, loc);
     return;
   }
@@ -7211,34 +7221,32 @@ void SpillSlotBaseSequence::emit(OpBuilder &builder, Location loc) const {
                           SpillAwareAllocator::spillOffsetReg(),
                           SpillAwareAllocator::spillOffsetReg());
   createNopLDISlot(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        SpillAwareAllocator::spillAddrReg(), /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
-                        SpillAwareAllocator::spillBaseReg(),
-                        SpillAwareAllocator::spillOffsetReg(),
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::b,
-                        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, SpillAwareAllocator::spillAddrReg(),
+      /*waddrMul=*/32, mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
+      SpillAwareAllocator::spillBaseReg(),
+      SpillAwareAllocator::spillOffsetReg(), mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createNopLDISlot(builder, loc);
 }
 
 void RawVDWSpillStoreSequence::emit(OpBuilder &builder, Location loc) const {
-  emitRawVDWStore(builder, loc, SpillAwareAllocator::spillAddrReg(),
-                  valueReg, std::nullopt, SpillAwareAllocator::spillRowReg(),
+  emitRawVDWStore(builder, loc, SpillAwareAllocator::spillAddrReg(), valueReg,
+                  std::nullopt, SpillAwareAllocator::spillRowReg(),
                   /*activeLanes=*/16, /*vpmRow=*/kVPMRow,
                   /*useMutex=*/kUseMutex);
 }
 
 void RawVDRSpillReloadSequence::emit(OpBuilder &builder, Location loc) const {
   if (kUseMutex) {
-    createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                          mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          /*waddrAdd=*/31, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
-                          mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
-                          /*raddrB=*/51, mlir::vc4::QPUMux::a,
-                          mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                          mlir::vc4::QPUMux::r1);
+    createScheduledBundle(
+        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+        mlir::vc4::Cond::never,
+        /*waddrAdd=*/31, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
+        mlir::vc4::MulOpcode::nop, /*raddrA=*/51,
+        /*raddrB=*/51, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+        mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   }
 
   emitRawVDRLoad(builder, loc, SpillAwareAllocator::spillAddrReg(), kVDRSetup,
@@ -7254,14 +7262,12 @@ void RawVDRSpillReloadSequence::emit(OpBuilder &builder, Location loc) const {
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
   createNopBundle(builder, loc);
-  createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
-                        mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                        valueReg, /*waddrMul=*/32,
-                        mlir::vc4::AddOpcode::bit_or,
-                        mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
-                        /*raddrB=*/48, mlir::vc4::QPUMux::a,
-                        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0,
-                        mlir::vc4::QPUMux::r1);
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never, valueReg, /*waddrMul=*/32,
+      mlir::vc4::AddOpcode::bit_or, mlir::vc4::MulOpcode::nop, /*raddrA=*/48,
+      /*raddrB=*/48, mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
   createVPMVCDWait(builder, loc, mlir::vc4::VPMVCDSide::read);
   createNopLDISlot(builder, loc);
 
@@ -7285,8 +7291,7 @@ void EdgeCopySequence::emit(OpBuilder &builder, Location loc) const {
     int64_t srcReg = registerMove->second;
     createScheduledBundle(builder, loc, mlir::vc4::QPUSignal::none,
                           mlir::vc4::Cond::always, mlir::vc4::Cond::never,
-                          dstReg, /*waddrMul=*/32,
-                          mlir::vc4::AddOpcode::bit_or,
+                          dstReg, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_or,
                           mlir::vc4::MulOpcode::nop, srcReg, srcReg,
                           mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::a,
                           mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
@@ -7305,112 +7310,118 @@ emitScheduledTemplateBody(OpBuilder &builder, const InstructionTemplate &templ,
                           const SpillAwareAllocator &allocator,
                           const LayoutSummary &layout) {
   switch (templ.kind) {
-    case InstructionTemplate::Kind::LoadImm:
-      if (failed(emitLoadImm(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::ElementNumber:
-      if (failed(emitElementNumber(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::UniformRead:
-      if (failed(emitUniformRead(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Splat:
-    case InstructionTemplate::Kind::Mov:
-      if (failed(emitMov(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::CondSelect:
-      if (failed(emitCondSelect(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::ALUAdd:
-    case InstructionTemplate::Kind::ALUMul:
-      if (failed(emitALU(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Pack:
-    case InstructionTemplate::Kind::Unpack:
-      if (failed(emitPackOrUnpack(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Rotate:
-      if (failed(emitRotate(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::MakeFlags:
-      if (failed(emitMakeFlags(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::EdgeCopy:
-      if (failed(emitEdgeCopy(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::TMURequest:
-      if (failed(emitTMURequest(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::TMURead:
-      if (failed(emitTMURead(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::SemaAcquire:
-    case InstructionTemplate::Kind::SemaRelease:
-      if (failed(emitSema(builder, templ)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Barrier:
-      if (failed(emitBarrier(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::Branch:
-    case InstructionTemplate::Kind::CondBranch:
-      if (templ.kind == InstructionTemplate::Kind::CondBranch &&
-          failed(emitMakeFlags(builder, templ, allocator)))
-        return failure();
-      if (failed(emitScheduledBranch(builder, templ, layout)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VPMWrite:
-      if (failed(emitVPMWrite(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VPMRead:
-      if (failed(emitVPMRead(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VDRLoad:
-      if (failed(emitVDRLoad(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VDRLoadRectDynamic:
-      if (failed(emitVDRLoadRectDynamic(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VDWStore:
-      if (failed(emitVDWStore(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VDWStoreVPM:
-      if (failed(emitVDWStoreVPM(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::VDWStoreRectDynamic:
-      if (failed(emitVDWStoreRectDynamic(builder, templ, allocator)))
-        return failure();
-      break;
-    case InstructionTemplate::Kind::ThreadEnd:
-      createThreadEndSequence(builder, templ.source->getLoc());
-      break;
+  case InstructionTemplate::Kind::LoadImm:
+    if (failed(emitLoadImm(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::ElementNumber:
+    if (failed(emitElementNumber(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::UniformRead:
+    if (failed(emitUniformRead(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::Splat:
+  case InstructionTemplate::Kind::Mov:
+    if (failed(emitMov(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::CondSelect:
+    if (failed(emitCondSelect(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::ALUAdd:
+  case InstructionTemplate::Kind::ALUMul:
+    if (failed(emitALU(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::SFU:
+    if (failed(emitSFU(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::Pack:
+  case InstructionTemplate::Kind::Unpack:
+    if (failed(emitPackOrUnpack(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::Rotate:
+    if (failed(emitRotate(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::MakeFlags:
+    if (failed(emitMakeFlags(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::EdgeCopy:
+    if (failed(emitEdgeCopy(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::TMURequest:
+    if (failed(emitTMURequest(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::TMURead:
+    if (failed(emitTMURead(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::SemaAcquire:
+  case InstructionTemplate::Kind::SemaRelease:
+    if (failed(emitSema(builder, templ)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::Barrier:
+    if (failed(emitBarrier(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::Branch:
+  case InstructionTemplate::Kind::CondBranch:
+    if (templ.kind == InstructionTemplate::Kind::CondBranch &&
+        failed(emitMakeFlags(builder, templ, allocator)))
+      return failure();
+    if (failed(emitScheduledBranch(builder, templ, layout)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VPMWrite:
+    if (failed(emitVPMWrite(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VPMRead:
+    if (failed(emitVPMRead(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VDRLoad:
+    if (failed(emitVDRLoad(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VDRLoadRectDynamic:
+    if (failed(emitVDRLoadRectDynamic(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VDWStore:
+    if (failed(emitVDWStore(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VDWStoreVPM:
+    if (failed(emitVDWStoreVPM(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::VDWStoreRectDynamic:
+    if (failed(emitVDWStoreRectDynamic(builder, templ, allocator)))
+      return failure();
+    break;
+  case InstructionTemplate::Kind::ThreadEnd:
+    createThreadEndSequence(builder, templ.source->getLoc());
+    break;
   }
   return success();
 }
 
-static LogicalResult emitScheduledFunctionBody(
-    Operation *sourceFunc, OpBuilder &builder, ArrayRef<ScheduledTemplate> scheduled,
-    const SpillAwareAllocator &allocator, const LayoutSummary &layout) {
+static LogicalResult
+emitScheduledFunctionBody(Operation *sourceFunc, OpBuilder &builder,
+                          ArrayRef<ScheduledTemplate> scheduled,
+                          const SpillAwareAllocator &allocator,
+                          const LayoutSummary &layout) {
   bool emittedThreadEnd = false;
   bool emittedSpillBaseUniform = !allocator.hasSpills();
   unsigned consumedPublicUniforms = 0;
@@ -7452,28 +7463,35 @@ static Operation *createVC4Module(Operation *sourceModule, OpBuilder &builder) {
   OperationState state(sourceModule->getLoc(), "vc4.module");
   StringAttr symName = getSymbolNameAttr(sourceModule);
   state.addAttribute(SymbolTable::getSymbolAttrName(),
-                     symName ? symName : builder.getStringAttr("ssavc4_lowered"));
+                     symName ? symName
+                             : builder.getStringAttr("ssavc4_lowered"));
   state.addRegion();
   Operation *vc4Module = builder.create(state);
   vc4Module->getRegion(0).push_back(new Block());
   return vc4Module;
 }
 
-static Operation *createVC4FuncShell(Operation *sourceFunc, OpBuilder &builder) {
+static Operation *createVC4FuncShell(Operation *sourceFunc,
+                                     OpBuilder &builder) {
   MLIRContext *ctx = builder.getContext();
   OperationState state(sourceFunc->getLoc(), "vc4.func");
 
   StringAttr symName = getSymbolNameAttr(sourceFunc);
   state.addAttribute(SymbolTable::getSymbolAttrName(),
-                     symName ? symName : builder.getStringAttr("ssavc4_kernel"));
-  state.addAttribute("function_type", TypeAttr::get(getFunctionType(sourceFunc, ctx)));
+                     symName ? symName
+                             : builder.getStringAttr("ssavc4_kernel"));
+  state.addAttribute("function_type",
+                     TypeAttr::get(getFunctionType(sourceFunc, ctx)));
 
   Attribute threading = sourceFunc->getAttr("threading");
   if (!threading)
-    threading = mlir::vc4::ThreadingModeAttr::get(ctx, mlir::vc4::ThreadingMode::single);
+    threading = mlir::vc4::ThreadingModeAttr::get(
+        ctx, mlir::vc4::ThreadingMode::single);
   state.addAttribute("threading", threading);
-  state.addAttribute("form", mlir::vc4::FunctionFormAttr::get(ctx, mlir::vc4::FunctionForm::scheduled));
-  state.addAttribute("domain", mlir::vc4::ExecutionDomainAttr::get(ctx, mlir::vc4::ExecutionDomain::qpu));
+  state.addAttribute("form", mlir::vc4::FunctionFormAttr::get(
+                                 ctx, mlir::vc4::FunctionForm::scheduled));
+  state.addAttribute("domain", mlir::vc4::ExecutionDomainAttr::get(
+                                   ctx, mlir::vc4::ExecutionDomain::qpu));
 
   addAttrIfPresent(sourceFunc, state, "kernel");
   addAttrIfPresent(sourceFunc, state, "vc4.launch_abi");
@@ -7548,8 +7566,8 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
     return resource;
 
   mlir::vc4::SemanticResourceInfo info;
-  if (failed(mlir::vc4::parseSemanticResourceMetadata(
-          func, resource, info, /*allowAbsent=*/false)))
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(func, resource, info,
+                                                      /*allowAbsent=*/false)))
     return resource;
   SmallVector<NamedAttribute, 12> attrs;
   for (NamedAttribute attr : resource)
@@ -7569,8 +7587,7 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
   int64_t totalRows = info.totalVPMRowsPerBlock;
   if (info.scheduleMode == "cooperative_block") {
     int64_t spillRows = info.warpsPerBlock;
-    totalRows = info.userVPMRowsPerBlock +
-                info.compilerVPMStagingRowsPerBlock +
+    totalRows = info.userVPMRowsPerBlock + info.compilerVPMStagingRowsPerBlock +
                 info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
                 spillRows;
     replaceAttr("spill_vpm_rows_per_block",
@@ -7579,8 +7596,7 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
                 builder.getI32IntegerAttr(totalRows));
   } else {
     int64_t spillRows = 1;
-    totalRows = info.userVPMRowsPerBlock +
-                info.compilerVPMStagingRowsPerBlock +
+    totalRows = info.userVPMRowsPerBlock + info.compilerVPMStagingRowsPerBlock +
                 info.warpsPerBlock * info.compilerVPMStagingRowsPerWarp +
                 spillRows;
     replaceAttr("spill_vpm_rows_per_block",
@@ -7607,8 +7623,8 @@ static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
   vc4Func->setAttr("spill_frame_stride_bytes",
                    builder.getI32IntegerAttr(allocator.getSpillFrameBytes()));
 
-  auto launchABI =
-      llvm::dyn_cast_or_null<DictionaryAttr>(vc4Func->getAttr("vc4.launch_abi"));
+  auto launchABI = llvm::dyn_cast_or_null<DictionaryAttr>(
+      vc4Func->getAttr("vc4.launch_abi"));
   if (launchABI)
     vc4Func->setAttr("vc4.launch_abi",
                      appendSpillFrameBaseBuiltin(builder, launchABI));
@@ -7630,7 +7646,8 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
   LivenessSummary liveness = computeLiveness(templates, virtualValues);
 
   SpillAwareAllocator allocator;
-  if (failed(allocator.allocate(sourceFunc, templates, virtualValues, liveness)))
+  if (failed(
+          allocator.allocate(sourceFunc, templates, virtualValues, liveness)))
     return failure();
 
   ConservativeScheduler scheduler;
@@ -7648,7 +7665,8 @@ static LogicalResult lowerFunction(Operation *sourceFunc, Operation *vc4Module,
 
   OpBuilder bodyBuilder(vc4Func->getContext());
   bodyBuilder.setInsertionPointToEnd(&vc4Func->getRegion(0).front());
-  return emitScheduledFunctionBody(sourceFunc, bodyBuilder, scheduled, allocator, layout);
+  return emitScheduledFunctionBody(sourceFunc, bodyBuilder, scheduled,
+                                   allocator, layout);
 }
 
 struct ConvertSSAVC4ToVC4Pass
@@ -7680,8 +7698,10 @@ struct ConvertSSAVC4ToVC4Pass
       builder.setInsertionPoint(sourceModule);
       Operation *vc4Module = createVC4Module(sourceModule, builder);
 
-      if (sourceModule->getNumRegions() != 1 || sourceModule->getRegion(0).empty()) {
-        sourceModule->emitOpError("requires one body region for SSAVC4 lowering");
+      if (sourceModule->getNumRegions() != 1 ||
+          sourceModule->getRegion(0).empty()) {
+        sourceModule->emitOpError(
+            "requires one body region for SSAVC4 lowering");
         signalPassFailure();
         return;
       }
@@ -7691,7 +7711,8 @@ struct ConvertSSAVC4ToVC4Pass
         if (hasName(&op, kSSAVC4FuncOpName))
           funcs.push_back(&op);
         else {
-          op.emitOpError("is not legal in an SSAVC4 module for M3 slice 3 lowering; expected ssavc4.func");
+          op.emitOpError("is not legal in an SSAVC4 module for M3 slice 3 "
+                         "lowering; expected ssavc4.func");
           signalPassFailure();
           return;
         }

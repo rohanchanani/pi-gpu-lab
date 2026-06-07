@@ -170,6 +170,26 @@ P3_POST_PHASE_STAGED_STATUSES = {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },
+    "p10_fragment_sfu_recip": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_rsqrt": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_exp": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_log": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fastmath_approx_contract": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
 }
 
 P4_I32_REDUCE_KINDS = {
@@ -341,6 +361,26 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_final_acceptance",
     },
     "p9_vdr_vdw_subword_dma_modes": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_recip": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_rsqrt": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_exp": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fragment_sfu_log": {
+        "implemented_pending_hardware",
+        "hardware_proven_pending_final_acceptance",
+    },
+    "p10_fastmath_approx_contract": {
         "implemented_pending_hardware",
         "hardware_proven_pending_final_acceptance",
     },
@@ -2595,6 +2635,7 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
     p9_staged_surface_tokens = {
         "vc4kernel.fragment_pack": "p9_fragment_pack",
         "vc4kernel.fragment_unpack": "p9_fragment_unpack",
+        "vc4kernel.fragment_sfu": "p10_fragment_sfu_recip",
     }
     p9_staged_statuses = {
         "implemented_pending_hardware",
@@ -2627,7 +2668,7 @@ def audit_p8_5_mixed_acceptance_lock(repo_root, matrix):
                     feature_id = p9_staged_surface_tokens.get(token)
                     if feature_id:
                         feature = features.get(feature_id, {})
-                        if feature.get("phase") == "P9" and feature.get(
+                        if feature.get("phase") in {"P9", "P10"} and feature.get(
                             "current_status"
                         ) in p9_staged_statuses:
                             continue

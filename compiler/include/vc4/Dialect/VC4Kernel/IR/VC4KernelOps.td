@@ -226,6 +226,19 @@ def VC4Kernel_FragmentPackOp : VC4Kernel_PureOp<"fragment_pack"> {
   let hasVerifier = 1;
 }
 
+def VC4Kernel_FragmentSFUOp : VC4Kernel_PureOp<"fragment_sfu"> {
+  let summary = "hardware-faithful approximate VC4 fragment SFU operation";
+  let arguments = (ins
+    VC4Kernel_Vector16F32:$input,
+    VC4Kernel_SFUKindAttr:$kind,
+    OptionalAttr<VC4Kernel_FPMathPolicyAttr>:$fp_policy,
+    VC4Kernel_FPDomainAttr:$domain
+  );
+  let results = (outs VC4Kernel_Vector16F32:$result);
+  let assemblyFormat = "$input attr-dict `:` type($input) `->` type($result)";
+  let hasVerifier = 1;
+}
+
 def VC4Kernel_FragmentALUAddOp : VC4Kernel_PureOp<"fragment_alu.add"> {
   let summary = "hardware-faithful VC4 ADD-pipe fragment ALU operation";
   let arguments = (ins

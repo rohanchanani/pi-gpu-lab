@@ -24,10 +24,10 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/StringMap.h"
 #include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/Twine.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/Support/ErrorHandling.h"
 
 #include <algorithm>
@@ -57,46 +57,50 @@ constexpr llvm::StringLiteral kPredNotOpName("vc4kernel.pred.not");
 constexpr llvm::StringLiteral kPredAnyOpName("vc4kernel.pred.any");
 constexpr llvm::StringLiteral kPredAllOpName("vc4kernel.pred.all");
 constexpr llvm::StringLiteral kSplatOpName("vc4kernel.splat");
-constexpr llvm::StringLiteral kFragmentBitcastOpName(
-    "vc4kernel.fragment_bitcast");
+constexpr llvm::StringLiteral
+    kFragmentBitcastOpName("vc4kernel.fragment_bitcast");
 constexpr llvm::StringLiteral kFragmentConstOpName("vc4kernel.fragment_const");
-constexpr llvm::StringLiteral kFragmentUnpackOpName(
-    "vc4kernel.fragment_unpack");
+constexpr llvm::StringLiteral
+    kFragmentUnpackOpName("vc4kernel.fragment_unpack");
 constexpr llvm::StringLiteral kFragmentPackOpName("vc4kernel.fragment_pack");
-constexpr llvm::StringLiteral kFragmentALUAddOpName(
-    "vc4kernel.fragment_alu.add");
-constexpr llvm::StringLiteral kFragmentALUMulOpName(
-    "vc4kernel.fragment_alu.mul");
+constexpr llvm::StringLiteral kFragmentSFUOpName("vc4kernel.fragment_sfu");
+constexpr llvm::StringLiteral
+    kFragmentALUAddOpName("vc4kernel.fragment_alu.add");
+constexpr llvm::StringLiteral
+    kFragmentALUMulOpName("vc4kernel.fragment_alu.mul");
 constexpr llvm::StringLiteral kFragmentCmpOpName("vc4kernel.fragment_cmp");
-constexpr llvm::StringLiteral kFragmentSelectOpName(
-    "vc4kernel.fragment_select");
-constexpr llvm::StringLiteral kFragmentRotateOpName("vc4kernel.fragment_rotate");
-constexpr llvm::StringLiteral kFragmentReduceOpName("vc4kernel.fragment_reduce");
+constexpr llvm::StringLiteral
+    kFragmentSelectOpName("vc4kernel.fragment_select");
+constexpr llvm::StringLiteral
+    kFragmentRotateOpName("vc4kernel.fragment_rotate");
+constexpr llvm::StringLiteral
+    kFragmentReduceOpName("vc4kernel.fragment_reduce");
 constexpr llvm::StringLiteral kTMULoadOpName("vc4kernel.tmu_load_fragment");
 constexpr llvm::StringLiteral kVDWStoreOpName("vc4kernel.vdw_store_fragment");
 constexpr llvm::StringLiteral kVPMAllocOpName("vc4kernel.vpm_alloc");
 constexpr llvm::StringLiteral kVPMWriteOpName("vc4kernel.vpm_write_fragment");
 constexpr llvm::StringLiteral kVPMReadOpName("vc4kernel.vpm_read_fragment");
 constexpr llvm::StringLiteral kVDRLoadOpName("vc4kernel.vdr_load_to_vpm");
-constexpr llvm::StringLiteral kVDRLoadRectOpName(
-    "vc4kernel.vdr_load_rect_to_vpm");
-constexpr llvm::StringLiteral kVDWStoreVPMOpName(
-    "vc4kernel.vdw_store_vpm_fragment");
-constexpr llvm::StringLiteral kVDWStoreRectOpName(
-    "vc4kernel.vdw_store_rect_from_vpm");
+constexpr llvm::StringLiteral
+    kVDRLoadRectOpName("vc4kernel.vdr_load_rect_to_vpm");
+constexpr llvm::StringLiteral
+    kVDWStoreVPMOpName("vc4kernel.vdw_store_vpm_fragment");
+constexpr llvm::StringLiteral
+    kVDWStoreRectOpName("vc4kernel.vdw_store_rect_from_vpm");
 constexpr llvm::StringLiteral kBarrierOpName("vc4kernel.barrier");
 
 constexpr llvm::StringLiteral kSSAVC4ModuleOpName("ssavc4.module");
 constexpr llvm::StringLiteral kSSAVC4FuncOpName("ssavc4.func");
 constexpr llvm::StringLiteral kSSAVC4ThreadEndOpName("ssavc4.thread_end");
 constexpr llvm::StringLiteral kSSAVC4LoadImmOpName("ssavc4.load_imm");
-constexpr llvm::StringLiteral kSSAVC4ElementNumberOpName(
-    "ssavc4.element_number");
+constexpr llvm::StringLiteral
+    kSSAVC4ElementNumberOpName("ssavc4.element_number");
 constexpr llvm::StringLiteral kSSAVC4UniformReadOpName("ssavc4.uniform.read");
 constexpr llvm::StringLiteral kSSAVC4SplatOpName("ssavc4.splat");
 constexpr llvm::StringLiteral kSSAVC4MovOpName("ssavc4.mov");
 constexpr llvm::StringLiteral kSSAVC4ALUAddOpName("ssavc4.alu.add");
 constexpr llvm::StringLiteral kSSAVC4ALUMulOpName("ssavc4.alu.mul");
+constexpr llvm::StringLiteral kSSAVC4SFUOpName("ssavc4.sfu");
 constexpr llvm::StringLiteral kSSAVC4PackOpName("ssavc4.pack");
 constexpr llvm::StringLiteral kSSAVC4UnpackOpName("ssavc4.unpack");
 constexpr llvm::StringLiteral kSSAVC4RotateOpName("ssavc4.rotate");
@@ -106,11 +110,11 @@ constexpr llvm::StringLiteral kSSAVC4VDWStoreOpName("ssavc4.vdw.store");
 constexpr llvm::StringLiteral kSSAVC4VPMWriteOpName("ssavc4.vpm.write");
 constexpr llvm::StringLiteral kSSAVC4VPMReadOpName("ssavc4.vpm.read");
 constexpr llvm::StringLiteral kSSAVC4VDRLoadOpName("ssavc4.vdr.load");
-constexpr llvm::StringLiteral kSSAVC4VDRLoadRectDynamicOpName(
-    "ssavc4.vdr.load_rect.dynamic");
+constexpr llvm::StringLiteral
+    kSSAVC4VDRLoadRectDynamicOpName("ssavc4.vdr.load_rect.dynamic");
 constexpr llvm::StringLiteral kSSAVC4VDWStoreVPMOpName("ssavc4.vdw.store_vpm");
-constexpr llvm::StringLiteral kSSAVC4VDWStoreRectDynamicOpName(
-    "ssavc4.vdw.store_rect.dynamic");
+constexpr llvm::StringLiteral
+    kSSAVC4VDWStoreRectDynamicOpName("ssavc4.vdw.store_rect.dynamic");
 constexpr llvm::StringLiteral kSSAVC4BarrierOpName("ssavc4.barrier");
 constexpr llvm::StringLiteral kSSAVC4BranchOpName("ssavc4.br");
 constexpr llvm::StringLiteral kSSAVC4CondBranchOpName("ssavc4.cond_br");
@@ -121,9 +125,10 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
-static LogicalResult verifyRequiredMemoryPolicy(
-    Operation *op, mlir::vc4kernel::MemoryPath expectedPath,
-    mlir::vc4kernel::Coherency expectedCoherency) {
+static LogicalResult
+verifyRequiredMemoryPolicy(Operation *op,
+                           mlir::vc4kernel::MemoryPath expectedPath,
+                           mlir::vc4kernel::Coherency expectedCoherency) {
   auto memoryPath =
       op->getAttrOfType<mlir::vc4kernel::MemoryPathAttr>("memory_path");
   auto coherency =
@@ -155,8 +160,7 @@ static LogicalResult verifyRequiredInactiveStorePolicy(Operation *op) {
   if (!inactiveStore)
     return op->emitOpError(
         "VDW stores require explicit inactive_store<preserve> in Surface v2");
-  if (inactiveStore.getValue() ==
-      mlir::vc4kernel::InactiveStore::preserve)
+  if (inactiveStore.getValue() == mlir::vc4kernel::InactiveStore::preserve)
     return success();
   return op->emitOpError(
       "VDW stores support only inactive_store<preserve> in P8");
@@ -180,9 +184,8 @@ static IntegerAttr asIntegerAttr(Attribute attr) {
 
 static NamedAttribute getSSAVC4VPMOrientation(OpBuilder &builder,
                                               Operation *op) {
-  auto attr =
-      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMOrientationAttr>(
-          op->getAttr("orientation"));
+  auto attr = llvm::dyn_cast_or_null<mlir::vc4kernel::VPMOrientationAttr>(
+      op->getAttr("orientation"));
   mlir::ssavc4::VPMOrientation value =
       attr && attr.getValue() == mlir::vc4kernel::VPMOrientation::vertical
           ? mlir::ssavc4::VPMOrientation::vertical
@@ -193,41 +196,34 @@ static NamedAttribute getSSAVC4VPMOrientation(OpBuilder &builder,
 }
 
 static NamedAttribute getSSAVC4VPMWidth(OpBuilder &builder, Operation *op) {
-  auto attr =
-      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMWidthAttr>(
-          op->getAttr("width"));
+  auto attr = llvm::dyn_cast_or_null<mlir::vc4kernel::VPMWidthAttr>(
+      op->getAttr("width"));
   mlir::ssavc4::VPMElemWidth value = mlir::ssavc4::VPMElemWidth::w32;
   if (attr && attr.getValue() == mlir::vc4kernel::VPMWidth::w16)
     value = mlir::ssavc4::VPMElemWidth::w16;
   if (attr && attr.getValue() == mlir::vc4kernel::VPMWidth::w8)
     value = mlir::ssavc4::VPMElemWidth::w8;
-  return builder.getNamedAttr(
-      "width",
-      mlir::ssavc4::VPMElemWidthAttr::get(builder.getContext(), value));
+  return builder.getNamedAttr("width", mlir::ssavc4::VPMElemWidthAttr::get(
+                                           builder.getContext(), value));
 }
 
 static NamedAttribute getSSAVC4VPMSubword(OpBuilder &builder, Operation *op) {
-  auto attr =
-      llvm::dyn_cast_or_null<mlir::vc4kernel::VPMSubwordAttr>(
-          op->getAttr("subword"));
+  auto attr = llvm::dyn_cast_or_null<mlir::vc4kernel::VPMSubwordAttr>(
+      op->getAttr("subword"));
   mlir::ssavc4::VPMSubword value = mlir::ssavc4::VPMSubword::none;
   if (attr && attr.getValue() == mlir::vc4kernel::VPMSubword::packed)
     value = mlir::ssavc4::VPMSubword::packed;
   if (attr && attr.getValue() == mlir::vc4kernel::VPMSubword::laned)
     value = mlir::ssavc4::VPMSubword::laned;
-  return builder.getNamedAttr(
-      "subword",
-      mlir::ssavc4::VPMSubwordAttr::get(builder.getContext(), value));
+  return builder.getNamedAttr("subword", mlir::ssavc4::VPMSubwordAttr::get(
+                                             builder.getContext(), value));
 }
 
 static FailureOr<Attribute> getFragmentUnpackMode(OpBuilder &builder,
                                                   Operation *op) {
-  auto source =
-      op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("source");
-  auto layout =
-      op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
-  auto policy =
-      op->getAttrOfType<mlir::vc4kernel::UnpackPolicyAttr>("policy");
+  auto source = op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("source");
+  auto layout = op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
+  auto policy = op->getAttrOfType<mlir::vc4kernel::UnpackPolicyAttr>("policy");
   if (!source || !layout || !policy)
     return op->emitOpError("requires explicit fragment unpack mode attrs");
   if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed)
@@ -250,10 +246,8 @@ static FailureOr<Attribute> getFragmentUnpackMode(OpBuilder &builder,
 static FailureOr<Attribute> getFragmentPackMode(OpBuilder &builder,
                                                 Operation *op) {
   auto dest = op->getAttrOfType<mlir::vc4kernel::SubwordTypeAttr>("dest");
-  auto layout =
-      op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
-  auto policy =
-      op->getAttrOfType<mlir::vc4kernel::PackPolicyAttr>("policy");
+  auto layout = op->getAttrOfType<mlir::vc4kernel::SubwordLayoutAttr>("layout");
+  auto policy = op->getAttrOfType<mlir::vc4kernel::PackPolicyAttr>("policy");
   if (!dest || !layout || !policy)
     return op->emitOpError("requires explicit fragment pack mode attrs");
   if (layout.getValue() != mlir::vc4kernel::SubwordLayout::packed ||
@@ -298,6 +292,7 @@ static bool isAllowedVC4KernelOp(Operation *op) {
       "vc4kernel.fragment_const",
       "vc4kernel.fragment_unpack",
       "vc4kernel.fragment_pack",
+      "vc4kernel.fragment_sfu",
       "vc4kernel.fragment_alu.add",
       "vc4kernel.fragment_alu.mul",
       "vc4kernel.fragment_cmp",
@@ -357,8 +352,7 @@ static SmallVector<int64_t, 16> getDenseI32Values(DenseElementsAttr attr) {
 }
 
 static bool isDenseI32Splat(DenseElementsAttr attr) {
-  return attr && attr.isSplat() &&
-         attr.getElementType().isSignlessInteger(32);
+  return attr && attr.isSplat() && attr.getElementType().isSignlessInteger(32);
 }
 
 static bool isDenseF32Splat(DenseElementsAttr attr) {
@@ -396,15 +390,13 @@ getI32LaneAffinePlan(ArrayRef<int64_t> values) {
 }
 
 static bool isPerLaneU2(ArrayRef<int64_t> values) {
-  return values.size() == 16 &&
-         llvm::all_of(values, [](int64_t value) {
+  return values.size() == 16 && llvm::all_of(values, [](int64_t value) {
            return value >= 0 && value <= 3;
          });
 }
 
 static bool isPerLaneS2(ArrayRef<int64_t> values) {
-  return values.size() == 16 &&
-         llvm::all_of(values, [](int64_t value) {
+  return values.size() == 16 && llvm::all_of(values, [](int64_t value) {
            return value >= -2 && value <= 1;
          });
 }
@@ -425,12 +417,12 @@ static LogicalResult verifyNoArithVectors(Operation *op) {
 static LogicalResult verifyIntegerArithI32(Operation *op) {
   for (Value operand : op->getOperands())
     if (!isScalarI32(operand.getType()))
-      return op->emitOpError(
-          "integer arith operations in vc4kernel require scalar i32 operands and results");
+      return op->emitOpError("integer arith operations in vc4kernel require "
+                             "scalar i32 operands and results");
   for (Type type : op->getResultTypes())
     if (!isScalarI32(type))
-      return op->emitOpError(
-        "integer arith operations in vc4kernel require scalar i32 operands and results");
+      return op->emitOpError("integer arith operations in vc4kernel require "
+                             "scalar i32 operands and results");
   return success();
 }
 
@@ -460,19 +452,19 @@ static LogicalResult verifyArithBoundary(Operation *op) {
     return op->emitOpError(
         "arith.constant in vc4kernel requires one scalar i1/i32/f32 result");
   }
-  if (hasAnyName(op, {"arith.divsi", "arith.divui", "arith.remsi",
-                      "arith.remui"}))
-    return op->emitOpError(
-        "integer division and remainder are not supported in vc4kernel scalar arith");
-  if (hasAnyName(op, {"arith.addf", "arith.subf", "arith.mulf",
-                      "arith.divf", "arith.minimumf", "arith.maximumf",
-                      "arith.minnumf", "arith.maxnumf"}))
+  if (hasAnyName(op,
+                 {"arith.divsi", "arith.divui", "arith.remsi", "arith.remui"}))
+    // clang-format off
+    return op->emitOpError("integer division and remainder are not supported in vc4kernel scalar arith");
+  // clang-format on
+  if (hasAnyName(op, {"arith.addf", "arith.subf", "arith.mulf", "arith.divf",
+                      "arith.minimumf", "arith.maximumf", "arith.minnumf",
+                      "arith.maxnumf"}))
     return op->emitOpError(
         "scalar f32 arithmetic is not supported in vc4kernel scalar arith");
-  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli",
-                      "arith.shli", "arith.shrui", "arith.shrsi",
-                      "arith.minsi", "arith.maxsi", "arith.minui",
-                      "arith.maxui"}))
+  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli", "arith.shli",
+                      "arith.shrui", "arith.shrsi", "arith.minsi",
+                      "arith.maxsi", "arith.minui", "arith.maxui"}))
     return verifyIntegerArithI32(op);
   if (name == "arith.andi" || name == "arith.ori" || name == "arith.xori") {
     if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
@@ -484,7 +476,8 @@ static LogicalResult verifyArithBoundary(Operation *op) {
         isScalarI1(op->getResult(0).getType()))
       return success();
     return op->emitOpError(
-        "bitwise arith operations in vc4kernel require scalar i32 operands and results or scalar i1 operands and result");
+        "bitwise arith operations in vc4kernel require scalar i32 operands and "
+        "results or scalar i1 operands and result");
   }
   if (name == "arith.bitcast") {
     if (op->getNumOperands() == 1 && op->getNumResults() == 1 &&
@@ -507,18 +500,22 @@ static LogicalResult verifyArithBoundary(Operation *op) {
         isScalarI32(op->getOperand(0).getType()) &&
         isScalarI1(op->getResult(0).getType()))
       return success();
-    return op->emitOpError(
-        "arith.trunci in vc4kernel supports only i32 to i1 low-bit trunc in P5");
+    // clang-format off
+    return op->emitOpError("arith.trunci in vc4kernel supports only i32 to i1 low-bit trunc in P5");
+    // clang-format on
   }
   if (name == "arith.sitofp")
-    return op->emitOpError(
-        "arith.sitofp requires exact scalar numeric cast support not available in P5");
+    // clang-format off
+    return op->emitOpError("arith.sitofp requires exact scalar numeric cast support not available in P5");
+  // clang-format on
   if (name == "arith.fptosi")
-    return op->emitOpError(
-        "arith.fptosi requires exact scalar numeric cast support not available in P5");
+    // clang-format off
+    return op->emitOpError("arith.fptosi requires exact scalar numeric cast support not available in P5");
+  // clang-format on
   if (hasAnyName(op, {"arith.uitofp", "arith.fptoui"})) {
-    return op->emitOpError(
-        "scalar numeric casts require exact scalar numeric cast support not available in P5");
+    // clang-format off
+    return op->emitOpError("scalar numeric casts require exact scalar numeric cast support not available in P5");
+    // clang-format on
   }
   if (name == "arith.cmpi") {
     if (op->getNumOperands() == 2 && op->getNumResults() == 1 &&
@@ -526,8 +523,8 @@ static LogicalResult verifyArithBoundary(Operation *op) {
         isScalarI32(op->getOperand(1).getType()) &&
         isScalarI1(op->getResult(0).getType()))
       return success();
-    return op->emitOpError(
-        "arith.cmpi in vc4kernel requires scalar i32 operands and scalar i1 result");
+    return op->emitOpError("arith.cmpi in vc4kernel requires scalar i32 "
+                           "operands and scalar i1 result");
   }
   if (name == "arith.select") {
     if (op->getNumOperands() == 3 && op->getNumResults() == 1 &&
@@ -538,8 +535,8 @@ static LogicalResult verifyArithBoundary(Operation *op) {
           op->getResult(0).getType() == valueType)
         return success();
     }
-    return op->emitOpError(
-        "arith.select in vc4kernel requires scalar i1 condition and matching scalar i1/i32/f32 values");
+    return op->emitOpError("arith.select in vc4kernel requires scalar i1 "
+                           "condition and matching scalar i1/i32/f32 values");
   }
   return op->emitOpError("arith operation is not allowed in vc4kernel");
 }
@@ -564,7 +561,8 @@ static LogicalResult verifyOperationBoundary(Operation *op) {
     if (auto cond = dyn_cast<cf::CondBranchOp>(op)) {
       if (!cond.getCondition().getType().isInteger(1))
         return op->emitOpError("cf.cond_br condition must be scalar i1");
-      if (failed(verifyNoVPMSuccessorOperands(op, cond.getTrueDestOperands())) ||
+      if (failed(
+              verifyNoVPMSuccessorOperands(op, cond.getTrueDestOperands())) ||
           failed(verifyNoVPMSuccessorOperands(op, cond.getFalseDestOperands())))
         return failure();
     }
@@ -578,8 +576,8 @@ static LogicalResult verifyOperationBoundary(Operation *op) {
     return op->emitOpError("raw scf operations are forbidden");
   if (dialect == "ssavc4" || dialect == "vc4")
     return op->emitOpError("lower-half dialect operations are forbidden");
-  return op->emitOpError()
-         << "dialect '" << dialect << "' is forbidden inside vc4kernel";
+  return op->emitOpError() << "dialect '" << dialect
+                           << "' is forbidden inside vc4kernel";
 }
 
 static LogicalResult verifyVC4Kernel(ModuleOp module) {
@@ -607,13 +605,14 @@ static LogicalResult verifyVC4Kernel(ModuleOp module) {
         }
       for (Region &region : op->getRegions())
         for (Block &block : region) {
-          bool isKernelEntryBlock = op == &top && &region == &top.getRegion(0) &&
+          bool isKernelEntryBlock = op == &top &&
+                                    &region == &top.getRegion(0) &&
                                     &block == &region.front();
           for (BlockArgument arg : block.getArguments()) {
             if (!isKernelEntryBlock &&
                 mlir::vc4kernel::isVC4KernelVPMTileType(arg.getType())) {
-              op->emitOpError(
-                  "cf block arguments may not carry !vc4kernel.vpm_tile in Stage 1");
+              op->emitOpError("cf block arguments may not carry "
+                              "!vc4kernel.vpm_tile in Stage 1");
               return WalkResult::interrupt();
             }
             if (containsIllegalType(arg.getType())) {
@@ -743,9 +742,9 @@ static DictionaryAttr buildBuiltinABIEntry(OpBuilder &builder, StringRef name,
   });
 }
 
-static DictionaryAttr buildArgABIEntry(OpBuilder &builder, DictionaryAttr source,
-                                       BlockArgument arg, unsigned index,
-                                       int64_t uniformIndex) {
+static DictionaryAttr buildArgABIEntry(OpBuilder &builder,
+                                       DictionaryAttr source, BlockArgument arg,
+                                       unsigned index, int64_t uniformIndex) {
   SmallVector<NamedAttribute, 8> attrs;
   if (source) {
     for (NamedAttribute named : source)
@@ -756,16 +755,17 @@ static DictionaryAttr buildArgABIEntry(OpBuilder &builder, DictionaryAttr source
     attrs.push_back(builder.getNamedAttr(
         "name", builder.getStringAttr((Twine("arg") + Twine(index)).str())));
   if (!source || !source.get("kind"))
-    attrs.push_back(builder.getNamedAttr("kind", builder.getStringAttr("scalar")));
+    attrs.push_back(
+        builder.getNamedAttr("kind", builder.getStringAttr("scalar")));
   if (!source || !source.get("direction"))
-    attrs.push_back(builder.getNamedAttr("direction",
-                                         builder.getStringAttr("by_value")));
+    attrs.push_back(
+        builder.getNamedAttr("direction", builder.getStringAttr("by_value")));
   if (!source || (!source.get("type") && !source.get("elem_type"))) {
     attrs.push_back(builder.getNamedAttr(
         "type", builder.getStringAttr(arg.getType().isF32() ? "f32" : "u32")));
   }
-  attrs.push_back(builder.getNamedAttr("uniform_index",
-                                       builder.getI32IntegerAttr(uniformIndex)));
+  attrs.push_back(builder.getNamedAttr(
+      "uniform_index", builder.getI32IntegerAttr(uniformIndex)));
   return builder.getDictionaryAttr(attrs);
 }
 
@@ -823,10 +823,10 @@ static void appendRequiredBuiltins(Operation *kernel,
     append("logical_request");
     append("total_requests");
   }
-  bool needsLogicalWarp =
-      kernelContains(kernel, kWarpIdOpName) || summary.uses_barrier ||
-      (summary.schedule_mode == "cooperative_block" &&
-       summary.compiler_vpm_staging_rows_per_warp > 0);
+  bool needsLogicalWarp = kernelContains(kernel, kWarpIdOpName) ||
+                          summary.uses_barrier ||
+                          (summary.schedule_mode == "cooperative_block" &&
+                           summary.compiler_vpm_staging_rows_per_warp > 0);
   if (needsLogicalWarp)
     append("logical_warp_id");
   if (summary.uses_barrier)
@@ -955,8 +955,7 @@ computeVC4KernelResourceSummary(Operation *kernel) {
       summary.compiler_vpm_staging_rows_per_block +
       summary.warps_per_block * summary.compiler_vpm_staging_rows_per_warp;
   summary.total_vpm_bytes_per_block = summary.total_vpm_rows_per_block * 16 * 4;
-  summary.requires_vpm_base_row_builtin =
-      summary.total_vpm_rows_per_block > 0;
+  summary.requires_vpm_base_row_builtin = summary.total_vpm_rows_per_block > 0;
   return summary;
 }
 
@@ -966,36 +965,32 @@ static DictionaryAttr buildSSAVC4ResourceMetadataFromVC4KernelSummary(
   if (summary.schedule_mode == "cooperative_block")
     scheduleMode = "cooperative_block";
   return builder.getDictionaryAttr({
-      builder.getNamedAttr("schedule_mode", builder.getStringAttr(scheduleMode)),
-      builder.getNamedAttr(
-          "warps_per_block",
-          builder.getI32IntegerAttr(summary.warps_per_block)),
+      builder.getNamedAttr("schedule_mode",
+                           builder.getStringAttr(scheduleMode)),
+      builder.getNamedAttr("warps_per_block",
+                           builder.getI32IntegerAttr(summary.warps_per_block)),
       builder.getNamedAttr(
           "user_vpm_rows_per_block",
           builder.getI32IntegerAttr(summary.user_vpm_rows_per_block)),
-      builder.getNamedAttr(
-          "compiler_vpm_staging_rows_per_warp",
-          builder.getI32IntegerAttr(
-              summary.compiler_vpm_staging_rows_per_warp)),
-      builder.getNamedAttr(
-          "compiler_vpm_staging_rows_per_block",
-          builder.getI32IntegerAttr(
-              summary.compiler_vpm_staging_rows_per_block)),
+      builder.getNamedAttr("compiler_vpm_staging_rows_per_warp",
+                           builder.getI32IntegerAttr(
+                               summary.compiler_vpm_staging_rows_per_warp)),
+      builder.getNamedAttr("compiler_vpm_staging_rows_per_block",
+                           builder.getI32IntegerAttr(
+                               summary.compiler_vpm_staging_rows_per_block)),
       builder.getNamedAttr(
           "total_vpm_rows_per_block",
           builder.getI32IntegerAttr(summary.total_vpm_rows_per_block)),
       builder.getNamedAttr("uses_tmu", builder.getBoolAttr(summary.uses_tmu)),
       builder.getNamedAttr("uses_vpm", builder.getBoolAttr(summary.uses_vpm)),
-      builder.getNamedAttr(
-          "uses_vpm_qpu_read",
-          builder.getBoolAttr(summary.uses_vpm_qpu_read)),
-      builder.getNamedAttr(
-          "uses_vpm_qpu_write",
-          builder.getBoolAttr(summary.uses_vpm_qpu_write)),
+      builder.getNamedAttr("uses_vpm_qpu_read",
+                           builder.getBoolAttr(summary.uses_vpm_qpu_read)),
+      builder.getNamedAttr("uses_vpm_qpu_write",
+                           builder.getBoolAttr(summary.uses_vpm_qpu_write)),
       builder.getNamedAttr("uses_vdr", builder.getBoolAttr(summary.uses_vdr)),
       builder.getNamedAttr("uses_vdw", builder.getBoolAttr(summary.uses_vdw)),
-      builder.getNamedAttr(
-          "uses_barrier", builder.getBoolAttr(summary.uses_barrier)),
+      builder.getNamedAttr("uses_barrier",
+                           builder.getBoolAttr(summary.uses_barrier)),
       builder.getNamedAttr(
           "semaphore_count_per_block",
           builder.getI32IntegerAttr(summary.semaphore_count_per_block)),
@@ -1019,10 +1014,12 @@ static Operation *createOp(OpBuilder &builder, Location loc, StringRef name,
   return builder.create(state);
 }
 
-static Value createOpWithResult(OpBuilder &builder, Location loc, StringRef name,
-                                ValueRange operands,
-                                ArrayRef<NamedAttribute> attrs, Type resultType) {
-  return createOp(builder, loc, name, operands, attrs, resultType)->getResult(0);
+static Value createOpWithResult(OpBuilder &builder, Location loc,
+                                StringRef name, ValueRange operands,
+                                ArrayRef<NamedAttribute> attrs,
+                                Type resultType) {
+  return createOp(builder, loc, name, operands, attrs, resultType)
+      ->getResult(0);
 }
 
 static Value createUniformRead(OpBuilder &builder, Location loc, Type type,
@@ -1034,13 +1031,13 @@ static Value createUniformRead(OpBuilder &builder, Location loc, Type type,
 
 static Value createLoadImm(OpBuilder &builder, Location loc, Type type,
                            Attribute value) {
-  SmallVector<NamedAttribute, 2> attrs{
-      builder.getNamedAttr("mode", mlir::vc4::LoadImmModeAttr::get(
-                                       builder.getContext(),
-                                       mlir::vc4::LoadImmMode::splat32))};
+  SmallVector<NamedAttribute, 2> attrs{builder.getNamedAttr(
+      "mode", mlir::vc4::LoadImmModeAttr::get(
+                  builder.getContext(), mlir::vc4::LoadImmMode::splat32))};
   if (value)
     attrs.push_back(builder.getNamedAttr("value", value));
-  return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs, type);
+  return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs,
+                            type);
 }
 
 static Value createPerLaneLoadImm(OpBuilder &builder, Location loc, Type type,
@@ -1051,12 +1048,11 @@ static Value createPerLaneLoadImm(OpBuilder &builder, Location loc, Type type,
   for (int64_t value : values)
     i32Values.push_back(static_cast<int32_t>(value));
   SmallVector<NamedAttribute, 2> attrs{
-      builder.getNamedAttr("mode",
-                           mlir::vc4::LoadImmModeAttr::get(builder.getContext(),
-                                                           mode)),
-      builder.getNamedAttr("values",
-                           builder.getDenseI32ArrayAttr(i32Values))};
-  return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs, type);
+      builder.getNamedAttr(
+          "mode", mlir::vc4::LoadImmModeAttr::get(builder.getContext(), mode)),
+      builder.getNamedAttr("values", builder.getDenseI32ArrayAttr(i32Values))};
+  return createOpWithResult(builder, loc, kSSAVC4LoadImmOpName, {}, attrs,
+                            type);
 }
 
 struct LoweredValue {
@@ -1119,8 +1115,7 @@ struct PredicatePlan {
     plan.maskValue = mask;
     return plan;
   }
-  static PredicatePlan generalMask(Value lhs, Value rhs,
-                                   mlir::vc4::Cond cond) {
+  static PredicatePlan generalMask(Value lhs, Value rhs, mlir::vc4::Cond cond) {
     PredicatePlan plan;
     plan.kind = Class::GeneralMask;
     plan.compareLhs = lhs;
@@ -1273,9 +1268,9 @@ static Value createI32Add(OpBuilder &builder, Location loc, Value lhs,
                           Value rhs) {
   return createOpWithResult(
       builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
-      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                          builder.getContext(),
-                                          mlir::vc4::AddOpcode::add))},
+      {builder.getNamedAttr(
+          "opcode", mlir::vc4::AddOpcodeAttr::get(builder.getContext(),
+                                                  mlir::vc4::AddOpcode::add))},
       lhs.getType());
 }
 
@@ -1283,9 +1278,9 @@ static Value createI32Sub(OpBuilder &builder, Location loc, Value lhs,
                           Value rhs) {
   return createOpWithResult(
       builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
-      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                          builder.getContext(),
-                                          mlir::vc4::AddOpcode::sub))},
+      {builder.getNamedAttr(
+          "opcode", mlir::vc4::AddOpcodeAttr::get(builder.getContext(),
+                                                  mlir::vc4::AddOpcode::sub))},
       lhs.getType());
 }
 
@@ -1305,17 +1300,17 @@ static Value createI32BinaryAddPipe(OpBuilder &builder, Location loc, Value lhs,
 
 static Value createScalarI32SignBias(OpBuilder &builder, Location loc,
                                      Value value) {
-  Value signBit = createLoadImm(
-      builder, loc, value.getType(),
-      builder.getIntegerAttr(builder.getI32Type(),
-                             llvm::APInt(32, 0x80000000u)));
+  Value signBit =
+      createLoadImm(builder, loc, value.getType(),
+                    builder.getIntegerAttr(builder.getI32Type(),
+                                           llvm::APInt(32, 0x80000000u)));
   return createI32BinaryAddPipe(builder, loc, value, signBit,
                                 mlir::vc4::AddOpcode::bit_xor);
 }
 
 static FailureOr<Value> emitFragmentConst(Operation *op, OpBuilder &builder) {
-  auto valueAttr = llvm::dyn_cast_if_present<DenseElementsAttr>(
-      op->getAttr("value"));
+  auto valueAttr =
+      llvm::dyn_cast_if_present<DenseElementsAttr>(op->getAttr("value"));
   if (!valueAttr) {
     op->emitOpError("requires dense value attribute");
     return failure();
@@ -1355,8 +1350,7 @@ static FailureOr<Value> emitFragmentConst(Operation *op, OpBuilder &builder) {
     return createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
                               resultType);
 
-  if (std::optional<LaneAffineConstPlan> plan =
-          getI32LaneAffinePlan(values)) {
+  if (std::optional<LaneAffineConstPlan> plan = getI32LaneAffinePlan(values)) {
     Value lanes = createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName,
                                      {}, {}, resultType);
     Value shift = createLoadImm(builder, loc, resultType,
@@ -1365,14 +1359,13 @@ static FailureOr<Value> emitFragmentConst(Operation *op, OpBuilder &builder) {
                                          mlir::vc4::AddOpcode::shl);
     Value base = createLoadImm(builder, loc, resultType,
                                builder.getI32IntegerAttr(plan->base));
-    return createI32BinaryAddPipe(
-        builder, loc, base, delta,
-        plan->subtract ? mlir::vc4::AddOpcode::sub : mlir::vc4::AddOpcode::add);
+    return createI32BinaryAddPipe(builder, loc, base, delta,
+                                  plan->subtract ? mlir::vc4::AddOpcode::sub
+                                                 : mlir::vc4::AddOpcode::add);
   }
 
-  if (isPerLaneS2(values) && llvm::any_of(values, [](int64_t value) {
-        return value < 0;
-      }))
+  if (isPerLaneS2(values) &&
+      llvm::any_of(values, [](int64_t value) { return value < 0; }))
     return createPerLaneLoadImm(builder, loc, resultType,
                                 mlir::vc4::LoadImmMode::per_elem_i2, values);
   if (isPerLaneU2(values))
@@ -1390,9 +1383,9 @@ static Value createMul24(OpBuilder &builder, Location loc, Value lhs,
                          Value rhs) {
   return createOpWithResult(
       builder, loc, kSSAVC4ALUMulOpName, {lhs, rhs},
-      {builder.getNamedAttr("opcode", mlir::vc4::MulOpcodeAttr::get(
-                                          builder.getContext(),
-                                          mlir::vc4::MulOpcode::mul24))},
+      {builder.getNamedAttr(
+          "opcode", mlir::vc4::MulOpcodeAttr::get(
+                        builder.getContext(), mlir::vc4::MulOpcode::mul24))},
       lhs.getType());
 }
 
@@ -1474,11 +1467,48 @@ mapMulALUOpcode(mlir::vc4kernel::MulALUOpcode opcode) {
   llvm_unreachable("unhandled VC4Kernel MUL-pipe opcode");
 }
 
+static mlir::ssavc4::SFUKind mapSFUKind(mlir::vc4kernel::SFUKind kind) {
+  switch (kind) {
+  case mlir::vc4kernel::SFUKind::recip:
+    return mlir::ssavc4::SFUKind::recip;
+  case mlir::vc4kernel::SFUKind::rsqrt:
+    return mlir::ssavc4::SFUKind::rsqrt;
+  case mlir::vc4kernel::SFUKind::exp:
+    return mlir::ssavc4::SFUKind::exp;
+  case mlir::vc4kernel::SFUKind::log:
+    return mlir::ssavc4::SFUKind::log;
+  }
+  llvm_unreachable("unhandled VC4Kernel SFU kind");
+}
+
+static mlir::ssavc4::FPMathPolicy
+mapFPMathPolicy(mlir::vc4kernel::FPMathPolicy policy) {
+  switch (policy) {
+  case mlir::vc4kernel::FPMathPolicy::approx_sfu:
+    return mlir::ssavc4::FPMathPolicy::approx_sfu;
+  case mlir::vc4kernel::FPMathPolicy::exact:
+    return mlir::ssavc4::FPMathPolicy::exact;
+  }
+  llvm_unreachable("unhandled VC4Kernel FP math policy");
+}
+
+static mlir::ssavc4::FPDomain mapFPDomain(mlir::vc4kernel::FPDomain domain) {
+  switch (domain) {
+  case mlir::vc4kernel::FPDomain::finite:
+    return mlir::ssavc4::FPDomain::finite;
+  case mlir::vc4kernel::FPDomain::finite_nonzero:
+    return mlir::ssavc4::FPDomain::finite_nonzero;
+  case mlir::vc4kernel::FPDomain::finite_positive:
+    return mlir::ssavc4::FPDomain::finite_positive;
+  }
+  llvm_unreachable("unhandled VC4Kernel FP domain");
+}
+
 static Value createFragmentAdd(OpBuilder &builder, Location loc, Value lhs,
                                Value rhs) {
-  mlir::vc4::AddOpcode opcode =
-      isVectorF32(lhs.getType()) ? mlir::vc4::AddOpcode::fadd
-                                 : mlir::vc4::AddOpcode::add;
+  mlir::vc4::AddOpcode opcode = isVectorF32(lhs.getType())
+                                    ? mlir::vc4::AddOpcode::fadd
+                                    : mlir::vc4::AddOpcode::add;
   return createOpWithResult(
       builder, loc, kSSAVC4ALUAddOpName, {lhs, rhs},
       {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
@@ -1501,17 +1531,18 @@ static Value createI32SplatConstant(OpBuilder &builder, Location loc, Type type,
 }
 
 static Value combineReduceValues(OpBuilder &builder, Location loc, Value lhs,
-                                 Value rhs,
-                                 mlir::vc4kernel::ReduceKind kind) {
+                                 Value rhs, mlir::vc4kernel::ReduceKind kind) {
   switch (kind) {
   case mlir::vc4kernel::ReduceKind::add:
     return createFragmentAdd(builder, loc, lhs, rhs);
   case mlir::vc4kernel::ReduceKind::min_s:
   case mlir::vc4kernel::ReduceKind::min_u:
-    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::min);
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::min);
   case mlir::vc4kernel::ReduceKind::max_s:
   case mlir::vc4kernel::ReduceKind::max_u:
-    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::max);
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::max);
   case mlir::vc4kernel::ReduceKind::bit_and:
     return createAddPipeBinary(builder, loc, lhs, rhs,
                                mlir::vc4::AddOpcode::bit_and);
@@ -1522,9 +1553,11 @@ static Value combineReduceValues(OpBuilder &builder, Location loc, Value lhs,
     return createAddPipeBinary(builder, loc, lhs, rhs,
                                mlir::vc4::AddOpcode::bit_xor);
   case mlir::vc4kernel::ReduceKind::fmin:
-    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::fmin);
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::fmin);
   case mlir::vc4kernel::ReduceKind::fmax:
-    return createAddPipeBinary(builder, loc, lhs, rhs, mlir::vc4::AddOpcode::fmax);
+    return createAddPipeBinary(builder, loc, lhs, rhs,
+                               mlir::vc4::AddOpcode::fmax);
   }
   llvm_unreachable("unhandled VC4Kernel reduce kind");
 }
@@ -1622,9 +1655,8 @@ static Value addI32Constant(OpBuilder &builder, Location loc, Value value,
                             int64_t constant) {
   if (constant == 0)
     return value;
-  Value offset =
-      createLoadImm(builder, loc, builder.getI32Type(),
-                    builder.getI32IntegerAttr(constant));
+  Value offset = createLoadImm(builder, loc, builder.getI32Type(),
+                               builder.getI32IntegerAttr(constant));
   return createI32Add(builder, loc, value, offset);
 }
 
@@ -1647,8 +1679,8 @@ static std::optional<int64_t> getSplatI32ConstantValue(Value value) {
 
 static std::optional<SmallVector<int64_t, 16>>
 getFragmentConstI32Values(Value value) {
-  auto constOp = dyn_cast_or_null<mlir::vc4kernel::FragmentConstOp>(
-      value.getDefiningOp());
+  auto constOp =
+      dyn_cast_or_null<mlir::vc4kernel::FragmentConstOp>(value.getDefiningOp());
   if (!constOp || !mlir::vc4kernel::isVC4KernelVector16I32Type(value.getType()))
     return std::nullopt;
   auto attr = llvm::dyn_cast<DenseElementsAttr>(constOp.getValue());
@@ -1684,9 +1716,8 @@ static bool isLaneByteOffsets(Value value) {
     return false;
   if (!hasName(def, kFragmentALUAddOpName))
     return false;
-  auto opcode =
-      llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
-          def->getAttr("opcode"));
+  auto opcode = llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+      def->getAttr("opcode"));
   if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::shl)
     return false;
   std::optional<int64_t> shift = getSplatI32ConstantValue(def->getOperand(1));
@@ -1727,14 +1758,12 @@ static FullRowVDWOffsets matchFullRowVDWByteOffsets(Value value) {
     return {};
   if (!hasName(def, kFragmentALUAddOpName))
     return {};
-  auto opcode =
-      llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
-          def->getAttr("opcode"));
+  auto opcode = llvm::dyn_cast_if_present<mlir::vc4kernel::AddALUOpcodeAttr>(
+      def->getAttr("opcode"));
   if (!opcode || opcode.getValue() != mlir::vc4kernel::AddALUOpcode::add)
     return {};
 
-  auto matchBasePlusLaneBytes = [](Value lhs,
-                                   Value rhs) -> FullRowVDWOffsets {
+  auto matchBasePlusLaneBytes = [](Value lhs, Value rhs) -> FullRowVDWOffsets {
     Value scalarBase = getSplatScalar(lhs);
     if (scalarBase && isLaneByteOffsets(rhs))
       return {/*matched=*/true, scalarBase, std::nullopt};
@@ -1754,9 +1783,9 @@ static Value createSubFlags(OpBuilder &builder, Location loc, Value lhs,
                             Value rhs) {
   return createOpWithResult(
       builder, loc, kSSAVC4MakeFlagsOpName, {lhs, rhs},
-      {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
-                                        builder.getContext(),
-                                        mlir::ssavc4::FlagKind::sub))},
+      {builder.getNamedAttr(
+          "kind", mlir::ssavc4::FlagKindAttr::get(
+                      builder.getContext(), mlir::ssavc4::FlagKind::sub))},
       mlir::ssavc4::FlagsType::get(builder.getContext()));
 }
 
@@ -1764,13 +1793,14 @@ static Value createFSubFlags(OpBuilder &builder, Location loc, Value lhs,
                              Value rhs) {
   return createOpWithResult(
       builder, loc, kSSAVC4MakeFlagsOpName, {lhs, rhs},
-      {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
-                                        builder.getContext(),
-                                        mlir::ssavc4::FlagKind::fsub))},
+      {builder.getNamedAttr(
+          "kind", mlir::ssavc4::FlagKindAttr::get(
+                      builder.getContext(), mlir::ssavc4::FlagKind::fsub))},
       mlir::ssavc4::FlagsType::get(builder.getContext()));
 }
 
-static Value createZeroTestFlags(OpBuilder &builder, Location loc, Value input) {
+static Value createZeroTestFlags(OpBuilder &builder, Location loc,
+                                 Value input) {
   return createOpWithResult(
       builder, loc, kSSAVC4MakeFlagsOpName, input,
       {builder.getNamedAttr("kind", mlir::ssavc4::FlagKindAttr::get(
@@ -1803,9 +1833,8 @@ static void createCondBranch(OpBuilder &builder, Location loc, Value flags,
   state.addOperands(trueOperands);
   state.addOperands(falseOperands);
   state.addSuccessors({trueDest, falseDest});
-  state.addAttribute("cond",
-                     mlir::vc4::BranchCondAttr::get(builder.getContext(),
-                                                    cond));
+  state.addAttribute(
+      "cond", mlir::vc4::BranchCondAttr::get(builder.getContext(), cond));
   state.addAttribute("operandSegmentSizes",
                      builder.getDenseI32ArrayAttr(
                          {1, static_cast<int32_t>(trueOperands.size()),
@@ -1818,15 +1847,15 @@ static Value createCondSelect(OpBuilder &builder, Location loc, Value flags,
                               mlir::vc4::Cond cond) {
   return createOpWithResult(
       builder, loc, kSSAVC4CondSelectOpName, {flags, trueValue, falseValue},
-      {builder.getNamedAttr("cond",
-                            mlir::vc4::CondAttr::get(builder.getContext(),
-                                                     cond))},
+      {builder.getNamedAttr(
+          "cond", mlir::vc4::CondAttr::get(builder.getContext(), cond))},
       trueValue.getType());
 }
 
 static Value createMaskConstant(OpBuilder &builder, Location loc,
                                 int64_t value) {
-  return createLoadImm(builder, loc, VectorType::get({16}, builder.getI32Type()),
+  return createLoadImm(builder, loc,
+                       VectorType::get({16}, builder.getI32Type()),
                        builder.getI32IntegerAttr(value));
 }
 
@@ -1835,21 +1864,19 @@ static bool isSameSSAValue(Value lhs, Value rhs) { return lhs && lhs == rhs; }
 static Value createI32Min(OpBuilder &builder, Location loc, Value lhs,
                           Value rhs) {
   Value flags = createSubFlags(builder, loc, lhs, rhs);
-  return createCondSelect(builder, loc, flags, lhs, rhs,
-                          mlir::vc4::Cond::cs);
+  return createCondSelect(builder, loc, flags, lhs, rhs, mlir::vc4::Cond::cs);
 }
 
 static Value createI32Max(OpBuilder &builder, Location loc, Value lhs,
                           Value rhs) {
   Value flags = createSubFlags(builder, loc, lhs, rhs);
-  return createCondSelect(builder, loc, flags, rhs, lhs,
-                          mlir::vc4::Cond::cs);
+  return createCondSelect(builder, loc, flags, rhs, lhs, mlir::vc4::Cond::cs);
 }
 
-static FailureOr<Value>
-materializePredicateMask(Operation *op, OpBuilder &builder,
-                         const PredicatePlan &predicate,
-                         LoweringState &state) {
+static FailureOr<Value> materializePredicateMask(Operation *op,
+                                                 OpBuilder &builder,
+                                                 const PredicatePlan &predicate,
+                                                 LoweringState &state) {
   Location loc = op->getLoc();
   Value one = createMaskConstant(builder, loc, 1);
   Value zero = createMaskConstant(builder, loc, 0);
@@ -1865,25 +1892,22 @@ materializePredicateMask(Operation *op, OpBuilder &builder,
       return op->emitOpError(
           "general predicate plan has no materialized mask or lowered compare "
           "operands");
-    Value flags =
-        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    Value flags = createSubFlags(builder, loc, predicate.compareLhs,
+                                 predicate.compareRhs);
     return createCondSelect(builder, loc, flags, one, zero,
                             predicate.compareCond);
   }
 
-  Value lane =
-      createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
-                         one.getType());
+  Value lane = createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {},
+                                  {}, one.getType());
 
   if (predicate.kind == PredicatePlan::Class::TailPrefix) {
     if (!predicate.base || !predicate.limit)
       return op->emitOpError("pred.tail plan is missing base or limit values");
-    Value baseVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.base, {},
-                           one.getType());
-    Value limitVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.limit,
-                           {}, one.getType());
+    Value baseVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                       predicate.base, {}, one.getType());
+    Value limitVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                        predicate.limit, {}, one.getType());
     Value index = createI32Add(builder, loc, baseVec, lane);
     Value flags = createSubFlags(builder, loc, index, limitVec);
     return createCondSelect(builder, loc, flags, one, zero,
@@ -1895,22 +1919,18 @@ materializePredicateMask(Operation *op, OpBuilder &builder,
         !predicate.cols)
       return op->emitOpError(
           "pred.rect plan is missing row, rows, col_base, or cols values");
-    Value colBaseVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName,
-                           predicate.colBase, {}, one.getType());
-    Value colEnd = createI32Add(builder, loc, predicate.colBase,
-                                predicate.cols);
-    Value colEndVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, colEnd, {},
-                           one.getType());
+    Value colBaseVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                          predicate.colBase, {}, one.getType());
+    Value colEnd =
+        createI32Add(builder, loc, predicate.colBase, predicate.cols);
+    Value colEndVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                         colEnd, {}, one.getType());
     Value upperFlags = createSubFlags(builder, loc, lane, colEndVec);
-    Value upperMasked =
-        createCondSelect(builder, loc, upperFlags, one, zero,
-                         mlir::vc4::Cond::cs);
+    Value upperMasked = createCondSelect(builder, loc, upperFlags, one, zero,
+                                         mlir::vc4::Cond::cs);
     Value lowerFlags = createSubFlags(builder, loc, lane, colBaseVec);
-    Value colMasked =
-        createCondSelect(builder, loc, lowerFlags, upperMasked, zero,
-                         mlir::vc4::Cond::cc);
+    Value colMasked = createCondSelect(builder, loc, lowerFlags, upperMasked,
+                                       zero, mlir::vc4::Cond::cc);
     Value rowFlags =
         createSubFlags(builder, loc, predicate.row, predicate.rows);
     return createCondSelect(builder, loc, rowFlags, colMasked, zero,
@@ -2008,10 +2028,12 @@ mapOrderedF32FragmentCmpPredicate(Operation *op,
   return result;
 }
 
-static Value createSignBiasedI32(OpBuilder &builder, Location loc, Value value) {
-  Value signBit = createLoadImm(
-      builder, loc, value.getType(),
-      builder.getIntegerAttr(builder.getI32Type(), llvm::APInt(32, 0x80000000u)));
+static Value createSignBiasedI32(OpBuilder &builder, Location loc,
+                                 Value value) {
+  Value signBit =
+      createLoadImm(builder, loc, value.getType(),
+                    builder.getIntegerAttr(builder.getI32Type(),
+                                           llvm::APInt(32, 0x80000000u)));
   return createI32BinaryAddPipe(builder, loc, value, signBit,
                                 mlir::vc4::AddOpcode::bit_xor);
 }
@@ -2019,9 +2041,8 @@ static Value createSignBiasedI32(OpBuilder &builder, Location loc, Value value) 
 static FailureOr<CompareMaskLowering>
 mapFragmentCmpPredicate(Operation *op, OpBuilder &builder, Value lhs,
                         Value rhs) {
-  auto attr =
-      llvm::dyn_cast_or_null<mlir::vc4kernel::CmpPredicateAttr>(
-          op->getAttr("predicate"));
+  auto attr = llvm::dyn_cast_or_null<mlir::vc4kernel::CmpPredicateAttr>(
+      op->getAttr("predicate"));
   if (!attr)
     return op->emitOpError("fragment_cmp is missing predicate attribute");
 
@@ -2097,8 +2118,7 @@ emitConditionPlan(Operation *op, OpBuilder &builder,
 
 static FailureOr<Value>
 materializeConditionAsI32(Operation *op, OpBuilder &builder,
-                          const ConditionPlan &condition,
-                          LoweringState &state);
+                          const ConditionPlan &condition, LoweringState &state);
 
 static FailureOr<EmittedCondition>
 emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
@@ -2164,8 +2184,8 @@ emitScalarCompareCondition(Operation *op, OpBuilder &builder, Value lhs,
     emitted.selectCond = mlir::vc4::Cond::cc;
     break;
   default:
-    return op->emitOpError(
-        "arith.cmpi lowering supports only eq, ne, slt, sle, sgt, sge, ult, ule, ugt, and uge");
+    return op->emitOpError("arith.cmpi lowering supports only eq, ne, slt, "
+                           "sle, sgt, sge, ult, ule, ugt, and uge");
   }
   emitted.flags = createSubFlags(builder, op->getLoc(), flagsLhs, flagsRhs);
   return emitted;
@@ -2278,9 +2298,8 @@ emitPredicateCondition(Operation *op, OpBuilder &builder,
     if (predicate.maskValue) {
       EmittedCondition emitted;
       emitted.flags = createZeroTestFlags(builder, loc, predicate.maskValue);
-      emitted.branchCond = requireAll
-                               ? mlir::vc4::BranchCond::all_z_clear
-                               : mlir::vc4::BranchCond::any_z_clear;
+      emitted.branchCond = requireAll ? mlir::vc4::BranchCond::all_z_clear
+                                      : mlir::vc4::BranchCond::any_z_clear;
       emitted.selectCond = mlir::vc4::Cond::zc;
       return emitted;
     }
@@ -2292,8 +2311,8 @@ emitPredicateCondition(Operation *op, OpBuilder &builder,
     if (failed(branchCond))
       return failure();
     EmittedCondition emitted;
-    emitted.flags =
-        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    emitted.flags = createSubFlags(builder, loc, predicate.compareLhs,
+                                   predicate.compareRhs);
     emitted.branchCond = *branchCond;
     emitted.selectCond = predicate.compareCond;
     return emitted;
@@ -2383,10 +2402,8 @@ emitConditionPlan(Operation *op, OpBuilder &builder,
     if (!condition.flags)
       return op->emitOpError("condition flags plan is missing flags value");
     return EmittedCondition{/*isConstant=*/false,
-                            /*constantValue=*/false,
-                            condition.flags,
-                            condition.branchCond,
-                            condition.selectCond};
+                            /*constantValue=*/false, condition.flags,
+                            condition.branchCond, condition.selectCond};
   }
   return op->emitOpError("unsupported condition plan");
 }
@@ -2401,9 +2418,9 @@ materializeConditionAsI32(Operation *op, OpBuilder &builder,
   if (failed(emitted))
     return failure();
   if (emitted->isConstant)
-    return createLoadImm(builder, loc, builder.getI32Type(),
-                         builder.getI32IntegerAttr(emitted->constantValue ? 1
-                                                                          : 0));
+    return createLoadImm(
+        builder, loc, builder.getI32Type(),
+        builder.getI32IntegerAttr(emitted->constantValue ? 1 : 0));
 
   Value one = createLoadImm(builder, loc, builder.getI32Type(),
                             builder.getI32IntegerAttr(1));
@@ -2413,10 +2430,9 @@ materializeConditionAsI32(Operation *op, OpBuilder &builder,
                           emitted->selectCond);
 }
 
-static FailureOr<Value>
-emitPredicateSelect(Operation *op, OpBuilder &builder,
-                    const PredicatePlan &predicate, Value trueValue,
-                    Value falseValue) {
+static FailureOr<Value> emitPredicateSelect(Operation *op, OpBuilder &builder,
+                                            const PredicatePlan &predicate,
+                                            Value trueValue, Value falseValue) {
   Location loc = op->getLoc();
   Type valueType = trueValue.getType();
   if (trueValue.getType() != falseValue.getType())
@@ -2435,8 +2451,8 @@ emitPredicateSelect(Operation *op, OpBuilder &builder,
     if (!predicate.compareLhs || !predicate.compareRhs)
       return op->emitOpError(
           "general predicate plan has no lowered compare operands");
-    Value flags =
-        createSubFlags(builder, loc, predicate.compareLhs, predicate.compareRhs);
+    Value flags = createSubFlags(builder, loc, predicate.compareLhs,
+                                 predicate.compareRhs);
     return createCondSelect(builder, loc, flags, trueValue, falseValue,
                             predicate.compareCond);
   }
@@ -2447,19 +2463,16 @@ emitPredicateSelect(Operation *op, OpBuilder &builder,
     return op->emitOpError(
         "structured predicate select currently requires vector<16xT> values");
   VectorType laneType = VectorType::get({16}, builder.getI32Type());
-  Value lane =
-      createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {}, {},
-                         laneType);
+  Value lane = createOpWithResult(builder, loc, kSSAVC4ElementNumberOpName, {},
+                                  {}, laneType);
 
   if (predicate.kind == PredicatePlan::Class::TailPrefix) {
     if (!predicate.base || !predicate.limit)
       return op->emitOpError("pred.tail plan is missing base or limit values");
-    Value baseVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.base, {},
-                           laneType);
-    Value limitVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, predicate.limit,
-                           {}, laneType);
+    Value baseVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                       predicate.base, {}, laneType);
+    Value limitVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                        predicate.limit, {}, laneType);
     Value index = createI32Add(builder, loc, baseVec, lane);
     Value flags = createSubFlags(builder, loc, index, limitVec);
     return createCondSelect(builder, loc, flags, trueValue, falseValue,
@@ -2471,20 +2484,16 @@ emitPredicateSelect(Operation *op, OpBuilder &builder,
         !predicate.cols)
       return op->emitOpError(
           "pred.rect plan is missing row, rows, col_base, or cols values");
-    Value one =
-        createLoadImm(builder, loc, builder.getI32Type(),
-                      builder.getI32IntegerAttr(1));
-    Value sixteen =
-        createLoadImm(builder, loc, builder.getI32Type(),
-                      builder.getI32IntegerAttr(16));
-    Value colBaseVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName,
-                           predicate.colBase, {}, laneType);
-    Value colEnd = createI32Add(builder, loc, predicate.colBase,
-                                predicate.cols);
-    Value colEndVec =
-        createOpWithResult(builder, loc, kSSAVC4SplatOpName, colEnd, {},
-                           laneType);
+    Value one = createLoadImm(builder, loc, builder.getI32Type(),
+                              builder.getI32IntegerAttr(1));
+    Value sixteen = createLoadImm(builder, loc, builder.getI32Type(),
+                                  builder.getI32IntegerAttr(16));
+    Value colBaseVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                          predicate.colBase, {}, laneType);
+    Value colEnd =
+        createI32Add(builder, loc, predicate.colBase, predicate.cols);
+    Value colEndVec = createOpWithResult(builder, loc, kSSAVC4SplatOpName,
+                                         colEnd, {}, laneType);
 
     Value current = trueValue;
     Value upperFlags = createSubFlags(builder, loc, lane, colEndVec);
@@ -2498,8 +2507,7 @@ emitPredicateSelect(Operation *op, OpBuilder &builder,
         createSubFlags(builder, loc, predicate.rows, rowPlusOne);
     current = createCondSelect(builder, loc, rowActiveFlags, current,
                                falseValue, mlir::vc4::Cond::cc);
-    Value colsActiveFlags =
-        createSubFlags(builder, loc, predicate.cols, one);
+    Value colsActiveFlags = createSubFlags(builder, loc, predicate.cols, one);
     current = createCondSelect(builder, loc, colsActiveFlags, current,
                                falseValue, mlir::vc4::Cond::cc);
     Value colBaseInRangeFlags =
@@ -2521,9 +2529,9 @@ static Value emitTMULoadFragment(Operation *op, OpBuilder &builder, Value base,
                                   {}, offsets.getType());
   Value address = createOpWithResult(
       builder, loc, kSSAVC4ALUAddOpName, {loadBase, offsets},
-      {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                          builder.getContext(),
-                                          mlir::vc4::AddOpcode::add))},
+      {builder.getNamedAttr(
+          "opcode", mlir::vc4::AddOpcodeAttr::get(builder.getContext(),
+                                                  mlir::vc4::AddOpcode::add))},
       offsets.getType());
   Value token = createOpWithResult(
       builder, loc, kSSAVC4TMURequestOpName, address,
@@ -2554,20 +2562,20 @@ static void emitVDWStore(Operation *op, OpBuilder &builder, Value base,
       if (logicalWarp) {
         Value warpOffset = logicalWarp;
         if (perWarpRows != 1) {
-          Value perWarp = createLoadImm(
-              builder, op->getLoc(), builder.getI32Type(),
-              builder.getI32IntegerAttr(perWarpRows));
+          Value perWarp =
+              createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                            builder.getI32IntegerAttr(perWarpRows));
           warpOffset = createMul24(builder, op->getLoc(), logicalWarp, perWarp);
         }
-        stagingRow = createI32Add(builder, op->getLoc(), stagingRow, warpOffset);
+        stagingRow =
+            createI32Add(builder, op->getLoc(), stagingRow, warpOffset);
       }
     }
     operands.push_back(stagingRow);
     segments[3] = 1;
   }
   SmallVector<NamedAttribute, 8> attrs{
-      getSSAVC4VPMWidth(builder, op),
-      getSSAVC4VPMSubword(builder, op),
+      getSSAVC4VPMWidth(builder, op), getSSAVC4VPMSubword(builder, op),
       builder.getNamedAttr("vpm_row", builder.getI32IntegerAttr(0)),
       builder.getNamedAttr("serialize", builder.getStringAttr("mutex")),
       builder.getNamedAttr("operandSegmentSizes",
@@ -2592,15 +2600,16 @@ static FailureOr<Value> applyVPMTileBase(Operation *op, OpBuilder &builder,
   return result;
 }
 
-static FailureOr<Value>
-applyVPMPredicateZeroFill(Operation *op, OpBuilder &builder, Value predicate,
-                          Value value, LoweringState &state) {
+static FailureOr<Value> applyVPMPredicateZeroFill(Operation *op,
+                                                  OpBuilder &builder,
+                                                  Value predicate, Value value,
+                                                  LoweringState &state) {
   const PredicatePlan *plan = lookupPredicatePlan(predicate, state);
   if (!plan)
     return op->emitOpError("predicate operand has no lowering plan");
   Value zero = createZeroValue(builder, op->getLoc(), value.getType());
-  FailureOr<Value> selected = emitPredicateSelect(op, builder, *plan, value,
-                                                  zero);
+  FailureOr<Value> selected =
+      emitPredicateSelect(op, builder, *plan, value, zero);
   if (failed(selected))
     return failure();
   return *selected;
@@ -2620,8 +2629,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           createLoadImm(builder, op->getLoc(), builder.getI32Type(),
                         builder.getI32IntegerAttr(intValue))};
     } else {
-      state.values[cst.getResult()] = {createLoadImm(
-          builder, op->getLoc(), cst.getType(), cst.getValue())};
+      state.values[cst.getResult()] = {
+          createLoadImm(builder, op->getLoc(), cst.getType(), cst.getValue())};
     }
     return success();
   }
@@ -2631,8 +2640,9 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     StringRef name;
     if (hasName(op, kProgramIdOpName)) {
       ownedName = getProgramIdBuiltinName(getAxisAttrValue(op));
-      name = state.launchABI.lookupBuiltin(ownedName) ? StringRef(ownedName)
-                                                      : StringRef("logical_request");
+      name = state.launchABI.lookupBuiltin(ownedName)
+                 ? StringRef(ownedName)
+                 : StringRef("logical_request");
     } else if (hasName(op, kNumProgramsOpName)) {
       ownedName = getNumProgramsBuiltinName(getAxisAttrValue(op));
       name = ownedName;
@@ -2646,15 +2656,14 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     return success();
   }
   if (hasName(op, kLaneRangeOpName)) {
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4ElementNumberOpName, {}, {},
-        op->getResult(0).getType())};
+    state.values[op->getResult(0)] = {
+        createOpWithResult(builder, op->getLoc(), kSSAVC4ElementNumberOpName,
+                           {}, {}, op->getResult(0).getType())};
     return success();
   }
-  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli",
-                      "arith.shli", "arith.shrui", "arith.shrsi",
-                      "arith.andi", "arith.ori", "arith.xori",
-                      "arith.minsi", "arith.maxsi", "arith.minui",
+  if (hasAnyName(op, {"arith.addi", "arith.subi", "arith.muli", "arith.shli",
+                      "arith.shrui", "arith.shrsi", "arith.andi", "arith.ori",
+                      "arith.xori", "arith.minsi", "arith.maxsi", "arith.minui",
                       "arith.maxui"})) {
     if (op->getResult(0).getType().isInteger(1)) {
       auto lhsIt = state.conditions.find(op->getOperand(0));
@@ -2698,11 +2707,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (hasName(op, "arith.minui") || hasName(op, "arith.maxui")) {
       Value lhs = createScalarI32SignBias(builder, op->getLoc(), operands[0]);
       Value rhs = createScalarI32SignBias(builder, op->getLoc(), operands[1]);
-      mlir::vc4::AddOpcode opcode =
-          hasName(op, "arith.minui") ? mlir::vc4::AddOpcode::min
-                                     : mlir::vc4::AddOpcode::max;
-      Value biasedResult = createI32BinaryAddPipe(builder, op->getLoc(), lhs,
-                                                  rhs, opcode);
+      mlir::vc4::AddOpcode opcode = hasName(op, "arith.minui")
+                                        ? mlir::vc4::AddOpcode::min
+                                        : mlir::vc4::AddOpcode::max;
+      Value biasedResult =
+          createI32BinaryAddPipe(builder, op->getLoc(), lhs, rhs, opcode);
       state.values[op->getResult(0)] = {
           createScalarI32SignBias(builder, op->getLoc(), biasedResult)};
       return success();
@@ -2737,9 +2746,9 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4MovOpName, input, {},
-        op->getResult(0).getType())};
+    state.values[op->getResult(0)] = {
+        createOpWithResult(builder, op->getLoc(), kSSAVC4MovOpName, input, {},
+                           op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, "arith.extui")) {
@@ -2787,8 +2796,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (resultType.isInteger(1)) {
       auto trueIt = state.conditions.find(select.getTrueValue());
       auto falseIt = state.conditions.find(select.getFalseValue());
-      if (trueIt == state.conditions.end() ||
-          falseIt == state.conditions.end())
+      if (trueIt == state.conditions.end() || falseIt == state.conditions.end())
         return op->emitOpError(
             "arith.select i1 operands require condition plans");
       FailureOr<Value> trueValue =
@@ -2803,11 +2811,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           emitConditionPlan(op, builder, conditionIt->second, state);
       if (failed(emitted))
         return failure();
-      Value selected = emitted->isConstant
-                           ? (emitted->constantValue ? *trueValue : *falseValue)
-                           : createCondSelect(builder, op->getLoc(),
-                                              emitted->flags, *trueValue,
-                                              *falseValue, emitted->selectCond);
+      Value selected =
+          emitted->isConstant
+              ? (emitted->constantValue ? *trueValue : *falseValue)
+              : createCondSelect(builder, op->getLoc(), emitted->flags,
+                                 *trueValue, *falseValue, emitted->selectCond);
       Value flags = createZeroTestFlags(builder, op->getLoc(), selected);
       state.values[select.getResult()] = {selected};
       state.conditions[select.getResult()] = ConditionPlan::flagsValue(
@@ -2833,18 +2841,18 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4SplatOpName, input, {},
-        op->getResult(0).getType())};
+    state.values[op->getResult(0)] = {
+        createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName, input, {},
+                           op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentBitcastOpName)) {
     Value input = mapValue(op, op->getOperand(0), state);
     if (!input)
       return failure();
-    state.values[op->getResult(0)] = {createOpWithResult(
-        builder, op->getLoc(), kSSAVC4MovOpName, input, {},
-        op->getResult(0).getType())};
+    state.values[op->getResult(0)] = {
+        createOpWithResult(builder, op->getLoc(), kSSAVC4MovOpName, input, {},
+                           op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentUnpackOpName)) {
@@ -2869,6 +2877,39 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     state.values[op->getResult(0)] = {createOpWithResult(
         builder, op->getLoc(), kSSAVC4PackOpName, input,
         {builder.getNamedAttr("mode", *mode)}, op->getResult(0).getType())};
+    return success();
+  }
+  if (hasName(op, kFragmentSFUOpName)) {
+    Value input = mapValue(op, op->getOperand(0), state);
+    if (!input)
+      return failure();
+    auto kindAttr = llvm::dyn_cast_if_present<mlir::vc4kernel::SFUKindAttr>(
+        op->getAttr("kind"));
+    auto policyAttr =
+        llvm::dyn_cast_if_present<mlir::vc4kernel::FPMathPolicyAttr>(
+            op->getAttr("fp_policy"));
+    auto domainAttr = llvm::dyn_cast_if_present<mlir::vc4kernel::FPDomainAttr>(
+        op->getAttr("domain"));
+    if (!kindAttr)
+      return op->emitOpError("fragment_sfu lowering requires kind");
+    if (!policyAttr)
+      return op->emitOpError(
+          "fragment_sfu requires explicit approximate SFU math policy");
+    if (!domainAttr)
+      return op->emitOpError("fragment_sfu lowering requires domain");
+    MLIRContext *ctx = builder.getContext();
+    state.values[op->getResult(0)] = {createOpWithResult(
+        builder, op->getLoc(), kSSAVC4SFUOpName, input,
+        {builder.getNamedAttr("kind",
+                              mlir::ssavc4::SFUKindAttr::get(
+                                  ctx, mapSFUKind(kindAttr.getValue()))),
+         builder.getNamedAttr("fp_policy",
+                              mlir::ssavc4::FPMathPolicyAttr::get(
+                                  ctx, mapFPMathPolicy(policyAttr.getValue()))),
+         builder.getNamedAttr("domain",
+                              mlir::ssavc4::FPDomainAttr::get(
+                                  ctx, mapFPDomain(domainAttr.getValue())))},
+        op->getResult(0).getType())};
     return success();
   }
   if (hasName(op, kFragmentConstOpName)) {
@@ -2942,9 +2983,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         lookupPredicatePlan(op->getOperand(1), state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
-    auto kind =
-        llvm::dyn_cast_or_null<mlir::vc4kernel::ReduceKindAttr>(
-            op->getAttr("kind"));
+    auto kind = llvm::dyn_cast_or_null<mlir::vc4kernel::ReduceKindAttr>(
+        op->getAttr("kind"));
     if (!kind)
       return op->emitOpError("fragment_reduce lowering requires kind");
     Type resultType = op->getResult(0).getType();
@@ -2956,9 +2996,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
           "fragment_reduce lowering requires vector<16xi32> or vector<16xf32>");
 
     Value identity;
-    bool unsignedMinMax =
-        reduceKind == mlir::vc4kernel::ReduceKind::min_u ||
-        reduceKind == mlir::vc4kernel::ReduceKind::max_u;
+    bool unsignedMinMax = reduceKind == mlir::vc4kernel::ReduceKind::min_u ||
+                          reduceKind == mlir::vc4kernel::ReduceKind::max_u;
     if (resultIsI32) {
       if (reduceKind == mlir::vc4kernel::ReduceKind::fmin ||
           reduceKind == mlir::vc4kernel::ReduceKind::fmax)
@@ -2979,8 +3018,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     }
 
     if (unsignedMinMax) {
-      Value bias = createI32SplatConstant(
-          builder, op->getLoc(), resultType, static_cast<int32_t>(0x80000000u));
+      Value bias = createI32SplatConstant(builder, op->getLoc(), resultType,
+                                          static_cast<int32_t>(0x80000000u));
       input = createAddPipeBinary(builder, op->getLoc(), input, bias,
                                   mlir::vc4::AddOpcode::bit_xor);
     }
@@ -2990,11 +3029,11 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(masked))
       return failure();
 
-    Value reduced = emitRotateReduceTree(builder, op->getLoc(), *masked,
-                                         reduceKind);
+    Value reduced =
+        emitRotateReduceTree(builder, op->getLoc(), *masked, reduceKind);
     if (unsignedMinMax) {
-      Value bias = createI32SplatConstant(
-          builder, op->getLoc(), resultType, static_cast<int32_t>(0x80000000u));
+      Value bias = createI32SplatConstant(builder, op->getLoc(), resultType,
+                                          static_cast<int32_t>(0x80000000u));
       reduced = createAddPipeBinary(builder, op->getLoc(), reduced, bias,
                                     mlir::vc4::AddOpcode::bit_xor);
     }
@@ -3047,8 +3086,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     Value limit = mapValue(op, op->getOperand(1), state);
     if (!base || !limit)
       return failure();
-    state.predicates[op->getResult(0)] =
-        PredicatePlan::tailPrefix(base, limit);
+    state.predicates[op->getResult(0)] = PredicatePlan::tailPrefix(base, limit);
     return success();
   }
   if (hasName(op, kPredRectOpName)) {
@@ -3079,20 +3117,19 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       else if (lhs->kind == PredicatePlan::Class::TailPrefix &&
                rhs->kind == PredicatePlan::Class::TailPrefix &&
                isSameSSAValue(lhs->base, rhs->base)) {
-        Value limit = createI32Min(builder, op->getLoc(), lhs->limit,
-                                   rhs->limit);
+        Value limit =
+            createI32Min(builder, op->getLoc(), lhs->limit, rhs->limit);
         result = PredicatePlan::tailPrefix(lhs->base, limit);
-      }
-      else {
+      } else {
         FailureOr<Value> lhsMask =
             materializePredicateMask(op, builder, *lhs, state);
         FailureOr<Value> rhsMask =
             materializePredicateMask(op, builder, *rhs, state);
         if (failed(lhsMask) || failed(rhsMask))
           return failure();
-        Value mask = createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask,
-                                            *rhsMask,
-                                            mlir::vc4::AddOpcode::bit_and);
+        Value mask =
+            createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask, *rhsMask,
+                                   mlir::vc4::AddOpcode::bit_and);
         result = PredicatePlan::generalMaskValue(mask);
       }
     } else {
@@ -3106,20 +3143,19 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       else if (lhs->kind == PredicatePlan::Class::TailPrefix &&
                rhs->kind == PredicatePlan::Class::TailPrefix &&
                isSameSSAValue(lhs->base, rhs->base)) {
-        Value limit = createI32Max(builder, op->getLoc(), lhs->limit,
-                                   rhs->limit);
+        Value limit =
+            createI32Max(builder, op->getLoc(), lhs->limit, rhs->limit);
         result = PredicatePlan::tailPrefix(lhs->base, limit);
-      }
-      else {
+      } else {
         FailureOr<Value> lhsMask =
             materializePredicateMask(op, builder, *lhs, state);
         FailureOr<Value> rhsMask =
             materializePredicateMask(op, builder, *rhs, state);
         if (failed(lhsMask) || failed(rhsMask))
           return failure();
-        Value mask = createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask,
-                                            *rhsMask,
-                                            mlir::vc4::AddOpcode::bit_or);
+        Value mask =
+            createI32BinaryAddPipe(builder, op->getLoc(), *lhsMask, *rhsMask,
+                                   mlir::vc4::AddOpcode::bit_or);
         result = PredicatePlan::generalMaskValue(mask);
       }
     }
@@ -3164,8 +3200,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
             op, mlir::vc4kernel::MemoryPath::tmu_global_read,
             mlir::vc4kernel::Coherency::readonly_tmu)))
       return failure();
-    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(2),
-                                                         state);
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(op->getOperand(2), state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
     if (predicate->kind != PredicatePlan::Class::Full &&
@@ -3184,21 +3220,21 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
 
     if (predicate->kind == PredicatePlan::Class::Full) {
-      state.values[op->getResult(0)] = {
-          emitTMULoadFragment(op, builder, base, offsets,
-                              op->getResult(0).getType())};
+      state.values[op->getResult(0)] = {emitTMULoadFragment(
+          op, builder, base, offsets, op->getResult(0).getType())};
       return success();
     }
 
-    Value zero = createZeroValue(builder, op->getLoc(), op->getResult(0).getType());
+    Value zero =
+        createZeroValue(builder, op->getLoc(), op->getResult(0).getType());
     if (predicate->kind == PredicatePlan::Class::Empty) {
       state.values[op->getResult(0)] = {zero};
       return success();
     }
 
-    Value safeOffsetVec = createOpWithResult(
-        builder, op->getLoc(), kSSAVC4SplatOpName, safeScalarOffset, {},
-        offsets.getType());
+    Value safeOffsetVec =
+        createOpWithResult(builder, op->getLoc(), kSSAVC4SplatOpName,
+                           safeScalarOffset, {}, offsets.getType());
 
     FailureOr<Value> safeOffsets =
         emitPredicateSelect(op, builder, *predicate, offsets, safeOffsetVec);
@@ -3222,15 +3258,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     FullRowVDWOffsets offsets = matchFullRowVDWByteOffsets(op->getOperand(1));
     if (!offsets.matched)
-      return op->emitOpError(
-          "VDW preserve store requires dense contiguous/rectangular address mapping");
-    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(3),
-                                                         state);
+      // clang-format off
+      return op->emitOpError("VDW preserve store requires dense contiguous/rectangular address mapping");
+    // clang-format on
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(op->getOperand(3), state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
     if (predicate->kind == PredicatePlan::Class::GeneralMask)
-      return op->emitOpError(
-          "sparse VDW store masks are not supported in P8");
+      return op->emitOpError("sparse VDW store masks are not supported in P8");
     if (predicate->kind != PredicatePlan::Class::Full &&
         predicate->kind != PredicatePlan::Class::Empty &&
         predicate->kind != PredicatePlan::Class::TailPrefix)
@@ -3242,8 +3278,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!base || !value)
       return failure();
     if (offsets.scalarBaseByteOffset) {
-      Value mappedOffset =
-          mapValue(op, offsets.scalarBaseByteOffset, state);
+      Value mappedOffset = mapValue(op, offsets.scalarBaseByteOffset, state);
       if (!mappedOffset)
         return failure();
       base = createI32Add(builder, op->getLoc(), base, mappedOffset);
@@ -3255,9 +3290,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     }
     if (predicate->kind == PredicatePlan::Class::Empty)
       return success();
-    Value sixteen =
-        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                      builder.getI32IntegerAttr(16));
+    Value sixteen = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                                  builder.getI32IntegerAttr(16));
     if (predicate->kind == PredicatePlan::Class::Full) {
       emitVDWStore(op, builder, base, value, sixteen, state,
                    /*staticActiveLanes=*/16);
@@ -3268,9 +3302,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!baseIndex || !limit)
       return op->emitOpError("pred.tail plan is missing base or limit values");
 
-    Value one =
-        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                      builder.getI32IntegerAttr(1));
+    Value one = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                              builder.getI32IntegerAttr(1));
     Value basePlusOne = createI32Add(builder, op->getLoc(), baseIndex, one);
     Value basePlusSixteen =
         createI32Add(builder, op->getLoc(), baseIndex, sixteen);
@@ -3317,15 +3350,15 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     int64_t elemBytes = 4;
     if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
       elemBytes = elemBytesAttr.getInt();
-    state.vpmAllocations[op->getResult(0)] = {
-        state.nextVPMRowOffset, rows, elemBytes};
+    state.vpmAllocations[op->getResult(0)] = {state.nextVPMRowOffset, rows,
+                                              elemBytes};
     state.nextVPMRowOffset += rows;
     return success();
   }
   if (hasName(op, kVPMWriteOpName)) {
-    if (failed(verifyRequiredMemoryPolicy(
-            op, mlir::vc4kernel::MemoryPath::vpm_qpu,
-            mlir::vc4kernel::Coherency::vpm_local)))
+    if (failed(
+            verifyRequiredMemoryPolicy(op, mlir::vc4kernel::MemoryPath::vpm_qpu,
+                                       mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     Value value = mapValue(op, op->getOperand(2), state);
@@ -3343,17 +3376,16 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     row = *plannedRow;
     createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, {row, value},
              {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
+              getSSAVC4VPMWidth(builder, op), getSSAVC4VPMSubword(builder, op),
               builder.getNamedAttr("x", op->getAttr("x")),
               builder.getNamedAttr("stride", op->getAttr("stride")),
               builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))});
     return success();
   }
   if (hasName(op, kVPMReadOpName)) {
-    if (failed(verifyRequiredMemoryPolicy(
-            op, mlir::vc4kernel::MemoryPath::vpm_qpu,
-            mlir::vc4kernel::Coherency::vpm_local)))
+    if (failed(
+            verifyRequiredMemoryPolicy(op, mlir::vc4kernel::MemoryPath::vpm_qpu,
+                                       mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
     if (!row)
@@ -3365,8 +3397,7 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     row = *plannedRow;
     Value read = createOpWithResult(
         builder, op->getLoc(), kSSAVC4VPMReadOpName, row,
-        {getSSAVC4VPMOrientation(builder, op),
-         getSSAVC4VPMWidth(builder, op),
+        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
          getSSAVC4VPMSubword(builder, op),
          builder.getNamedAttr("x", op->getAttr("x")),
          builder.getNamedAttr("stride", op->getAttr("stride")),
@@ -3391,26 +3422,26 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::AddOpcode::add))},
+        {builder.getNamedAttr(
+            "opcode", mlir::vc4::AddOpcodeAttr::get(
+                          builder.getContext(), mlir::vc4::AddOpcode::add))},
         base.getType());
     FailureOr<Value> plannedDstRow =
         applyVPMTileBase(op, builder, op->getOperand(2), dstRow, state);
     if (failed(plannedDstRow))
       return failure();
     dstRow = *plannedDstRow;
-    createOp(builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
-             {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("row_len", op->getAttr("cols")),
-              builder.getNamedAttr("nrows", op->getAttr("rows")),
-              builder.getNamedAttr("memory_pitch_bytes",
-                                   op->getAttr("global_stride_bytes")),
-              builder.getNamedAttr("vpm_x", op->getAttr("dst_x")),
-              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    createOp(
+        builder, op->getLoc(), kSSAVC4VDRLoadOpName, {address, dstRow},
+        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+         getSSAVC4VPMSubword(builder, op),
+         builder.getNamedAttr("row_len", op->getAttr("cols")),
+         builder.getNamedAttr("nrows", op->getAttr("rows")),
+         builder.getNamedAttr("memory_pitch_bytes",
+                              op->getAttr("global_stride_bytes")),
+         builder.getNamedAttr("vpm_x", op->getAttr("dst_x")),
+         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
     return success();
   }
   if (hasName(op, kVDRLoadRectOpName)) {
@@ -3429,27 +3460,27 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::AddOpcode::add))},
+        {builder.getNamedAttr(
+            "opcode", mlir::vc4::AddOpcodeAttr::get(
+                          builder.getContext(), mlir::vc4::AddOpcode::add))},
         base.getType());
     FailureOr<Value> plannedDstRow =
         applyVPMTileBase(op, builder, op->getOperand(2), dstRow, state);
     if (failed(plannedDstRow))
       return failure();
     dstRow = *plannedDstRow;
-    createOp(builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName,
-             {address, dstRow, activeRows, activeCols, memoryPitchBytes},
-             {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
-              builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
-              builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
-              builder.getNamedAttr("dst_x", op->getAttr("dst_x")),
-              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-              builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
-              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    createOp(
+        builder, op->getLoc(), kSSAVC4VDRLoadRectDynamicOpName,
+        {address, dstRow, activeRows, activeCols, memoryPitchBytes},
+        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+         getSSAVC4VPMSubword(builder, op),
+         builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+         builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+         builder.getNamedAttr("dst_x", op->getAttr("dst_x")),
+         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+         builder.getNamedAttr("zero_fill", builder.getBoolAttr(true)),
+         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
     return success();
   }
   if (hasName(op, kVDWStoreVPMOpName)) {
@@ -3459,8 +3490,8 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     if (failed(verifyRequiredInactiveStorePolicy(op)))
       return failure();
-    const PredicatePlan *predicate = lookupPredicatePlan(op->getOperand(4),
-                                                         state);
+    const PredicatePlan *predicate =
+        lookupPredicatePlan(op->getOperand(4), state);
     if (!predicate)
       return op->emitOpError("predicate operand has no lowering plan");
     if (predicate->kind == PredicatePlan::Class::Empty)
@@ -3476,9 +3507,9 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::AddOpcode::add))},
+        {builder.getNamedAttr(
+            "opcode", mlir::vc4::AddOpcodeAttr::get(
+                          builder.getContext(), mlir::vc4::AddOpcode::add))},
         base.getType());
     FailureOr<Value> plannedSrcRow =
         applyVPMTileBase(op, builder, op->getOperand(0), srcRow, state);
@@ -3487,32 +3518,33 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     srcRow = *plannedSrcRow;
     if (predicate->kind == PredicatePlan::Class::TailPrefix) {
       if (!predicate->base || !predicate->limit)
-        return op->emitOpError("pred.tail plan is missing base or limit values");
-      Value activeTail =
-          createI32Sub(builder, op->getLoc(), predicate->limit, predicate->base);
+        return op->emitOpError(
+            "pred.tail plan is missing base or limit values");
+      Value activeTail = createI32Sub(builder, op->getLoc(), predicate->limit,
+                                      predicate->base);
       auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
-      Value vpmX = createLoadImm(
-          builder, op->getLoc(), builder.getI32Type(),
-          builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+      Value vpmX =
+          createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                        builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
       SmallVector<Value, 4> operands{address, srcRow, vpmX, activeTail};
       int64_t elemBytes = 4;
       if (auto elemBytesAttr = op->getAttrOfType<IntegerAttr>("elem_bytes"))
         elemBytes = elemBytesAttr.getInt();
-      createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
-               {getSSAVC4VPMOrientation(builder, op),
-                getSSAVC4VPMWidth(builder, op),
-                getSSAVC4VPMSubword(builder, op),
-                builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
-                builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
-                builder.getNamedAttr("memory_pitch_bytes",
-                                     builder.getI32IntegerAttr(16 * elemBytes)),
-                builder.getNamedAttr("serialize",
-                                     builder.getStringAttr("mutex"))});
+      createOp(
+          builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands,
+          {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+           getSSAVC4VPMSubword(builder, op),
+           builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
+           builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
+           builder.getNamedAttr("memory_pitch_bytes",
+                                builder.getI32IntegerAttr(16 * elemBytes)),
+           builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
       return success();
     }
     auto srcX = llvm::dyn_cast_or_null<IntegerAttr>(op->getAttr("src_x"));
-    Value vpmX = createLoadImm(builder, op->getLoc(), builder.getI32Type(),
-                               builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
+    Value vpmX =
+        createLoadImm(builder, op->getLoc(), builder.getI32Type(),
+                      builder.getI32IntegerAttr(srcX ? srcX.getInt() : 0));
     SmallVector<Value, 4> operands{address, srcRow, vpmX};
     SmallVector<NamedAttribute, 8> attrs{
         getSSAVC4VPMOrientation(builder, op),
@@ -3520,21 +3552,19 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
         getSSAVC4VPMSubword(builder, op),
         builder.getNamedAttr("row_len", builder.getI32IntegerAttr(16)),
         builder.getNamedAttr("nrows", builder.getI32IntegerAttr(1)),
-        builder.getNamedAttr("memory_pitch_bytes",
-                             builder.getI32IntegerAttr(
-                                 16 * (op->getAttrOfType<IntegerAttr>(
-                                           "elem_bytes")
-                                            ? op->getAttrOfType<IntegerAttr>(
-                                                    "elem_bytes")
-                                                  .getInt()
-                                            : 4))),
+        builder.getNamedAttr(
+            "memory_pitch_bytes",
+            builder.getI32IntegerAttr(
+                16 *
+                (op->getAttrOfType<IntegerAttr>("elem_bytes")
+                     ? op->getAttrOfType<IntegerAttr>("elem_bytes").getInt()
+                     : 4))),
         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))};
     if (predicate->kind == PredicatePlan::Class::Full) {
-      attrs.push_back(builder.getNamedAttr(
-          "active_lanes", builder.getI32IntegerAttr(16)));
+      attrs.push_back(
+          builder.getNamedAttr("active_lanes", builder.getI32IntegerAttr(16)));
     }
-    createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName,
-             operands, attrs);
+    createOp(builder, op->getLoc(), kSSAVC4VDWStoreVPMOpName, operands, attrs);
     return success();
   }
   if (hasName(op, kVDWStoreRectOpName)) {
@@ -3555,28 +3585,27 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
       return failure();
     Value address = createOpWithResult(
         builder, op->getLoc(), kSSAVC4ALUAddOpName, {base, byteOffset},
-        {builder.getNamedAttr("opcode", mlir::vc4::AddOpcodeAttr::get(
-                                            builder.getContext(),
-                                            mlir::vc4::AddOpcode::add))},
+        {builder.getNamedAttr(
+            "opcode", mlir::vc4::AddOpcodeAttr::get(
+                          builder.getContext(), mlir::vc4::AddOpcode::add))},
         base.getType());
     FailureOr<Value> plannedSrcRow =
         applyVPMTileBase(op, builder, op->getOperand(0), srcRow, state);
     if (failed(plannedSrcRow))
       return failure();
     srcRow = *plannedSrcRow;
-    createOp(builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName,
-             {address, srcRow, activeRows, activeCols, memoryStrideBytes},
-             {getSSAVC4VPMOrientation(builder, op),
-              getSSAVC4VPMWidth(builder, op),
-              getSSAVC4VPMSubword(builder, op),
-              builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
-              builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
-              builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
-              builder.getNamedAttr("src_x", op->getAttr("src_x")),
-              builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
-              builder.getNamedAttr("preserve_inactive",
-                                   builder.getBoolAttr(true)),
-              builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
+    createOp(
+        builder, op->getLoc(), kSSAVC4VDWStoreRectDynamicOpName,
+        {address, srcRow, activeRows, activeCols, memoryStrideBytes},
+        {getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
+         getSSAVC4VPMSubword(builder, op),
+         builder.getNamedAttr("max_rows", op->getAttr("max_rows")),
+         builder.getNamedAttr("max_cols", op->getAttr("max_cols")),
+         builder.getNamedAttr("elem_bytes", op->getAttr("elem_bytes")),
+         builder.getNamedAttr("src_x", op->getAttr("src_x")),
+         builder.getNamedAttr("vpm_pitch", op->getAttr("vpm_pitch")),
+         builder.getNamedAttr("preserve_inactive", builder.getBoolAttr(true)),
+         builder.getNamedAttr("serialize", builder.getStringAttr("mutex"))});
     return success();
   }
   if (hasName(op, kBarrierOpName)) {
@@ -3586,12 +3615,13 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (!logicalWarp || !warpsPerBlock || !semaphoreBase)
       return op->emitOpError(
           "missing launch builtin uniforms for cooperative barrier");
-    createOp(builder, op->getLoc(), kSSAVC4BarrierOpName,
-             {logicalWarp, warpsPerBlock, semaphoreBase},
-             {builder.getNamedAttr("arrive_offset", builder.getI32IntegerAttr(0)),
-              builder.getNamedAttr("go_offset", builder.getI32IntegerAttr(1)),
-              builder.getNamedAttr("depart_offset", builder.getI32IntegerAttr(2)),
-              builder.getNamedAttr("reset_offset", builder.getI32IntegerAttr(3))});
+    createOp(
+        builder, op->getLoc(), kSSAVC4BarrierOpName,
+        {logicalWarp, warpsPerBlock, semaphoreBase},
+        {builder.getNamedAttr("arrive_offset", builder.getI32IntegerAttr(0)),
+         builder.getNamedAttr("go_offset", builder.getI32IntegerAttr(1)),
+         builder.getNamedAttr("depart_offset", builder.getI32IntegerAttr(2)),
+         builder.getNamedAttr("reset_offset", builder.getI32IntegerAttr(3))});
     return success();
   }
   return op->emitOpError("is not implemented by vc4kernel -> ssavc4 lowering");
@@ -3667,22 +3697,23 @@ static LogicalResult lowerKernel(Operation *kernel, Operation *func) {
     state.blockMap[&sourceBlock] = destBlock;
     if (&sourceBlock != &source.front()) {
       for (BlockArgument arg : sourceBlock.getArguments())
-        state.values[arg] = {destBlock->addArgument(arg.getType(),
-                                                    arg.getLoc())};
+        state.values[arg] = {
+            destBlock->addArgument(arg.getType(), arg.getLoc())};
     }
   }
 
   builder.setInsertionPointToStart(state.blockMap.lookup(&source.front()));
   int64_t nextUniform = 0;
   for (BlockArgument arg : source.front().getArguments())
-    state.values[arg] = {createUniformRead(builder, arg.getLoc(),
-                                           arg.getType(), nextUniform++)};
+    state.values[arg] = {
+        createUniformRead(builder, arg.getLoc(), arg.getType(), nextUniform++)};
   auto materializeBuiltin = [&](StringRef name) {
     state.launchABI.bindBuiltin(
-        name, createUniformRead(builder, kernel->getLoc(),
-                                builder.getI32Type(), nextUniform++));
+        name, createUniformRead(builder, kernel->getLoc(), builder.getI32Type(),
+                                nextUniform++));
   };
-  appendRequiredBuiltins(kernel, state.resourcePlan.summary, materializeBuiltin);
+  appendRequiredBuiltins(kernel, state.resourcePlan.summary,
+                         materializeBuiltin);
 
   for (Block &sourceBlock : source) {
     Block *destBlock = state.blockMap.lookup(&sourceBlock);

@@ -67,6 +67,27 @@ def SSAVC4_FlagKind : SSAVC4_DialectI32Enum<"FlagKind",
       I32EnumAttrCase<"fsub", 3>
     ]>;
 
+def SSAVC4_SFUKind : SSAVC4_DialectI32Enum<"SFUKind",
+    "SSAVC4 hardware special-functions unit kind", [
+      I32EnumAttrCase<"recip", 52>,
+      I32EnumAttrCase<"rsqrt", 53>,
+      I32EnumAttrCase<"exp", 54>,
+      I32EnumAttrCase<"log", 55>
+    ]>;
+
+def SSAVC4_FPMathPolicy : SSAVC4_DialectI32Enum<"FPMathPolicy",
+    "SSAVC4 explicit approximate floating-point math policy", [
+      I32EnumAttrCase<"approx_sfu", 0>,
+      I32EnumAttrCase<"exact", 1>
+    ]>;
+
+def SSAVC4_FPDomain : SSAVC4_DialectI32Enum<"FPDomain",
+    "SSAVC4 explicit finite floating-point domain contract", [
+      I32EnumAttrCase<"finite", 0>,
+      I32EnumAttrCase<"finite_nonzero", 1>,
+      I32EnumAttrCase<"finite_positive", 2>
+    ]>;
+
 def SSAVC4_TMUUnitAttr : SSAVC4_EnumAttr<SSAVC4_TMUUnit, "tmu_unit">;
 def SSAVC4_TMUModeAttr : SSAVC4_EnumAttr<SSAVC4_TMUMode, "tmu_mode">;
 def SSAVC4_TMUReadPartAttr
@@ -80,5 +101,9 @@ def SSAVC4_VPMElemWidthAttr
 def SSAVC4_VDWStoreSerializeAttr
     : SSAVC4_EnumAttr<SSAVC4_VDWStoreSerialize, "vdw_store_serialize">;
 def SSAVC4_FlagKindAttr : SSAVC4_EnumAttr<SSAVC4_FlagKind, "flag_kind">;
+def SSAVC4_SFUKindAttr : SSAVC4_EnumAttr<SSAVC4_SFUKind, "sfu_kind">;
+def SSAVC4_FPMathPolicyAttr
+    : SSAVC4_EnumAttr<SSAVC4_FPMathPolicy, "fp_math_policy">;
+def SSAVC4_FPDomainAttr : SSAVC4_EnumAttr<SSAVC4_FPDomain, "fp_domain">;
 
 #endif // SSAVC4_ATTRS_TD

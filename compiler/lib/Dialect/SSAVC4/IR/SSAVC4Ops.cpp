@@ -26,12 +26,10 @@ namespace {
 static LogicalResult emitValueTypeError(Operation *op, Type type,
                                         StringRef role) {
   return op->emitOpError() << role << " type must be one of i32, f32, "
-                           << "vector<16xi32>, or vector<16xf32>; got "
-                           << type;
+                           << "vector<16xi32>, or vector<16xf32>; got " << type;
 }
 
-static LogicalResult verifyValueType(Operation *op, Type type,
-                                     StringRef role) {
+static LogicalResult verifyValueType(Operation *op, Type type, StringRef role) {
   if (isSSAVC4ValueType(type))
     return success();
   return emitValueTypeError(op, type, role);
@@ -79,17 +77,15 @@ static LogicalResult verifySameShapeAndDomain(Operation *op, Type lhs, Type rhs,
 static LogicalResult verifyVector16(Operation *op, Type type, StringRef role) {
   if (isSSAVC4Vector16(type))
     return success();
-  return op->emitOpError() << role
-                           << " type must be vector<16xi32> or vector<16xf32>; got "
-                           << type;
+  return op->emitOpError()
+         << role << " type must be vector<16xi32> or vector<16xf32>; got "
+         << type;
 }
 
 static bool isI32ToF32Reinterpret(Type inputType, Type resultType) {
   return haveSameSSAVC4Shape(inputType, resultType) &&
-         ((isSSAVC4IntCarrier(inputType) &&
-           isSSAVC4FloatCarrier(resultType)) ||
-          (isSSAVC4FloatCarrier(inputType) &&
-           isSSAVC4IntCarrier(resultType)));
+         ((isSSAVC4IntCarrier(inputType) && isSSAVC4FloatCarrier(resultType)) ||
+          (isSSAVC4FloatCarrier(inputType) && isSSAVC4IntCarrier(resultType)));
 }
 
 static LogicalResult verifyNoUnexpectedPair(Operation *op, Attribute first,
@@ -107,8 +103,8 @@ static LogicalResult verifyIntegerAttr32(Operation *op, Attribute attr,
                                          StringRef name) {
   auto intAttr = dyn_cast_or_null<IntegerAttr>(attr);
   if (!intAttr || !intAttr.getType().isSignlessInteger(32)) {
-    return op->emitOpError() << "'" << name
-                             << "' attribute must be signless i32";
+    return op->emitOpError()
+           << "'" << name << "' attribute must be signless i32";
   }
   return success();
 }
@@ -124,8 +120,6 @@ static std::optional<int64_t> getSplatI32Constant(Value value) {
   return attr.getInt();
 }
 
-
-
 static DictionaryAttr getEnclosingResourceMetadata(Operation *op) {
   for (Operation *parent = op->getParentOp(); parent;
        parent = parent->getParentOp()) {
@@ -139,8 +133,8 @@ static DictionaryAttr getEnclosingResourceMetadata(Operation *op) {
 static LogicalResult verifyVDRResourceMetadata(Operation *op) {
   DictionaryAttr resource = getEnclosingResourceMetadata(op);
   mlir::vc4::SemanticResourceInfo info;
-  if (failed(mlir::vc4::parseSemanticResourceMetadata(
-          op, resource, info, /*allowAbsent=*/false)))
+  if (failed(mlir::vc4::parseSemanticResourceMetadata(op, resource, info,
+                                                      /*allowAbsent=*/false)))
     return failure();
 
   if (!info.usesVPM || !info.usesVDR || info.totalVPMRowsPerBlock <= 0 ||
@@ -174,7 +168,8 @@ static LogicalResult verifyExecutableVPMQPUMode(Operation *op,
         "32-bit VPM QPU access requires subword = #ssavc4.vpm_subword<none>");
   if (width != VPMElemWidth::w32 && subword == VPMSubword::none)
     return op->emitOpError(
-        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> or #ssavc4.vpm_subword<laned>");
+        "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> "
+        "or #ssavc4.vpm_subword<laned>");
   return success();
 }
 
@@ -196,17 +191,15 @@ static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
                                                 VPMOrientation orientation,
                                                 StringRef role) {
   if (width == VPMElemWidth::w32 && subword != VPMSubword::none)
-    return op->emitOpError()
-           << "32-bit " << role
-           << " requires subword = #ssavc4.vpm_subword<none>";
+    return op->emitOpError() << "32-bit " << role
+                             << " requires subword = #ssavc4.vpm_subword<none>";
   if (width != VPMElemWidth::w32 && subword == VPMSubword::none)
     return op->emitOpError()
            << "sub-32 " << role
            << " requires subword = #ssavc4.vpm_subword<packed>";
   if (width != VPMElemWidth::w32 && subword == VPMSubword::laned)
     return op->emitOpError()
-           << role
-           << " laned subword mode is not supported by VC4 hardware";
+           << role << " laned subword mode is not supported by VC4 hardware";
   if (width != VPMElemWidth::w32 && orientation == VPMOrientation::vertical)
     return op->emitOpError()
            << "vertical subword " << role << " is not supported in P9";
@@ -220,51 +213,48 @@ static LogicalResult verifyElemBytesMatchesWidth(Operation *op,
   if (!expected)
     return op->emitOpError("has unknown VPM element width");
   if (elemBytes != *expected)
-    return op->emitOpError()
-           << "requires elem_bytes to match width (" << *expected
-           << " for this mode)";
+    return op->emitOpError() << "requires elem_bytes to match width ("
+                             << *expected << " for this mode)";
   return success();
 }
 
-static LogicalResult verifyVPMQPUCoordinates(Operation *op,
-                                             VPMElemWidth width,
+static LogicalResult verifyVPMQPUCoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
                                              int64_t x, int64_t stride) {
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w32 && x != 0)
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32 &&
+      x != 0)
     return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w16 && x > 1)
-    return op->emitOpError(
-        "horizontal 16-bit VPM QPU access requires halfword selector x in range [0, 1]");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w8 && x > 3)
-    return op->emitOpError(
-        "horizontal 8-bit VPM QPU access requires byte selector x in range [0, 3]");
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w16 &&
+      x > 1)
+    return op->emitOpError("horizontal 16-bit VPM QPU access requires halfword "
+                           "selector x in range [0, 1]");
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
+      x > 3)
+    return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
+                           "selector x in range [0, 3]");
   if (stride <= 0 || stride > 63)
     return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
 }
 
-static LogicalResult verifyVPMDMACoordinates(Operation *op,
-                                             VPMElemWidth width,
+static LogicalResult verifyVPMDMACoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
                                              int64_t x, int64_t stride) {
   if (x < 0 || x > 15)
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w32 && x != 0)
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32 &&
+      x != 0)
     return op->emitOpError("horizontal 32-bit VPM DMA access requires x = 0");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w16 && x > 1)
-    return op->emitOpError(
-        "horizontal 16-bit VPM DMA access requires halfword selector x in range [0, 1]");
-  if (orientation == VPMOrientation::horizontal &&
-      width == VPMElemWidth::w8 && x > 3)
-    return op->emitOpError(
-        "horizontal 8-bit VPM DMA access requires byte selector x in range [0, 3]");
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w16 &&
+      x > 1)
+    return op->emitOpError("horizontal 16-bit VPM DMA access requires halfword "
+                           "selector x in range [0, 1]");
+  if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
+      x > 3)
+    return op->emitOpError("horizontal 8-bit VPM DMA access requires byte "
+                           "selector x in range [0, 3]");
   if (stride <= 0)
     return op->emitOpError("requires positive VPM stride");
   return success();
@@ -373,8 +363,8 @@ LogicalResult LoadImmOp::verify() {
 
   Attribute valueAttr = getValueAttr();
   Attribute valuesAttr = getValuesAttr();
-  if (failed(verifyNoUnexpectedPair(op, valueAttr, "value", valuesAttr,
-                                    "values")))
+  if (failed(
+          verifyNoUnexpectedPair(op, valueAttr, "value", valuesAttr, "values")))
     return failure();
 
   switch (getMode()) {
@@ -392,7 +382,8 @@ LogicalResult LoadImmOp::verify() {
     if (!valuesAttr)
       return emitOpError("per-element mode requires a 'values' attribute");
     if (!isa<VectorType>(resultType) || !isSSAVC4IntCarrier(resultType))
-      return emitOpError("per-element mode requires result type vector<16xi32>");
+      return emitOpError(
+          "per-element mode requires result type vector<16xi32>");
     auto dense = dyn_cast<DenseI32ArrayAttr>(valuesAttr);
     if (!dense)
       return emitOpError("per-element mode requires dense i32 array 'values'");
@@ -400,13 +391,12 @@ LogicalResult LoadImmOp::verify() {
       return emitOpError("per-element mode requires exactly 16 lane values");
     int32_t minValue =
         getMode() == mlir::vc4::LoadImmMode::per_elem_i2 ? -2 : 0;
-    int32_t maxValue =
-        getMode() == mlir::vc4::LoadImmMode::per_elem_i2 ? 1 : 3;
+    int32_t maxValue = getMode() == mlir::vc4::LoadImmMode::per_elem_i2 ? 1 : 3;
     for (int32_t laneValue : dense.asArrayRef()) {
       if (laneValue < minValue || laneValue > maxValue) {
-        return emitOpError() << "lane values for per-element mode must be in "
-                             << "range [" << minValue << ", " << maxValue
-                             << "]";
+        return emitOpError()
+               << "lane values for per-element mode must be in "
+               << "range [" << minValue << ", " << maxValue << "]";
       }
     }
     return success();
@@ -458,10 +448,10 @@ LogicalResult VPMWriteOp::verify() {
     return failure();
   int64_t lanes = getLanesAttr().getInt();
   if (lanes != 16)
-    return emitOpError("supports only full 16-lane VPM vectors in executable v1");
+    return emitOpError(
+        "supports only full 16-lane VPM vectors in executable v1");
   return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
-                                 getXAttr().getInt(),
-                                 getStrideAttr().getInt());
+                                 getXAttr().getInt(), getStrideAttr().getInt());
 }
 
 LogicalResult VPMReadOp::verify() {
@@ -474,10 +464,10 @@ LogicalResult VPMReadOp::verify() {
     return failure();
   int64_t lanes = getLanesAttr().getInt();
   if (lanes != 16)
-    return emitOpError("supports only full 16-lane VPM vectors in executable v1");
+    return emitOpError(
+        "supports only full 16-lane VPM vectors in executable v1");
   return verifyVPMQPUCoordinates(op, getWidth(), getOrientation(),
-                                 getXAttr().getInt(),
-                                 getStrideAttr().getInt());
+                                 getXAttr().getInt(), getStrideAttr().getInt());
 }
 
 LogicalResult MovOp::verify() {
@@ -606,6 +596,37 @@ LogicalResult ALUMulOp::verify() {
   return verifyIntCarrier(op, resultType, "result");
 }
 
+LogicalResult SFUOp::verify() {
+  Operation *op = getOperation();
+  Type inputType = getInput().getType();
+  Type resultType = getResult().getType();
+  if (failed(verifyVector16(op, inputType, "input")) ||
+      failed(verifyFloatCarrier(op, inputType, "input")) ||
+      failed(verifyVector16(op, resultType, "result")) ||
+      failed(verifyFloatCarrier(op, resultType, "result")))
+    return failure();
+  if (getFpPolicy() != FPMathPolicy::approx_sfu)
+    return emitOpError(
+        "exact floating-point math cannot be lowered to VC4 SFU");
+
+  FPDomain expectedDomain;
+  switch (getKind()) {
+  case SFUKind::recip:
+    expectedDomain = FPDomain::finite_nonzero;
+    break;
+  case SFUKind::rsqrt:
+  case SFUKind::log:
+    expectedDomain = FPDomain::finite_positive;
+    break;
+  case SFUKind::exp:
+    expectedDomain = FPDomain::finite;
+    break;
+  }
+  if (getDomain() != expectedDomain)
+    return emitOpError("sfu domain does not match SFU kind contract");
+  return success();
+}
+
 LogicalResult PackOp::verify() {
   Operation *op = getOperation();
   Type inputType = getInput().getType();
@@ -702,7 +723,8 @@ LogicalResult CondBranchOp::verify() {
   if (!isa<FlagsType>(getFlags().getType()))
     return emitOpError("flags operand must be !ssavc4.flags");
   if (getCond() == mlir::vc4::BranchCond::always)
-    return emitOpError("cond_br with always condition is invalid; use ssavc4.br");
+    return emitOpError(
+        "cond_br with always condition is invalid; use ssavc4.br");
   if (failed(verifySuccessorOperands(op, getTrueDest(), getTrueDestOperands(),
                                      "true")))
     return failure();
@@ -722,7 +744,6 @@ LogicalResult SemaReleaseOp::verify() {
   return emitOpError("requires an i32 semaphore id operand");
 }
 
-
 LogicalResult VDRLoadOp::verify() {
   Operation *op = getOperation();
   if (!getAddress().getType().isSignlessInteger(32))
@@ -731,8 +752,7 @@ LogicalResult VDRLoadOp::verify() {
     return emitOpError("requires an i32 VPM base row operand");
 
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(),
-                                        "VDR DMA")))
+                                        getOrientation(), "VDR DMA")))
     return failure();
   int64_t elemBytes = *getVPMElemBytes(getWidth());
 
@@ -760,7 +780,7 @@ LogicalResult VDRLoadOp::verify() {
     return failure();
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
-                                           "serialize")))
+                                            "serialize")))
     return failure();
   return verifyVDRResourceMetadata(op);
 }
@@ -778,14 +798,12 @@ LogicalResult VDRLoadRectDynamicOp::verify() {
     return failure();
   if (failed(verifyElemBytesMatchesWidth(op, getElemBytes(), getWidth())) ||
       failed(verifyDynamicPitchOrStride(op, getMemoryPitchBytes(),
-                                        "memory_pitch_bytes",
-                                        getElemBytes())))
+                                        "memory_pitch_bytes", getElemBytes())))
     return failure();
   if (!getZeroFill())
     return emitOpError("requires zero_fill = true");
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(),
-                                        "VDR DMA")))
+                                        getOrientation(), "VDR DMA")))
     return failure();
   if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
                                      getDstX(), getVpmPitch())))
@@ -806,8 +824,7 @@ LogicalResult VDWStoreVPMOp::verify() {
     return emitOpError("requires an i32 VPM x-coordinate operand");
 
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(),
-                                        "VDW DMA")))
+                                        getOrientation(), "VDW DMA")))
     return failure();
   int64_t elemBytes = *getVPMElemBytes(getWidth());
   int64_t rowLen = getRowLenAttr().getInt();
@@ -827,13 +844,14 @@ LogicalResult VDWStoreVPMOp::verify() {
       !getActiveLanesValue().getType().isSignlessInteger(32))
     return emitOpError("requires an i32 dynamic active-lane operand");
   if (getActiveLanesValue() && nrows != 1)
-    return emitOpError("supports dynamic active_lanes only for single-row VDW stores");
+    return emitOpError(
+        "supports dynamic active_lanes only for single-row VDW stores");
   if (auto activeLanes = getActiveLanesAttr())
     if (activeLanes.getInt() != rowLen)
       return emitOpError("active_lanes must match row_len for VDW stores");
 
   if (failed(verifyOptionalStringAttrChoice(op, "serialize", "mutex", "none",
-                                           "serialize")))
+                                            "serialize")))
     return failure();
   return success();
 }
@@ -851,14 +869,12 @@ LogicalResult VDWStoreRectDynamicOp::verify() {
     return failure();
   if (failed(verifyElemBytesMatchesWidth(op, getElemBytes(), getWidth())) ||
       failed(verifyDynamicPitchOrStride(op, getMemoryStrideBytes(),
-                                        "memory_stride_bytes",
-                                        getElemBytes())))
+                                        "memory_stride_bytes", getElemBytes())))
     return failure();
   if (!getPreserveInactive())
     return emitOpError("requires preserve_inactive = true");
   if (failed(verifyExecutableVPMDMAMode(op, getWidth(), getSubword(),
-                                        getOrientation(),
-                                        "VDW DMA")))
+                                        getOrientation(), "VDW DMA")))
     return failure();
   if (failed(verifyVPMDMACoordinates(op, getWidth(), getOrientation(),
                                      getSrcX(), getVpmPitch())))
