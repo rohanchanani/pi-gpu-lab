@@ -1285,6 +1285,26 @@ semantics, including producer `vector.shuffle` inside verified VC4Kernel, are
 deterministic-rejects. Future vector lowering may map only legal rotate patterns
 to this op after preserving the documented direction and modulo 16 policy.
 
+Lane broadcast is not a separate VC4Kernel operation. The accepted Surface v2
+form is the canonical composite idiom:
+
+```text
+lane_range
+scalar splat of the selected lane
+fragment_cmp eq
+fragment_select payload-or-zero
+i32 fragment_reduce add
+```
+
+For arbitrary 32-bit payloads, exactly one selected lane contributes a nonzero
+value, so the i32 add reduction returns the selected payload unchanged modulo
+2^32. For exact f32 bit preservation, use `fragment_bitcast` from f32 to i32,
+the i32 composite broadcast, then `fragment_bitcast` back. Finite numeric f32
+broadcast may use the existing finite-tree f32 add reduction only under the
+finite f32 reduction policy. Future vector lowering may map legal
+extract-and-broadcast or shuffle-splat forms into this composite idiom, but it
+must not admit arbitrary shuffle/permutation semantics.
+
 ### 9.7 `vc4kernel.fragment_reduce`
 
 ```mlir
@@ -2289,6 +2309,7 @@ vc4kernel.block_reduce
 vc4kernel.tile_dot
 vc4kernel.tile_contract
 vc4kernel.tile_matmul
+vc4kernel.fragment_broadcast_lane
 vc4kernel.surface_placeholder
 vc4kernel.memref_load
 vc4kernel.memref_store
@@ -2298,6 +2319,11 @@ vc4kernel.fragment_contract
 ```
 
 `fragment_contract` is forbidden as a permanent Surface v2 `vc4kernel` feature. Future vector contract handling must lower through the standard value layer into admitted target execution-plan features instead of resurrecting a contract-specific VC4Kernel op.
+
+`vc4kernel.fragment_broadcast_lane` is likewise absent from the final Surface v2
+operation inventory. Lane broadcast is represented by the documented composite
+idiom over `lane_range`, `fragment_cmp`, `fragment_select`, `fragment_reduce`,
+and `fragment_bitcast`.
 
 ---
 

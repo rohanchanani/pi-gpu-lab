@@ -110,6 +110,13 @@ FORBIDDEN_TILE_TERMS = {
 
 AMBIGUOUS_TOKENS = ("TBD", "TODO", "unknown", "maybe", "??")
 
+BROADCAST_LANE_TRANSITIONAL_STATUSES = {
+    "planned",
+    "pending",
+    "implemented_pending_hardware",
+    "deferred",
+}
+
 
 def fail(message):
     print(f"FAIL: {message}", file=sys.stderr)
@@ -225,6 +232,24 @@ def validate_feature(feature, phases):
             fail(f"sparse VDW feature {feature['id']} lacks deterministic-reject policy")
         if feature["current_status"] not in {"deterministic_reject", "deferred"}:
             fail(f"sparse VDW feature {feature['id']} has invalid current_status")
+    if feature["id"] == "p11_fragment_broadcast_lane_if_supported":
+        status = feature["current_status"]
+        if status in BROADCAST_LANE_TRANSITIONAL_STATUSES:
+            fail("P11 lane broadcast row must not be transitional")
+        broadcast_text = text.lower()
+        for token in [
+            "composite",
+            "lane_range",
+            "fragment_cmp",
+            "fragment_select",
+            "fragment_reduce",
+            "fragment_bitcast",
+            "no vc4kernel.fragment_broadcast_lane",
+            "arbitrary shuffle",
+            "deterministic reject",
+        ]:
+            if token not in broadcast_text:
+                fail(f"P11 lane broadcast row must document {token}")
 
 
 def validate_features(matrix):

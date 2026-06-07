@@ -378,10 +378,12 @@ P11_REQUIRED_ISOLATED_FIXTURES = {
     "fragment_rotate_dynamic_loop_branch_vc4kernel",
     "fragment_rotate_dynamic_forced_spill_vc4kernel",
     "fragment_rotate_dynamic_tmu_sfu_pack_interaction_vc4kernel",
+    "fragment_broadcast_lane_composite_vc4kernel",
 }
 P11_REQUIRED_NEGATIVE_TESTS = {
     "compiler/test/Dialect/VC4Kernel/invalid-fragment-rotate.mlir",
     "compiler/test/Dialect/VC4Kernel/invalid-fragment-shuffle.mlir",
+    "compiler/test/Dialect/VC4Kernel/invalid-fragment-broadcast-lane.mlir",
     "compiler/test/Dialect/SSAVC4/pure-ops-invalid.mlir",
 }
 P11_REQUIRED_MIXED_FIXTURES = {
@@ -526,6 +528,9 @@ P5_POST_PHASE_STAGED_STATUSES = {
         "hardware_proven_pending_pressure_policy",
         "hardware_proven_pending_policy_lock",
         "hardware_proven_pending_final_acceptance",
+    },
+    "p11_fragment_broadcast_lane_if_supported": {
+        "accepted",
     },
     "p12_dynamic_vpm_read_write_coordinates": {
         "implemented_pending_hardware",
@@ -3335,6 +3340,35 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         if token not in shuffle_text:
             fail(f"P11 arbitrary shuffle matrix entry must document {token}")
 
+    broadcast_feature = require_matrix_feature(
+        features,
+        "p11_fragment_broadcast_lane_if_supported",
+        "P11",
+        "accepted",
+    )
+    broadcast_text = json.dumps(broadcast_feature).lower()
+    for token in [
+        "composite",
+        "lane_range",
+        "fragment_cmp",
+        "fragment_select",
+        "fragment_reduce",
+        "fragment_bitcast",
+        "no vc4kernel.fragment_broadcast_lane",
+        "arbitrary shuffle",
+        "deterministic reject",
+        "fragment_broadcast_lane_composite_vc4kernel",
+    ]:
+        if token not in broadcast_text:
+            fail(f"P11 lane broadcast composite matrix entry must document {token}")
+    if broadcast_feature.get("current_status") in {
+        "planned",
+        "pending",
+        "implemented_pending_hardware",
+        "deferred",
+    }:
+        fail("P11 lane broadcast composite must not be transitional")
+
     p12_vpm = require_matrix_feature_status_in(
         features,
         "p12_dynamic_vpm_read_write_coordinates",
@@ -3448,6 +3482,17 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
             "vc4kernel.fragment_rotate",
             "#vc4kernel.inactive_store<preserve>",
         ],
+        "fragment_broadcast_lane_composite_vc4kernel": [
+            "vc4kernel.lane_range",
+            "arith.addi",
+            "vc4kernel.splat",
+            "vc4kernel.fragment_cmp",
+            "vc4kernel.fragment_select",
+            "vc4kernel.fragment_reduce",
+            "vc4kernel.fragment_bitcast",
+            "vc4kernel.vdw_store_fragment",
+            "#vc4kernel.inactive_store<preserve>",
+        ],
     }
     expected_metadata = {
         "fragment_rotate_dynamic_i32_vc4kernel": [
@@ -3492,6 +3537,17 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
             "saw_pack_unpack",
             "saw_dynamic_rotate",
             "saw_vdw_preserve",
+        ],
+        "fragment_broadcast_lane_composite_vc4kernel": [
+            "saw_broadcast_lane_composite",
+            "saw_dynamic_lane_select",
+            "saw_lane0",
+            "saw_lane15",
+            "saw_i32_bit_preserving",
+            "saw_f32_bitcast_path",
+            "saw_fragment_reduce",
+            "no_first_class_broadcast_op",
+            "arbitrary_shuffle_reject_preserved",
         ],
     }
     dynamic_rotate_ops = 0
@@ -3543,6 +3599,8 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         "dynamic amount operand must be scalar i32",
         "fragment_rotate result must have matching types",
         "vector dialect operations are forbidden",
+        "vc4kernel.fragment_broadcast_lane",
+        "unknown or forbidden vc4kernel operation",
     ]:
         if token not in negative_text:
             fail(f"P11 lock negative tests missing diagnostic/token: {token}")
@@ -3666,6 +3724,10 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
         "rotate-derived shuffle",
         "arbitrary shuffle",
         "vector.shuffle",
+        "Lane broadcast is not a separate VC4Kernel operation",
+        "fragment_select payload-or-zero",
+        "fragment_broadcast_lane",
+        "fragment_bitcast",
         "P11 mixed fixtures",
     ]:
         if token not in docs:
@@ -3674,6 +3736,7 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
     counts.update(
         {
             "p11_dynamic_rotate_matrix_features": 1,
+            "p11_broadcast_lane_composite_matrix_features": 1,
             "p11_shuffle_reject_entries": 1,
             "p11_isolated_fixture_retention_checks": len(P11_REQUIRED_ISOLATED_FIXTURES),
             "p11_negative_tests": len(P11_REQUIRED_NEGATIVE_TESTS),

@@ -1,0 +1,24 @@
+{
+  "name": "fragment_broadcast_lane_composite_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "saw_broadcast_lane_composite": 1,
+    "saw_dynamic_lane_select": 1,
+    "saw_lane0": 1,
+    "saw_lane15": 1,
+    "saw_empty_identity": 1,
+    "saw_i32_bit_preserving": 1,
+    "saw_f32_bitcast_path": 1,
+    "saw_fragment_reduce": 1,
+    "no_first_class_broadcast_op": 1,
+    "arbitrary_shuffle_reject_preserved": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 5
+  }
+}

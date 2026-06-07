@@ -714,20 +714,23 @@
       "id": "p11_fragment_broadcast_lane_if_supported",
       "phase": "P11",
       "category": "rotate_shuffle",
-      "current_status": "planned",
-      "final_status_target": "implemented_if_hardware_proven_or_rejected",
-      "current_surface": "Lane broadcast is currently expressed through existing VPM/read or reduction patterns where proven.",
-      "target_surface": "Dedicated lane broadcast only if supported by hardware-proven lowering.",
-      "vc4kernel_verifier_plan": "Reject unsupported broadcast sources and require lane index range proof.",
-      "vc4kernel_to_ssavc4_plan": "Lower only to proven rotate/VPM/ALU sequence; reject otherwise.",
-      "ssavc4_to_vc4_plan": "Preserve branch/layout and VPM resource accounting for any sequence used.",
-      "hardware_or_reject_verification_plan": "Hardware proof for each admitted broadcast form or deterministic-reject tests.",
-      "upstream_use": "Vector shuffle patterns after pre-vector lock.",
-      "migration_or_removal": "New planned surface; do not add a producer tile broadcast op.",
+      "current_status": "accepted",
+      "final_status_target": "accepted_composite_no_first_class_op",
+      "current_surface": "Lane broadcast is accepted as a canonical composite idiom, not as a vc4kernel.fragment_broadcast_lane op: lane_range plus scalar splat plus fragment_cmp eq plus fragment_select payload-or-zero plus i32 fragment_reduce add. Bit-preserving f32 uses fragment_bitcast f32-to-i32, the i32 composite broadcast, then fragment_bitcast back.",
+      "target_surface": "No dedicated broadcast op is added. Future vector lowering may map legal extract-and-broadcast or shuffle-splat forms into this composite idiom only after proving it is a broadcast, not an arbitrary permutation.",
+      "vc4kernel_verifier_plan": "Implemented by existing op verifiers and negative coverage: the component ops verify independently, vector dialect producer ops reject inside VC4Kernel, and an attempted vc4kernel.fragment_broadcast_lane spelling is a forbidden operation.",
+      "vc4kernel_to_ssavc4_plan": "Implemented by existing lowering for lane_range, splat, fragment_cmp, fragment_select, fragment_reduce add, fragment_bitcast moves, and VDW preserve stores; no direct VC4KernelToVC4 path and no first-class broadcast lowering.",
+      "ssavc4_to_vc4_plan": "Implemented through existing SSAVC4 compare/select, bit-preserving mov, rotate-tree reduction, TMU, and VDW preserve paths; no arbitrary shuffle or permutation lowering is introduced.",
+      "hardware_or_reject_verification_plan": "P13x1 fragment_broadcast_lane_composite_vc4kernel proves dynamic lane 0, 1, 7, 15, out-of-range empty identity, arbitrary i32 bit patterns, and f32 bitcast-preserving payloads. Existing P4/P11 fixtures keep reduction, dynamic lane broadcast, and arbitrary shuffle rejection covered.",
+      "upstream_use": "Future vector extract+broadcast and legal shuffle-splat lowering after pre-vector lock.",
+      "migration_or_removal": "No vc4kernel.fragment_broadcast_lane op and no tile_broadcast alias. The capability is internalized into fragment_cmp, fragment_select, fragment_reduce, and fragment_bitcast rows.",
       "dependencies": [
-        "p11_fragment_rotate_dynamic_if_hardware"
+        "p2_fragment_bitcast",
+        "p3_fragment_cmp_signed_i32",
+        "p4_fragment_reduce_general",
+        "p11_arbitrary_shuffle_permutation_reject"
       ],
-      "acceptance_line": "Lane broadcast is accepted only when it is not a tile DSL feature and has hardware proof."
+      "acceptance_line": "Lane broadcast is accepted as a hardware-proven composite idiom only; arbitrary shuffle/permutation remains a deterministic reject."
     },
     {
       "id": "p11_arbitrary_shuffle_permutation_reject",
