@@ -112,8 +112,8 @@ module {
 // -----
 
 module {
-  vc4kernel.kernel @vertical_subword_dma_deferred(%ptr : i32) attributes {
-    public_name = "vertical_subword_dma_deferred",
+  vc4kernel.kernel @vertical_subword_dma_missing_selector(%ptr : i32) attributes {
+    public_name = "vertical_subword_dma_missing_selector",
     schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
     arg_attrs = [{name = "ptr", kind = "buffer", direction = "in", elem_type = "i32"}],
     warps_per_block = 1 : i32

@@ -206,7 +206,7 @@ static LogicalResult verifyExecutableVPMDMAMode(Operation *op,
       orientation == VPMOrientation::vertical)
     return op->emitOpError()
            << "vertical subword " << role
-           << " is unproven/deferred in P12";
+           << " requires explicit subword_selector syntax in P12";
   return success();
 }
 
@@ -409,7 +409,8 @@ static LogicalResult verifyVPMDMACoordinates(Operation *op, VPMElemWidth width,
   if (!explicitSelector) {
     if (xValue && width != VPMElemWidth::w32)
       return op->emitOpError(
-          "dynamic subword VPM DMA x selectors are unproven/deferred in P12");
+          "sub-32 VPM DMA word-X must use the final explicit "
+          "dynamic_subword_selector coordinate form");
     if (selectorAttr || selectorValue)
       return op->emitOpError(
           "subword_selector is not supported for this VPM DMA op yet");

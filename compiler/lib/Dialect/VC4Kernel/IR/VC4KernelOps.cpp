@@ -863,7 +863,7 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
         orientation.getValue() == VPMOrientation::vertical)
       return op->emitOpError()
              << "vertical subword " << dmaRole
-             << " is unproven/deferred in P12";
+             << " requires explicit subword_selector syntax in P12";
   } else {
     if (width.getValue() == VPMWidth::w32 &&
         subword.getValue() != VPMSubword::none)
@@ -893,12 +893,14 @@ static LogicalResult verifyVPMExecutableMode(Operation *op, StringRef xAttrName,
           "meaningful");
     if (qpuSubwordModes && width.getValue() != VPMWidth::w32)
       return op->emitOpError(
-          "dynamic subword VPM QPU x selectors are unproven/deferred in P12");
+          "sub-32 VPM QPU word-X must use the final explicit "
+          "dynamic_subword_selector coordinate form");
     if (!dmaUsesExplicitSelector && dmaSubwordModes &&
         width.getValue() != VPMWidth::w32)
       return op->emitOpError()
-             << "dynamic subword " << dmaRole
-             << " x selectors are unproven/deferred in P12";
+             << "sub-32 " << dmaRole
+             << " word-X must use the final explicit dynamic_subword_selector "
+                "coordinate form";
   } else {
     int64_t x = xAttr.getInt();
     if (x < 0 || x > 15)
