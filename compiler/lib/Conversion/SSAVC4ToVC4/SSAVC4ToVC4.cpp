@@ -100,6 +100,31 @@ static bool hasName(Operation *op, llvm::StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
+static Value getOptionalSegmentOperand(Operation *op, unsigned segmentIndex) {
+  if (auto write = llvm::dyn_cast<mlir::ssavc4::VPMWriteOp>(op)) {
+    if (segmentIndex == 2)
+      return write.getXValue();
+    if (segmentIndex == 3)
+      return write.getSubwordSelectorValue();
+  }
+  if (auto read = llvm::dyn_cast<mlir::ssavc4::VPMReadOp>(op)) {
+    if (segmentIndex == 1)
+      return read.getXValue();
+    if (segmentIndex == 2)
+      return read.getSubwordSelectorValue();
+  }
+  auto segments = op->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes");
+  if (!segments)
+    return {};
+  ArrayRef<int32_t> sizes = segments.asArrayRef();
+  if (segmentIndex >= sizes.size() || sizes[segmentIndex] == 0)
+    return {};
+  unsigned operandIndex = 0;
+  for (unsigned i = 0; i < segmentIndex; ++i)
+    operandIndex += static_cast<unsigned>(sizes[i]);
+  return op->getOperand(operandIndex);
+}
+
 static StringAttr getSymbolNameAttr(Operation *op) {
   return llvm::dyn_cast_or_null<StringAttr>(
       op->getAttr(SymbolTable::getSymbolAttrName()));
@@ -1805,27 +1830,74 @@ static LogicalResult verifyVPMSubset(Operation *op, Type valueType) {
     return op->emitOpError(
         "sub-32 VPM QPU access requires subword = #ssavc4.vpm_subword<packed> "
         "or #ssavc4.vpm_subword<laned>");
-  bool hasDynamicX =
-      (hasName(op, kSSAVC4VPMWriteOpName) && op->getNumOperands() == 3) ||
-      (hasName(op, kSSAVC4VPMReadOpName) && op->getNumOperands() == 2);
-  int64_t x = getI32IntegerAttrOr(op, "x", hasDynamicX ? 0 : -1);
+  Value dynamicX = hasName(op, kSSAVC4VPMWriteOpName)
+                       ? getOptionalSegmentOperand(op, 2)
+                       : getOptionalSegmentOperand(op, 1);
+  Value dynamicSelector = hasName(op, kSSAVC4VPMWriteOpName)
+                              ? getOptionalSegmentOperand(op, 3)
+                              : getOptionalSegmentOperand(op, 2);
+  auto xAttr = op->getAttrOfType<IntegerAttr>("x");
+  auto selectorAttr = op->getAttrOfType<IntegerAttr>("subword_selector");
   int64_t stride = getI32IntegerAttrOr(op, "stride", -1);
-  if (x < 0 || x > 15)
+  bool needsWordX =
+      orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical;
+  bool needsSelector = width.getValue() != mlir::ssavc4::VPMElemWidth::w32;
+  if (!needsWordX && dynamicX)
+    return op->emitOpError(
+        "horizontal VPM QPU access does not encode a word x coordinate");
+  if (!needsWordX && xAttr) {
+    bool legacyHorizontalW32Noop =
+        orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
+        width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
+        xAttr.getInt() == 0;
+    if (!legacyHorizontalW32Noop)
+      return op->emitOpError(
+          "horizontal VPM QPU access must not specify static x");
+  }
+  if (needsWordX && xAttr && dynamicX)
+    return op->emitOpError(
+        "specify either static x or dynamic x operand, not both");
+  if (needsWordX && !xAttr && !dynamicX)
+    return op->emitOpError("requires static x attr or dynamic x operand");
+  if (xAttr && (xAttr.getInt() < 0 || xAttr.getInt() > 15))
     return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
-      width.getValue() == mlir::ssavc4::VPMElemWidth::w32 && x != 0)
-    return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
-  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
-      width.getValue() == mlir::ssavc4::VPMElemWidth::w16 && x > 1)
-    return op->emitOpError("horizontal 16-bit VPM QPU access requires halfword "
-                           "selector x in range [0, 1]");
-  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal &&
-      width.getValue() == mlir::ssavc4::VPMElemWidth::w8 && x > 3)
-    return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
-                           "selector x in range [0, 3]");
+  if (dynamicX && !dynamicX.getType().isSignlessInteger(32))
+    return op->emitOpError(
+        "requires an i32 dynamic VPM x operand for M3 lowering");
+  if (!needsSelector && (selectorAttr || dynamicSelector))
+    return op->emitOpError(
+        "32-bit VPM QPU access must not specify subword_selector");
+  if (needsSelector && selectorAttr && dynamicSelector)
+    return op->emitOpError("specify either static subword_selector or dynamic "
+                           "subword selector operand, not both");
+  if (needsSelector && !selectorAttr && !dynamicSelector)
+    return op->emitOpError("requires subword_selector attr or dynamic subword "
+                           "selector operand");
+  int64_t maxSelector =
+      width.getValue() == mlir::ssavc4::VPMElemWidth::w8 ? 3 : 1;
+  if (selectorAttr &&
+      (selectorAttr.getInt() < 0 || selectorAttr.getInt() > maxSelector))
+    return op->emitOpError()
+           << "subword_selector must be in range [0, " << maxSelector << "]";
+  if (dynamicSelector &&
+      !dynamicSelector.getType().isSignlessInteger(32))
+    return op->emitOpError(
+        "requires an i32 dynamic VPM subword selector operand for M3 lowering");
   if (stride <= 0 || stride > 63)
     return op->emitOpError("requires VPM stride in range [1, 63]");
   return success();
+}
+
+static int64_t getVPMQPUSelectorBits(mlir::ssavc4::VPMElemWidth width) {
+  switch (width) {
+  case mlir::ssavc4::VPMElemWidth::w8:
+    return 2;
+  case mlir::ssavc4::VPMElemWidth::w16:
+    return 1;
+  case mlir::ssavc4::VPMElemWidth::w32:
+    return 0;
+  }
+  return 0;
 }
 
 static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
@@ -1836,12 +1908,9 @@ static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
   auto subword =
       llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
   int64_t stride = getI32IntegerAttrOr(source, "stride", 1);
-  bool hasDynamicX =
-      (hasName(source, kSSAVC4VPMWriteOpName) &&
-       source->getNumOperands() == 3) ||
-      (hasName(source, kSSAVC4VPMReadOpName) && source->getNumOperands() == 2);
-  int64_t x = getI32IntegerAttrOr(source, "x", hasDynamicX ? 0 : -1);
-  if (stride < 1 || stride > 63 || x < 0 || x > 15)
+  int64_t staticX = getI32IntegerAttrOr(source, "x", 0);
+  int64_t staticSelector = getI32IntegerAttrOr(source, "subword_selector", 0);
+  if (stride < 1 || stride > 63 || staticX < 0 || staticX > 15)
     return source->emitOpError(
         "has invalid VPM QPU setup attributes after verification");
   if (width.getValue() == mlir::ssavc4::VPMElemWidth::w32 &&
@@ -1870,7 +1939,11 @@ static FailureOr<int64_t> buildVPMQPUSetupBase(Operation *source) {
     modeBits |= 0x400;
   if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal)
     modeBits |= 0x800;
-  modeBits |= x;
+  int64_t selectorBits = getVPMQPUSelectorBits(width.getValue());
+  int64_t staticAddressBits = staticSelector;
+  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::vertical)
+    staticAddressBits |= staticX << selectorBits;
+  modeBits |= staticAddressBits;
   return (1 << 20) | (stride << 12) | modeBits;
 }
 
@@ -1893,26 +1966,92 @@ getPackedSubwordLogicalRowScale(mlir::ssavc4::VPMElemWidth width,
 static std::pair<int64_t, mlir::vc4::QPUMux>
 emitVPMQPUAddressRow(OpBuilder &builder, Location loc, Operation *source,
                      int64_t rowReg) {
-  auto orientation = llvm::cast<mlir::ssavc4::VPMOrientationAttr>(
-      source->getAttr("orientation"));
   auto width =
       llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
-  auto subword =
-      llvm::cast<mlir::ssavc4::VPMSubwordAttr>(source->getAttr("subword"));
-  int64_t scale = 1;
-  if (orientation.getValue() == mlir::ssavc4::VPMOrientation::horizontal)
-    scale =
-        getPackedSubwordLogicalRowScale(width.getValue(), subword.getValue());
-  if (scale == 1)
+  int64_t scale = getVPMQPUSelectorBits(width.getValue());
+  if (scale == 0)
     return {rowReg, mlir::vc4::QPUMux::a};
   createScheduledBundle(
       builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
       mlir::vc4::Cond::never,
-      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      /*waddrAdd=*/32, /*waddrMul=*/33, mlir::vc4::AddOpcode::shl,
       mlir::vc4::MulOpcode::nop, rowReg, /*raddrB=*/0, mlir::vc4::QPUMux::a,
       mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
-      /*smallImm=*/scale == 4 ? 2 : 1);
+      /*smallImm=*/scale);
+  return {0, mlir::vc4::QPUMux::r0};
+}
+
+static std::pair<int64_t, mlir::vc4::QPUMux>
+emitSmallImmBitAndToR1(OpBuilder &builder, Location loc, int64_t inputReg,
+                       mlir::vc4::QPUMux inputMux, int64_t mask) {
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::bit_and,
+      mlir::vc4::MulOpcode::nop, inputReg, /*raddrB=*/0, inputMux,
+      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/mask);
   return {0, mlir::vc4::QPUMux::r1};
+}
+
+static std::pair<int64_t, mlir::vc4::QPUMux>
+emitSmallImmShiftLeftToR1(OpBuilder &builder, Location loc, int64_t inputReg,
+                          mlir::vc4::QPUMux inputMux, int64_t shift) {
+  if (shift == 0)
+    return {inputReg, inputMux};
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::small_imm, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::shl,
+      mlir::vc4::MulOpcode::nop, inputReg, /*raddrB=*/0, inputMux,
+      mlir::vc4::QPUMux::b, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1,
+      /*smallImm=*/shift);
+  return {0, mlir::vc4::QPUMux::r1};
+}
+
+static std::pair<int64_t, mlir::vc4::QPUMux>
+emitAddToR0(OpBuilder &builder, Location loc, int64_t lhsReg,
+            mlir::vc4::QPUMux lhsMux, int64_t rhsReg,
+            mlir::vc4::QPUMux rhsMux) {
+  createScheduledBundle(
+      builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
+      mlir::vc4::Cond::never,
+      /*waddrAdd=*/32, /*waddrMul=*/33, mlir::vc4::AddOpcode::add,
+      mlir::vc4::MulOpcode::nop, lhsReg, rhsReg, lhsMux, rhsMux,
+      mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
+  return {0, mlir::vc4::QPUMux::r0};
+}
+
+static std::pair<int64_t, mlir::vc4::QPUMux>
+emitVPMQPUDynamicAddress(OpBuilder &builder, Location loc, Operation *source,
+                         int64_t rowReg, std::optional<int64_t> dynamicXReg,
+                         std::optional<int64_t> dynamicSelectorReg) {
+  auto width =
+      llvm::cast<mlir::ssavc4::VPMElemWidthAttr>(source->getAttr("width"));
+  int64_t selectorBits = getVPMQPUSelectorBits(width.getValue());
+  auto [addressReg, addressMux] =
+      emitVPMQPUAddressRow(builder, loc, source, rowReg);
+  if (dynamicXReg) {
+    auto [maskedXReg, maskedXMux] = emitSmallImmBitAndToR1(
+        builder, loc, *dynamicXReg, mlir::vc4::QPUMux::a, 15);
+    auto [shiftedXReg, shiftedXMux] = emitSmallImmShiftLeftToR1(
+        builder, loc, maskedXReg, maskedXMux, selectorBits);
+    auto added = emitAddToR0(builder, loc, addressReg, addressMux, shiftedXReg,
+                             shiftedXMux);
+    addressReg = added.first;
+    addressMux = added.second;
+  }
+  if (dynamicSelectorReg) {
+    int64_t selectorMask =
+        width.getValue() == mlir::ssavc4::VPMElemWidth::w8 ? 3 : 1;
+    auto [maskedSelectorReg, maskedSelectorMux] = emitSmallImmBitAndToR1(
+        builder, loc, *dynamicSelectorReg, mlir::vc4::QPUMux::a, selectorMask);
+    auto added = emitAddToR0(builder, loc, addressReg, addressMux,
+                             maskedSelectorReg, maskedSelectorMux);
+    addressReg = added.first;
+    addressMux = added.second;
+  }
+  return {addressReg, addressMux};
 }
 
 static LogicalResult verifyRestrictedFlagUses(Operation *func) {
@@ -2761,16 +2900,23 @@ selectInstructionTemplates(Operation *func,
       if (hasName(&op, kSSAVC4VPMWriteOpName)) {
         if (failed(verifyVPMResource(func, &op)))
           return failure();
-        if (op.getNumOperands() != 2 && op.getNumOperands() != 3)
+        Value dynamicX = getOptionalSegmentOperand(&op, 2);
+        Value dynamicSelector = getOptionalSegmentOperand(&op, 3);
+        if (op.getNumOperands() < 2 || op.getNumOperands() > 4)
           return op.emitOpError(
-              "requires row, optional dynamic x, and vector value operands");
+              "requires row, vector value, optional dynamic x, and optional "
+              "dynamic subword selector operands");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
           return op.emitOpError(
               "requires an i32 VPM row operand for M3 lowering");
-        if (op.getNumOperands() == 3 &&
-            !op.getOperand(2).getType().isSignlessInteger(32))
+        if (dynamicX && !dynamicX.getType().isSignlessInteger(32))
           return op.emitOpError(
               "requires an i32 dynamic VPM x operand for M3 lowering");
+        if (dynamicSelector &&
+            !dynamicSelector.getType().isSignlessInteger(32))
+          return op.emitOpError(
+              "requires an i32 dynamic VPM subword selector operand for M3 "
+              "lowering");
         if (failed(verifyVPMSubset(&op, op.getOperand(1).getType())))
           return failure();
         InstructionTemplate templ;
@@ -2786,17 +2932,24 @@ selectInstructionTemplates(Operation *func,
       if (hasName(&op, kSSAVC4VPMReadOpName)) {
         if (failed(verifyVPMResource(func, &op)))
           return failure();
-        if ((op.getNumOperands() != 1 && op.getNumOperands() != 2) ||
+        Value dynamicX = getOptionalSegmentOperand(&op, 1);
+        Value dynamicSelector = getOptionalSegmentOperand(&op, 2);
+        if (op.getNumOperands() < 1 || op.getNumOperands() > 3 ||
             op.getNumResults() != 1)
           return op.emitOpError(
-              "requires row, optional dynamic x, and one vector result");
+              "requires row, optional dynamic x, optional dynamic subword "
+              "selector, and one vector result");
         if (!op.getOperand(0).getType().isSignlessInteger(32))
           return op.emitOpError(
               "requires an i32 VPM row operand for M3 lowering");
-        if (op.getNumOperands() == 2 &&
-            !op.getOperand(1).getType().isSignlessInteger(32))
+        if (dynamicX && !dynamicX.getType().isSignlessInteger(32))
           return op.emitOpError(
               "requires an i32 dynamic VPM x operand for M3 lowering");
+        if (dynamicSelector &&
+            !dynamicSelector.getType().isSignlessInteger(32))
+          return op.emitOpError(
+              "requires an i32 dynamic VPM subword selector operand for M3 "
+              "lowering");
         if (failed(verifyVPMSubset(&op, op.getResult(0).getType())))
           return failure();
         Value result = op.getResult(0);
@@ -3968,16 +4121,21 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
                                   const InstructionTemplate &templ,
                                   const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  if (templ.operands.size() != 2 && templ.operands.size() != 3)
+  if (templ.operands.size() < 2 || templ.operands.size() > 4)
     return source->emitError(
         "internal lowering error: VPM write has wrong operand count");
   std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
-  std::optional<int64_t> dynamicXReg;
-  if (templ.operands.size() == 3)
-    dynamicXReg = allocator.lookup(templ, templ.operands[2]);
+  Value dynamicX = getOptionalSegmentOperand(source, 2);
+  std::optional<int64_t> dynamicXReg =
+      dynamicX ? allocator.lookup(templ, dynamicX) : std::optional<int64_t>();
+  Value dynamicSelector = getOptionalSegmentOperand(source, 3);
+  std::optional<int64_t> dynamicSelectorReg =
+      dynamicSelector ? allocator.lookup(templ, dynamicSelector)
+                      : std::optional<int64_t>();
   std::optional<int64_t> valueReg =
       allocator.lookup(templ, templ.operands[1]);
-  if (!rowReg || (templ.operands.size() == 3 && !dynamicXReg) || !valueReg)
+  if (!rowReg || (dynamicX && !dynamicXReg) ||
+      (dynamicSelector && !dynamicSelectorReg) || !valueReg)
     return source->emitOpError() << "uses a VPM row/value that is not defined "
                                     "by a lowerable SSAVC4 op";
 
@@ -3998,17 +4156,8 @@ static LogicalResult emitVPMWrite(OpBuilder &builder,
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
   auto [addressRowReg, addressRowMux] =
-      emitVPMQPUAddressRow(builder, loc, source, *rowReg);
-  if (dynamicXReg) {
-    createScheduledBundle(
-        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
-        mlir::vc4::Cond::never,
-        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
-        mlir::vc4::MulOpcode::nop, addressRowReg, *dynamicXReg, addressRowMux,
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-    addressRowReg = 0;
-    addressRowMux = mlir::vc4::QPUMux::r1;
-  }
+      emitVPMQPUDynamicAddress(builder, loc, source, *rowReg, dynamicXReg,
+                               dynamicSelectorReg);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::write,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,
@@ -4032,16 +4181,20 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
                                  const InstructionTemplate &templ,
                                  const SpillAwareAllocator &allocator) {
   Operation *source = templ.source;
-  if ((templ.operands.size() != 1 && templ.operands.size() != 2) ||
-      !templ.result)
+  if ((templ.operands.size() < 1 || templ.operands.size() > 3) || !templ.result)
     return source->emitError(
         "internal lowering error: VPM read template is malformed");
   std::optional<int64_t> rowReg = allocator.lookup(templ, templ.operands[0]);
-  std::optional<int64_t> dynamicXReg;
-  if (templ.operands.size() == 2)
-    dynamicXReg = allocator.lookup(templ, templ.operands[1]);
+  Value dynamicX = getOptionalSegmentOperand(source, 1);
+  std::optional<int64_t> dynamicXReg =
+      dynamicX ? allocator.lookup(templ, dynamicX) : std::optional<int64_t>();
+  Value dynamicSelector = getOptionalSegmentOperand(source, 2);
+  std::optional<int64_t> dynamicSelectorReg =
+      dynamicSelector ? allocator.lookup(templ, dynamicSelector)
+                      : std::optional<int64_t>();
   std::optional<int64_t> resultReg = allocator.lookup(templ, *templ.result);
-  if (!rowReg || (templ.operands.size() == 2 && !dynamicXReg) || !resultReg)
+  if (!rowReg || (dynamicX && !dynamicXReg) ||
+      (dynamicSelector && !dynamicSelectorReg) || !resultReg)
     return source->emitOpError() << "uses a VPM row/result that is not defined "
                                     "by a lowerable SSAVC4 op";
 
@@ -4062,17 +4215,8 @@ static LogicalResult emitVPMRead(OpBuilder &builder,
   }
   createSplat32LDI(builder, loc, *setupBase, 35);
   auto [addressRowReg, addressRowMux] =
-      emitVPMQPUAddressRow(builder, loc, source, *rowReg);
-  if (dynamicXReg) {
-    createScheduledBundle(
-        builder, loc, mlir::vc4::QPUSignal::none, mlir::vc4::Cond::always,
-        mlir::vc4::Cond::never,
-        /*waddrAdd=*/33, /*waddrMul=*/32, mlir::vc4::AddOpcode::add,
-        mlir::vc4::MulOpcode::nop, addressRowReg, *dynamicXReg, addressRowMux,
-        mlir::vc4::QPUMux::a, mlir::vc4::QPUMux::r0, mlir::vc4::QPUMux::r1);
-    addressRowReg = 0;
-    addressRowMux = mlir::vc4::QPUMux::r1;
-  }
+      emitVPMQPUDynamicAddress(builder, loc, source, *rowReg, dynamicXReg,
+                               dynamicSelectorReg);
   createVPMVCDSetup(builder, loc, mlir::vc4::VPMVCDSide::read,
                     mlir::vc4::Cond::always, mlir::vc4::Cond::never,
                     mlir::vc4::AddOpcode::add, mlir::vc4::MulOpcode::nop,

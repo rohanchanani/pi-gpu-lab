@@ -341,40 +341,44 @@ def VC4Kernel_VPMAllocOp : VC4Kernel_Op<"vpm_alloc", [
 }
 
 def VC4Kernel_VPMWriteFragmentOp : VC4Kernel_Op<"vpm_write_fragment", [
-    MemoryEffects<[MemWrite]>
+    AttrSizedOperandSegments, MemoryEffects<[MemWrite]>
   ]> {
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$row,
                        VC4Kernel_Vector16Data:$value,
                        VC4Kernel_PredType:$pred,
                        Optional<VC4Kernel_I32>:$x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$stride,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
-  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? `,` $value `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? `,` type($value) `,` type($pred)";
+  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $value `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($value) `,` type($pred)";
   let hasVerifier = 1;
 }
 
 def VC4Kernel_VPMReadFragmentOp : VC4Kernel_Op<"vpm_read_fragment", [
-    MemoryEffects<[MemRead]>
+    AttrSizedOperandSegments, MemoryEffects<[MemRead]>
   ]> {
   let arguments = (ins VC4Kernel_VPMTileType:$tile,
                        VC4Kernel_I32:$row,
                        VC4Kernel_PredType:$pred,
                        Optional<VC4Kernel_I32>:$x_value,
+                       Optional<VC4Kernel_I32>:$subword_selector_value,
                        VC4Kernel_VPMOrientationAttr:$orientation,
                        VC4Kernel_VPMWidthAttr:$width,
                        VC4Kernel_VPMSubwordAttr:$subword,
                        OptionalAttr<I32Attr>:$x,
+                       OptionalAttr<I32Attr>:$subword_selector,
                        I32Attr:$stride,
                        OptionalAttr<VC4Kernel_MemoryPathAttr>:$memory_path,
                        OptionalAttr<VC4Kernel_CoherencyAttr>:$coherency);
   let results = (outs VC4Kernel_Vector16Data:$result);
-  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? `,` type($pred) `->` type($result)";
+  let assemblyFormat = "$tile `,` $row (`dynamic_x` $x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $pred attr-dict `:` type($tile) `,` type($row) (`dynamic_x` type($x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($pred) `->` type($result)";
   let hasVerifier = 1;
 }
 

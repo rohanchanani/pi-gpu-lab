@@ -241,40 +241,105 @@ static LogicalResult verifyDynamicVPMXOperand(Operation *op, Value xValue,
   return success();
 }
 
+static bool qpuModeRequiresWordX(VPMOrientation orientation) {
+  return orientation == VPMOrientation::vertical;
+}
+
+static bool qpuModeRequiresSubwordSelector(VPMElemWidth width) {
+  return width != VPMElemWidth::w32;
+}
+
+static int64_t getQPUSelectorMax(VPMElemWidth width) {
+  switch (width) {
+  case VPMElemWidth::w8:
+    return 3;
+  case VPMElemWidth::w16:
+    return 1;
+  case VPMElemWidth::w32:
+    return -1;
+  }
+  return -1;
+}
+
+static LogicalResult verifyDynamicVPMSubwordSelectorOperand(
+    Operation *op, Value selector, VPMElemWidth width) {
+  if (!selector)
+    return success();
+  if (!selector.getType().isSignlessInteger(32))
+    return op->emitOpError(
+        "requires an i32 VPM QPU dynamic subword selector operand");
+  int64_t maxSelector = getQPUSelectorMax(width);
+  std::optional<int64_t> constant = getSplatI32Constant(selector);
+  if (constant && (*constant < 0 || *constant > maxSelector))
+    return op->emitOpError()
+           << "VPM QPU dynamic subword selector constant must be in range [0, "
+           << maxSelector << "]";
+  return success();
+}
+
+static LogicalResult verifyVPMQPUVerticalRowAlignment(Operation *op, Value row,
+                                                      VPMOrientation orientation) {
+  if (orientation != VPMOrientation::vertical)
+    return success();
+  std::optional<int64_t> rowCst = getSplatI32Constant(row);
+  if (rowCst && (*rowCst % 16 != 0))
+    return op->emitOpError(
+        "vertical VPM QPU row constant must be aligned to a 16-row block");
+  return success();
+}
+
 static LogicalResult verifyVPMQPUCoordinates(Operation *op, VPMElemWidth width,
                                              VPMOrientation orientation,
                                              IntegerAttr xAttr, Value xValue,
+                                             IntegerAttr selectorAttr,
+                                             Value selectorValue,
                                              int64_t stride) {
-  if (xAttr && xValue)
+  bool needsWordX = qpuModeRequiresWordX(orientation);
+  bool needsSelector = qpuModeRequiresSubwordSelector(width);
+
+  if (!needsWordX && xValue)
+    return op->emitOpError(
+        "horizontal VPM QPU access does not encode a word x coordinate");
+  if (!needsWordX && xAttr) {
+    bool legacyHorizontalW32Noop =
+        orientation == VPMOrientation::horizontal &&
+        width == VPMElemWidth::w32 && xAttr.getInt() == 0;
+    if (!legacyHorizontalW32Noop)
+      return op->emitOpError(
+          "horizontal VPM QPU access must not specify static x");
+  }
+  if (needsWordX && xAttr && xValue)
     return op->emitOpError(
         "specify either static x or dynamic x operand, not both");
-  if (!xAttr && !xValue)
+  if (needsWordX && !xAttr && !xValue)
     return op->emitOpError("requires static x attr or dynamic x operand");
   if (failed(verifyDynamicVPMXOperand(op, xValue, "VPM QPU dynamic x")))
     return failure();
-  if (xValue) {
-    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w32)
-      return op->emitOpError(
-          "horizontal 32-bit VPM QPU access encodes Y only; dynamic x is not "
-          "meaningful");
-    if (width != VPMElemWidth::w32)
-      return op->emitOpError(
-          "dynamic subword VPM QPU x selectors are unproven/deferred in P12");
-  } else {
+  if (xAttr) {
     int64_t x = xAttr.getInt();
     if (x < 0 || x > 15)
       return op->emitOpError("requires VPM x coordinate in range [0, 15]");
-    if (orientation == VPMOrientation::horizontal &&
-        width == VPMElemWidth::w32 && x != 0)
-      return op->emitOpError("horizontal 32-bit VPM QPU access requires x = 0");
-    if (orientation == VPMOrientation::horizontal &&
-        width == VPMElemWidth::w16 && x > 1)
-      return op->emitOpError("horizontal 16-bit VPM QPU access requires "
-                             "halfword selector x in range [0, 1]");
-    if (orientation == VPMOrientation::horizontal && width == VPMElemWidth::w8 &&
-        x > 3)
-      return op->emitOpError("horizontal 8-bit VPM QPU access requires byte "
-                             "selector x in range [0, 3]");
+  }
+  if (!needsSelector && selectorValue)
+    return op->emitOpError("32-bit VPM QPU access must not specify a dynamic "
+                           "subword selector");
+  if (!needsSelector && selectorAttr)
+    return op->emitOpError(
+        "32-bit VPM QPU access must not specify subword_selector");
+  if (needsSelector && selectorAttr && selectorValue)
+    return op->emitOpError("specify either static subword_selector or dynamic "
+                           "subword selector operand, not both");
+  if (needsSelector && !selectorAttr && !selectorValue)
+    return op->emitOpError("requires subword_selector attr or dynamic subword "
+                           "selector operand");
+  if (failed(
+          verifyDynamicVPMSubwordSelectorOperand(op, selectorValue, width)))
+    return failure();
+  if (selectorAttr) {
+    int64_t maxSelector = getQPUSelectorMax(width);
+    if (selectorAttr.getInt() < 0 || selectorAttr.getInt() > maxSelector)
+      return op->emitOpError()
+             << "subword_selector must be in range [0, " << maxSelector << "]";
   }
   if (stride <= 0 || stride > 63)
     return op->emitOpError("requires VPM stride in range [1, 63]");
@@ -504,9 +569,12 @@ LogicalResult VPMWriteOp::verify() {
   if (lanes != 16)
     return emitOpError(
         "supports only full 16-lane VPM vectors in executable v1");
+  if (failed(verifyVPMQPUVerticalRowAlignment(op, getRow(), getOrientation())))
+    return failure();
   return verifyVPMQPUCoordinates(
       op, getWidth(), getOrientation(), getXAttr(),
-      getOptionalOperandByCount(getOperation(), 2, 2), getStrideAttr().getInt());
+      getXValue(), getSubwordSelectorAttr(), getSubwordSelectorValue(),
+      getStrideAttr().getInt());
 }
 
 LogicalResult VPMReadOp::verify() {
@@ -521,9 +589,12 @@ LogicalResult VPMReadOp::verify() {
   if (lanes != 16)
     return emitOpError(
         "supports only full 16-lane VPM vectors in executable v1");
+  if (failed(verifyVPMQPUVerticalRowAlignment(op, getRow(), getOrientation())))
+    return failure();
   return verifyVPMQPUCoordinates(
       op, getWidth(), getOrientation(), getXAttr(),
-      getOptionalOperandByCount(getOperation(), 1, 1), getStrideAttr().getInt());
+      getXValue(), getSubwordSelectorAttr(), getSubwordSelectorValue(),
+      getStrideAttr().getInt());
 }
 
 LogicalResult MovOp::verify() {

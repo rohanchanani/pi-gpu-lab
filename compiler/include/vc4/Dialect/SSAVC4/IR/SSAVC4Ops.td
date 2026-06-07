@@ -312,7 +312,9 @@ def SSAVC4_TMUReadOp : SSAVC4_Op<"tmu.read"> {
 }
 
 
-def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
+def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write", [
+    AttrSizedOperandSegments
+  ]> {
   let summary = "SSAVC4 effectful shared VPM vector write";
   let description = [{
     Writes one 16-lane vector value to VPM through QPU register-space VPM
@@ -324,18 +326,22 @@ def SSAVC4_VPMWriteOp : SSAVC4_Op<"vpm.write"> {
     AnyType:$row,
     AnyType:$value,
     Optional<AnyType>:$x_value,
+    Optional<AnyType>:$subword_selector_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
     OptionalAttr<I32Attr>:$x,
+    OptionalAttr<I32Attr>:$subword_selector,
     I32Attr:$stride,
     I32Attr:$lanes
   );
-  let assemblyFormat = "$row (`dynamic_x` $x_value^)? `,` $value attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? `,` type($value)";
+  let assemblyFormat = "$row (`dynamic_x` $x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? `,` $value attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `,` type($value)";
   let hasVerifier = 1;
 }
 
-def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
+def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read", [
+    AttrSizedOperandSegments
+  ]> {
   let summary = "SSAVC4 effectful shared VPM vector read";
   let description = [{
     Reads one 16-lane vector value from VPM through QPU register-space VPM
@@ -346,15 +352,17 @@ def SSAVC4_VPMReadOp : SSAVC4_Op<"vpm.read"> {
   let arguments = (ins
     AnyType:$row,
     Optional<AnyType>:$x_value,
+    Optional<AnyType>:$subword_selector_value,
     SSAVC4_VPMOrientationAttr:$orientation,
     SSAVC4_VPMElemWidthAttr:$width,
     SSAVC4_VPMSubwordAttr:$subword,
     OptionalAttr<I32Attr>:$x,
+    OptionalAttr<I32Attr>:$subword_selector,
     I32Attr:$stride,
     I32Attr:$lanes
   );
   let results = (outs AnyType:$result);
-  let assemblyFormat = "$row (`dynamic_x` $x_value^)? attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? `->` type($result)";
+  let assemblyFormat = "$row (`dynamic_x` $x_value^)? (`dynamic_subword_selector` $subword_selector_value^)? attr-dict `:` type($row) (`dynamic_x` type($x_value)^)? (`dynamic_subword_selector` type($subword_selector_value)^)? `->` type($result)";
   let hasVerifier = 1;
 }
 

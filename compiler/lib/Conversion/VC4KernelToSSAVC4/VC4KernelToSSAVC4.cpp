@@ -134,6 +134,31 @@ static Value getOptionalOperandByCount(Operation *op, unsigned dynamicIndex,
   return {};
 }
 
+static Value getOptionalSegmentOperand(Operation *op, unsigned segmentIndex) {
+  if (auto write = llvm::dyn_cast<mlir::vc4kernel::VPMWriteFragmentOp>(op)) {
+    if (segmentIndex == 4)
+      return write.getXValue();
+    if (segmentIndex == 5)
+      return write.getSubwordSelectorValue();
+  }
+  if (auto read = llvm::dyn_cast<mlir::vc4kernel::VPMReadFragmentOp>(op)) {
+    if (segmentIndex == 3)
+      return read.getXValue();
+    if (segmentIndex == 4)
+      return read.getSubwordSelectorValue();
+  }
+  auto segments = op->getAttrOfType<DenseI32ArrayAttr>("operandSegmentSizes");
+  if (!segments)
+    return {};
+  ArrayRef<int32_t> sizes = segments.asArrayRef();
+  if (segmentIndex >= sizes.size() || sizes[segmentIndex] == 0)
+    return {};
+  unsigned operandIndex = 0;
+  for (unsigned i = 0; i < segmentIndex; ++i)
+    operandIndex += static_cast<unsigned>(sizes[i]);
+  return op->getOperand(operandIndex);
+}
+
 static LogicalResult
 verifyRequiredMemoryPolicy(Operation *op,
                            mlir::vc4kernel::MemoryPath expectedPath,
@@ -3379,10 +3404,14 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                        mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
-    Value dynamicX = getOptionalOperandByCount(op, 4, 4);
+    Value dynamicX = getOptionalSegmentOperand(op, 4);
     Value mappedDynamicX = dynamicX ? mapValue(op, dynamicX, state) : Value();
+    Value dynamicSelector = getOptionalSegmentOperand(op, 5);
+    Value mappedDynamicSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
     Value value = mapValue(op, op->getOperand(2), state);
-    if (!row || (dynamicX && !mappedDynamicX) || !value)
+    if (!row || (dynamicX && !mappedDynamicX) ||
+        (dynamicSelector && !mappedDynamicSelector) || !value)
       return failure();
     FailureOr<Value> zeroFilled =
         applyVPMPredicateZeroFill(op, builder, op->getOperand(3), value, state);
@@ -3394,16 +3423,25 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
     if (failed(plannedRow))
       return failure();
     row = *plannedRow;
-    SmallVector<Value, 3> operands{row, value};
+    SmallVector<Value, 4> operands{row, value};
     if (mappedDynamicX)
       operands.push_back(mappedDynamicX);
+    if (mappedDynamicSelector)
+      operands.push_back(mappedDynamicSelector);
     SmallVector<NamedAttribute, 8> attrs{
         getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
         getSSAVC4VPMSubword(builder, op),
         builder.getNamedAttr("stride", op->getAttr("stride")),
-        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))};
+        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+        builder.getNamedAttr(
+            "operandSegmentSizes",
+            builder.getDenseI32ArrayAttr(
+                {1, 1, mappedDynamicX ? 1 : 0,
+                 mappedDynamicSelector ? 1 : 0}))};
     if (Attribute xAttr = op->getAttr("x"))
       attrs.push_back(builder.getNamedAttr("x", xAttr));
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     createOp(builder, op->getLoc(), kSSAVC4VPMWriteOpName, operands, attrs);
     return success();
   }
@@ -3413,25 +3451,38 @@ static LogicalResult lowerBodyOp(Operation *op, OpBuilder &builder,
                                        mlir::vc4kernel::Coherency::vpm_local)))
       return failure();
     Value row = mapValue(op, op->getOperand(1), state);
-    Value dynamicX = getOptionalOperandByCount(op, 3, 3);
+    Value dynamicX = getOptionalSegmentOperand(op, 3);
     Value mappedDynamicX = dynamicX ? mapValue(op, dynamicX, state) : Value();
-    if (!row || (dynamicX && !mappedDynamicX))
+    Value dynamicSelector = getOptionalSegmentOperand(op, 4);
+    Value mappedDynamicSelector =
+        dynamicSelector ? mapValue(op, dynamicSelector, state) : Value();
+    if (!row || (dynamicX && !mappedDynamicX) ||
+        (dynamicSelector && !mappedDynamicSelector))
       return failure();
     FailureOr<Value> plannedRow =
         applyVPMTileBase(op, builder, op->getOperand(0), row, state);
     if (failed(plannedRow))
       return failure();
     row = *plannedRow;
-    SmallVector<Value, 2> operands{row};
+    SmallVector<Value, 3> operands{row};
     if (mappedDynamicX)
       operands.push_back(mappedDynamicX);
+    if (mappedDynamicSelector)
+      operands.push_back(mappedDynamicSelector);
     SmallVector<NamedAttribute, 8> attrs{
         getSSAVC4VPMOrientation(builder, op), getSSAVC4VPMWidth(builder, op),
         getSSAVC4VPMSubword(builder, op),
         builder.getNamedAttr("stride", op->getAttr("stride")),
-        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16))};
+        builder.getNamedAttr("lanes", builder.getI32IntegerAttr(16)),
+        builder.getNamedAttr(
+            "operandSegmentSizes",
+            builder.getDenseI32ArrayAttr(
+                {1, mappedDynamicX ? 1 : 0,
+                 mappedDynamicSelector ? 1 : 0}))};
     if (Attribute xAttr = op->getAttr("x"))
       attrs.push_back(builder.getNamedAttr("x", xAttr));
+    if (Attribute selectorAttr = op->getAttr("subword_selector"))
+      attrs.push_back(builder.getNamedAttr("subword_selector", selectorAttr));
     Value read = createOpWithResult(builder, op->getLoc(),
                                     kSSAVC4VPMReadOpName, operands, attrs,
                                     op->getResult(0).getType());

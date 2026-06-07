@@ -12,6 +12,7 @@ module {
   } {
     %c0 = arith.constant 0 : i32
     %x = arith.constant 3 : i32
+    %sel = arith.constant 1 : i32
     %rows = arith.constant 1 : i32
     %cols = arith.constant 16 : i32
     %pitch = arith.constant 64 : i32
@@ -26,6 +27,14 @@ module {
 
     // CHECK: vc4kernel.vpm_read_fragment %{{.*}}, %{{.*}} dynamic_x %{{.*}}, %{{.*}} {
     %read = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %x, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32, !vc4kernel.pred<16> -> vector<16xi32>
+
+    // CHECK: vc4kernel.vpm_write_fragment %{{.*}}, %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}}, %{{.*}} {
+    // CHECK-SAME: width = #vc4kernel.vpm_width<w16>
+    vc4kernel.vpm_write_fragment %tile, %c0 dynamic_subword_selector %sel, %value, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_subword_selector i32, vector<16xi32>, !vc4kernel.pred<16>
+
+    // CHECK: vc4kernel.vpm_read_fragment %{{.*}}, %{{.*}} dynamic_x %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}} {
+    // CHECK-SAME: width = #vc4kernel.vpm_width<w8>
+    %read_sub = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %x dynamic_subword_selector %sel, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<laned>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32 dynamic_subword_selector i32, !vc4kernel.pred<16> -> vector<16xi32>
 
     // CHECK: vc4kernel.vdr_load_to_vpm %{{.*}}, %{{.*}}, %{{.*}}, %{{.*}} dynamic_dst_x %{{.*}} {
     vc4kernel.vdr_load_to_vpm %in, %c0, %tile, %c0 dynamic_dst_x %x {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32

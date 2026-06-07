@@ -5,6 +5,10 @@
 // CHECK-NOT: x =
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
 // CHECK: ssavc4.vpm.read %{{.*}} dynamic_x %{{.*}} {
+// CHECK: ssavc4.vpm.write %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w16>
+// CHECK: ssavc4.vpm.read %{{.*}} dynamic_x %{{.*}} dynamic_subword_selector %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w8>
 // CHECK: ssavc4.vdr.load %{{.*}}, %{{.*}} dynamic_x %{{.*}} {
 // CHECK-NOT: vpm_x =
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
@@ -48,6 +52,7 @@ module {
     warps_per_block = 1 : i32
   } {
     %c0 = arith.constant 0 : i32
+    %sel = arith.constant 1 : i32
     %c1 = arith.constant 1 : i32
     %c16 = arith.constant 16 : i32
     %c64 = arith.constant 64 : i32
@@ -56,6 +61,8 @@ module {
     %tile = vc4kernel.vpm_alloc {rows = 4 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     vc4kernel.vpm_write_fragment %tile, %c0 dynamic_x %x_arg, %value, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32, vector<16xi32>, !vc4kernel.pred<16>
     %read = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %x_arg, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32, !vc4kernel.pred<16> -> vector<16xi32>
+    vc4kernel.vpm_write_fragment %tile, %c0 dynamic_subword_selector %sel, %value, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_subword_selector i32, vector<16xi32>, !vc4kernel.pred<16>
+    %read_sub = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %x_arg dynamic_subword_selector %sel, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<laned>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32 dynamic_subword_selector i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.vdr_load_to_vpm %in, %c0, %tile, %c0 dynamic_dst_x %x_arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32
     vc4kernel.vdr_load_to_vpm %in, %c0, %tile, %c0 dynamic_dst_x %x_arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 64 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32
     vc4kernel.vdr_load_rect_to_vpm %in, %c0, %tile, %c0 dynamic_dst_x %x_arg, %c1, %c16, %c64 {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32, i32, i32, i32

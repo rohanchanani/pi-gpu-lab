@@ -8,6 +8,11 @@
 // CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // CHECK: vc4.qpu.vpmvcd_setup
 // CHECK-SAME: side = #vc4.vpmvcd_side<read>
+// Dynamic QPU subword selector is masked and composed into ADDR.
+// CHECK: op_add = #vc4.add_opcode<and>
+// CHECK: op_add = #vc4.add_opcode<add>
+// CHECK: vc4.qpu.vpmvcd_setup
+// CHECK-SAME: side = #vc4.vpmvcd_side<write>
 // Dynamic VDR X is masked and ORed into the VDR setup path.
 // CHECK: op_add = #vc4.add_opcode<and>
 // CHECK: op_add = #vc4.add_opcode<or>
@@ -57,12 +62,14 @@ ssavc4.module @dynamic_vpm_coordinate_setup {
     %addr = ssavc4.uniform.read 0 : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 3 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %cols = ssavc4.load_imm <splat32> {value = 8 : i32} : i32
     %pitch = ssavc4.load_imm <splat32> {value = 64 : i32} : i32
     %value = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
     ssavc4.vpm.write %row dynamic_x %x, %value {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32, vector<16xi32>
     %read = ssavc4.vpm.read %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32 -> vector<16xi32>
+    ssavc4.vpm.write %row dynamic_subword_selector %sel, %value {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_subword_selector i32, vector<16xi32>
     ssavc4.vdr.load %addr, %row dynamic_x %x {
       width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32,
       nrows = 1 : i32,

@@ -5,6 +5,10 @@
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<vertical>
 // CHECK-NOT: x =
 // CHECK: ssavc4.vpm.read %{{.*}} dynamic_x %{{.*}} {
+// CHECK: ssavc4.vpm.write %{{.*}} dynamic_subword_selector %{{.*}}, %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w16>
+// CHECK: ssavc4.vpm.read %{{.*}} dynamic_x %{{.*}} dynamic_subword_selector %{{.*}} {
+// CHECK-SAME: width = #ssavc4.vpm_elem_width<w8>
 // CHECK: ssavc4.vdr.load %{{.*}}, %{{.*}} dynamic_x %{{.*}} {
 // CHECK-SAME: orientation = #ssavc4.vpm_orientation<horizontal>
 // CHECK: ssavc4.vdr.load %{{.*}}, %{{.*}} dynamic_x %{{.*}} {
@@ -58,12 +62,15 @@ ssavc4.module @dynamic_vpm_coordinates {
     %addr = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 3 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %rows = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     %cols = ssavc4.load_imm <splat32> {value = 16 : i32} : i32
     %pitch = ssavc4.load_imm <splat32> {value = 64 : i32} : i32
     %value = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
     ssavc4.vpm.write %row dynamic_x %x, %value {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32, vector<16xi32>
     %read = ssavc4.vpm.read %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32 -> vector<16xi32>
+    ssavc4.vpm.write %row dynamic_subword_selector %sel, %value {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_subword_selector i32, vector<16xi32>
+    %read_sub = ssavc4.vpm.read %row dynamic_x %x dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<laned>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 dynamic_x i32 dynamic_subword_selector i32 -> vector<16xi32>
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 64 : i32, orientation = #ssavc4.vpm_orientation<vertical>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
     ssavc4.vdr.load_rect.dynamic %addr, %row dynamic_dst_x %x, %rows, %cols, %pitch {max_rows = 1 : i32, max_cols = 16 : i32, elem_bytes = 4 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, vpm_pitch = 1 : i32, zero_fill = true} : i32, i32 dynamic_dst_x i32, i32, i32, i32

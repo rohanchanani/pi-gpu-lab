@@ -7,6 +7,7 @@
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelDialect.h"
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelTypes.h"
 
+#include "mlir/Bytecode/BytecodeOpInterface.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/IR/Operation.h"

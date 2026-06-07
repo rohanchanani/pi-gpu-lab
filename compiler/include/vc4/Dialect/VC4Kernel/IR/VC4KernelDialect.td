@@ -13,7 +13,7 @@ def VC4Kernel_Dialect : Dialect {
     TMU/VDR/VPM/VDW memory path choices, logical launch identity, VPM
     resources, barriers, and scalar CFG.
   }];
-  let usePropertiesForAttributes = 0;
+  let usePropertiesForAttributes = 1;
   let useDefaultAttributePrinterParser = 1;
   let useDefaultTypePrinterParser = 1;
 }

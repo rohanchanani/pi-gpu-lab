@@ -4,7 +4,7 @@ ssavc4.module @bad_qpu_horizontal_dynamic_x {
   ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
-    // CHECK: horizontal 32-bit VPM QPU access encodes Y only; dynamic x is not meaningful
+    // CHECK: horizontal VPM QPU access does not encode a word x coordinate
     %read = ssavc4.vpm.read %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_x i32 -> vector<16xi32>
     ssavc4.thread_end
   }
@@ -16,7 +16,7 @@ ssavc4.module @bad_qpu_subword_dynamic_x {
   ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
-    // CHECK: dynamic subword VPM QPU x selectors are unproven/deferred in P12
+    // CHECK: horizontal VPM QPU access does not encode a word x coordinate
     %read = ssavc4.vpm.read %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_x i32 -> vector<16xi32>
     ssavc4.thread_end
   }
@@ -31,6 +31,42 @@ ssavc4.module @bad_dma_subword_dynamic_x {
     %x = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
     // CHECK: dynamic subword VPM DMA x selectors are unproven/deferred in P12
     ssavc4.vdr.load %addr, %row dynamic_x %x {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, row_len = 16 : i32, nrows = 1 : i32, memory_pitch_bytes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>, vpm_pitch = 1 : i32} : i32, i32 dynamic_x i32
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_qpu_subword_missing_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    // CHECK: requires subword_selector attr or dynamic subword selector operand
+    %read = ssavc4.vpm.read %row {width = #ssavc4.vpm_elem_width<w16>, subword = #ssavc4.vpm_subword<packed>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 -> vector<16xi32>
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_qpu_subword_both_selectors {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    %value = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    ssavc4.vpm.write %row dynamic_subword_selector %sel, %value {width = #ssavc4.vpm_elem_width<w8>, subword = #ssavc4.vpm_subword<packed>, subword_selector = 0 : i32, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_subword_selector i32, vector<16xi32>
+    ssavc4.thread_end
+  }
+}
+
+// -----
+
+ssavc4.module @bad_qpu_w32_dynamic_selector {
+  ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
+    %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
+    %sel = ssavc4.load_imm <splat32> {value = 1 : i32} : i32
+    // CHECK: 32-bit VPM QPU access must not specify a dynamic subword selector
+    %read = ssavc4.vpm.read %row dynamic_subword_selector %sel {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 dynamic_subword_selector i32 -> vector<16xi32>
     ssavc4.thread_end
   }
 }
@@ -55,7 +91,7 @@ ssavc4.module @bad_vpm_write_neither_x {
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     %value = ssavc4.load_imm <splat32> {value = 7 : i32} : vector<16xi32>
     // CHECK: requires static x attr or dynamic x operand
-    ssavc4.vpm.write %row, %value {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32, vector<16xi32>
+    ssavc4.vpm.write %row, %value {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32, vector<16xi32>
     ssavc4.thread_end
   }
 }
@@ -78,7 +114,7 @@ ssavc4.module @bad_vpm_read_neither_x {
   ssavc4.func @kernel() attributes {kernel, threading = #vc4.threading_mode<single>} {
     %row = ssavc4.load_imm <splat32> {value = 0 : i32} : i32
     // CHECK: requires static x attr or dynamic x operand
-    %read = ssavc4.vpm.read %row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<horizontal>} : i32 -> vector<16xi32>
+    %read = ssavc4.vpm.read %row {width = #ssavc4.vpm_elem_width<w32>, subword = #ssavc4.vpm_subword<none>, stride = 1 : i32, lanes = 16 : i32, orientation = #ssavc4.vpm_orientation<vertical>} : i32 -> vector<16xi32>
     ssavc4.thread_end
   }
 }

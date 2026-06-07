@@ -10,7 +10,7 @@ module {
     %c0 = arith.constant 0 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: horizontal 32-bit VPM QPU access encodes Y only; dynamic x is not meaningful
+    // CHECK: horizontal VPM QPU access does not encode a word x coordinate
     %read = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %arg, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
@@ -28,7 +28,7 @@ module {
     %c0 = arith.constant 0 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: dynamic subword VPM QPU x selectors are unproven/deferred in P12
+    // CHECK: horizontal VPM QPU access does not encode a word x coordinate
     %read = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_x %arg, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_x i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
@@ -50,6 +50,61 @@ module {
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
     // CHECK: dynamic subword VDR DMA x selectors are unproven/deferred in P12
     vc4kernel.vdr_load_to_vpm %ptr, %c0, %tile, %c0 dynamic_dst_x %arg {rows = 1 : i32, cols = 16 : i32, global_stride_bytes = 16 : i32, elem_bytes = 1 : i32, orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, vpm_pitch = 1 : i32, memory_path = #vc4kernel.memory_path<vdr_global_to_vpm>, coherency = #vc4kernel.coherency<dma_ordered>} : i32, i32, !vc4kernel.vpm_tile, i32 dynamic_dst_x i32
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @qpu_subword_missing_selector() attributes {
+    public_name = "qpu_subword_missing_selector",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [],
+    warps_per_block = 1 : i32
+  } {
+    %c0 = arith.constant 0 : i32
+    %full = vc4kernel.pred.full : !vc4kernel.pred<16>
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: subword_selector attribute or dynamic subword selector operand is required
+    %read = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w16>, subword = #vc4kernel.vpm_subword<packed>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @qpu_subword_both_selectors(%arg : i32) attributes {
+    public_name = "qpu_subword_both_selectors",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [{name = "arg", kind = "scalar", direction = "by_value", type = "i32"}],
+    warps_per_block = 1 : i32
+  } {
+    %c0 = arith.constant 0 : i32
+    %full = vc4kernel.pred.full : !vc4kernel.pred<16>
+    %value = vc4kernel.fragment_const {value = dense<7> : vector<16xi32>} : vector<16xi32>
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: specify either static subword_selector or dynamic subword selector operand, not both
+    vc4kernel.vpm_write_fragment %tile, %c0 dynamic_subword_selector %arg, %value, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w8>, subword = #vc4kernel.vpm_subword<packed>, subword_selector = 0 : i32, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_subword_selector i32, vector<16xi32>, !vc4kernel.pred<16>
+    vc4kernel.return
+  }
+}
+
+// -----
+
+module {
+  vc4kernel.kernel @qpu_w32_dynamic_selector(%arg : i32) attributes {
+    public_name = "qpu_w32_dynamic_selector",
+    schedule_mode = #vc4kernel.schedule_mode<independent_vector>,
+    arg_attrs = [{name = "arg", kind = "scalar", direction = "by_value", type = "i32"}],
+    warps_per_block = 1 : i32
+  } {
+    %c0 = arith.constant 0 : i32
+    %full = vc4kernel.pred.full : !vc4kernel.pred<16>
+    %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
+    // CHECK: 32-bit VPM QPU access must not specify a dynamic subword selector
+    %read = vc4kernel.vpm_read_fragment %tile, %c0 dynamic_subword_selector %arg, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32 dynamic_subword_selector i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
 }
@@ -93,8 +148,8 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %value = vc4kernel.fragment_const {value = dense<7> : vector<16xi32>} : vector<16xi32>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: x attribute or dynamic x operand is required
-    vc4kernel.vpm_write_fragment %tile, %c0, %value, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
+    // CHECK: static x attribute or dynamic x operand is required
+    vc4kernel.vpm_write_fragment %tile, %c0, %value, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, vector<16xi32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }
@@ -119,8 +174,8 @@ module {
     %c0 = arith.constant 0 : i32
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %tile = vc4kernel.vpm_alloc {rows = 1 : i32, elem_bytes = 4 : i32} : !vc4kernel.vpm_tile
-    // CHECK: x attribute or dynamic x operand is required
-    %read = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<horizontal>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
+    // CHECK: static x attribute or dynamic x operand is required
+    %read = vc4kernel.vpm_read_fragment %tile, %c0, %full {orientation = #vc4kernel.vpm_orientation<vertical>, width = #vc4kernel.vpm_width<w32>, subword = #vc4kernel.vpm_subword<none>, stride = 1 : i32, memory_path = #vc4kernel.memory_path<vpm_qpu>, coherency = #vc4kernel.coherency<vpm_local>} : !vc4kernel.vpm_tile, i32, !vc4kernel.pred<16> -> vector<16xi32>
     vc4kernel.return
   }
 }
