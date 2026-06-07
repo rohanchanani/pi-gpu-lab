@@ -1,0 +1,22 @@
+{
+  "name": "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 5,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_dynamic_vpm_pingpong": 1,
+    "saw_dynamic_vpm_row": 1,
+    "saw_dynamic_vpm_x": 1,
+    "saw_dynamic_subword_selector": 1,
+    "saw_vdr_dynamic_subword_selector": 1,
+    "saw_vdw_dynamic_subword_selector": 1,
+    "saw_runtime_loop": 1,
+    "saw_iters0": 1,
+    "saw_iters4": 1,
+    "saw_tail_cols": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_to_vpm": 1
+  }
+}

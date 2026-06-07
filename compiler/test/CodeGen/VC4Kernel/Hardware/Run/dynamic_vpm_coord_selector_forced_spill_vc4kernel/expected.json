@@ -1,0 +1,19 @@
+{
+  "name": "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_spill_frame_nonzero": 1,
+    "saw_dynamic_vpm_row": 1,
+    "saw_dynamic_vpm_x": 1,
+    "saw_dynamic_subword_selector": 1,
+    "saw_vdr_dynamic_subword_selector": 1,
+    "saw_vdw_dynamic_subword_selector": 1,
+    "saw_vdw_preserve": 1,
+    "hidden_spill_reload_tmu_hits": 0,
+    "no_tmu_to_vpm": 1
+  }
+}

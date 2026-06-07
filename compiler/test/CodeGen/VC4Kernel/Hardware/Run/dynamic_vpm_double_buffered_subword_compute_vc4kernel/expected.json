@@ -1,0 +1,24 @@
+{
+  "name": "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_vdr_dynamic_subword_selector": 1,
+    "saw_dynamic_vpm_row": 1,
+    "saw_dynamic_vpm_x": 1,
+    "saw_dynamic_subword_selector": 1,
+    "saw_vpm_qpu_dynamic_selector_read": 1,
+    "saw_fragment_unpack": 1,
+    "saw_fragment_alu": 1,
+    "saw_cmp_select": 1,
+    "saw_fragment_reduce": 1,
+    "saw_dynamic_rotate": 1,
+    "saw_vdr_to_vpm_sidepath": 1,
+    "saw_vdw_dynamic_subword_selector": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_to_vpm": 1
+  }
+}
