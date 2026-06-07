@@ -74,9 +74,13 @@ rotate with TMU safe loads, VDR/VPM tile paths, finite reductions, P9 subword
 side paths, P10 SFU side paths, and VDW preserve stores.
 
 P12 adds `dynamic_vpm_pingpong_coord_selector_loop_vc4kernel`,
+`dynamic_vpm_pingpong_qpu_read_vc4kernel`,
 `dynamic_vpm_double_buffered_subword_compute_vc4kernel`, and
 `dynamic_vpm_coord_selector_forced_spill_vc4kernel` to the lock-mode mixed
-suite, followed by the final P12 mixed acceptance fixtures
+suite. The first ping-pong fixture is a VDR/VPM/VDW copy-path proof and does
+not claim QPU read coverage; `dynamic_vpm_pingpong_qpu_read_vc4kernel` is the
+checked runtime ping-ponged VPM QPU read proof. P12 then adds the final mixed
+acceptance fixtures
 `mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel` and
 `mixed_double_buffered_vpm_tiles_vc4kernel`. Word-X and subword selector are
 separate fields. Dynamic selector is not dynamic subword mode, and setup-field

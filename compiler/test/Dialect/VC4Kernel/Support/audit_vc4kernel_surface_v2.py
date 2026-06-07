@@ -413,6 +413,7 @@ P12_REQUIRED_ISOLATED_FIXTURES = {
 }
 P12_REQUIRED_MIXED_FIXTURES = {
     "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
+    "dynamic_vpm_pingpong_qpu_read_vc4kernel",
     "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
     "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
     "mixed_dynamic_vpm_coordinates_rect_loop_vc4kernel",
@@ -423,6 +424,7 @@ P12_REQUIRED_MIXED_FEATURES = {
     "p12_dynamic_vdr_coord_selector",
     "p12_dynamic_vdw_coord_selector",
     "p12_double_buffered_dynamic_vpm_tiles",
+    "p12_checked_pingpong_qpu_read",
     "p12_dynamic_coord_selector_rejects",
     "p12_mixed_pingpong_coord_selector_loop",
     "p12_mixed_double_buffered_subword_compute",
@@ -3818,6 +3820,19 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
             "saw_vdw_preserve",
             "no_tmu_to_vpm",
         ],
+        "dynamic_vpm_pingpong_qpu_read_vc4kernel": [
+            "saw_dynamic_vpm_pingpong",
+            "saw_pingpong_qpu_write",
+            "saw_pingpong_qpu_read",
+            "saw_checked_qpu_read_output",
+            "saw_qpu_dynamic_subword_selector",
+            "saw_fragment_pack",
+            "saw_fragment_unpack",
+            "saw_cmp_select",
+            "saw_fragment_reduce",
+            "saw_vdw_preserve",
+            "no_tmu_to_vpm",
+        ],
         "dynamic_vpm_double_buffered_subword_compute_vc4kernel": [
             "saw_vdr_dynamic_subword_selector",
             "saw_dynamic_vpm_row",
@@ -3895,12 +3910,14 @@ def audit_p12_dynamic_vpm_coord_lock(repo_root, matrix):
         for prefix in PRODUCER_OR_LOWER_HALF_OP_PREFIXES:
             if prefix in input_text:
                 fail(f"P12 lock mixed VC4Kernel fixture {name} contains {prefix}")
-        for token in [
+        required_tokens = [
             "dynamic_subword_selector",
-            "#vc4kernel.memory_path<vdr_global_to_vpm>",
             "#vc4kernel.memory_path<vdw_global_store>",
             "#vc4kernel.inactive_store<preserve>",
-        ]:
+        ]
+        if name != "dynamic_vpm_pingpong_qpu_read_vc4kernel":
+            required_tokens.append("#vc4kernel.memory_path<vdr_global_to_vpm>")
+        for token in required_tokens:
             if token not in input_text:
                 fail(f"P12 lock mixed fixture {name} missing token {token}")
         for key in fixtures[name]["required_result_fields"]:

@@ -602,6 +602,51 @@
       ]
     },
     {
+      "name": "dynamic_vpm_pingpong_qpu_read_vc4kernel",
+      "dialect": "vc4kernel",
+      "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/dynamic_vpm_pingpong_qpu_read_vc4kernel",
+      "runner_kind": "vc4kernel_candidate",
+      "status": "implemented",
+      "real_world_role": "Checked runtime ping-pong VPM QPU read path: a dynamic QPU VPM selector write populates a ping-ponged tile, then a dynamic QPU VPM selector read feeds unpack/cmp/select/reduce and checked VDW preserve output.",
+      "feature_tags": [
+        "p3_i32_cmp",
+        "p4_i32_reduce",
+        "p5_scalar_i32_control_address",
+        "p6_memory_path_coherency",
+        "p8_vdw_preserve_register",
+        "p9_fragment_unpack",
+        "p12_dynamic_vpm_qpu_coord_selector",
+        "p12_double_buffered_dynamic_vpm_tiles",
+        "p12_checked_pingpong_qpu_read"
+      ],
+      "required_result_fields": [
+        "status",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "saw_dynamic_vpm_pingpong",
+        "saw_pingpong_qpu_write",
+        "saw_pingpong_qpu_read",
+        "saw_checked_qpu_read_output",
+        "saw_qpu_dynamic_subword_selector",
+        "saw_fragment_pack",
+        "saw_fragment_unpack",
+        "saw_cmp_select",
+        "saw_fragment_reduce",
+        "saw_runtime_loop",
+        "saw_iters1",
+        "saw_iters4",
+        "saw_vdw_preserve",
+        "no_tmu_to_vpm"
+      ],
+      "expected_cases_summary": "Runtime loop counts 1, 2, 3, and 4 with alternating ping-pong rows/selectors; each loop writes through QPU VPM dynamic selector, then the final ping-ponged buffer is read by QPU VPM dynamic selector and the read value is checked directly and through a reduction.",
+      "triage_feature_bands": [
+        "dynamic_vpm_pingpong",
+        "qpu_dynamic_selector_read",
+        "checked_qpu_read_output"
+      ]
+    },
+    {
       "name": "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
       "dialect": "vc4kernel",
       "path": "compiler/test/CodeGen/VC4Kernel/Hardware/Run/dynamic_vpm_double_buffered_subword_compute_vc4kernel",
@@ -1266,7 +1311,8 @@
       "verification_kind": "hardware_mixed",
       "covered_by": [
         "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
-        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+        "dynamic_vpm_pingpong_qpu_read_vc4kernel"
       ],
       "required": true,
       "status": "implemented"
@@ -1302,7 +1348,18 @@
       "covered_by": [
         "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
         "dynamic_vpm_double_buffered_subword_compute_vc4kernel",
-        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+        "dynamic_vpm_pingpong_qpu_read_vc4kernel"
+      ],
+      "required": true,
+      "status": "implemented"
+    },
+    {
+      "id": "p12_checked_pingpong_qpu_read",
+      "phase": "P12",
+      "verification_kind": "hardware_mixed",
+      "covered_by": [
+        "dynamic_vpm_pingpong_qpu_read_vc4kernel"
       ],
       "required": true,
       "status": "implemented"
@@ -1420,7 +1477,8 @@
       "covered_by": [
         "mixed_double_buffered_vpm_tiles_vc4kernel",
         "dynamic_vpm_pingpong_coord_selector_loop_vc4kernel",
-        "dynamic_vpm_coord_selector_forced_spill_vc4kernel"
+        "dynamic_vpm_coord_selector_forced_spill_vc4kernel",
+        "dynamic_vpm_pingpong_qpu_read_vc4kernel"
       ],
       "required": true,
       "status": "implemented"

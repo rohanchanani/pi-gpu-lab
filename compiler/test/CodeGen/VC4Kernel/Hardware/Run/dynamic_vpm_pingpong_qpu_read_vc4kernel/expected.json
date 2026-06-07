@@ -1,0 +1,24 @@
+{
+  "name": "dynamic_vpm_pingpong_qpu_read_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 4,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "saw_dynamic_vpm_pingpong": 1,
+    "saw_pingpong_qpu_write": 1,
+    "saw_pingpong_qpu_read": 1,
+    "saw_checked_qpu_read_output": 1,
+    "saw_qpu_dynamic_subword_selector": 1,
+    "saw_fragment_pack": 1,
+    "saw_fragment_unpack": 1,
+    "saw_cmp_select": 1,
+    "saw_fragment_reduce": 1,
+    "saw_runtime_loop": 1,
+    "saw_iters1": 1,
+    "saw_iters4": 1,
+    "saw_vdw_preserve": 1,
+    "no_tmu_to_vpm": 1
+  }
+}
