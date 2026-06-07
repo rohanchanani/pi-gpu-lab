@@ -1465,7 +1465,7 @@ static std::string formatWriteAddress(int64_t address, bool forAddALU,
   case 52:
     return "recip";
   case 53:
-    return "rsqrt";
+    return "recipsqrt";
   case 54:
     return "exp";
   case 55:

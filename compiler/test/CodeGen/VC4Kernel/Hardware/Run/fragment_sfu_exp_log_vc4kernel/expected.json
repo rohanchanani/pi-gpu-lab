@@ -1,0 +1,24 @@
+{
+  "name": "fragment_sfu_exp_log_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 1,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 1,
+    "lanes": 16,
+    "saw_sfu": 1,
+    "saw_approx_policy": 1,
+    "saw_exp": 1,
+    "saw_log": 1,
+    "saw_domain_guard": 1,
+    "base2_semantics": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.256,
+    "max_rel_diff": 0.002
+  }
+}

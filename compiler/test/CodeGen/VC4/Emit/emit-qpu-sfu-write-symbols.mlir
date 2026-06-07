@@ -4,7 +4,7 @@
 // RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/qpu_sfu_write_symbols.qasm
 
 // QASM: mov recip, ra0
-// QASM-NEXT: mov rsqrt, ra0
+// QASM-NEXT: mov recipsqrt, ra0
 // QASM-NEXT: mov exp, ra0
 // QASM-NEXT: mov log, ra0
 // QASM-NEXT: thrend
