@@ -1,0 +1,19 @@
+{
+  "name": "value_store_preserve_sentinel_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "elements_checked": 145,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 33,
+    "max_coverage_n": 192,
+    "buffer_n": 256,
+    "output_hash": 853231441,
+    "runtime_allocations": 1,
+    "runtime_launches": 8
+  }
+}

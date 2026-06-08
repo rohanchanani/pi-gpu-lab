@@ -123,6 +123,21 @@ static int checksum_low16(uint32_t n) {
     return checksum;
 }
 
+static uint32_t rotl32_local(uint32_t value, uint32_t amount) {
+    amount &= 31u;
+    return amount == 0u ? value : ((value << amount) | (value >> (32u - amount)));
+}
+
+static uint32_t hash_output_bits(uint32_t n) {
+    uint32_t hash = 2166136261u ^ n;
+    for (uint32_t i = 0; i < n; i++) {
+        uint32_t index = VALUE_COPY_F32_TAIL_VC4VALUE_GUARD + i;
+        hash ^= float_to_bits(y_values[index]) + 0x9e3779b9u + (i << 6) + (i >> 2);
+        hash = rotl32_local(hash, 5u) * 16777619u;
+    }
+    return hash;
+}
+
 void notmain(void) {
     struct vc4_program *program = 0;
     if (vc4_program_create(&program, 0) < 0 || !program)
@@ -139,6 +154,7 @@ void notmain(void) {
     int sentinel_mismatches = 0;
     int launch_failures = 0;
     int checksum_accum = 0;
+    uint32_t output_hash = 2166136261u;
     float max_abs_diff_overall = 0.0f;
     int start = timer_get_usec();
     vc4_dim3 block = vc4_m2_dim3(VALUE_COPY_F32_TAIL_VC4VALUE_ELEMENTS_PER_WAVE, 1, 1);
@@ -171,21 +187,23 @@ void notmain(void) {
         verify_results(n, &mismatches, &max_abs_diff);
         int case_sentinels = verify_sentinel_region(n);
         int checksum = checksum_low16(n);
+        output_hash ^= hash_output_bits(n) + 0x9e3779b9u + (case_id << 6) + (case_id >> 2);
+        output_hash = rotl32_local(output_hash, 7u);
         if (max_abs_diff > max_abs_diff_overall)
             max_abs_diff_overall = max_abs_diff;
         total_mismatches += mismatches;
         sentinel_mismatches += case_sentinels;
         checksum_accum += checksum;
-        printk("VALUE_COPY_F32_TAIL_VC4VALUE_CASE case=%d n=%d waves=%d coverage=%d buffer_n=%d mismatches=%d sentinel_mismatches=%d checksum=%d max_abs_diff=%f\n",
+        printk("VALUE_COPY_F32_TAIL_VC4VALUE_CASE case=%d n=%d waves=%d coverage=%d buffer_n=%d mismatches=%d sentinel_mismatches=%d checksum=%d hash=%x max_abs_diff=%f\n",
                (int)case_id, (int)n, (int)waves, (int)rounded_coverage,
                VALUE_COPY_F32_TAIL_VC4VALUE_BUFFER_N, mismatches, case_sentinels,
-               checksum, max_abs_diff);
+               checksum, hash_output_bits(n), max_abs_diff);
     }
 
     int elapsed = timer_get_usec() - start;
     const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 &&
                           launch_failures == 0) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=value_copy_f32_tail_vc4value status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d checksum_accum=%d max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=value_copy_f32_tail_vc4value status=%s cases=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d checksum_accum=%d output_hash=%u max_abs_diff=%f runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
            status, (int)(sizeof(test_sizes) / sizeof(test_sizes[0])),
            total_mismatches, sentinel_mismatches, launch_failures,
            VALUE_COPY_F32_TAIL_VC4VALUE_ACTIVE_QPUS,
@@ -193,7 +211,7 @@ void notmain(void) {
            VALUE_COPY_F32_TAIL_VC4VALUE_MAX_N,
            VALUE_COPY_F32_TAIL_VC4VALUE_MAX_COVERAGE_N,
            VALUE_COPY_F32_TAIL_VC4VALUE_BUFFER_N, checksum_accum,
-           max_abs_diff_overall, 2,
+           output_hash, max_abs_diff_overall, 2,
            (int)(sizeof(test_sizes) / sizeof(test_sizes[0])), elapsed);
 
     vc4Free(program, x_dev);

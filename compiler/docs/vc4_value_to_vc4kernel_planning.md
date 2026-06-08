@@ -22,6 +22,24 @@ READY_FOR_HARDWARE_PHASE5G=YES
 READY_FOR_TRITON=NO
 ```
 
+Phase 5g hardware note:
+
+```text
+PHASE5G_VALUE_COPY_F32_TAIL_HARDWARE_SMOKE=YES
+PHASE5G_ACTIVE_QPUS_1_ONLY=YES
+PHASE5G_ORIGINAL_ACTIVE_QPUS_12_FIXTURE_EXPOSED_OVERLAUNCH_TAIL_MASK_GAP=YES
+PHASE5G_NARROWED_TO_ONE_LOGICAL_VECTOR16_REQUEST_PER_BLOCK=YES
+PHASE5G_NOT_SUFFICIENT_FOR_FINAL_PHASE5_TAIL_MEMORY_COVERAGE=YES
+PHASE5H_OR_PHASE5J_REQUIRES_MULTI_REQUEST_12_ACTIVE_QPU_VALUE_HARDWARE=YES
+```
+
+The original Phase 5g `active_qpus=12` copy/tail fixture exposed a real
+overlaunch/tail-mask gap: logical requests beyond `ceil(n / 16)` could observe
+negative remaining element counts and write full inactive chunks. The committed
+Phase 5g fixture was intentionally narrowed to one logical `vector<16>` request
+per block only to prove the initial value-to-hardware path. It must not be
+treated as complete Phase 5 tail/memory coverage.
+
 The guide is a planning contract for future phases. It describes the decisions
 those phases must make before creating VC4Kernel IR from:
 

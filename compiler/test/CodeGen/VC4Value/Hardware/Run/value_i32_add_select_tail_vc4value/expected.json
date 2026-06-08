@@ -1,0 +1,19 @@
+{
+  "name": "value_i32_add_select_tail_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 13,
+    "elements_checked": 1469,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 1108438954,
+    "runtime_allocations": 4,
+    "runtime_launches": 13
+  }
+}

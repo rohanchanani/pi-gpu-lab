@@ -647,7 +647,17 @@ private:
     if (!limit)
       return failure();
     Value zero = createI32Constant(builder, op->getLoc(), 0);
-    state.predicates[op->getResult(0)] = createPredTail(builder, op->getLoc(), zero, limit);
+    Value sixteen = createI32Constant(builder, op->getLoc(), 16);
+    Value belowZero = builder.create<arith::CmpIOp>(
+        op->getLoc(), arith::CmpIPredicate::slt, limit, zero);
+    Value nonNegative = builder.create<arith::SelectOp>(
+        op->getLoc(), belowZero, zero, limit);
+    Value aboveSixteen = builder.create<arith::CmpIOp>(
+        op->getLoc(), arith::CmpIPredicate::sgt, nonNegative, sixteen);
+    Value clamped = builder.create<arith::SelectOp>(
+        op->getLoc(), aboveSixteen, sixteen, nonNegative);
+    state.predicates[op->getResult(0)] =
+        createPredTail(builder, op->getLoc(), zero, clamped);
     return success();
   }
 
