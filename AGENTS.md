@@ -383,6 +383,34 @@ compiler/test/CodeGen/VC4Kernel/Hardware/MixedAcceptance/audit_mixed_fixture_cla
 
 Create analogous value/Triton claim auditing when new upper-layer mixed fixtures appear.
 
+### 7.5 Phase 5 value-layer hardware doctrine
+
+Phase 5 is the first executable standard value-layer slice. Static verifier,
+conversion, and lit tests can prove syntax, diagnostics, and lowering shape,
+but they do not prove executable value semantics.
+
+For Phase 5 value lowering:
+
+- every executable feature band needs targeted isolation hardware fixtures
+  with strict CPU oracles and sentinels;
+- routine final acceptance must use value-layer mixed fixtures that combine
+  launch identity, lane math, masks, transfer reads/writes, ALU, compare,
+  select, TMU safe offsets, and VDW preserve behavior;
+- value mixed fixtures must have a manifest and claim audit for every
+  `saw_*`, `no_*`, or equivalent claim, following the VC4Kernel mixed fixture
+  precedent;
+- the value hardware runner must generate fresh candidates from source and
+  lower only through `vc4kernel -> ssavc4 -> scheduled vc4`;
+- CPU oracles, sentinels, expected JSON, power-cycle discipline, timeout
+  policy, and result checking are part of the proof and must not be weakened;
+- failed mixed fixtures should be debugged by running the relevant isolation
+  fixtures, reducing the mixed kernel, and inspecting value IR, VC4Kernel,
+  SSAVC4, scheduled VC4, emitted artifacts, and runtime packing;
+- real lower-half bugs in VC4Kernel, SSAVC4, scheduled VC4, artifact emission,
+  or runtime must be escalated as blockers unless the current prompt explicitly
+  authorizes fixing that layer;
+- do not reshape natural value kernels to hide compiler or lower-half bugs.
+
 ---
 
 ## 8. Hardware runner discipline

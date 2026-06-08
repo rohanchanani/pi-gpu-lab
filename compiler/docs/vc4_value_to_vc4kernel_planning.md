@@ -23,6 +23,8 @@ The Phase 3.5 vector abstraction boundary is recorded in
 `compiler/docs/vc4_value_surface_abstraction_policy.md`.
 The Phase 4 public value ABI is recorded in
 `compiler/docs/vc4_value_kernel_abi.md`.
+Executable value-lowering hardware proof requirements are recorded in
+`compiler/docs/vc4_value_hardware_verification_policy.md`.
 
 ## 2. Planning boundary
 
