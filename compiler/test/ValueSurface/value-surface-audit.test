@@ -1,7 +1,17 @@
 // RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/audit_vc4_value_surface.py --repo-root %vc4_repo_root --matrix %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json --mode phase3-lock | FileCheck %s
+// RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/audit_vc4_value_surface.py --repo-root %vc4_repo_root --matrix %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json --mode phase4-abi-lock | FileCheck %s --check-prefix=PHASE4
 
 // CHECK: matrix_features=26
 // CHECK: forbidden_valid_test_hits=0
 // CHECK: vc4value_scope_creep_hits=0
 // CHECK: readiness_yes_hits=0
 // CHECK: PASS VC4 value surface audit: mode=phase3-lock
+
+// PHASE4: matrix_features=26
+// PHASE4: forbidden_valid_test_hits=0
+// PHASE4: vc4value_scope_creep_hits=0
+// PHASE4: readiness_yes_hits=0
+// PHASE4: phase4_doc_claim_hits=0
+// PHASE4: phase4_valid_abi_hits=0
+// PHASE4: phase4_valid_corpus=9
+// PHASE4: PASS VC4 value surface audit: mode=phase4-abi-lock

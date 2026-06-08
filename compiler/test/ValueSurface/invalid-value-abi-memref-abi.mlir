@@ -79,6 +79,15 @@ builtin.module {
 // -----
 
 builtin.module {
+  // expected-error @+2 {{unsupported memref element type in VC4 value surface}}
+  // expected-error @+1 {{public value kernel @memref_index argument #0 'x': public memref element type must be signless i8, signless i16, signless i32, f16, or f32}}
+  func.func @memref_index(%x: memref<16xindex, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} { return }
+}
+
+// -----
+
+builtin.module {
   // expected-error @+1 {{public value kernel @missing_shape_args argument #1 'x': dynamic public memref argument requires vc4value.shape_args}}
   func.func @missing_shape_args(
       %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
@@ -146,6 +155,28 @@ builtin.module {
       %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
       %s: index {vc4value.arg_name = "s", vc4value.scalar_role = "stride"},
       %x: memref<?xf32, strided<[?]>, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["n"], vc4value.stride_args = ["missing"]})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} { return }
+}
+
+// -----
+
+builtin.module {
+  // expected-error @+1 {{public value kernel @stride_malformed argument #2 'x': vc4value.stride_args must be an ArrayAttr of StringAttr}}
+  func.func @stride_malformed(
+      %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
+      %s: index {vc4value.arg_name = "s", vc4value.scalar_role = "stride"},
+      %x: memref<?xf32, strided<[?]>, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["n"], vc4value.stride_args = "s"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} { return }
+}
+
+// -----
+
+builtin.module {
+  // expected-error @+1 {{public value kernel @stride_f32_arg argument #2 'x': vc4value.stride_args entry 'stride' must name an index or i32 scalar argument}}
+  func.func @stride_f32_arg(
+      %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
+      %stride: f32 {vc4value.arg_name = "stride", vc4value.scalar_role = "stride"},
+      %x: memref<?xf32, strided<[?]>, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["n"], vc4value.stride_args = ["stride"]})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} { return }
 }
 

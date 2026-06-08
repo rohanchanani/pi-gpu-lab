@@ -107,6 +107,61 @@ PHASE3_5_EQUIVALENTS = {
     ),
 }
 
+PHASE4_ABI_EQUIVALENTS = {
+    "value_kernel_func_wrapper_abi": (
+        "value_kernel_wrapper_attrs",
+        "accepted_public_abi_contract",
+    ),
+    "vc4value_global_memory_space_attr": (
+        "logical_memref_types_surface",
+        "accepted_public_abi_contract",
+    ),
+    "public_arg_name_attr_schema": (
+        "value_kernel_wrapper_attrs",
+        "accepted_public_abi_contract",
+    ),
+    "public_memref_direction_attr_schema": (
+        "logical_memref_types_surface",
+        "accepted_public_abi_contract",
+    ),
+    "public_scalar_role_attr_schema": (
+        "value_kernel_wrapper_attrs",
+        "accepted_public_abi_contract",
+    ),
+    "public_memref_shape_args_metadata": (
+        "logical_memref_types_surface",
+        "accepted_public_abi_contract",
+    ),
+    "public_memref_stride_args_metadata": (
+        "logical_memref_types_surface",
+        "accepted_public_abi_contract",
+    ),
+    "rank1_rank2_global_memref_i8_i16_i32_f16_f32_abi": (
+        "logical_memref_types_surface",
+        "abi_admissible_with_staged_subsets",
+    ),
+    "public_memref_dim_metadata_only": (
+        "logical_memref_types_surface",
+        "accepted_metadata_only",
+    ),
+    "public_vector_args_reject": (
+        "fixed_vector_types_surface",
+        "reject_public_kernel_argument_only_body_vectors_remain_surface_admissible",
+    ),
+    "public_tensor_args_reject": (
+        "forbidden_producer_dialects",
+        "reject_public_kernel_argument_and_initial_value_surface_tensor_policy",
+    ),
+    "hidden_memref_descriptor_reject": (
+        "forbidden_memref_side_effect_ops",
+        "deterministic_reject_no_hidden_descriptor_abi",
+    ),
+    "phase5_v1_i32_f32_rank1_contiguous_lowerable_subset": (
+        "logical_memref_types_surface",
+        "future_phase5_v1_lowerable_candidate",
+    ),
+}
+
 FORBIDDEN_VECTOR_LIMIT_PHRASES = [
     "vector<16> is the only legal value-layer vector shape",
     "vector<16xT> is the only legal value-layer vector shape",
@@ -144,6 +199,13 @@ def lowering_behavior_for(row: dict, equivalent_id: str):
     if isinstance(behavior, dict):
         return behavior.get(equivalent_id)
     return behavior
+
+
+def phase4_behavior_for(row: dict, equivalent_id: str):
+    behavior = row.get("phase4_abi_behavior")
+    if isinstance(behavior, dict):
+        return behavior.get(equivalent_id)
+    return None
 
 
 def validate_phase3_5_vector_abstraction(data: dict, matrix_path: str) -> None:
@@ -215,8 +277,79 @@ def validate_phase3_5_vector_abstraction(data: dict, matrix_path: str) -> None:
                 fail(f"{path} claims Triton is ready")
 
 
+def validate_phase4_abi_lock(data: dict, matrix_path: str) -> None:
+    features = data["features"]
+    resolved_matrix_path = pathlib.Path(matrix_path).resolve()
+
+    forbidden_status_words = {"unknown", "planned", "deferred", "unclassified"}
+    for row in features:
+        status = row.get("status")
+        if any(word in status for word in forbidden_status_words):
+            fail(f"{row.get('feature_id')} has nonfinal ABI status {status!r}")
+
+    for equivalent_id, (feature_id, expected_behavior) in PHASE4_ABI_EQUIVALENTS.items():
+        row = get_feature(features, feature_id)
+        equivalents = row.get("phase4_abi_equivalent_feature_ids")
+        if not isinstance(equivalents, list) or equivalent_id not in equivalents:
+            fail(f"{feature_id} missing Phase 4 ABI equivalent {equivalent_id}")
+        actual_behavior = phase4_behavior_for(row, equivalent_id)
+        if actual_behavior != expected_behavior:
+            fail(
+                f"{feature_id} must classify {equivalent_id} as "
+                f"{expected_behavior!r}, got {actual_behavior!r}"
+            )
+
+    memref_row = get_feature(features, "logical_memref_types_surface")
+    memref_text = json.dumps(memref_row, sort_keys=True)
+    for phrase in ["i8/i16/i32/f16/f32", "no hidden descriptors", "memref.dim as metadata only"]:
+        if phrase not in memref_text:
+            fail(f"logical memref row must document Phase 4 ABI phrase: {phrase}")
+    if (
+        phase4_behavior_for(
+            memref_row, "rank1_rank2_global_memref_i8_i16_i32_f16_f32_abi"
+        )
+        == phase4_behavior_for(
+            memref_row, "phase5_v1_i32_f32_rank1_contiguous_lowerable_subset"
+        )
+    ):
+        fail("memref ABI row must distinguish ABI-admissible forms from Phase 5 V1 candidates")
+
+    memref_text_lower = memref_text.lower()
+    if "i8/i16/i32/f16/f32" in memref_text and "staged" not in memref_text_lower:
+        fail("i8/i16/f16/rank2 memref ABI row must include staged subset language")
+
+    f16_row = get_feature(features, "staged_subword_f16_storage")
+    f16_text = json.dumps(f16_row, sort_keys=True)
+    if "native f16 arithmetic is not accepted" not in f16_text:
+        fail("f16 row must reject native f16 arithmetic")
+    if "f32 compute" not in f16_text:
+        fail("f16 row must state f16 storage uses future f32 compute path")
+
+    hidden_row = get_feature(features, "forbidden_memref_side_effect_ops")
+    if hidden_row.get("status") != "deterministic_reject_surface_policy":
+        fail("hidden memref descriptor equivalent must live on a deterministic reject row")
+    vector_row = get_feature(features, "fixed_vector_types_surface")
+    if vector_row.get("status") != "accepted_surface_contract":
+        fail("public vector arg rejection must not make body vector values rejected")
+    tensor_row = get_feature(features, "forbidden_producer_dialects")
+    if tensor_row.get("status") != "deterministic_reject_surface_policy":
+        fail("public tensor args must remain deterministic rejects")
+
+    matrix_text = resolved_matrix_path.read_text(encoding="utf-8")
+    if "READY_FOR_TRITON=YES" in matrix_text:
+        fail("matrix claims Triton readiness")
+    if "native f16 arithmetic is accepted" in matrix_text:
+        fail("matrix claims native f16 arithmetic")
+
+    docs_root = resolved_matrix_path.parent
+    for doc in docs_root.glob("vc4*phase4*.md"):
+        text = doc.read_text(encoding="utf-8")
+        if "READY_FOR_TRITON=YES" in text:
+            fail(f"{doc} claims Triton is ready")
+
+
 def validate_matrix(matrix_path: str, mode: str) -> dict:
-    if mode not in {"phase3-lock", "phase3_5"}:
+    if mode not in {"phase3-lock", "phase3_5", "phase4-abi-lock"}:
         fail(f"unsupported mode {mode!r}")
 
     try:
@@ -265,6 +398,8 @@ def validate_matrix(matrix_path: str, mode: str) -> dict:
         fail(f"unexpected status counts {dict(counts)}")
 
     validate_phase3_5_vector_abstraction(data, matrix_path)
+    if mode == "phase4-abi-lock":
+        validate_phase4_abi_lock(data, matrix_path)
 
     return data
 

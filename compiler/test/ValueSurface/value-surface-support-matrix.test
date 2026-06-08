@@ -1,3 +1,5 @@
 // RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/check_vc4_value_surface_matrix.py %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json --mode phase3-lock | FileCheck %s
+// RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/check_vc4_value_surface_matrix.py %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json --mode phase4-abi-lock | FileCheck %s --check-prefix=PHASE4
 
 // CHECK: PASS VC4 value surface matrix: mode=phase3-lock features=26 accepted_surface_contract=9 staged_future_surface_contract=7 deterministic_reject_surface_policy=8 internal_only=2
+// PHASE4: PASS VC4 value surface matrix: mode=phase4-abi-lock features=26 accepted_surface_contract=9 staged_future_surface_contract=7 deterministic_reject_surface_policy=8 internal_only=2

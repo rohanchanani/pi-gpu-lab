@@ -282,8 +282,15 @@ The support matrix is:
 compiler/docs/vc4_value_surface_support_matrix.json
 ```
 
-Later Phase 3 audits must validate the matrix, source tests, pass registration,
-and absence of lowering/Triton claims.
+Phase 4 ABI audits validate the matrix, source tests, pass registration,
+public ABI corpus, absence of hidden descriptor claims, absence of hardware-path
+selection in `#vc4value.global`, and absence of unscoped lowering/Triton claims.
+The source-controlled lock modes are:
+
+```text
+python3 compiler/test/ValueSurface/Support/check_vc4_value_surface_matrix.py compiler/docs/vc4_value_surface_support_matrix.json --mode phase4-abi-lock
+python3 compiler/test/ValueSurface/Support/audit_vc4_value_surface.py --repo-root . --matrix compiler/docs/vc4_value_surface_support_matrix.json --mode phase4-abi-lock
+```
 
 ## 18. Phase readiness lines
 

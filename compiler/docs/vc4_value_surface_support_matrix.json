@@ -387,6 +387,7 @@
         "memref.store",
         "memref.atomic_rmw",
         "memref.generic_atomic_rmw",
+        "memref.atomic_yield",
         "memref.copy",
         "memref.dma_start",
         "memref.dma_wait"

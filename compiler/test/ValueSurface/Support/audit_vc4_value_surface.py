@@ -53,6 +53,99 @@ COVERAGE_REQUIREMENTS = {
     "unsupported_scalable_vectors_and_unranked_memrefs": "invalid-value-surface-type-guardrails.mlir",
 }
 
+PHASE4_VALID_CORPUS = [
+    "value-abi-basic-launch-valid.mlir",
+    "value-abi-grid-rank-3-valid.mlir",
+    "value-abi-public-scalar-args-valid.mlir",
+    "value-abi-memref-element-types-rank1-valid.mlir",
+    "value-abi-memref-element-types-rank2-valid.mlir",
+    "value-abi-memref-dim-metadata-valid.mlir",
+    "value-abi-static-memref-no-shape-args-valid.mlir",
+    "value-abi-stride-args-metadata-valid.mlir",
+    "value-abi-vector-values-not-public-args-valid.mlir",
+]
+
+PHASE4_INVALID_CORPUS = {
+    "missing kernel grid_rank": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "missing_grid_rank",
+    ),
+    "bad grid_rank": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "grid_rank_four",
+    ),
+    "axis out of range": ("invalid-value-abi-memref-abi.mlir", "axis = 1 : i32"),
+    "missing arg_name": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "missing_arg_name",
+    ),
+    "duplicate arg_name": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "duplicate_arg_name",
+    ),
+    "bad arg_name": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "bad_arg_name",
+    ),
+    "reserved arg_name": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "reserved_arg_name",
+    ),
+    "missing direction": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "missing_direction",
+    ),
+    "bad direction": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "bad_direction",
+    ),
+    "scalar direction": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "scalar_direction",
+    ),
+    "bad scalar_role": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "bad_scalar_role",
+    ),
+    "vector public arg": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "vector_arg",
+    ),
+    "tensor public arg": (
+        "invalid-value-abi-kernel-wrapper-and-arg-attrs.mlir",
+        "tensor_arg",
+    ),
+    "unranked memref": ("invalid-value-abi-memref-abi.mlir", "memref<*xf32>"),
+    "rank0 memref": ("invalid-value-abi-memref-abi.mlir", "@rank0"),
+    "rank3 memref": ("invalid-value-abi-memref-abi.mlir", "@rank3"),
+    "missing global memspace": ("invalid-value-abi-memref-abi.mlir", "@default_memspace"),
+    "wrong memspace": ("invalid-value-abi-memref-abi.mlir", "@wrong_memspace"),
+    "memref i1 reject": ("invalid-value-abi-memref-abi.mlir", "@memref_i1"),
+    "memref i64 reject": ("invalid-value-abi-memref-abi.mlir", "@memref_i64"),
+    "memref f64 reject": ("invalid-value-abi-memref-abi.mlir", "@memref_f64"),
+    "memref bf16 reject": ("invalid-value-abi-memref-abi.mlir", "@memref_bf16"),
+    "memref index reject": ("invalid-value-abi-memref-abi.mlir", "@memref_index"),
+    "missing shape_args": ("invalid-value-abi-memref-abi.mlir", "@missing_shape_args"),
+    "shape_args length mismatch": ("invalid-value-abi-memref-abi.mlir", "@shape_len"),
+    "shape_args nonexistent": ("invalid-value-abi-memref-abi.mlir", "@shape_missing_arg"),
+    "shape_args wrong type": ("invalid-value-abi-memref-abi.mlir", "@shape_f32_arg"),
+    "shape_args duplicate": ("invalid-value-abi-memref-abi.mlir", "@shape_duplicate"),
+    "shape_args malformed": ("invalid-value-abi-memref-abi.mlir", "@shape_malformed"),
+    "stride_args nonexistent": ("invalid-value-abi-memref-abi.mlir", "@stride_missing_arg"),
+    "stride_args malformed": ("invalid-value-abi-memref-abi.mlir", "@stride_malformed"),
+    "stride_args wrong type": ("invalid-value-abi-memref-abi.mlir", "@stride_f32_arg"),
+    "memref.load reject": ("invalid-value-abi-memref-abi.mlir", "memref.load"),
+    "memref.store reject": ("invalid-value-abi-memref-abi.mlir", "memref.store"),
+    "vc4value hardware op names": (
+        "invalid-value-surface-vc4value-scope-creep.mlir",
+        "vc4value.load",
+    ),
+}
+
+PHASE4_ALLOWED_SCOPED_LOWERING = (
+    "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES_FOR_PHASE5_ELEMENTWISE_V1"
+)
+
 
 def fail(message: str) -> None:
     print(f"FAIL VC4 value surface audit: {message}", file=sys.stderr)
@@ -143,6 +236,94 @@ def scan_readiness_yes(repo_root: pathlib.Path) -> list[str]:
     return hits
 
 
+def scan_phase4_readiness_yes(repo_root: pathlib.Path) -> list[str]:
+    hits = []
+    for root in [repo_root / "compiler/docs", repo_root / "compiler/test"]:
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or "Support" in path.parts:
+                continue
+            text = path.read_text(encoding="utf-8", errors="ignore")
+            if "READY_FOR_TRITON=YES" in text:
+                hits.append(f"{path}:READY_FOR_TRITON=YES")
+            broad_lowering_text = text.replace(PHASE4_ALLOWED_SCOPED_LOWERING, "")
+            if "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES" in broad_lowering_text:
+                hits.append(f"{path}:READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES")
+    return hits
+
+
+def scan_phase4_doc_claims(repo_root: pathlib.Path) -> list[str]:
+    hits = []
+    docs = [
+        repo_path(repo_root, "compiler/docs/vc4_value_kernel_abi.md"),
+        repo_path(repo_root, "compiler/docs/vc4_value_surface_verifier.md"),
+        repo_path(repo_root, "compiler/docs/vc4_value_surface_support_matrix.json"),
+    ]
+    hardware_names = ["TMU", "VDR", "VPM", "VDW"]
+    for path in docs:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if "#vc4value.global" in line and "select" in line.lower():
+                if any(name in line for name in hardware_names) and "does not" not in line.lower():
+                    hits.append(f"{path}:{lineno}:#vc4value.global hardware selection")
+            lowered = line.lower()
+            for phrase in [
+                "uses hidden memref descriptor",
+                "hidden memref descriptors are accepted",
+                "hidden descriptor abi is accepted",
+                "all phase 4 memref types are phase 5 lowerable",
+                "native f16 arithmetic is accepted",
+                "native f16 arithmetic is lowerable",
+            ]:
+                if phrase in lowered:
+                    hits.append(f"{path}:{lineno}:{phrase}")
+            if "direct vc4kerneltovc4" in lowered:
+                allowed = ["no direct", "not", "forbidden", "non-goal", "do not"]
+                if not any(token in lowered for token in allowed):
+                    hits.append(f"{path}:{lineno}:direct VC4KernelToVC4 accepted path")
+            if "vc4tile" in lowered:
+                allowed = ["no vc4tile", "not", "forbidden", "retired", "resurrect"]
+                if not any(token in lowered for token in allowed):
+                    hits.append(f"{path}:{lineno}:VC4Tile current path")
+    return hits
+
+
+def scan_valid_abi_tests(test_dir: pathlib.Path) -> list[str]:
+    hits = []
+    signature_re = re.compile(
+        r"func\.func\s+@[A-Za-z0-9_.$-]+\s*\((.*?)\)\s*attributes\s*\{[^}]*vc4value\.kernel",
+        re.S,
+    )
+    for path in sorted(test_dir.glob("value-abi*.mlir")):
+        text = path.read_text(encoding="utf-8")
+        for token in ["memref.load", "memref.store"]:
+            if token in text:
+                hits.append(f"{path}:{token} in valid ABI test")
+        for match in signature_re.finditer(text):
+            args = match.group(1)
+            if "vector<" in args:
+                hits.append(f"{path}:public vector argument in valid ABI test")
+            if "tensor<" in args:
+                hits.append(f"{path}:public tensor argument in valid ABI test")
+    return hits
+
+
+def validate_phase4_corpus(test_dir: pathlib.Path) -> None:
+    for filename in PHASE4_VALID_CORPUS:
+        path = test_dir / filename
+        require_file(path, "Phase 4 valid ABI test")
+        text = path.read_text(encoding="utf-8")
+        if "--vc4-verify-value-surface" not in text:
+            fail(f"{filename} does not run --vc4-verify-value-surface")
+    for label, (filename, needle) in PHASE4_INVALID_CORPUS.items():
+        path = test_dir / filename
+        require_file(path, f"Phase 4 invalid ABI test for {label}")
+        text = path.read_text(encoding="utf-8")
+        if needle not in text:
+            fail(f"{filename} missing Phase 4 invalid ABI coverage for {label}: {needle}")
+
+
 def require_file(path: pathlib.Path, label: str) -> None:
     if not path.exists():
         fail(f"{label} missing: {path}")
@@ -155,7 +336,7 @@ def main() -> None:
     parser.add_argument("--mode", required=True)
     args = parser.parse_args()
 
-    if args.mode != "phase3-lock":
+    if args.mode not in {"phase3-lock", "phase4-abi-lock"}:
         fail(f"unsupported mode {args.mode!r}")
 
     repo_root = pathlib.Path(args.repo_root).resolve()
@@ -221,7 +402,17 @@ def main() -> None:
         fail("lit tests do not mention --vc4-verify-value-surface")
 
     vc4value_scope_hits = scan_vc4value_scope(repo_root)
-    readiness_yes_hits = scan_readiness_yes(repo_root)
+    readiness_yes_hits = (
+        scan_phase4_readiness_yes(repo_root)
+        if args.mode == "phase4-abi-lock"
+        else scan_readiness_yes(repo_root)
+    )
+    phase4_doc_hits = []
+    phase4_valid_abi_hits = []
+    if args.mode == "phase4-abi-lock":
+        validate_phase4_corpus(test_dir)
+        phase4_doc_hits = scan_phase4_doc_claims(repo_root)
+        phase4_valid_abi_hits = scan_valid_abi_tests(test_dir)
 
     if forbidden_valid_hits:
         fail("forbidden dialects in valid tests: " + ", ".join(forbidden_valid_hits))
@@ -229,6 +420,10 @@ def main() -> None:
         fail("vc4value scope creep hits: " + ", ".join(vc4value_scope_hits))
     if readiness_yes_hits:
         fail("readiness YES hits: " + ", ".join(readiness_yes_hits))
+    if phase4_doc_hits:
+        fail("Phase 4 ABI doc claim hits: " + ", ".join(phase4_doc_hits))
+    if phase4_valid_abi_hits:
+        fail("Phase 4 valid ABI test hits: " + ", ".join(phase4_valid_abi_hits))
 
     print(f"matrix_features={matrix_features}")
     print(f"valid_test_files={len(valid_files)}")
@@ -236,7 +431,12 @@ def main() -> None:
     print(f"forbidden_valid_test_hits={len(forbidden_valid_hits)}")
     print(f"vc4value_scope_creep_hits={len(vc4value_scope_hits)}")
     print(f"readiness_yes_hits={len(readiness_yes_hits)}")
-    print("PASS VC4 value surface audit: mode=phase3-lock")
+    if args.mode == "phase4-abi-lock":
+        print(f"phase4_doc_claim_hits={len(phase4_doc_hits)}")
+        print(f"phase4_valid_abi_hits={len(phase4_valid_abi_hits)}")
+        print(f"phase4_valid_corpus={len(PHASE4_VALID_CORPUS)}")
+        print(f"phase4_invalid_corpus={len(PHASE4_INVALID_CORPUS)}")
+    print(f"PASS VC4 value surface audit: mode={args.mode}")
 
 
 if __name__ == "__main__":
