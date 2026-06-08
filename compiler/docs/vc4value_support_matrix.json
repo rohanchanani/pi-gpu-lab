@@ -1,0 +1,105 @@
+{
+  "generated_by": "Phase2e_vc4value_tiny_surface_lock",
+  "phase": "Phase2",
+  "dialect": "vc4value",
+  "allowed_ops": [
+    "program_id",
+    "num_programs"
+  ],
+  "unknown_ops_allowed": false,
+  "ready_for_phase3_value_surface_verifier": true,
+  "ready_for_value_to_vc4kernel_lowering": false,
+  "ready_for_triton": false,
+  "features": [
+    {
+      "feature_id": "vc4value.program_id",
+      "status": "accepted_static_syntax",
+      "result_type": "index",
+      "axis_values": [
+        0,
+        1,
+        2
+      ],
+      "notes": "Logical launch-grid program id; not physical QPU identity."
+    },
+    {
+      "feature_id": "vc4value.num_programs",
+      "status": "accepted_static_syntax",
+      "result_type": "index",
+      "axis_values": [
+        0,
+        1,
+        2
+      ],
+      "notes": "Logical launch-grid extent for a value-layer axis."
+    },
+    {
+      "feature_id": "vc4value.function_metadata_conventions",
+      "status": "documented_convention_phase3_verifier_pending",
+      "attrs": [
+        "vc4value.kernel",
+        "vc4value.grid_rank",
+        "vc4value.target_profile",
+        "vc4value.math_policy"
+      ],
+      "notes": "Ordinary named attributes only in Phase 2."
+    },
+    {
+      "feature_id": "vc4value.memory_ops",
+      "status": "deterministic_reject_scope_forbidden",
+      "forbidden_examples": [
+        "load",
+        "store"
+      ],
+      "notes": "The value layer uses memref/vector semantics; vc4value is not a memory dialect."
+    },
+    {
+      "feature_id": "vc4value.tile_ops",
+      "status": "deterministic_reject_scope_forbidden",
+      "forbidden_examples": [
+        "tile"
+      ],
+      "notes": "vc4value must not become a tile DSL."
+    },
+    {
+      "feature_id": "vc4value.fragment_ops",
+      "status": "deterministic_reject_scope_forbidden",
+      "forbidden_examples": [
+        "fragment"
+      ],
+      "notes": "Fragment operations belong to the locked VC4Kernel target surface, not vc4value."
+    },
+    {
+      "feature_id": "vc4value.hardware_path_ops",
+      "status": "deterministic_reject_scope_forbidden",
+      "forbidden_examples": [
+        "tmu",
+        "vdr",
+        "vdw",
+        "vpm"
+      ],
+      "notes": "TMU/VDR/VDW/VPM are target planning choices below the value layer."
+    },
+    {
+      "feature_id": "vc4value.lane_id",
+      "status": "deterministic_reject_use_vector_step",
+      "notes": "Lane identity is represented with vector.step in the standard value surface."
+    },
+    {
+      "feature_id": "vc4value.physical_qpu_identity",
+      "status": "deterministic_reject_not_value_layer_semantics",
+      "forbidden_examples": [
+        "warp_id",
+        "thread_id",
+        "block_id",
+        "qpu"
+      ],
+      "notes": "program_id is logical launch-grid identity, not physical QPU identity."
+    },
+    {
+      "feature_id": "vc4value.lowering",
+      "status": "not_in_phase2",
+      "notes": "Value-to-VC4Kernel lowering starts in later phases."
+    }
+  ]
+}

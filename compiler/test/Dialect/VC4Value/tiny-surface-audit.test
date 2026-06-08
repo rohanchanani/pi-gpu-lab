@@ -1,0 +1,6 @@
+// RUN: python3 %vc4_repo_root/compiler/test/Dialect/VC4Value/Support/audit_vc4value_tiny_surface.py \
+// RUN:   --repo-root %vc4_repo_root \
+// RUN:   --matrix %vc4_repo_root/compiler/docs/vc4value_support_matrix.json \
+// RUN:   --mode phase2-lock | FileCheck %s
+
+// CHECK: PASS VC4Value tiny surface audit: mode=phase2-lock ops=2 unknown_ops_allowed=0
