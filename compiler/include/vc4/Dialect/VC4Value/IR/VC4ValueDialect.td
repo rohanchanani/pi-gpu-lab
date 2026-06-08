@@ -13,6 +13,7 @@ def VC4Value_Dialect : Dialect {
     must not expose TMU/VDR/VDW/VPM, it must not carry fragment operations,
     and it does not lower directly to VC4.
   }];
+  let useDefaultAttributePrinterParser = 1;
 }
 
 #endif // VC4VALUE_DIALECT_TD

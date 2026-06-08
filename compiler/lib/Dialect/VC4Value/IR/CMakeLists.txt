@@ -4,6 +4,7 @@ add_mlir_dialect_library(VC4ValueDialect
 
   DEPENDS
     VC4ValueDialectIncGen
+    VC4ValueAttrDefsIncGen
     VC4ValueOpsIncGen
 
   LINK_LIBS PUBLIC

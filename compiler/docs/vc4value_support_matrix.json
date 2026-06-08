@@ -45,6 +45,13 @@
       "notes": "Ordinary named attributes only in Phase 2."
     },
     {
+      "feature_id": "vc4value.global_memory_space_attr",
+      "status": "accepted_metadata_attr_phase4",
+      "spelling": "#vc4value.global",
+      "attr_class": "GlobalMemorySpaceAttr",
+      "notes": "Phase 4c memory-space metadata attribute for public value-kernel memrefs; not an operation, not a memory path, and not lowering."
+    },
+    {
       "feature_id": "vc4value.memory_ops",
       "status": "deterministic_reject_scope_forbidden",
       "forbidden_examples": [

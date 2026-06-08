@@ -80,7 +80,20 @@ define exact math lowering.
 Phase 2 does not verify these attrs. Phase 3 will add the value-surface
 verifier.
 
-## 6. Explicitly forbidden operations
+## 6. Memory-space attribute
+
+Phase 4c adds one VC4Value dialect attribute:
+
+```mlir
+#vc4value.global
+```
+
+`#vc4value.global` is a zero-operand memory-space attribute for Phase 4 public
+kernel memref ABI types such as `memref<?xf32, #vc4value.global>`. It is
+metadata only. It is not an operation, does not add `vc4value` memory ops, does
+not select TMU/VDR/VPM/VDW, and does not imply lowering or hardware execution.
+
+## 7. Explicitly forbidden operations
 
 The following operations are not part of `vc4value`:
 
@@ -103,13 +116,13 @@ The dialect must not allow unknown operations. If any listed operation is ever
 introduced, it must be through an explicit future contract change, not by
 silently accepting unknown `vc4value.*` syntax.
 
-## 7. Relationship to vector.step and lanes
+## 8. Relationship to vector.step and lanes
 
 Lane identity in the value surface is represented by `vector.step` and standard
 vector operations, not by `vc4value.lane_id`. `vc4value.program_id` and
 `vc4value.num_programs` describe logical launch-grid identity only.
 
-## 8. Relationship to vc4kernel
+## 9. Relationship to vc4kernel
 
 `vc4value` sits above VC4Kernel. It is not VC4Kernel, it is not a tile DSL, it
 does not expose VC4Kernel memory-path operations, and it does not lower directly
@@ -119,21 +132,24 @@ Later value-to-VC4Kernel lowering will map logical `vc4value.program_id` and
 `vc4value.num_programs` to the locked VC4Kernel launch identity surface. That
 lowering does not exist in Phase 2.
 
-## 9. Non-goals before Phase 3/4/5
+## 10. Non-goals before Phase 3/4/5
 
 Before Phase 3/4/5, `vc4value` does not provide:
 
 - value-surface semantic verification;
 - kernel ABI lowering;
 - memref ABI lowering;
-- memory-space attributes such as `#vc4value.global`;
+- memory operations or hardware memory-path attributes;
 - value-to-VC4Kernel lowering;
 - vector transfer lowering;
 - TTIR/Triton ingestion;
 - hardware fixtures;
 - memory, tile, fragment, barrier, lane, warp, thread, or physical QPU ID ops.
 
-## 10. Readiness lines
+Phase 4c adds only `#vc4value.global` as a memory-space metadata attribute. It
+does not add lowering or memory operations.
+
+## 11. Readiness lines
 
 VC4VALUE_MINIMAL_SPEC_LOCKED=YES
 READY_FOR_PHASE2E_VC4VALUE_AUDIT=YES

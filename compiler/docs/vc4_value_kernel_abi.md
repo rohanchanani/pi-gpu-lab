@@ -276,8 +276,8 @@ func.func @dims(
 }
 ```
 
-These snippets use the intended Phase 4 syntax. `#vc4value.global` is locked by
-this contract and implemented in the following Phase 4 dialect prompt.
+These snippets use the Phase 4 syntax. `#vc4value.global` is locked by this
+contract and implemented as a VC4Value dialect memory-space attribute.
 
 ## 13. Rejected examples
 
