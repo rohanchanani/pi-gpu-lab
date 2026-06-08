@@ -2,15 +2,20 @@
 
 #include "vc4/Transforms/ValueSurface/ValueSurfacePasses.h"
 
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
+#include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
+#include "llvm/ADT/TypeSwitch.h"
 
+#include <cctype>
 #include <memory>
+#include <optional>
 
 using namespace mlir;
 
@@ -80,6 +85,14 @@ static bool isSupportedMemRefElementType(Type type) {
   return type.isF16() || type.isF32();
 }
 
+static bool isPublicAbiScalarArgType(Type type) {
+  if (type.isIndex() || type.isF32())
+    return true;
+  if (auto integerType = dyn_cast<IntegerType>(type))
+    return integerType.getWidth() == 32;
+  return false;
+}
+
 static bool hasF16Type(Type type) {
   if (type.isF16())
     return true;
@@ -111,6 +124,72 @@ static std::optional<int64_t> getI64Attr(Operation *op, StringRef attrName) {
   if (!attr)
     return std::nullopt;
   return attr.getValue().getSExtValue();
+}
+
+static bool isIdentifierStart(char c) {
+  return std::isalpha(static_cast<unsigned char>(c)) || c == '_';
+}
+
+static bool isIdentifierBody(char c) {
+  return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
+static bool isLegalArgNameSyntax(StringRef name) {
+  if (name.empty() || !isIdentifierStart(name.front()))
+    return false;
+  return llvm::all_of(name.drop_front(), isIdentifierBody);
+}
+
+static bool isReservedArgName(StringRef name) {
+  return llvm::is_contained(
+      ArrayRef<StringRef>{"program_id", "num_programs", "lane_id", "qpu_id",
+                          "physical_qpu_id", "warp_id", "thread_id",
+                          "num_qpus", "vpm_base_row", "semaphore_base",
+                          "uniform_index", "uniform_offset", "tmu", "vdr",
+                          "vdw", "vpm", "ssavc4", "vc4kernel", "vc4"},
+      name);
+}
+
+static bool isAllowedDirection(StringRef value) {
+  return value == "in" || value == "out" || value == "inout";
+}
+
+static bool isAllowedScalarRole(StringRef value) {
+  return value == "value" || value == "extent" || value == "stride" ||
+         value == "grid_dim" || value == "policy";
+}
+
+static bool isAllowedValueArgAttr(StringRef name) {
+  return name == "vc4value.arg_name" || name == "vc4value.direction" ||
+         name == "vc4value.scalar_role" || name == "vc4value.shape_args" ||
+         name == "vc4value.stride_args";
+}
+
+static bool isArrayOfStringAttr(Attribute attr) {
+  auto arrayAttr = dyn_cast_or_null<ArrayAttr>(attr);
+  return arrayAttr && llvm::all_of(arrayAttr, [](Attribute element) {
+           return isa<StringAttr>(element);
+         });
+}
+
+static DictionaryAttr getArgAttrs(func::FuncOp func, unsigned argIndex) {
+  std::optional<ArrayAttr> argAttrs = func.getArgAttrs();
+  if (!argAttrs || argIndex >= argAttrs->size())
+    return {};
+  return dyn_cast<DictionaryAttr>((*argAttrs)[argIndex]);
+}
+
+static InFlightDiagnostic emitArgError(func::FuncOp func, unsigned argIndex) {
+  InFlightDiagnostic diag = func.emitError()
+                            << "public value kernel @" << func.getName()
+                            << " argument #" << argIndex;
+  if (auto argName =
+          dyn_cast_or_null<StringAttr>(
+              func.getArgAttr(argIndex, "vc4value.arg_name"))) {
+    diag << " '" << argName.getValue() << "'";
+  }
+  diag << ": ";
+  return diag;
 }
 
 static bool checkType(Operation *owner, Type type, bool &sawError) {
@@ -201,6 +280,120 @@ static bool checkType(Operation *owner, Type type, bool &sawError) {
   return true;
 }
 
+static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
+  llvm::SmallDenseSet<StringRef> seenArgNames;
+
+  for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
+    Type argType = func.getArgument(i).getType();
+    DictionaryAttr argAttrs = getArgAttrs(func, i);
+
+    if (argAttrs) {
+      for (NamedAttribute attr : argAttrs) {
+        StringRef name = attr.getName().getValue();
+        if (name.starts_with("vc4value.") && !isAllowedValueArgAttr(name)) {
+          emitArgError(func, i)
+              << "unknown vc4value public argument ABI attribute '" << name
+              << "'";
+          sawError = true;
+        }
+      }
+    }
+
+    auto argNameAttr =
+        dyn_cast_or_null<StringAttr>(func.getArgAttr(i, "vc4value.arg_name"));
+    if (!argNameAttr) {
+      emitArgError(func, i)
+          << "requires StringAttr vc4value.arg_name matching "
+          << "^[A-Za-z_][A-Za-z0-9_]*$";
+      sawError = true;
+    } else {
+      StringRef argName = argNameAttr.getValue();
+      if (!isLegalArgNameSyntax(argName)) {
+        emitArgError(func, i)
+            << "vc4value.arg_name must match "
+            << "^[A-Za-z_][A-Za-z0-9_]*$";
+        sawError = true;
+      }
+      if (isReservedArgName(argName)) {
+        emitArgError(func, i)
+            << "vc4value.arg_name '" << argName
+            << "' is reserved for lower-half/runtime/builtin metadata";
+        sawError = true;
+      }
+      if (!seenArgNames.insert(argName).second) {
+        emitArgError(func, i)
+            << "duplicate vc4value.arg_name '" << argName << "'";
+        sawError = true;
+      }
+    }
+
+    auto directionAttr =
+        dyn_cast_or_null<StringAttr>(func.getArgAttr(i, "vc4value.direction"));
+    if (isa<MemRefType>(argType)) {
+      if (!directionAttr) {
+        emitArgError(func, i)
+            << "memref argument requires vc4value.direction = \"in\", "
+            << "\"out\", or \"inout\"";
+        sawError = true;
+      } else if (!isAllowedDirection(directionAttr.getValue())) {
+        emitArgError(func, i)
+            << "vc4value.direction must be \"in\", \"out\", or \"inout\"";
+        sawError = true;
+      }
+    } else if (directionAttr) {
+      emitArgError(func, i)
+          << "non-memref scalar argument must not have vc4value.direction";
+      sawError = true;
+    }
+
+    if (auto scalarRoleAttr = dyn_cast_or_null<StringAttr>(
+            func.getArgAttr(i, "vc4value.scalar_role"))) {
+      if (isa<MemRefType>(argType)) {
+        emitArgError(func, i)
+            << "memref argument must not have vc4value.scalar_role";
+        sawError = true;
+      }
+      if (!isAllowedScalarRole(scalarRoleAttr.getValue())) {
+        emitArgError(func, i)
+            << "vc4value.scalar_role must be \"value\", \"extent\", "
+            << "\"stride\", \"grid_dim\", or \"policy\"";
+        sawError = true;
+      }
+    }
+
+    for (StringRef attrName :
+         {"vc4value.shape_args", "vc4value.stride_args"}) {
+      if (Attribute attr = func.getArgAttr(i, attrName);
+          attr && !isArrayOfStringAttr(attr)) {
+        emitArgError(func, i) << attrName << " must be an ArrayAttr of "
+                              << "StringAttr";
+        sawError = true;
+      }
+    }
+
+    if (isa<VectorType>(argType)) {
+      emitArgError(func, i)
+          << "vector public arguments are not legal in the VC4 value ABI";
+      sawError = true;
+      continue;
+    }
+    if (isa<RankedTensorType, UnrankedTensorType>(argType)) {
+      emitArgError(func, i)
+          << "tensor public arguments are not legal in the VC4 value ABI";
+      sawError = true;
+      continue;
+    }
+    if (isa<MemRefType>(argType)) {
+      continue;
+    }
+    if (!isPublicAbiScalarArgType(argType)) {
+      emitArgError(func, i)
+          << "public scalar argument type must be index, i32, or f32";
+      sawError = true;
+    }
+  }
+}
+
 static void checkOperationTypes(Operation *op, bool &sawError) {
   for (Type type : op->getOperandTypes())
     checkType(op, type, sawError);
@@ -270,6 +463,8 @@ struct VerifyValueSurfacePass
                           << "vc4value.grid_rank in [1, 3]";
           sawError = true;
         }
+        if (auto func = dyn_cast<func::FuncOp>(op))
+          checkPublicKernelArgumentSchema(func, sawError);
       }
 
       if (isForbiddenTargetDialect(dialect)) {

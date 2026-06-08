@@ -1,7 +1,8 @@
 // RUN: vc4-opt %s --vc4-verify-value-surface -verify-diagnostics -split-input-file
 
 builtin.module {
-  func.func @kernel(%out: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(%out: memref<16xf32> {vc4value.arg_name = "out", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     %c16 = arith.constant 16 : index
     %zero = arith.constant 0.000000e+00 : f32
@@ -17,7 +18,8 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%out: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(%out: memref<16xf32> {vc4value.arg_name = "out", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     %c16 = arith.constant 16 : index
     %zero = arith.constant 0.000000e+00 : f32

@@ -2,7 +2,10 @@
 
 builtin.module {
   // expected-error @+1 {{tensor types are not legal in the initial VC4 value surface}}
-  func.func @tensor_type(%t: tensor<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @tensor_type(%t: tensor<16xf32>) {
+    return
+  }
+  func.func @kernel() attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     return
   }
 }

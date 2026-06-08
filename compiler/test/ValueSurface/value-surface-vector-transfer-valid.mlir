@@ -2,7 +2,10 @@
 
 builtin.module {
   // CHECK-LABEL: func.func @kernel
-  func.func @kernel(%in: memref<16xf32>, %out: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(
+      %in: memref<16xf32> {vc4value.arg_name = "in", vc4value.direction = "in"},
+      %out: memref<16xf32> {vc4value.arg_name = "out", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %pid = vc4value.program_id {axis = 0 : i32} : index
     %c0 = arith.constant 0 : index
     %zero = arith.constant 0.000000e+00 : f32

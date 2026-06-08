@@ -59,7 +59,7 @@ producer-facing value-surface boundary:
 The verifier does not prove:
 
 - value-to-VC4Kernel lowerability;
-- memref ABI or launch ABI correctness;
+- full memref ABI correctness;
 - vector transfer lowering;
 - math lowering policy correctness;
 - VC4Kernel verifier correctness;
@@ -71,10 +71,12 @@ Lowerability starts in Phase 5 after Phase 4 ABI lock. TTIR import remains
 disallowed until the handwritten value path is proven.
 
 Phase 4 extends the same verification boundary with public value-kernel ABI
-rules documented in `compiler/docs/vc4_value_kernel_abi.md`. Those rules lock
-argument names, directions, scalar roles, `#vc4value.global` memref arguments,
-explicit shape/stride metadata, and the no-hidden-descriptor policy. They still
-do not lower value IR to VC4Kernel.
+rules documented in `compiler/docs/vc4_value_kernel_abi.md`. Phase 4d verifies
+the public kernel wrapper, `vc4value.grid_rank`, public argument names, memref
+directions, scalar roles, public argument categories, and unknown
+`vc4value.*` argument ABI attributes. Phase 4e verifies the exact
+`#vc4value.global` memref ABI. These checks still do not lower value IR to
+VC4Kernel.
 
 ## 5. Allowed dialect family
 

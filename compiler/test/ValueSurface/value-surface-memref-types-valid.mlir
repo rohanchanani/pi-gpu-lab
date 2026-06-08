@@ -3,11 +3,12 @@
 builtin.module {
   // CHECK-LABEL: func.func @kernel
   func.func @kernel(
-      %m_i8: memref<16xi8>,
-      %m_i16: memref<4x4xi16>,
-      %m_i32: memref<16xi32>,
-      %m_f16: memref<4x4xf16>,
-      %m_f32: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+      %m_i8: memref<16xi8> {vc4value.arg_name = "m_i8", vc4value.direction = "in"},
+      %m_i16: memref<4x4xi16> {vc4value.arg_name = "m_i16", vc4value.direction = "in"},
+      %m_i32: memref<16xi32> {vc4value.arg_name = "m_i32", vc4value.direction = "in"},
+      %m_f16: memref<4x4xf16> {vc4value.arg_name = "m_f16", vc4value.direction = "in"},
+      %m_f32: memref<16xf32> {vc4value.arg_name = "m_f32", vc4value.direction = "in"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %pid = vc4value.program_id {axis = 0 : i32} : index
     %c0 = arith.constant 0 : index
     // CHECK: memref.dim

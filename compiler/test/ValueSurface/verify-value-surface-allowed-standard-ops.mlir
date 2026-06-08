@@ -2,7 +2,10 @@
 
 builtin.module {
   // CHECK-LABEL: func.func @kernel
-  func.func @kernel(%in: memref<16xf32>, %out: memref<16xf32>, %flag: i1) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(
+      %in: memref<16xf32> {vc4value.arg_name = "in", vc4value.direction = "in"},
+      %out: memref<16xf32> {vc4value.arg_name = "out", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     // CHECK: vc4value.program_id
     %pid = vc4value.program_id {axis = 0 : i32} : index
     // CHECK: vc4value.num_programs
@@ -20,6 +23,7 @@ builtin.module {
     %read = vector.transfer_read %in[%c0], %zero {in_bounds = [true]} : memref<16xf32>, vector<16xf32>
     // CHECK: vector.transfer_write
     vector.transfer_write %read, %out[%c0] {in_bounds = [true]} : vector<16xf32>, memref<16xf32>
+    %flag = arith.constant true
     // CHECK: scf.if
     scf.if %flag {
       vector.transfer_write %splat, %out[%c0] {in_bounds = [true]} : vector<16xf32>, memref<16xf32>

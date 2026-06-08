@@ -1,7 +1,8 @@
 // RUN: vc4-opt %s --vc4-verify-value-surface -verify-diagnostics -split-input-file
 
 builtin.module {
-  func.func @kernel(%in: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(%in: memref<16xf32> {vc4value.arg_name = "in", vc4value.direction = "in"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
     %v = memref.load %in[%c0] : memref<16xf32>
@@ -12,7 +13,8 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%out: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(%out: memref<16xf32> {vc4value.arg_name = "out", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     %zero = arith.constant 0.000000e+00 : f32
     // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
@@ -24,7 +26,10 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%src: memref<16xf32>, %dst: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(
+      %src: memref<16xf32> {vc4value.arg_name = "src", vc4value.direction = "in"},
+      %dst: memref<16xf32> {vc4value.arg_name = "dst", vc4value.direction = "out"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
     memref.copy %src, %dst : memref<16xf32> to memref<16xf32>
     return
@@ -34,7 +39,8 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%m: memref<16xi32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(%m: memref<16xi32> {vc4value.arg_name = "m", vc4value.direction = "inout"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     %v = arith.constant 1 : i32
     // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
@@ -46,7 +52,11 @@ builtin.module {
 // -----
 
 builtin.module {
-  func.func @kernel(%src: memref<16xf32, 0>, %dst: memref<16xf32, 1>, %tag: memref<1xi32, 2>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+  func.func @kernel(
+      %src: memref<16xf32, 0> {vc4value.arg_name = "src", vc4value.direction = "in"},
+      %dst: memref<16xf32, 1> {vc4value.arg_name = "dst", vc4value.direction = "out"},
+      %tag: memref<1xi32, 2> {vc4value.arg_name = "tag", vc4value.direction = "inout"})
+      attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %c0 = arith.constant 0 : index
     %c16 = arith.constant 16 : index
     // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
