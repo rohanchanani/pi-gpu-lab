@@ -21,6 +21,8 @@ Feature classification remains in
 `compiler/docs/vc4_value_ttir_feature_taxonomy.json`.
 The Phase 3.5 vector abstraction boundary is recorded in
 `compiler/docs/vc4_value_surface_abstraction_policy.md`.
+The Phase 4 public value ABI is recorded in
+`compiler/docs/vc4_value_kernel_abi.md`.
 
 ## 2. Planning boundary
 
@@ -56,20 +58,26 @@ operands.
 
 ## 4. ABI and memref lowering plan
 
-A value memref base pointer lowers to a raw i32 uniform for VC4Kernel. Dynamic
-sizes, strides, offsets, and other ABI values lower to scalar arguments or
-metadata after the value-layer ABI plan proves their type and range.
+A value memref base pointer lowers later to a raw i32 uniform for VC4Kernel.
+Dynamic sizes, strides, offsets, and other ABI values lower to scalar arguments
+or metadata after the value-layer ABI plan proves their type and range.
 
-The initial ABI is contiguous rank-1 global memory:
+Phase 4 locks the producer-facing public memref ABI as rank-1/rank-2
+`#vc4value.global` memrefs with element types:
 
 ```text
-memref<?xf32>
-memref<?xi32>
+i8, i16, i32, f16, f32
 ```
 
-Later rank-2 strided ABI support must preserve rank, shape, pitch, stride,
-layout, memory space, and element type until the planner chooses a target memory
-path.
+Dynamic dimensions are named by `vc4value.shape_args`; dynamic strides are
+named by `vc4value.stride_args`. There is no hidden memref descriptor ABI.
+`memref.dim` is metadata-only and must resolve to explicit extent arguments or
+static dimensions before target lowering.
+
+The first Phase 5 V1 lowerable memory subset is narrower: rank-1 contiguous
+i32/f32 global memrefs for elementwise kernels. i8/i16/f16 memrefs, rank-2
+memrefs, and dynamic-stride layouts remain staged until the planner implements
+the relevant subword, f16-storage, or VPM/tile paths.
 
 Read-only, write-only, and inout attributes are planning hints. They can guide
 TMU, VDR, and VDW path selection, but they are not permission to weaken source

@@ -26,7 +26,17 @@
       "diagnostic_policy": "diagnose missing/invalid kernel metadata",
       "verification": "verifier checks function attrs and grid-rank shape",
       "summary": "func.func with vc4value.kernel and vc4value.grid_rank metadata is the value-kernel wrapper contract.",
-      "notes": "Admissibility only; no ABI lowering."
+      "notes": "Admissibility only; no ABI lowering. Phase 4 locks public argument names and scalar roles; it still performs no lowering.",
+      "phase4_abi_equivalent_feature_ids": [
+        "value_kernel_func_wrapper_abi",
+        "public_arg_name_attr_schema",
+        "public_scalar_role_attr_schema"
+      ],
+      "phase4_abi_behavior": {
+        "value_kernel_func_wrapper_abi": "accepted_public_abi_contract",
+        "public_arg_name_attr_schema": "accepted_public_abi_contract",
+        "public_scalar_role_attr_schema": "accepted_public_abi_contract"
+      }
     },
     {
       "feature_id": "vc4value_program_id_num_programs",
@@ -89,7 +99,25 @@
       "diagnostic_policy": "diagnose unranked memref or rank greater than 2",
       "verification": "type walker checks memref types",
       "summary": "ranked rank-1/rank-2 logical memref types with supported scalar element types are admissible value-surface memory types.",
-      "notes": "No memory-space attr is finalized in Phase3."
+      "notes": "No memory-space attr is finalized in Phase3. Phase 4 refines public memrefs to rank-1/rank-2 #vc4value.global ABI arguments with explicit shape/stride scalar metadata and no hidden descriptors.",
+      "phase4_abi_equivalent_feature_ids": [
+        "vc4value_global_memory_space_attr",
+        "public_memref_direction_attr_schema",
+        "public_memref_shape_args_metadata",
+        "public_memref_stride_args_metadata",
+        "rank1_rank2_global_memref_i8_i16_i32_f16_f32_abi",
+        "public_memref_dim_metadata_only",
+        "phase5_v1_i32_f32_rank1_contiguous_lowerable_subset"
+      ],
+      "phase4_abi_behavior": {
+        "vc4value_global_memory_space_attr": "accepted_public_abi_contract",
+        "public_memref_direction_attr_schema": "accepted_public_abi_contract",
+        "public_memref_shape_args_metadata": "accepted_public_abi_contract",
+        "public_memref_stride_args_metadata": "accepted_public_abi_contract",
+        "rank1_rank2_global_memref_i8_i16_i32_f16_f32_abi": "abi_admissible_with_staged_subsets",
+        "public_memref_dim_metadata_only": "accepted_metadata_only",
+        "phase5_v1_i32_f32_rank1_contiguous_lowerable_subset": "future_phase5_v1_lowerable_candidate"
+      }
     },
     {
       "feature_id": "fixed_vector_types_surface",
@@ -111,7 +139,7 @@
       "diagnostic_policy": "diagnose scalable vectors, vector rank greater than 2, or unsupported vector element types",
       "verification": "type walker checks vector types",
       "summary": "fixed non-scalable rank-1/rank-2 vector types with supported scalar element types are admissible value-surface vector types; vector<16xT> is the Phase 5 V1 lowerable fragment-normal form, not the global value-layer type limit.",
-      "notes": "Phase 3.5 distinguishes surface admissibility from Phase 5 V1 lowerability. i32/f32 vector<16> arithmetic carriers are lowerable_v1 later; i1/index are support forms; i8/i16/f16 are surface/storage forms unless a later phase proves arithmetic.",
+      "notes": "Phase 3.5 distinguishes surface admissibility from Phase 5 V1 lowerability. i32/f32 vector<16> arithmetic carriers are lowerable_v1 later; i1/index are support forms; i8/i16/f16 are surface/storage forms unless a later phase proves arithmetic. Phase 4 rejects vector public kernel arguments while preserving Phase 3.5 body-vector admissibility.",
       "phase3_5_equivalent_feature_ids": [
         "value.vector.fixed_rank1.width16_fragment_carriers",
         "value.vector.fixed_rank1.non16_staged_split",
@@ -122,6 +150,12 @@
         "value.vector.fixed_rank1.width16_fragment_carriers": "lowerable_v1",
         "value.vector.fixed_rank1.non16_staged_split": "staged_split_required",
         "value.vector.fixed_rank2.staged_tile_contract": "staged_tile_or_contract_required"
+      },
+      "phase4_abi_equivalent_feature_ids": [
+        "public_vector_args_reject"
+      ],
+      "phase4_abi_behavior": {
+        "public_vector_args_reject": "reject_public_kernel_argument_only_body_vectors_remain_surface_admissible"
       }
     },
     {
@@ -290,12 +324,18 @@
       "diagnostic_policy": "diagnose forbidden producer dialect namespace",
       "verification": "verifier rejects op dialect names",
       "summary": "tt, ttg, gpu, linalg, tensor, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, and mhlo are rejected in value-surface inputs.",
-      "notes": "Future producer inputs must canonicalize first. Tensor/linalg are not Phase 3.5 value IR.",
+      "notes": "Future producer inputs must canonicalize first. Tensor/linalg are not Phase 3.5 value IR. Phase 4 public tensor arguments remain rejected; tensor/linalg stay future producer layers only.",
       "phase3_5_equivalent_feature_ids": [
         "value.tensor_linalg.initial_reject"
       ],
       "surface_verifier_behavior": "reject",
-      "phase5_lowering_behavior": "rejected"
+      "phase5_lowering_behavior": "rejected",
+      "phase4_abi_equivalent_feature_ids": [
+        "public_tensor_args_reject"
+      ],
+      "phase4_abi_behavior": {
+        "public_tensor_args_reject": "reject_public_kernel_argument_and_initial_value_surface_tensor_policy"
+      }
     },
     {
       "feature_id": "forbidden_target_dialects",
@@ -357,7 +397,13 @@
       "diagnostic_policy": "diagnose direct memref side-effect operation",
       "verification": "verifier rejects listed memref ops",
       "summary": "memref.load/store/atomic/copy/dma operations are rejected to preserve the transfer/planning boundary.",
-      "notes": "Use vector.transfer_read/write for standard memory semantics."
+      "notes": "Use vector.transfer_read/write for standard memory semantics. Phase 4 locks explicit shape/stride scalar metadata and rejects hidden memref descriptor ABI assumptions.",
+      "phase4_abi_equivalent_feature_ids": [
+        "hidden_memref_descriptor_reject"
+      ],
+      "phase4_abi_behavior": {
+        "hidden_memref_descriptor_reject": "deterministic_reject_no_hidden_descriptor_abi"
+      }
     },
     {
       "feature_id": "forbidden_sparse_store_ops",

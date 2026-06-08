@@ -32,6 +32,13 @@ Phase 3.5 refines the vector abstraction boundary in
 target-profiled standard MLIR subset, while `vector<16xT>` is the Phase 5 V1
 lowerable fragment-normal form rather than the global value-layer type limit.
 
+Phase 4 locks the public value kernel ABI in
+`compiler/docs/vc4_value_kernel_abi.md`. That ABI uses `func.func`
+`vc4value.kernel` wrappers, public argument attrs, and rank-1/rank-2 logical
+memrefs in `#vc4value.global` memory space. It is still a static ABI contract:
+no value-to-VC4Kernel lowering, memref lowering, runtime behavior, hardware
+path selection, or Triton support is implemented by the ABI document.
+
 No vector dialect ops are legal inside verified VC4Kernel. VC4Kernel may use
 `vector<16xT>` carrier types for target fragment values, but those carrier types
 are not permission for producer dialect operations to appear in verified
@@ -168,19 +175,22 @@ VC4Kernel receives raw i32 base pointer uniforms plus scalar sizes, strides,
 offsets, and policy values after lowering. That raw pointer ABI is a lower
 target contract, not the producer-facing value syntax.
 
-Initial V1 value memory supports:
+Phase 4 defines the public value ABI as rank-1/rank-2 logical memrefs in
+`#vc4value.global` memory space with element types:
 
 ```text
-memref<?xf32>
-memref<?xi32>
+i8, i16, i32, f16, f32
 ```
 
-for contiguous 1D global buffers. The recommended conceptual memory space is
-`#vc4value.global`, but Phase 4 may finalize the exact TableGen spelling.
+Dynamic dimensions and dynamic strides are explicit scalar kernel arguments
+named by `vc4value.shape_args` and `vc4value.stride_args`. There is no hidden
+memref descriptor ABI. `memref.dim` is metadata-only and must later resolve to
+explicit scalar extent arguments or static dimensions.
 
-Later phases may support rank-2 strided memrefs. Those phases must preserve
-rank, shape, layout, pitch, and stride semantics long enough for the planner to
-choose TMU, VDR/VPM, VDW, or a diagnostic.
+The Phase 5 V1 lowerable subset is narrower than the Phase 4 ABI:
+rank-1 contiguous i32/f32 global memrefs for elementwise kernels. i8/i16/f16
+memrefs and rank-2 memrefs are ABI-admissible but staged for subword,
+f16-storage, or VPM/tile planning.
 
 ## 8. Vector type and lane model
 

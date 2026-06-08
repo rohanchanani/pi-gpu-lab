@@ -70,6 +70,12 @@ The verifier does not prove:
 Lowerability starts in Phase 5 after Phase 4 ABI lock. TTIR import remains
 disallowed until the handwritten value path is proven.
 
+Phase 4 extends the same verification boundary with public value-kernel ABI
+rules documented in `compiler/docs/vc4_value_kernel_abi.md`. Those rules lock
+argument names, directions, scalar roles, `#vc4value.global` memref arguments,
+explicit shape/stride metadata, and the no-hidden-descriptor policy. They still
+do not lower value IR to VC4Kernel.
+
 ## 5. Allowed dialect family
 
 The allowed producer-facing value dialect family is exactly:
@@ -242,6 +248,11 @@ READY_FOR_TRITON=NO
 
 Phase 4 owns value ABI lock. Phase 5+ owns value-to-VC4Kernel lowering. TTIR
 import remains disallowed until the handwritten value path is proven.
+
+The Phase 4 ABI handoff permits a future Phase 5 V1 package to target only the
+vector<16> i32/f32 elementwise rank-1 contiguous subset first. Broader fixed
+vectors, rank-2 memrefs, subword storage, and f16 storage remain staged unless
+a later phase proves and implements their lowering.
 
 The verifier must not add conversion patterns, target emission, runtime hooks,
 hardware candidate generation, or hardware fixtures.

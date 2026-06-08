@@ -114,6 +114,18 @@ FORBIDDEN_VECTOR_LIMIT_PHRASES = [
     "only legal value-layer vector shape is vector<16xT>",
 ]
 
+PHASE4_SCOPED_LOWERING_READINESS = (
+    "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES_FOR_PHASE5_ELEMENTWISE_V1"
+)
+
+
+def has_forbidden_lowering_ready_claim(text: str) -> bool:
+    """Reject broad YES claims while allowing the scoped Phase 4 handoff line."""
+    return (
+        "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES"
+        in text.replace(PHASE4_SCOPED_LOWERING_READINESS, "")
+    )
+
 
 def fail(message: str) -> None:
     print(f"FAIL VC4 value surface matrix: {message}", file=sys.stderr)
@@ -174,7 +186,7 @@ def validate_phase3_5_vector_abstraction(data: dict, matrix_path: str) -> None:
     docs_root = resolved_matrix_path.parent
     for doc in docs_root.glob("vc4*phase3*.md"):
         text = doc.read_text(encoding="utf-8")
-        if "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES" in text:
+        if has_forbidden_lowering_ready_claim(text):
             fail(f"{doc} claims value-to-vc4kernel lowering is ready")
         if "READY_FOR_TRITON=YES" in text:
             fail(f"{doc} claims Triton is ready")
@@ -197,7 +209,7 @@ def validate_phase3_5_vector_abstraction(data: dict, matrix_path: str) -> None:
                     fail(f"{path} claims forbidden global vector<16> limit: {phrase}")
             if "audit" in path.name or path.name.startswith("invalid-"):
                 continue
-            if "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES" in text:
+            if has_forbidden_lowering_ready_claim(text):
                 fail(f"{path} claims value-to-vc4kernel lowering is ready")
             if "READY_FOR_TRITON=YES" in text:
                 fail(f"{path} claims Triton is ready")
