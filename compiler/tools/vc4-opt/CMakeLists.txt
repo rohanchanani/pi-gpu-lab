@@ -17,6 +17,7 @@ add_dependencies(vc4-opt
   VC4KernelTypesIncGen
   VC4KernelOpsIncGen
   VC4ValueDialectIncGen
+  VC4ValueOpsIncGen
 )
 
 target_link_libraries(vc4-opt
