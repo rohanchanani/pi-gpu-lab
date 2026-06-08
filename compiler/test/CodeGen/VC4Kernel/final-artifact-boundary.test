@@ -1,0 +1,10 @@
+# RUN: python3 %S/Support/audit_final_artifact_boundary.py --repo-root %S/../../../../../ --work-dir %t | FileCheck %s
+
+# CHECK: AUDITED mixed_surface_lock_elementwise_full_vc4kernel
+# CHECK: AUDITED mixed_surface_lock_vpm_pipeline_full_vc4kernel
+# CHECK: AUDITED mixed_surface_lock_dynamic_pingpong_qpu_compute_vc4kernel
+# CHECK: AUDITED mixed_blocked_gemv_vpm_fullstack_vc4kernel
+# CHECK: AUDITED mixed_blocked_gemm_vpm_fullstack_vc4kernel
+# CHECK: AUDITED mixed_surface_lock_cooperative_barrier_full_vc4kernel
+# CHECK: AUDITED mixed_lower_half_spill_dma_branch_ssavc4
+# CHECK: PASS VC4Kernel final artifact boundary audit: fixtures=7 groups=7

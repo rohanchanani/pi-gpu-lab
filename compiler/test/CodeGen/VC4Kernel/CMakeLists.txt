@@ -26,4 +26,15 @@ foreach(mixed_file ${VC4KERNEL_MIXED_ACCEPTANCE_FILES})
   configure_file("${mixed_file}" "${mixed_out}" COPYONLY)
 endforeach()
 
+file(GLOB VC4KERNEL_CODEGEN_SUPPORT_FILES CONFIGURE_DEPENDS
+  "${CMAKE_CURRENT_SOURCE_DIR}/Support/*")
+foreach(support_file ${VC4KERNEL_CODEGEN_SUPPORT_FILES})
+  get_filename_component(support_name "${support_file}" NAME)
+  set(support_out
+    "${CMAKE_CURRENT_BINARY_DIR}/Support/${support_name}")
+  get_filename_component(support_out_dir "${support_out}" DIRECTORY)
+  file(MAKE_DIRECTORY "${support_out_dir}")
+  configure_file("${support_file}" "${support_out}" COPYONLY)
+endforeach()
+
 add_subdirectory(Emit)
