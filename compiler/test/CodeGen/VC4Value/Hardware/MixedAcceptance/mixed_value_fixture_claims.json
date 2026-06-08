@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase5_mixed_acceptance_claims",
+  "fixtures": [
+    {
+      "name": "mixed_value_saxpy_select_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_saxpy_select_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_saxpy_select_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_saxpy_select_tail_vc4value/candidate/mixed_value_saxpy_select_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_mixed_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_mixed_elementwise=1 and zero mismatches/sentinel/launch failures; the harness checks tmp = a * x + y and selected output against the CPU oracle for every active element."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_tail_mask=1 and sentinel_mismatches=0; input.mlir uses vector.create_mask and the harness verifies inactive output lanes remain sentinel."
+          }
+        },
+        {
+          "claim": "saw_value_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir has checked vector.transfer_read operands for x, y, and fallback; expected output depends on all loaded buffers and is compared by the harness."
+          }
+        },
+        {
+          "claim": "saw_value_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores through a masked vector.transfer_write; expected.json requires sentinel_mismatches=0 after the harness fills inactive output slots with an adversarial sentinel."
+          }
+        },
+        {
+          "claim": "saw_value_f32_cmp_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses finite arith.cmpf plus arith.select; the harness oracle selects tmp or fallback based on the same finite threshold comparison."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_i32_f32_dual_path_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_i32_f32_dual_path_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_i32_f32_dual_path_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_i32_f32_dual_path_tail_vc4value/candidate/mixed_value_i32_f32_dual_path_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_mixed_i32_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir combines i32 and f32 transfer reads in one value kernel; the checked output depends on the i32 predicate selecting between f32 arithmetic and yf."
+          }
+        },
+        {
+          "claim": "saw_value_i32_cmp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses arith.cmpi sgt over vector<16xi32>; the harness oracle uses xi > threshold_i for every active element."
+          }
+        },
+        {
+          "claim": "saw_value_f32_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses arith.mulf and arith.addf; the harness checks candidate = a * xf + yf when the i32 predicate selects it."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "expected.json requires saw_value_tail_mask=1 and sentinel_mismatches=0; input.mlir uses vector.create_mask and the harness checks inactive output slots."
+          }
+        },
+        {
+          "claim": "saw_value_store_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir stores with a tail mask; the harness requires preserved sentinel values outside active n for every case."
+          }
+        }
+      ]
+    }
+  ]
+}

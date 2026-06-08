@@ -1,0 +1,27 @@
+{
+  "name": "mixed_value_saxpy_select_tail_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 39,
+    "elements_checked": 4407,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 3583424099,
+    "saw_value_mixed_elementwise": 1,
+    "saw_value_tail_mask": 1,
+    "saw_value_tmu_load": 1,
+    "saw_value_vdw_preserve": 1,
+    "saw_value_f32_cmp_select": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 39
+  },
+  "float_max": {
+    "max_abs_diff": 0.001
+  }
+}

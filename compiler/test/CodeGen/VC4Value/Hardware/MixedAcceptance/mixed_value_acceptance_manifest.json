@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase5_mixed_acceptance",
+  "fixtures": [
+    {
+      "name": "mixed_value_saxpy_select_tail_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_saxpy_select_tail_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "f32 elementwise masked saxpy plus finite compare/select through value-to-vc4kernel hardware",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_vector_step_lane",
+        "value_f32_transfer_read",
+        "value_f32_transfer_write",
+        "value_f32_alu",
+        "value_f32_finite_cmp_select",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "output_hash",
+        "saw_value_mixed_elementwise",
+        "saw_value_tail_mask",
+        "saw_value_tmu_load",
+        "saw_value_vdw_preserve",
+        "saw_value_f32_cmp_select"
+      ],
+      "expected_cases_summary": "13 n values times 3 scalar a values; active_qpus=12; tails and full vectors checked with sentinels",
+      "triage_feature_bands": [
+        "f32_tmu",
+        "f32_alu",
+        "finite_cmp_select",
+        "tail_store_preserve"
+      ]
+    },
+    {
+      "name": "mixed_value_i32_f32_dual_path_tail_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_i32_f32_dual_path_tail_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "mixed i32 predicate path controlling f32 arithmetic output through value-to-vc4kernel hardware",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_vector_step_lane",
+        "value_i32_transfer_read",
+        "value_f32_transfer_read",
+        "value_f32_transfer_write",
+        "value_i32_cmp",
+        "value_f32_alu",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "output_hash",
+        "saw_value_mixed_i32_f32",
+        "saw_value_i32_cmp",
+        "saw_value_f32_alu",
+        "saw_value_tail_mask",
+        "saw_value_store_preserve"
+      ],
+      "expected_cases_summary": "13 n values times 3 scalar a values; active_qpus=12; i32 cmp controls f32 select with sentinels",
+      "triage_feature_bands": [
+        "i32_tmu",
+        "i32_cmp",
+        "f32_tmu_alu",
+        "tail_store_preserve"
+      ]
+    }
+  ],
+  "required_features": [
+    {
+      "id": "value_launch_identity",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_vector_step_lane",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_f32_transfer_read",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_i32_transfer_read",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_f32_transfer_write",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_i32_transfer_write",
+      "verification_kind": "hardware_isolation_backstop",
+      "covered_by": [],
+      "covered_by_isolation": [
+        "value_i32_add_select_tail_vc4value"
+      ],
+      "mixed_status": "staged_mixed_addition",
+      "required": true
+    },
+    {
+      "id": "value_f32_alu",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_i32_cmp",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_f32_finite_cmp_select",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_tail_masks",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_vdw_inactive_preserve",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_no_producer_dialect_in_verified_vc4kernel",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    }
+  ],
+  "isolation_backstops": [
+    "value_i32_add_select_tail_vc4value"
+  ],
+  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine Phase 5 value mixed hardware gate."
+}
