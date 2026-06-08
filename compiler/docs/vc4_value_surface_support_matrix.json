@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_by": "Phase3f_value_surface_audit_lock",
+  "generated_by": "Phase3_5b_vector_abstraction_refinement",
   "phase": "Phase3",
   "status_counts_expected_for_phase3_lock": {
     "accepted_surface_contract": 9,
@@ -99,15 +99,30 @@
         "vector"
       ],
       "value_surface_form": [
-        "fixed vector types"
+        "fixed rank-1 vector<16xT> fragment-normal support form",
+        "fixed rank-1 vector<NxT> where N != 16 staged split form",
+        "fixed rank-2 vector<MxNxT> staged tile/contract form"
       ],
       "required_vc4kernel_contract": [
-        "VC4Kernel may use vector<16xT> carriers later"
+        "VC4Kernel may use vector<16xT> carrier types later",
+        "non-16 fixed vectors must split to vector<16> fragments plus tails or loops before VC4Kernel",
+        "rank-2 fixed vectors require later tile/contract/VPM planning before VC4Kernel"
       ],
-      "diagnostic_policy": "diagnose scalable vectors or vector rank greater than 2",
+      "diagnostic_policy": "diagnose scalable vectors, vector rank greater than 2, or unsupported vector element types",
       "verification": "type walker checks vector types",
-      "summary": "fixed non-scalable rank-1/rank-2 vector types with supported scalar element types are admissible value-surface vector types.",
-      "notes": "No VC4Kernel fragment lowering in Phase3."
+      "summary": "fixed non-scalable rank-1/rank-2 vector types with supported scalar element types are admissible value-surface vector types; vector<16xT> is the Phase 5 V1 lowerable fragment-normal form, not the global value-layer type limit.",
+      "notes": "Phase 3.5 distinguishes surface admissibility from Phase 5 V1 lowerability. i32/f32 vector<16> arithmetic carriers are lowerable_v1 later; i1/index are support forms; i8/i16/f16 are surface/storage forms unless a later phase proves arithmetic.",
+      "phase3_5_equivalent_feature_ids": [
+        "value.vector.fixed_rank1.width16_fragment_carriers",
+        "value.vector.fixed_rank1.non16_staged_split",
+        "value.vector.fixed_rank2.staged_tile_contract"
+      ],
+      "surface_verifier_behavior": "accept",
+      "phase5_lowering_behavior": {
+        "value.vector.fixed_rank1.width16_fragment_carriers": "lowerable_v1",
+        "value.vector.fixed_rank1.non16_staged_split": "staged_split_required",
+        "value.vector.fixed_rank2.staged_tile_contract": "staged_tile_or_contract_required"
+      }
     },
     {
       "feature_id": "vector_step_splat_mask_surface",
@@ -260,6 +275,7 @@
         "ttg",
         "gpu",
         "linalg",
+        "tensor",
         "nvgpu",
         "nvvm",
         "rocdl",
@@ -273,8 +289,13 @@
       ],
       "diagnostic_policy": "diagnose forbidden producer dialect namespace",
       "verification": "verifier rejects op dialect names",
-      "summary": "tt, ttg, gpu, linalg, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, and mhlo are rejected in value-surface inputs.",
-      "notes": "Future inputs must canonicalize first."
+      "summary": "tt, ttg, gpu, linalg, tensor, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, and mhlo are rejected in value-surface inputs.",
+      "notes": "Future producer inputs must canonicalize first. Tensor/linalg are not Phase 3.5 value IR.",
+      "phase3_5_equivalent_feature_ids": [
+        "value.tensor_linalg.initial_reject"
+      ],
+      "surface_verifier_behavior": "reject",
+      "phase5_lowering_behavior": "rejected"
     },
     {
       "feature_id": "forbidden_target_dialects",
@@ -366,16 +387,26 @@
       ],
       "value_surface_form": [
         "scalable vector",
+        "unsupported vector element type",
         "unranked memref",
-        "rank > 2"
+        "rank > 2",
+        "tensor type",
+        "complex type"
       ],
       "required_vc4kernel_contract": [
-        "VC4Kernel locked surface is fixed/vector-16 oriented"
+        "VC4Kernel locked surface is fixed/vector-16 oriented downstream",
+        "Phase 3.5 value surface allows only i1/index/i8/i16/i32/f16/f32 vector element types"
       ],
-      "diagnostic_policy": "diagnose unsupported type shape",
+      "diagnostic_policy": "diagnose scalable vectors, unsupported vector element types, tensor/complex types, unranked memrefs, or rank greater than 2",
       "verification": "type walker checks memref/vector types",
-      "summary": "scalable vectors, unranked memrefs, memref rank greater than 2, and vector rank greater than 2 are rejected in Phase 3.",
-      "notes": "Staging guardrail, not permanent hardware proof."
+      "summary": "scalable vectors, unsupported vector element types, tensor types, complex types, unranked memrefs, memref rank greater than 2, and vector rank greater than 2 are rejected in Phase 3.5.",
+      "notes": "Fixed non-scalable rank-1/rank-2 vectors are not rejected merely because their shape is not vector<16>; scalable vectors and unsupported element types remain deterministic initial rejects.",
+      "phase3_5_equivalent_feature_ids": [
+        "value.vector.scalable_reject",
+        "value.vector.unsupported_element_reject"
+      ],
+      "surface_verifier_behavior": "reject",
+      "phase5_lowering_behavior": "rejected"
     },
     {
       "feature_id": "staged_vector_gather_memory_expansion",
@@ -464,15 +495,21 @@
       ],
       "value_surface_form": [
         "i8/i16 storage",
-        "f16 storage conversion"
+        "f16 storage conversion",
+        "f16 vector carrier/storage forms"
       ],
       "required_vc4kernel_contract": [
         "VC4Kernel f16 storage conversion plus f32 compute"
       ],
       "diagnostic_policy": "diagnose native f16 arithmetic in later policies",
       "verification": "future verifier/matrix update required",
-      "summary": "subword and f16 storage conversion are staged for later table-backed lowering.",
-      "notes": "Native f16 arithmetic remains rejected downstream."
+      "summary": "subword and f16 storage conversion are staged for later table-backed lowering; native f16 arithmetic is not accepted.",
+      "notes": "f16 is surface-admissible as a storage-conversion type. f16 storage conversion plus f32 compute is accepted downstream, but native f16 arithmetic is not accepted.",
+      "phase3_5_equivalent_feature_ids": [
+        "value.vector.f16_storage_not_native_arith"
+      ],
+      "surface_verifier_behavior": "accept",
+      "phase5_lowering_behavior": "staged_storage_only"
     },
     {
       "feature_id": "staged_shuffle_rotate_broadcast",

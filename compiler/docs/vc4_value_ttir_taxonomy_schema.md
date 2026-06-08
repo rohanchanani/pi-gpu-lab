@@ -42,6 +42,10 @@ VC4Kernel may use `vector<16xT>` carrier types for target fragments, but
 verified VC4Kernel hardware fixtures must not contain vector dialect operations
 or other producer dialect operations.
 
+The Phase 3.5 value abstraction policy distinguishes surface-admissible fixed
+vectors from Phase 5 V1 lowerable `vector<16>` fragment-normal forms. Taxonomy
+rows must not describe `vector<16xT>` as the global value-layer vector limit.
+
 `READY_FOR_TRITON` remains `NO` during Phase 1. TTIR/Triton rows in the taxonomy
 are planning classifications, not implementation claims.
 
@@ -173,6 +177,12 @@ math must not silently lower to approximate SFU.
 handling, dense rectangular stores, cache hint handling, atomics staging, or
 out-of-scope memory forms.
 
+Vector rows should distinguish `surface_verifier_behavior` from
+`phase5_lowering_behavior` once those fields are present. Fixed rank-1
+non-16 vectors are staged for split/tail lowering, fixed rank-2 vectors are
+staged for tile/contract planning, and scalable vectors remain deterministic
+initial rejects.
+
 `mask_policy` records full, empty, tail, rectangular, sparse-compute,
 sparse-store, and unknown-mask behavior. Sparse VDW stores remain a locked
 VC4Kernel reject.
@@ -189,7 +199,8 @@ tests, audits, or proof artifacts. Updates must preserve these invariants:
 - no direct VC4KernelToVC4 path;
 - no VC4Tile resurrection;
 - no producer dialect operations inside verified VC4Kernel;
-- no READY_FOR_TRITON=YES until real TTIR ingestion is implemented and proven;
+- no affirmative Triton-readiness line until real TTIR ingestion is implemented
+  and proven;
 - no permanent reject without semantic or hardware impossibility proof;
 - no executable value/Triton support claim from documentation alone;
 - no weakening of locked VC4Kernel verifier, audit, fixture, or mixed-claim

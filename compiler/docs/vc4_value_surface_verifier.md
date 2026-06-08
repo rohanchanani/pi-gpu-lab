@@ -36,6 +36,12 @@ VC4 hardware path choices belong to later value-to-VC4Kernel planning.
 No vector dialect ops are legal inside verified VC4Kernel. VC4Kernel may still
 use `vector<16xT>` carrier types for target fragment values.
 
+Phase 3.5 refines this boundary in
+`compiler/docs/vc4_value_surface_abstraction_policy.md`: fixed rank-1 and
+rank-2 value vectors are surface-admissible when their element types are
+allowed, while `vector<16xT>` is the Phase 5 V1 lowerable fragment-normal form
+and not the global value-layer type limit.
+
 ## 3. What the verifier proves
 
 The verifier proves that an input module stays inside the Phase 3
@@ -85,6 +91,10 @@ surface first:
 tt, ttg, gpu, linalg, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, mhlo
 ```
 
+Tensor dialect IR is also outside the initial value surface. Future producer
+layers may canonicalize tensor or linalg-like programs into the value surface,
+but tensor/linalg operations are not Phase 3.5 value IR.
+
 It also rejects target/lower-half dialects in value input:
 
 ```text
@@ -129,15 +139,22 @@ stronger policy meaning.
 
 ## 9. Type guardrails
 
-Phase 3 accepts fixed, non-scalable vector types and ranked memref types within
-the initial value-surface shape contract.
+Phase 3.5 accepts fixed, non-scalable rank-1 and rank-2 vector types and ranked
+memref types within the initial value-surface shape contract.
+
+Allowed vector element types are exactly `i1`, `index`, `i8`, `i16`, `i32`,
+`f16`, and `f32`. `vector<16xT>` is the Phase 5 V1 lowerable fragment-normal
+form. Non-16 rank-1 vectors are staged for split/tail lowering, and rank-2
+vectors are staged for tile/contract planning.
 
 The verifier rejects:
 
 - scalable vectors;
+- unsupported vector element types;
 - unranked memrefs;
 - memref rank greater than 2;
-- vector rank greater than 2.
+- vector rank greater than 2;
+- tensor and complex types.
 
 These are Phase 3 staging guardrails, not permanent hardware-impossibility
 proofs.

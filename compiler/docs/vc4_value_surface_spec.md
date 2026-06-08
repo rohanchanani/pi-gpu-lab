@@ -27,6 +27,11 @@ The value surface is tracked alongside the Phase 1 taxonomy in
 features; this document explains the human-readable value-layer contract those
 rows are expected to preserve.
 
+Phase 3.5 refines the vector abstraction boundary in
+`compiler/docs/vc4_value_surface_abstraction_policy.md`: the value surface is a
+target-profiled standard MLIR subset, while `vector<16xT>` is the Phase 5 V1
+lowerable fragment-normal form rather than the global value-layer type limit.
+
 No vector dialect ops are legal inside verified VC4Kernel. VC4Kernel may use
 `vector<16xT>` carrier types for target fragment values, but those carrier types
 are not permission for producer dialect operations to appear in verified
@@ -64,12 +69,14 @@ The following dialect families are not accepted in the initial verified value
 path:
 
 ```text
-tt, ttg, gpu, linalg, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, mhlo
+tt, ttg, gpu, linalg, tensor, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, mhlo
 ```
 
 `linalg` may be useful as a future lowering input, but it must canonicalize to
-the value surface first. The initial verified path consumes `vector` and
-`memref` forms, not `linalg` ops.
+the value surface first. Tensor IR may also be useful above the value surface,
+but it must lower into the target-profiled value subset first. The initial
+verified path consumes `vector` and `memref` forms, not `tensor` or `linalg`
+ops.
 
 Real TTIR is a future producer input. It must lower into this value surface
 after the handwritten path is proven; TTIR ops are not part of the value surface
@@ -177,27 +184,53 @@ choose TMU, VDR/VPM, VDW, or a diagnostic.
 
 ## 8. Vector type and lane model
 
-The first executable value shape is SIMD-16. Conceptual value-layer forms
-include:
+The value surface admits fixed, non-scalable rank-1 and rank-2 vectors with
+allowed element types. `vector<16xT>` is the Phase 5 V1 lowerable
+fragment-normal form for executable elementwise lowering; it is not the global
+value-layer type limit.
+
+Surface-admissible vector forms include:
 
 ```text
-vector<16xi32>
-vector<16xf32>
-vector<16xindex>
-vector<16xi1>
+vector<16xi32>        ; Phase 5 V1 lowerable arithmetic carrier
+vector<16xf32>        ; Phase 5 V1 lowerable arithmetic carrier
+vector<16xindex>      ; value-level address/program-id support form
+vector<16xi1>         ; mask/predicate support form
+vector<NxT>           ; staged split/tail form when N != 16
+vector<MxNxT>         ; staged tile/contract form
 ```
 
-`vector.step` is the preferred arange/lane representation. The common lane
-range is:
+Allowed vector element types are exactly:
+
+```text
+i1, index, i8, i16, i32, f16, f32
+```
+
+`i1` is for masks and predicate sources. `index` is for value-level address and
+program-id arithmetic. `i8` and `i16` are subword storage and data-movement
+surface types, not native arithmetic promises. `f16` is a storage-conversion
+surface type: f16 storage conversion plus f32 compute is accepted downstream,
+but native f16 arithmetic remains rejected. `i32` and `f32` are the first
+executable arithmetic carriers for Phase 5 V1.
+
+Fixed rank-1 `vector<NxT>` where `N != 16` is surface-admissible and staged for
+later splitting into `vector<16>` fragments plus tails or loops. Fixed rank-2
+`vector<MxNxT>` is surface-admissible and staged for later tile, contract, and
+VPM planning. Scalable vectors remain deterministic rejects in the initial
+value surface.
+
+`vector.step` is the preferred arange/lane representation. The common first V1
+lane range is:
 
 ```mlir
 %lane = vector.step : vector<16xindex>
 ```
 
-`BLOCK_SIZE=16` is the first planned block size. Larger blocks must split or
-loop over `vector<16>` fragments. The value surface must not invent a wider
-VC4Kernel fragment carrier or assume physical lanes beyond the locked SIMD-16
-target model.
+`BLOCK_SIZE=16` is the first lowerable block size. Larger or non-16 blocks are
+not permanent value-surface rejects; they are staged until splitting, tail
+masks, loops, or rank-2 tile planning are implemented. The value surface must
+not invent a wider VC4Kernel fragment carrier or assume physical lanes beyond
+the locked SIMD-16 target model.
 
 ## 9. Mask model
 

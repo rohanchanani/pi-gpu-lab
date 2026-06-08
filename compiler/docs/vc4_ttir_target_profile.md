@@ -22,6 +22,8 @@ Triton / emitted TTIR
 The value-surface contract is specified in
 `compiler/docs/vc4_value_surface_spec.md`. Feature classification is tracked in
 `compiler/docs/vc4_value_ttir_feature_taxonomy.json`.
+Phase 3.5 vector abstraction policy is specified in
+`compiler/docs/vc4_value_surface_abstraction_policy.md`.
 
 ## 2. Definition of FULL for this project
 
@@ -87,7 +89,7 @@ The initial smoke profile is a narrow conceptual subset:
   cases;
 - masked store into `vector.transfer_write` for dense/tail cases;
 - simple arithmetic, comparison, and select;
-- `BLOCK_SIZE=16` first.
+- `BLOCK_SIZE=16` first for the Phase 5 V1 lowerable fragment-normal form.
 
 The first smoke profile explicitly excludes dot, reductions, and block pointers.
 Those families are staged later so the importer does not conflate a small
@@ -117,10 +119,12 @@ Arange-like TTIR forms lower conceptually through the value lane model:
 vector.step -> vector<16xindex> lane range
 ```
 
-`BLOCK_SIZE=16` is first because it matches the locked SIMD-16 value fragment
-shape. Larger block sizes should split or loop over `vector<16>` fragments.
-Non-16 block sizes are not permanent rejects; they are staged until splitting,
-tail masks, and loop structure are specified.
+`BLOCK_SIZE=16` is first because it matches the Phase 5 V1 lowerable
+`vector<16>` fragment-normal form. This is not the global value-layer vector
+limit. Fixed rank-1 `vector<NxT>` with `N != 16` is surface-admissible and
+staged until splitting, tail masks, and loop structure are specified. Fixed
+rank-2 vectors are surface-admissible and staged for tile, contract, and VPM
+planning. Scalable vectors remain initial deterministic rejects.
 
 Offsets should remain ordinary value expressions over `index` or proven i32
 values until the ABI profile proves target conversion is safe.

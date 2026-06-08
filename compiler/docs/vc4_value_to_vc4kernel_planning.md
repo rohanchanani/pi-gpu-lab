@@ -19,6 +19,8 @@ func + tiny vc4value + vector + memref + arith + math + scf/cf
 
 Feature classification remains in
 `compiler/docs/vc4_value_ttir_feature_taxonomy.json`.
+The Phase 3.5 vector abstraction boundary is recorded in
+`compiler/docs/vc4_value_surface_abstraction_policy.md`.
 
 ## 2. Planning boundary
 
@@ -75,13 +77,20 @@ memory semantics or skip required inactive-lane handling.
 
 ## 5. Lane and fragment planning
 
-`vector.step` maps to VC4Kernel lane identity / `lane_range` equivalent when the
-vector shape is `vector<16xindex>` or can be safely converted to the target i32
-lane carrier.
+`vector.step` maps to VC4Kernel lane identity / `lane_range` equivalent in the
+Phase 5 V1 subset when the vector shape is `vector<16xindex>` or can be safely
+converted to the target i32 lane carrier.
 
-`vector<16xi32>` and `vector<16xf32>` map to VC4Kernel fragment carrier types.
-The value planner must not invent wider VC4Kernel fragment carriers. Larger
-blocks split or loop over `vector<16>` fragments.
+`vector<16xi32>` and `vector<16xf32>` are the first lowerable VC4Kernel
+fragment carrier types for executable arithmetic. `vector<16xi1>` and
+`vector<16xindex>` are support forms for masks and address/program-id
+arithmetic. `vector<16xT>` is not the global value-layer type limit.
+
+Fixed rank-1 `vector<NxT>` with `N != 16` is surface-admissible and staged for
+later splitting into `vector<16>` fragments plus tails or loops. Fixed rank-2
+`vector<MxNxT>` is surface-admissible and staged for later tile, contract, and
+VPM planning. The value planner must not invent wider VC4Kernel fragment
+carriers.
 
 `vector.splat` and constants map to VC4Kernel `splat` and `fragment_const` where
 the element type and encoding are legal. Constants that are not directly
