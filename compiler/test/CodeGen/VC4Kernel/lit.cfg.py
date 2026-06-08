@@ -9,6 +9,20 @@ config.suffixes = [".test"]
 config.excludes = ["Hardware"]
 config.test_source_root = os.path.dirname(__file__)
 
+# Stable repo root for helper scripts; do not depend on individual test depth.
+_vc4_repo_root = getattr(config, "vc4_repo_root", None)
+if _vc4_repo_root is None:
+  _candidate = os.path.abspath(config.test_source_root)
+  while True:
+    if os.path.isdir(os.path.join(_candidate, "compiler", "test")):
+      _vc4_repo_root = _candidate
+      break
+    _parent = os.path.dirname(_candidate)
+    if _parent == _candidate:
+      raise RuntimeError("could not find VC4 repository root from lit config")
+    _candidate = _parent
+config.substitutions.append(("%vc4_repo_root", str(_vc4_repo_root)))
+
 _tools = []
 _compiler_root = getattr(config, "vc4_source_root", None)
 if _compiler_root:

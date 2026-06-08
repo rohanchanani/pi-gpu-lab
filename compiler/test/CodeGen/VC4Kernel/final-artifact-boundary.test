@@ -1,4 +1,4 @@
-# RUN: python3 %S/Support/audit_final_artifact_boundary.py --repo-root %S/../../../../../ --work-dir %t | FileCheck %s
+# RUN: python3 %S/Support/audit_final_artifact_boundary.py --repo-root %vc4_repo_root --work-dir %t | FileCheck %s
 
 # CHECK: AUDITED mixed_surface_lock_elementwise_full_vc4kernel
 # CHECK: AUDITED mixed_surface_lock_vpm_pipeline_full_vc4kernel
