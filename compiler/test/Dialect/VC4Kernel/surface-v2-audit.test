@@ -286,7 +286,7 @@
 # P13-SAME: sparse_vdw_active_hits=0
 # P13: p13_final_surface_lock:
 # P13-SAME: active_doc_transitional_hits=0
-# P13-SAME: active_docs_scanned=4
+# P13-SAME: active_docs_scanned=5
 # P13-SAME: active_source_forbidden_hits=0
 # P13-SAME: checked_pingpong_qpu_read=1
 # P13-SAME: claim_audit_claims=289

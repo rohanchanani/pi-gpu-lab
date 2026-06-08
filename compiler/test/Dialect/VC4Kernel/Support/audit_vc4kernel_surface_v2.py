@@ -627,6 +627,7 @@ P13E_P12_SELECTOR_INVALID_CORPUS = [
 ]
 P13_ACTIVE_SURFACE_DOCS = [
     Path("compiler/docs/vc4kernel_surface_v2_support_matrix.json"),
+    Path("compiler/docs/vc4kernel_surface_v2_final_lock.md"),
     Path("compiler/docs/vc4kernel_mixed_acceptance_policy.md"),
     Path("compiler/docs/codegen/vc4kernel_dialect_strict_specification.md"),
     Path("compiler/docs/codegen/vc4kernel_decision_traceability_matrix.md"),
