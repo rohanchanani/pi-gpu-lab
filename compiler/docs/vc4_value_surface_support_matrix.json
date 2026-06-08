@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_by": "Phase3b_value_surface_matrix_seed",
+  "generated_by": "Phase3f_value_surface_audit_lock",
   "phase": "Phase3",
   "status_counts_expected_for_phase3_lock": {
     "accepted_surface_contract": 9,
