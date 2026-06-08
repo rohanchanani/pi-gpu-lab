@@ -10,6 +10,14 @@ add a `vc4value` dialect, does not add a verifier, does not add conversion
 passes, does not add TTIR import, does not run hardware, and does not change the
 locked VC4Kernel surface.
 
+Phase 5 implementation status:
+
+```text
+VC4_VALUE_TO_VC4KERNEL_PASS_SKELETON_PRESENT=YES
+PASS_FLAG=--convert-vc4-value-to-vc4kernel
+READY_FOR_TRITON=NO
+```
+
 The guide is a planning contract for future phases. It describes the decisions
 those phases must make before creating VC4Kernel IR from:
 

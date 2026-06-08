@@ -2,6 +2,7 @@ add_mlir_tool(vc4-opt
   vc4-opt.cpp
   ${PROJECT_SOURCE_DIR}/lib/Conversion/SSAVC4ToVC4/SSAVC4ToVC4.cpp
   ${PROJECT_SOURCE_DIR}/lib/Conversion/VC4KernelToSSAVC4/VC4KernelToSSAVC4.cpp
+  ${PROJECT_SOURCE_DIR}/lib/Conversion/VC4ValueToVC4Kernel/VC4ValueToVC4Kernel.cpp
 )
 
 add_dependencies(vc4-opt
@@ -17,6 +18,7 @@ add_dependencies(vc4-opt
   VC4KernelTypesIncGen
   VC4KernelOpsIncGen
   VC4ValueDialectIncGen
+  VC4ValueAttrDefsIncGen
   VC4ValueOpsIncGen
 )
 

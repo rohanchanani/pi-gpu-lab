@@ -168,8 +168,11 @@ def require_no_conversion_mentions(repo_root: Path) -> None:
     conversion_root = repo_root / "compiler/lib/Conversion"
     if not conversion_root.exists():
         return
+    phase5_lowering_root = conversion_root / "VC4ValueToVC4Kernel"
     for path in conversion_root.rglob("*"):
         if not path.is_file():
+            continue
+        if phase5_lowering_root in path.parents:
             continue
         text = path.read_text(errors="ignore")
         if "VC4Value" in text or "vc4value" in text:
