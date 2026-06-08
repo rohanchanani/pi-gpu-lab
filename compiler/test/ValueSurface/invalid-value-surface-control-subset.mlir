@@ -19,3 +19,16 @@ builtin.module {
     return
   }
 }
+
+// -----
+
+builtin.module {
+  func.func @kernel(%i: i32) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    // expected-error @+1 {{cf operation is not in the Phase 3 VC4 value-surface control subset}}
+    cf.switch %i : i32, [
+      default: ^bb1
+    ]
+  ^bb1:
+    return
+  }
+}

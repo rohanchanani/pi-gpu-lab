@@ -30,3 +30,29 @@ builtin.module {
     return
   }
 }
+
+// -----
+
+builtin.module {
+  func.func @kernel(%m: memref<16xi32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    %c0 = arith.constant 0 : index
+    %v = arith.constant 1 : i32
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    %old = memref.atomic_rmw addi %v, %m[%c0] : (i32, memref<16xi32>) -> i32
+    return
+  }
+}
+
+// -----
+
+builtin.module {
+  func.func @kernel(%src: memref<16xf32, 0>, %dst: memref<16xf32, 1>, %tag: memref<1xi32, 2>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    %c0 = arith.constant 0 : index
+    %c16 = arith.constant 16 : index
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    memref.dma_start %src[%c0], %dst[%c0], %c16, %tag[%c0] : memref<16xf32, 0>, memref<16xf32, 1>, memref<1xi32, 2>
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    memref.dma_wait %tag[%c0], %c16 : memref<1xi32, 2>
+    return
+  }
+}
