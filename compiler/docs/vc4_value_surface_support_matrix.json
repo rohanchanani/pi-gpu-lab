@@ -1,0 +1,536 @@
+{
+  "schema_version": 1,
+  "generated_by": "Phase3b_value_surface_matrix_seed",
+  "phase": "Phase3",
+  "status_counts_expected_for_phase3_lock": {
+    "accepted_surface_contract": 9,
+    "staged_future_surface_contract": 7,
+    "deterministic_reject_surface_policy": 8,
+    "internal_only": 2
+  },
+  "features": [
+    {
+      "feature_id": "value_kernel_wrapper_attrs",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "func",
+        "vc4value"
+      ],
+      "value_surface_form": [
+        "func.func attributes {vc4value.kernel, vc4value.grid_rank}"
+      ],
+      "required_vc4kernel_contract": [
+        "kernel ABI remains downstream VC4Kernel work"
+      ],
+      "diagnostic_policy": "diagnose missing/invalid kernel metadata",
+      "verification": "verifier checks function attrs and grid-rank shape",
+      "summary": "func.func with vc4value.kernel and vc4value.grid_rank metadata is the value-kernel wrapper contract.",
+      "notes": "Admissibility only; no ABI lowering."
+    },
+    {
+      "feature_id": "vc4value_program_id_num_programs",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vc4value"
+      ],
+      "value_surface_form": [
+        "vc4value.program_id",
+        "vc4value.num_programs"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel program_id/num_programs are later lowering targets"
+      ],
+      "diagnostic_policy": "diagnose non-kernel use or axis outside containing grid rank",
+      "verification": "verifier walks vc4value ops and checks containing func metadata",
+      "summary": "only vc4value.program_id and vc4value.num_programs are allowed launch identity ops.",
+      "notes": "Logical launch identity, not physical QPU identity."
+    },
+    {
+      "feature_id": "allowed_standard_dialects_boundary",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "builtin",
+        "func",
+        "vc4value",
+        "vector",
+        "memref",
+        "arith",
+        "math",
+        "scf",
+        "cf"
+      ],
+      "value_surface_form": [
+        "standard value-surface IR"
+      ],
+      "required_vc4kernel_contract": [
+        "producer dialects must lower before VC4Kernel"
+      ],
+      "diagnostic_policy": "diagnose any operation from outside the allowed family",
+      "verification": "audit and verifier check operation dialect namespaces",
+      "summary": "builtin, func, vc4value, vector, memref, arith, math, scf, and cf are the only value-surface dialect family.",
+      "notes": "Allowed syntax does not imply lowering."
+    },
+    {
+      "feature_id": "logical_memref_types_surface",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "memref"
+      ],
+      "value_surface_form": [
+        "ranked memref types"
+      ],
+      "required_vc4kernel_contract": [
+        "raw pointer ABI is Phase4/5+ work"
+      ],
+      "diagnostic_policy": "diagnose unranked memref or rank greater than 2",
+      "verification": "type walker checks memref types",
+      "summary": "ranked rank-1/rank-2 logical memref types with supported scalar element types are admissible value-surface memory types.",
+      "notes": "No memory-space attr is finalized in Phase3."
+    },
+    {
+      "feature_id": "fixed_vector_types_surface",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vector"
+      ],
+      "value_surface_form": [
+        "fixed vector types"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel may use vector<16xT> carriers later"
+      ],
+      "diagnostic_policy": "diagnose scalable vectors or vector rank greater than 2",
+      "verification": "type walker checks vector types",
+      "summary": "fixed non-scalable rank-1/rank-2 vector types with supported scalar element types are admissible value-surface vector types.",
+      "notes": "No VC4Kernel fragment lowering in Phase3."
+    },
+    {
+      "feature_id": "vector_step_splat_mask_surface",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vector",
+        "arith"
+      ],
+      "value_surface_form": [
+        "vector.step",
+        "vector.broadcast",
+        "arith.constant",
+        "vector mask forms"
+      ],
+      "required_vc4kernel_contract": [
+        "lane identity remains planner/lowering work"
+      ],
+      "diagnostic_policy": "diagnose forbidden dialect alternatives such as vc4value.lane_id",
+      "verification": "operation whitelist admits standard lane/mask syntax",
+      "summary": "vector.step, splat/broadcast, constants, and mask constructors are admissible value-surface syntax.",
+      "notes": "Lane representation is vector.step."
+    },
+    {
+      "feature_id": "vector_transfer_read_write_surface",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vector",
+        "memref"
+      ],
+      "value_surface_form": [
+        "vector.transfer_read",
+        "vector.transfer_write"
+      ],
+      "required_vc4kernel_contract": [
+        "TMU/VDR/VDW/VPM choice is later planning"
+      ],
+      "diagnostic_policy": "diagnose direct memref side-effect bypasses",
+      "verification": "operation policy accepts transfers and rejects direct side effects",
+      "summary": "vector.transfer_read/write are admissible standard memory semantics, but lowering is not implemented in Phase 3.",
+      "notes": "Accepting syntax does not claim hardware path support."
+    },
+    {
+      "feature_id": "arith_math_surface_boundary",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "arith",
+        "math"
+      ],
+      "value_surface_form": [
+        "arith ops",
+        "math ops"
+      ],
+      "required_vc4kernel_contract": [
+        "SFU approximate policy remains explicit later"
+      ],
+      "diagnostic_policy": "diagnose forbidden target math forms only if outside allowed dialects",
+      "verification": "dialect-family check admits arith/math",
+      "summary": "arith/math dialect syntax belongs to the value surface, with exact/finite/approx policy enforced by later lowering phases.",
+      "notes": "Exact/default math must not silently lower to SFU."
+    },
+    {
+      "feature_id": "scf_cf_surface_boundary",
+      "status": "accepted_surface_contract",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "scf",
+        "cf"
+      ],
+      "value_surface_form": [
+        "scf.if",
+        "scf.for",
+        "cf.br",
+        "cf.cond_br"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel verified output is a later boundary"
+      ],
+      "diagnostic_policy": "diagnose lower-half dialect control in value input",
+      "verification": "dialect-family check admits scf/cf",
+      "summary": "restricted scf/cf value control syntax is admissible, but scf must not survive into verified vc4kernel later.",
+      "notes": "Phase3 does not canonicalize control flow."
+    },
+    {
+      "feature_id": "support_matrix_and_audit_contract",
+      "status": "internal_only",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "internal"
+      ],
+      "value_surface_form": [
+        "JSON matrix",
+        "audit scripts"
+      ],
+      "required_vc4kernel_contract": [
+        "N/A"
+      ],
+      "diagnostic_policy": "diagnose matrix/schema drift",
+      "verification": "matrix checker and audit scripts validate contract",
+      "summary": "value-surface matrix and audits are internal contract machinery.",
+      "notes": "Internal guardrail only."
+    },
+    {
+      "feature_id": "value_to_vc4kernel_lowering_absent_guard",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "internal"
+      ],
+      "value_surface_form": [
+        "absence of conversion pass"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel remains downstream"
+      ],
+      "diagnostic_policy": "diagnose conversion/lowering claims in Phase3 audits",
+      "verification": "audit scans conversion/transform registrations",
+      "summary": "Phase 3 must not claim or perform value-to-vc4kernel lowering.",
+      "notes": "Lowering starts Phase5 after ABI lock."
+    },
+    {
+      "feature_id": "triton_ttir_direct_ingestion_absent_guard",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "internal"
+      ],
+      "value_surface_form": [
+        "absence of TTIR import"
+      ],
+      "required_vc4kernel_contract": [
+        "TTIR must enter after handwritten value path is proven"
+      ],
+      "diagnostic_policy": "diagnose TTIR/Triton import claims",
+      "verification": "audit scans tools and docs for readiness contradictions",
+      "summary": "Phase 3 must not claim or perform TTIR/Triton ingestion.",
+      "notes": "READY_FOR_TRITON remains NO."
+    },
+    {
+      "feature_id": "forbidden_producer_dialects",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "producer"
+      ],
+      "value_surface_form": [
+        "tt",
+        "ttg",
+        "gpu",
+        "linalg",
+        "nvgpu",
+        "nvvm",
+        "rocdl",
+        "spirv",
+        "iree",
+        "stablehlo",
+        "mhlo"
+      ],
+      "required_vc4kernel_contract": [
+        "producer dialects are not VC4Kernel"
+      ],
+      "diagnostic_policy": "diagnose forbidden producer dialect namespace",
+      "verification": "verifier rejects op dialect names",
+      "summary": "tt, ttg, gpu, linalg, nvgpu, nvvm, rocdl, spirv, iree, stablehlo, and mhlo are rejected in value-surface inputs.",
+      "notes": "Future inputs must canonicalize first."
+    },
+    {
+      "feature_id": "forbidden_target_dialects",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "target"
+      ],
+      "value_surface_form": [
+        "vc4kernel",
+        "ssavc4",
+        "vc4"
+      ],
+      "required_vc4kernel_contract": [
+        "target/lower-half dialects are below the value surface"
+      ],
+      "diagnostic_policy": "diagnose target dialect in value input",
+      "verification": "verifier rejects target dialect namespaces",
+      "summary": "vc4kernel, ssavc4, and vc4 dialect operations are rejected in value-surface inputs.",
+      "notes": "Preserves one-way stack layering."
+    },
+    {
+      "feature_id": "forbidden_vc4value_scope_creep",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vc4value"
+      ],
+      "value_surface_form": [
+        "forbidden vc4value.* scope"
+      ],
+      "required_vc4kernel_contract": [
+        "only program_id/num_programs are valid"
+      ],
+      "diagnostic_policy": "diagnose vc4value operation other than program_id/num_programs",
+      "verification": "audit and verifier compare vc4value op names",
+      "summary": "vc4value memory, tile, fragment, hardware-path, lane, warp, thread, and barrier ops are forbidden.",
+      "notes": "Keeps vc4value tiny."
+    },
+    {
+      "feature_id": "forbidden_memref_side_effect_ops",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "memref"
+      ],
+      "value_surface_form": [
+        "memref.load",
+        "memref.store",
+        "memref.atomic_rmw",
+        "memref.generic_atomic_rmw",
+        "memref.copy",
+        "memref.dma_start",
+        "memref.dma_wait"
+      ],
+      "required_vc4kernel_contract": [
+        "memory path chosen later by planner"
+      ],
+      "diagnostic_policy": "diagnose direct memref side-effect operation",
+      "verification": "verifier rejects listed memref ops",
+      "summary": "memref.load/store/atomic/copy/dma operations are rejected to preserve the transfer/planning boundary.",
+      "notes": "Use vector.transfer_read/write for standard memory semantics."
+    },
+    {
+      "feature_id": "forbidden_sparse_store_ops",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "vector"
+      ],
+      "value_surface_form": [
+        "vector.scatter",
+        "vector.compressstore"
+      ],
+      "required_vc4kernel_contract": [
+        "sparse VDW stores remain rejected"
+      ],
+      "diagnostic_policy": "diagnose sparse-store-shaped vector op",
+      "verification": "verifier rejects listed vector store ops",
+      "summary": "vector.scatter and vector.compressstore are rejected because sparse stores are not an accepted VC4Kernel store path.",
+      "notes": "Future proof needed for sparse stores."
+    },
+    {
+      "feature_id": "unsupported_scalable_vectors_and_unranked_memrefs",
+      "status": "deterministic_reject_surface_policy",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "types"
+      ],
+      "value_surface_form": [
+        "scalable vector",
+        "unranked memref",
+        "rank > 2"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel locked surface is fixed/vector-16 oriented"
+      ],
+      "diagnostic_policy": "diagnose unsupported type shape",
+      "verification": "type walker checks memref/vector types",
+      "summary": "scalable vectors, unranked memrefs, memref rank greater than 2, and vector rank greater than 2 are rejected in Phase 3.",
+      "notes": "Staging guardrail, not permanent hardware proof."
+    },
+    {
+      "feature_id": "staged_vector_gather_memory_expansion",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase10",
+      "source_layers": [
+        "vector",
+        "memref"
+      ],
+      "value_surface_form": [
+        "vector.gather"
+      ],
+      "required_vc4kernel_contract": [
+        "TMU gather support is later planning"
+      ],
+      "diagnostic_policy": "diagnose if used before staged support unless explicitly allowed",
+      "verification": "future verifier/matrix update required",
+      "summary": "vector.gather/TMU gather-style loads are staged for later memory expansion.",
+      "notes": "Not a Phase3 accepted surface contract."
+    },
+    {
+      "feature_id": "staged_vector_reduction",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase11",
+      "source_layers": [
+        "vector"
+      ],
+      "value_surface_form": [
+        "vector.reduction"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel fragment_reduce exists downstream"
+      ],
+      "diagnostic_policy": "diagnose missing finite/strict policy in later phases",
+      "verification": "future verifier/matrix update required",
+      "summary": "vector.reduction is a planned standard representation for later reduction lowering.",
+      "notes": "i32/f32 policy is later work."
+    },
+    {
+      "feature_id": "staged_vector_contract",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase19",
+      "source_layers": [
+        "vector"
+      ],
+      "value_surface_form": [
+        "vector.contract"
+      ],
+      "required_vc4kernel_contract": [
+        "tile planner and VC4Kernel fragment/memory support later"
+      ],
+      "diagnostic_policy": "diagnose unsupported contract shapes until Phase19",
+      "verification": "future verifier/matrix update required",
+      "summary": "vector.contract is the planned standard representation for later dot/GEMM lowering.",
+      "notes": "No dot/GEMM lowering in Phase3."
+    },
+    {
+      "feature_id": "staged_math_sfu_policy",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase13",
+      "source_layers": [
+        "math"
+      ],
+      "value_surface_form": [
+        "math.exp",
+        "math.log",
+        "math.rsqrt",
+        "math.sqrt"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel approximate SFU policy is explicit"
+      ],
+      "diagnostic_policy": "diagnose exact/default math approximations later",
+      "verification": "future policy verifier required",
+      "summary": "math/SFU lowering requires explicit exact/finite/approx policy in later phases.",
+      "notes": "Exact/default math must not silently lower to SFU."
+    },
+    {
+      "feature_id": "staged_subword_f16_storage",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase15",
+      "source_layers": [
+        "memref",
+        "vector",
+        "arith"
+      ],
+      "value_surface_form": [
+        "i8/i16 storage",
+        "f16 storage conversion"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel f16 storage conversion plus f32 compute"
+      ],
+      "diagnostic_policy": "diagnose native f16 arithmetic in later policies",
+      "verification": "future verifier/matrix update required",
+      "summary": "subword and f16 storage conversion are staged for later table-backed lowering.",
+      "notes": "Native f16 arithmetic remains rejected downstream."
+    },
+    {
+      "feature_id": "staged_shuffle_rotate_broadcast",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase17",
+      "source_layers": [
+        "vector",
+        "arith"
+      ],
+      "value_surface_form": [
+        "rotate-like patterns",
+        "lane broadcast composite"
+      ],
+      "required_vc4kernel_contract": [
+        "VC4Kernel rotate/composite support downstream"
+      ],
+      "diagnostic_policy": "diagnose arbitrary shuffle/permutation direct use later",
+      "verification": "future verifier/matrix update required",
+      "summary": "rotate, lane-broadcast composite, and limited shuffle patterns are staged for later lowering.",
+      "notes": "Lane broadcast is composite, not a vc4kernel op."
+    },
+    {
+      "feature_id": "staged_vpm_tile_planning",
+      "status": "staged_future_surface_contract",
+      "phase_target": "Phase18",
+      "source_layers": [
+        "vector",
+        "memref",
+        "scf"
+      ],
+      "value_surface_form": [
+        "structured tile patterns"
+      ],
+      "required_vc4kernel_contract": [
+        "VPM/VDR/VDW are target planning mechanisms"
+      ],
+      "diagnostic_policy": "diagnose direct hardware ops in value input",
+      "verification": "future planner/audit update required",
+      "summary": "VPM/VDR/VDW tile planning is staged for later lowering below the value surface.",
+      "notes": "The value surface never exposes TMU/VDR/VDW/VPM ops."
+    },
+    {
+      "feature_id": "phase3_lock_doc",
+      "status": "internal_only",
+      "phase_target": "Phase3",
+      "source_layers": [
+        "internal"
+      ],
+      "value_surface_form": [
+        "phase lock doc"
+      ],
+      "required_vc4kernel_contract": [
+        "N/A"
+      ],
+      "diagnostic_policy": "diagnose missing final readiness lines",
+      "verification": "Phase3g lock audit",
+      "summary": "final Phase 3 lock document records readiness for Phase 4.",
+      "notes": "Internal handoff artifact."
+    }
+  ]
+}
