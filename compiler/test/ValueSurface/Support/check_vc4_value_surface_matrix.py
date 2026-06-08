@@ -204,7 +204,7 @@ def validate_phase3_5_vector_abstraction(data: dict, matrix_path: str) -> None:
 
 
 def validate_matrix(matrix_path: str, mode: str) -> dict:
-    if mode != "phase3-lock":
+    if mode not in {"phase3-lock", "phase3_5"}:
         fail(f"unsupported mode {mode!r}")
 
     try:
@@ -265,7 +265,7 @@ def main() -> None:
 
     validate_matrix(args.matrix, args.mode)
     print(
-        "PASS VC4 value surface matrix: mode=phase3-lock features=26 "
+        f"PASS VC4 value surface matrix: mode={args.mode} features=26 "
         "accepted_surface_contract=9 staged_future_surface_contract=7 "
         "deterministic_reject_surface_policy=8 internal_only=2"
     )

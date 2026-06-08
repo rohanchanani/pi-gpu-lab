@@ -1,0 +1,12 @@
+// RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/check_vc4_value_surface_matrix.py %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json | FileCheck %s --check-prefix=MATRIX
+// RUN: python3 %vc4_repo_root/compiler/test/ValueSurface/Support/audit_vc4_value_surface_abstraction.py --repo-root %vc4_repo_root --matrix %vc4_repo_root/compiler/docs/vc4_value_surface_support_matrix.json --mode phase3_5 | FileCheck %s --check-prefix=AUDIT
+
+// MATRIX: PASS VC4 value surface matrix: mode=phase3-lock features=26 accepted_surface_contract=9 staged_future_surface_contract=7 deterministic_reject_surface_policy=8 internal_only=2
+
+// AUDIT: matrix_features=26
+// AUDIT: abstraction_equivalents=7
+// AUDIT: vector16_only_hits=0
+// AUDIT: valid_target_hits=0
+// AUDIT: readiness_yes_hits=0
+// AUDIT: vc4value_scope_creep_hits=0
+// AUDIT: PASS VC4 value surface abstraction audit: mode=phase3_5
