@@ -26,5 +26,6 @@ target_link_libraries(vc4-opt
     SSAVC4Dialect
     VC4KernelDialect
     VC4ValueDialect
+    VC4ValueSurfaceTransforms
     MLIR
 )

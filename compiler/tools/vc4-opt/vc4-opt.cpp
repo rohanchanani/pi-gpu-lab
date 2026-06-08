@@ -10,6 +10,8 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/Math/IR/Math.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
@@ -17,6 +19,7 @@
 #include "vc4/Dialect/VC4Value/IR/VC4ValueDialect.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
 #include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
+#include "vc4/Transforms/ValueSurface/ValueSurfacePasses.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
@@ -1280,6 +1283,7 @@ struct VC4VerifyScheduledPeripheralAccessesPass
 int main(int argc, char **argv) {
   llvm::InitLLVM y(argc, argv);
   mlir::vc4::registerConvertVC4KernelToSSAVC4Pass();
+  mlir::vc4::registerValueSurfacePasses();
   mlir::PassRegistration<VC4TestPrintEffectsPass>();
   mlir::PassRegistration<VC4VerifyEmitContractPass>();
   mlir::PassRegistration<VC4VerifyScheduledHardwareRulesPass>();
@@ -1289,7 +1293,8 @@ int main(int argc, char **argv) {
 
   mlir::DialectRegistry registry;
   registry.insert<mlir::arith::ArithDialect, mlir::cf::ControlFlowDialect,
-                  mlir::func::FuncDialect, mlir::scf::SCFDialect,
+                  mlir::func::FuncDialect, mlir::math::MathDialect,
+                  mlir::memref::MemRefDialect, mlir::scf::SCFDialect,
                   mlir::vector::VectorDialect,
                   mlir::vc4::VC4Dialect,
                   mlir::ssavc4::SSAVC4Dialect,
