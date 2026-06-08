@@ -26,9 +26,9 @@ static bool isForbiddenTargetDialect(StringRef dialect) {
 
 static bool isForbiddenProducerDialect(StringRef dialect) {
   return dialect == "tt" || dialect == "ttg" || dialect == "gpu" ||
-         dialect == "linalg" || dialect == "nvgpu" || dialect == "nvvm" ||
-         dialect == "rocdl" || dialect == "spirv" || dialect == "iree" ||
-         dialect == "stablehlo" || dialect == "mhlo";
+         dialect == "linalg" || dialect == "tensor" || dialect == "nvgpu" ||
+         dialect == "nvvm" || dialect == "rocdl" || dialect == "spirv" ||
+         dialect == "iree" || dialect == "stablehlo" || dialect == "mhlo";
 }
 
 static bool isAllowedDialect(StringRef dialect) {
@@ -60,7 +60,7 @@ static bool isAllowedCFOp(StringRef name) {
   return name == "cf.br" || name == "cf.cond_br";
 }
 
-static bool isSupportedVectorElementType(Type type) {
+static bool isSupportedScalarType(Type type) {
   if (type.isIndex())
     return true;
   if (auto integerType = dyn_cast<IntegerType>(type))
@@ -69,11 +69,32 @@ static bool isSupportedVectorElementType(Type type) {
   return type.isF16() || type.isF32();
 }
 
+static bool isSupportedVectorElementType(Type type) {
+  return isSupportedScalarType(type);
+}
+
 static bool isSupportedMemRefElementType(Type type) {
   if (auto integerType = dyn_cast<IntegerType>(type))
-    return integerType.getWidth() == 1 || integerType.getWidth() == 8 ||
-           integerType.getWidth() == 16 || integerType.getWidth() == 32;
+    return integerType.getWidth() == 8 || integerType.getWidth() == 16 ||
+           integerType.getWidth() == 32;
   return type.isF16() || type.isF32();
+}
+
+static bool hasF16Type(Type type) {
+  if (type.isF16())
+    return true;
+  if (auto vectorType = dyn_cast<VectorType>(type))
+    return hasF16Type(vectorType.getElementType());
+  if (auto memRefType = dyn_cast<MemRefType>(type))
+    return hasF16Type(memRefType.getElementType());
+  return false;
+}
+
+static bool isNativeF16ArithmeticOp(StringRef name) {
+  return name == "arith.addf" || name == "arith.subf" ||
+         name == "arith.mulf" || name == "arith.divf" ||
+         name == "arith.maximumf" || name == "arith.minimumf" ||
+         name == "arith.maxnumf" || name == "arith.minnumf";
 }
 
 static Operation *getEnclosingFunc(Operation *op) {
@@ -100,7 +121,8 @@ static bool checkType(Operation *owner, Type type, bool &sawError) {
   }
 
   if (isa<RankedTensorType, UnrankedTensorType>(type)) {
-    owner->emitError() << "tensor types are not legal in the VC4 value surface";
+    owner->emitError()
+        << "tensor types are not legal in the initial VC4 value surface";
     sawError = true;
     return false;
   }
@@ -108,28 +130,42 @@ static bool checkType(Operation *owner, Type type, bool &sawError) {
   if (auto vectorType = dyn_cast<VectorType>(type)) {
     if (vectorType.isScalable()) {
       owner->emitError()
-          << "scalable vectors are not legal in the VC4 value surface";
+          << "scalable vector types are not legal in the VC4 value surface";
+      sawError = true;
+      return false;
+    }
+    if (vectorType.getRank() == 0) {
+      owner->emitError()
+          << "vector rank 0 is not legal in the VC4 value surface";
       sawError = true;
       return false;
     }
     if (vectorType.getRank() > 2) {
       owner->emitError() << "vector rank greater than 2 is not legal in the "
-                         << "VC4 value surface";
+                         << "Phase 3.5 VC4 value surface";
       sawError = true;
       return false;
     }
     if (llvm::any_of(vectorType.getShape(), ShapedType::isDynamic)) {
-      owner->emitError()
-          << "scalable vectors are not legal in the VC4 value surface";
+      owner->emitError() << "vector dimensions must be static positive "
+                         << "integers in the VC4 value surface";
+      sawError = true;
+      return false;
+    }
+    if (llvm::any_of(vectorType.getShape(),
+                     [](int64_t dim) { return dim <= 0; })) {
+      owner->emitError() << "vector dimensions must be static positive "
+                         << "integers in the VC4 value surface";
       sawError = true;
       return false;
     }
     if (!isSupportedVectorElementType(vectorType.getElementType())) {
       owner->emitError()
-          << "unsupported vector element type in VC4 value surface";
+          << "vector element type is not legal in the VC4 value surface";
       sawError = true;
       return false;
     }
+    return true;
   }
 
   if (isa<UnrankedMemRefType>(type)) {
@@ -152,6 +188,14 @@ static bool checkType(Operation *owner, Type type, bool &sawError) {
       sawError = true;
       return false;
     }
+    return true;
+  }
+
+  if (!isSupportedScalarType(type)) {
+    owner->emitError()
+        << "scalar type is not legal in the VC4 value surface";
+    sawError = true;
+    return false;
   }
 
   return true;
@@ -201,6 +245,14 @@ struct VerifyValueSurfacePass
       bool isFunc = opName == "func.func";
 
       checkOperationTypes(op, sawError);
+
+      if (isNativeF16ArithmeticOp(opName) &&
+          (llvm::any_of(op->getOperandTypes(), hasF16Type) ||
+           llvm::any_of(op->getResultTypes(), hasF16Type))) {
+        op->emitError() << "native f16 arithmetic is not legal in the "
+                        << "Phase 3.5 VC4 value surface";
+        sawError = true;
+      }
 
       if ((op->hasAttr("vc4value.kernel") ||
            op->hasAttr("vc4value.grid_rank")) &&

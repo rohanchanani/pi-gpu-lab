@@ -260,7 +260,7 @@ def validate_matrix(matrix_path: str, mode: str) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("matrix")
-    parser.add_argument("--mode", required=True)
+    parser.add_argument("--mode", default="phase3-lock")
     args = parser.parse_args()
 
     validate_matrix(args.matrix, args.mode)
