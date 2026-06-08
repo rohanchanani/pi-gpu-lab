@@ -40,6 +40,28 @@ Phase 5g fixture was intentionally narrowed to one logical `vector<16>` request
 per block only to prove the initial value-to-hardware path. It must not be
 treated as complete Phase 5 tail/memory coverage.
 
+Phase 5 final hardware lock status:
+
+```text
+VC4_VALUE_TO_VC4KERNEL_PHASE5_ELEMENTWISE_LOCKED=YES
+VC4_VALUE_TO_VC4KERNEL_PASS_ACCEPTED=YES
+VC4_VALUE_ELEMENTWISE_VECTOR16_COMPUTE_ACCEPTED_HARDWARE=YES
+VC4_VALUE_TRANSFER_READ_TMU_ACCEPTED_HARDWARE=YES
+VC4_VALUE_TRANSFER_WRITE_VDW_PRESERVE_ACCEPTED_HARDWARE=YES
+VC4_VALUE_ELEMENTWISE_MIXED_ACCEPTANCE_ACCEPTED=YES
+READY_FOR_PHASE6_REAL_TTIR_INVENTORY_AND_IMPORTER_SKELETON=YES
+READY_FOR_TRITON=NO
+```
+
+Phase 5 locks only the handwritten V1 elementwise lowering subset:
+rank-1 contiguous i32/f32 `#vc4value.global` transfer reads and writes,
+`vector<16>` i32/f32 compute, finite-policy f32 compare/select, i32 compare,
+tail masks, TMU inactive-zero safe-offset loads, and VDW inactive-preserve
+stores. Non-16 vectors, rank-2 vectors and memrefs, subword/f16 memory paths,
+reductions, contracts, gather/scatter, SFU/math lowering, control-flow
+lowering, and Triton/TTIR ingestion remain staged and are not made value-surface
+rejects by this lock.
+
 The guide is a planning contract for future phases. It describes the decisions
 those phases must make before creating VC4Kernel IR from:
 
