@@ -24,6 +24,7 @@ FORBIDDEN_VALID_TEST_TOKENS = [
     "iree.",
     "stablehlo.",
     "mhlo.",
+    "tensor.",
 ]
 
 FORBIDDEN_VC4VALUE_SCOPE_TOKENS = [
@@ -75,7 +76,7 @@ def repo_path(repo_root: pathlib.Path, rel: str) -> pathlib.Path:
 
 def is_valid_value_surface_test(path: pathlib.Path) -> bool:
     name = path.name
-    if name.startswith("invalid-") or "reject" in name:
+    if name.startswith("invalid-") or "reject" in name or "invalid" in name:
         return False
     return (
         name.startswith("value-surface-")
@@ -85,7 +86,11 @@ def is_valid_value_surface_test(path: pathlib.Path) -> bool:
 
 
 def is_invalid_value_surface_test(path: pathlib.Path) -> bool:
-    return path.name.startswith("invalid-") or "reject" in path.name
+    return (
+        path.name.startswith("invalid-")
+        or "reject" in path.name
+        or "invalid" in path.name
+    )
 
 
 def extract_vc4value_op_mnemonics(ops_td: pathlib.Path) -> list[str]:
