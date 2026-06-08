@@ -1,0 +1,32 @@
+// RUN: vc4-opt %s --vc4-verify-value-surface -verify-diagnostics -split-input-file
+
+builtin.module {
+  func.func @kernel(%in: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    %c0 = arith.constant 0 : index
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    %v = memref.load %in[%c0] : memref<16xf32>
+    return
+  }
+}
+
+// -----
+
+builtin.module {
+  func.func @kernel(%out: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    %c0 = arith.constant 0 : index
+    %zero = arith.constant 0.000000e+00 : f32
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    memref.store %zero, %out[%c0] : memref<16xf32>
+    return
+  }
+}
+
+// -----
+
+builtin.module {
+  func.func @kernel(%src: memref<16xf32>, %dst: memref<16xf32>) attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
+    // expected-error @+1 {{direct memref side-effect operation is not legal in the VC4 value surface; use structured vector transfer/planning forms}}
+    memref.copy %src, %dst : memref<16xf32> to memref<16xf32>
+    return
+  }
+}
