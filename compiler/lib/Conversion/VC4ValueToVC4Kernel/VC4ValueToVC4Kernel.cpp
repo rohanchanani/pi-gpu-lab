@@ -160,6 +160,15 @@ static bool isRank1IdentityGlobalMemref(Type type) {
   return memrefType.getLayout().isIdentity();
 }
 
+static bool isRank1IdentityTransferMap(Operation *op) {
+  auto read = llvm::dyn_cast<vector::TransferReadOp>(op);
+  if (!read)
+    return false;
+  AffineMap map = read.getPermutationMap();
+  return map.getNumDims() == 1 && map.getNumSymbols() == 0 &&
+         map.getNumResults() == 1 && map.isMinorIdentity();
+}
+
 static StringRef getElementTypeName(Type type) {
   if (type.isF32())
     return "f32";
@@ -957,6 +966,8 @@ private:
       return emitStagedDiagnostic(op, "transfer_read result type outside vector<16xi32/f32>");
     if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
       return emitStagedDiagnostic(op, "transfer_read rank or mask form");
+    if (!isRank1IdentityTransferMap(op))
+      return emitStagedDiagnostic(op, "transfer_read permutation map beyond rank-1 identity");
 
     Value memref = op->getOperand(0);
     Value index = op->getOperand(1);
@@ -975,7 +986,9 @@ private:
     if (!base || failed(pred))
       return failure();
     int64_t elemBytes = 4;
-    FailureOr<Value> byteOffsets = createByteOffsets(op, index, elemBytes, *pred);
+    FailureOr<Value> byteOffsets =
+        createByteOffsets(op, index, elemBytes,
+                          mask ? std::optional<Value>(*pred) : std::nullopt);
     if (failed(byteOffsets))
       return failure();
     Value safeOffset = createI32Constant(builder, op->getLoc(), 0);
