@@ -6,9 +6,11 @@ builtin.module {
       %n: index {vc4value.arg_name = "n", vc4value.scalar_role = "extent"},
       %alpha: f32 {vc4value.arg_name = "alpha"},
       %x: memref<?xf32, #vc4value.global> {vc4value.arg_name = "x",
-                                           vc4value.direction = "in"},
+                                           vc4value.direction = "in",
+                                           vc4value.shape_args = ["n"]},
       %y: memref<?xf32, #vc4value.global> {vc4value.arg_name = "y",
-                                           vc4value.direction = "inout"})
+                                           vc4value.direction = "inout",
+                                           vc4value.shape_args = ["n"]})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     // CHECK: vc4value.program_id
     %pid = vc4value.program_id {axis = 0 : i32} : index

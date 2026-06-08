@@ -75,8 +75,11 @@ rules documented in `compiler/docs/vc4_value_kernel_abi.md`. Phase 4d verifies
 the public kernel wrapper, `vc4value.grid_rank`, public argument names, memref
 directions, scalar roles, public argument categories, and unknown
 `vc4value.*` argument ABI attributes. Phase 4e verifies the exact
-`#vc4value.global` memref ABI. These checks still do not lower value IR to
-VC4Kernel.
+`#vc4value.global` public memref ABI: rank 1/rank 2 only, element types
+`i8`, `i16`, `i32`, `f16`, and `f32`, explicit `vc4value.shape_args` for
+dynamic dimensions, explicit `vc4value.stride_args` for dynamic strides in
+strided layouts, `memref.dim` as metadata only, and launch identity axes within
+`vc4value.grid_rank`. These checks still do not lower value IR to VC4Kernel.
 
 ## 5. Allowed dialect family
 
@@ -138,7 +141,7 @@ attribute with value 1, 2, or 3.
 
 For every `vc4value.program_id` or `vc4value.num_programs`, the `axis` value
 must be less than the containing kernel's `vc4value.grid_rank`. Phase 2 already
-verifies the local axis domain 0..2; Phase 3 adds the function-level grid-rank
+verifies the local axis domain 0..2; Phase 4e adds the function-level grid-rank
 relationship.
 
 Other metadata conventions such as `vc4value.target_profile` and
@@ -148,7 +151,9 @@ stronger policy meaning.
 ## 9. Type guardrails
 
 Phase 3.5 accepts fixed, non-scalable rank-1 and rank-2 vector types and ranked
-memref types within the initial value-surface shape contract.
+memref types within the initial value-surface shape contract. Phase 4 narrows
+public kernel argument memrefs to the ABI contract without narrowing non-ABI
+body vector values.
 
 Allowed vector element types are exactly `i1`, `index`, `i8`, `i16`, `i32`,
 `f16`, and `f32`. `vector<16xT>` is the Phase 5 V1 lowerable fragment-normal
@@ -161,6 +166,9 @@ The verifier rejects:
 - unsupported vector element types;
 - unranked memrefs;
 - memref rank greater than 2;
+- public memref arguments outside `#vc4value.global`;
+- public memref arguments without required dynamic `vc4value.shape_args`;
+- malformed or unresolved public memref `vc4value.stride_args`;
 - vector rank greater than 2;
 - tensor and complex types.
 
@@ -182,6 +190,7 @@ memref.load
 memref.store
 memref.atomic_rmw
 memref.generic_atomic_rmw
+memref.atomic_yield
 memref.copy
 memref.dma_start
 memref.dma_wait

@@ -2,10 +2,14 @@
 
 #include "vc4/Transforms/ValueSurface/ValueSurfacePasses.h"
 
+#include "vc4/Dialect/VC4Value/IR/VC4ValueAttrs.h"
+
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Diagnostics.h"
+#include "mlir/IR/Matchers.h"
 #include "mlir/IR/Operation.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/DenseSet.h"
@@ -18,6 +22,7 @@
 #include <optional>
 
 using namespace mlir;
+using namespace mlir::vc4value;
 
 namespace {
 
@@ -49,8 +54,8 @@ static bool isLegalVC4ValueOp(StringRef name) {
 static bool isForbiddenMemRefSideEffectOp(StringRef name) {
   return name == "memref.load" || name == "memref.store" ||
          name == "memref.atomic_rmw" || name == "memref.generic_atomic_rmw" ||
-         name == "memref.copy" || name == "memref.dma_start" ||
-         name == "memref.dma_wait";
+         name == "memref.atomic_yield" || name == "memref.copy" ||
+         name == "memref.dma_start" || name == "memref.dma_wait";
 }
 
 static bool isForbiddenSparseStoreVectorOp(StringRef name) {
@@ -79,9 +84,11 @@ static bool isSupportedVectorElementType(Type type) {
 }
 
 static bool isSupportedMemRefElementType(Type type) {
-  if (auto integerType = dyn_cast<IntegerType>(type))
-    return integerType.getWidth() == 8 || integerType.getWidth() == 16 ||
-           integerType.getWidth() == 32;
+  if (auto integerType = dyn_cast<IntegerType>(type)) {
+    return integerType.isSignlessInteger() &&
+           (integerType.getWidth() == 8 || integerType.getWidth() == 16 ||
+            integerType.getWidth() == 32);
+  }
   return type.isF16() || type.isF32();
 }
 
@@ -90,6 +97,14 @@ static bool isPublicAbiScalarArgType(Type type) {
     return true;
   if (auto integerType = dyn_cast<IntegerType>(type))
     return integerType.getWidth() == 32;
+  return false;
+}
+
+static bool isIndexOrI32(Type type) {
+  if (type.isIndex())
+    return true;
+  if (auto integerType = dyn_cast<IntegerType>(type))
+    return integerType.isSignlessInteger(32);
   return false;
 }
 
@@ -172,6 +187,17 @@ static bool isArrayOfStringAttr(Attribute attr) {
          });
 }
 
+static SmallVector<StringRef> getStringArrayValues(Attribute attr) {
+  SmallVector<StringRef> values;
+  auto arrayAttr = dyn_cast_or_null<ArrayAttr>(attr);
+  if (!arrayAttr)
+    return values;
+  values.reserve(arrayAttr.size());
+  for (Attribute element : arrayAttr)
+    values.push_back(cast<StringAttr>(element).getValue());
+  return values;
+}
+
 static DictionaryAttr getArgAttrs(func::FuncOp func, unsigned argIndex) {
   std::optional<ArrayAttr> argAttrs = func.getArgAttrs();
   if (!argAttrs || argIndex >= argAttrs->size())
@@ -191,6 +217,75 @@ static InFlightDiagnostic emitArgError(func::FuncOp func, unsigned argIndex) {
   diag << ": ";
   return diag;
 }
+
+static InFlightDiagnostic emitMemRefDimError(Operation *op) {
+  return op->emitError() << "memref.dim in Phase 4 value ABI: ";
+}
+
+static bool hasGlobalMemorySpace(MemRefType type) {
+  return isa_and_nonnull<GlobalMemorySpaceAttr>(type.getMemorySpace());
+}
+
+static unsigned countDynamicDims(MemRefType type) {
+  return llvm::count_if(type.getShape(), ShapedType::isDynamic);
+}
+
+static std::optional<unsigned> getDynamicDimOrdinal(MemRefType type,
+                                                    unsigned dim) {
+  if (dim >= static_cast<unsigned>(type.getRank()) ||
+      !ShapedType::isDynamic(type.getDimSize(dim)))
+    return std::nullopt;
+  unsigned ordinal = 0;
+  for (unsigned i = 0; i < dim; ++i)
+    if (ShapedType::isDynamic(type.getDimSize(i)))
+      ++ordinal;
+  return ordinal;
+}
+
+static bool hasShapeArgForDynamicDim(func::FuncOp func, unsigned argIndex,
+                                     MemRefType type, unsigned dim) {
+  std::optional<unsigned> ordinal = getDynamicDimOrdinal(type, dim);
+  if (!ordinal)
+    return true;
+  Attribute attr = func.getArgAttr(argIndex, "vc4value.shape_args");
+  if (!isArrayOfStringAttr(attr))
+    return false;
+  SmallVector<StringRef> names = getStringArrayValues(attr);
+  return *ordinal < names.size() && !names[*ordinal].empty();
+}
+
+static std::optional<unsigned> getPublicMemRefArgIndex(func::FuncOp func,
+                                                       Value value) {
+  auto blockArg = dyn_cast<BlockArgument>(value);
+  if (!blockArg)
+    return std::nullopt;
+  if (blockArg.getOwner() != &func.getBody().front())
+    return std::nullopt;
+  unsigned argIndex = blockArg.getArgNumber();
+  if (argIndex >= func.getNumArguments() ||
+      !isa<MemRefType>(func.getArgument(argIndex).getType()))
+    return std::nullopt;
+  return argIndex;
+}
+
+static bool getStridesAndOffset(MemRefType type, SmallVectorImpl<int64_t> &strides,
+                                int64_t &offset) {
+  MemRefLayoutAttrInterface layout = type.getLayout();
+  if (!layout || layout.isIdentity()) {
+    strides.clear();
+    offset = 0;
+    return true;
+  }
+  return succeeded(layout.getStridesAndOffset(type.getShape(), strides, offset));
+}
+
+struct PublicArgInfo {
+  Type type;
+  std::optional<unsigned> index;
+  bool isScalar = false;
+  bool isExtentCompatible = false;
+  bool isStrideCompatible = false;
+};
 
 static bool checkType(Operation *owner, Type type, bool &sawError) {
   if (isa<ComplexType>(type)) {
@@ -282,6 +377,7 @@ static bool checkType(Operation *owner, Type type, bool &sawError) {
 
 static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
   llvm::SmallDenseSet<StringRef> seenArgNames;
+  llvm::DenseMap<StringRef, PublicArgInfo> argsByName;
 
   for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
     Type argType = func.getArgument(i).getType();
@@ -325,11 +421,28 @@ static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
             << "duplicate vc4value.arg_name '" << argName << "'";
         sawError = true;
       }
+      PublicArgInfo info;
+      info.type = argType;
+      info.index = i;
+      info.isScalar = !isa<MemRefType, UnrankedMemRefType, VectorType,
+                           RankedTensorType, UnrankedTensorType>(argType);
+      if (info.isScalar && isPublicAbiScalarArgType(argType)) {
+        info.isExtentCompatible = true;
+        info.isStrideCompatible = true;
+      }
+      if (auto scalarRoleAttr = dyn_cast_or_null<StringAttr>(
+              func.getArgAttr(i, "vc4value.scalar_role"))) {
+        info.isExtentCompatible = scalarRoleAttr.getValue() == "extent" ||
+                                  scalarRoleAttr.getValue() == "value";
+        info.isStrideCompatible = scalarRoleAttr.getValue() == "stride" ||
+                                  scalarRoleAttr.getValue() == "value";
+      }
+      argsByName.try_emplace(argName, info);
     }
 
     auto directionAttr =
         dyn_cast_or_null<StringAttr>(func.getArgAttr(i, "vc4value.direction"));
-    if (isa<MemRefType>(argType)) {
+    if (isa<MemRefType, UnrankedMemRefType>(argType)) {
       if (!directionAttr) {
         emitArgError(func, i)
             << "memref argument requires vc4value.direction = \"in\", "
@@ -361,16 +474,6 @@ static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
       }
     }
 
-    for (StringRef attrName :
-         {"vc4value.shape_args", "vc4value.stride_args"}) {
-      if (Attribute attr = func.getArgAttr(i, attrName);
-          attr && !isArrayOfStringAttr(attr)) {
-        emitArgError(func, i) << attrName << " must be an ArrayAttr of "
-                              << "StringAttr";
-        sawError = true;
-      }
-    }
-
     if (isa<VectorType>(argType)) {
       emitArgError(func, i)
           << "vector public arguments are not legal in the VC4 value ABI";
@@ -383,13 +486,166 @@ static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
       sawError = true;
       continue;
     }
-    if (isa<MemRefType>(argType)) {
+    if (isa<MemRefType, UnrankedMemRefType>(argType)) {
       continue;
     }
     if (!isPublicAbiScalarArgType(argType)) {
       emitArgError(func, i)
           << "public scalar argument type must be index, i32, or f32";
       sawError = true;
+    }
+  }
+
+  for (unsigned i = 0, e = func.getNumArguments(); i < e; ++i) {
+    Type argType = func.getArgument(i).getType();
+    if (isa<UnrankedMemRefType>(argType)) {
+      emitArgError(func, i) << "public memref argument must be a ranked "
+                            << "memref with rank 1 or 2";
+      sawError = true;
+      continue;
+    }
+    auto memRefType = dyn_cast<MemRefType>(argType);
+    if (!memRefType)
+      continue;
+
+    if (memRefType.getRank() == 0 || memRefType.getRank() > 2) {
+      emitArgError(func, i) << "public memref argument rank must be 1 or 2";
+      sawError = true;
+    }
+    if (!hasGlobalMemorySpace(memRefType)) {
+      emitArgError(func, i)
+          << "public memref argument memory space must be #vc4value.global";
+      sawError = true;
+    }
+    if (!isSupportedMemRefElementType(memRefType.getElementType())) {
+      emitArgError(func, i)
+          << "public memref element type must be signless i8, signless i16, "
+          << "signless i32, f16, or f32";
+      sawError = true;
+    }
+
+    SmallVector<int64_t> strides;
+    int64_t offset = 0;
+    if (!getStridesAndOffset(memRefType, strides, offset)) {
+      emitArgError(func, i)
+          << "public memref layout must be identity or strided";
+      sawError = true;
+    } else if (ShapedType::isDynamic(offset) || offset != 0) {
+      emitArgError(func, i)
+          << "public memref layout offset must be static 0";
+      sawError = true;
+    }
+
+    Attribute shapeAttr = func.getArgAttr(i, "vc4value.shape_args");
+    unsigned dynamicDimCount = countDynamicDims(memRefType);
+    SmallVector<StringRef> shapeNames;
+    bool shapeAttrWellFormed = !shapeAttr || isArrayOfStringAttr(shapeAttr);
+    if (shapeAttr && !shapeAttrWellFormed) {
+      emitArgError(func, i)
+          << "vc4value.shape_args must be an ArrayAttr of StringAttr";
+      sawError = true;
+    } else {
+      shapeNames = getStringArrayValues(shapeAttr);
+      if (dynamicDimCount == 0 && !shapeNames.empty()) {
+        emitArgError(func, i)
+            << "static public memref argument must not have nonempty "
+            << "vc4value.shape_args";
+        sawError = true;
+      }
+      if (dynamicDimCount > 0 && !shapeAttr) {
+        emitArgError(func, i)
+            << "dynamic public memref argument requires vc4value.shape_args";
+        sawError = true;
+      }
+      if (shapeAttr && shapeNames.size() != dynamicDimCount) {
+        emitArgError(func, i)
+            << "vc4value.shape_args length must equal the number of dynamic "
+            << "memref dimensions";
+        sawError = true;
+      }
+      llvm::SmallDenseSet<StringRef> seenShapeNames;
+      for (StringRef name : shapeNames) {
+        if (!seenShapeNames.insert(name).second) {
+          emitArgError(func, i)
+              << "vc4value.shape_args must not contain duplicate names";
+          sawError = true;
+        }
+        auto it = argsByName.find(name);
+        if (it == argsByName.end()) {
+          emitArgError(func, i)
+              << "vc4value.shape_args entry '" << name
+              << "' must name an existing scalar argument";
+          sawError = true;
+          continue;
+        }
+        if (!it->second.isScalar || !isIndexOrI32(it->second.type)) {
+          emitArgError(func, i)
+              << "vc4value.shape_args entry '" << name
+              << "' must name an index or i32 scalar argument";
+          sawError = true;
+        }
+        if (!it->second.isExtentCompatible) {
+          emitArgError(func, i)
+              << "vc4value.shape_args entry '" << name
+              << "' must name a scalar with vc4value.scalar_role \"extent\" "
+              << "or \"value\"";
+          sawError = true;
+        }
+      }
+    }
+
+    Attribute strideAttr = func.getArgAttr(i, "vc4value.stride_args");
+    SmallVector<StringRef> strideNames;
+    bool strideAttrWellFormed = !strideAttr || isArrayOfStringAttr(strideAttr);
+    if (strideAttr && !strideAttrWellFormed) {
+      emitArgError(func, i)
+          << "vc4value.stride_args must be an ArrayAttr of StringAttr";
+      sawError = true;
+    } else {
+      strideNames = getStringArrayValues(strideAttr);
+      unsigned dynamicStrideCount = llvm::count_if(
+          strides, [](int64_t stride) { return ShapedType::isDynamic(stride); });
+      if (dynamicStrideCount == 0 && !strideNames.empty()) {
+        emitArgError(func, i)
+            << "public memref argument without dynamic strides must not have "
+            << "nonempty vc4value.stride_args";
+        sawError = true;
+      }
+      if (dynamicStrideCount > 0 && strideNames.size() != dynamicStrideCount) {
+        emitArgError(func, i)
+            << "vc4value.stride_args length must equal the number of dynamic "
+            << "memref strides";
+        sawError = true;
+      }
+      llvm::SmallDenseSet<StringRef> seenStrideNames;
+      for (StringRef name : strideNames) {
+        if (!seenStrideNames.insert(name).second) {
+          emitArgError(func, i)
+              << "vc4value.stride_args must not contain duplicate names";
+          sawError = true;
+        }
+        auto it = argsByName.find(name);
+        if (it == argsByName.end()) {
+          emitArgError(func, i)
+              << "vc4value.stride_args entry '" << name
+              << "' must name an existing scalar argument";
+          sawError = true;
+          continue;
+        }
+        if (!it->second.isScalar || !isIndexOrI32(it->second.type)) {
+          emitArgError(func, i)
+              << "vc4value.stride_args entry '" << name
+              << "' must name an index or i32 scalar argument";
+          sawError = true;
+        }
+        if (!it->second.isStrideCompatible) {
+          emitArgError(func, i)
+              << "vc4value.stride_args entry '" << name
+              << "' must name a scalar with vc4value.scalar_role \"stride\" "
+              << "or \"value\"";
+          sawError = true;
+        }
+      }
     }
   }
 }
@@ -414,6 +670,51 @@ static void checkOperationTypes(Operation *op, bool &sawError) {
       for (BlockArgument arg : block.getArguments())
         checkType(op, arg.getType(), sawError);
     }
+  }
+}
+
+static void checkMemRefDimOp(memref::DimOp dimOp, bool &sawError) {
+  auto func = dyn_cast_or_null<func::FuncOp>(getEnclosingFunc(dimOp));
+  if (!func || !func->hasAttr("vc4value.kernel")) {
+    emitMemRefDimError(dimOp) << "operation requires an enclosing public "
+                              << "vc4value.kernel function";
+    sawError = true;
+    return;
+  }
+
+  auto memRefType = dyn_cast<MemRefType>(dimOp.getSource().getType());
+  if (!memRefType || !hasGlobalMemorySpace(memRefType)) {
+    emitMemRefDimError(dimOp)
+        << "source must be a public #vc4value.global memref argument";
+    sawError = true;
+    return;
+  }
+
+  std::optional<unsigned> argIndex = getPublicMemRefArgIndex(func, dimOp.getSource());
+  if (!argIndex) {
+    emitMemRefDimError(dimOp)
+        << "source must be a public #vc4value.global memref argument";
+    sawError = true;
+    return;
+  }
+
+  APInt dimValue;
+  if (!matchPattern(dimOp.getIndex(), m_ConstantInt(&dimValue))) {
+    emitMemRefDimError(dimOp) << "dimension index must be a constant index";
+    sawError = true;
+    return;
+  }
+  int64_t dim = dimValue.getSExtValue();
+  if (dim < 0 || dim >= memRefType.getRank()) {
+    emitMemRefDimError(dimOp) << "dimension index is out of range";
+    sawError = true;
+    return;
+  }
+  if (!hasShapeArgForDynamicDim(func, *argIndex, memRefType,
+                                static_cast<unsigned>(dim))) {
+    emitMemRefDimError(dimOp)
+        << "dynamic dimension requires vc4value.shape_args mapping";
+    sawError = true;
   }
 }
 
@@ -511,6 +812,9 @@ struct VerifyValueSurfacePass
           }
         }
       }
+
+      if (auto dimOp = dyn_cast<memref::DimOp>(op))
+        checkMemRefDimOp(dimOp, sawError);
 
       if (isForbiddenMemRefSideEffectOp(opName)) {
         op->emitError()

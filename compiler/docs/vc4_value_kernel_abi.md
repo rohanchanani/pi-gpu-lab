@@ -117,7 +117,8 @@ i8, i16, i32, f16, f32
 
 The value-layer memref is a logical memory object. It carries shape, layout,
 element type, memory space, direction, and explicit shape/stride metadata for
-later planning.
+later planning. Phase 4e verifies this public argument contract statically; it
+does not lower any memref.
 
 Phase 5 V1 may lower only the first executable subset: i32/f32 rank-1
 contiguous global memrefs for elementwise vector<16> kernels. i8, i16, f16,
@@ -132,12 +133,16 @@ argument in VC4Kernel.
 
 Dynamic dimensions and dynamic strides are explicit scalar arguments, not
 hidden memref descriptors. A memref type with dynamic dimensions must name the
-corresponding extent scalar args through `vc4value.shape_args`.
+corresponding extent scalar args through `vc4value.shape_args`. Explicit
+strided layouts with dynamic strides must name stride scalar args through
+`vc4value.stride_args`; identity-layout dynamic memrefs do not require hidden
+stride metadata.
 
 `memref.dim` is metadata-only at the value surface. It must lower later to
 explicit scalar extent arguments or proven static dimensions. It does not
 authorize a hidden descriptor, runtime descriptor load, or unmodeled ABI
-packet.
+packet. Phase 4e accepts `memref.dim` only on public `#vc4value.global` memref
+arguments whose queried dynamic dimension has a `vc4value.shape_args` mapping.
 
 ## 9. Memory space #vc4value.global
 

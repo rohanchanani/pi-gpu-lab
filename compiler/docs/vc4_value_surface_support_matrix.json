@@ -96,10 +96,10 @@
       "required_vc4kernel_contract": [
         "raw pointer ABI is Phase4/5+ work"
       ],
-      "diagnostic_policy": "diagnose unranked memref or rank greater than 2",
-      "verification": "type walker checks memref types",
+      "diagnostic_policy": "diagnose unranked memref, rank greater than 2, public memref ABI memory-space/element/shape/stride violations, or invalid memref.dim metadata queries",
+      "verification": "type walker checks memref types; Phase 4e public ABI verifier checks #vc4value.global, rank, element type, direction, shape_args, stride_args, memref.dim metadata, and launch axes",
       "summary": "ranked rank-1/rank-2 logical memref types with supported scalar element types are admissible value-surface memory types.",
-      "notes": "No memory-space attr is finalized in Phase3. Phase 4c implements #vc4value.global as public memref ABI metadata for rank-1/rank-2 arguments with explicit shape/stride scalar metadata and no hidden descriptors.",
+      "notes": "No memory-space attr is finalized in Phase3. Phase 4c implements #vc4value.global as public memref ABI metadata. Phase 4e verifies rank-1/rank-2 public memref arguments with i8/i16/i32/f16/f32 elements, explicit shape metadata for dynamic dimensions, explicit stride metadata for dynamic strides in strided layouts, memref.dim as metadata only, and no hidden descriptors.",
       "phase4_abi_equivalent_feature_ids": [
         "vc4value_global_memory_space_attr",
         "public_memref_direction_attr_schema",
@@ -397,7 +397,7 @@
       "diagnostic_policy": "diagnose direct memref side-effect operation",
       "verification": "verifier rejects listed memref ops",
       "summary": "memref.load/store/atomic/copy/dma operations are rejected to preserve the transfer/planning boundary.",
-      "notes": "Use vector.transfer_read/write for standard memory semantics. Phase 4 locks explicit shape/stride scalar metadata and rejects hidden memref descriptor ABI assumptions.",
+      "notes": "Use vector.transfer_read/write for standard memory semantics. Phase 4e locks explicit shape/stride scalar metadata for the public memref ABI, treats memref.dim as metadata only, and rejects hidden memref descriptor ABI assumptions.",
       "phase4_abi_equivalent_feature_ids": [
         "hidden_memref_descriptor_reject"
       ],

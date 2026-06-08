@@ -7,7 +7,7 @@
 builtin.module {
   // CHECK-LABEL: func.func @kernel
   func.func @kernel(
-      %mem: memref<16xf32> {vc4value.arg_name = "mem", vc4value.direction = "in"})
+      %mem: memref<16xf32, #vc4value.global> {vc4value.arg_name = "mem", vc4value.direction = "in"})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     %pid = vc4value.program_id {axis = 0 : i32} : index
     %c0 = arith.constant 0 : index
@@ -22,7 +22,7 @@ builtin.module {
     %mask = vector.create_mask %c16 : vector<16xi1>
     %pass = vector.broadcast %zero : f32 to vector<16xf32>
     // CHECK: vector.gather
-    %g = vector.gather %mem[%c0][%idx], %mask, %pass {alignment = 4 : i64} : memref<16xf32>, vector<16xindex>, vector<16xi1>, vector<16xf32> into vector<16xf32>
+    %g = vector.gather %mem[%c0][%idx], %mask, %pass {alignment = 4 : i64} : memref<16xf32, #vc4value.global>, vector<16xindex>, vector<16xi1>, vector<16xf32> into vector<16xf32>
     // CHECK: vector.reduction
     %r = vector.reduction <add>, %lhs : vector<16xf32> into f32
     // CHECK: math.exp

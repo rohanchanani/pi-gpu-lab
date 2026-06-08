@@ -70,7 +70,7 @@ builtin.module {
 
 builtin.module {
   // expected-error @+1 {{public value kernel @missing_direction argument #0 'x': memref argument requires vc4value.direction = "in", "out", or "inout"}}
-  func.func @missing_direction(%x: memref<?xf32, #vc4value.global> {vc4value.arg_name = "x"})
+  func.func @missing_direction(%x: memref<16xf32, #vc4value.global> {vc4value.arg_name = "x"})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     return
   }
@@ -80,7 +80,7 @@ builtin.module {
 
 builtin.module {
   // expected-error @+1 {{public value kernel @bad_direction argument #0 'x': vc4value.direction must be "in", "out", or "inout"}}
-  func.func @bad_direction(%x: memref<?xf32, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "read"})
+  func.func @bad_direction(%x: memref<16xf32, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "read"})
       attributes {vc4value.kernel, vc4value.grid_rank = 1 : i32} {
     return
   }
