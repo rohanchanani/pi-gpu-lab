@@ -13,6 +13,7 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelDialect.h"
+#include "vc4/Dialect/VC4Value/IR/VC4ValueDialect.h"
 #include "vc4/Dialect/SSAVC4/IR/SSAVC4Dialect.h"
 #include "vc4/Dialect/VC4/IR/VC4QPURegisterInfo.h"
 
@@ -1290,7 +1291,8 @@ int main(int argc, char **argv) {
                   mlir::scf::SCFDialect, mlir::vector::VectorDialect,
                   mlir::vc4::VC4Dialect,
                   mlir::ssavc4::SSAVC4Dialect,
-                  mlir::vc4kernel::VC4KernelDialect>();
+                  mlir::vc4kernel::VC4KernelDialect,
+                  mlir::vc4value::VC4ValueDialect>();
 
   return mlir::asMainReturnCode(
       mlir::MlirOptMain(argc, argv, "VC4 modular optimizer driver\n", registry));
