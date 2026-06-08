@@ -169,6 +169,15 @@ static bool isRank1IdentityTransferMap(Operation *op) {
          map.getNumResults() == 1 && map.isMinorIdentity();
 }
 
+static bool isRank1IdentityTransferWriteMap(Operation *op) {
+  auto write = llvm::dyn_cast<vector::TransferWriteOp>(op);
+  if (!write)
+    return false;
+  AffineMap map = write.getPermutationMap();
+  return map.getNumDims() == 1 && map.getNumSymbols() == 0 &&
+         map.getNumResults() == 1 && map.isMinorIdentity();
+}
+
 static StringRef getElementTypeName(Type type) {
   if (type.isF32())
     return "f32";
@@ -1020,6 +1029,10 @@ private:
       return emitStagedDiagnostic(op, "transfer_write value outside vector<16xi32/f32>");
     if (!isRank1IdentityGlobalMemref(memref.getType()))
       return emitStagedDiagnostic(op, "transfer_write memref outside rank-1 contiguous i32/f32 #vc4value.global");
+    if (!isRank1IdentityTransferWriteMap(op))
+      return emitStagedDiagnostic(op, "transfer_write permutation map beyond rank-1 identity");
+    if (mask && !hasName((*mask).getDefiningOp(), "vector.create_mask"))
+      return emitStagedDiagnostic(op, "sparse or unknown transfer_write mask");
 
     Value value = lookupValue(op, vector);
     Value base = lookupValue(op, memref);
