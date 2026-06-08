@@ -208,7 +208,15 @@ Phase 2 must not implement memory, tile, fragment, lane-id, barrier, TMU, VDR,
 VDW, or VPM operations. Phase 2 must not implement value-to-VC4Kernel lowering
 or TTIR ingestion.
 
-## 11. Readiness lines
+## 11. Prerequisite Readiness Lines
+
+```text
+PHASE0_RESULT=READY
+READY_FOR_VALUE_SURFACE_PACKAGES=YES
+READY_FOR_TRITON=NO
+```
+
+## 12. Readiness Lines
 
 ```text
 VC4_VECTOR_TRITON_PHASE1_TAXONOMY_SPEC_LOCKED=YES
