@@ -22,6 +22,21 @@ lowering tool are retired. Python tooling remains allowed for Triton
 source-to-TTIR generation, snapshot regeneration/comparison, and TTIR inventory
 only. `READY_FOR_TRITON` remains `NO`.
 
+## Current Phase-8.25 Vertical Workflow Note
+
+The standing workflow is now explicitly vertical. The project should not add
+many value-layer capabilities before returning to TTIR. Each coherent
+source-visible value capability or legality category should be followed by a
+matching TTIR bridge/support/reject lock before the next major value capability,
+unless the value phase only refactors internal lowering without adding a
+source-visible capability or legality category.
+
+Phase 8 value-layer control flow therefore leads to Phase 8.5 TTIR
+control-flow bridge/support/reject lock, not directly to Phase 9. Phase 9 mask
+classifier and richer memory legality leads to Phase 9.5 TTIR mask/memory
+bridge/support/reject lock, not directly to Phase 10. `READY_FOR_TRITON`
+remains `NO`.
+
 ## 0. Purpose
 
 This report records the current state of the Vector/Triton plan after the latest design discussion. It updates and extends the earlier pre-P9 Vector/Triton design-decision report with the decisions now made about `vc4value`, program IDs, memref ABI, Triton tooling, approximate math policy, implementation ordering, and the definition of “FULL” Triton support.
@@ -48,8 +63,10 @@ The implementation philosophy is:
 plan the full taxonomy first
   -> implement a narrow value-layer vertical slice
   -> get real TTIR elementwise to hardware quickly
-  -> iteratively expand the value surface
-  -> after each expansion, add the corresponding TTIR lowering
+  -> iteratively expand one coherent value capability
+  -> prove value -> vc4kernel -> ssavc4 -> scheduled vc4 -> hardware
+  -> add the corresponding TTIR bridge/support/reject lock
+  -> prove real TTIR -> value -> hardware when executable
   -> converge asymptotically toward full Triton coverage
 ```
 
@@ -1142,6 +1159,47 @@ small loop-carried accumulator
 
 No raw `scf` survives into verified `vc4kernel`.
 
+Phase 8 final readiness points to Phase 8.5 TTIR control-flow
+bridge/support/reject lock, not Phase 9.
+
+---
+
+## Phase 8.5 — TTIR control-flow bridge/support/reject lock
+
+### Goal
+
+Inventory real Triton-emitted TTIR control-flow forms against the Phase 8
+value `scf`/`cf` boundary, then either bridge matching forms to value IR or
+lock deterministic staged/reject classifications with exact reasons.
+
+### Initial classification targets
+
+```text
+Triton compile-time/meta control flow:
+  frontend-specialization; no runtime value control-flow import required
+
+tl.range / emitted TTIR loop forms:
+  Phase 8.5 inventory target
+
+scalar cf/scf branch forms:
+  lowerable if they match the Phase 8 value-cf subset, otherwise staged
+
+vector/per-lane branch conditions:
+  deterministic reject as control flow; must become masks/selects
+
+ttg/triton_gpu/nvgpu/nvvm backend control flow:
+  reject at TTIR frontend boundary
+
+warp-specialized or async-partition control metadata:
+  inspect in Phase 8.5; ignore only if proven semantic-no-op for emitted TTIR
+```
+
+### Gate
+
+No broad TTIR control-flow support claim. If executable forms are accepted, they
+must lower through `TTIR -> value -> vc4kernel -> ssavc4 -> scheduled vc4` and
+hardware when required. `READY_FOR_TRITON` remains `NO`.
+
 ---
 
 ## Phase 9 — Mask classifier and richer memory legality
@@ -1193,6 +1251,43 @@ negative sparse-store tests
 
 No memory lowering should pattern-match masks ad hoc after this phase.
 
+Phase 9 final readiness points to Phase 9.5 TTIR mask/memory-legality
+bridge/support/reject lock, not Phase 10.
+
+---
+
+## Phase 9.5 — TTIR mask/memory-legality bridge/support/reject lock
+
+### Goal
+
+Map real TTIR mask and memory forms onto the Phase 9 value mask classifier and
+memory-legality categories, then either bridge executable forms or lock staged
+and deterministic reject classifications with exact reasons.
+
+### Targets
+
+```text
+canonical tail masks:
+  bridge to value tail masks where they match the classifier
+
+full/empty masks:
+  bridge to value full/empty forms where structurally proven
+
+rectangular memory masks:
+  staged or bridge only where Phase 9 value legality proves dense/rect effects
+
+sparse/unknown store masks:
+  deterministic reject unless a future hardware-proven emulation path exists
+
+non-affine pointer tensors:
+  staged for Phase 10/10.5 gather or strided memory classification
+```
+
+### Gate
+
+TTIR memory import must use structural mask and pointer analysis, not source
+names or printed-IR substrings. `READY_FOR_TRITON` remains `NO`.
+
 ---
 
 ## Phase 10 — Memory expansion: gather loads and strided transfers
@@ -1238,6 +1333,21 @@ negative scatter store
 ### Gate
 
 This expands load coverage without violating VDW sparse-store rules.
+
+---
+
+## Phase 10.5 — TTIR gather/strided memory bridge
+
+### Goal
+
+Connect Phase 10 value gather-load and strided-transfer legality to real TTIR
+pointer-tensor forms, while preserving the sparse-store reject boundary.
+
+### Gate
+
+Executable TTIR gather or strided memory forms must lower through the standard
+value path and hardware when claimed. Unsupported scatter or sparse-store forms
+must reject deterministically with the first unsupported boundary named.
 
 ---
 
@@ -1289,7 +1399,8 @@ F32 reductions must carry explicit finite/approx policy. No silent strict-IEEE r
 
 ### Goal
 
-Immediately connect the new value reduction path to real Triton.
+Connect the Phase 11 value reduction path to real Triton before moving to the
+next major value capability.
 
 ### Triton kernels
 
@@ -1379,7 +1490,8 @@ Approximate math must be explicit in IR, diagnostics, or manifest.
 
 ### Goal
 
-Connect real Triton fast math to value math policy.
+Connect real Triton fast math to the Phase 13 value math policy before moving
+to the next major value capability.
 
 ### Supported first
 
@@ -1462,7 +1574,8 @@ Every accepted subword path must cite the exact accepted mode table entry.
 
 ### Goal
 
-Connect real Triton subword kernels to the proven value paths.
+Connect real Triton subword kernels to the Phase 15 proven value paths before
+moving to the next major value capability.
 
 ### Supported first
 
@@ -2041,8 +2154,11 @@ Every new executable semantic needs hardware proof.
 6  Real TTIR inventory and importer skeleton
 7  Real TTIR elementwise smoke to hardware
 8  Control flow and loop boundary
+8.5 TTIR control-flow bridge/support/reject lock
 9  Mask classifier and richer memory legality
+9.5 TTIR mask/memory-legality bridge/support/reject lock
 10 Memory expansion: gather loads and strided transfers
+10.5 TTIR gather/strided memory bridge
 11 Reductions
 12 TTIR reductions smoke
 13 Math and SFU policy
@@ -2155,7 +2271,13 @@ Implementation order:
     Phase 5 handwritten vector elementwise to hardware
     Phase 6 real TTIR inventory/importer
     Phase 7 real TTIR elementwise smoke to hardware
-    then expand iteratively: loops, masks/memory, reductions, math, subword, shuffle, VPM tiling, vector.contract/GEMM, TTIR dot, block pointers, full profile closure.
+    Phase 8 value control flow
+    Phase 8.5 TTIR control-flow bridge/support/reject lock
+    Phase 9 value mask/memory legality
+    Phase 9.5 TTIR mask/memory-legality bridge/support/reject lock
+    Phase 10 value gather/strided memory
+    Phase 10.5 TTIR gather/strided memory bridge
+    then continue in value/TTIR pairs: reductions, math, subword, shuffle, VPM tiling, vector.contract/GEMM, TTIR dot, block pointers, full profile closure.
 
 For each implementation phase, generate prompt packages in the established project style:
   1. read-only inventory/design lock
@@ -2175,7 +2297,9 @@ The plan is now coherent:
 Design the full Triton/value/vc4kernel taxonomy first.
 Implement only a narrow elementwise value slice first.
 Immediately prove real TTIR source-to-hardware smoke.
-Then iteratively expand the value surface and connect each expansion to TTIR.
+Then iteratively expand one coherent value capability, prove it through
+hardware when executable, and connect the corresponding real TTIR forms before
+moving to the next major value capability.
 Keep all hardware-specific planning below the value layer.
 Use vc4value only for tiny launch/policy plumbing.
 Make “FULL Triton” mean supported or permanently rejected with proof.

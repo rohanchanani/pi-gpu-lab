@@ -279,6 +279,40 @@ the locked VC4Kernel finite f32 comparison contract.
 Select-like forms map to value `select` over vector masks. The masks must still
 be classified before they drive memory effects.
 
+## 9.5 TTIR control-flow bridge status
+
+Phase 8 locks value-layer `scf`/`cf` control flow through the standard
+`value -> vc4kernel -> ssavc4 -> scheduled vc4` path. It does not claim TTIR
+control-flow import. Phase 8.5 owns TTIR control-flow inventory,
+support/reject classification, and any executable bridge work.
+
+Required Phase 8.5 classifications:
+
+- TTIR compile-time/meta control flow:
+  `frontend_specialization`; no runtime value control-flow import is required
+  when the emitted TTIR has already been specialized into straight-line or
+  scalar-control IR.
+- TTIR `tl.range` / emitted TTIR loop forms:
+  `phase_inventory_target`; inspect real emitted forms in Phase 8.5 before
+  accepting or rejecting.
+- TTIR scalar `cf`/`scf` branch forms:
+  `lowerable_if_matches_value_cf_subset`; lower only if they structurally match
+  the Phase 8 value-cf subset, otherwise stage with the first unsupported
+  boundary named.
+- TTIR vector or per-lane branch conditions:
+  deterministic reject as control flow. VC4 has one program counter per QPU
+  program; per-lane divergence must be represented as masks/selects, not
+  per-lane PC.
+- TTIR backend dialect control flow in `ttg`, `triton_gpu`, `nvgpu`, or `nvvm`:
+  deterministic reject at the TTIR frontend boundary because those are not the
+  accepted source dialects for the VC4 path.
+- TTIR warp-specialized or async-partition control-flow metadata:
+  Phase 8.5 inspection target. Ignore only if proven a semantic no-op for the
+  emitted TTIR; otherwise classify as staged or reject with the exact reason.
+
+These are taxonomy and profile classifications only. They do not claim
+supported TTIR control flow, and `READY_FOR_TRITON=NO` remains true.
+
 ## 10. Reductions
 
 TTIR reductions map to `vector.reduction` only when value reduction legality is
@@ -404,6 +438,9 @@ The staged TTIR sequence is:
 
 - Phase 6 inventory/importer skeleton;
 - Phase 7 elementwise smoke;
+- Phase 8.5 control-flow bridge/support/reject lock;
+- Phase 9.5 mask/memory-legality bridge/support/reject lock;
+- Phase 10.5 gather/strided memory bridge;
 - Phase 12 reductions smoke;
 - Phase 14 math smoke;
 - Phase 16 subword smoke;

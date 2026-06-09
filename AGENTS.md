@@ -766,6 +766,38 @@ Near-term focus:
 
 Do not skip Phase 5 and jump to TTIR.
 
+### Vertical value/TTIR increment workflow
+
+Future upper-stack work should alternate coherent value-layer capability phases
+with corresponding TTIR bridge/support/reject phases. Value phases must not run
+far ahead of TTIR.
+
+For every coherent source-visible value-layer capability or legality category:
+
+```text
+plan the taxonomy
+  -> implement the value capability
+  -> prove value -> vc4kernel -> ssavc4 -> scheduled vc4 -> hardware
+  -> add the corresponding TTIR bridge/support/reject classification
+  -> prove real TTIR -> value -> hardware when executable
+  -> move to the next major value capability
+```
+
+The TTIR bridge phase may implement executable support, or it may lock
+deterministic staged/reject classifications with exact reasons and proof
+obligations. A value phase that only refactors internal lowering without adding
+a source-visible capability or legality category does not require a matching
+TTIR bridge before the next phase.
+
+Do not build elegant value abstractions that are not continuously checked
+against real Triton-emitted TTIR. Phase 8 value control-flow therefore leads to
+Phase 8.5 TTIR control-flow bridge/support/reject lock before Phase 9. Phase 9
+mask classifier and richer memory legality leads to Phase 9.5 TTIR
+mask/memory-legality bridge/support/reject lock before Phase 10.
+
+`READY_FOR_TRITON` remains `NO` until the project explicitly reopens that
+global readiness gate.
+
 ---
 
 ## 16. Final response contract for Codex phases

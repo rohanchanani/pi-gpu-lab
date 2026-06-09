@@ -224,3 +224,32 @@ Permanent reject language must continue to distinguish hardware impossibility
 from not-yet-implemented staging. Performance, inconvenience, lack of current
 planner support, or absence from the Phase 7 V1 importer is not a permanent
 reject proof.
+
+## 12. Phase 8.5 TTIR control-flow reject boundary
+
+Phase 8 locks value-layer control flow. It does not claim TTIR control-flow
+import. Phase 8.5 must classify real TTIR control-flow forms before any next
+major value capability runs ahead.
+
+The following Phase 8.5 classifications preserve the reject-proof boundary:
+
+- Compile-time or meta-level Triton control flow is frontend specialization
+  when the emitted TTIR no longer has runtime control-flow semantics to import.
+- `tl.range` and emitted TTIR loop forms are Phase 8.5 inventory targets until
+  their real emitted structure is inspected.
+- Scalar `cf`/`scf` branch forms may become lowerable only when they
+  structurally match the Phase 8 value-cf subset; otherwise they remain staged
+  with the first unsupported boundary named.
+- Vector or per-lane branch conditions reject as control flow. They must become
+  mask/select dataflow, not per-lane program-counter divergence.
+- Backend dialect control flow in `ttg`, `triton_gpu`, `nvgpu`, or `nvvm`
+  rejects at the TTIR frontend boundary because those dialects are not the
+  accepted source boundary for VC4.
+- Warp-specialized or async-partition control metadata may be ignored only if
+  Phase 8.5 proves it is a semantic no-op for the emitted TTIR; otherwise it
+  must be staged or rejected with the exact semantic reason.
+
+These are staged/support/reject classifications, not a broad TTIR
+control-flow support claim. Permanent rejects still require the proof template
+above unless the reject is a boundary-policy reject rather than a hardware
+impossibility claim. `READY_FOR_TRITON=NO` remains true.

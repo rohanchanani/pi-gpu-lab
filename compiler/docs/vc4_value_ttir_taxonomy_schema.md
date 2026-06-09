@@ -95,6 +95,20 @@ are planning classifications, not implementation claims.
 : Resource/manifest/runtime/audit/artifact contract, not a source-program
   feature.
 
+`frontend_specialization`
+: The source construct is resolved by the Triton frontend or TTIR generation
+  before runtime value control flow exists. No runtime value control-flow import
+  is required when the emitted TTIR has no corresponding semantic operation.
+
+`phase_inventory_target`
+: A future phase must inspect real emitted TTIR forms before support or reject
+  classification is locked.
+
+`lowerable_if_matches_value_cf_subset`
+: A TTIR control-flow form may lower only when structural analysis proves it
+  matches the locked Phase 8 value-cf subset. Non-matching forms remain staged
+  or reject with the first unsupported boundary named.
+
 ## 4. Feature row schema
 
 Each `feature_families` row is an object with these fields:
