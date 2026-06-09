@@ -9,8 +9,14 @@ elif [[ $# -gt 0 ]]; then
   exit 2
 fi
 
-if [[ -x .vc4_auto/triton_phase6_venv/bin/python ]]; then
-  PY=.vc4_auto/triton_phase6_venv/bin/python
+fallback_python=".vc4_auto/triton_phase6_venv/bin"/python
+
+if [[ -n "${VC4_TRITON_PYTHON:-}" ]]; then
+  PY="$VC4_TRITON_PYTHON"
+elif [[ -n "${TRITON_PYTHON:-}" ]]; then
+  PY="$TRITON_PYTHON"
+elif [[ -x "$fallback_python" ]]; then
+  PY="$fallback_python"
 else
   PY=python3
 fi

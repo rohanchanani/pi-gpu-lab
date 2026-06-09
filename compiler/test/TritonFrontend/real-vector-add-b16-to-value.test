@@ -1,6 +1,7 @@
-# RUN: bash -c 'if [ ! -x "%vc4_repo_root/.vc4_auto/triton_phase6_venv/bin/python" ]; then echo "UNSUPPORTED: triton phase6 venv not present"; exit 0; fi'
+# REQUIRES: vc4-has-triton-python
+
 # RUN: bash -c 'mkdir -p "%vc4_repo_root/.vc4_auto/vector_triton_phase7b_vector_add_lowering/lit"'
-# RUN: "%vc4_repo_root/.vc4_auto/triton_phase6_venv/bin/python" "%vc4_repo_root/tools/vc4-triton-import" "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --mode lower-elementwise-v1 --target cuda:80:32 -o "%vc4_repo_root/.vc4_auto/vector_triton_phase7b_vector_add_lowering/lit/vector_add_b16.vc4value.mlir"
+# RUN: "%vc4_triton_python" "%vc4_repo_root/tools/vc4-triton-import" "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --mode lower-elementwise-v1 --target cuda:80:32 -o "%vc4_repo_root/.vc4_auto/vector_triton_phase7b_vector_add_lowering/lit/vector_add_b16.vc4value.mlir"
 # RUN: FileCheck %s --check-prefix=VALUE --input-file="%vc4_repo_root/.vc4_auto/vector_triton_phase7b_vector_add_lowering/lit/vector_add_b16.vc4value.mlir"
 
 # VALUE: func.func @vector_add_b16_kernel

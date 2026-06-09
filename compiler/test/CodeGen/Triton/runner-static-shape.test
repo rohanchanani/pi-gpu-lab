@@ -1,0 +1,6 @@
+# RUN: rm -rf %t && mkdir -p %t/bad_value_fixture
+# RUN: cp "%vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/Run/value_copy_f32_tail_vc4value/input.mlir" %t/bad_value_fixture/input.ttir.mlir
+# RUN: cp "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton/expected.json" %t/bad_value_fixture/expected.json
+# RUN: not "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" %t/bad_value_fixture generate 2>&1 | FileCheck %s --check-prefix=REJECT
+
+# REJECT: TTIR hardware input must contain tt dialect operations

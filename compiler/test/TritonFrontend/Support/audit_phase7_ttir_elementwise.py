@@ -89,9 +89,10 @@ def find_tool(repo_root: Path, name: str) -> str:
 
 
 def triton_python(repo_root: Path) -> str:
-    override = os.environ.get("VC4_TRITON_PYTHON")
-    if override:
-        return override
+    for env_name in ("VC4_TRITON_PYTHON", "TRITON_PYTHON"):
+        override = os.environ.get(env_name)
+        if override:
+            return override
     candidate = repo_root / ".vc4_auto" / "triton_phase6_venv" / "bin" / "python"
     if candidate.exists():
         return str(candidate)

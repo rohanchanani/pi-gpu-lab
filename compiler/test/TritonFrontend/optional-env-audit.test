@@ -1,0 +1,1 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/audit_triton_optional_env.py" --repo-root "%vc4_repo_root"

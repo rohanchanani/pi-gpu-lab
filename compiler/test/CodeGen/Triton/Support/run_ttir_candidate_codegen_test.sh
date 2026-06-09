@@ -343,12 +343,16 @@ run_vc4_codegen() {
   vc4_codegen="$(find_tool vc4-codegen)"
   importer="$REPO_ROOT/tools/vc4-triton-import"
   require_file "$importer"
+  local phase6_venv_python
+  phase6_venv_python="$REPO_ROOT/.vc4_auto/triton_phase6_venv/bin"/python
   if [[ -n "${VC4_TRITON_PYTHON:-}" ]]; then
     triton_python="$VC4_TRITON_PYTHON"
-  elif [[ -x "$REPO_ROOT/.vc4_auto/triton_phase6_venv/bin/python" ]]; then
-    triton_python="$REPO_ROOT/.vc4_auto/triton_phase6_venv/bin/python"
+  elif [[ -n "${TRITON_PYTHON:-}" ]]; then
+    triton_python="$TRITON_PYTHON"
+  elif [[ -x "$phase6_venv_python" ]]; then
+    triton_python="$phase6_venv_python"
   else
-    fail "could not find pinned Phase 6 Triton Python at .vc4_auto/triton_phase6_venv/bin/python; set VC4_TRITON_PYTHON"
+    fail "could not find pinned Phase 6 Triton Python; set VC4_TRITON_PYTHON or TRITON_PYTHON"
   fi
   rm -rf "$GENERATED_DIR"
   mkdir -p "$GENERATED_DIR"

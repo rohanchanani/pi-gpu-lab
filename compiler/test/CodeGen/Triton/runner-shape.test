@@ -1,9 +1,7 @@
-# RUN: rm -rf %t && mkdir -p %t/bad_value_fixture
-# RUN: cp "%vc4_repo_root/compiler/test/CodeGen/VC4Value/Hardware/Run/value_copy_f32_tail_vc4value/input.mlir" %t/bad_value_fixture/input.ttir.mlir
-# RUN: cp "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton/expected.json" %t/bad_value_fixture/expected.json
-# RUN: not "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" %t/bad_value_fixture generate 2>&1 | FileCheck %s --check-prefix=REJECT
-# RUN: bash -c 'if [ ! -x "%vc4_repo_root/.vc4_auto/triton_phase6_venv/bin/python" ]; then echo "UNSUPPORTED: triton phase6 venv not present"; exit 0; fi'
-# RUN: VC4_CODEGEN_STATE_ROOT=%t/state "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton" generate
+# REQUIRES: vc4-has-triton-python
+
+# RUN: rm -rf %t
+# RUN: VC4_TRITON_PYTHON="%vc4_triton_python" VC4_CODEGEN_STATE_ROOT=%t/state "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton" generate
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.ttir.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.value.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/verified.vc4kernel.mlir
@@ -12,9 +10,6 @@
 # RUN: FileCheck %s --check-prefix=VALUE --input-file=%t/state/candidates/triton_vector_add_tail_vc4triton/lowered.value.mlir
 # RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/state/candidates/triton_vector_add_tail_vc4triton/verified.vc4kernel.mlir
 # RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_ttir_static_pipeline.py" --value %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.value.mlir --vc4kernel %t/state/candidates/triton_vector_add_tail_vc4triton/verified.vc4kernel.mlir --ssavc4 %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.ssavc4.mlir --vc4 %t/state/candidates/triton_vector_add_tail_vc4triton/scheduled.vc4.mlir --bundle %t/state/candidates/triton_vector_add_tail_vc4triton | FileCheck %s --check-prefix=AUDIT
-
-# REJECT: TTIR hardware input must contain tt dialect operations
-
 # VALUE: func.func @vector_add_b16_kernel
 # VALUE: vc4value.kernel
 # VALUE: vector.transfer_read
