@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""VC4 Triton importer skeleton.
+
+Phase 6 supports inventory only. Semantic TTIR-to-value lowering is deliberately
+disabled until Phase 7.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import re
+import sys
+from collections import Counter
+from pathlib import Path
+
+
+PHASE6_LOWERING_DIAGNOSTIC = (
+    "TTIR-to-value semantic lowering is not implemented in Phase 6; "
+    "run Phase 7 after Phase 6 final lock."
+)
+
+
+def fail(message: str, code: int = 1) -> "None":
+    print(f"vc4-triton-import: error: {message}", file=sys.stderr)
+    raise SystemExit(code)
+
+
+def load_triton():
+    try:
+        import inspect
+        import triton
+        from triton._C.libtriton import ir
+        from triton.backends.compiler import GPUTarget
+    except Exception as exc:
+        fail(
+            "Triton is required for optional Phase 6 import inventory. Install "
+            "pinned Triton 3.7.0 or use the documented source fallback. "
+            f"Import failed: {exc}"
+        )
+    version = getattr(triton, "__version__", "<missing>")
+    if not str(version).startswith("3.7."):
+        fail(f"expected Triton 3.7.x for Phase 6, found {version}")
+    return triton, ir, GPUTarget, Path(inspect.getfile(triton)).resolve()
+
+
+def parse_target(target_text: str):
+    parts = target_text.split(":")
+    if len(parts) != 3:
+        fail("target must have form '<backend>:<arch>:<warp-size>', e.g. cuda:80:32")
+    backend, arch, warp_size = parts
+    arch_value: int | str = int(arch) if arch.isdigit() else arch
+    try:
+        warp_value = int(warp_size)
+    except ValueError:
+        fail(f"target warp-size must be an integer, got {warp_size}")
+    return backend, arch_value, warp_value
+
+
+def inventory_ops(parsed_module_text: str) -> dict[str, int]:
+    # Inventory only. The TTIR file has already passed Triton's MLIR parser.
+    ops: list[str] = []
+    for line in parsed_module_text.splitlines():
+        stripped = line.strip()
+        match = re.match(
+            r'(?:%[A-Za-z0-9_.$-]+\s*=\s*)?'
+            r'"?([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_.$]*)"?\b',
+            stripped,
+        )
+        if match:
+            ops.append(match.group(1))
+    return dict(sorted(Counter(ops).items()))
+
+
+def unsupported_initial_features(op_counts: dict[str, int]) -> list[str]:
+    unsupported: list[str] = []
+    feature_ops = {
+        "reductions": ["tt.reduce", "tt.reduce.return"],
+        "approx_math_exp": ["math.exp"],
+        "sqrt_math_policy": ["math.sqrt"],
+        "dot_contract": ["tt.dot"],
+        "rank2_block_forms": ["tt.broadcast", "tt.expand_dims"],
+        "atomics": ["tt.atomic_add", "tt.atomic_cas", "tt.atomic_xchg"],
+        "block_pointers": ["tt.make_tensor_ptr", "tt.advance"],
+    }
+    for feature, ops in feature_ops.items():
+        if any(op_counts.get(op, 0) > 0 for op in ops):
+            unsupported.append(feature)
+    return unsupported
+
+
+def is_phase7_candidate(op_counts: dict[str, int]) -> bool:
+    required = ["tt.func", "tt.return", "tt.get_program_id", "tt.make_range", "tt.load", "tt.store"]
+    if not all(op_counts.get(op, 0) > 0 for op in required):
+        return False
+    return not unsupported_initial_features(op_counts)
+
+
+def parse_inventory(input_path: Path, target_text: str) -> dict[str, object]:
+    if not input_path.is_file():
+        fail(f"input TTIR file does not exist: {input_path}")
+
+    triton, ir, GPUTarget, triton_file = load_triton()
+    target = GPUTarget(*parse_target(target_text))
+    backend = triton.compiler.make_backend(target)
+    context = ir.context()
+    ir.load_dialects(context)
+    backend.load_dialects(context)
+
+    module = ir.parse_mlir_module(str(input_path), context)
+    module.context = context
+    entry = "<unknown>"
+    if hasattr(module, "get_entry_func_name"):
+        entry = str(module.get_entry_func_name())
+
+    op_counts = inventory_ops(str(module))
+    unsupported = unsupported_initial_features(op_counts)
+    phase7_candidate = is_phase7_candidate(op_counts)
+    return {
+        "input": str(input_path),
+        "triton_version": getattr(triton, "__version__", "<missing>"),
+        "triton_file": str(triton_file),
+        "target": target_text,
+        "entry_function": entry,
+        "op_counts": op_counts,
+        "phase7_candidate": phase7_candidate,
+        "unsupported_initial_features": unsupported,
+        "notes": [
+            "Parsed with Triton's MLIR parser before inventory.",
+            "Op counting is a post-parse inventory summary, not importer/lowering logic.",
+            "Phase 6 never emits vc4kernel, ssavc4, or scheduled vc4.",
+            "TTIR-to-value semantic lowering is intentionally disabled until Phase 7."
+        ],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("input", help="Input .ttir.mlir file")
+    parser.add_argument("--target", default="cuda:80:32")
+    parser.add_argument("--mode", choices=["inventory", "lower-elementwise-v1"], required=True)
+    parser.add_argument("--summary-json", default=None)
+    parser.add_argument("-o", "--output", default=None)
+    args = parser.parse_args()
+
+    if args.mode == "lower-elementwise-v1":
+        if args.output:
+            Path(args.output).unlink(missing_ok=True)
+        fail(PHASE6_LOWERING_DIAGNOSTIC)
+
+    if args.output:
+        fail("inventory mode does not write MLIR output; use --summary-json")
+    if not args.summary_json:
+        fail("inventory mode requires --summary-json")
+
+    summary = parse_inventory(Path(args.input), args.target)
+    summary_path = Path(args.summary_json)
+    summary_path.parent.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    print("VC4_TRITON_IMPORT_MODE=inventory")
+    print("PARSE_TTIR=PASS")
+    print("ENTRY_FUNCTION=" + str(summary["entry_function"]))
+    print("READY_FOR_TRITON=NO")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
