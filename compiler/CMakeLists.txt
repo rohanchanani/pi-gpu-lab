@@ -25,6 +25,46 @@ include(HandleLLVMOptions)
 message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
 
+# Some installed MLIR packages, including Triton's prebuilt LLVM/MLIR package,
+# export concrete MLIR component targets but not the aggregate monolithic target
+# named `MLIR`.  VC4 links against MLIR, so do not provide an empty compatibility
+# target here; use the aggregate target when available and otherwise link the
+# concrete component targets exported by the installed package.
+if(TARGET MLIR)
+  set(VC4_MLIR_LINK_LIBS MLIR)
+  set(VC4_MLIR_TOOL_LINK_LIBS MLIR)
+else()
+  set(VC4_MLIR_LINK_LIBS
+    MLIRArithDialect
+    MLIRBytecodeOpInterface
+    MLIRCallInterfaces
+    MLIRCastInterfaces
+    MLIRControlFlowDialect
+    MLIRControlFlowInterfaces
+    MLIRDataLayoutInterfaces
+    MLIRFuncDialect
+    MLIRFunctionInterfaces
+    MLIRIR
+    MLIRInferTypeOpInterface
+    MLIRMathDialect
+    MLIRMemRefDialect
+    MLIRParser
+    MLIRPass
+    MLIRRewrite
+    MLIRSCFDialect
+    MLIRShapedOpInterfaces
+    MLIRSideEffectInterfaces
+    MLIRSupport
+    MLIRTransforms
+    MLIRVectorDialect
+    MLIRViewLikeInterface
+  )
+  set(VC4_MLIR_TOOL_LINK_LIBS
+    ${VC4_MLIR_LINK_LIBS}
+    MLIRMlirOptMain
+  )
+endif()
+
 if(NOT DEFINED LLVM_EXTERNAL_LIT OR LLVM_EXTERNAL_LIT STREQUAL "")
   find_program(VC4_LIT_PROGRAM
     NAMES llvm-lit lit

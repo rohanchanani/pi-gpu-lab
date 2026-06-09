@@ -3,5 +3,5 @@ add_mlir_library(VC4ValueSurfaceTransforms
 
   LINK_LIBS PUBLIC
     VC4ValueDialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

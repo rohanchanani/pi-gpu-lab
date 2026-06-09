@@ -8,5 +8,5 @@ add_mlir_dialect_library(VC4ValueDialect
     VC4ValueOpsIncGen
 
   LINK_LIBS PUBLIC
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

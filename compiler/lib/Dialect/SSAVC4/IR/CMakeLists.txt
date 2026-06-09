@@ -14,5 +14,5 @@ add_mlir_dialect_library(SSAVC4Dialect
 
   LINK_LIBS PUBLIC
     VC4Dialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

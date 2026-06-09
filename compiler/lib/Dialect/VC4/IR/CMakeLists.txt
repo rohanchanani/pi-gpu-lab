@@ -12,5 +12,5 @@ add_mlir_dialect_library(VC4Dialect
     VC4OpsIncGen
 
   LINK_LIBS PUBLIC
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

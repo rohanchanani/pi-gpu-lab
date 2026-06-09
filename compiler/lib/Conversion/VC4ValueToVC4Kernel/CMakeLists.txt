@@ -14,5 +14,5 @@ add_mlir_library(VC4ValueToVC4Kernel
   LINK_LIBS PUBLIC
     VC4ValueDialect
     VC4KernelDialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

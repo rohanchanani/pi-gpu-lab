@@ -26,7 +26,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
-#include "llvm/Support/InitLLVM.h"
 
 namespace {
 
@@ -1281,7 +1280,6 @@ struct VC4VerifyScheduledPeripheralAccessesPass
 } // namespace
 
 int main(int argc, char **argv) {
-  llvm::InitLLVM y(argc, argv);
   mlir::vc4::registerConvertVC4KernelToSSAVC4Pass();
   mlir::vc4::registerValueSurfacePasses();
   mlir::PassRegistration<VC4TestPrintEffectsPass>();

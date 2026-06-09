@@ -29,5 +29,5 @@ target_link_libraries(vc4-opt
     VC4KernelDialect
     VC4ValueDialect
     VC4ValueSurfaceTransforms
-    MLIR
+    ${VC4_MLIR_TOOL_LINK_LIBS}
 )

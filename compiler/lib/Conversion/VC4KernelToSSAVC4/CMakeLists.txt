@@ -13,5 +13,5 @@ add_mlir_library(VC4KernelToSSAVC4
     VC4Dialect
     SSAVC4Dialect
     VC4KernelDialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )

@@ -6,7 +6,7 @@ add_mlir_library(VC4ArtifactEmitter
 
   LINK_LIBS PUBLIC
     VC4Dialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )
 
 # Bootstrap this slice through the already-reached compiler/lib tree.  The

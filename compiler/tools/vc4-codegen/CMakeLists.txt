@@ -6,5 +6,5 @@ target_link_libraries(vc4-codegen
   PRIVATE
     VC4ArtifactEmitter
     VC4Dialect
-    MLIR
+    ${VC4_MLIR_LINK_LIBS}
 )
