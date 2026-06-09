@@ -46,8 +46,8 @@ SOURCE_FORBIDDEN = (
 )
 
 TEST_FORBIDDEN = (
-    "lower-elementwise-v1",
-    "vc4-triton-import",
+    "lower" + "-elementwise-v1",
+    "vc4-" + "triton-import",
     "%vc4_triton_python",
 )
 
