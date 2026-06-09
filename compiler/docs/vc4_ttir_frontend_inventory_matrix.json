@@ -1,0 +1,178 @@
+{
+  "phase": "VC4 Vector/Triton Phase 6d",
+  "triton_pinned_version": "3.7.0",
+  "ready_for_triton": "NO",
+  "entries": {
+    "tt_func": {
+      "status_for_phase7": "required",
+      "value_surface_target": "func.func",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.func"],
+      "required_in_phase7_candidates": true,
+      "notes": "Every generated TTIR snapshot has a public tt.func entry. Phase 7 importer skeleton should map this to the value-layer function/kernel boundary, not directly to vc4kernel."
+    },
+    "tt_return": {
+      "status_for_phase7": "required",
+      "value_surface_target": "func.return",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.return"],
+      "required_in_phase7_candidates": true,
+      "notes": "All Phase 6 corpus kernels contain tt.return. Future reductions may introduce helper tt.func regions with additional returns."
+    },
+    "tt_get_program_id_axis0": {
+      "status_for_phase7": "required",
+      "value_surface_target": "vc4value.program_id",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.get_program_id"],
+      "required_in_phase7_candidates": true,
+      "notes": "Required elementwise candidates use axis 0. The matmul future corpus also observes axis 1; axis 1 remains staged for multidimensional grid planning."
+    },
+    "tt_make_range_or_arange": {
+      "status_for_phase7": "required",
+      "value_surface_target": "vector.step",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.make_range"],
+      "required_in_phase7_candidates": true,
+      "notes": "Triton tl.arange lowers to tt.make_range tensor forms. Phase 7 should recognize the vector<16> lane range pattern for B16 elementwise snapshots."
+    },
+    "tt_splat": {
+      "status_for_phase7": "required",
+      "value_surface_target": "vector.splat",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.splat"],
+      "required_in_phase7_candidates": true,
+      "notes": "Observed in pointer/base scalar expansion, scalar argument expansion, and constants broadcast to tensor lanes."
+    },
+    "tt_load_tensor_of_pointers_mask_other_zero": {
+      "status_for_phase7": "required",
+      "value_surface_target": "vector.transfer_read",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.load"],
+      "required_in_phase7_candidates": true,
+      "notes": "Required elementwise snapshots use masked tensor-of-pointers loads with other=0.0 or other=0. Softmax uses other=-inf and is staged."
+    },
+    "tt_store_tensor_of_pointers_mask": {
+      "status_for_phase7": "required",
+      "value_surface_target": "vector.transfer_write",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.store"],
+      "required_in_phase7_candidates": true,
+      "notes": "Required elementwise snapshots use masked tensor-of-pointers stores. Sparse/unknown store masks remain a later legality concern."
+    },
+    "arith_addi_tensor": {
+      "status_for_phase7": "required",
+      "value_surface_target": "arith.addi",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["arith.addi"],
+      "required_in_phase7_candidates": true,
+      "notes": "Observed for offset math in all elementwise snapshots and i32 arithmetic in i32_add_select_b16."
+    },
+    "arith_addf_tensor": {
+      "status_for_phase7": "required",
+      "value_surface_target": "arith.addf",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["arith.addf"],
+      "required_in_phase7_candidates": false,
+      "notes": "Required for f32 elementwise candidates vector_add_b16 and saxpy_select_b16. Not expected in the pure i32 candidate."
+    },
+    "arith_cmpi_tensor": {
+      "status_for_phase7": "required",
+      "value_surface_target": "arith.cmpi",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["arith.cmpi"],
+      "required_in_phase7_candidates": true,
+      "notes": "Observed for mask construction, bounds checks, and i32 compare/select."
+    },
+    "arith_cmpf_tensor": {
+      "status_for_phase7": "required",
+      "value_surface_target": "arith.cmpf",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["arith.cmpf"],
+      "required_in_phase7_candidates": false,
+      "notes": "Observed in saxpy_select_b16 for f32 threshold comparison. Not expected in vector_add_b16 or i32_add_select_b16."
+    },
+    "tt_or_arith_where_select_pattern": {
+      "status_for_phase7": "required",
+      "value_surface_target": "arith.select",
+      "first_supported_phase": "Phase 7",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["arith.select"],
+      "required_in_phase7_candidates": false,
+      "notes": "Triton tl.where lowered to arith.select in saxpy_select_b16 and i32_add_select_b16. Not expected in vector_add_b16."
+    },
+    "future_tl_sum_reduce": {
+      "status_for_phase7": "staged",
+      "value_surface_target": "vector.reduction",
+      "first_supported_phase": "Phase 11",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.reduce", "tt.reduce.return"],
+      "required_in_phase7_candidates": false,
+      "notes": "Observed in softmax_row and layer_norm_forward. Phase 7 must inventory but not lower reductions."
+    },
+    "future_tl_exp_approx": {
+      "status_for_phase7": "staged",
+      "value_surface_target": "math.exp with explicit approximate policy",
+      "first_supported_phase": "Phase 13",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["math.exp"],
+      "required_in_phase7_candidates": false,
+      "notes": "Observed in softmax_row. VC4 SFU lowering requires explicit approximate/target policy in a later math phase."
+    },
+    "future_tl_dot": {
+      "status_for_phase7": "staged",
+      "value_surface_target": "vector.contract",
+      "first_supported_phase": "Phase 19",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.dot"],
+      "required_in_phase7_candidates": false,
+      "notes": "Observed in matmul_dot. Must not be simplified away or lowered directly to vc4kernel in Phase 6 or 7."
+    },
+    "future_block_pointer_forms": {
+      "status_for_phase7": "future_profile",
+      "value_surface_target": "memref/vector transfer planning",
+      "first_supported_phase": "Phase 24",
+      "permanent_reject_possible": false,
+      "ttir_ops": ["tt.make_tensor_ptr", "tt.advance"],
+      "required_in_phase7_candidates": false,
+      "notes": "Not observed in the current Phase 6 corpus, which uses explicit tensor-of-pointers arithmetic. Real block pointer forms remain a future profile target."
+    },
+    "atomics": {
+      "status_for_phase7": "reject_initially",
+      "value_surface_target": "deterministic reject",
+      "first_supported_phase": "unplanned",
+      "permanent_reject_possible": true,
+      "ttir_ops": ["tt.atomic_add", "tt.atomic_cas", "tt.atomic_xchg"],
+      "required_in_phase7_candidates": false,
+      "notes": "Not observed in the Phase 6 corpus. Initial VC4 value/Triton importer should reject atomics deterministically."
+    },
+    "cache_modifiers": {
+      "status_for_phase7": "reject_initially",
+      "value_surface_target": "deterministic reject or ignored only with proof",
+      "first_supported_phase": "unplanned",
+      "permanent_reject_possible": true,
+      "ttir_ops": [],
+      "required_in_phase7_candidates": false,
+      "notes": "Not observed as distinct TTIR ops in the Phase 6 corpus. Any cache modifier attributes must be inventoried after parse and rejected unless a future VC4 memory policy proves semantics."
+    },
+    "volatile": {
+      "status_for_phase7": "reject_initially",
+      "value_surface_target": "deterministic reject",
+      "first_supported_phase": "unplanned",
+      "permanent_reject_possible": true,
+      "ttir_ops": [],
+      "required_in_phase7_candidates": false,
+      "notes": "Not observed in the Phase 6 corpus. Volatile memory semantics are outside the Phase 7 elementwise smoke scope."
+    }
+  }
+}
