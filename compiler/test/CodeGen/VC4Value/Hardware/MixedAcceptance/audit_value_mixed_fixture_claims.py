@@ -82,7 +82,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_value_f32_cmp_select" in claim_names:
         for marker in ('vc4value.fp_domain = "finite"', "arith.cmpf", "arith.select"):
             require_marker(mlir, marker, "saw_value_f32_cmp_select input")
-        require_marker(harness, "tmp > THRESHOLD", "saw_value_f32_cmp_select harness")
+        if "tmp > THRESHOLD" not in harness and "looped > THRESHOLD" not in harness:
+            fail("saw_value_f32_cmp_select harness missing finite threshold oracle")
 
     if "saw_value_mixed_i32_f32" in claim_names:
         for marker in ("memref<?xi32", "memref<?xf32", "arith.cmpi", "arith.mulf", "arith.addf", "arith.select"):
@@ -97,7 +98,30 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_value_f32_alu" in claim_names:
         for marker in ("arith.mulf", "arith.addf"):
             require_marker(mlir, marker, "saw_value_f32_alu input")
-        require_marker(harness, "a * xf_values[index] + yf_values[index]", "saw_value_f32_alu harness")
+        if (
+            "a * xf_values[index] + yf_values[index]" not in harness
+            and "factor * xf_values[index] + yf_values[index]" not in harness
+            and "factor * yf_values[index] + xf_values[index]" not in harness
+        ):
+            fail("saw_value_f32_alu harness missing checked f32 arithmetic oracle")
+
+    if "saw_value_cf_loop" in claim_names:
+        for marker in ("cf.br ^loop", "cf.cond_br", "arith.cmpi ult"):
+            require_marker(mlir, marker, "saw_value_cf_loop input")
+        if "trip_cases" not in harness or "trip" not in harness:
+            fail("saw_value_cf_loop harness missing varied trip-count oracle")
+
+    if "saw_value_cf_cond_br" in claim_names:
+        require_marker(mlir, "cf.cond_br", "saw_value_cf_cond_br input")
+        if "flag_cases" not in harness and "use_select" not in harness and "use_i32_path" not in harness:
+            fail("saw_value_cf_cond_br harness missing runtime branch flag")
+
+    if "saw_value_vector_block_arg" in claim_names:
+        require_marker(mlir, "vector<16xf32>", "saw_value_vector_block_arg input")
+        if mlir.count("vector<16xf32>") < 4:
+            fail("saw_value_vector_block_arg requires multiple vector block argument sites")
+        if "merged vector" in harness:
+            fail("saw_value_vector_block_arg cannot be claimed by comments only")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

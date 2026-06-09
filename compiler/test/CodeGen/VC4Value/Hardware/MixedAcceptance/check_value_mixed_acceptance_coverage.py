@@ -44,6 +44,8 @@ OPTIONAL_FEATURE_FIELDS = {
 REQUIRED_FIXTURES = {
     "mixed_value_saxpy_select_tail_vc4value",
     "mixed_value_i32_f32_dual_path_tail_vc4value",
+    "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+    "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -59,6 +61,9 @@ REQUIRED_FEATURES = {
     "value_tail_masks",
     "value_vdw_inactive_preserve",
     "value_no_producer_dialect_in_verified_vc4kernel",
+    "value_cf_loop",
+    "value_cf_cond_br",
+    "value_vector_block_arg",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -160,6 +165,9 @@ def validate_fixture(repo_root, fixture):
         "value_f32_finite_cmp_select": "arith.cmpf",
         "value_tail_masks": "vector.create_mask",
         "value_vdw_inactive_preserve": "vector.transfer_write",
+        "value_cf_loop": "cf.br",
+        "value_cf_cond_br": "cf.cond_br",
+        "value_vector_block_arg": "vector<16xf32>",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -181,7 +189,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase8_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]

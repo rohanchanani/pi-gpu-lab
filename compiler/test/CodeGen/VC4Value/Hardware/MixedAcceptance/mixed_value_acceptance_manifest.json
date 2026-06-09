@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_mixed_acceptance",
+  "suite_name": "vc4value_phase5_phase8_mixed_acceptance",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -82,6 +82,101 @@
         "f32_tmu_alu",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_saxpy_loop_select_tail_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "f32 saxpy-style loop with runtime scalar branch, vector merge argument, finite select, tail store, and preserve checks",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_vector_step_lane",
+        "value_f32_transfer_read",
+        "value_f32_transfer_write",
+        "value_f32_alu",
+        "value_f32_finite_cmp_select",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_cf_loop",
+        "value_cf_cond_br",
+        "value_vector_block_arg",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "output_hash",
+        "saw_value_cf_loop",
+        "saw_value_cf_cond_br",
+        "saw_value_vector_block_arg",
+        "saw_value_tail_mask",
+        "saw_value_tmu_load",
+        "saw_value_vdw_preserve",
+        "saw_value_f32_cmp_select"
+      ],
+      "expected_cases_summary": "12 n values times 3 scalar a values times 3 loop trip counts times 2 runtime branch flags; active_qpus=12; tails and full vectors checked with sentinels",
+      "triage_feature_bands": [
+        "value_cf",
+        "f32_tmu",
+        "f32_alu",
+        "finite_cmp_select",
+        "tail_store_preserve"
+      ]
+    },
+    {
+      "name": "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "runtime branch selects between i32-predicated f32 path and f32 alternate path after a counted loop carries a vector factor",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_vector_step_lane",
+        "value_i32_transfer_read",
+        "value_f32_transfer_read",
+        "value_f32_transfer_write",
+        "value_i32_cmp",
+        "value_f32_alu",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_cf_loop",
+        "value_cf_cond_br",
+        "value_vector_block_arg",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "output_hash",
+        "saw_value_cf_loop",
+        "saw_value_cf_cond_br",
+        "saw_value_vector_block_arg",
+        "saw_value_tail_mask",
+        "saw_value_tmu_load",
+        "saw_value_vdw_preserve",
+        "saw_value_mixed_i32_f32",
+        "saw_value_i32_cmp",
+        "saw_value_f32_alu"
+      ],
+      "expected_cases_summary": "12 n values times 2 scalar a values times 3 loop trip counts times 2 runtime branch flags; active_qpus=12; i32 and f32 paths checked with sentinels",
+      "triage_feature_bands": [
+        "value_cf",
+        "i32_tmu",
+        "i32_cmp",
+        "f32_tmu_alu",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -90,7 +185,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -99,7 +196,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -108,7 +207,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -116,7 +217,8 @@
       "id": "value_i32_transfer_read",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -125,7 +227,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -144,7 +248,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -152,7 +258,8 @@
       "id": "value_i32_cmp",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -160,7 +267,8 @@
       "id": "value_f32_finite_cmp_select",
       "verification_kind": "hardware_checked_output",
       "covered_by": [
-        "mixed_value_saxpy_select_tail_vc4value"
+        "mixed_value_saxpy_select_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value"
       ],
       "required": true
     },
@@ -169,7 +277,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -178,7 +288,9 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     },
@@ -187,7 +299,36 @@
       "verification_kind": "runner_audit",
       "covered_by": [
         "mixed_value_saxpy_select_tail_vc4value",
-        "mixed_value_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_cf_loop",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_cf_cond_br",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_vector_block_arg",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
       ],
       "required": true
     }
@@ -195,5 +336,5 @@
   "isolation_backstops": [
     "value_i32_add_select_tail_vc4value"
   ],
-  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine Phase 5 value mixed hardware gate."
+  "final_acceptance_policy": "Run this manifest with run_value_mixed_acceptance.sh after static conversion checks and claim audits. Isolation fixtures remain triage tools; this suite is the routine value mixed hardware gate for Phase 5 and Phase 8 control flow."
 }

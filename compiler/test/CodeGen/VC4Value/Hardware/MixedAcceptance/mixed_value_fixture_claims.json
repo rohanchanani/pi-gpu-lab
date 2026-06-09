@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase8_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -88,6 +88,138 @@
           "claim_kind": "CHECKED_OUTPUT",
           "evidence": {
             "checked_output": "input.mlir stores with a tail mask; the harness requires preserved sentinel values outside active n for every case."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_cf_saxpy_loop_select_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_saxpy_loop_select_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_saxpy_loop_select_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_saxpy_loop_select_tail_vc4value/candidate/mixed_value_cf_saxpy_loop_select_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_cf_loop",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.br/cf.cond_br loop blocks with loop-carried index and vector accumulator; expected.json requires saw_value_cf_loop=1 and the harness varies trip counts 0, 1, and 3."
+          }
+        },
+        {
+          "claim": "saw_value_cf_cond_br",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses scalar cf.cond_br for the runtime use_select path and the loop guard; the harness varies the runtime branch flag and checks distinct CPU oracle paths."
+          }
+        },
+        {
+          "claim": "saw_value_vector_block_arg",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir carries vector<16xf32> block arguments through loop, branch, and merge blocks; output depends on the merged vector value."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask and masked transfer_write; expected.json requires sentinel_mismatches=0 across tail-heavy n cases."
+          }
+        },
+        {
+          "claim": "saw_value_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads x, y, and fallback with vector.transfer_read; the CPU oracle depends on every loaded buffer."
+          }
+        },
+        {
+          "claim": "saw_value_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked transfer_write is checked by sentinels outside active n; expected.json requires sentinel_mismatches=0."
+          }
+        },
+        {
+          "claim": "saw_value_f32_cmp_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "select_path uses finite arith.cmpf and arith.select; the harness branch flag exercises that path and checks the threshold oracle."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_i32_f32_dual_path_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_i32_f32_dual_path_tail_vc4value/candidate/mixed_value_cf_i32_f32_dual_path_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_cf_loop",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.br/cf.cond_br counted loop blocks with loop-carried index and vector factor; expected.json requires saw_value_cf_loop=1 and the harness varies trip counts 0, 2, and 5."
+          }
+        },
+        {
+          "claim": "saw_value_cf_cond_br",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses scalar cf.cond_br for the runtime use_i32_path branch and loop guard; the harness varies the runtime branch flag and checks both paths."
+          }
+        },
+        {
+          "claim": "saw_value_vector_block_arg",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir carries vector<16xf32> block arguments through loop, branch, and merge blocks; output depends on the merged vector value."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask and masked transfer_write; expected.json requires sentinel_mismatches=0 across tail-heavy n cases."
+          }
+        },
+        {
+          "claim": "saw_value_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads xi, xf, and yf with vector.transfer_read; the CPU oracle depends on i32 and f32 loaded buffers."
+          }
+        },
+        {
+          "claim": "saw_value_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked transfer_write is checked by sentinels outside active n; expected.json requires sentinel_mismatches=0."
+          }
+        },
+        {
+          "claim": "saw_value_mixed_i32_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir combines i32 and f32 transfer reads in a control-flow kernel; output depends on runtime branch path and i32 predicate."
+          }
+        },
+        {
+          "claim": "saw_value_i32_cmp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "i32_path uses arith.cmpi sgt over vector<16xi32>; the harness oracle uses xi > threshold_i when the i32 path is selected."
+          }
+        },
+        {
+          "claim": "saw_value_f32_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "both branch paths use f32 arith.mulf/arith.addf; the harness checks the path-specific f32 formula for each active element."
           }
         }
       ]
