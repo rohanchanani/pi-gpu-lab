@@ -1,0 +1,52 @@
+# RUN: bash -c 'if [ ! -x "%vc4_repo_root/.vc4_auto/triton_phase6_venv/bin/python" ]; then echo "UNSUPPORTED: triton phase6 venv not present"; exit 0; fi'
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: "%vc4_repo_root/.vc4_auto/triton_phase6_venv/bin/python" "%vc4_repo_root/tools/vc4-triton-import" "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --mode lower-elementwise-v1 --target cuda:80:32 -o %t/vector_add_b16.vc4value.mlir
+# RUN: FileCheck %s --check-prefix=VALUE --input-file=%t/vector_add_b16.vc4value.mlir
+# RUN: vc4-opt %t/vector_add_b16.vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/vector_add_b16.vc4kernel.mlir
+# RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/vector_add_b16.vc4kernel.mlir
+# RUN: vc4-opt %t/vector_add_b16.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/vector_add_b16.ssavc4.mlir
+# RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/vector_add_b16.ssavc4.mlir
+# RUN: vc4-opt %t/vector_add_b16.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/vector_add_b16.vc4.mlir
+# RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/vector_add_b16.vc4.mlir
+# RUN: vc4-codegen %t/vector_add_b16.vc4.mlir --emit-bundle %t/vector_add_b16.bundle
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_ttir_static_pipeline.py" --value %t/vector_add_b16.vc4value.mlir --vc4kernel %t/vector_add_b16.vc4kernel.mlir --ssavc4 %t/vector_add_b16.ssavc4.mlir --vc4 %t/vector_add_b16.vc4.mlir --bundle %t/vector_add_b16.bundle | FileCheck %s --check-prefix=AUDIT
+
+# VALUE: func.func @vector_add_b16_kernel
+# VALUE: vc4value.kernel
+# VALUE: vc4value.program_id
+# VALUE: vector.step
+# VALUE: vector.create_mask
+# VALUE: vector.transfer_read
+# VALUE: arith.addf
+# VALUE: vector.transfer_write
+# VALUE-NOT: tt.
+# VALUE-NOT: vc4kernel.
+# VALUE-NOT: ssavc4.
+# VALUE-NOT: vc4.qpu
+
+# VC4KERNEL: vc4kernel.kernel @vector_add_b16_kernel
+# VC4KERNEL: vc4kernel.tmu_load_fragment
+# VC4KERNEL: vc4kernel.vdw_store_fragment
+# VC4KERNEL-NOT: func.func
+# VC4KERNEL-NOT: vector.
+# VC4KERNEL-NOT: memref.
+# VC4KERNEL-NOT: vc4value.
+# VC4KERNEL-NOT: tt.
+
+# SSAVC4: ssavc4.func @vector_add_b16_kernel
+# SSAVC4: ssavc4.tmu.request
+# SSAVC4: ssavc4.vdw.store
+# SSAVC4-NOT: vc4kernel.
+# SSAVC4-NOT: func.func
+# SSAVC4-NOT: vector.
+# SSAVC4-NOT: memref.
+# SSAVC4-NOT: vc4value.
+
+# VC4: vc4.module
+# VC4: vc4.qpu.
+# VC4-NOT: ssavc4.
+# VC4-NOT: vc4kernel.
+# VC4-NOT: func.func
+# VC4-NOT: vc4value.
+
+# AUDIT: TTIR_STATIC_PIPELINE_AUDIT=PASS
