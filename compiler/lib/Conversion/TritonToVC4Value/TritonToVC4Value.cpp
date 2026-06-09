@@ -290,8 +290,19 @@ private:
   MLIRContext *ctx;
 };
 
-static Type convertScalarArgType(Type type, bool isSizeLike, OpBuilder &builder) {
-  if (isSizeLike && isScalarI32(type))
+enum class TTIRArgumentRole {
+  GlobalPointerIn,
+  GlobalPointerOut,
+  GlobalPointerInOut,
+  ScalarTailBound,
+  ScalarF32,
+  ScalarI32,
+  Unknown
+};
+
+static Type convertScalarArgType(Type type, TTIRArgumentRole role,
+                                 OpBuilder &builder) {
+  if (role == TTIRArgumentRole::ScalarTailBound && isScalarI32(type))
     return builder.getIndexType();
   if (isScalarI32(type) || isScalarF32(type))
     return type;
@@ -368,12 +379,6 @@ static std::string inferSourceArgName(BlockArgument arg, unsigned index) {
       return sanitizeSymbolName(cleaned);
   }
   return ("arg" + Twine(index)).str();
-}
-
-static bool isLikelySizeArgName(StringRef name) {
-  return name == "n" || name == "n_elements" || name == "size" ||
-         name == "numel" || name.ends_with("_n") || name.ends_with("_size") ||
-         name.ends_with("_elements");
 }
 
 static bool hasAnyName(Operation *op, ArrayRef<StringRef> names) {
@@ -554,8 +559,8 @@ struct TTIRArgInfo {
   std::string valueName;
   Type sourceType;
   Type valueType;
+  TTIRArgumentRole role = TTIRArgumentRole::Unknown;
   bool isPointer = false;
-  bool isSizeLike = false;
   TTIRScalarElementKind pointerElement = TTIRScalarElementKind::Unsupported;
   bool loaded = false;
   bool stored = false;
@@ -610,6 +615,7 @@ public:
     if (failed(classifyMemoryDirections()))
       return failure();
     markRequiredDataflow();
+    classifyScalarArgumentRoles();
     return success();
   }
 
@@ -617,6 +623,12 @@ public:
   Block &getEntryBlock() const { return funcOp->getRegion(0).front(); }
   ArrayRef<TTIRArgInfo> getArgs() const { return args; }
   const CommonPlan &getCommonPlan() const { return common; }
+  StringRef getTailBoundArgName() const {
+    auto it = argIndex.find(common.sizeArg);
+    if (it == argIndex.end())
+      return {};
+    return args[it->second].valueName;
+  }
 
   TTIRArgInfo *lookupArg(BlockArgument arg) {
     auto it = argIndex.find(arg);
@@ -702,7 +714,8 @@ private:
         info.isPointer = true;
         info.pointerElement = pointer->pointeeKind;
       } else if (isScalarI32(arg.getType()) || isScalarF32(arg.getType())) {
-        info.isSizeLike = isLikelySizeArgName(info.valueName);
+        info.role = isScalarF32(arg.getType()) ? TTIRArgumentRole::ScalarF32
+                                               : TTIRArgumentRole::ScalarI32;
       } else {
         if (typeAdapter.classifyTensorPointerElement(arg.getType()))
           return emitStagedDiagnostic(funcOp, "unsupported pointer argument element type");
@@ -885,8 +898,11 @@ private:
     if (!sizeArg)
       return emitStagedDiagnostic(rhsSplat, "tail mask size is not a function argument");
     auto it = argIndex.find(sizeArg);
-    if (it == argIndex.end() || !args[it->second].isSizeLike)
-      return emitStagedDiagnostic(rhsSplat, "tail mask size argument is not ABI size-like");
+    if (it == argIndex.end())
+      return emitInternalError(rhsSplat, "tail mask size argument missing from arg table");
+    if (!isScalarI32(args[it->second].sourceType))
+      return emitStagedDiagnostic(rhsSplat, "tail mask bound is not an i32 scalar argument");
+    args[it->second].role = TTIRArgumentRole::ScalarTailBound;
     common.sizeArg = sizeArg;
     canonicalInfrastructureValues.insert(rhsSplat->getResult(0));
     canonicalInfrastructureValues.insert(mask);
@@ -910,7 +926,30 @@ private:
       if (hasName(&op, kTTStoreOpName))
         args[it->second].stored = true;
     }
+    for (TTIRArgInfo &arg : args) {
+      if (!arg.isPointer)
+        continue;
+      if (arg.loaded && arg.stored)
+        arg.role = TTIRArgumentRole::GlobalPointerInOut;
+      else if (arg.stored)
+        arg.role = TTIRArgumentRole::GlobalPointerOut;
+      else if (arg.loaded)
+        arg.role = TTIRArgumentRole::GlobalPointerIn;
+    }
     return success();
+  }
+
+  void classifyScalarArgumentRoles() {
+    for (TTIRArgInfo &arg : args) {
+      if (arg.isPointer || arg.sourceArg == common.sizeArg)
+        continue;
+      if (isScalarF32(arg.sourceType)) {
+        arg.role = TTIRArgumentRole::ScalarF32;
+        continue;
+      }
+      if (isScalarI32(arg.sourceType))
+        arg.role = TTIRArgumentRole::ScalarI32;
+    }
   }
 
   void markRequiredValue(Value value) {
@@ -1011,7 +1050,7 @@ private:
             memorySpace));
         continue;
       }
-      Type converted = convertScalarArgType(arg.sourceType, arg.isSizeLike, builder);
+      Type converted = convertScalarArgType(arg.sourceType, arg.role, builder);
       if (!converted)
         return sourceFunc->emitOpError("unsupported scalar argument type");
       argTypes.push_back(converted);
@@ -1040,7 +1079,9 @@ private:
                              builder.getStringAttr(direction));
         if (planner.getCommonPlan().sizeArg) {
           valueFunc.setArgAttr(index, kVC4ValueShapeArgsAttr,
-                               builder.getArrayAttr({builder.getStringAttr("n")}));
+                               builder.getArrayAttr(
+                                   {builder.getStringAttr(
+                                       planner.getTailBoundArgName())}));
         }
       }
       valueMap[arg.sourceArg] = entry->getArgument(index);

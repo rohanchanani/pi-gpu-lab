@@ -16,13 +16,26 @@ RANGE_REPLACEMENTS = {
     "make-range-1-17": "tt.make_range {end = 17 : i32, start = 1 : i32}",
 }
 
+NAME_REPLACEMENTS = {
+    "tail-bound-weird-name": (
+        ("%n_elements: i32 loc(\"n_elements\"(#loc))", "%items: i32 loc(\"items\"(#loc))"),
+        ("%n_elements", "%items"),
+    ),
+    "compute-i32-name-n": (
+        ("%bias: i32 loc(\"bias\"(#loc))", "%n: i32 loc(\"n\"(#loc))"),
+        ("%bias", "%n"),
+    ),
+}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True)
     parser.add_argument(
         "--kind",
-        choices=sorted(set(AXIS_REPLACEMENTS) | set(RANGE_REPLACEMENTS)),
+        choices=sorted(
+            set(AXIS_REPLACEMENTS) | set(RANGE_REPLACEMENTS) | set(NAME_REPLACEMENTS)
+        ),
         required=True,
     )
     parser.add_argument("--out", required=True)
@@ -33,11 +46,17 @@ def main() -> int:
       if "tt.get_program_id x : i32" not in base:
         raise SystemExit("base TTIR does not contain the expected axis-x program id")
       text = base.replace("tt.get_program_id x : i32", AXIS_REPLACEMENTS[args.kind], 1)
-    else:
+    elif args.kind in RANGE_REPLACEMENTS:
       marker = "tt.make_range {end = 16 : i32, start = 0 : i32}"
       if marker not in base:
         raise SystemExit("base TTIR does not contain the expected make_range 0..16")
       text = base.replace(marker, RANGE_REPLACEMENTS[args.kind], 1)
+    else:
+      text = base
+      for old, new in NAME_REPLACEMENTS[args.kind]:
+        if old not in text:
+          raise SystemExit(f"base TTIR does not contain expected name marker: {old}")
+        text = text.replace(old, new)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")

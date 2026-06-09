@@ -59,6 +59,13 @@
       "cpp_importer_only": true
     },
     {
+      "test": "ttir-argument-roles-structural.test",
+      "input": "generated name-mutation probes from examples/triton/phase6/generated/vector_add_b16.ttir.mlir and i32_add_select_b16.ttir.mlir",
+      "input_kind": "parser-valid TTIR name/provenance probes derived from real generated TTIR snapshots",
+      "feature_claim": "tail-bound and compute scalar argument roles are classified from use-def structure, not source names",
+      "cpp_importer_only": true
+    },
+    {
       "test": "backend-dialects-rejected.test",
       "input": "compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir",
       "input_kind": "parser-negative backend dialect IR",
@@ -84,6 +91,13 @@
       "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
       "input_kind": "static source audit",
       "feature_claim": "program axis and make_range classification use exact typed/structured APIs and not printed attr/op substring matching",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "semantic-string-matching-audit.test",
+      "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp and accepted conversion tests",
+      "input_kind": "static source/test audit",
+      "feature_claim": "semantic string matching and argument-name semantic role heuristics are absent from the C++ TTIR importer path",
       "cpp_importer_only": true
     }
   ],

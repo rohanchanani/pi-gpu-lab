@@ -1,0 +1,21 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind tail-bound-weird-name --out %t/tail_bound_weird.ttir.mlir
+# RUN: %vc4_triton_opt %t/tail_bound_weird.ttir.mlir --convert-triton-to-vc4-value -o %t/tail_bound_weird.value.mlir
+# RUN: FileCheck %s --check-prefix=TAIL --input-file=%t/tail_bound_weird.value.mlir
+
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir" --kind compute-i32-name-n --out %t/compute_i32_named_n.ttir.mlir
+# RUN: %vc4_triton_opt %t/compute_i32_named_n.ttir.mlir --convert-triton-to-vc4-value -o %t/compute_i32_named_n.value.mlir
+# RUN: FileCheck %s --check-prefix=COMPUTE --input-file=%t/compute_i32_named_n.value.mlir
+
+# TAIL: func.func @vector_add_b16_kernel(
+# TAIL-SAME: vc4value.shape_args = ["items"]
+# TAIL-SAME: %{{[^:]+}}: index {vc4value.arg_name = "items"}
+# TAIL: arith.subi %{{[^,]+}}, %{{[^ ]+}} : index
+
+# COMPUTE: func.func @i32_add_select_b16_kernel(
+# COMPUTE-SAME: %{{[^:]+}}: i32 {vc4value.arg_name = "n"}
+# COMPUTE-SAME: %{{[^:]+}}: index {vc4value.arg_name = "n"}
+# COMPUTE: vector.broadcast %{{[^ ]+}} : i32 to vector<16xi32>
