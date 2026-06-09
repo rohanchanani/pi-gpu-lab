@@ -11,8 +11,15 @@ configure_lit_site_cfg(
     "MLIR_TOOLS_DIR"
 )
 
+set(VC4_CHECK_DEPENDS
+  vc4-opt
+)
+if(TARGET vc4-triton-opt)
+  list(APPEND VC4_CHECK_DEPENDS vc4-triton-opt)
+endif()
+
 add_lit_testsuite(check-vc4 "Running the VC4 regression tests"
   ${CMAKE_CURRENT_BINARY_DIR}
   DEPENDS
-    vc4-opt
+    ${VC4_CHECK_DEPENDS}
 )

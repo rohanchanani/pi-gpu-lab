@@ -24,3 +24,9 @@ tool_dirs = [config.vc4_tools_dir, config.mlir_tools_dir, config.llvm_tools_dir]
 tools = ["vc4-opt", "FileCheck"]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)
+config.environment["VC4_ACTIVE_TOOLS_DIR"] = config.vc4_tools_dir
+
+vc4_triton_opt = os.path.join(config.vc4_tools_dir, "vc4-triton-opt")
+if os.path.isfile(vc4_triton_opt) and os.access(vc4_triton_opt, os.X_OK):
+    config.available_features.add("vc4-triton-cpp-frontend")
+    config.substitutions.append(("%vc4_triton_opt", vc4_triton_opt))

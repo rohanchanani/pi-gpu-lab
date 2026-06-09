@@ -899,7 +899,12 @@ public:
         !valueFunc.getBody().front().back().hasTrait<OpTrait::IsTerminator>())
       builder.create<func::ReturnOp>(planner.getFuncOp()->getLoc());
 
-    planner.getFuncOp()->erase();
+    // Unlink the parsed Triton function after emitting its value-layer
+    // replacement. Destroying this generic Triton function during the pass trips
+    // MLIR region teardown assertions on internal block-argument uses with the
+    // pinned Triton/LLVM build; unlinking is enough to keep the output module at
+    // the value-layer boundary.
+    planner.getFuncOp()->remove();
     return success();
   }
 
@@ -929,7 +934,6 @@ private:
     }
 
     std::string name = sanitizeSymbolName(fn.getName());
-    OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPoint(sourceFunc);
     valueFunc = builder.create<func::FuncOp>(
         sourceFunc->getLoc(), name, FunctionType::get(ctx, argTypes, {}));

@@ -1,0 +1,35 @@
+# REQUIRES: vc4-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/i32_add_select_b16.vc4value.mlir
+# RUN: FileCheck %s --check-prefix=VALUE --implicit-check-not='tt.' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --implicit-check-not='vc4kernel.' --implicit-check-not='ssavc4.' --implicit-check-not='vc4.qpu' --input-file=%t/i32_add_select_b16.vc4value.mlir
+# RUN: %vc4_opt %t/i32_add_select_b16.vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/i32_add_select_b16.vc4kernel.mlir
+# RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/i32_add_select_b16.vc4kernel.mlir
+
+# VALUE: func.func @i32_add_select_b16_kernel
+# VALUE-SAME: memref<?xi32, #vc4value.global>
+# VALUE-SAME: index
+# VALUE: attributes
+# VALUE-SAME: vc4value.kernel
+# VALUE: vc4value.program_id
+# VALUE-SAME: axis = 0
+# VALUE: vector.step
+# VALUE: vector.create_mask
+# VALUE: vector.transfer_read
+# VALUE: vector.transfer_read
+# VALUE: vector.transfer_read
+# VALUE: arith.addi
+# VALUE: vector.broadcast
+# VALUE: arith.subi
+# VALUE: vector.broadcast
+# VALUE: arith.cmpi sgt
+# VALUE: arith.select
+# VALUE: vector.transfer_write
+# VALUE: return
+
+# VC4KERNEL: vc4kernel.kernel @i32_add_select_b16_kernel
+# VC4KERNEL: vc4kernel.tmu_load_fragment
+# VC4KERNEL: vc4kernel.fragment_cmp
+# VC4KERNEL: vc4kernel.fragment_select
+# VC4KERNEL: vc4kernel.vdw_store_fragment
+# VC4KERNEL: vc4kernel.return
