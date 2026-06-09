@@ -11,6 +11,12 @@ TTIR_CONTROL_FLOW_STAGED=YES
 TTIR_CPP_IMPORTER_STATIC_REGRESSION=PASS
 NO_TEMPORARY_VALUE_CF_WORKAROUNDS=YES
 READY_FOR_PHASE8F_HARDWARE_ISOLATION=YES
+PHASE8_VALUE_CF_ISOLATION_HARDWARE=PASS
+VALUE_CF_BRANCH_GUARD_HARDWARE=PASS
+VALUE_CF_IF_ELSE_MERGE_HARDWARE=PASS
+VALUE_CF_SCALAR_LOOP_HARDWARE=PASS
+VALUE_CF_VECTOR_CARRY_LOOP_HARDWARE=PASS
+READY_FOR_PHASE8G_MIXED_ACCEPTANCE=YES
 TTIR_CONTROL_FLOW_IMPORT=NO
 READY_FOR_TRITON=NO
 
@@ -59,4 +65,20 @@ log the canonicalization and preserve the after-scf-to-cf intermediate IR.
 
 Pure `cf` inputs retain the existing direct value-to-VC4Kernel path.
 
-Hardware was not run for this boundary lock. READY_FOR_TRITON remains NO.
+## Phase 8f Isolation Hardware
+
+Phase 8f ran focused value-layer control-flow isolation fixtures on real VC4
+hardware through the standard value-to-VC4Kernel-to-SSAVC4-to-scheduled-VC4
+path. The fixtures are direct `cf` value inputs, so no Phase 8f hardware
+fixture required SCF canonicalization.
+
+All Phase 8f isolation fixtures passed with `active_qpus=12`, `lanes=16`,
+nonzero output hashes, zero mismatches, zero sentinel mismatches, and zero
+launch failures:
+
+- `value_cf_branch_guard_tail_vc4value`
+- `value_cf_if_else_merge_vc4value`
+- `value_cf_counted_loop_scalar_block_args_vc4value`
+- `value_cf_loop_vector_carry_tail_vc4value`
+
+READY_FOR_TRITON remains NO.
