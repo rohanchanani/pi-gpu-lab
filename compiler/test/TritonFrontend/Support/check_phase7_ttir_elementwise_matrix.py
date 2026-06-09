@@ -145,8 +145,8 @@ def validate_matrix(repo_root: Path, matrix_path: Path, mode: str) -> None:
         row = by_id[feature_id]
         if row["status"] != "accepted_hardware_proven":
             fail(f"{feature_id} must be accepted_hardware_proven")
-        if mode == "lock" and not row["hardware_fixtures"]:
-            fail(f"{feature_id} must reference Phase 7 hardware fixtures in lock mode")
+        if mode in ("lock", "final") and not row["hardware_fixtures"]:
+            fail(f"{feature_id} must reference Phase 7 hardware fixtures in {mode} mode")
         for fixture in row["hardware_fixtures"]:
             if "Triton/Hardware/Run/" not in fixture:
                 fail(f"{feature_id} hardware fixture must be a Phase 7 TTIR fixture: {fixture}")
@@ -169,7 +169,7 @@ def validate_matrix(repo_root: Path, matrix_path: Path, mode: str) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--matrix", required=True, type=Path)
-    parser.add_argument("--mode", choices=["draft", "lock"], default="draft")
+    parser.add_argument("--mode", choices=["draft", "lock", "final"], default="draft")
     args = parser.parse_args()
     repo_root = Path(__file__).resolve().parents[4]
     validate_matrix(repo_root, args.matrix, args.mode)

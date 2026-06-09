@@ -1,12 +1,12 @@
 # VC4 Vector/Triton Phase 7 TTIR Elementwise Hardware Lock
 
-VC4_TRITON_PHASE7_ELEMENTWISE_HARDWARE_LOCKED=PENDING
+VC4_TRITON_PHASE7_ELEMENTWISE_HARDWARE_LOCKED=YES
 VC4_TRITON_PHASE7_REAL_TTIR_TO_VALUE_LOWERING=YES
 VC4_TRITON_PHASE7_TTIR_ELEMENTWISE_STATIC_PIPELINE=YES
 VC4_TRITON_PHASE7_TTIR_ELEMENTWISE_ISOLATION_HARDWARE=YES
 VC4_TRITON_PHASE7_TTIR_ELEMENTWISE_MIXED_HARDWARE=YES
 VC4_TRITON_PHASE7_MIXED_FIXTURE_CLAIMS_AUDITED=YES
-READY_FOR_PHASE8_CONTROL_FLOW_AND_LOOP_BOUNDARY=PENDING
+READY_FOR_PHASE8_CONTROL_FLOW_AND_LOOP_BOUNDARY=YES
 READY_FOR_TRITON=NO
 
 ## Scope
@@ -52,5 +52,7 @@ gather/scatter, block pointers, atomics, rank-2 tensors, subword/f16/bf16/int8
 memory lowering, SFU/math, control flow, `BLOCK_SIZE != 16`, and program-id
 axes 1/2 remain staged until later phases.
 
-The final Phase 7j prompt is expected to run the final acceptance gates and may
-update the pending lock/readiness lines.
+All executable TTIR claims are hardware-backed by the Phase 7 TTIR mixed suite
+and by Phase 7j regressions over the existing Phase 5 VC4Value mixed suite and
+the locked P13 VC4Kernel mixed suite. Phase 7 remains an elementwise TTIR smoke
+lock, not full Triton readiness.

@@ -241,7 +241,7 @@ def audit_mixed_claims(repo_root: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", required=True, type=Path)
-    parser.add_argument("--mode", choices=["draft", "lock"], default="draft")
+    parser.add_argument("--mode", choices=["draft", "lock", "final"], default="draft")
     args = parser.parse_args()
     repo_root = args.repo_root.resolve()
     audit_direct_ttir_claims(repo_root)
