@@ -7,6 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+option(VC4_ENABLE_TRITON_CPP_FRONTEND
+  "Build optional Triton C++ TTIR frontend"
+  OFF)
+
+set(VC4_TRITON_SOURCE_DIR "" CACHE PATH
+  "Triton source tree for the optional C++ TTIR frontend")
+set(VC4_TRITON_BUILD_DIR "" CACHE PATH
+  "Triton CMake build tree for generated headers and explicit objects")
+set(VC4_TRITON_LLVM_PREFIX "" CACHE PATH
+  "Triton-pinned LLVM/MLIR installation prefix")
+set(VC4_TRITON_CPP_OBJECTS "" CACHE STRING
+  "Semicolon-separated explicit Triton object files for the optional frontend")
+set(VC4_TRITON_CPP_LIBRARIES "" CACHE STRING
+  "Semicolon-separated explicit Triton libraries for the optional frontend")
+
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib")
@@ -131,6 +146,13 @@ enable_testing()
 add_subdirectory(include)
 add_subdirectory(lib)
 add_subdirectory(tools/vc4-opt)
+
+if(VC4_ENABLE_TRITON_CPP_FRONTEND)
+  include("${PROJECT_SOURCE_DIR}/cmake/VC4TritonFrontendDeps.cmake")
+  add_subdirectory(lib/Conversion/TritonToVC4Value)
+  add_subdirectory(tools/vc4-triton-opt)
+endif()
+
 add_subdirectory(test)
 add_subdirectory(test/Dialect/SSAVC4)
 add_subdirectory(test/Dialect/VC4Kernel)
