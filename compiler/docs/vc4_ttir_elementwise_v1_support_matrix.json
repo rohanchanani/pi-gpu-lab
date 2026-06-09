@@ -1,0 +1,303 @@
+{
+  "schema_version": 1,
+  "phase": "VC4 Vector/Triton Phase 7",
+  "matrix_name": "vc4_ttir_elementwise_v1_support_matrix",
+  "ready_for_triton": "NO",
+  "accepted_input_snapshots": [
+    "examples/triton/phase6/generated/vector_add_b16.ttir.mlir",
+    "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
+    "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir"
+  ],
+  "required_path": [
+    "ttir",
+    "vc4value",
+    "vc4kernel",
+    "ssavc4",
+    "scheduled_vc4",
+    "hardware"
+  ],
+  "status_values": [
+    "accepted_hardware_proven",
+    "accepted_static_proven",
+    "staged_future_work",
+    "deterministic_reject_surface_policy",
+    "deterministic_reject_hardware_forbidden",
+    "internal_only"
+  ],
+  "features": [
+    {
+      "id": "real_ttir_parse_and_import",
+      "status": "accepted_hardware_proven",
+      "summary": "Real Triton 3.7.0 TTIR snapshots parse and import through vc4-triton-import --mode lower-elementwise-v1.",
+      "proof_paths": [
+        "tools/vc4-triton-import",
+        "examples/triton/phase6/generated/vector_add_b16.ttir.mlir",
+        "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
+        "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir",
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_saxpy_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_i32_add_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_program_id_axis0_to_vc4value",
+      "status": "accepted_hardware_proven",
+      "summary": "Axis-0 tt.get_program_id lowers to vc4value.program_id {axis = 0}.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/mixed_acceptance_manifest.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_make_range_0_16_to_vector_step",
+      "status": "accepted_hardware_proven",
+      "summary": "tt.make_range start=0 end=16 lowers to vector.step and vector<16> lane math.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Emit/triton-vector-add-b16-static-pipeline.test"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_contiguous_addptr_to_value_transfer",
+      "status": "accepted_hardware_proven",
+      "summary": "Canonical base + pid*16 + lane tt.addptr patterns lower to contiguous value transfer indices.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-extended-elementwise-to-vc4kernel-static.test",
+        "compiler/test/CodeGen/Triton/Support/audit_ttir_static_pipeline.py"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_saxpy_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_masked_load_other_zero_to_transfer_read",
+      "status": "accepted_hardware_proven",
+      "summary": "Masked tt.load with zero other lowers to vector.transfer_read and later TMU inactive-zero safe loads.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/mixed_fixture_claims.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_saxpy_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_masked_store_tail_to_transfer_write",
+      "status": "accepted_hardware_proven",
+      "summary": "Canonical tail-masked tt.store lowers to vector.transfer_write and later VDW inactive-preserve store.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/mixed_fixture_claims.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_f32_add_mul_cmp_select_elementwise",
+      "status": "accepted_hardware_proven",
+      "summary": "f32 add/mul plus finite cmp/select forms from vector_add_b16 and saxpy_select_b16 lower and pass hardware.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton/expected.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_saxpy_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_i32_add_cmp_select_elementwise",
+      "status": "accepted_hardware_proven",
+      "summary": "i32 add/sub plus cmp/select forms from i32_add_select_b16 lower and pass hardware.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton/expected.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_i32_add_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_tail_mask_overlaunch_active_qpus12",
+      "status": "accepted_hardware_proven",
+      "summary": "Tail masks preserve correctness and sentinels with active_qpus=12, lanes=16, and overlaunch sizes including 1000.",
+      "proof_paths": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton/expected.json",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton/expected.json"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_to_value_to_vc4kernel_to_hardware",
+      "status": "accepted_hardware_proven",
+      "summary": "The only accepted executable path is TTIR to value to vc4kernel to ssavc4 to scheduled vc4 to artifacts/runtime/hardware.",
+      "proof_paths": [
+        "compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/run_mixed_acceptance.sh"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_mixed_acceptance_claim_audit",
+      "status": "accepted_hardware_proven",
+      "summary": "Phase 7 mixed saw_* claims are source-controlled and audited as CHECKED_OUTPUT, CHECKED_AUDIT, or PHASE_GUARD.",
+      "proof_paths": [
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/mixed_acceptance_manifest.json",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/mixed_fixture_claims.json",
+        "compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/audit_mixed_fixture_claims.py"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_value_only_importer_output",
+      "status": "accepted_static_proven",
+      "summary": "lower-elementwise-v1 emits func/vc4value/vector/memref/arith value IR only, with no TTIR or lower-half ops.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "ttir_reduce",
+      "status": "staged_future_work",
+      "summary": "Reductions are staged for a later vector.reduction/value policy phase; this is not a permanent hardware-impossible reject.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/importer-phase7c-rejects-staged-forms.test"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "ttir_dot",
+      "status": "staged_future_work",
+      "summary": "tt.dot is staged for later vector.contract/tile planning; no direct TTIR-to-lower-half path is accepted.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/importer-phase7c-rejects-staged-forms.test"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "block_pointers",
+      "status": "staged_future_work",
+      "summary": "Block pointers and tensor descriptors are staged for future memory descriptor planning.",
+      "proof_paths": [
+        "compiler/docs/vc4_ttir_target_profile.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "gather_load",
+      "status": "staged_future_work",
+      "summary": "Gather loads need future address, mask, and inactive-lane safety planning.",
+      "proof_paths": [
+        "compiler/docs/vc4_value_to_vc4kernel_planning.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "scatter_store",
+      "status": "staged_future_work",
+      "summary": "Scatter stores need future emulation or hardware-proven planning and cannot lower to sparse VDW in Phase 7.",
+      "proof_paths": [
+        "compiler/docs/vc4_value_to_vc4kernel_planning.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "axis1_axis2_program_ids",
+      "status": "staged_future_work",
+      "summary": "Program-id axes 1 and 2 are staged beyond the Phase 7 one-dimensional profile.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/importer-phase7c-rejects-staged-forms.test"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "block_size_not_16",
+      "status": "staged_future_work",
+      "summary": "Non-16 block sizes require future splitting/looping; they are not classified as hardware-impossible.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/importer-phase7c-rejects-staged-forms.test"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "f16_bf16_int8_memory",
+      "status": "staged_future_work",
+      "summary": "Subword and f16 storage require later storage conversion and mode-table planning; native unsupported arithmetic remains a lower-target contract reject.",
+      "proof_paths": [
+        "compiler/docs/vc4_ttir_reject_proof_policy.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "math_sfu",
+      "status": "staged_future_work",
+      "summary": "Math/SFU lowering requires explicit approximate/exact policy and remains outside Phase 7.",
+      "proof_paths": [
+        "compiler/docs/vc4_ttir_reject_proof_policy.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "scf_control_flow",
+      "status": "staged_future_work",
+      "summary": "SCF/control-flow TTIR forms are staged for Phase 8 and later control-flow lowering.",
+      "proof_paths": [
+        "compiler/docs/vc4_value_to_vc4kernel_planning.md"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "ttir_direct_to_lower_half_paths",
+      "status": "deterministic_reject_surface_policy",
+      "summary": "Direct TTIR-to-vc4kernel, TTIR-to-ssavc4, and TTIR-to-scheduled-vc4 paths are rejected by the source integration policy.",
+      "proof_paths": [
+        "compiler/docs/vc4_ttir_target_profile.md",
+        "compiler/test/TritonFrontend/Support/audit_phase7_ttir_elementwise.py"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "vc4value_runtime_policy_ops",
+      "status": "internal_only",
+      "summary": "vc4value remains tiny launch/policy plumbing; TMU, VDW, VPM, and physical QPU details stay below the value layer.",
+      "proof_paths": [
+        "compiler/docs/vc4value_dialect_minimal_spec.md",
+        "compiler/docs/vc4_value_to_vc4kernel_planning.md"
+      ],
+      "hardware_fixtures": []
+    }
+  ]
+}

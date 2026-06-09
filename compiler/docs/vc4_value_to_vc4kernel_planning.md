@@ -472,3 +472,42 @@ The path remains TTIR -> standard value layer -> VC4Kernel -> SSAVC4 ->
 scheduled VC4. Phase 6 does not implement TTIR-to-value semantic lowering, and
 `READY_FOR_TRITON=NO` remains true until later phases add and prove the importer
 and hardware path.
+
+## 23. Phase 7 TTIR elementwise hardware handoff
+
+Phase 7 proves that the real Phase 6 elementwise TTIR corpus can enter the
+existing Phase 5 value planner without bypassing it:
+
+```text
+real emitted TTIR
+  -> vc4-triton-import --mode lower-elementwise-v1
+  -> func/vc4value/vector/memref/arith value IR
+  -> --convert-vc4-value-to-vc4kernel
+  -> vc4kernel
+  -> ssavc4
+  -> scheduled vc4
+  -> generated artifacts/runtime
+  -> real VC4 hardware
+```
+
+The supported examples are:
+
+- `vector_add_b16`;
+- `saxpy_select_b16`;
+- `i32_add_select_b16`.
+
+The TTIR importer output contract remains value-only. Generated value IR may
+contain `func`, `vc4value`, `vector`, `memref`, and `arith`, but not `tt`,
+`ttg`, `gpu`, `vc4kernel`, `ssavc4`, or scheduled `vc4` operations. Verified
+`vc4kernel` output must contain no producer dialect operations.
+
+Phase 7 hardware covers contiguous rank-1 i32/f32 memory, zero-other masked
+loads, canonical tail stores, vector<16> arithmetic, compare/select, overlaunch
+tail masks, TMU load planning, and VDW inactive-preserve stores at
+active_qpus=12 and lanes=16. The mixed TTIR acceptance suite provides the
+cumulative Phase 7 hardware gate and claim audit.
+
+Future value planning remains responsible for reductions, dot/contract,
+gather/scatter, block pointers, subword/f16 storage, math/SFU policy, non-16
+block splitting, axes 1/2, and control flow. These are staged planning gaps
+unless a later proof explicitly classifies a specific form as impossible.

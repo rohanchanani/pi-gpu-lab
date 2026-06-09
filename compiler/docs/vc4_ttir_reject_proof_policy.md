@@ -182,3 +182,45 @@ until later phases add exact policy, emulation, or hardware proof:
 These staged forms are not permanent rejects merely because Phase 6 and Phase 7
 do not lower them. Permanent rejects still require the proof template above.
 `READY_FOR_TRITON=NO` remains true because full Triton support is not enabled.
+
+## 11. Phase 7 elementwise hardware proof and staged rejects
+
+Phase 7 hardware-proves a narrow real TTIR elementwise V1 subset through the
+standard path:
+
+```text
+TTIR -> value -> vc4kernel -> ssavc4 -> scheduled vc4 -> hardware
+```
+
+The accepted/hardware-proven proof source is the real emitted Phase 6 TTIR
+snapshot corpus:
+
+- `vector_add_b16`;
+- `saxpy_select_b16`;
+- `i32_add_select_b16`.
+
+Phase 7 accepts only the exact elementwise V1 forms recorded in
+`compiler/docs/vc4_ttir_elementwise_v1_support_matrix.json`: axis-0 program
+ids, `tt.make_range` 0..16, contiguous `tt.addptr`, masked zero-other loads,
+canonical tail stores, and the i32/f32 arithmetic, compare, and select forms
+used by the three snapshots.
+
+The following remain staged or deterministic surface-policy rejects for Phase
+7, not permanent hardware-impossible rejects:
+
+- reductions and `tt.reduce`;
+- dot/contract and `tt.dot`;
+- gather/scatter and non-affine pointer expressions;
+- block pointers and tensor descriptors;
+- atomics;
+- rank-2 tensors;
+- subword, f16, bf16, and int8 memory lowering;
+- math/SFU forms requiring exact or approximate policy;
+- `scf`/control flow;
+- `BLOCK_SIZE != 16`;
+- program-id axes 1 and 2.
+
+Permanent reject language must continue to distinguish hardware impossibility
+from not-yet-implemented staging. Performance, inconvenience, lack of current
+planner support, or absence from the Phase 7 V1 importer is not a permanent
+reject proof.

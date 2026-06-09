@@ -126,6 +126,64 @@ Triton support complete:
 READY_FOR_TRITON=NO
 ```
 
+### Phase 7h hardware-proven elementwise V1 subset
+
+Phase 7h hardware-proves the first real TTIR executable path for the Phase 6
+real elementwise corpus:
+
+```text
+real emitted TTIR snapshot
+  -> vc4-triton-import --mode lower-elementwise-v1
+  -> standard VC4 value IR
+  -> vc4kernel
+  -> ssavc4
+  -> scheduled vc4
+  -> artifacts/runtime
+  -> real VC4 hardware
+```
+
+The proof source is the checked-in real Triton 3.7.0 TTIR snapshots, not fake
+or hand-written TTIR:
+
+```text
+examples/triton/phase6/generated/vector_add_b16.ttir.mlir
+examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir
+examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir
+```
+
+The accepted/hardware-proven operation forms remain the narrow elementwise V1
+profile:
+
+- one public `tt.func` kernel and `tt.return`;
+- axis-0 `tt.get_program_id` only;
+- `tt.make_range` / arange pattern exactly representing `0..16`;
+- scalar splats and broadcasts needed by the three snapshots;
+- contiguous pointer expressions equivalent to `base + (pid * 16 + lane)`;
+- masked `tt.load` with zero `other` operands;
+- canonical tail-masked `tt.store`;
+- tensor `i32` and `f32` elementwise add/sub/mul where present;
+- finite `f32` and exact `i32` compare/select forms accepted by the Phase 5
+  value lowering contract;
+- active_qpus=12, lanes=16, adversarial tail/overlaunch sizes, strict CPU
+  oracles, sentinels, and nonzero output hashes.
+
+Phase 7h does not accept reductions, dot/contract, gather/scatter, block
+pointers, atomics, rank-2 tensors, subword or f16/bf16/int8 memory lowering,
+SFU/math, `scf`/control flow, `BLOCK_SIZE != 16`, or program-id axes 1/2.
+Those are staged future work unless a later proof classifies a specific form
+as a surface-policy or hardware-forbidden deterministic reject.
+
+The locked Phase 7 support matrix is
+`compiler/docs/vc4_ttir_elementwise_v1_support_matrix.json`. The mixed
+hardware gate is under
+`compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/`.
+
+Even after Phase 7h:
+
+```text
+READY_FOR_TRITON=NO
+```
+
 ## 6. Launch and program IDs
 
 TTIR launch identity maps through value-layer launch plumbing:
