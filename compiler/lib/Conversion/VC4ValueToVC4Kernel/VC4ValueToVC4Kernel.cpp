@@ -6,19 +6,21 @@
 //
 //===----------------------------------------------------------------------===//
 //
-// Phase 5 lowers the first executable standard value-layer slice into the
-// locked VC4Kernel target-kernel planning dialect.  This pass intentionally
-// keeps a crisp boundary between:
+// Phase 5 lowered the first executable standard value-layer slice into the
+// locked VC4Kernel target-kernel planning dialect.  Phase 8 extends that slice
+// with standard cf.br/cf.cond_br multi-block control flow while preserving a
+// crisp boundary between:
 //
 //   * the broad value-surface contract, which is allowed to contain staged
 //     fixed vectors, rank-2 shapes, subword storage, reductions, contracts,
 //     scf/cf, and future TTIR-importable patterns; and
-//   * the Phase 5 executable subset, which is only straight-line vector<16>
-//     i32/f32 elementwise code over rank-1 contiguous #vc4value.global memrefs.
+//   * the executable subset, which is vector<16> i32/f32 elementwise code over
+//     rank-1 contiguous #vc4value.global memrefs plus Phase 8 V1 cf control
+//     flow.
 //
 // Staged value-surface features are not rejected by the value-surface verifier;
-// they are rejected here with precise "not Phase 5 lowerable" diagnostics until
-// the corresponding executable phases are implemented and hardware-proven.
+// they are rejected here with precise diagnostics until the corresponding
+// executable phases are implemented and hardware-proven.
 //
 //===----------------------------------------------------------------------===//
 
@@ -365,6 +367,7 @@ struct LoweringState {
   explicit LoweringState(Operation *sourceKernel) : sourceKernel(sourceKernel) {}
 
   Operation *sourceKernel = nullptr;
+  DenseMap<Block *, Block *> blocks;
   DenseMap<Value, Value> values;
   DenseMap<Value, Value> predicates;
 };
@@ -383,25 +386,20 @@ public:
     if (!kernel)
       return failure();
 
-    Block &sourceEntry = func.getBody().front();
-    Block &targetEntry = kernel->getRegion(0).front();
-    builder.setInsertionPointToEnd(&targetEntry);
+    if (failed(createTargetBlocks(kernel)))
+      return failure();
+    if (failed(mapFunctionArguments()))
+      return failure();
+    if (failed(mapBlockArguments()))
+      return failure();
 
-    mapEntryArguments(sourceEntry, targetEntry);
-
-    for (Operation &op : sourceEntry.getOperations()) {
-      if (auto ret = llvm::dyn_cast<func::ReturnOp>(op)) {
-        if (ret.getNumOperands() != 0)
-          return ret.emitOpError("Phase 5 value kernels must return void");
-        createOp(builder, ret.getLoc(), kReturnOpName, {}, {});
-        continue;
-      }
-      if (failed(lowerOperation(&op)))
+    for (Block &sourceBlock : func.getBody()) {
+      Block *targetBlock = lookupTargetBlock(func.getOperation(), &sourceBlock);
+      if (!targetBlock)
+        return failure();
+      if (failed(lowerBlockBody(sourceBlock, *targetBlock)))
         return failure();
     }
-
-    if (targetEntry.empty() || !targetEntry.back().hasTrait<OpTrait::IsTerminator>())
-      createOp(builder, func.getLoc(), kReturnOpName, {}, {});
 
     func.erase();
     return success();
@@ -415,11 +413,8 @@ private:
     if (!gridRank || gridRank.getInt() != 1)
       return emitStagedDiagnostic(func.getOperation(),
                                   "grid_rank other than 1");
-    if (!llvm::hasSingleElement(func.getBody()))
-      return emitStagedDiagnostic(func.getOperation(),
-                                  "multi-block value kernels");
     if (!func.getFunctionType().getResults().empty())
-      return func.emitOpError("Phase 5 value kernels must have no function results");
+      return func.emitOpError("Phase 8 value kernels must have no function results");
     return success();
   }
 
@@ -466,6 +461,30 @@ private:
     return kernel;
   }
 
+  LogicalResult createTargetBlocks(Operation *kernel) {
+    Region &body = kernel->getRegion(0);
+    Block &sourceEntry = func.getBody().front();
+    Block &targetEntry = body.front();
+    state.blocks[&sourceEntry] = &targetEntry;
+
+    for (Block &sourceBlock : llvm::drop_begin(func.getBody())) {
+      auto *targetBlock = new Block();
+      SmallVector<Type, 4> loweredArgTypes;
+      SmallVector<Location, 4> argLocs;
+      for (BlockArgument arg : sourceBlock.getArguments()) {
+        FailureOr<Type> loweredType = lowerBlockArgType(arg);
+        if (failed(loweredType))
+          return failure();
+        loweredArgTypes.push_back(*loweredType);
+        argLocs.push_back(arg.getLoc());
+      }
+      targetBlock->addArguments(loweredArgTypes, argLocs);
+      body.push_back(targetBlock);
+      state.blocks[&sourceBlock] = targetBlock;
+    }
+    return success();
+  }
+
   FailureOr<Type> lowerPublicArgType(BlockArgument arg) {
     Type type = arg.getType();
     if (auto memrefType = llvm::dyn_cast<MemRefType>(type)) {
@@ -487,6 +506,28 @@ private:
     InFlightDiagnostic diag = arg.getOwner()->getParentOp()->emitOpError();
     diag << "public kernel argument type " << type
          << " is not Phase 5 lowerable; staged value-surface feature. "
+         << "READY_FOR_TRITON remains NO";
+    return failure();
+  }
+
+  FailureOr<Type> lowerBlockArgType(BlockArgument arg) {
+    Type type = arg.getType();
+    if (type.isIndex() || type.isSignlessInteger(32))
+      return builder.getI32Type();
+    if (type.isInteger(1))
+      return builder.getI1Type();
+    if (type.isF32())
+      return builder.getF32Type();
+    if (isVector16I1(type))
+      return getPred16(ctx);
+    if (isVector16Index(type))
+      return getVector16I32(ctx);
+    if (isVector16I32(type) || isVector16F32(type))
+      return type;
+
+    InFlightDiagnostic diag = arg.getOwner()->getParentOp()->emitOpError();
+    diag << "block argument type " << type
+         << " is not Phase 8 value control-flow lowerable. "
          << "READY_FOR_TRITON remains NO";
     return failure();
   }
@@ -523,11 +564,43 @@ private:
     return builder.getDictionaryAttr(attrs);
   }
 
-  void mapEntryArguments(Block &sourceEntry, Block &targetEntry) {
+  LogicalResult mapFunctionArguments() {
+    Block &sourceEntry = func.getBody().front();
+    Block *targetEntry = lookupTargetBlock(func.getOperation(), &sourceEntry);
+    if (!targetEntry)
+      return failure();
     for (auto [sourceArg, targetArg] : llvm::zip(sourceEntry.getArguments(),
-                                                 targetEntry.getArguments())) {
+                                                 targetEntry->getArguments())) {
       state.values[sourceArg] = targetArg;
     }
+    return success();
+  }
+
+  LogicalResult mapBlockArguments() {
+    for (Block &sourceBlock : llvm::drop_begin(func.getBody())) {
+      Block *targetBlock = lookupTargetBlock(func.getOperation(), &sourceBlock);
+      if (!targetBlock)
+        return failure();
+      for (auto [sourceArg, targetArg] : llvm::zip(sourceBlock.getArguments(),
+                                                   targetBlock->getArguments()))
+        mapLoweredValue(sourceArg, targetArg);
+    }
+    return success();
+  }
+
+  void mapLoweredValue(Value source, Value target) {
+    if (isVector16I1(source.getType()))
+      state.predicates[source] = target;
+    else
+      state.values[source] = target;
+  }
+
+  Block *lookupTargetBlock(Operation *op, Block *block) {
+    auto it = state.blocks.find(block);
+    if (it != state.blocks.end())
+      return it->second;
+    op->emitOpError("successor block has no Phase 8 lowering plan");
+    return nullptr;
   }
 
   Value lookupValue(Operation *op, Value value) {
@@ -544,6 +617,127 @@ private:
       return it->second;
     op->emitOpError("predicate/mask operand has no Phase 5 lowering plan");
     return {};
+  }
+
+  Value lookupBranchOperand(Operation *op, Value value) {
+    if (isVector16I1(value.getType()))
+      return lookupPredicate(op, value);
+    return lookupValue(op, value);
+  }
+
+  LogicalResult lowerBlockBody(Block &sourceBlock, Block &targetBlock) {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToEnd(&targetBlock);
+
+    for (Operation &op : sourceBlock.getOperations()) {
+      if (op.hasTrait<OpTrait::IsTerminator>())
+        return lowerTerminator(&op);
+      if (failed(lowerOperation(&op)))
+        return failure();
+    }
+
+    return sourceBlock.getParentOp()->emitOpError()
+           << "value block has no terminator; not Phase 8 lowerable. "
+           << "READY_FOR_TRITON remains NO";
+  }
+
+  LogicalResult lowerTerminator(Operation *op) {
+    if (auto ret = llvm::dyn_cast<func::ReturnOp>(op))
+      return lowerReturn(ret);
+    if (auto branch = llvm::dyn_cast<cf::BranchOp>(op))
+      return lowerBranch(branch);
+    if (auto condBranch = llvm::dyn_cast<cf::CondBranchOp>(op))
+      return lowerCondBranch(condBranch);
+    if (op->getName().getDialectNamespace() == "scf")
+      return emitStagedDiagnostic(op, "raw scf operation");
+    return emitPhase5Diagnostic(op, Twine("terminator '") +
+                                        op->getName().getStringRef() + "'");
+  }
+
+  LogicalResult lowerReturn(func::ReturnOp ret) {
+    if (ret.getNumOperands() != 0)
+      return ret.emitOpError("Phase 8 value kernels must return void");
+    createOp(builder, ret.getLoc(), kReturnOpName, {}, {});
+    return success();
+  }
+
+  LogicalResult lowerSuccessorOperands(Operation *op, OperandRange operands,
+                                       Block *sourceSuccessor,
+                                       SmallVectorImpl<Value> &lowered) {
+    Block *targetSuccessor = lookupTargetBlock(op, sourceSuccessor);
+    if (!targetSuccessor)
+      return failure();
+    if (operands.size() != targetSuccessor->getNumArguments()) {
+      return op->emitOpError()
+             << "successor operand count " << operands.size()
+             << " does not match lowered target block argument count "
+             << targetSuccessor->getNumArguments()
+             << "; not Phase 8 lowerable. READY_FOR_TRITON remains NO";
+    }
+
+    for (auto [operand, targetArg] :
+         llvm::zip(operands, targetSuccessor->getArguments())) {
+      Value mapped = lookupBranchOperand(op, operand);
+      if (!mapped)
+        return failure();
+      if (mapped.getType() != targetArg.getType()) {
+        return op->emitOpError()
+               << "successor operand type " << mapped.getType()
+               << " does not match lowered target block argument type "
+               << targetArg.getType()
+               << "; not Phase 8 lowerable. READY_FOR_TRITON remains NO";
+      }
+      lowered.push_back(mapped);
+    }
+    return success();
+  }
+
+  LogicalResult lowerBranch(cf::BranchOp branch) {
+    Block *target = lookupTargetBlock(branch.getOperation(), branch.getDest());
+    if (!target)
+      return failure();
+    SmallVector<Value, 4> operands;
+    if (failed(lowerSuccessorOperands(branch.getOperation(),
+                                      branch.getDestOperands(),
+                                      branch.getDest(), operands)))
+      return failure();
+    builder.create<cf::BranchOp>(branch.getLoc(), target, operands);
+    return success();
+  }
+
+  LogicalResult lowerCondBranch(cf::CondBranchOp branch) {
+    if (!branch.getCondition().getType().isInteger(1))
+      return branch.emitOpError()
+             << "condition must be scalar i1 for Phase 8 value control flow; "
+             << "READY_FOR_TRITON remains NO";
+    Value condition = lookupValue(branch.getOperation(), branch.getCondition());
+    if (!condition)
+      return failure();
+    if (!condition.getType().isInteger(1))
+      return branch.emitOpError()
+             << "condition must lower to scalar i1 for Phase 8 value control flow; "
+             << "READY_FOR_TRITON remains NO";
+
+    Block *trueTarget =
+        lookupTargetBlock(branch.getOperation(), branch.getTrueDest());
+    Block *falseTarget =
+        lookupTargetBlock(branch.getOperation(), branch.getFalseDest());
+    if (!trueTarget || !falseTarget)
+      return failure();
+
+    SmallVector<Value, 4> trueOperands;
+    SmallVector<Value, 4> falseOperands;
+    if (failed(lowerSuccessorOperands(branch.getOperation(),
+                                      branch.getTrueDestOperands(),
+                                      branch.getTrueDest(), trueOperands)) ||
+        failed(lowerSuccessorOperands(branch.getOperation(),
+                                      branch.getFalseDestOperands(),
+                                      branch.getFalseDest(), falseOperands)))
+      return failure();
+
+    builder.create<cf::CondBranchOp>(branch.getLoc(), condition, trueTarget,
+                                     trueOperands, falseTarget, falseOperands);
+    return success();
   }
 
   LogicalResult lowerOperation(Operation *op) {
@@ -576,9 +770,10 @@ private:
     if (name == "arith.index_cast")
       return lowerIndexCast(op);
 
-    if (op->getName().getDialectNamespace() == "scf" ||
-        op->getName().getDialectNamespace() == "cf")
-      return emitStagedDiagnostic(op, "control-flow operation");
+    if (op->getName().getDialectNamespace() == "scf")
+      return emitStagedDiagnostic(op, "raw scf operation");
+    if (op->getName().getDialectNamespace() == "cf")
+      return emitStagedDiagnostic(op, "non-terminator control-flow operation");
     if (op->getName().getDialectNamespace() == "math")
       return emitStagedDiagnostic(op, "math dialect operation");
     if (op->getName().getDialectNamespace() == "vector")
@@ -1083,7 +1278,7 @@ struct ConvertVC4ValueToVC4KernelPass
   }
 
   StringRef getDescription() const final {
-    return "Lower the Phase 5 VC4 value-surface elementwise subset to VC4Kernel";
+    return "Lower the executable VC4 value-surface subset to VC4Kernel";
   }
 
   void getDependentDialects(DialectRegistry &registry) const final {
