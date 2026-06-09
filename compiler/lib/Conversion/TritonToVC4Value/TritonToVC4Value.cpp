@@ -122,14 +122,6 @@ static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
 }
 
-static std::string stringify(Attribute attr) {
-  std::string out;
-  llvm::raw_string_ostream os(out);
-  if (attr)
-    attr.print(os);
-  return out;
-}
-
 static LogicalResult emitStagedDiagnostic(Operation *op, const Twine &detail) {
   return op->emitOpError()
          << detail << " is not Phase 7.5 C++ TTIR-to-VC4Value lowerable; "
@@ -389,39 +381,64 @@ static bool hasAnyName(Operation *op, ArrayRef<StringRef> names) {
   return llvm::is_contained(names, name);
 }
 
-static std::optional<int64_t> getIntegerAttrValue(Operation *op,
-                                                  StringRef name) {
-  if (auto attr = op->getAttrOfType<IntegerAttr>(name))
-    return attr.getInt();
-  return std::nullopt;
-}
+enum class TTIRProgramAxis { X = 0, Y = 1, Z = 2 };
 
-static std::string getAttrString(Operation *op, StringRef name) {
-  if (Attribute attr = op->getAttr(name))
-    return stringify(attr);
-  return "";
-}
+struct TTIRRangeInfo {
+  int64_t start = 0;
+  int64_t end = 0;
+  int64_t width = 0;
+};
 
-static bool isAxisZero(Operation *op) {
-  std::string axis = getAttrString(op, "axis");
-  // Triton prints the axis in custom form (`x`, `y`, `z`) but the generic attr
-  // may be an enum attr.  Accept only axis-0 spellings.  Axis 1/2 remain staged
-  // until the value launch/grid lowering phases expand beyond V1.
-  return axis == "#tt.program_id_dim<x>" || axis == "x" || axis == "0" ||
-         axis.find("x") != std::string::npos || axis.find("0") != std::string::npos;
-}
+class TTIRAttrAdapter {
+public:
+  FailureOr<TTIRProgramAxis> classifyProgramAxis(Operation *op) const {
+    if (auto programId = llvm::dyn_cast<mlir::triton::GetProgramIdOp>(op))
+      return convertProgramAxis(op, programId.getAxis());
+    if (auto numPrograms = llvm::dyn_cast<mlir::triton::GetNumProgramsOp>(op))
+      return convertProgramAxis(op, numPrograms.getAxis());
 
-static bool isMakeRange0To16(Operation *op) {
-  std::optional<int64_t> start = getIntegerAttrValue(op, "start");
-  std::optional<int64_t> end = getIntegerAttrValue(op, "end");
-  if (start && end)
-    return *start == 0 && *end == 16;
-  std::string text;
-  llvm::raw_string_ostream os(text);
-  op->print(os, OpPrintingFlags().skipRegions());
-  return StringRef(text).contains("start = 0") &&
-         StringRef(text).contains("end = 16");
-}
+    auto axisAttr = op->getAttrOfType<mlir::triton::ProgramIDDimAttr>("axis");
+    if (!axisAttr)
+      return op->emitOpError("unknown program axis attr form");
+    return convertProgramAxis(op, axisAttr.getValue());
+  }
+
+  FailureOr<TTIRRangeInfo> classifyMakeRange(Operation *op) const {
+    int64_t start = 0;
+    int64_t end = 0;
+    if (auto makeRange = llvm::dyn_cast<mlir::triton::MakeRangeOp>(op)) {
+      start = static_cast<int64_t>(makeRange.getStart());
+      end = static_cast<int64_t>(makeRange.getEnd());
+    } else {
+      auto startAttr = op->getAttrOfType<IntegerAttr>("start");
+      auto endAttr = op->getAttrOfType<IntegerAttr>("end");
+      if (!startAttr || !endAttr)
+        return op->emitOpError("unknown tt.make_range start/end attr form");
+      start = startAttr.getInt();
+      end = endAttr.getInt();
+    }
+
+    TTIRRangeInfo info;
+    info.start = start;
+    info.end = end;
+    info.width = end - start;
+    return info;
+  }
+
+private:
+  FailureOr<TTIRProgramAxis>
+  convertProgramAxis(Operation *op, mlir::triton::ProgramIDDim axis) const {
+    switch (axis) {
+    case mlir::triton::ProgramIDDim::X:
+      return TTIRProgramAxis::X;
+    case mlir::triton::ProgramIDDim::Y:
+      return TTIRProgramAxis::Y;
+    case mlir::triton::ProgramIDDim::Z:
+      return TTIRProgramAxis::Z;
+    }
+    return op->emitOpError("unknown program axis enum value");
+  }
+};
 
 static bool isZeroLikeConstant(Operation *op) {
   auto constant = llvm::dyn_cast_or_null<arith::ConstantOp>(op);
@@ -711,6 +728,16 @@ private:
     for (Operation &op : entry.getOperations()) {
       if (isForbiddenProducerOrBackendDialect(&op))
         return emitPermanentReject(&op, "backend/non-TTIR dialect operation in TTIR input");
+      if (hasName(&op, kTTGetNumProgramsOpName)) {
+        FailureOr<TTIRProgramAxis> axis = attrAdapter.classifyProgramAxis(&op);
+        if (failed(axis))
+          return failure();
+        if (*axis != TTIRProgramAxis::X)
+          return emitStagedDiagnostic(
+              &op,
+              "num_programs axis 1/2 is staged until value grid-rank >1 lowering");
+        return emitStagedDiagnostic(&op, "tt.get_num_programs");
+      }
       if (hasName(&op, kTTBroadcastOpName) || hasName(&op, kTTExpandDimsOpName) ||
           hasName(&op, kTTTransOpName))
         return emitStagedDiagnostic(&op, "rank-2/shape-changing TTIR tensor form");
@@ -740,12 +767,23 @@ private:
 
     if (programIds.size() != 1)
       return emitStagedDiagnostic(funcOp, "TTIR functions with other than one program_id");
-    if (!isAxisZero(programIds.front()))
-      return emitStagedDiagnostic(programIds.front(), "program_id axis other than 0/x");
+    FailureOr<TTIRProgramAxis> axis =
+        attrAdapter.classifyProgramAxis(programIds.front());
+    if (failed(axis))
+      return failure();
+    if (*axis != TTIRProgramAxis::X)
+      return emitStagedDiagnostic(
+          programIds.front(),
+          "program_id axis 1/2 is staged until value grid-rank >1 lowering");
     common.programId = programIds.front();
 
-    if (ranges.size() != 1 || !isMakeRange0To16(ranges.front()))
+    if (ranges.size() != 1)
       return emitStagedDiagnostic(funcOp, "tt.make_range other than 0..16");
+    FailureOr<TTIRRangeInfo> range = attrAdapter.classifyMakeRange(ranges.front());
+    if (failed(range))
+      return failure();
+    if (range->start != 0 || range->end != 16 || range->width != 16)
+      return emitStagedDiagnostic(ranges.front(), "tt.make_range other than 0..16");
     common.makeRange = ranges.front();
 
     if (stores.empty())
@@ -909,6 +947,7 @@ private:
 
   Operation *funcOp;
   TTIRTypeAdapter typeAdapter;
+  TTIRAttrAdapter attrAdapter;
   SmallVector<TTIRArgInfo, 8> args;
   DenseMap<BlockArgument, unsigned> argIndex;
   CommonPlan common;

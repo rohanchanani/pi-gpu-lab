@@ -32,7 +32,7 @@
 # MAKE-RANGE: staged TTIR target-profile feature
 # MAKE-RANGE: READY_FOR_TRITON remains NO
 
-# AXIS: program_id axis other than 0/x
+# AXIS: program_id axis 1/2 is staged until value grid-rank >1 lowering
 # AXIS: staged TTIR target-profile feature
 # AXIS: READY_FOR_TRITON remains NO
 

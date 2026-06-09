@@ -12,18 +12,32 @@ AXIS_REPLACEMENTS = {
     "axis-z": "tt.get_program_id z : i32",
 }
 
+RANGE_REPLACEMENTS = {
+    "make-range-1-17": "tt.make_range {end = 17 : i32, start = 1 : i32}",
+}
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", required=True)
-    parser.add_argument("--kind", choices=sorted(AXIS_REPLACEMENTS), required=True)
+    parser.add_argument(
+        "--kind",
+        choices=sorted(set(AXIS_REPLACEMENTS) | set(RANGE_REPLACEMENTS)),
+        required=True,
+    )
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
 
     base = Path(args.base).read_text(encoding="utf-8")
-    if "tt.get_program_id x : i32" not in base:
-      raise SystemExit("base TTIR does not contain the expected axis-x program id")
-    text = base.replace("tt.get_program_id x : i32", AXIS_REPLACEMENTS[args.kind], 1)
+    if args.kind in AXIS_REPLACEMENTS:
+      if "tt.get_program_id x : i32" not in base:
+        raise SystemExit("base TTIR does not contain the expected axis-x program id")
+      text = base.replace("tt.get_program_id x : i32", AXIS_REPLACEMENTS[args.kind], 1)
+    else:
+      marker = "tt.make_range {end = 16 : i32, start = 0 : i32}"
+      if marker not in base:
+        raise SystemExit("base TTIR does not contain the expected make_range 0..16")
+      text = base.replace(marker, RANGE_REPLACEMENTS[args.kind], 1)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")

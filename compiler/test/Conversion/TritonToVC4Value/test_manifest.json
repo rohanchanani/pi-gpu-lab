@@ -45,6 +45,13 @@
       "cpp_importer_only": true
     },
     {
+      "test": "ttir-attrs-staged-reject.test",
+      "input": "generated make_range 1..17 probe plus compiler/test/Conversion/TritonToVC4Value/Inputs/num-programs-axis-y.ttir.mlir and Inputs/num-programs-axis-z.ttir.mlir",
+      "input_kind": "parser-valid staged TTIR attr/range probes",
+      "feature_claim": "non-V1 make_range forms and num_programs axes 1/2 remain staged/rejected through exact structured classification",
+      "cpp_importer_only": true
+    },
+    {
       "test": "ttir-pointer-types-staged-reject.test",
       "input": "generated f16 probe plus compiler/test/Conversion/TritonToVC4Value/Inputs/block-pointer-staged.ttir.mlir and Inputs/rank2-pointer-tensor-staged.ttir.mlir",
       "input_kind": "parser-valid staged TTIR pointer type probes",
@@ -70,6 +77,13 @@
       "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
       "input_kind": "static source audit",
       "feature_claim": "semantic pointer type classification uses typed Triton APIs and not printed !tt.ptr matching",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "attr-semantics-audit.test",
+      "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
+      "input_kind": "static source audit",
+      "feature_claim": "program axis and make_range classification use exact typed/structured APIs and not printed attr/op substring matching",
       "cpp_importer_only": true
     }
   ],

@@ -6,10 +6,10 @@
 # RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis-z --out %t/axis_z.ttir.mlir
 # RUN: not %vc4_triton_opt %t/axis_z.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_z.value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS2
 
-# AXIS1: program_id axis other than 0/x
+# AXIS1: program_id axis 1/2 is staged until value grid-rank >1 lowering
 # AXIS1: staged TTIR target-profile feature
 # AXIS1: READY_FOR_TRITON remains NO
 
-# AXIS2: program_id axis other than 0/x
+# AXIS2: program_id axis 1/2 is staged until value grid-rank >1 lowering
 # AXIS2: staged TTIR target-profile feature
 # AXIS2: READY_FOR_TRITON remains NO

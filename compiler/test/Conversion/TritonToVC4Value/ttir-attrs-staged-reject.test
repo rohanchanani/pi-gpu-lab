@@ -1,0 +1,18 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind make-range-1-17 --out %t/make_range_1_17.ttir.mlir
+# RUN: not %vc4_triton_opt %t/make_range_1_17.ttir.mlir --convert-triton-to-vc4-value -o %t/make_range_1_17.value.mlir 2>&1 | FileCheck %s --check-prefix=RANGE
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Inputs/num-programs-axis-y.ttir.mlir" --convert-triton-to-vc4-value -o %t/num_programs_y.value.mlir 2>&1 | FileCheck %s --check-prefix=NUMPROGRAMS
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Inputs/num-programs-axis-z.ttir.mlir" --convert-triton-to-vc4-value -o %t/num_programs_z.value.mlir 2>&1 | FileCheck %s --check-prefix=NUMPROGRAMS
+
+# RANGE: tt.make_range other than 0..16
+# RANGE: staged TTIR target-profile feature
+# RANGE: READY_FOR_TRITON remains NO
+
+# NUMPROGRAMS: num_programs axis 1/2 is staged until value grid-rank >1 lowering
+# NUMPROGRAMS: staged TTIR target-profile feature
+# NUMPROGRAMS: READY_FOR_TRITON remains NO
