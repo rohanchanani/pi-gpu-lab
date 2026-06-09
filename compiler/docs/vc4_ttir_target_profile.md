@@ -286,6 +286,21 @@ Phase 8 locks value-layer `scf`/`cf` control flow through the standard
 control-flow import. Phase 8.5 owns TTIR control-flow inventory,
 support/reject classification, and any executable bridge work.
 
+PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
+SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
+NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+READY_FOR_TRITON=NO
+
+QPU control flow is scalar/coherent across SIMD lanes. Per-lane control
+divergence is not accepted as branch CFG; masks/selects carry lane-varying
+dataflow. Value-level `scf.while`, nested structured control flow,
+tl.range-style loop skeletons, and persistent-loop skeletons are the relevant
+support targets before TTIR import.
+
 Required Phase 8.5 classifications:
 
 - TTIR compile-time/meta control flow:
@@ -294,7 +309,9 @@ Required Phase 8.5 classifications:
   scalar-control IR.
 - TTIR `tl.range` / emitted TTIR loop forms:
   `phase_inventory_target`; inspect real emitted forms in Phase 8.5 before
-  accepting or rejecting.
+  accepting or rejecting. Structurally scalar counted loops should map to the
+  Phase 8R tl.range-style loop skeleton or persistent-loop skeleton value
+  targets when their bodies use supported features.
 - TTIR scalar `cf`/`scf` branch forms:
   `lowerable_if_matches_value_cf_subset`; lower only if they structurally match
   the Phase 8 value-cf subset, otherwise stage with the first unsupported

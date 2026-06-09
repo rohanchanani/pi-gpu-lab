@@ -54,6 +54,11 @@ COVERAGE_REQUIREMENTS = {
     "phase8_cf_if_valid": "value-surface-cf-if-valid.mlir",
     "phase8_cf_loop_valid": "value-surface-cf-loop-valid.mlir",
     "phase8_scf_boundary_valid": "value-surface-scf-boundary-valid.mlir",
+    "phase8r_scf_while_valid": "value-surface-scf-while-valid.mlir",
+    "phase8r_nested_structured_cf_valid": "value-surface-nested-structured-cf-valid.mlir",
+    "phase8r_vector_branch_condition_invalid": "value-surface-vector-branch-condition-invalid.mlir",
+    "phase8r_scf_parallel_staged_invalid": "value-surface-scf-parallel-or-forall-staged-invalid.mlir",
+    "phase8r_scf_index_switch_policy": "value-surface-scf-index-switch-policy.mlir",
     "phase8_cf_policy_invalid": "invalid-value-surface-phase8-cf-policy.mlir",
 }
 
@@ -303,6 +308,13 @@ def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
     required_phrases = [
         "Phase 8 is a value-layer control-flow phase",
         "scf-to-cf",
+        "PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE",
+        "SCF_WHILE_VALUE_TARGET=SUPPORT_NOW",
+        "NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW",
+        "TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW",
+        "PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW",
+        "VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS",
+        "IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON",
         "TTIR control flow",
         "READY_FOR_TRITON remains NO",
     ]
@@ -326,10 +338,19 @@ def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
         "cf.cond_br": "accepted_executable_phase8_pending_hardware",
         "scf.if": "surface_admissible_canonicalization_required",
         "scf.for": "surface_admissible_canonicalization_required",
+        "scf.while": "surface_admissible_canonicalization_required_phase8r",
+        "nested_structured_cf": "support_now_phase8r",
+        "tl_range_style_loop_skeleton": "support_now_value_level_phase8r",
+        "persistent_loop_skeleton": "support_now_value_level_phase8r",
         "ttir_control_flow": "staged_future_ttir_import",
-        "vector_valued_branch_conditions": "deterministic_reject",
+        "vector_valued_branch_conditions": "deterministic_reject_as_cfg_use_masks",
         "memref_block_args": "deterministic_reject_until_proven",
-        "cf.switch": "staged_reject_until_proven",
+        "cf.switch": "staged_with_proof_phase8r",
+        "scf.index_switch": "staged_with_proof_phase8r",
+        "scf.parallel": "staged_reject_parallel_semantics",
+        "scf.forall": "staged_reject_parallel_semantics",
+        "scf.reduce": "staged_reject_reduction_semantics",
+        "irreducible_cfg": "probe_not_required_for_sane_triton",
     }
     for key, value in expected.items():
         if behavior.get(key) != value:
@@ -340,6 +361,24 @@ def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
     for control_token in ["br", "cond_br", "if", "for", "yield", "switch"]:
         if any(control_token == op or control_token in op for op in vc4value_ops):
             hits.append(f"vc4value op owns control-flow token {control_token}")
+
+    lock_doc = repo_path(repo_root, "compiler/docs/vc4_vector_triton_phase8_control_flow_lock.md")
+    lock_text = lock_doc.read_text(encoding="utf-8")
+    for phrase in [
+        "QPU control flow is scalar/coherent across SIMD lanes",
+        "Per-lane control divergence is not accepted as branch CFG",
+        "scf.while is in scope now through upstream scf-to-cf",
+        "tl.range-style loop skeleton",
+        "persistent-loop skeleton",
+        "scf.parallel",
+        "scf.forall",
+        "scf.reduce",
+        "cf.switch",
+        "scf.index_switch",
+        "verified VC4Kernel contains no raw scf",
+    ]:
+        if phrase not in lock_text:
+            hits.append(f"phase8 lock doc missing Phase 8R phrase: {phrase}")
 
     return hits
 

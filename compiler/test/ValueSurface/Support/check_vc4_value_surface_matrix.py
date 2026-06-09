@@ -186,11 +186,20 @@ PHASE8_CF_BEHAVIOR = {
     "value.block_args.vector16xf32": "lowerable_phase8_v1",
     "scf.if": "surface_admissible_canonicalization_required",
     "scf.for": "surface_admissible_canonicalization_required",
+    "scf.while": "surface_admissible_canonicalization_required_phase8r",
+    "nested_structured_cf": "support_now_phase8r",
+    "tl_range_style_loop_skeleton": "support_now_value_level_phase8r",
+    "persistent_loop_skeleton": "support_now_value_level_phase8r",
     "scf_inside_vc4kernel": "deterministic_reject",
     "ttir_control_flow": "staged_future_ttir_import",
-    "vector_valued_branch_conditions": "deterministic_reject",
+    "vector_valued_branch_conditions": "deterministic_reject_as_cfg_use_masks",
     "memref_block_args": "deterministic_reject_until_proven",
-    "cf.switch": "staged_reject_until_proven",
+    "cf.switch": "staged_with_proof_phase8r",
+    "scf.index_switch": "staged_with_proof_phase8r",
+    "scf.parallel": "staged_reject_parallel_semantics",
+    "scf.forall": "staged_reject_parallel_semantics",
+    "scf.reduce": "staged_reject_reduction_semantics",
+    "irreducible_cfg": "probe_not_required_for_sane_triton",
 }
 
 
@@ -384,6 +393,11 @@ def validate_phase8_control_flow_policy(data: dict, matrix_path: str) -> None:
     control_text = json.dumps(control_row, sort_keys=True)
     for phrase in [
         "scf-to-cf",
+        "scf.while",
+        "tl.range-style loop skeleton",
+        "persistent-loop skeleton",
+        "vector branch conditions are rejected as CFG",
+        "irreducible CFG is probe/classify only",
         "Executable value-to-VC4Kernel lowering consumes cf, not raw scf",
         "TTIR control flow is staged_future_ttir_import",
         "READY_FOR_TRITON remains NO",

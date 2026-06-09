@@ -355,12 +355,27 @@ emulation path, not a direct VC4Kernel arbitrary permutation.
 Phase 8 is a value-layer control-flow phase, not TTIR control-flow import. The
 executable value-to-VC4Kernel control boundary consumes `cf`, not raw `scf`.
 
+PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
+SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
+NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+READY_FOR_TRITON=NO
+
 `scf` may appear in value input as a source convenience. Raw `scf` must not
 survive into verified VC4Kernel. Before executable value-to-VC4Kernel lowering,
-`scf.if` and `scf.for` must canonicalize through the upstream MLIR
+`scf.if`, `scf.for`, and `scf.while` must canonicalize through the upstream MLIR
 `--convert-scf-to-cf` pass into `cf` branches and block arguments. The planner
 must not grow a custom SCF lowering unless the upstream pass is proven unusable
 and that blocker is recorded for user review.
+
+QPU control flow is scalar/coherent across SIMD lanes. Per-lane control
+divergence is not accepted as branch CFG; it is represented by masks/selects.
+Nested structured control flow, tl.range-style loop skeletons, and
+persistent-loop skeletons are value-layer targets before TTIR import when their
+bodies use supported value features.
 
 The canonical Phase 8 executable pipeline for structured value control flow is:
 
@@ -401,8 +416,11 @@ vector<16xf32>
 `index` and `vector<16xindex>` must lower to target i32 carriers before
 verified VC4Kernel. `vector<16xi1>` masks must lower to accepted VC4Kernel
 predicate or scalar condition forms. Memref block arguments, VPM tile block
-arguments, vector-valued branch conditions, `cf.switch`, and exception-like
-control flow remain rejected or staged in Phase 8.
+arguments, vector-valued branch conditions, `cf.switch`, `scf.index_switch`,
+`scf.parallel`, `scf.forall`, `scf.reduce`, irreducible CFG, and
+exception-like control flow remain rejected or staged in Phase 8R. Irreducible
+CFG is probe/classify only and is not required for sane Triton Phase 8.5
+control-flow import.
 
 Natural loops, block arguments, liveness, spills, and branch layout must be
 preserved honestly. The planner must not reshape kernels to hide backend bugs.

@@ -1123,10 +1123,14 @@ Allow value input to use structured control flow while preserving verified `vc4k
 ```text
 scf.for
 scf.if
+scf.while
+nested structured control flow
 loop-carried values
 canonical scf -> cf
 block args
 natural loops
+tl.range-style loop skeletons
+persistent-loop skeletons
 ```
 
 ### Use cases
@@ -1136,6 +1140,7 @@ grid-stride elementwise loops
 K loops for reductions
 K loops for GEMM
 small looped kernels
+persistent tile-loop skeletons
 ```
 
 ### Work
@@ -1145,6 +1150,9 @@ decide whether value-to-vc4kernel requires prior convert-scf-to-cf
 mine old VC4Tile-era scf/cf code/tests if useful
 add verifier rules
 reject unsupported irreducible/cyclic forms
+reject vector branch conditions as CFG and use masks/selects for per-lane dataflow
+stage cf.switch/scf.index_switch pending proof
+stage scf.parallel/scf.forall/scf.reduce for parallel/reduction phases
 ```
 
 ### Hardware fixtures
@@ -1158,6 +1166,15 @@ small loop-carried accumulator
 ### Gate
 
 No raw `scf` survives into verified `vc4kernel`.
+
+PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
+SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
+NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+READY_FOR_TRITON=NO
 
 Phase 8 final readiness points to Phase 8.5 TTIR control-flow
 bridge/support/reject lock, not Phase 9.

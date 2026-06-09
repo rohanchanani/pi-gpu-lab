@@ -383,12 +383,28 @@ plan rather than a direct VC4Kernel shuffle or permutation.
 Phase 8 is a value-layer control-flow phase. It does not add TTIR control-flow
 import, new memory features, reductions, dot/contract, or math support.
 
+PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
+SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
+NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
+READY_FOR_TRITON=NO
+
 The executable Phase 8 value-to-VC4Kernel boundary consumes `cf`, not raw `scf`.
 The structured-control boundary is the upstream MLIR `--convert-scf-to-cf`
-canonicalization pass before value-to-VC4Kernel lowering. `scf.if` and
-`scf.for` remain surface-admissible value input forms, but they are
+canonicalization pass before value-to-VC4Kernel lowering. `scf.if`, `scf.for`,
+and `scf.while` remain surface-admissible value input forms, but they are
 canonicalization-required and must not survive into verified VC4Kernel. Custom
 SCF lowering is not part of Phase 8.
+
+QPU control flow is scalar/coherent across SIMD lanes. Per-lane control
+divergence is not accepted as branch CFG; use masks/selects for per-lane data
+flow. Nested structured control flow is a value-layer executable target when it
+canonicalizes to the accepted scalar `cf.br` and scalar-i1 `cf.cond_br` subset.
+The tl.range-style loop skeleton and persistent-loop skeleton are value-layer
+targets before TTIR import.
 
 The canonical executable pipeline for SCF-bearing value input is:
 
@@ -434,8 +450,11 @@ memref block arguments are rejected until a later ABI and lowering proof exists.
 
 The following remain rejected or staged in Phase 8:
 
-- vector-valued branch conditions;
-- `cf.switch`;
+- vector-valued branch conditions, as branch CFG; use masks/selects;
+- `cf.switch` and `scf.index_switch`, staged with proof;
+- irreducible CFG, probe/classify only and not required for sane Triton;
+- `scf.parallel`, `scf.forall`, and `scf.reduce`, staged/rejected for parallel
+  or reduction semantics rather than simple scalar control flow;
 - exception-like control flow;
 - memref block arguments and memref successor operands;
 - VPM tile block arguments;

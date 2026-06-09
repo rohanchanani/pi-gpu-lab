@@ -64,7 +64,8 @@ static bool isForbiddenSparseStoreVectorOp(StringRef name) {
 }
 
 static bool isAllowedSCFOp(StringRef name) {
-  return name == "scf.for" || name == "scf.if" || name == "scf.yield";
+  return name == "scf.for" || name == "scf.if" || name == "scf.while" ||
+         name == "scf.condition" || name == "scf.yield";
 }
 
 static bool isAllowedCFOp(StringRef name) {

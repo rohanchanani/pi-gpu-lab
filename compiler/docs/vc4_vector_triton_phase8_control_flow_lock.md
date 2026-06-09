@@ -33,6 +33,13 @@ TTIR_CONTROL_FLOW_IMPORT=NO
 ACTIVE_NEXT_STEP=PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE=YES
 READY_FOR_PHASE8R_CONTROL_FLOW_COMPLETENESS_REPAIR=YES
+PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE
+SCF_WHILE_VALUE_TARGET=SUPPORT_NOW
+NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
+TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
+VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -41,6 +48,11 @@ READY_FOR_TRITON=NO
 Phase 8 is a value-layer control-flow phase. It does not add TTIR
 control-flow import and does not add new math, memory, reduction, dot, or
 Triton features.
+
+Phase 8R makes the scalar/coherent control-flow completeness target explicit.
+QPU control flow is scalar/coherent across SIMD lanes: a QPU program has one
+program counter for its 16 lanes. Per-lane control divergence is not accepted as branch CFG and must be represented with masks/selects.
+Vector branch conditions are rejected as CFG.
 
 `scf` is a value-surface input convenience only. Executable lowering to
 VC4Kernel consumes `cf`, not raw `scf`. The required structured-control
@@ -53,6 +65,21 @@ boundary is the upstream MLIR pass:
 Custom SCF lowering is not part of Phase 8. If upstream SCF-to-CF ever becomes
 unavailable, the phase must stop with a named blocker instead of inventing a
 local lowering.
+
+Phase 8R target forms are `scf.if`, `scf.for`, `scf.while`, and nested
+structured control flow, all through upstream scf-to-cf before verified
+VC4Kernel. scf.while is in scope now through upstream scf-to-cf. The
+tl.range-style loop skeleton and persistent-loop skeleton are value-level
+targets before TTIR import; unsupported loop body features remain staged by
+body feature, not by control flow.
+
+`scf.parallel`, `scf.forall`, and `scf.reduce` are not simple scalar
+control-flow support. They remain staged/rejected for parallel and reduction
+phases. `cf.switch` and `scf.index_switch` are staged with proof because Phase
+8Ra did not find them critical for sane Triton control-flow import; revisit
+only with a structural upstream conversion or reliable scalar branch-chain
+lowering. Irreducible CFG is probe/classify only, not required for sane Triton
+Phase 8.5 support.
 
 ## Executable Pipeline
 
@@ -72,6 +99,8 @@ Verified VC4Kernel must contain no raw `scf`, `vector`, `memref`, `func`,
 `vc4value`, TTIR, `ssavc4`, or scheduled `vc4` producer operations. It may
 contain accepted VC4Kernel operations, accepted scalar `arith`, and standard
 `cf.br`/scalar-i1 `cf.cond_br`.
+
+Phase 8R wording: verified VC4Kernel contains no raw scf or producer dialects.
 
 ## Runner Policy
 
