@@ -1,0 +1,22 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# The first importer run must leave no hidden/unlinked TTIR. Running the importer
+# again on value IR deterministically rejects because no tt.func remains.
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/first.value.mlir
+# RUN: FileCheck %s --check-prefix=FIRST --implicit-check-not='tt.' --input-file=%t/first.value.mlir
+# RUN: rm -f %t/second.value.mlir
+# RUN: not %vc4_triton_opt %t/first.value.mlir --convert-triton-to-vc4-value -o %t/second.value.mlir 2> %t/second.err
+# RUN: FileCheck %s --check-prefix=SECOND --input-file=%t/second.err
+# RUN: test ! -s %t/second.value.mlir
+
+# FIRST: func.func @vector_add_b16_kernel
+# FIRST-SAME: vc4value.kernel
+# FIRST: vc4value.program_id
+# FIRST: vector.transfer_write
+
+# SECOND: expected at least one tt.func
+# SECOND: READY_FOR_TRITON remains NO
+# SECOND-NOT: assertion
+# SECOND-NOT: crash

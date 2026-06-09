@@ -1,0 +1,19 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# Multiple independent Phase 7.5 V1 tt.funcs are supported. The importer lowers
+# all of them atomically into value funcs in deterministic source order.
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Inputs/two-supported-functions.ttir.mlir" --convert-triton-to-vc4-value -o %t/two_supported.value.mlir
+# RUN: FileCheck %s --check-prefix=VALUE --implicit-check-not='tt.' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --implicit-check-not='vc4kernel.' --implicit-check-not='ssavc4.' --implicit-check-not='vc4.qpu' --input-file=%t/two_supported.value.mlir
+# RUN: %vc4_opt_triton %t/two_supported.value.mlir --vc4-verify-value-surface -o %t/two_supported.verified.mlir
+
+# VALUE: func.func @probe_a
+# VALUE-SAME: vc4value.kernel
+# VALUE: vc4value.program_id
+# VALUE: vector.transfer_write
+# VALUE: func.func @probe_b
+# VALUE-SAME: vc4value.kernel
+# VALUE: vc4value.program_id
+# VALUE: vector.transfer_write
+# VALUE-NOT: func.func @probe_a

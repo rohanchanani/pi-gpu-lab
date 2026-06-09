@@ -1,0 +1,15 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# A supported function followed by an unsupported function must fail without
+# committing the supported value function into the output file.
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: rm -f %t/supported_plus_dot.value.mlir
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Inputs/supported-plus-dot.ttir.mlir" --convert-triton-to-vc4-value -o %t/supported_plus_dot.value.mlir 2> %t/supported_plus_dot.err
+# RUN: FileCheck %s --check-prefix=ERR --input-file=%t/supported_plus_dot.err
+# RUN: test ! -s %t/supported_plus_dot.value.mlir
+
+# ERR: tt.dot / contract
+# ERR: is not Phase 7.5 C++ TTIR-to-VC4Value lowerable
+# ERR: staged TTIR target-profile feature
+# ERR: READY_FOR_TRITON remains NO

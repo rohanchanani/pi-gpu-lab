@@ -1,0 +1,7 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/audit_output_module_lifetime.py" | FileCheck %s
+
+# CHECK: TTIR_OUTPUT_MODULE_LIFETIME_AUDIT=PASS
+# CHECK: TT_FUNC_REMOVE_WORKAROUND=NO
+# CHECK: OUTPUT_MODULE_CONSTRUCTION=YES
+# CHECK: ATOMIC_IMPORT_POLICY=YES
+# CHECK: READY_FOR_TRITON=NO
