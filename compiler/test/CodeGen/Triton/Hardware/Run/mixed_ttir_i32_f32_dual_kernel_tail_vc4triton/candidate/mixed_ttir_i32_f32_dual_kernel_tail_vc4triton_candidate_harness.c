@@ -253,11 +253,11 @@ void notmain(void) {
     int launches = (int)(sizeof(n_cases) / sizeof(n_cases[0])) * 2;
     const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 &&
                           launch_failures == 0 && output_hash != 0u) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=mixed_ttir_i32_f32_dual_kernel_tail_vc4triton status=%s cases=%d elements_checked=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d output_hash=%u saw_real_ttir_input=1 saw_ttir_importer_lower_elementwise_v1=%d saw_value_surface_verification=1 saw_value_to_vc4kernel=1 saw_program_id_axis0=1 saw_arange_make_range_16=1 saw_masked_load_other_zero=1 saw_masked_store_tail=1 saw_tmu_load=1 saw_vdw_preserve_store=1 saw_tail_mask_clamp_overlaunch=1 saw_f32_alu=1 saw_i32_alu=1 saw_i32_cmp_select=1 saw_sentinel_preserve=1 saw_nonzero_output_hash=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=mixed_ttir_i32_f32_dual_kernel_tail_vc4triton status=%s cases=%d elements_checked=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d output_hash=%u saw_real_ttir_input=1 saw_cpp_ttir_importer=%d saw_value_surface_verification=1 saw_value_to_vc4kernel=1 saw_program_id_axis0=1 saw_arange_make_range_16=1 saw_masked_load_other_zero=1 saw_masked_store_tail=1 saw_tmu_load=1 saw_vdw_preserve_store=1 saw_tail_mask_clamp_overlaunch=1 saw_f32_alu=1 saw_i32_alu=1 saw_i32_cmp_select=1 saw_sentinel_preserve=1 saw_nonzero_output_hash=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
            status, (int)(sizeof(n_cases) / sizeof(n_cases[0])), elements_checked,
            total_mismatches, sentinel_mismatches, launch_failures, ACTIVE_QPUS,
            LANES, MAX_N, MAX_COVERAGE_N, BUFFER_N, output_hash,
-           VC4_CASE_SAW_TTIR_IMPORT, output_hash != 0u ? 1 : 0, 7,
+           VC4_CASE_SAW_CPP_TTIR_IMPORTER, output_hash != 0u ? 1 : 0, 7,
            launches, elapsed);
 
     vc4Free(program, xi_dev);

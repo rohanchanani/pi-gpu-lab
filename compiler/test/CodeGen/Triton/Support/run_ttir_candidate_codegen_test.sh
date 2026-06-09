@@ -300,6 +300,30 @@ if re.search(r'(?<![A-Za-z0-9_])"?vc4\.', text):
 PY_VALIDATE_VALUE
 }
 
+append_value_module_body() {
+  local out_path="$1"
+  local module_path="$2"
+  python3 - "$out_path" "$module_path" <<'PY_APPEND_VALUE_MODULE'
+from pathlib import Path
+import sys
+
+out_path = Path(sys.argv[1])
+module_path = Path(sys.argv[2])
+lines = module_path.read_text(encoding="utf-8").splitlines()
+while lines and not lines[0].strip():
+    lines.pop(0)
+while lines and not lines[-1].strip():
+    lines.pop()
+if len(lines) < 2 or lines[0].strip() != "module {" or lines[-1].strip() != "}":
+    raise SystemExit(f"{module_path}: expected a single top-level 'module {{ ... }}' value artifact")
+body = lines[1:-1]
+with out_path.open("a", encoding="utf-8") as out:
+    for line in body:
+        out.write(line)
+        out.write("\n")
+PY_APPEND_VALUE_MODULE
+}
+
 validate_core_ssavc4_file() {
   local path="$1"
   require_file "$path"
@@ -376,8 +400,8 @@ run_vc4_codegen() {
 
   input_count="$(ttir_input_count)"
   [[ "$input_count" -gt 0 ]] || fail "no TTIR inputs found for $TEST_NAME"
-  : > "$input_value"
   if [[ "$input_count" -eq 1 ]]; then
+    : > "$input_value"
     input_path="$(ttir_input_paths | head -n 1)"
     cp "$input_path" "$input_ttir"
     log "importing TTIR input $(relpath "$input_path") to VC4 value IR at $(relpath "$input_value")"
@@ -388,6 +412,7 @@ run_vc4_codegen() {
   else
     mkdir -p "$lowered_tmp_dir/inputs" "$lowered_tmp_dir/imported"
     : > "$input_ttir"
+    printf 'module {\n' > "$input_value"
     while IFS= read -r input_path; do
       [[ -z "$input_path" ]] && continue
       input_base="$(basename "$input_path" .ttir.mlir)"
@@ -404,9 +429,9 @@ run_vc4_codegen() {
         --convert-triton-to-vc4-value \
         -o "$per_input_value"
       validate_value_file "$per_input_value"
-      cat "$per_input_value" >> "$input_value"
-      printf '\n' >> "$input_value"
+      append_value_module_body "$input_value" "$per_input_value"
     done < <(ttir_input_paths)
+    printf '}\n' >> "$input_value"
     validate_value_file "$input_value"
   fi
 
@@ -611,7 +636,6 @@ lines = [
     "#define VC4_CASE_CONFIG_H",
     "",
     "#define VC4_CASE_SAW_CPP_TTIR_IMPORTER 1",
-    "#define VC4_CASE_SAW_TTIR_IMPORT 1",
 ]
 
 for key, value in sorted(os.environ.items()):

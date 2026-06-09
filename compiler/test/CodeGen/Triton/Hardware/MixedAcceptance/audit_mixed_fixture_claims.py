@@ -67,8 +67,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(ttir, "tt.func", "saw_real_ttir_input TTIR")
         require_marker(ttir, "tt.return", "saw_real_ttir_input TTIR")
 
-    if "saw_ttir_importer_lower_elementwise_v1" in claim_names:
-        require_marker(harness, "VC4_CASE_SAW_TTIR_IMPORT", "saw_ttir_importer_lower_elementwise_v1 harness")
+    if "saw_cpp_ttir_importer" in claim_names:
+        require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
 
     if "saw_value_surface_verification" in claim_names or "saw_value_to_vc4kernel" in claim_names:
         if "runner_audit" not in json.dumps(fixture_claims["claims"]).lower():

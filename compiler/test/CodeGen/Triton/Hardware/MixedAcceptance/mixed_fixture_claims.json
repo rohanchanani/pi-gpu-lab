@@ -11,7 +11,7 @@
       ],
       "claims": [
         {"claim": "saw_real_ttir_input", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "coverage and claim audits require source-controlled TTIR containing tt.func and tt.return, with no lower-layer dialect input markers."}},
-        {"claim": "saw_cpp_ttir_importer_to_vc4value", "claim_kind": "CHECKED_OUTPUT", "evidence": {"checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_TTIR_IMPORT only after vc4-triton-opt --convert-triton-to-vc4-value succeeds; expected.json requires the printed result field to be 1."}},
+        {"claim": "saw_cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT", "evidence": {"checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_CPP_TTIR_IMPORTER only after vc4-triton-opt --convert-triton-to-vc4-value succeeds; expected.json requires the printed result field to be 1."}},
         {"claim": "saw_value_surface_verification", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "the TTIR runner executes vc4-opt --vc4-verify-value-surface before hardware workdir generation."}},
         {"claim": "saw_value_to_vc4kernel", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "runner_audit: the TTIR runner executes --convert-vc4-value-to-vc4kernel --verify-vc4kernel and validates no producer dialect ops remain in verified vc4kernel."}},
         {"claim": "saw_program_id_axis0", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "TTIR source contains tt.get_program_id and the Phase 7.5 C++ importer accepts only axis 0 for the elementwise V1 subset."}},
@@ -37,7 +37,7 @@
       ],
       "claims": [
         {"claim": "saw_real_ttir_input", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "coverage and claim audits require at least two source-controlled TTIR snapshots containing tt.func and tt.return, with no lower-layer dialect input markers."}},
-        {"claim": "saw_cpp_ttir_importer_to_vc4value", "claim_kind": "CHECKED_OUTPUT", "evidence": {"checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_TTIR_IMPORT only after each fixture TTIR input is imported through vc4-triton-opt --convert-triton-to-vc4-value; expected.json requires the printed result field to be 1."}},
+        {"claim": "saw_cpp_ttir_importer", "claim_kind": "CHECKED_OUTPUT", "evidence": {"checked_output": "runner-generated vc4_case_config.h defines VC4_CASE_SAW_CPP_TTIR_IMPORTER only after each fixture TTIR input is imported through vc4-triton-opt --convert-triton-to-vc4-value; expected.json requires the printed result field to be 1."}},
         {"claim": "saw_value_surface_verification", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "runner_audit: the TTIR runner imports each TTIR input to value IR, concatenates at the value layer, and executes vc4-opt --vc4-verify-value-surface."}},
         {"claim": "saw_value_to_vc4kernel", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "runner_audit: the TTIR runner executes --convert-vc4-value-to-vc4kernel --verify-vc4kernel and validates no producer dialect ops remain in verified vc4kernel."}},
         {"claim": "saw_program_id_axis0", "claim_kind": "CHECKED_AUDIT", "evidence": {"checked_audit": "both TTIR inputs contain tt.get_program_id and the Phase 7.5 C++ importer accepts only axis 0 for the elementwise V1 subset."}},

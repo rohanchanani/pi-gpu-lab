@@ -39,7 +39,7 @@ REQUIRED_FIXTURES = {
 
 REQUIRED_FEATURES = {
     "real_ttir_input",
-    "ttir_importer_lower_elementwise_v1",
+    "cpp_ttir_importer",
     "value_surface_verification",
     "value_to_vc4kernel",
     "program_id_axis0",
@@ -183,7 +183,7 @@ def validate_fixture(repo_root, fixture, lock_mode):
 
     tags = set(fixture["feature_tags"])
     ttir_text = "\n".join(path.read_text(encoding="utf-8", errors="replace") for path in inputs)
-    for required in ("real_ttir_input", "ttir_importer_lower_elementwise_v1", "active_qpus_12", "sentinel_preserve", "nonzero_output_hash"):
+    for required in ("real_ttir_input", "cpp_ttir_importer", "active_qpus_12", "sentinel_preserve", "nonzero_output_hash"):
         if required not in tags:
             fail(f"{name} missing required feature tag {required}")
     if "f32_cmp_select" in tags and ("arith.cmpf" not in ttir_text or "arith.select" not in ttir_text):
