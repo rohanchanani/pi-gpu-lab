@@ -12,6 +12,7 @@ import json
 import re
 import sys
 from collections import Counter
+from dataclasses import dataclass
 from pathlib import Path
 
 
@@ -19,6 +20,31 @@ PHASE6_LOWERING_DIAGNOSTIC = (
     "TTIR-to-value semantic lowering is not implemented in Phase 6; "
     "run Phase 7 after Phase 6 final lock."
 )
+
+PHASE7_UNSUPPORTED_DIAGNOSTIC = "unsupported TTIR op/form for Phase 7 elementwise V1"
+
+
+@dataclass(frozen=True)
+class TTIRArgument:
+    name: str
+    typ: str
+    source_name: str | None
+
+
+@dataclass(frozen=True)
+class TTIROperation:
+    op_name: str
+    result_names: tuple[str, ...]
+    operands: tuple[str, ...]
+    result_type: str | None
+    text: str
+
+
+@dataclass(frozen=True)
+class TTIRFunction:
+    name: str
+    args: tuple[TTIRArgument, ...]
+    ops: tuple[TTIROperation, ...]
 
 
 def fail(message: str, code: int = 1) -> "None":
@@ -70,6 +96,288 @@ def inventory_ops(parsed_module_text: str) -> dict[str, int]:
         if match:
             ops.append(match.group(1))
     return dict(sorted(Counter(ops).items()))
+
+
+def split_top_level(text: str, sep: str = ",") -> list[str]:
+    parts: list[str] = []
+    start = 0
+    angle = paren = brace = bracket = 0
+    in_string = False
+    escaped = False
+    for i, ch in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "<":
+            angle += 1
+        elif ch == ">":
+            angle = max(0, angle - 1)
+        elif ch == "(":
+            paren += 1
+        elif ch == ")":
+            paren = max(0, paren - 1)
+        elif ch == "{":
+            brace += 1
+        elif ch == "}":
+            brace = max(0, brace - 1)
+        elif ch == "[":
+            bracket += 1
+        elif ch == "]":
+            bracket = max(0, bracket - 1)
+        elif ch == sep and angle == paren == brace == bracket == 0:
+            parts.append(text[start:i].strip())
+            start = i + 1
+    tail = text[start:].strip()
+    if tail:
+        parts.append(tail)
+    return parts
+
+
+def strip_locs(text: str) -> str:
+    text = re.sub(r'\s+loc\("[^"]+"\([^)]*\)\)', "", text)
+    text = re.sub(r"\s+loc\(#loc[0-9]*\)", "", text)
+    text = re.sub(r"\s+loc\(#loc\)", "", text)
+    return text
+
+
+def parse_ttir_operation(line: str) -> TTIROperation | None:
+    stripped = strip_locs(line.strip())
+    if not stripped or stripped.startswith("#") or stripped in ("module {", "}"):
+        return None
+    if stripped.startswith("tt.func "):
+        return None
+
+    result_names: tuple[str, ...] = ()
+    body = stripped
+    if stripped.startswith("%") and " = " in stripped:
+        lhs, body = stripped.split(" = ", 1)
+        result_names = tuple(re.findall(r"%[A-Za-z0-9_.$-]+", lhs))
+
+    match = re.match(r'"?([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_.$]*)"?\b(.*)$', body)
+    if not match:
+        return None
+    op_name = match.group(1)
+    rest = match.group(2)
+    operands = tuple(re.findall(r"%[A-Za-z0-9_.$-]+", rest))
+    result_type = None
+    if " : " in body:
+        result_type = body.rsplit(" : ", 1)[1].strip()
+    return TTIROperation(op_name, result_names, operands, result_type, stripped)
+
+
+def parse_ttir_function(parsed_module_text: str) -> TTIRFunction:
+    lines = parsed_module_text.splitlines()
+    func_lines = [line.strip() for line in lines if line.strip().startswith("tt.func ")]
+    if len(func_lines) != 1:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+    func_line = strip_locs(func_lines[0])
+    func_match = re.match(
+        r"tt\.func\s+public\s+@([A-Za-z_][A-Za-z0-9_.$]*)\((.*)\)\s+attributes\b",
+        func_line,
+    )
+    if not func_match:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+    func_name = func_match.group(1)
+    args_text = func_match.group(2)
+    args: list[TTIRArgument] = []
+    for arg_text in split_top_level(args_text):
+        source_match = re.search(r'loc\("([^"]+)"', arg_text)
+        arg_clean = strip_locs(arg_text)
+        arg_match = re.match(r"(%[A-Za-z0-9_.$-]+)\s*:\s*([^ ]+)", arg_clean)
+        if not arg_match:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+        args.append(
+            TTIRArgument(
+                name=arg_match.group(1),
+                typ=arg_match.group(2),
+                source_name=source_match.group(1) if source_match else None,
+            )
+        )
+
+    ops = [op for line in lines if (op := parse_ttir_operation(line)) is not None]
+    return TTIRFunction(func_name, tuple(args), tuple(ops))
+
+
+def op_by_result(func: TTIRFunction) -> dict[str, TTIROperation]:
+    result_map: dict[str, TTIROperation] = {}
+    for op in func.ops:
+        for result in op.result_names:
+            if result in result_map:
+                fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op.op_name}")
+            result_map[result] = op
+    return result_map
+
+
+def require_single_op(func: TTIRFunction, op_name: str) -> TTIROperation:
+    matches = [op for op in func.ops if op.op_name == op_name]
+    if len(matches) != 1:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op_name}")
+    return matches[0]
+
+
+def require_op_count(func: TTIRFunction, op_name: str, expected: int) -> list[TTIROperation]:
+    matches = [op for op in func.ops if op.op_name == op_name]
+    if len(matches) != expected:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op_name}")
+    return matches
+
+
+def require_constant_zero(op: TTIROperation) -> None:
+    if "0.000000e+00" not in op.text or "tensor<16xf32>" not in op.text:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.constant")
+
+
+def validate_vector_add_b16(func: TTIRFunction) -> None:
+    allowed_ops = {
+        "arith.addf",
+        "arith.addi",
+        "arith.andi",
+        "arith.cmpi",
+        "arith.constant",
+        "arith.extsi",
+        "arith.muli",
+        "tt.addptr",
+        "tt.func",
+        "tt.get_program_id",
+        "tt.load",
+        "tt.make_range",
+        "tt.return",
+        "tt.splat",
+        "tt.store",
+    }
+    for op in func.ops:
+        if op.op_name not in allowed_ops:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op.op_name}")
+
+    if len(func.args) != 4:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+    expected_arg_types = ("!tt.ptr<f32>", "!tt.ptr<f32>", "!tt.ptr<f32>", "i32")
+    if tuple(arg.typ for arg in func.args) != expected_arg_types:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+
+    pid = require_single_op(func, "tt.get_program_id")
+    if "tt.get_program_id x : i32" not in pid.text or len(pid.result_names) != 1:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.get_program_id")
+
+    make_range = require_single_op(func, "tt.make_range")
+    if "start = 0 : i32" not in make_range.text or "end = 16 : i32" not in make_range.text:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.make_range")
+    if make_range.result_type != "tensor<16xi32>":
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.make_range")
+
+    addf = require_single_op(func, "arith.addf")
+    loads = require_op_count(func, "tt.load", 2)
+    stores = require_op_count(func, "tt.store", 1)
+    addptrs = require_op_count(func, "tt.addptr", 3)
+    returns = require_op_count(func, "tt.return", 1)
+    if returns[0].operands:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.return")
+
+    result_map = op_by_result(func)
+    if len(addf.operands) != 2:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addf")
+    for operand in addf.operands:
+        producer = result_map.get(operand)
+        if producer is None or producer.op_name != "tt.load":
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addf")
+
+    store = stores[0]
+    if len(store.operands) != 3 or store.operands[1] != addf.result_names[0]:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.store")
+    tail_mask = store.operands[2]
+
+    addptr_offset: str | None = None
+    for addptr in addptrs:
+        if len(addptr.operands) != 2:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
+        if addptr_offset is None:
+            addptr_offset = addptr.operands[1]
+        elif addptr_offset != addptr.operands[1]:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
+    if addptr_offset is None:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
+
+    mask_producer = result_map.get(tail_mask)
+    if mask_producer is None or mask_producer.op_name != "arith.cmpi" or " slt," not in mask_producer.text:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.cmpi")
+    if len(mask_producer.operands) < 2 or mask_producer.operands[0] != addptr_offset:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.cmpi")
+
+    for load in loads:
+        if len(load.operands) != 3:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
+        if load.operands[1] != tail_mask:
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
+        zero = result_map.get(load.operands[2])
+        if zero is None or zero.op_name != "arith.constant":
+            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
+        require_constant_zero(zero)
+
+    if store.operands[0] not in {op.result_names[0] for op in addptrs if op.result_names}:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.store")
+
+    range_result = make_range.result_names[0]
+    offset_add = result_map.get(addptr_offset)
+    if offset_add is None or offset_add.op_name != "arith.addi" or range_result not in offset_add.operands:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addi")
+
+    scalar_splat = result_map.get(next(operand for operand in offset_add.operands if operand != range_result))
+    if scalar_splat is None or scalar_splat.op_name != "tt.splat":
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.splat")
+    base = result_map.get(scalar_splat.operands[0]) if scalar_splat.operands else None
+    if base is None or base.op_name != "arith.muli" or pid.result_names[0] not in base.operands:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.muli")
+
+
+def value_arg_name(arg: TTIRArgument, fallback: str) -> str:
+    name = arg.source_name or arg.name.lstrip("%")
+    if name.endswith("_ptr"):
+        name = name[:-4]
+    if name == "n_elements":
+        return "n"
+    return name or fallback
+
+
+def emit_vector_add_value_ir(func: TTIRFunction) -> str:
+    x_name = value_arg_name(func.args[0], "x")
+    y_name = value_arg_name(func.args[1], "y")
+    out_name = value_arg_name(func.args[2], "out")
+    n_name = value_arg_name(func.args[3], "n")
+    if (x_name, y_name, out_name, n_name) != ("x", "y", "out", "n"):
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
+    return f"""func.func @{func.name}(
+    %x: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "x",
+                                          vc4value.direction = "in",
+                                          vc4value.shape_args = ["n"]}},
+    %y: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "y",
+                                          vc4value.direction = "in",
+                                          vc4value.shape_args = ["n"]}},
+    %out: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "out",
+                                            vc4value.direction = "out",
+                                            vc4value.shape_args = ["n"]}},
+    %n: index {{vc4value.arg_name = "n"}})
+    attributes {{vc4value.kernel, vc4value.grid_rank = 1 : i32}} {{
+  %pid = vc4value.program_id {{axis = 0 : i32}} : index
+  %lanes = vector.step : vector<16xindex>
+  %c16 = arith.constant 16 : index
+  %base = arith.muli %pid, %c16 : index
+  %remaining = arith.subi %n, %base : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %xv = vector.transfer_read %x[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
+  %yv = vector.transfer_read %y[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
+  %sum = arith.addf %xv, %yv : vector<16xf32>
+  vector.transfer_write %sum, %out[%base], %mask : vector<16xf32>, memref<?xf32, #vc4value.global>
+  return
+}}
+"""
 
 
 def unsupported_initial_features(op_counts: dict[str, int]) -> list[str]:
@@ -134,6 +442,33 @@ def parse_inventory(input_path: Path, target_text: str) -> dict[str, object]:
     }
 
 
+def parse_ttir_text(input_path: Path, target_text: str) -> tuple[object, str]:
+    if not input_path.is_file():
+        fail(f"input TTIR file does not exist: {input_path}")
+
+    triton, ir, GPUTarget, _triton_file = load_triton()
+    target = GPUTarget(*parse_target(target_text))
+    backend = triton.compiler.make_backend(target)
+    context = ir.context()
+    ir.load_dialects(context)
+    backend.load_dialects(context)
+
+    module = ir.parse_mlir_module(str(input_path), context)
+    module.context = context
+    return module, str(module)
+
+
+def lower_elementwise_v1(input_path: Path, target_text: str, output_path: Path) -> None:
+    _module, parsed_text = parse_ttir_text(input_path, target_text)
+    func = parse_ttir_function(parsed_text)
+    validate_vector_add_b16(func)
+    value_ir = emit_vector_add_value_ir(func)
+    if any(token in value_ir for token in ("tt.", "ttg.", "gpu.", "nvgpu.", "nvvm.", "rocdl.", "llvm.", "vc4kernel.", "ssavc4.", "vc4.qpu")):
+        fail("internal error: Phase 7 importer attempted to emit non-value IR")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(value_ir, encoding="utf-8")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", help="Input .ttir.mlir file")
@@ -144,9 +479,16 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.mode == "lower-elementwise-v1":
-        if args.output:
-            Path(args.output).unlink(missing_ok=True)
-        fail(PHASE6_LOWERING_DIAGNOSTIC)
+        if not args.output:
+            fail("lower-elementwise-v1 mode requires -o/--output")
+        output_path = Path(args.output)
+        output_path.unlink(missing_ok=True)
+        lower_elementwise_v1(Path(args.input), args.target, output_path)
+        print("VC4_TRITON_IMPORT_MODE=lower-elementwise-v1")
+        print("PARSE_TTIR=PASS")
+        print("TTIR_TO_VALUE=PASS")
+        print("READY_FOR_TRITON=NO")
+        return 0
 
     if args.output:
         fail("inventory mode does not write MLIR output; use --summary-json")
