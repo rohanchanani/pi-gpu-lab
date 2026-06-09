@@ -1,0 +1,21 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/vector_add_b16.value.mlir
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/check_ttir_to_vc4value_output.py" %t/vector_add_b16.value.mlir --kind vector-add
+# RUN: %vc4_opt_triton %t/vector_add_b16.value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/vector_add_b16.vc4kernel.mlir
+# RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/vector_add_b16.vc4kernel.mlir
+
+# VC4KERNEL: vc4kernel.kernel @vector_add_b16_kernel
+# VC4KERNEL: vc4kernel.program_id
+# VC4KERNEL: vc4kernel.tmu_load_fragment
+# VC4KERNEL: vc4kernel.fragment_alu.add
+# VC4KERNEL: vc4kernel.vdw_store_fragment
+# VC4KERNEL: vc4kernel.return
+# VC4KERNEL-NOT: tt.
+# VC4KERNEL-NOT: vector.
+# VC4KERNEL-NOT: memref.
+# VC4KERNEL-NOT: func.func
+# VC4KERNEL-NOT: vc4value.
+# VC4KERNEL-NOT: ssavc4.
+# VC4KERNEL-NOT: vc4.qpu

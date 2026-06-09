@@ -1,0 +1,6 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/audit_conversion_suite.py" | FileCheck %s
+
+# CHECK: TRITON_TO_VC4VALUE_CONVERSION_SUITE_AUDIT=PASS
+# CHECK: CPP_IMPORTER_CONVERSION_SUITE_USES_CPP_TOOL=YES
+# CHECK: PYTHON_SEMANTIC_LOWERING_USED=NO
+# CHECK: READY_FOR_TRITON=NO

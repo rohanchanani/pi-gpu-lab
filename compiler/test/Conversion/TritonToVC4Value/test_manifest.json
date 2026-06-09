@@ -1,0 +1,68 @@
+{
+  "ready_for_triton": false,
+  "suite": "compiler/test/Conversion/TritonToVC4Value",
+  "tests": [
+    {
+      "test": "ttir-vector-add-b16-to-vc4value-valid.test",
+      "input": "examples/triton/phase6/generated/vector_add_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "vector-add b16 TTIR lowers through C++ importer to VC4 value IR and VC4Kernel verifier",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "ttir-saxpy-select-b16-to-vc4value-valid.test",
+      "input": "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "saxpy/select/tail TTIR lowers through C++ importer to VC4 value IR and VC4Kernel verifier",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "ttir-i32-add-select-b16-to-vc4value-valid.test",
+      "input": "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir",
+      "input_kind": "real generated TTIR snapshot",
+      "feature_claim": "i32 add/select/tail TTIR lowers through C++ importer to VC4 value IR and VC4Kernel verifier",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "ttir-reduce-staged-reject.test",
+      "input": "compiler/test/TritonFrontend/Inputs/cpp-reduce-staged.ttir.mlir",
+      "input_kind": "parser-valid staged TTIR input",
+      "feature_claim": "tt.reduce remains staged/rejected",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "ttir-dot-staged-reject.test",
+      "input": "compiler/test/TritonFrontend/Inputs/cpp-dot-staged.ttir.mlir",
+      "input_kind": "parser-valid staged TTIR input",
+      "feature_claim": "tt.dot remains staged/rejected",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "ttir-program-id-axes-staged-reject.test",
+      "input": "generated from examples/triton/phase6/generated/vector_add_b16.ttir.mlir by Support/make_staged_ttir.py",
+      "input_kind": "parser-valid staged TTIR profile probe derived from a real generated TTIR snapshot",
+      "feature_claim": "program_id axes 1 and 2 remain staged/rejected",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "backend-dialects-rejected.test",
+      "input": "compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir",
+      "input_kind": "parser-negative backend dialect IR",
+      "feature_claim": "TTGIR/NVGPU/NVVM backend dialect inputs are deterministically rejected",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "accepted-path-audit.test",
+      "input": "this conversion suite",
+      "input_kind": "static audit",
+      "feature_claim": "accepted conversion tests use vc4-triton-opt and not Python semantic lowering",
+      "cpp_importer_only": true
+    }
+  ],
+  "unavailable_negative_forms": [
+    {
+      "feature": "block pointer or tensor descriptor",
+      "reason": "no source-controlled parser-valid TTIR snapshot exists in this repository state"
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir" --convert-triton-to-vc4-value -o %t.ttg.value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir" --convert-triton-to-vc4-value -o %t.nvgpu.value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir" --convert-triton-to-vc4-value -o %t.nvvm.value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+
+# BACKEND: unregistered dialect
