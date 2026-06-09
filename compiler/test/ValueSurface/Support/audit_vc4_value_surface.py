@@ -51,6 +51,10 @@ COVERAGE_REQUIREMENTS = {
     "forbidden_memref_side_effect_ops": "invalid-value-surface-memory-side-effects.mlir",
     "forbidden_sparse_store_ops": "invalid-value-surface-sparse-store-ops.mlir",
     "unsupported_scalable_vectors_and_unranked_memrefs": "invalid-value-surface-type-guardrails.mlir",
+    "phase8_cf_if_valid": "value-surface-cf-if-valid.mlir",
+    "phase8_cf_loop_valid": "value-surface-cf-loop-valid.mlir",
+    "phase8_scf_boundary_valid": "value-surface-scf-boundary-valid.mlir",
+    "phase8_cf_policy_invalid": "invalid-value-surface-phase8-cf-policy.mlir",
 }
 
 PHASE4_VALID_CORPUS = [
@@ -289,6 +293,57 @@ def scan_phase4_doc_claims(repo_root: pathlib.Path) -> list[str]:
     return hits
 
 
+def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
+    hits = []
+    docs = [
+        repo_path(repo_root, "compiler/docs/vc4_value_surface_spec.md"),
+        repo_path(repo_root, "compiler/docs/vc4_value_to_vc4kernel_planning.md"),
+        repo_path(repo_root, "compiler/docs/vc4_value_surface_support_matrix.json"),
+    ]
+    required_phrases = [
+        "Phase 8 is a value-layer control-flow phase",
+        "scf-to-cf",
+        "TTIR control flow",
+        "READY_FOR_TRITON remains NO",
+    ]
+    for path in docs:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        for phrase in required_phrases:
+            if phrase not in text:
+                hits.append(f"{path}:missing {phrase}")
+        if "READY_FOR_TRITON=YES" in text:
+            hits.append(f"{path}:READY_FOR_TRITON=YES")
+
+    matrix = json.loads(
+        repo_path(repo_root, "compiler/docs/vc4_value_surface_support_matrix.json")
+        .read_text(encoding="utf-8")
+    )
+    rows = {row.get("feature_id"): row for row in matrix.get("features", [])}
+    control_row = rows.get("scf_cf_surface_boundary", {})
+    behavior = control_row.get("phase8_control_flow_behavior", {})
+    expected = {
+        "cf.br": "accepted_executable_phase8_pending_hardware",
+        "cf.cond_br": "accepted_executable_phase8_pending_hardware",
+        "scf.if": "surface_admissible_canonicalization_required",
+        "scf.for": "surface_admissible_canonicalization_required",
+        "ttir_control_flow": "staged_future_ttir_import",
+        "vector_valued_branch_conditions": "deterministic_reject",
+        "memref_block_args": "deterministic_reject_until_proven",
+        "cf.switch": "staged_reject_until_proven",
+    }
+    for key, value in expected.items():
+        if behavior.get(key) != value:
+            hits.append(f"matrix scf/cf behavior {key}={behavior.get(key)!r}")
+
+    ops_td = repo_path(repo_root, "compiler/include/vc4/Dialect/VC4Value/IR/VC4ValueOps.td")
+    vc4value_ops = extract_vc4value_op_mnemonics(ops_td)
+    for control_token in ["br", "cond_br", "if", "for", "yield", "switch"]:
+        if any(control_token == op or control_token in op for op in vc4value_ops):
+            hits.append(f"vc4value op owns control-flow token {control_token}")
+
+    return hits
+
+
 def scan_valid_abi_tests(test_dir: pathlib.Path) -> list[str]:
     hits = []
     signature_re = re.compile(
@@ -409,6 +464,7 @@ def main() -> None:
     )
     phase4_doc_hits = []
     phase4_valid_abi_hits = []
+    phase8_cf_policy_hits = scan_phase8_cf_policy(repo_root)
     if args.mode == "phase4-abi-lock":
         validate_phase4_corpus(test_dir)
         phase4_doc_hits = scan_phase4_doc_claims(repo_root)
@@ -424,6 +480,8 @@ def main() -> None:
         fail("Phase 4 ABI doc claim hits: " + ", ".join(phase4_doc_hits))
     if phase4_valid_abi_hits:
         fail("Phase 4 valid ABI test hits: " + ", ".join(phase4_valid_abi_hits))
+    if phase8_cf_policy_hits:
+        fail("Phase 8 CF policy hits: " + ", ".join(phase8_cf_policy_hits))
 
     print(f"matrix_features={matrix_features}")
     print(f"valid_test_files={len(valid_files)}")
@@ -436,6 +494,7 @@ def main() -> None:
         print(f"phase4_valid_abi_hits={len(phase4_valid_abi_hits)}")
         print(f"phase4_valid_corpus={len(PHASE4_VALID_CORPUS)}")
         print(f"phase4_invalid_corpus={len(PHASE4_INVALID_CORPUS)}")
+    print(f"phase8_cf_policy_hits={len(phase8_cf_policy_hits)}")
     print(f"PASS VC4 value surface audit: mode={args.mode}")
 
 

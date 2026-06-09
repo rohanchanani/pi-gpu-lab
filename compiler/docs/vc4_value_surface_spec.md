@@ -380,14 +380,60 @@ plan rather than a direct VC4Kernel shuffle or permutation.
 
 ## 16. Control-flow boundary
 
-`scf` may appear in value input. Raw `scf` must not survive into verified
-VC4Kernel.
+Phase 8 is a value-layer control-flow phase. It does not add TTIR control-flow
+import, new memory features, reductions, dot/contract, or math support.
 
-Before or during value-to-VC4Kernel lowering, structured control must
-canonicalize into forms the target planner can handle, such as `cf` branches,
-block arguments, predication, or other specified intermediate forms. Natural
-loops and block args should be preserved until the lowering can prove correct
-allocation, spill, and branch-layout behavior.
+The executable Phase 8 value-to-VC4Kernel boundary consumes `cf`, not raw `scf`.
+The preferred structured-control boundary is upstream `scf` to `cf`
+canonicalization, referred to as the scf-to-cf boundary, before
+value-to-VC4Kernel lowering. `scf.if` and `scf.for`
+remain surface-admissible value input forms, but they are
+canonicalization-required and must not survive into verified VC4Kernel.
+
+The Phase 8 V1 executable `cf` profile is narrow:
+
+```text
+cf.br
+cf.cond_br with scalar i1 condition
+func.return
+multiple blocks inside a vc4value.kernel func.func
+```
+
+Phase 8 V1 block arguments are lowerable only for these value types, and only
+where downstream lowering supports them:
+
+```text
+index
+i1
+i32
+f32
+vector<16xi1>
+vector<16xindex>
+vector<16xi32>
+vector<16xf32>
+```
+
+`cf.br` and `cf.cond_br` are classified as
+accepted_executable_phase8_pending_hardware until hardware fixtures prove the
+full value-to-hardware path. Value block arguments are staged by type:
+`index`, `i1`, `i32`, `f32`, `vector<16xi1>`, `vector<16xindex>`,
+`vector<16xi32>`, and `vector<16xf32>` are the Phase 8 V1 candidate set;
+memref block arguments are rejected until a later ABI and lowering proof exists.
+
+The following remain rejected or staged in Phase 8:
+
+- vector-valued branch conditions;
+- `cf.switch`;
+- exception-like control flow;
+- memref block arguments and memref successor operands;
+- VPM tile block arguments;
+- TTIR control flow, which is staged for a future TTIR importer phase;
+- raw `scf` inside verified VC4Kernel.
+
+Verified VC4Kernel output contains no producer dialect operations: no raw
+`scf`, `vector`, `memref`, `func`, `vc4value`, TTIR, `ssavc4`, or scheduled
+`vc4` operations. Natural loops and block args should be preserved until the
+lowering can prove correct allocation, spill, and branch-layout behavior.
 
 The lowering must not reshape kernels merely to hide backend bugs.
 
@@ -467,6 +513,10 @@ Triton source, real TTIR, and any other producer import must lower into the
 standard value surface first. They must not bypass the value surface, lower
 directly to VC4Kernel as the first path, introduce producer dialect ops inside
 verified VC4Kernel, or rely on VC4Tile history.
+
+TTIR control flow is not part of Phase 8. It remains staged_future_ttir_import
+until a later phase explicitly updates the C++ importer, tests it, and proves it
+through the required hardware path. READY_FOR_TRITON remains NO.
 
 Future TTIR profile docs must classify each TTIR construct against
 `compiler/docs/vc4_value_ttir_feature_taxonomy.json` and this value-surface

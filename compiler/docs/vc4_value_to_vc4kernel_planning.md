@@ -352,15 +352,50 @@ emulation path, not a direct VC4Kernel arbitrary permutation.
 
 ## 17. Control-flow planning
 
-`scf` may appear in value input. Raw `scf` must not survive into verified
-VC4Kernel.
+Phase 8 is a value-layer control-flow phase, not TTIR control-flow import. The
+executable value-to-VC4Kernel control boundary consumes `cf`, not raw `scf`.
 
-Before or during value-to-VC4Kernel lowering, `scf` must canonicalize to
-`cf`/block arguments, predicated forms, or another specified intermediate that
-the VC4Kernel planner can lower safely.
+`scf` may appear in value input. Raw `scf` must not survive into verified
+VC4Kernel. Before value-to-VC4Kernel lowering, `scf.if` and `scf.for` should
+canonicalize through the upstream scf-to-cf conversion into `cf` branches and
+block arguments. The planner should not grow a custom SCF lowering unless the
+upstream pass is proven unusable and that blocker is recorded.
+
+The Phase 8 V1 executable `cf` set is:
+
+```text
+cf.br
+cf.cond_br with scalar i1 condition
+func.return
+```
+
+Value block arguments are staged by type. The Phase 8 V1 candidate lowerable
+set is exactly:
+
+```text
+index
+i1
+i32
+f32
+vector<16xi1>
+vector<16xindex>
+vector<16xi32>
+vector<16xf32>
+```
+
+`index` and `vector<16xindex>` must lower to target i32 carriers before
+verified VC4Kernel. `vector<16xi1>` masks must lower to accepted VC4Kernel
+predicate or scalar condition forms. Memref block arguments, VPM tile block
+arguments, vector-valued branch conditions, `cf.switch`, and exception-like
+control flow remain rejected or staged in Phase 8.
 
 Natural loops, block arguments, liveness, spills, and branch layout must be
 preserved honestly. The planner must not reshape kernels to hide backend bugs.
+
+Verified VC4Kernel output contains no producer dialect operations. It may
+contain accepted VC4Kernel operations, accepted scalar `arith`, and
+`cf.br`/scalar-i1 `cf.cond_br`; it must contain no raw `scf`, `vector`,
+`memref`, `func`, `vc4value`, TTIR, `ssavc4`, or scheduled `vc4` operations.
 
 ## 18. Contract/GEMM planning
 
@@ -512,3 +547,7 @@ Future value planning remains responsible for reductions, dot/contract,
 gather/scatter, block pointers, subword/f16 storage, math/SFU policy, non-16
 block splitting, axes 1/2, and control flow. These are staged planning gaps
 unless a later proof explicitly classifies a specific form as impossible.
+
+Phase 8 does not add TTIR control-flow import. TTIR control flow remains
+staged_future_ttir_import, and `READY_FOR_TRITON=NO` remains true.
+READY_FOR_TRITON remains NO.

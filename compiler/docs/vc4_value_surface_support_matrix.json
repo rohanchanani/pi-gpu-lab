@@ -232,15 +232,36 @@
         "scf.if",
         "scf.for",
         "cf.br",
-        "cf.cond_br"
+        "cf.cond_br",
+        "value block arguments"
       ],
       "required_vc4kernel_contract": [
-        "VC4Kernel verified output is a later boundary"
+        "VC4Kernel verified output contains no raw scf/vector/memref/func/vc4value/producer ops",
+        "VC4Kernel may contain only accepted cf.br and scalar-i1 cf.cond_br forms at the CFG boundary"
       ],
-      "diagnostic_policy": "diagnose lower-half dialect control in value input",
-      "verification": "dialect-family check admits scf/cf",
-      "summary": "restricted scf/cf value control syntax is admissible, but scf must not survive into verified vc4kernel later.",
-      "notes": "Phase3 does not canonicalize control flow."
+      "diagnostic_policy": "diagnose lower-half dialect control in value input, vector-valued branch conditions, memref block arguments, memref successor operands, cf.switch, and raw scf at the verified VC4Kernel boundary",
+      "verification": "dialect-family check admits restricted scf/cf; Phase 8 verifier checks scalar-i1 cf.cond_br conditions and rejects memref CFG block/successor operands",
+      "summary": "Phase 8 is a value-layer control-flow phase: cf.br and scalar-i1 cf.cond_br are accepted_executable_phase8_pending_hardware, while scf.if/scf.for are surface_admissible_canonicalization_required through upstream scf-to-cf before value-to-VC4Kernel lowering.",
+      "notes": "Executable value-to-VC4Kernel lowering consumes cf, not raw scf. Upstream scf-to-cf canonicalization is the preferred boundary. TTIR control flow is staged_future_ttir_import and not Phase 8. READY_FOR_TRITON remains NO.",
+      "phase8_control_flow_behavior": {
+        "cf.br": "accepted_executable_phase8_pending_hardware",
+        "cf.cond_br": "accepted_executable_phase8_pending_hardware",
+        "value.block_args.index": "lowerable_phase8_v1",
+        "value.block_args.i1": "lowerable_phase8_v1",
+        "value.block_args.i32": "lowerable_phase8_v1",
+        "value.block_args.f32": "lowerable_phase8_v1",
+        "value.block_args.vector16xi1": "lowerable_phase8_v1",
+        "value.block_args.vector16xindex": "lowerable_phase8_v1",
+        "value.block_args.vector16xi32": "lowerable_phase8_v1",
+        "value.block_args.vector16xf32": "lowerable_phase8_v1",
+        "scf.if": "surface_admissible_canonicalization_required",
+        "scf.for": "surface_admissible_canonicalization_required",
+        "scf_inside_vc4kernel": "deterministic_reject",
+        "ttir_control_flow": "staged_future_ttir_import",
+        "vector_valued_branch_conditions": "deterministic_reject",
+        "memref_block_args": "deterministic_reject_until_proven",
+        "cf.switch": "staged_reject_until_proven"
+      }
     },
     {
       "feature_id": "support_matrix_and_audit_contract",

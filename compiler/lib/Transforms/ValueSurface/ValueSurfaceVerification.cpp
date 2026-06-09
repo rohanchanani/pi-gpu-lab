@@ -4,6 +4,7 @@
 
 #include "vc4/Dialect/VC4Value/IR/VC4ValueAttrs.h"
 
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -68,6 +69,10 @@ static bool isAllowedSCFOp(StringRef name) {
 
 static bool isAllowedCFOp(StringRef name) {
   return name == "cf.br" || name == "cf.cond_br";
+}
+
+static bool isMemRefValueSurfaceCFGType(Type type) {
+  return isa<MemRefType, UnrankedMemRefType>(type);
 }
 
 static bool isSupportedScalarType(Type type) {
@@ -667,8 +672,55 @@ static void checkOperationTypes(Operation *op, bool &sawError) {
 
   for (Region &region : op->getRegions()) {
     for (Block &block : region) {
-      for (BlockArgument arg : block.getArguments())
+      bool isFuncEntryBlock =
+          op->getName().getStringRef() == "func.func" && &block == &region.front();
+      for (BlockArgument arg : block.getArguments()) {
         checkType(op, arg.getType(), sawError);
+        if (!isFuncEntryBlock && isMemRefValueSurfaceCFGType(arg.getType())) {
+          op->emitError() << "memref block arguments are not in the Phase 8 "
+                          << "VC4 value control-flow subset";
+          sawError = true;
+        }
+      }
+    }
+  }
+}
+
+static void checkCFOp(Operation *op, bool &sawError) {
+  if (auto cond = dyn_cast<cf::CondBranchOp>(op)) {
+    if (!cond.getCondition().getType().isInteger(1)) {
+      op->emitError()
+          << "cf.cond_br condition must be scalar i1 in the Phase 8 "
+          << "VC4 value control-flow subset";
+      sawError = true;
+    }
+    for (Value operand : cond.getTrueDestOperands()) {
+      if (isMemRefValueSurfaceCFGType(operand.getType())) {
+        op->emitError()
+            << "memref successor operands are not in the Phase 8 "
+            << "VC4 value control-flow subset";
+        sawError = true;
+      }
+    }
+    for (Value operand : cond.getFalseDestOperands()) {
+      if (isMemRefValueSurfaceCFGType(operand.getType())) {
+        op->emitError()
+            << "memref successor operands are not in the Phase 8 "
+            << "VC4 value control-flow subset";
+        sawError = true;
+      }
+    }
+    return;
+  }
+
+  if (auto br = dyn_cast<cf::BranchOp>(op)) {
+    for (Value operand : br.getDestOperands()) {
+      if (isMemRefValueSurfaceCFGType(operand.getType())) {
+        op->emitError()
+            << "memref successor operands are not in the Phase 8 "
+            << "VC4 value control-flow subset";
+        sawError = true;
+      }
     }
   }
 }
@@ -841,6 +893,9 @@ struct VerifyValueSurfacePass
                         << "value-surface control subset";
         sawError = true;
       }
+
+      if (dialect == "cf" && isAllowedCFOp(opName))
+        checkCFOp(op, sawError);
 
       return WalkResult::advance();
     });

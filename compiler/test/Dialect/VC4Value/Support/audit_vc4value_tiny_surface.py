@@ -25,6 +25,13 @@ FORBIDDEN_TOKENS = {
     "barrier",
     "semaphore",
     "qpu",
+    "br",
+    "branch",
+    "cond_br",
+    "if",
+    "for",
+    "yield",
+    "switch",
 }
 FORBIDDEN_OP_SPELLINGS = [
     "vc4value.load",
@@ -38,6 +45,13 @@ FORBIDDEN_OP_SPELLINGS = [
     "vc4value.lane_id",
     "vc4value.barrier",
     "vc4value.semaphore",
+    "vc4value.br",
+    "vc4value.branch",
+    "vc4value.cond_br",
+    "vc4value.if",
+    "vc4value.for",
+    "vc4value.yield",
+    "vc4value.switch",
 ]
 REQUIRED_FEATURES = {
     "vc4value.program_id": {

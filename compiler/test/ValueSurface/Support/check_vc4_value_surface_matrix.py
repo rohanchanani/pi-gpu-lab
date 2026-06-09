@@ -173,6 +173,26 @@ PHASE4_SCOPED_LOWERING_READINESS = (
     "READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=YES_FOR_PHASE5_ELEMENTWISE_V1"
 )
 
+PHASE8_CF_BEHAVIOR = {
+    "cf.br": "accepted_executable_phase8_pending_hardware",
+    "cf.cond_br": "accepted_executable_phase8_pending_hardware",
+    "value.block_args.index": "lowerable_phase8_v1",
+    "value.block_args.i1": "lowerable_phase8_v1",
+    "value.block_args.i32": "lowerable_phase8_v1",
+    "value.block_args.f32": "lowerable_phase8_v1",
+    "value.block_args.vector16xi1": "lowerable_phase8_v1",
+    "value.block_args.vector16xindex": "lowerable_phase8_v1",
+    "value.block_args.vector16xi32": "lowerable_phase8_v1",
+    "value.block_args.vector16xf32": "lowerable_phase8_v1",
+    "scf.if": "surface_admissible_canonicalization_required",
+    "scf.for": "surface_admissible_canonicalization_required",
+    "scf_inside_vc4kernel": "deterministic_reject",
+    "ttir_control_flow": "staged_future_ttir_import",
+    "vector_valued_branch_conditions": "deterministic_reject",
+    "memref_block_args": "deterministic_reject_until_proven",
+    "cf.switch": "staged_reject_until_proven",
+}
+
 
 def has_forbidden_lowering_ready_claim(text: str) -> bool:
     """Reject broad YES claims while allowing the scoped Phase 4 handoff line."""
@@ -348,6 +368,52 @@ def validate_phase4_abi_lock(data: dict, matrix_path: str) -> None:
             fail(f"{doc} claims Triton is ready")
 
 
+def validate_phase8_control_flow_policy(data: dict, matrix_path: str) -> None:
+    features = data["features"]
+    control_row = get_feature(features, "scf_cf_surface_boundary")
+    behavior = control_row.get("phase8_control_flow_behavior")
+    if not isinstance(behavior, dict):
+        fail("scf/cf row missing phase8_control_flow_behavior")
+    for key, expected in PHASE8_CF_BEHAVIOR.items():
+        if behavior.get(key) != expected:
+            fail(
+                f"scf/cf row must classify {key} as {expected!r}, "
+                f"got {behavior.get(key)!r}"
+            )
+
+    control_text = json.dumps(control_row, sort_keys=True)
+    for phrase in [
+        "scf-to-cf",
+        "Executable value-to-VC4Kernel lowering consumes cf, not raw scf",
+        "TTIR control flow is staged_future_ttir_import",
+        "READY_FOR_TRITON remains NO",
+    ]:
+        if phrase not in control_text:
+            fail(f"scf/cf row missing Phase 8 phrase: {phrase}")
+    if "vc4value." in control_text and "program_id" not in control_text:
+        fail("scf/cf row must not assign control-flow semantics to vc4value ops")
+
+    docs_root = pathlib.Path(matrix_path).resolve().parent
+    for doc_name in [
+        "vc4_value_surface_spec.md",
+        "vc4_value_to_vc4kernel_planning.md",
+    ]:
+        doc = docs_root / doc_name
+        text = doc.read_text(encoding="utf-8")
+        for phrase in [
+            "Phase 8 is a value-layer control-flow phase",
+            "consumes `cf`, not raw `scf`",
+            "scf-to-cf",
+            "Verified VC4Kernel output contains no producer dialect operations",
+            "TTIR control flow",
+            "READY_FOR_TRITON remains NO",
+        ]:
+            if phrase not in text:
+                fail(f"{doc_name} missing Phase 8 control-flow phrase: {phrase}")
+        if "READY_FOR_TRITON=YES" in text:
+            fail(f"{doc_name} claims Triton readiness")
+
+
 def validate_matrix(matrix_path: str, mode: str) -> dict:
     if mode not in {"phase3-lock", "phase3_5", "phase4-abi-lock"}:
         fail(f"unsupported mode {mode!r}")
@@ -397,6 +463,7 @@ def validate_matrix(matrix_path: str, mode: str) -> dict:
     if dict(counts) != EXPECTED_COUNTS:
         fail(f"unexpected status counts {dict(counts)}")
 
+    validate_phase8_control_flow_policy(data, matrix_path)
     validate_phase3_5_vector_abstraction(data, matrix_path)
     if mode == "phase4-abi-lock":
         validate_phase4_abi_lock(data, matrix_path)
