@@ -1,9 +1,19 @@
 # VC4 Triton Importer Boundary
 
 Phase 6 added `tools/vc4-triton-import` as an importer boundary skeleton.
-Phase 7 extends that tool with a narrow static TTIR-to-value lowering mode for
-the real Phase 6 elementwise corpus. The importer is still not full Triton
-support and is not yet hardware-proven.
+Phase 7 extended that Python tool with a narrow static TTIR-to-value lowering
+mode for the real Phase 6 elementwise corpus. Phase 7.5 retires that Python
+semantic lowering mode from accepted tests and hardware proof.
+
+The accepted semantic importer is now the optional C++ MLIR tool:
+
+```text
+compiler/build-triton-llvm/bin/vc4-triton-opt \
+  --convert-triton-to-vc4-value
+```
+
+Python remains allowed for Triton source to TTIR snapshot generation and
+inventory. The C++ importer is still not full Triton support.
 
 READY_FOR_TRITON remains NO.
 
@@ -23,9 +33,10 @@ Text inspection is used only after real Triton parse succeeds, and only for repo
 
 ## Phase 7 Boundary
 
-Phase 7 extends this boundary with TTIR elementwise-to-value IR lowering for the
-locked Phase 7 candidate corpus. The source of truth is emitted TTIR, not
-Python-level Triton metaprogramming.
+Phase 7 extended this boundary with TTIR elementwise-to-value IR lowering for
+the locked Phase 7 candidate corpus. Phase 7.5 moves the accepted semantic
+path to `vc4-triton-opt --convert-triton-to-vc4-value`. The source of truth is
+emitted TTIR, not Python-level Triton metaprogramming.
 
 The expected future demo path is:
 
@@ -43,7 +54,8 @@ Phase 6 intentionally stops at the TTIR inventory boundary.
 
 ## Phase 7c Static Lowering
 
-`--mode lower-elementwise-v1` now accepts exactly these real TTIR snapshots:
+The retired Python `--mode lower-elementwise-v1` accepted exactly these real
+TTIR snapshots:
 
 ```text
 examples/triton/phase6/generated/vector_add_b16.ttir.mlir
@@ -94,8 +106,9 @@ Semantic lowering mode was reserved in Phase 6 and failed with:
 TTIR-to-value semantic lowering is not implemented in Phase 6; run Phase 7 after Phase 6 final lock.
 ```
 
-In Phase 7c, the same mode succeeds for the three elementwise snapshots listed
-above and rejects staged forms.
+In Phase 7c, that mode succeeded for the three elementwise snapshots listed
+above and rejected staged forms. In Phase 7.5 and later, accepted tests must
+use the C++ `vc4-triton-opt --convert-triton-to-vc4-value` path instead.
 
 ## Producer IR Policy
 

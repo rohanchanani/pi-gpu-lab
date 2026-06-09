@@ -11,13 +11,14 @@ READY_FOR_TRITON=NO
 
 ## Scope
 
-Phase 7 proves the first real TTIR executable path for the narrow elementwise
-V1 profile:
+Phase 7 proved the first real TTIR executable path for the narrow elementwise
+V1 profile. Phase 7.5 supersedes the accepted semantic frontend with the
+optional C++ importer:
 
 ```text
 real Triton source
   -> real emitted TTIR snapshot
-  -> vc4-triton-import --mode lower-elementwise-v1
+  -> vc4-triton-opt --convert-triton-to-vc4-value
   -> standard VC4 value IR
   -> vc4kernel
   -> ssavc4
@@ -25,6 +26,10 @@ real Triton source
   -> generated artifacts/runtime
   -> real VC4 hardware
 ```
+
+The previous Python `vc4-triton-import --mode lower-elementwise-v1` semantic
+path is retired from accepted tests. Python remains allowed for Triton source to
+TTIR snapshot generation and inventory.
 
 The proof source is the checked-in Phase 6 Triton 3.7.0 TTIR corpus:
 

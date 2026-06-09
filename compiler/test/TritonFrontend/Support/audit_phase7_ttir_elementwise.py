@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import subprocess
 import sys
@@ -79,24 +78,14 @@ def run(cmd: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def find_tool(repo_root: Path, name: str) -> str:
-    candidate = repo_root / "compiler" / "build" / "bin" / name
-    if candidate.exists():
-        return str(candidate)
+    for build_dir in ("build-triton-llvm", "build"):
+        candidate = repo_root / "compiler" / build_dir / "bin" / name
+        if candidate.exists():
+            return str(candidate)
     proc = subprocess.run(["/bin/sh", "-lc", f"command -v {name}"], text=True, stdout=subprocess.PIPE)
     if proc.returncode == 0 and proc.stdout.strip():
         return proc.stdout.strip()
     fail(f"could not find required tool: {name}")
-
-
-def triton_python(repo_root: Path) -> str:
-    for env_name in ("VC4_TRITON_PYTHON", "TRITON_PYTHON"):
-        override = os.environ.get(env_name)
-        if override:
-            return override
-    candidate = repo_root / ".vc4_auto" / "triton_phase6_venv" / "bin" / "python"
-    if candidate.exists():
-        return str(candidate)
-    return sys.executable
 
 
 def contains_op_marker(text: str, marker: str) -> bool:
@@ -180,8 +169,7 @@ def audit_ready_for_triton(repo_root: Path) -> None:
 
 def audit_generated_boundaries(repo_root: Path) -> None:
     vc4_opt = find_tool(repo_root, "vc4-opt")
-    importer = repo_root / "tools" / "vc4-triton-import"
-    py = triton_python(repo_root)
+    vc4_triton_opt = find_tool(repo_root, "vc4-triton-opt")
     with tempfile.TemporaryDirectory(prefix="phase7_ttir_audit_") as tmp_text:
         tmp = Path(tmp_text)
         for rel in SNAPSHOTS:
@@ -193,13 +181,9 @@ def audit_generated_boundaries(repo_root: Path) -> None:
             vc4kernel = tmp / f"{stem}.vc4kernel.mlir"
             run(
                 [
-                    py,
-                    str(importer),
+                    vc4_triton_opt,
                     str(snapshot),
-                    "--mode",
-                    "lower-elementwise-v1",
-                    "--target",
-                    "cuda:80:32",
+                    "--convert-triton-to-vc4-value",
                     "-o",
                     str(value),
                 ],

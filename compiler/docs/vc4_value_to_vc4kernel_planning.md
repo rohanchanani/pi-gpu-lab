@@ -476,11 +476,12 @@ and hardware path.
 ## 23. Phase 7 TTIR elementwise hardware handoff
 
 Phase 7 proves that the real Phase 6 elementwise TTIR corpus can enter the
-existing Phase 5 value planner without bypassing it:
+existing Phase 5 value planner without bypassing it. Phase 7.5 locks the
+accepted semantic importer as the optional C++ `vc4-triton-opt` path:
 
 ```text
 real emitted TTIR
-  -> vc4-triton-import --mode lower-elementwise-v1
+  -> vc4-triton-opt --convert-triton-to-vc4-value
   -> func/vc4value/vector/memref/arith value IR
   -> --convert-vc4-value-to-vc4kernel
   -> vc4kernel

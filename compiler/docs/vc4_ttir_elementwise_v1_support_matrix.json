@@ -28,15 +28,34 @@
     {
       "id": "real_ttir_parse_and_import",
       "status": "accepted_hardware_proven",
-      "summary": "Real Triton 3.7.0 TTIR snapshots parse and import through vc4-triton-import --mode lower-elementwise-v1.",
+      "summary": "Real Triton 3.7.0 TTIR snapshots parse through the optional C++ vc4-triton-opt tool and enter the value layer.",
       "proof_paths": [
-        "tools/vc4-triton-import",
+        "compiler/tools/vc4-triton-opt/vc4-triton-opt.cpp",
         "examples/triton/phase6/generated/vector_add_b16.ttir.mlir",
         "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
         "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir",
-        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
-        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
-        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test"
+        "compiler/test/TritonFrontend/cpp-vector-add-b16-static.test",
+        "compiler/test/TritonFrontend/cpp-saxpy-select-b16-static.test",
+        "compiler/test/TritonFrontend/cpp-i32-add-select-b16-static.test"
+      ],
+      "hardware_fixtures": [
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_saxpy_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/triton_i32_add_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_saxpy_cmp_select_tail_vc4triton",
+        "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_i32_f32_dual_kernel_tail_vc4triton"
+      ]
+    },
+    {
+      "id": "ttir_to_value_cpp_conversion",
+      "status": "accepted_hardware_proven",
+      "summary": "TTIR-to-VC4Value semantic lowering uses vc4-triton-opt --convert-triton-to-vc4-value as the accepted C++ importer path.",
+      "proof_paths": [
+        "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
+        "compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh",
+        "compiler/test/CodeGen/Triton/Emit/triton-vector-add-b16-static-pipeline.test",
+        "compiler/test/CodeGen/Triton/Emit/triton-saxpy-select-b16-static-pipeline.test",
+        "compiler/test/CodeGen/Triton/Emit/triton-i32-add-select-b16-static-pipeline.test"
       ],
       "hardware_fixtures": [
         "compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton",
@@ -181,11 +200,11 @@
     {
       "id": "ttir_value_only_importer_output",
       "status": "accepted_static_proven",
-      "summary": "lower-elementwise-v1 emits func/vc4value/vector/memref/arith value IR only, with no TTIR or lower-half ops.",
+      "summary": "The C++ importer emits func/vc4value/vector/memref/arith value IR only, with no TTIR or lower-half ops.",
       "proof_paths": [
-        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
-        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
-        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test"
+        "compiler/test/TritonFrontend/cpp-vector-add-b16-static.test",
+        "compiler/test/TritonFrontend/cpp-saxpy-select-b16-static.test",
+        "compiler/test/TritonFrontend/cpp-i32-add-select-b16-static.test"
       ],
       "hardware_fixtures": []
     },
@@ -286,6 +305,30 @@
       "proof_paths": [
         "compiler/docs/vc4_ttir_target_profile.md",
         "compiler/test/TritonFrontend/Support/audit_phase7_ttir_elementwise.py"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "ttgir_nvidia_inputs_rejected",
+      "status": "deterministic_reject_surface_policy",
+      "summary": "TTGIR, NVIDIA, NVGPU, NVVM, and target backend dialect inputs are not accepted TTIR frontend inputs.",
+      "proof_paths": [
+        "compiler/test/TritonFrontend/cpp-staged-diagnostics.test",
+        "compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir",
+        "compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir",
+        "compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir"
+      ],
+      "hardware_fixtures": []
+    },
+    {
+      "id": "phase7_python_semantic_importer_retired",
+      "status": "deterministic_reject_surface_policy",
+      "summary": "The Python lower-elementwise-v1 semantic importer is retained only as legacy code; accepted static and hardware TTIR paths use the C++ importer.",
+      "proof_paths": [
+        "compiler/test/CodeGen/Triton/Support/audit_accepted_ttir_cpp_pipeline.py",
+        "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
+        "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test"
       ],
       "hardware_fixtures": []
     },

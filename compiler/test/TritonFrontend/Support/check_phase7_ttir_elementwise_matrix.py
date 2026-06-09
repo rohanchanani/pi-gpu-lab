@@ -21,6 +21,7 @@ ALLOWED_STATUSES = {
 
 REQUIRED_ACCEPTED_HARDWARE = {
     "real_ttir_parse_and_import",
+    "ttir_to_value_cpp_conversion",
     "ttir_program_id_axis0_to_vc4value",
     "ttir_make_range_0_16_to_vector_step",
     "ttir_contiguous_addptr_to_value_transfer",
@@ -31,6 +32,12 @@ REQUIRED_ACCEPTED_HARDWARE = {
     "ttir_tail_mask_overlaunch_active_qpus12",
     "ttir_to_value_to_vc4kernel_to_hardware",
     "ttir_mixed_acceptance_claim_audit",
+}
+
+REQUIRED_POLICY_ROWS = {
+    "ttir_direct_to_lower_half_paths",
+    "ttgir_nvidia_inputs_rejected",
+    "phase7_python_semantic_importer_retired",
 }
 
 REQUIRED_STAGED = {
@@ -135,9 +142,12 @@ def validate_matrix(repo_root: Path, matrix_path: Path, mode: str) -> None:
             require_repo_path(repo_root, rel, f"{feature_id}.hardware_fixtures")
 
     missing_accepted = REQUIRED_ACCEPTED_HARDWARE - set(by_id)
+    missing_policy = REQUIRED_POLICY_ROWS - set(by_id)
     missing_staged = REQUIRED_STAGED - set(by_id)
     if missing_accepted:
         fail(f"missing accepted hardware rows: {sorted(missing_accepted)}")
+    if missing_policy:
+        fail(f"missing required policy rows: {sorted(missing_policy)}")
     if missing_staged:
         fail(f"missing staged rows: {sorted(missing_staged)}")
 
@@ -150,6 +160,14 @@ def validate_matrix(repo_root: Path, matrix_path: Path, mode: str) -> None:
         for fixture in row["hardware_fixtures"]:
             if "Triton/Hardware/Run/" not in fixture:
                 fail(f"{feature_id} hardware fixture must be a Phase 7 TTIR fixture: {fixture}")
+        row_text = json.dumps(row, sort_keys=True)
+        for legacy in ("vc4-triton-import", "lower-elementwise-v1"):
+            if legacy in row_text:
+                fail(f"{feature_id} accepted hardware row still cites retired Python semantic path {legacy!r}")
+
+    for feature_id in REQUIRED_POLICY_ROWS:
+        if by_id[feature_id]["status"] != "deterministic_reject_surface_policy":
+            fail(f"{feature_id} must be deterministic_reject_surface_policy")
 
     for feature_id in REQUIRED_STAGED:
         if by_id[feature_id]["status"] != "staged_future_work":

@@ -60,17 +60,31 @@ current TTIR spelling before Phase 6.
 
 ## 4. Import architecture
 
-The recommended future importer shape is:
+The accepted semantic importer shape after Phase 7.5 is the optional C++ MLIR
+tool:
 
 ```text
-vc4-triton-import input.ttir.mlir -o output.vc4value.mlir
+compiler/build-triton-llvm/bin/vc4-triton-opt input.ttir.mlir \
+  --convert-triton-to-vc4-value \
+  -o output.vc4value.mlir
 ```
 
-The importer must parse MLIR structurally. It must not use a regex parser.
+This path is gated by `VC4_ENABLE_TRITON_CPP_FRONTEND=ON`; the default
+`compiler/build` lane remains Triton-free and has no `vc4-triton-opt` target.
+`VC4TritonFrontendDeps` is the only CMake target that may carry Triton
+source/build/include/object/library closure details.
+
+The importer parses MLIR structurally through Triton/MLIR dialect machinery.
+It must not use a regex parser or dispatch by kernel name.
 
 The first path is real emitted TTIR into the standard VC4 value surface. It is
 not direct Triton-to-VC4Kernel, not TTIR-to-VC4Kernel, and not TTIR-to-SSAVC4.
 It must not accept TTGIR/NVIDIA-specific IR as the first VC4 path.
+
+Python remains allowed for Triton Python source to `.ttir.mlir` snapshot
+generation and inventory. The old Phase 7 Python semantic lowering mode,
+`vc4-triton-import --mode lower-elementwise-v1`, is retired from accepted
+lowering tests and hardware proof.
 
 Normal `check-vc4` must not require Triton regeneration. TTIR fixtures, once
 they exist, should be checked in or generated through a controlled non-default
@@ -128,12 +142,13 @@ READY_FOR_TRITON=NO
 
 ### Phase 7h hardware-proven elementwise V1 subset
 
-Phase 7h hardware-proves the first real TTIR executable path for the Phase 6
-real elementwise corpus:
+Phase 7 originally hardware-proved the first real TTIR executable path for the
+Phase 6 real elementwise corpus through the Python Phase 7 importer. Phase 7.5
+re-locked the accepted path through the optional C++ importer:
 
 ```text
 real emitted TTIR snapshot
-  -> vc4-triton-import --mode lower-elementwise-v1
+  -> vc4-triton-opt --convert-triton-to-vc4-value
   -> standard VC4 value IR
   -> vc4kernel
   -> ssavc4
@@ -177,6 +192,9 @@ The locked Phase 7 support matrix is
 `compiler/docs/vc4_ttir_elementwise_v1_support_matrix.json`. The mixed
 hardware gate is under
 `compiler/test/CodeGen/Triton/Hardware/MixedAcceptance/`.
+
+The Phase 7.5 C++ frontend lock is recorded in
+`compiler/docs/vc4_vector_triton_phase7_5_cpp_frontend_lock.md`.
 
 Even after Phase 7h:
 
