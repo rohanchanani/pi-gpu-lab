@@ -17,6 +17,7 @@
 #include "vc4/Dialect/VC4Value/IR/VC4ValueDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Conversion/Passes.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Math/IR/Math.h"
@@ -31,6 +32,7 @@
 #include "triton/Dialect/Triton/IR/Dialect.h"
 
 int main(int argc, char **argv) {
+  mlir::registerSCFToControlFlowPass();
   mlir::vc4::registerConvertTritonToVC4ValuePass();
 
   mlir::DialectRegistry registry;

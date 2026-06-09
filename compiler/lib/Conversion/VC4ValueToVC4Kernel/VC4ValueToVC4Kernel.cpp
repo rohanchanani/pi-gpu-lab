@@ -363,6 +363,13 @@ static LogicalResult emitPhase5Diagnostic(Operation *op, Twine detail) {
                            << "READY_FOR_TRITON remains NO";
 }
 
+static LogicalResult emitRawSCFDiagnostic(Operation *op) {
+  return op->emitOpError()
+         << "raw scf operation cannot lower directly to VC4Kernel; run "
+         << "explicit upstream --convert-scf-to-cf before "
+         << "--convert-vc4-value-to-vc4kernel. READY_FOR_TRITON remains NO";
+}
+
 struct LoweringState {
   explicit LoweringState(Operation *sourceKernel) : sourceKernel(sourceKernel) {}
 
@@ -649,7 +656,7 @@ private:
     if (auto condBranch = llvm::dyn_cast<cf::CondBranchOp>(op))
       return lowerCondBranch(condBranch);
     if (op->getName().getDialectNamespace() == "scf")
-      return emitStagedDiagnostic(op, "raw scf operation");
+      return emitRawSCFDiagnostic(op);
     return emitPhase5Diagnostic(op, Twine("terminator '") +
                                         op->getName().getStringRef() + "'");
   }
@@ -771,7 +778,7 @@ private:
       return lowerIndexCast(op);
 
     if (op->getName().getDialectNamespace() == "scf")
-      return emitStagedDiagnostic(op, "raw scf operation");
+      return emitRawSCFDiagnostic(op);
     if (op->getName().getDialectNamespace() == "cf")
       return emitStagedDiagnostic(op, "non-terminator control-flow operation");
     if (op->getName().getDialectNamespace() == "math")

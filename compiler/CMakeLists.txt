@@ -66,6 +66,7 @@ else()
     MLIRParser
     MLIRPass
     MLIRRewrite
+    MLIRSCFToControlFlow
     MLIRSCFDialect
     MLIRShapedOpInterfaces
     MLIRSideEffectInterfaces

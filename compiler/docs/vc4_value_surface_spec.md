@@ -384,11 +384,23 @@ Phase 8 is a value-layer control-flow phase. It does not add TTIR control-flow
 import, new memory features, reductions, dot/contract, or math support.
 
 The executable Phase 8 value-to-VC4Kernel boundary consumes `cf`, not raw `scf`.
-The preferred structured-control boundary is upstream `scf` to `cf`
-canonicalization, referred to as the scf-to-cf boundary, before
-value-to-VC4Kernel lowering. `scf.if` and `scf.for`
-remain surface-admissible value input forms, but they are
-canonicalization-required and must not survive into verified VC4Kernel.
+The structured-control boundary is the upstream MLIR `--convert-scf-to-cf`
+canonicalization pass before value-to-VC4Kernel lowering. `scf.if` and
+`scf.for` remain surface-admissible value input forms, but they are
+canonicalization-required and must not survive into verified VC4Kernel. Custom
+SCF lowering is not part of Phase 8.
+
+The canonical executable pipeline for SCF-bearing value input is:
+
+```text
+--convert-scf-to-cf
+--vc4-verify-value-surface
+--convert-vc4-value-to-vc4kernel
+--verify-vc4kernel
+```
+
+Pure `cf` input does not need the first pass. Value runners that accept `scf`
+input must log the canonicalization step and preserve the after-scf-to-cf IR.
 
 The Phase 8 V1 executable `cf` profile is narrow:
 

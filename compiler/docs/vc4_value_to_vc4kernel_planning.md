@@ -355,11 +355,26 @@ emulation path, not a direct VC4Kernel arbitrary permutation.
 Phase 8 is a value-layer control-flow phase, not TTIR control-flow import. The
 executable value-to-VC4Kernel control boundary consumes `cf`, not raw `scf`.
 
-`scf` may appear in value input. Raw `scf` must not survive into verified
-VC4Kernel. Before value-to-VC4Kernel lowering, `scf.if` and `scf.for` should
-canonicalize through the upstream scf-to-cf conversion into `cf` branches and
-block arguments. The planner should not grow a custom SCF lowering unless the
-upstream pass is proven unusable and that blocker is recorded.
+`scf` may appear in value input as a source convenience. Raw `scf` must not
+survive into verified VC4Kernel. Before executable value-to-VC4Kernel lowering,
+`scf.if` and `scf.for` must canonicalize through the upstream MLIR
+`--convert-scf-to-cf` pass into `cf` branches and block arguments. The planner
+must not grow a custom SCF lowering unless the upstream pass is proven unusable
+and that blocker is recorded for user review.
+
+The canonical Phase 8 executable pipeline for structured value control flow is:
+
+```text
+value input with scf
+  -> --convert-scf-to-cf
+  -> --vc4-verify-value-surface
+  -> --convert-vc4-value-to-vc4kernel
+  -> --verify-vc4kernel
+```
+
+Pure `cf` inputs may enter `--vc4-verify-value-surface` directly. VC4Value
+hardware/static runners that encounter `scf` input must preserve the
+after-scf-to-cf intermediate IR before constructing VC4Kernel.
 
 The Phase 8 V1 executable `cf` set is:
 

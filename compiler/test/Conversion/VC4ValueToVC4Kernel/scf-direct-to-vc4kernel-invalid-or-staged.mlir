@@ -10,6 +10,6 @@ func.func @scf_direct_to_vc4kernel_invalid_or_staged()
   return
 }
 
-// CHECK: raw scf operation is not Phase 5 lowerable
-// CHECK: staged value-surface feature
+// CHECK: raw scf operation cannot lower directly to VC4Kernel
+// CHECK: explicit upstream --convert-scf-to-cf
 // CHECK: READY_FOR_TRITON remains NO

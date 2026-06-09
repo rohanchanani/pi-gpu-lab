@@ -266,7 +266,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_value stable_vc4kernel stable_ssavc4 stable_vc4
+  local vc4_opt vc4_codegen lowered_dir lowered_tmp_dir input_value canonical_value value_for_lowering verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_value stable_canonical_value stable_vc4kernel stable_ssavc4 stable_vc4
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   rm -rf "$GENERATED_DIR"
@@ -275,18 +275,27 @@ run_vc4_codegen() {
   mkdir -p "$lowered_dir"
   lowered_tmp_dir="$(mktemp -d "$lowered_dir/${TEST_NAME}.tmp.XXXXXX")"
   input_value="$lowered_tmp_dir/${TEST_NAME}.value.mlir"
+  canonical_value="$lowered_tmp_dir/${TEST_NAME}.after-scf-to-cf.mlir"
   verified_vc4kernel="$lowered_tmp_dir/${TEST_NAME}.verified.vc4kernel.mlir"
   lowered_ssavc4="$lowered_tmp_dir/${TEST_NAME}.ssavc4.mlir"
   scheduled_vc4="$lowered_tmp_dir/${TEST_NAME}.vc4.mlir"
   stable_value="$lowered_dir/${TEST_NAME}.value.mlir"
+  stable_canonical_value="$lowered_dir/${TEST_NAME}.after-scf-to-cf.mlir"
   stable_vc4kernel="$lowered_dir/${TEST_NAME}.verified.vc4kernel.mlir"
   stable_ssavc4="$lowered_dir/${TEST_NAME}.ssavc4.mlir"
   stable_vc4="$lowered_dir/${TEST_NAME}.vc4.mlir"
 
   cp "$INPUT_MLIR" "$input_value"
+  value_for_lowering="$input_value"
+
+  if grep -Eq '(^|[^A-Za-z0-9_])"?scf\.' "$input_value"; then
+    log "canonicalizing SCF input through upstream --convert-scf-to-cf at $(relpath "$canonical_value")"
+    "$vc4_opt" "$input_value" --convert-scf-to-cf -o "$canonical_value"
+    value_for_lowering="$canonical_value"
+  fi
 
   log "converting VC4Value input $(relpath "$INPUT_MLIR") to VC4Kernel at $(relpath "$verified_vc4kernel")"
-  "$vc4_opt" "$input_value" \
+  "$vc4_opt" "$value_for_lowering" \
     --vc4-verify-value-surface \
     --convert-vc4-value-to-vc4kernel \
     -o "$verified_vc4kernel"
@@ -312,6 +321,11 @@ run_vc4_codegen() {
   "$vc4_codegen" "$scheduled_vc4" --emit-bundle "$GENERATED_DIR"
 
   cp "$input_value" "$stable_value"
+  if [ "$value_for_lowering" = "$canonical_value" ]; then
+    cp "$canonical_value" "$stable_canonical_value"
+  else
+    rm -f "$stable_canonical_value"
+  fi
   cp "$verified_vc4kernel" "$stable_vc4kernel"
   cp "$lowered_ssavc4" "$stable_ssavc4"
   cp "$scheduled_vc4" "$stable_vc4"

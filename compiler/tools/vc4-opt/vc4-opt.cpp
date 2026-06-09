@@ -14,6 +14,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
+#include "mlir/Conversion/Passes.h"
 #include "vc4/Dialect/VC4/IR/VC4Ops.h"
 #include "vc4/Dialect/VC4Kernel/IR/VC4KernelDialect.h"
 #include "vc4/Dialect/VC4Value/IR/VC4ValueDialect.h"
@@ -1280,6 +1281,7 @@ struct VC4VerifyScheduledPeripheralAccessesPass
 } // namespace
 
 int main(int argc, char **argv) {
+  mlir::registerSCFToControlFlowPass();
   mlir::vc4::registerConvertVC4KernelToSSAVC4Pass();
   mlir::vc4::registerValueSurfacePasses();
   mlir::PassRegistration<VC4TestPrintEffectsPass>();
