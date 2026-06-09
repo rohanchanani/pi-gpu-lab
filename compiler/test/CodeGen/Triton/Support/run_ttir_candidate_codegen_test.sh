@@ -152,8 +152,15 @@ vc4_candidate_is_transient_preboot_failure() {
 
 find_tool() {
   local tool="$1"
-  if [[ -x "$REPO_ROOT/compiler/build/bin/$tool" ]]; then printf '%s\n' "$REPO_ROOT/compiler/build/bin/$tool"; return 0; fi
+  local env_name env_value
+  env_name="$(printf '%s\n' "$tool" | tr '[:lower:]-' '[:upper:]_')"
+  env_name="VC4_${env_name}"
+  env_value="${!env_name:-}"
+  if [[ -n "$env_value" && -x "$env_value" ]]; then printf '%s\n' "$env_value"; return 0; fi
+  if [[ -n "${VC4_ACTIVE_TOOLS_DIR:-}" && -x "$VC4_ACTIVE_TOOLS_DIR/$tool" ]]; then printf '%s\n' "$VC4_ACTIVE_TOOLS_DIR/$tool"; return 0; fi
   if command -v "$tool" >/dev/null 2>&1; then command -v "$tool"; return 0; fi
+  if [[ -x "$REPO_ROOT/compiler/build-triton-llvm/bin/$tool" ]]; then printf '%s\n' "$REPO_ROOT/compiler/build-triton-llvm/bin/$tool"; return 0; fi
+  if [[ -x "$REPO_ROOT/compiler/build/bin/$tool" ]]; then printf '%s\n' "$REPO_ROOT/compiler/build/bin/$tool"; return 0; fi
   fail "could not find required tool: $tool"
 }
 
@@ -338,22 +345,10 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen triton_python importer lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
+  local vc4_opt vc4_codegen vc4_triton_opt lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
-  importer="$REPO_ROOT/tools/vc4-triton-import"
-  require_file "$importer"
-  local phase6_venv_python
-  phase6_venv_python="$REPO_ROOT/.vc4_auto/triton_phase6_venv/bin"/python
-  if [[ -n "${VC4_TRITON_PYTHON:-}" ]]; then
-    triton_python="$VC4_TRITON_PYTHON"
-  elif [[ -n "${TRITON_PYTHON:-}" ]]; then
-    triton_python="$TRITON_PYTHON"
-  elif [[ -x "$phase6_venv_python" ]]; then
-    triton_python="$phase6_venv_python"
-  else
-    fail "could not find pinned Phase 6 Triton Python; set VC4_TRITON_PYTHON or TRITON_PYTHON"
-  fi
+  vc4_triton_opt="$(find_tool vc4-triton-opt)"
   rm -rf "$GENERATED_DIR"
   mkdir -p "$GENERATED_DIR"
   lowered_dir="$AUTO_ROOT/lowered"
@@ -378,9 +373,8 @@ run_vc4_codegen() {
     input_path="$(ttir_input_paths | head -n 1)"
     cp "$input_path" "$input_ttir"
     log "importing TTIR input $(relpath "$input_path") to VC4 value IR at $(relpath "$input_value")"
-    "$triton_python" "$importer" "$input_ttir" \
-      --mode lower-elementwise-v1 \
-      --target cuda:80:32 \
+    "$vc4_triton_opt" "$input_ttir" \
+      --convert-triton-to-vc4-value \
       -o "$input_value"
     validate_value_file "$input_value"
   else
@@ -398,9 +392,8 @@ run_vc4_codegen() {
         printf '\n// END_TTIR_INPUT %s\n\n' "$(relpath "$input_path")"
       } >> "$input_ttir"
       log "importing TTIR input $(relpath "$input_path") to VC4 value IR at $(relpath "$per_input_value")"
-      "$triton_python" "$importer" "$per_input_ttir" \
-        --mode lower-elementwise-v1 \
-        --target cuda:80:32 \
+      "$vc4_triton_opt" "$per_input_ttir" \
+        --convert-triton-to-vc4-value \
         -o "$per_input_value"
       validate_value_file "$per_input_value"
       cat "$per_input_value" >> "$input_value"

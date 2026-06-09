@@ -1,7 +1,7 @@
-# REQUIRES: vc4-has-triton-python
+# REQUIRES: vc4-triton-cpp-frontend
 
 # RUN: rm -rf %t
-# RUN: VC4_TRITON_PYTHON="%vc4_triton_python" VC4_CODEGEN_STATE_ROOT=%t/state "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton" generate
+# RUN: VC4_TRITON_OPT="%vc4_triton_opt" VC4_OPT="%vc4_opt" VC4_CODEGEN="%vc4_codegen" VC4_CODEGEN_STATE_ROOT=%t/state "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton" generate
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.ttir.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.value.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/verified.vc4kernel.mlir

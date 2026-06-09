@@ -67,7 +67,29 @@ if _has_pinned_triton_python(_triton_python):
 else:
   config.substitutions.append(("%vc4_triton_python", "false"))
 
-_tools = [os.path.join(str(_vc4_repo_root), "compiler", "build", "bin")]
+_tools = []
+_configured_tools_dir = getattr(config, "vc4_tools_dir", None)
+_active_tools_dir = config.environment.get("VC4_ACTIVE_TOOLS_DIR")
+_cwd_tools_dir = None
+if os.path.basename(os.getcwd()) == "test":
+  _cwd_tools_dir = os.path.abspath(os.path.join(os.getcwd(), "..", "bin"))
+
+for _env_name in ("VC4_OPT", "VC4_CODEGEN", "VC4_TRITON_OPT"):
+  _path = os.environ.get(_env_name)
+  if _is_executable(_path):
+    _tools.append(os.path.dirname(_path))
+if _cwd_tools_dir and _is_executable(os.path.join(_cwd_tools_dir, "vc4-opt")):
+  _tools.append(_cwd_tools_dir)
+elif _active_tools_dir:
+  _tools.append(_active_tools_dir)
+elif _configured_tools_dir:
+  _tools.append(str(_configured_tools_dir))
+else:
+  _tools.extend([
+      os.path.join(str(_vc4_repo_root), "compiler", "build-triton-llvm", "bin"),
+      os.path.join(str(_vc4_repo_root), "compiler", "build", "bin"),
+  ])
+
 _compiler_root = getattr(config, "vc4_source_root", None)
 if _compiler_root:
   _tools.append(os.path.join(str(_compiler_root), "build", "bin"))
@@ -76,6 +98,36 @@ for _tool in ["FileCheck"]:
   _path = shutil.which(_tool)
   if _path:
     _tools.append(os.path.dirname(_path))
+
+_vc4_opt = None
+_vc4_codegen = None
+_vc4_triton_opt = None
+for _dir in _tools:
+  _candidate_vc4_opt = os.path.join(_dir, "vc4-opt")
+  if _vc4_opt is None and _is_executable(_candidate_vc4_opt):
+    _vc4_opt = _candidate_vc4_opt
+  _candidate_vc4_codegen = os.path.join(_dir, "vc4-codegen")
+  if _vc4_codegen is None and _is_executable(_candidate_vc4_codegen):
+    _vc4_codegen = _candidate_vc4_codegen
+  _candidate_vc4_triton_opt = os.path.join(_dir, "vc4-triton-opt")
+  if _vc4_triton_opt is None and _is_executable(_candidate_vc4_triton_opt):
+    _vc4_triton_opt = _candidate_vc4_triton_opt
+
+if _vc4_triton_opt:
+  config.available_features.add("vc4-triton-cpp-frontend")
+  config.substitutions.append(("%vc4_triton_opt", _vc4_triton_opt))
+else:
+  config.substitutions.append(("%vc4_triton_opt", "false"))
+
+if _vc4_opt:
+  config.substitutions.append(("%vc4_opt", _vc4_opt))
+else:
+  config.substitutions.append(("%vc4_opt", "false"))
+
+if _vc4_codegen:
+  config.substitutions.append(("%vc4_codegen", _vc4_codegen))
+else:
+  config.substitutions.append(("%vc4_codegen", "false"))
 
 _existing_path = config.environment.get("PATH", os.environ.get("PATH", ""))
 config.environment["PATH"] = os.pathsep.join(_tools + [_existing_path])

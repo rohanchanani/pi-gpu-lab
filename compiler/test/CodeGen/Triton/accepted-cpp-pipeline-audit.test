@@ -1,0 +1,5 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_accepted_ttir_cpp_pipeline.py" "%vc4_repo_root" | FileCheck %s
+
+# CHECK: ACCEPTED_TTIR_CPP_PIPELINE_AUDIT=PASS
+# CHECK: ACCEPTED_TTIR_STATIC_PIPELINE_USES_CPP_IMPORTER=YES
+# CHECK: PYTHON_SEMANTIC_LOWER_ELEMENTWISE_RETIRED_FROM_ACCEPTED_TESTS=YES

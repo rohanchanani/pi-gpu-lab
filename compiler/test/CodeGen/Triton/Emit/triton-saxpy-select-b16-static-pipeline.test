@@ -1,20 +1,22 @@
-# REQUIRES: vc4-has-triton-python
+# REQUIRES: vc4-triton-cpp-frontend
 
 # RUN: rm -rf %t && mkdir -p %t
-# RUN: "%vc4_triton_python" "%vc4_repo_root/tools/vc4-triton-import" "%vc4_repo_root/examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir" --mode lower-elementwise-v1 --target cuda:80:32 -o %t/saxpy_select_b16.vc4value.mlir
-# RUN: FileCheck %s --check-prefix=VALUE --input-file=%t/saxpy_select_b16.vc4value.mlir
-# RUN: vc4-opt %t/saxpy_select_b16.vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/saxpy_select_b16.vc4kernel.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/saxpy_select_b16.vc4value.mlir
+# RUN: FileCheck %s --check-prefix=VALUE --implicit-check-not='tt.' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --implicit-check-not='vc4kernel.' --implicit-check-not='ssavc4.' --implicit-check-not='vc4.qpu' --input-file=%t/saxpy_select_b16.vc4value.mlir
+# RUN: %vc4_opt %t/saxpy_select_b16.vc4value.mlir --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel --verify-vc4kernel -o %t/saxpy_select_b16.vc4kernel.mlir
 # RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/saxpy_select_b16.vc4kernel.mlir
-# RUN: vc4-opt %t/saxpy_select_b16.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/saxpy_select_b16.ssavc4.mlir
+# RUN: %vc4_opt %t/saxpy_select_b16.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/saxpy_select_b16.ssavc4.mlir
 # RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/saxpy_select_b16.ssavc4.mlir
-# RUN: vc4-opt %t/saxpy_select_b16.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/saxpy_select_b16.vc4.mlir
+# RUN: %vc4_opt %t/saxpy_select_b16.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/saxpy_select_b16.vc4.mlir
 # RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/saxpy_select_b16.vc4.mlir
-# RUN: vc4-codegen %t/saxpy_select_b16.vc4.mlir --emit-bundle %t/saxpy_select_b16.bundle
+# RUN: %vc4_codegen %t/saxpy_select_b16.vc4.mlir --emit-bundle %t/saxpy_select_b16.bundle
 # RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/audit_ttir_static_pipeline.py" --value %t/saxpy_select_b16.vc4value.mlir --vc4kernel %t/saxpy_select_b16.vc4kernel.mlir --ssavc4 %t/saxpy_select_b16.ssavc4.mlir --vc4 %t/saxpy_select_b16.vc4.mlir --bundle %t/saxpy_select_b16.bundle | FileCheck %s --check-prefix=AUDIT
 
 # VALUE: func.func @saxpy_select_b16_kernel
 # VALUE: vc4value.kernel
 # VALUE: vc4value.program_id
+# VALUE: vector.step
+# VALUE: vector.create_mask
 # VALUE: vector.transfer_read
 # VALUE: vector.broadcast
 # VALUE: arith.mulf
@@ -22,10 +24,6 @@
 # VALUE: arith.cmpf
 # VALUE: arith.select
 # VALUE: vector.transfer_write
-# VALUE-NOT: tt.
-# VALUE-NOT: vc4kernel.
-# VALUE-NOT: ssavc4.
-# VALUE-NOT: vc4.qpu
 
 # VC4KERNEL: vc4kernel.kernel @saxpy_select_b16_kernel
 # VC4KERNEL: vc4kernel.tmu_load_fragment
