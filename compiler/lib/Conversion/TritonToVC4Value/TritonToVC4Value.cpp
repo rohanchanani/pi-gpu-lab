@@ -58,6 +58,7 @@
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/Location.h"
 #include "mlir/IR/Operation.h"
+#include "mlir/IR/OwningOpRef.h"
 #include "mlir/IR/Region.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
@@ -83,6 +84,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 
 using namespace mlir;
@@ -150,6 +152,19 @@ static bool isForbiddenProducerOrBackendDialect(Operation *op) {
   return dialect == "ttg" || dialect == "triton_gpu" || dialect == "nvgpu" ||
          dialect == "nvvm" || dialect == "rocdl" || dialect == "gpu" ||
          dialect == "llvm" || dialect == "spirv";
+}
+
+static bool isForbiddenValueOutputDialect(StringRef dialect) {
+  return dialect == "tt" || dialect == "ttg" || dialect == "triton_gpu" ||
+         dialect == "nvgpu" || dialect == "nvvm" || dialect == "gpu" ||
+         dialect == "llvm" || dialect == "spirv" || dialect == "vc4kernel" ||
+         dialect == "ssavc4" || dialect == "vc4";
+}
+
+static bool isAllowedValueOutputDialect(StringRef dialect) {
+  return dialect == "builtin" || dialect == "func" || dialect == "vc4value" ||
+         dialect == "vector" || dialect == "memref" || dialect == "arith" ||
+         dialect == "math" || dialect == "scf" || dialect == "cf";
 }
 
 static bool isScalarI32(Type type) { return type.isSignlessInteger(32); }
@@ -997,9 +1012,9 @@ private:
 
 class FunctionLowerer {
 public:
-  FunctionLowerer(ModuleOp module, FunctionPlanner &planner)
-      : module(module), planner(planner), ctx(module.getContext()), builder(ctx),
-        typeAdapter(ctx) {}
+  FunctionLowerer(ModuleOp outputModule, FunctionPlanner &planner)
+      : outputModule(outputModule), planner(planner),
+        ctx(outputModule.getContext()), builder(ctx), typeAdapter(ctx) {}
 
   LogicalResult lower() {
     if (failed(createValueFunction()))
@@ -1022,12 +1037,6 @@ public:
         !valueFunc.getBody().front().back().hasTrait<OpTrait::IsTerminator>())
       builder.create<func::ReturnOp>(planner.getFuncOp()->getLoc());
 
-    // Unlink the parsed Triton function after emitting its value-layer
-    // replacement. Destroying this generic Triton function during the pass trips
-    // MLIR region teardown assertions on internal block-argument uses with the
-    // pinned Triton/LLVM build; unlinking is enough to keep the output module at
-    // the value-layer boundary.
-    planner.getFuncOp()->remove();
     return success();
   }
 
@@ -1057,7 +1066,7 @@ private:
     }
 
     std::string name = sanitizeSymbolName(fn.getName());
-    builder.setInsertionPoint(sourceFunc);
+    builder.setInsertionPointToEnd(outputModule.getBody());
     valueFunc = builder.create<func::FuncOp>(
         sourceFunc->getLoc(), name, FunctionType::get(ctx, argTypes, {}));
     valueFunc->setAttr(kVC4ValueKernelAttr, builder.getUnitAttr());
@@ -1358,7 +1367,7 @@ private:
 
   TTIRArgInfo *lookupSourceArg(BlockArgument arg) { return planner.lookupArg(arg); }
 
-  ModuleOp module;
+  ModuleOp outputModule;
   FunctionPlanner &planner;
   MLIRContext *ctx;
   OpBuilder builder;
@@ -1369,6 +1378,93 @@ private:
   Value baseIndex;
   Value tailMask;
 };
+
+class TTIRToValueModuleBuilder {
+public:
+  explicit TTIRToValueModuleBuilder(ModuleOp outputModule)
+      : outputModule(outputModule) {}
+
+  LogicalResult lower(ArrayRef<std::unique_ptr<FunctionPlanner>> planners) {
+    for (const std::unique_ptr<FunctionPlanner> &planner : planners) {
+      FunctionLowerer lowerer(outputModule, *planner);
+      if (failed(lowerer.lower()))
+        return failure();
+    }
+    return success();
+  }
+
+private:
+  ModuleOp outputModule;
+};
+
+static LogicalResult validateInputModuleAttrs(ModuleOp inputModule) {
+  if (inputModule->getAttrs().empty())
+    return success();
+
+  InFlightDiagnostic diag = inputModule.emitError()
+      << "TTIR module attributes are not Phase 7.5 C++ TTIR-to-VC4Value "
+         "lowerable; unknown module attrs are staged until a value-safe module "
+         "attribute policy is implemented. READY_FOR_TRITON remains NO";
+  for (NamedAttribute attr : inputModule->getAttrs())
+    diag << "\n  attr: " << attr.getName();
+  return failure();
+}
+
+static LogicalResult verifyValueOutputModule(ModuleOp outputModule) {
+  for (Operation &op : outputModule.getBody()->getOperations()) {
+    if (!llvm::isa<func::FuncOp>(&op))
+      return op.emitOpError()
+             << "top-level value output operation must be func.func";
+
+    if (!op.hasAttr(kVC4ValueKernelAttr))
+      return op.emitOpError()
+             << "value output function missing vc4value.kernel";
+    if (!op.hasAttr(kVC4ValueGridRankAttr))
+      return op.emitOpError()
+             << "value output function missing vc4value.grid_rank";
+  }
+
+  bool sawIllegal = false;
+  outputModule.walk([&](Operation *op) {
+    StringRef dialect = op->getName().getDialectNamespace();
+    if (isForbiddenValueOutputDialect(dialect)) {
+      op->emitOpError() << "TTIR importer emitted or preserved forbidden dialect '"
+                        << dialect << "'";
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    if (!isAllowedValueOutputDialect(dialect)) {
+      op->emitOpError() << "TTIR importer emitted unexpected value output dialect '"
+                        << dialect << "'";
+      sawIllegal = true;
+      return WalkResult::interrupt();
+    }
+    return WalkResult::advance();
+  });
+  if (sawIllegal)
+    return failure();
+  return success();
+}
+
+static LogicalResult commitOutputModule(ModuleOp inputModule,
+                                        ModuleOp outputModule) {
+  if (failed(verifyValueOutputModule(outputModule)))
+    return failure();
+
+  Block *inputBody = inputModule.getBody();
+  SmallVector<Operation *, 8> oldOps;
+  for (Operation &op : inputBody->getOperations())
+    oldOps.push_back(&op);
+
+  for (Operation *op : oldOps)
+    op->erase();
+
+  Block *outputBody = outputModule.getBody();
+  inputBody->getOperations().splice(inputBody->end(),
+                                    outputBody->getOperations());
+
+  return verifyValueOutputModule(inputModule);
+}
 
 struct ConvertTritonToVC4ValuePass
     : public PassWrapper<ConvertTritonToVC4ValuePass, OperationPass<ModuleOp>> {
@@ -1388,11 +1484,16 @@ struct ConvertTritonToVC4ValuePass
   }
 
   void runOnOperation() final {
-    ModuleOp module = getOperation();
+    ModuleOp inputModule = getOperation();
     SmallVector<Operation *, 4> ttFuncs;
     SmallVector<Operation *, 4> illegalTopLevelOps;
 
-    for (Operation &op : module.getBody()->getOperations()) {
+    if (failed(validateInputModuleAttrs(inputModule))) {
+      signalPassFailure();
+      return;
+    }
+
+    for (Operation &op : inputModule.getBody()->getOperations()) {
       if (hasName(&op, kTTFuncOpName)) {
         ttFuncs.push_back(&op);
         continue;
@@ -1404,9 +1505,9 @@ struct ConvertTritonToVC4ValuePass
     }
 
     if (ttFuncs.empty()) {
-      module.emitError("expected at least one tt.func; C++ TTIR-to-VC4Value "
-                       "lowering remains Phase 7.5 elementwise V1 only. "
-                       "READY_FOR_TRITON remains NO");
+      inputModule.emitError("expected at least one tt.func; C++ TTIR-to-VC4Value "
+                            "lowering remains Phase 7.5 elementwise V1 only. "
+                            "READY_FOR_TRITON remains NO");
       signalPassFailure();
       return;
     }
@@ -1418,36 +1519,52 @@ struct ConvertTritonToVC4ValuePass
       return;
     }
 
-    for (Operation *ttFunc : llvm::make_early_inc_range(ttFuncs)) {
-      FunctionPlanner planner(ttFunc);
-      if (failed(planner.analyze())) {
-        signalPassFailure();
-        return;
+    OwningOpRef<ModuleOp> outputModule =
+        ModuleOp::create(inputModule.getLoc());
+
+    {
+      SmallVector<std::unique_ptr<FunctionPlanner>, 4> planners;
+      std::set<std::string> valueFunctionNames;
+
+      for (Operation *ttFunc : ttFuncs) {
+        auto planner = std::make_unique<FunctionPlanner>(ttFunc);
+        if (failed(planner->analyze())) {
+          signalPassFailure();
+          return;
+        }
+
+        auto fn = llvm::dyn_cast<FunctionOpInterface>(ttFunc);
+        if (!fn) {
+          ttFunc->emitOpError("expected tt.func to implement FunctionOpInterface");
+          signalPassFailure();
+          return;
+        }
+        std::string valueName = sanitizeSymbolName(fn.getName());
+        if (!valueFunctionNames.insert(valueName).second) {
+          ttFunc->emitOpError()
+              << "duplicate value output symbol '" << valueName
+              << "' after TTIR function name sanitization is not Phase 7.5 "
+                 "lowerable; READY_FOR_TRITON remains NO";
+          signalPassFailure();
+          return;
+        }
+
+        planners.push_back(std::move(planner));
       }
-      FunctionLowerer lowerer(module, planner);
-      if (failed(lowerer.lower())) {
+
+      TTIRToValueModuleBuilder moduleBuilder(*outputModule);
+      if (failed(moduleBuilder.lower(planners))) {
         signalPassFailure();
         return;
       }
     }
 
-    // Defensive boundary check: the importer must produce only value-layer IR.
-    bool sawIllegal = false;
-    module.walk([&](Operation *op) {
-      if (op == module.getOperation())
-        return WalkResult::advance();
-      StringRef dialect = op->getName().getDialectNamespace();
-      if (dialect == "tt" || dialect == "ttg" || dialect == "triton_gpu" ||
-          dialect == "nvgpu" || dialect == "nvvm" || dialect == "gpu" ||
-          dialect == "vc4kernel" || dialect == "ssavc4" || dialect == "vc4") {
-        op->emitOpError() << "TTIR importer emitted or preserved forbidden dialect '"
-                          << dialect << "'";
-        sawIllegal = true;
-        return WalkResult::interrupt();
-      }
-      return WalkResult::advance();
-    });
-    if (sawIllegal)
+    if (failed(verifyValueOutputModule(*outputModule))) {
+      signalPassFailure();
+      return;
+    }
+
+    if (failed(commitOutputModule(inputModule, *outputModule)))
       signalPassFailure();
   }
 };
