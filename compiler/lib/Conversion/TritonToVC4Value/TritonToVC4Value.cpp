@@ -661,13 +661,19 @@ private:
   }
 
   LogicalResult scanOps(Block &entry) {
+    // Prefer high-level staged feature diagnostics before more generic tensor
+    // shape diagnostics.  This keeps future dot/reduction tests from being
+    // masked by their rank-2 operands or helper constants.
     for (Operation &op : entry.getOperations()) {
-      if (isForbiddenProducerOrBackendDialect(&op))
-        return emitPermanentReject(&op, "backend/non-TTIR dialect operation in TTIR input");
       if (hasName(&op, kTTDotOpName))
         return emitStagedDiagnostic(&op, "tt.dot / contract");
       if (hasName(&op, kTTReduceOpName) || hasName(&op, kTTReduceReturnOpName))
         return emitStagedDiagnostic(&op, "tt.reduce");
+    }
+
+    for (Operation &op : entry.getOperations()) {
+      if (isForbiddenProducerOrBackendDialect(&op))
+        return emitPermanentReject(&op, "backend/non-TTIR dialect operation in TTIR input");
       if (hasName(&op, kTTBroadcastOpName) || hasName(&op, kTTExpandDimsOpName) ||
           hasName(&op, kTTTransOpName))
         return emitStagedDiagnostic(&op, "rank-2/shape-changing TTIR tensor form");

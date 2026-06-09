@@ -1,0 +1,63 @@
+# REQUIRES: vc4-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind make_range_end8 --out %t/make_range_end8.ttir.mlir
+# RUN: not %vc4_triton_opt %t/make_range_end8.ttir.mlir --convert-triton-to-vc4-value -o %t/make_range_end8.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=MAKE-RANGE
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis_y --out %t/axis_y.ttir.mlir
+# RUN: not %vc4_triton_opt %t/axis_y.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_y.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-reduce-staged.ttir.mlir" --convert-triton-to-vc4-value -o %t/reduce.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=REDUCE
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-dot-staged.ttir.mlir" --convert-triton-to-vc4-value -o %t/dot.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=DOT
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind rank2_probe --out %t/rank2_probe.ttir.mlir
+# RUN: not %vc4_triton_opt %t/rank2_probe.ttir.mlir --convert-triton-to-vc4-value -o %t/rank2_probe.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=RANK2
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind nonzero_other --out %t/nonzero_other.ttir.mlir
+# RUN: not %vc4_triton_opt %t/nonzero_other.ttir.mlir --convert-triton-to-vc4-value -o %t/nonzero_other.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=LOAD-OTHER
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind store_nomask --out %t/store_nomask.ttir.mlir
+# RUN: not %vc4_triton_opt %t/store_nomask.ttir.mlir --convert-triton-to-vc4-value -o %t/store_nomask.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=STORE-NOMASK
+
+# RUN: python3 "%vc4_repo_root/compiler/test/TritonFrontend/Support/make_phase7c_negative_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind store_scatter --out %t/store_scatter.ttir.mlir
+# RUN: not %vc4_triton_opt %t/store_scatter.ttir.mlir --convert-triton-to-vc4-value -o %t/store_scatter.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=STORE-SPARSE
+
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir" --convert-triton-to-vc4-value -o %t/ttg.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir" --convert-triton-to-vc4-value -o %t/nvgpu.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+# RUN: not %vc4_triton_opt "%vc4_repo_root/compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir" --convert-triton-to-vc4-value -o %t/nvvm.vc4value.mlir 2>&1 | FileCheck %s --check-prefix=BACKEND
+
+# MAKE-RANGE: tt.make_range other than 0..16
+# MAKE-RANGE: staged TTIR target-profile feature
+# MAKE-RANGE: READY_FOR_TRITON remains NO
+
+# AXIS: program_id axis other than 0/x
+# AXIS: staged TTIR target-profile feature
+# AXIS: READY_FOR_TRITON remains NO
+
+# REDUCE: tt.reduce
+# REDUCE: staged TTIR target-profile feature
+# REDUCE: READY_FOR_TRITON remains NO
+
+# DOT: tt.dot / contract
+# DOT: staged TTIR target-profile feature
+# DOT: READY_FOR_TRITON remains NO
+
+# RANK2: rank-2/shape-changing TTIR tensor form
+# RANK2: staged TTIR target-profile feature
+# RANK2: READY_FOR_TRITON remains NO
+
+# LOAD-OTHER: tt.load other value other than zero
+# LOAD-OTHER: staged TTIR target-profile feature
+# LOAD-OTHER: READY_FOR_TRITON remains NO
+
+# STORE-NOMASK: tt.store without canonical mask operand
+# STORE-NOMASK: staged TTIR target-profile feature
+# STORE-NOMASK: READY_FOR_TRITON remains NO
+
+# STORE-SPARSE: multiple distinct pointer offset expressions
+# STORE-SPARSE: staged TTIR target-profile feature
+# STORE-SPARSE: READY_FOR_TRITON remains NO
+
+# BACKEND: unregistered dialect
