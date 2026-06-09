@@ -50,6 +50,7 @@ case "$TEST_ARG" in
   *) TEST_ROOT="$REPO_ROOT/compiler/test/CodeGen/Triton/Hardware/Run/$TEST_NAME" ;;
 esac
 INPUT_TTIR="$TEST_ROOT/input.ttir.mlir"
+INPUTS_DIR="$TEST_ROOT/inputs"
 EXPECTED_JSON="$TEST_ROOT/expected.json"
 REFERENCE_DIR="$TEST_ROOT/reference"
 CANDIDATE_DIR="$TEST_ROOT/candidate"
@@ -69,6 +70,45 @@ fail() { printf '[ttir-candidate] ERROR: %s\n' "$*" >&2; exit 1; }
 relpath() { case "$1" in "$REPO_ROOT"/*) printf '%s\n' "${1#$REPO_ROOT/}" ;; *) printf '%s\n' "$1" ;; esac; }
 require_file() { [[ -f "$1" ]] || fail "required file not found: $(relpath "$1")"; }
 require_dir() { [[ -d "$1" ]] || fail "required directory not found: $(relpath "$1")"; }
+
+ttir_input_paths() {
+  if [[ -f "$INPUT_TTIR" ]]; then
+    printf '%s\n' "$INPUT_TTIR"
+    return 0
+  fi
+  if [[ -d "$INPUTS_DIR" ]]; then
+    find "$INPUTS_DIR" -maxdepth 1 -type f -name '*.ttir.mlir' -print | sort
+    return 0
+  fi
+  return 0
+}
+
+ttir_input_count() {
+  ttir_input_paths | awk 'NF { count++ } END { print count + 0 }'
+}
+
+validate_ttir_input_file() {
+  local input_path="$1"
+  require_file "$input_path"
+  python3 - "$input_path" <<'PY_CHECK_TTIR_INPUT'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8", errors="replace")
+if not re.search(r'(?<![A-Za-z0-9_])"?tt\.', text):
+    raise SystemExit(f"{path}: TTIR hardware input must contain tt dialect operations")
+for dialect in ("vc4value", "vc4kernel", "ssavc4", "ttg", "gpu", "nvgpu", "nvvm", "rocdl", "llvm"):
+    if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):
+        raise SystemExit(f"{path}: TTIR hardware input must not contain {dialect}.*")
+if re.search(r'(?<![A-Za-z0-9_])"?vc4\.', text):
+    raise SystemExit(f"{path}: TTIR hardware input must not contain scheduled vc4.*")
+for forbidden in ("ttgir", "ptx", "cubin", "hsaco"):
+    if forbidden in text.lower():
+        raise SystemExit(f"{path}: TTIR hardware input must not contain {forbidden}")
+PY_CHECK_TTIR_INPUT
+}
 
 vc4_candidate_transient_preboot_failure_reason() {
   local log_path="$1"
@@ -118,31 +158,24 @@ find_tool() {
 }
 
 check_fixture() {
+  local count input_path
   if [[ "$BUNDLE_ONLY_FIXTURE" -eq 1 ]]; then
-    require_file "$INPUT_TTIR"
+    count="$(ttir_input_count)"
+    [[ "$count" -gt 0 ]] || fail "required TTIR input not found: $(relpath "$INPUT_TTIR") or $(relpath "$INPUTS_DIR")/*.ttir.mlir"
+    while IFS= read -r input_path; do
+      [[ -z "$input_path" ]] && continue
+      validate_ttir_input_file "$input_path"
+    done < <(ttir_input_paths)
     return 0
   fi
   require_dir "$TEST_ROOT"
-  require_file "$INPUT_TTIR"
+  count="$(ttir_input_count)"
+  [[ "$count" -gt 0 ]] || fail "required TTIR input not found: $(relpath "$INPUT_TTIR") or $(relpath "$INPUTS_DIR")/*.ttir.mlir"
   require_file "$EXPECTED_JSON"
-  python3 - "$INPUT_TTIR" <<'PY_CHECK_TTIR_INPUT'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8", errors="replace")
-if not re.search(r'(?<![A-Za-z0-9_])"?tt\.', text):
-    raise SystemExit(f"{path}: TTIR hardware input must contain tt dialect operations")
-for dialect in ("vc4value", "vc4kernel", "ssavc4", "ttg", "gpu", "nvgpu", "nvvm", "rocdl", "llvm"):
-    if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):
-        raise SystemExit(f"{path}: TTIR hardware input must not contain {dialect}.*")
-if re.search(r'(?<![A-Za-z0-9_])"?vc4\.', text):
-    raise SystemExit(f"{path}: TTIR hardware input must not contain scheduled vc4.*")
-for forbidden in ("ttgir", "ptx", "cubin", "hsaco"):
-    if forbidden in text.lower():
-        raise SystemExit(f"{path}: TTIR hardware input must not contain {forbidden}")
-PY_CHECK_TTIR_INPUT
+  while IFS= read -r input_path; do
+    [[ -z "$input_path" ]] && continue
+    validate_ttir_input_file "$input_path"
+  done < <(ttir_input_paths)
 }
 
 manifest_kernel_records() {
@@ -305,7 +338,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen triton_python importer lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 value_verified
+  local vc4_opt vc4_codegen triton_python importer lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   importer="$REPO_ROOT/tools/vc4-triton-import"
@@ -334,14 +367,43 @@ run_vc4_codegen() {
   stable_ssavc4="$lowered_dir/${TEST_NAME}.lowered.ssavc4.mlir"
   stable_vc4="$lowered_dir/${TEST_NAME}.scheduled.vc4.mlir"
 
-  cp "$INPUT_TTIR" "$input_ttir"
-
-  log "importing TTIR input $(relpath "$INPUT_TTIR") to VC4 value IR at $(relpath "$input_value")"
-  "$triton_python" "$importer" "$input_ttir" \
-    --mode lower-elementwise-v1 \
-    --target cuda:80:32 \
-    -o "$input_value"
-  validate_value_file "$input_value"
+  input_count="$(ttir_input_count)"
+  [[ "$input_count" -gt 0 ]] || fail "no TTIR inputs found for $TEST_NAME"
+  : > "$input_value"
+  if [[ "$input_count" -eq 1 ]]; then
+    input_path="$(ttir_input_paths | head -n 1)"
+    cp "$input_path" "$input_ttir"
+    log "importing TTIR input $(relpath "$input_path") to VC4 value IR at $(relpath "$input_value")"
+    "$triton_python" "$importer" "$input_ttir" \
+      --mode lower-elementwise-v1 \
+      --target cuda:80:32 \
+      -o "$input_value"
+    validate_value_file "$input_value"
+  else
+    mkdir -p "$lowered_tmp_dir/inputs" "$lowered_tmp_dir/imported"
+    : > "$input_ttir"
+    while IFS= read -r input_path; do
+      [[ -z "$input_path" ]] && continue
+      input_base="$(basename "$input_path" .ttir.mlir)"
+      per_input_ttir="$lowered_tmp_dir/inputs/${input_base}.ttir.mlir"
+      per_input_value="$lowered_tmp_dir/imported/${input_base}.value.mlir"
+      cp "$input_path" "$per_input_ttir"
+      {
+        printf '// BEGIN_TTIR_INPUT %s\n' "$(relpath "$input_path")"
+        cat "$per_input_ttir"
+        printf '\n// END_TTIR_INPUT %s\n\n' "$(relpath "$input_path")"
+      } >> "$input_ttir"
+      log "importing TTIR input $(relpath "$input_path") to VC4 value IR at $(relpath "$per_input_value")"
+      "$triton_python" "$importer" "$per_input_ttir" \
+        --mode lower-elementwise-v1 \
+        --target cuda:80:32 \
+        -o "$per_input_value"
+      validate_value_file "$per_input_value"
+      cat "$per_input_value" >> "$input_value"
+      printf '\n' >> "$input_value"
+    done < <(ttir_input_paths)
+    validate_value_file "$input_value"
+  fi
 
   log "verifying imported VC4 value IR at $(relpath "$value_verified")"
   "$vc4_opt" "$input_value" --vc4-verify-value-surface -o "$value_verified"
@@ -384,6 +446,13 @@ run_vc4_codegen() {
   cp "$verified_vc4kernel" "$GENERATED_DIR/verified.vc4kernel.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
   cp "$scheduled_vc4" "$GENERATED_DIR/scheduled.vc4.mlir"
+  if [[ "$input_count" -gt 1 ]]; then
+    mkdir -p "$GENERATED_DIR/inputs"
+    while IFS= read -r input_path; do
+      [[ -z "$input_path" ]] && continue
+      cp "$input_path" "$GENERATED_DIR/inputs/$(basename "$input_path")"
+    done < <(ttir_input_paths)
+  fi
   rm -rf "$lowered_tmp_dir"
   check_generated_bundle
 }
