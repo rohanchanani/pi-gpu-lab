@@ -8,6 +8,20 @@
 
 ---
 
+## Current Post-Phase-7.5 Note
+
+This report contains historical planning text that predates the locked C++
+frontend path. Current accepted TTIR-to-VC4Value semantic lowering is:
+
+```text
+vc4-triton-opt --convert-triton-to-vc4-value
+```
+
+Historical references below to `vc4-triton-import` as a TTIR-to-value semantic
+lowering tool are retired. Python tooling remains allowed for Triton
+source-to-TTIR generation, snapshot regeneration/comparison, and TTIR inventory
+only. `READY_FOR_TRITON` remains `NO`.
+
 ## 0. Purpose
 
 This report records the current state of the Vector/Triton plan after the latest design discussion. It updates and extends the earlier pre-P9 Vector/Triton design-decision report with the decisions now made about `vc4value`, program IDs, memref ABI, Triton tooling, approximate math policy, implementation ordering, and the definition of “FULL” Triton support.

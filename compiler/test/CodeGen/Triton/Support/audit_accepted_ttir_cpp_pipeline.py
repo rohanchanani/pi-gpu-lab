@@ -39,16 +39,6 @@ REQUIRED_ACCEPTED = (
     "--verify-vc4kernel",
 )
 
-LEGACY_TESTS = (
-    "compiler/test/TritonFrontend/real-vector-add-b16-to-vc4kernel-static.test",
-    "compiler/test/TritonFrontend/real-i32-add-select-b16-to-value.test",
-    "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",
-    "compiler/test/TritonFrontend/importer-rejects-phase6-lowering-disabled-message-removed.test",
-    "compiler/test/TritonFrontend/importer-phase7c-rejects-staged-forms.test",
-    "compiler/test/TritonFrontend/real-saxpy-select-b16-to-value.test",
-    "compiler/test/TritonFrontend/real-extended-elementwise-to-vc4kernel-static.test",
-)
-
 KERNEL_NAME_NEEDLES = (
     "saxpy_select_b16_kernel",
     "vector_add_b16_kernel",
@@ -104,13 +94,14 @@ def audit_accepted(repo: Path) -> None:
 
 
 def audit_legacy(repo: Path) -> None:
-    for rel in LEGACY_TESTS:
-        path = repo / rel
-        text = read(path)
-        if "lower-elementwise-v1" not in text:
-            fail(f"{rel}: legacy test no longer contains expected audit needle")
-        if "UNSUPPORTED: legacy-python-semantic-lowering" not in text:
-            fail(f"{rel}: legacy Python semantic lowering test is not retired")
+    legacy_retirement_test = (
+        repo / "compiler/test/TritonFrontend/importer-lower-elementwise-v1-retired.test"
+    )
+    text = read(legacy_retirement_test)
+    if "Python semantic TTIR-to-VC4Value lowering is retired" not in text:
+        fail("legacy lowering retirement test is missing the retirement diagnostic")
+    if "--mode lower-elementwise-v1" not in text:
+        fail("legacy lowering retirement test no longer exercises the retired mode")
 
 
 def audit_importer_sources(repo: Path) -> None:

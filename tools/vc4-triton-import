@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """VC4 Triton importer skeleton.
 
-Phase 6 supports inventory only. Semantic TTIR-to-value lowering is deliberately
-disabled until Phase 7.
+This Python tool is retained for TTIR inventory only. The old Phase 7
+TTIR-to-VC4Value semantic lowering bridge is retired; use the C++ frontend:
+vc4-triton-opt --convert-triton-to-vc4-value.
 """
 
 from __future__ import annotations
@@ -19,6 +20,11 @@ from pathlib import Path
 PHASE6_LOWERING_DIAGNOSTIC = (
     "TTIR-to-value semantic lowering is not implemented in Phase 6; "
     "run Phase 7 after Phase 6 final lock."
+)
+
+RETIRED_LOWERING_DIAGNOSTIC = (
+    "Python semantic TTIR-to-VC4Value lowering is retired. "
+    "Use vc4-triton-opt --convert-triton-to-vc4-value."
 )
 
 PHASE7_UNSUPPORTED_DIAGNOSTIC = "unsupported TTIR op/form for Phase 7 elementwise V1"
@@ -761,16 +767,9 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.mode == "lower-elementwise-v1":
-        if not args.output:
-            fail("lower-elementwise-v1 mode requires -o/--output")
-        output_path = Path(args.output)
-        output_path.unlink(missing_ok=True)
-        lower_elementwise_v1(Path(args.input), args.target, output_path)
-        print("VC4_TRITON_IMPORT_MODE=lower-elementwise-v1")
-        print("PARSE_TTIR=PASS")
-        print("TTIR_TO_VALUE=PASS")
-        print("READY_FOR_TRITON=NO")
-        return 0
+        if args.output:
+            Path(args.output).unlink(missing_ok=True)
+        fail(RETIRED_LOWERING_DIAGNOSTIC)
 
     if args.output:
         fail("inventory mode does not write MLIR output; use --summary-json")

@@ -97,7 +97,10 @@ NVIDIA codegen
 
 No TTIR-to-VC4Value lowering was implemented in this phase.
 
-The Phase 7 Python importer remains in place.
+Current post-Phase-7.5 state: accepted TTIR-to-VC4Value semantic lowering is
+the optional C++ `vc4-triton-opt --convert-triton-to-vc4-value` path. The
+Python `vc4-triton-import` tool remains only for TTIR inventory/snapshot
+workflows; its old `lower-elementwise-v1` semantic lowering mode is retired.
 
 No hardware was run.
 

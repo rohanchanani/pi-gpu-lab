@@ -323,7 +323,7 @@
     {
       "id": "phase7_python_semantic_importer_retired",
       "status": "deterministic_reject_surface_policy",
-      "summary": "The Python lower-elementwise-v1 semantic importer is retained only as legacy code; accepted static and hardware TTIR paths use the C++ importer.",
+      "summary": "The Python lower-elementwise-v1 semantic importer is retired and hard-disabled; accepted static and hardware TTIR paths use the C++ importer.",
       "proof_paths": [
         "compiler/test/CodeGen/Triton/Support/audit_accepted_ttir_cpp_pipeline.py",
         "compiler/test/TritonFrontend/real-vector-add-b16-to-value.test",

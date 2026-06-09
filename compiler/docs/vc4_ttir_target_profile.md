@@ -84,7 +84,8 @@ It must not accept TTGIR/NVIDIA-specific IR as the first VC4 path.
 Python remains allowed for Triton Python source to `.ttir.mlir` snapshot
 generation and inventory. The old Phase 7 Python semantic lowering mode,
 `vc4-triton-import --mode lower-elementwise-v1`, is retired from accepted
-lowering tests and hardware proof.
+lowering tests and hardware proof and is hard-disabled with a diagnostic that
+points users to the C++ importer.
 
 Normal `check-vc4` must not require Triton regeneration. TTIR fixtures, once
 they exist, should be checked in or generated through a controlled non-default

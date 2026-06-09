@@ -7,7 +7,6 @@ config.name = "VC4 Triton frontend optional"
 config.test_format = lit.formats.ShTest()
 config.suffixes = [".test"]
 config.excludes = ["Support", "lit.cfg.py"]
-config.available_features.add("legacy-python-semantic-lowering")
 _parent_test_exec_root = getattr(config, "test_exec_root", None)
 config.test_source_root = os.path.dirname(__file__)
 

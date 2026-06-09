@@ -39,8 +39,10 @@ The proof source is the checked-in Phase 6 Triton 3.7.0 TTIR corpus:
 
 ## Proven Gates
 
-- Static TTIR-to-value and value-to-vc4kernel tests exist under
-  `compiler/test/TritonFrontend/`.
+- Dedicated static TTIR-to-value and value-to-vc4kernel conversion tests exist
+  under `compiler/test/Conversion/TritonToVC4Value/`; older frontend smoke
+  tests under `compiler/test/TritonFrontend/` are not the accepted semantic
+  lowering path.
 - Static TTIR-to-scheduled-VC4 pipeline tests exist under
   `compiler/test/CodeGen/Triton/Emit/`.
 - Isolation hardware fixtures exist under

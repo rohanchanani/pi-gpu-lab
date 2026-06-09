@@ -113,6 +113,11 @@ those families.
 
 The future importer shape is:
 
+Historical Phase 1 note: the command below was an early planning placeholder.
+Post-Phase-7.5 accepted TTIR-to-value semantic lowering is
+`vc4-triton-opt --convert-triton-to-vc4-value`; `vc4-triton-import` is retained
+only for TTIR inventory/snapshot workflows.
+
 ```text
 vc4-triton-import input.ttir.mlir -o output.vc4value.mlir
 ```

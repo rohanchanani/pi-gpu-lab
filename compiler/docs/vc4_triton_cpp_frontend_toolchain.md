@@ -117,9 +117,13 @@ The VC4 frontend path must reject TTGIR/NVGPU/NVVM/NVIDIA input dialect operatio
 
 ## Scope
 
-No TTIR-to-VC4Value lowering was implemented here.
+No TTIR-to-VC4Value lowering was implemented in this lane setup package.
 
-The Phase 7 Python importer remains in place and is not removed by this lane lock.
+Current post-Phase-7.5 state: accepted TTIR-to-VC4Value semantic lowering is
+the optional C++ `vc4-triton-opt --convert-triton-to-vc4-value` path. The
+Python `vc4-triton-import` tool is retained only for TTIR inventory/snapshot
+workflows; its old `lower-elementwise-v1` semantic lowering mode is retired and
+must not be used as an accepted test, runner, or documentation path.
 
 No hardware was run.
 
