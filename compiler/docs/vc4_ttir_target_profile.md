@@ -95,6 +95,37 @@ The first smoke profile explicitly excludes dot, reductions, and block pointers.
 Those families are staged later so the importer does not conflate a small
 elementwise smoke test with broader Triton support.
 
+### Phase 7c implemented static subset
+
+Phase 7c implements static TTIR-to-value lowering for exactly the three real
+Triton 3.7.0 Phase 6 elementwise snapshots:
+
+```text
+examples/triton/phase6/generated/vector_add_b16.ttir.mlir
+examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir
+examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir
+```
+
+The accepted forms are the Phase 7 V1 elementwise profile only:
+
+- one public axis-0 `tt.func` kernel with `tt.return`;
+- `tt.get_program_id x` and `tt.make_range` exactly representing `0..16`;
+- contiguous pointer expressions equivalent to `base + (pid * 16 + lane)`;
+- masked `tt.load` with `other=0` or `other=0.0`;
+- masked `tt.store` with the same canonical tail mask;
+- scalar `i32`/`f32` splats, `i32`/`f32` elementwise arithmetic, accepted
+  comparisons, and vector select forms used by the three snapshots.
+
+The importer emits standard value IR only. It does not emit `vc4kernel`,
+`ssavc4`, scheduled `vc4`, TTGIR, vendor GPU IR, LLVM IR, PTX, cubin, or hsaco.
+
+Phase 7c remains static only. It is not hardware proof and does not make
+Triton support complete:
+
+```text
+READY_FOR_TRITON=NO
+```
+
 ## 6. Launch and program IDs
 
 TTIR launch identity maps through value-layer launch plumbing:
@@ -152,6 +183,12 @@ value-level emulation strategy is specified.
 
 Unknown store masks must be diagnosed before target lowering. They must not
 silently become sparse VDW stores.
+
+Phase 7c diagnostics reject V1-adjacent forms including nonzero load `other`,
+unmasked loads/stores that the importer cannot prove full and canonical,
+non-affine or scattered pointer expressions, axis-1/axis-2 program ids,
+`BLOCK_SIZE != 16`, rank-2/block-pointer forms, unsupported element types, dot,
+and reductions.
 
 ## 9. Elementwise arithmetic, comparisons, and select
 

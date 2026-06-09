@@ -1,6 +1,9 @@
-# VC4 Triton Importer Skeleton
+# VC4 Triton Importer Boundary
 
-Phase 6 adds `tools/vc4-triton-import` as an importer boundary skeleton only. It is inventory-only because the project has not yet implemented or hardware-proved semantic TTIR-to-value lowering.
+Phase 6 added `tools/vc4-triton-import` as an importer boundary skeleton.
+Phase 7 extends that tool with a narrow static TTIR-to-value lowering mode for
+the real Phase 6 elementwise corpus. The importer is still not full Triton
+support and is not yet hardware-proven.
 
 READY_FOR_TRITON remains NO.
 
@@ -20,7 +23,9 @@ Text inspection is used only after real Triton parse succeeds, and only for repo
 
 ## Phase 7 Boundary
 
-Phase 7 will extend this boundary with TTIR elementwise-to-value IR lowering for the locked Phase 7 candidate corpus. The source of truth for that work is emitted TTIR, not Python-level Triton metaprogramming.
+Phase 7 extends this boundary with TTIR elementwise-to-value IR lowering for the
+locked Phase 7 candidate corpus. The source of truth is emitted TTIR, not
+Python-level Triton metaprogramming.
 
 The expected future demo path is:
 
@@ -36,6 +41,42 @@ real Triton Python source
 
 Phase 6 intentionally stops at the TTIR inventory boundary.
 
+## Phase 7c Static Lowering
+
+`--mode lower-elementwise-v1` now accepts exactly these real TTIR snapshots:
+
+```text
+examples/triton/phase6/generated/vector_add_b16.ttir.mlir
+examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir
+examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir
+```
+
+The mode first parses TTIR through Triton's MLIR parser and dialect machinery.
+Only after parse succeeds does it build a small SSA operation model and check
+the Phase 7 V1 elementwise form:
+
+- one public kernel function;
+- axis-0 program id;
+- `tt.make_range` exactly `0..16`;
+- contiguous `base + pid*16 + lane` pointer expressions;
+- masked zero-fill loads and canonical tail-mask stores;
+- the f32/i32 arithmetic, compare, scalar splat, and select forms used by the
+  three Phase 6 elementwise snapshots.
+
+It emits standard value IR only: `func`, tiny `vc4value`, `vector`, `memref`,
+and `arith`. It must not emit `vc4kernel`, `ssavc4`, scheduled `vc4`, TTGIR,
+vendor GPU dialects, LLVM IR, PTX, cubin, or hsaco.
+
+Unsupported V1-adjacent forms reject with stable diagnostics beginning with:
+
+```text
+unsupported TTIR op/form for Phase 7 elementwise V1
+```
+
+Staged rejects include reductions, dot/contract, rank-2 tensor/block-pointer
+forms, nonzero load `other`, unmasked or noncanonical memory operations, axis
+1/2 program ids, `BLOCK_SIZE != 16`, and unsupported element types.
+
 ## CLI
 
 Inventory mode:
@@ -47,11 +88,14 @@ tools/vc4-triton-import examples/triton/phase6/generated/vector_add_b16.ttir.mli
   --summary-json .vc4_auto/vector_add_import_inventory.json
 ```
 
-Semantic lowering mode is reserved for Phase 7 and fails in Phase 6 with:
+Semantic lowering mode was reserved in Phase 6 and failed with:
 
 ```text
 TTIR-to-value semantic lowering is not implemented in Phase 6; run Phase 7 after Phase 6 final lock.
 ```
+
+In Phase 7c, the same mode succeeds for the three elementwise snapshots listed
+above and rejects staged forms.
 
 ## Producer IR Policy
 

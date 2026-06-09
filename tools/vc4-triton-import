@@ -23,6 +23,18 @@ PHASE6_LOWERING_DIAGNOSTIC = (
 
 PHASE7_UNSUPPORTED_DIAGNOSTIC = "unsupported TTIR op/form for Phase 7 elementwise V1"
 
+STAGED_FEATURE_OPS = {
+    "tt.dot": "dot/contract is staged beyond Phase 7 elementwise V1",
+    "tt.reduce": "reductions are staged beyond Phase 7 elementwise V1",
+    "tt.reduce.return": "reductions are staged beyond Phase 7 elementwise V1",
+    "tt.broadcast": "rank-2 tensor forms are staged beyond Phase 7 elementwise V1",
+    "tt.expand_dims": "rank-2 tensor forms are staged beyond Phase 7 elementwise V1",
+    "tt.make_tensor_ptr": "block pointer forms are staged beyond Phase 7 elementwise V1",
+    "tt.advance": "block pointer forms are staged beyond Phase 7 elementwise V1",
+    "math.exp": "math/SFU policy is staged beyond Phase 7 elementwise V1",
+    "math.sqrt": "math/SFU policy is staged beyond Phase 7 elementwise V1",
+}
+
 
 @dataclass(frozen=True)
 class TTIRArgument:
@@ -45,6 +57,15 @@ class TTIRFunction:
     name: str
     args: tuple[TTIRArgument, ...]
     ops: tuple[TTIROperation, ...]
+
+
+@dataclass(frozen=True)
+class CanonicalElementwise:
+    result_map: dict[str, TTIROperation]
+    tail_mask: str
+    offset_value: str
+    loads: tuple[TTIROperation, ...]
+    stores: tuple[TTIROperation, ...]
 
 
 def fail(message: str, code: int = 1) -> "None":
@@ -176,6 +197,14 @@ def parse_ttir_function(parsed_module_text: str) -> TTIRFunction:
     lines = parsed_module_text.splitlines()
     func_lines = [line.strip() for line in lines if line.strip().startswith("tt.func ")]
     if len(func_lines) != 1:
+        ops = [op for line in lines if (op := parse_ttir_operation(line)) is not None]
+        for preferred in ("tt.reduce", "tt.reduce.return", "tt.dot"):
+            for op in ops:
+                if op.op_name == preferred:
+                    fail_unsupported(op.op_name, STAGED_FEATURE_OPS[op.op_name])
+        for op in ops:
+            if op.op_name in STAGED_FEATURE_OPS:
+                fail_unsupported(op.op_name, STAGED_FEATURE_OPS[op.op_name])
         fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
     func_line = strip_locs(func_lines[0])
     func_match = re.match(
@@ -229,113 +258,6 @@ def require_op_count(func: TTIRFunction, op_name: str, expected: int) -> list[TT
     return matches
 
 
-def require_constant_zero(op: TTIROperation) -> None:
-    if "0.000000e+00" not in op.text or "tensor<16xf32>" not in op.text:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.constant")
-
-
-def validate_vector_add_b16(func: TTIRFunction) -> None:
-    allowed_ops = {
-        "arith.addf",
-        "arith.addi",
-        "arith.andi",
-        "arith.cmpi",
-        "arith.constant",
-        "arith.extsi",
-        "arith.muli",
-        "tt.addptr",
-        "tt.func",
-        "tt.get_program_id",
-        "tt.load",
-        "tt.make_range",
-        "tt.return",
-        "tt.splat",
-        "tt.store",
-    }
-    for op in func.ops:
-        if op.op_name not in allowed_ops:
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op.op_name}")
-
-    if len(func.args) != 4:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
-    expected_arg_types = ("!tt.ptr<f32>", "!tt.ptr<f32>", "!tt.ptr<f32>", "i32")
-    if tuple(arg.typ for arg in func.args) != expected_arg_types:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
-
-    pid = require_single_op(func, "tt.get_program_id")
-    if "tt.get_program_id x : i32" not in pid.text or len(pid.result_names) != 1:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.get_program_id")
-
-    make_range = require_single_op(func, "tt.make_range")
-    if "start = 0 : i32" not in make_range.text or "end = 16 : i32" not in make_range.text:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.make_range")
-    if make_range.result_type != "tensor<16xi32>":
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.make_range")
-
-    addf = require_single_op(func, "arith.addf")
-    loads = require_op_count(func, "tt.load", 2)
-    stores = require_op_count(func, "tt.store", 1)
-    addptrs = require_op_count(func, "tt.addptr", 3)
-    returns = require_op_count(func, "tt.return", 1)
-    if returns[0].operands:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.return")
-
-    result_map = op_by_result(func)
-    if len(addf.operands) != 2:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addf")
-    for operand in addf.operands:
-        producer = result_map.get(operand)
-        if producer is None or producer.op_name != "tt.load":
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addf")
-
-    store = stores[0]
-    if len(store.operands) != 3 or store.operands[1] != addf.result_names[0]:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.store")
-    tail_mask = store.operands[2]
-
-    addptr_offset: str | None = None
-    for addptr in addptrs:
-        if len(addptr.operands) != 2:
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
-        if addptr_offset is None:
-            addptr_offset = addptr.operands[1]
-        elif addptr_offset != addptr.operands[1]:
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
-    if addptr_offset is None:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.addptr")
-
-    mask_producer = result_map.get(tail_mask)
-    if mask_producer is None or mask_producer.op_name != "arith.cmpi" or " slt," not in mask_producer.text:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.cmpi")
-    if len(mask_producer.operands) < 2 or mask_producer.operands[0] != addptr_offset:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.cmpi")
-
-    for load in loads:
-        if len(load.operands) != 3:
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
-        if load.operands[1] != tail_mask:
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
-        zero = result_map.get(load.operands[2])
-        if zero is None or zero.op_name != "arith.constant":
-            fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.load")
-        require_constant_zero(zero)
-
-    if store.operands[0] not in {op.result_names[0] for op in addptrs if op.result_names}:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.store")
-
-    range_result = make_range.result_names[0]
-    offset_add = result_map.get(addptr_offset)
-    if offset_add is None or offset_add.op_name != "arith.addi" or range_result not in offset_add.operands:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.addi")
-
-    scalar_splat = result_map.get(next(operand for operand in offset_add.operands if operand != range_result))
-    if scalar_splat is None or scalar_splat.op_name != "tt.splat":
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.splat")
-    base = result_map.get(scalar_splat.operands[0]) if scalar_splat.operands else None
-    if base is None or base.op_name != "arith.muli" or pid.result_names[0] not in base.operands:
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: arith.muli")
-
-
 def value_arg_name(arg: TTIRArgument, fallback: str) -> str:
     name = arg.source_name or arg.name.lstrip("%")
     if name.endswith("_ptr"):
@@ -345,31 +267,344 @@ def value_arg_name(arg: TTIRArgument, fallback: str) -> str:
     return name or fallback
 
 
-def emit_vector_add_value_ir(func: TTIRFunction) -> str:
-    x_name = value_arg_name(func.args[0], "x")
-    y_name = value_arg_name(func.args[1], "y")
-    out_name = value_arg_name(func.args[2], "out")
-    n_name = value_arg_name(func.args[3], "n")
-    if (x_name, y_name, out_name, n_name) != ("x", "y", "out", "n"):
-        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: tt.func")
-    return f"""func.func @{func.name}(
-    %x: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "x",
-                                          vc4value.direction = "in",
-                                          vc4value.shape_args = ["n"]}},
-    %y: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "y",
-                                          vc4value.direction = "in",
-                                          vc4value.shape_args = ["n"]}},
-    %out: memref<?xf32, #vc4value.global> {{vc4value.arg_name = "out",
-                                            vc4value.direction = "out",
-                                            vc4value.shape_args = ["n"]}},
-    %n: index {{vc4value.arg_name = "n"}})
-    attributes {{vc4value.kernel, vc4value.grid_rank = 1 : i32}} {{
-  %pid = vc4value.program_id {{axis = 0 : i32}} : index
+def fail_unsupported(op_name: str, detail: str | None = None) -> "None":
+    if detail:
+        fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op_name} ({detail})")
+    fail(f"{PHASE7_UNSUPPORTED_DIAGNOSTIC}: {op_name}")
+
+
+def require_constant_zero(op: TTIROperation) -> None:
+    if "tensor<16xf32>" in op.text and "dense<0.000000e+00>" in op.text:
+        return
+    if "tensor<16xi32>" in op.text and "dense<0>" in op.text:
+        return
+    fail_unsupported("tt.load", "masked loads require other=0")
+
+
+def contains_rank2_tensor(text: str) -> bool:
+    for match in re.findall(r"tensor<([^>]+)>", text):
+        if match.count("x") >= 2:
+            return True
+    return False
+
+
+def source_arg_names(func: TTIRFunction) -> tuple[str, ...]:
+    return tuple(value_arg_name(arg, arg.name.lstrip("%")) for arg in func.args)
+
+
+def check_stage_rejects(func: TTIRFunction) -> None:
+    for preferred in ("tt.dot", "tt.reduce", "tt.reduce.return"):
+        for op in func.ops:
+            if op.op_name == preferred:
+                fail_unsupported(op.op_name, STAGED_FEATURE_OPS[op.op_name])
+    for op in func.ops:
+        if op.op_name in STAGED_FEATURE_OPS:
+            fail_unsupported(op.op_name, STAGED_FEATURE_OPS[op.op_name])
+        if contains_rank2_tensor(op.text):
+            fail_unsupported(op.op_name, "rank-2 tensor forms are staged beyond Phase 7 elementwise V1")
+
+
+def check_allowed_ops(func: TTIRFunction) -> None:
+    allowed_ops = {
+        "arith.addf", "arith.addi", "arith.andi", "arith.cmpf", "arith.cmpi",
+        "arith.constant", "arith.extsi", "arith.mulf", "arith.muli",
+        "arith.select", "arith.subf", "arith.subi", "tt.addptr", "tt.func",
+        "tt.get_program_id", "tt.load", "tt.make_range", "tt.return",
+        "tt.splat", "tt.store",
+    }
+    for op in func.ops:
+        if op.op_name not in allowed_ops:
+            fail_unsupported(op.op_name)
+
+
+def check_supported_arg_types(func: TTIRFunction) -> None:
+    for arg in func.args:
+        if arg.typ in ("!tt.ptr<f32>", "!tt.ptr<i32>", "f32", "i32"):
+            continue
+        if any(token in arg.typ for token in ("f16", "bf16", "i8")):
+            fail_unsupported("tt.func", "unsupported element type for Phase 7 elementwise V1")
+        fail_unsupported("tt.func")
+
+
+def check_common_header(func: TTIRFunction) -> tuple[TTIROperation, TTIROperation]:
+    check_stage_rejects(func)
+    check_allowed_ops(func)
+    check_supported_arg_types(func)
+    returns = require_op_count(func, "tt.return", 1)
+    if returns[0].operands:
+        fail_unsupported("tt.return")
+    pid = require_single_op(func, "tt.get_program_id")
+    if "tt.get_program_id x : i32" not in pid.text or len(pid.result_names) != 1:
+        fail_unsupported("tt.get_program_id", "only axis x/0 is supported in Phase 7")
+    make_range = require_single_op(func, "tt.make_range")
+    if "start = 0 : i32" not in make_range.text or "end = 16 : i32" not in make_range.text:
+        fail_unsupported("tt.make_range", "BLOCK_SIZE must be exactly 16")
+    if make_range.result_type != "tensor<16xi32>":
+        fail_unsupported("tt.make_range", "BLOCK_SIZE must be exactly 16")
+    return pid, make_range
+
+
+def check_canonical_offset(func: TTIRFunction, result_map: dict[str, TTIROperation],
+                           pid: TTIROperation, make_range: TTIROperation) -> str:
+    addptrs = [op for op in func.ops if op.op_name == "tt.addptr"]
+    if not addptrs:
+        fail_unsupported("tt.addptr")
+    offset_value: str | None = None
+    for addptr in addptrs:
+        if len(addptr.operands) != 2:
+            fail_unsupported("tt.addptr", "pointer expression must be base + pid*16 + lane")
+        if offset_value is None:
+            offset_value = addptr.operands[1]
+        elif offset_value != addptr.operands[1]:
+            fail_unsupported("tt.addptr", "all pointers must use the same canonical contiguous offset")
+        ptr_splat = result_map.get(addptr.operands[0])
+        if ptr_splat is None or ptr_splat.op_name != "tt.splat":
+            fail_unsupported("tt.addptr", "pointer base must be a scalar pointer splat")
+    if offset_value is None:
+        fail_unsupported("tt.addptr")
+    offset_add = result_map.get(offset_value)
+    if offset_add is None or offset_add.op_name != "arith.addi":
+        fail_unsupported("tt.addptr", "pointer expression must be base + pid*16 + lane")
+    range_result = make_range.result_names[0]
+    if range_result not in offset_add.operands:
+        fail_unsupported("tt.addptr", "pointer expression must include lane range")
+    base_operands = [operand for operand in offset_add.operands if operand != range_result]
+    if len(base_operands) != 1:
+        fail_unsupported("tt.addptr", "pointer expression must be base + pid*16 + lane")
+    scalar_splat = result_map.get(base_operands[0])
+    if scalar_splat is None or scalar_splat.op_name != "tt.splat" or not scalar_splat.operands:
+        fail_unsupported("tt.splat")
+    base = result_map.get(scalar_splat.operands[0])
+    if base is None or base.op_name != "arith.muli" or pid.result_names[0] not in base.operands:
+        fail_unsupported("arith.muli", "base offset must be pid * 16")
+    return offset_value
+
+
+def check_tail_mask(func: TTIRFunction, result_map: dict[str, TTIROperation], offset_value: str) -> str:
+    stores = [op for op in func.ops if op.op_name == "tt.store"]
+    if not stores:
+        fail_unsupported("tt.store")
+    tail_mask: str | None = None
+    for store in stores:
+        if len(store.operands) != 3:
+            fail_unsupported("tt.store", "stores require the canonical tail mask")
+        if tail_mask is None:
+            tail_mask = store.operands[2]
+        elif tail_mask != store.operands[2]:
+            fail_unsupported("tt.store", "all stores must use the same canonical tail mask")
+    if tail_mask is None:
+        fail_unsupported("tt.store")
+    mask_producer = result_map.get(tail_mask)
+    if mask_producer is None or mask_producer.op_name != "arith.cmpi":
+        fail_unsupported("tt.store", "stores require the canonical tail mask")
+    if " slt," not in mask_producer.text:
+        fail_unsupported("arith.cmpi", "tail mask must be offsets < n")
+    if len(mask_producer.operands) < 2 or mask_producer.operands[0] != offset_value:
+        fail_unsupported("tt.store", "stores require the canonical tail mask")
+    return tail_mask
+
+
+def check_loads_and_stores(func: TTIRFunction, result_map: dict[str, TTIROperation],
+                           tail_mask: str, offset_value: str) -> tuple[tuple[TTIROperation, ...], tuple[TTIROperation, ...]]:
+    loads = tuple(op for op in func.ops if op.op_name == "tt.load")
+    stores = tuple(op for op in func.ops if op.op_name == "tt.store")
+    for load in loads:
+        if len(load.operands) != 3:
+            fail_unsupported("tt.load", "masked loads with other=0 are required")
+        if load.operands[1] != tail_mask:
+            fail_unsupported("tt.load", "loads must use the canonical tail mask")
+        ptr = result_map.get(load.operands[0])
+        if ptr is None or ptr.op_name != "tt.addptr" or len(ptr.operands) != 2 or ptr.operands[1] != offset_value:
+            fail_unsupported("tt.load", "load pointer must be base + pid*16 + lane")
+        zero = result_map.get(load.operands[2])
+        if zero is None or zero.op_name != "arith.constant":
+            fail_unsupported("tt.load", "masked loads require other=0")
+        require_constant_zero(zero)
+    for store in stores:
+        ptr = result_map.get(store.operands[0])
+        if ptr is None or ptr.op_name != "tt.addptr" or len(ptr.operands) != 2 or ptr.operands[1] != offset_value:
+            fail_unsupported("tt.store", "store pointer must be base + pid*16 + lane")
+        if store.operands[2] != tail_mask:
+            fail_unsupported("tt.store", "stores require the canonical tail mask")
+    return loads, stores
+
+
+def check_canonical_elementwise(func: TTIRFunction) -> CanonicalElementwise:
+    pid, make_range = check_common_header(func)
+    result_map = op_by_result(func)
+    offset_value = check_canonical_offset(func, result_map, pid, make_range)
+    tail_mask = check_tail_mask(func, result_map, offset_value)
+    loads, stores = check_loads_and_stores(func, result_map, tail_mask, offset_value)
+    return CanonicalElementwise(result_map, tail_mask, offset_value, loads, stores)
+
+
+def pointer_arg_direction(func: TTIRFunction, canon: CanonicalElementwise, arg: TTIRArgument) -> str:
+    loaded = False
+    stored = False
+    for op in (*canon.loads, *canon.stores):
+        ptr = canon.result_map.get(op.operands[0])
+        splat = canon.result_map.get(ptr.operands[0]) if ptr and ptr.operands else None
+        if splat is None or not splat.operands or splat.operands[0] != arg.name:
+            continue
+        loaded = loaded or op.op_name == "tt.load"
+        stored = stored or op.op_name == "tt.store"
+    if loaded and stored:
+        return "inout"
+    if stored:
+        return "out"
+    return "in"
+
+
+def check_load_element_type(load: TTIROperation, elem_type: str) -> None:
+    if f"tensor<16x!tt.ptr<{elem_type}>>" not in load.text:
+        fail_unsupported("tt.load", f"expected {elem_type} tensor-of-pointers load")
+
+
+def validate_vector_add_b16(func: TTIRFunction) -> CanonicalElementwise:
+    canon = check_canonical_elementwise(func)
+    if len(func.args) != 4:
+        fail_unsupported("tt.func")
+    if tuple(arg.typ for arg in func.args) != ("!tt.ptr<f32>", "!tt.ptr<f32>", "!tt.ptr<f32>", "i32"):
+        fail_unsupported("tt.func")
+    if source_arg_names(func) != ("x", "y", "out", "n"):
+        fail_unsupported("tt.func")
+    addf = require_single_op(func, "arith.addf")
+    if len(canon.loads) != 2 or len(canon.stores) != 1:
+        fail_unsupported("tt.load")
+    for load in canon.loads:
+        check_load_element_type(load, "f32")
+    if len(addf.operands) != 2 or canon.stores[0].operands[1] != addf.result_names[0]:
+        fail_unsupported("arith.addf")
+    for operand in addf.operands:
+        producer = canon.result_map.get(operand)
+        if producer is None or producer.op_name != "tt.load":
+            fail_unsupported("arith.addf")
+    return canon
+
+
+def validate_saxpy_select_b16(func: TTIRFunction) -> CanonicalElementwise:
+    canon = check_canonical_elementwise(func)
+    if len(func.args) != 6:
+        fail_unsupported("tt.func")
+    if tuple(arg.typ for arg in func.args) != ("!tt.ptr<f32>", "!tt.ptr<f32>", "!tt.ptr<f32>", "f32", "f32", "i32"):
+        fail_unsupported("tt.func")
+    if source_arg_names(func) != ("x", "y", "out", "a", "threshold", "n"):
+        fail_unsupported("tt.func")
+    if len(canon.loads) != 2 or len(canon.stores) != 1:
+        fail_unsupported("tt.load")
+    for load in canon.loads:
+        check_load_element_type(load, "f32")
+    mulf = require_single_op(func, "arith.mulf")
+    addf = require_single_op(func, "arith.addf")
+    cmpf = require_single_op(func, "arith.cmpf")
+    select = require_single_op(func, "arith.select")
+    if " olt," not in cmpf.text:
+        fail_unsupported("arith.cmpf", "only finite ordered Phase 5 predicates are supported")
+    if len(select.operands) != 3 or select.operands[0] not in cmpf.result_names:
+        fail_unsupported("arith.select")
+    if canon.stores[0].operands[1] != select.result_names[0]:
+        fail_unsupported("tt.store")
+    load_results = {load.result_names[0] for load in canon.loads if load.result_names}
+    if not any(operand in load_results for operand in mulf.operands):
+        fail_unsupported("arith.mulf")
+    if mulf.result_names[0] not in addf.operands or not any(operand in load_results for operand in addf.operands):
+        fail_unsupported("arith.addf")
+    if addf.result_names[0] not in cmpf.operands:
+        fail_unsupported("arith.cmpf")
+    return canon
+
+
+def validate_i32_add_select_b16(func: TTIRFunction) -> CanonicalElementwise:
+    canon = check_canonical_elementwise(func)
+    if len(func.args) != 7:
+        fail_unsupported("tt.func")
+    if tuple(arg.typ for arg in func.args) != ("!tt.ptr<i32>", "!tt.ptr<i32>", "!tt.ptr<i32>", "!tt.ptr<i32>", "i32", "i32", "i32"):
+        fail_unsupported("tt.func")
+    if source_arg_names(func) != ("x", "y", "alt", "out", "bias", "threshold", "n"):
+        fail_unsupported("tt.func")
+    if len(canon.loads) != 3 or len(canon.stores) != 1:
+        fail_unsupported("tt.load")
+    for load in canon.loads:
+        check_load_element_type(load, "i32")
+    addi_ops = [op for op in func.ops if op.op_name == "arith.addi"]
+    subi_ops = [op for op in func.ops if op.op_name == "arith.subi"]
+    cmpi_ops = [op for op in func.ops if op.op_name == "arith.cmpi"]
+    select = require_single_op(func, "arith.select")
+    if len(addi_ops) < 2 or len(subi_ops) < 1:
+        fail_unsupported("arith.addi")
+    sgt_results = {result for op in cmpi_ops for result in op.result_names if " sgt," in op.text}
+    if not sgt_results:
+        fail_unsupported("arith.cmpi", "only Phase 5 accepted i32 predicates are supported")
+    if len(select.operands) != 3 or select.operands[0] not in sgt_results:
+        fail_unsupported("arith.select")
+    if canon.stores[0].operands[1] != select.result_names[0]:
+        fail_unsupported("tt.store")
+    return canon
+
+
+def validate_supported_elementwise(func: TTIRFunction) -> tuple[str, CanonicalElementwise]:
+    if func.name == "vector_add_b16_kernel":
+        return "vector_add", validate_vector_add_b16(func)
+    if func.name == "saxpy_select_b16_kernel":
+        return "saxpy_select", validate_saxpy_select_b16(func)
+    if func.name == "i32_add_select_b16_kernel":
+        return "i32_add_select", validate_i32_add_select_b16(func)
+    check_stage_rejects(func)
+    fail_unsupported("tt.func", "only Phase 6 elementwise V1 snapshots are supported")
+
+
+def memref_arg_line(arg: TTIRArgument, direction: str, elem_type: str, suffix: str) -> str:
+    name = value_arg_name(arg, arg.name.lstrip("%"))
+    return (
+        f'    %{name}: memref<?x{elem_type}, #vc4value.global> {{vc4value.arg_name = "{name}",\n'
+        f'                                          vc4value.direction = "{direction}",\n'
+        f'                                          vc4value.shape_args = ["n"]}}{suffix}'
+    )
+
+
+def scalar_arg_line(arg: TTIRArgument, typ: str, suffix: str) -> str:
+    name = value_arg_name(arg, arg.name.lstrip("%"))
+    value_type = "index" if name == "n" else typ
+    return f'    %{name}: {value_type} {{vc4value.arg_name = "{name}"}}{suffix}'
+
+
+def emit_function_header(func: TTIRFunction, canon: CanonicalElementwise, fp_domain: bool = False) -> str:
+    lines = [f"func.func @{func.name}("]
+    rendered: list[str] = []
+    for arg in func.args:
+        name = value_arg_name(arg, arg.name.lstrip("%"))
+        if arg.typ == "!tt.ptr<f32>":
+            rendered.append(memref_arg_line(arg, pointer_arg_direction(func, canon, arg), "f32", ","))
+        elif arg.typ == "!tt.ptr<i32>":
+            rendered.append(memref_arg_line(arg, pointer_arg_direction(func, canon, arg), "i32", ","))
+        elif arg.typ == "f32":
+            rendered.append(scalar_arg_line(arg, "f32", ","))
+        elif arg.typ == "i32":
+            rendered.append(scalar_arg_line(arg, "i32", ","))
+        else:
+            fail_unsupported("tt.func")
+        if name == "n":
+            rendered[-1] = rendered[-1].rstrip(",") + ")"
+    lines.extend(rendered)
+    attrs = "vc4value.kernel, vc4value.grid_rank = 1 : i32"
+    if fp_domain:
+        attrs += ', vc4value.fp_domain = "finite"'
+    lines.append(f"    attributes {{{attrs}}} {{")
+    return "\n".join(lines)
+
+
+def emit_common_body_prefix() -> str:
+    return """  %pid = vc4value.program_id {axis = 0 : i32} : index
   %lanes = vector.step : vector<16xindex>
   %c16 = arith.constant 16 : index
   %base = arith.muli %pid, %c16 : index
   %remaining = arith.subi %n, %base : index
-  %mask = vector.create_mask %remaining : vector<16xi1>
+  %mask = vector.create_mask %remaining : vector<16xi1>"""
+
+
+def emit_vector_add_value_ir(func: TTIRFunction, canon: CanonicalElementwise) -> str:
+    return f"""{emit_function_header(func, canon)}
+{emit_common_body_prefix()}
   %zero = arith.constant 0.000000e+00 : f32
   %xv = vector.transfer_read %x[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
   %yv = vector.transfer_read %y[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
@@ -378,6 +613,53 @@ def emit_vector_add_value_ir(func: TTIRFunction) -> str:
   return
 }}
 """
+
+
+def emit_saxpy_select_value_ir(func: TTIRFunction, canon: CanonicalElementwise) -> str:
+    return f"""{emit_function_header(func, canon, fp_domain=True)}
+{emit_common_body_prefix()}
+  %zero = arith.constant 0.000000e+00 : f32
+  %xv = vector.transfer_read %x[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
+  %yv = vector.transfer_read %y[%base], %zero, %mask : memref<?xf32, #vc4value.global>, vector<16xf32>
+  %av = vector.broadcast %a : f32 to vector<16xf32>
+  %thresholdv = vector.broadcast %threshold : f32 to vector<16xf32>
+  %scaled = arith.mulf %av, %xv : vector<16xf32>
+  %tmp = arith.addf %scaled, %yv : vector<16xf32>
+  %cond = arith.cmpf olt, %tmp, %thresholdv : vector<16xf32>
+  %selected = arith.select %cond, %tmp, %yv : vector<16xi1>, vector<16xf32>
+  vector.transfer_write %selected, %out[%base], %mask : vector<16xf32>, memref<?xf32, #vc4value.global>
+  return
+}}
+"""
+
+
+def emit_i32_add_select_value_ir(func: TTIRFunction, canon: CanonicalElementwise) -> str:
+    return f"""{emit_function_header(func, canon)}
+{emit_common_body_prefix()}
+  %zero = arith.constant 0 : i32
+  %xv = vector.transfer_read %x[%base], %zero, %mask : memref<?xi32, #vc4value.global>, vector<16xi32>
+  %yv = vector.transfer_read %y[%base], %zero, %mask : memref<?xi32, #vc4value.global>, vector<16xi32>
+  %altv = vector.transfer_read %alt[%base], %zero, %mask : memref<?xi32, #vc4value.global>, vector<16xi32>
+  %biasv = vector.broadcast %bias : i32 to vector<16xi32>
+  %thresholdv = vector.broadcast %threshold : i32 to vector<16xi32>
+  %sum = arith.addi %xv, %yv : vector<16xi32>
+  %tmp = arith.subi %sum, %biasv : vector<16xi32>
+  %cond = arith.cmpi sgt, %tmp, %thresholdv : vector<16xi32>
+  %selected = arith.select %cond, %tmp, %altv : vector<16xi1>, vector<16xi32>
+  vector.transfer_write %selected, %out[%base], %mask : vector<16xi32>, memref<?xi32, #vc4value.global>
+  return
+}}
+"""
+
+
+def emit_value_ir(kind: str, func: TTIRFunction, canon: CanonicalElementwise) -> str:
+    if kind == "vector_add":
+        return emit_vector_add_value_ir(func, canon)
+    if kind == "saxpy_select":
+        return emit_saxpy_select_value_ir(func, canon)
+    if kind == "i32_add_select":
+        return emit_i32_add_select_value_ir(func, canon)
+    raise AssertionError(f"unknown Phase 7 lowering kind: {kind}")
 
 
 def unsupported_initial_features(op_counts: dict[str, int]) -> list[str]:
@@ -461,8 +743,8 @@ def parse_ttir_text(input_path: Path, target_text: str) -> tuple[object, str]:
 def lower_elementwise_v1(input_path: Path, target_text: str, output_path: Path) -> None:
     _module, parsed_text = parse_ttir_text(input_path, target_text)
     func = parse_ttir_function(parsed_text)
-    validate_vector_add_b16(func)
-    value_ir = emit_vector_add_value_ir(func)
+    kind, canon = validate_supported_elementwise(func)
+    value_ir = emit_value_ir(kind, func, canon)
     if any(token in value_ir for token in ("tt.", "ttg.", "gpu.", "nvgpu.", "nvvm.", "rocdl.", "llvm.", "vc4kernel.", "ssavc4.", "vc4.qpu")):
         fail("internal error: Phase 7 importer attempted to emit non-value IR")
     output_path.parent.mkdir(parents=True, exist_ok=True)
