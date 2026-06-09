@@ -65,6 +65,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassRegistry.h"
 #include "mlir/Support/LLVM.h"
+#include "triton/Dialect/Triton/IR/Dialect.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/DenseSet.h"
 #include "llvm/ADT/APFloat.h"
@@ -119,13 +120,6 @@ constexpr unsigned kPhase7VectorWidth = 16;
 
 static bool hasName(Operation *op, StringRef name) {
   return op && op->getName().getStringRef() == name;
-}
-
-static std::string stringify(Type type) {
-  std::string out;
-  llvm::raw_string_ostream os(out);
-  type.print(os);
-  return out;
 }
 
 static std::string stringify(Attribute attr) {
@@ -203,53 +197,106 @@ static bool containsRankGreaterThanOneTensor(Type type) {
   return shaped && shaped.getRank() > 1;
 }
 
-static bool containsTritonPointerType(Type type) {
-  std::string text = stringify(type);
-  return llvm::StringRef(text).contains("!tt.ptr<");
-}
+enum class TTIRScalarElementKind { I1, I32, F32, Unsupported };
 
-static std::optional<std::string> parseSupportedTritonPointerElement(Type type) {
-  // Triton pointer type APIs are not used here intentionally; the semantic
-  // importer operates on parsed MLIR but avoids generated Triton op/type C++
-  // classes so the lowering library can remain independent from Triton's
-  // transitive C++ link closure.  Keep all textual type spelling dependence
-  // centralized in this helper.
-  std::string storage = stringify(type);
-  StringRef text(storage);
-  StringRef marker = "!tt.ptr<";
-  size_t start = text.find(marker);
-  if (start == StringRef::npos)
-    return std::nullopt;
-  start += marker.size();
-  size_t end = text.find_first_of(",>", start);
-  if (end == StringRef::npos || end <= start)
-    return std::nullopt;
-  StringRef elem = text.slice(start, end).trim();
-  if (elem == "f32" || elem == "i32")
-    return elem.str();
-  return std::nullopt;
-}
+struct TTIRPointerTypeInfo {
+  Type pointeeType;
+  TTIRScalarElementKind pointeeKind = TTIRScalarElementKind::Unsupported;
+  std::optional<unsigned> addressSpace;
+  bool isSupportedPhase75Element = false;
+  bool isTensorPointer = false;
+};
 
-static std::optional<std::string> getSupportedPointerElement(Type type) {
-  return parseSupportedTritonPointerElement(type);
-}
+struct TTIRTensorTypeInfo {
+  RankedTensorType tensorType;
+  int64_t rank = 0;
+  SmallVector<int64_t, 4> shape;
+  Type elementType;
+  TTIRScalarElementKind elementKind = TTIRScalarElementKind::Unsupported;
+};
 
-static std::optional<std::string> getTensorPointerElement(Type type) {
-  auto shaped = llvm::dyn_cast<RankedTensorType>(type);
-  if (!shaped)
-    return std::nullopt;
-  return getSupportedPointerElement(shaped.getElementType());
-}
+class TTIRTypeAdapter {
+public:
+  explicit TTIRTypeAdapter(MLIRContext *ctx) : ctx(ctx) {}
 
-static Type convertTensorElementToVector(Type type, MLIRContext *ctx) {
-  auto shaped = llvm::dyn_cast<RankedTensorType>(type);
-  if (!shaped || shaped.getRank() != 1 || shaped.getDimSize(0) != 16)
+  std::optional<TTIRPointerTypeInfo> classifyPointerType(Type type) const {
+    auto pointerType = llvm::dyn_cast<mlir::triton::PointerType>(type);
+    if (!pointerType)
+      return std::nullopt;
+
+    TTIRPointerTypeInfo info;
+    info.pointeeType = pointerType.getPointeeType();
+    info.addressSpace = static_cast<unsigned>(pointerType.getAddressSpace());
+    info.isTensorPointer = llvm::isa<RankedTensorType>(info.pointeeType);
+    Type elementType = info.pointeeType;
+    if (auto tensor = llvm::dyn_cast<RankedTensorType>(info.pointeeType))
+      elementType = tensor.getElementType();
+    info.pointeeKind = classifyScalarElement(elementType);
+    info.isSupportedPhase75Element =
+        !info.isTensorPointer && (info.pointeeKind == TTIRScalarElementKind::I32 ||
+                                  info.pointeeKind == TTIRScalarElementKind::F32);
+    return info;
+  }
+
+  std::optional<TTIRPointerTypeInfo>
+  classifyTensorPointerElement(Type type) const {
+    auto shaped = llvm::dyn_cast<RankedTensorType>(type);
+    if (!shaped)
+      return std::nullopt;
+    return classifyPointerType(shaped.getElementType());
+  }
+
+  std::optional<TTIRTensorTypeInfo> classifyRankedTensor(Type type) const {
+    auto shaped = llvm::dyn_cast<RankedTensorType>(type);
+    if (!shaped)
+      return std::nullopt;
+
+    TTIRTensorTypeInfo info;
+    info.tensorType = shaped;
+    info.rank = shaped.getRank();
+    info.shape.append(shaped.getShape().begin(), shaped.getShape().end());
+    info.elementType = shaped.getElementType();
+    info.elementKind = classifyScalarElement(info.elementType);
+    return info;
+  }
+
+  Type convertTensorToValueVector(Type type, OpBuilder &builder) const {
+    std::optional<TTIRTensorTypeInfo> tensor = classifyRankedTensor(type);
+    if (!tensor || tensor->rank != 1 || tensor->shape[0] != kPhase7VectorWidth)
+      return {};
+    Type elem = getValueElementType(tensor->elementKind, builder);
+    if (!elem)
+      return {};
+    return VectorType::get({kPhase7VectorWidth}, elem);
+  }
+
+  Type getValueElementType(TTIRScalarElementKind kind, OpBuilder &builder) const {
+    switch (kind) {
+    case TTIRScalarElementKind::I1:
+      return builder.getI1Type();
+    case TTIRScalarElementKind::I32:
+      return builder.getI32Type();
+    case TTIRScalarElementKind::F32:
+      return builder.getF32Type();
+    case TTIRScalarElementKind::Unsupported:
+      return {};
+    }
     return {};
-  Type elem = shaped.getElementType();
-  if (elem.isInteger(1) || elem.isSignlessInteger(32) || elem.isF32())
-    return VectorType::get({16}, elem);
-  return {};
-}
+  }
+
+private:
+  TTIRScalarElementKind classifyScalarElement(Type type) const {
+    if (type.isInteger(1))
+      return TTIRScalarElementKind::I1;
+    if (type.isSignlessInteger(32))
+      return TTIRScalarElementKind::I32;
+    if (type.isF32())
+      return TTIRScalarElementKind::F32;
+    return TTIRScalarElementKind::Unsupported;
+  }
+
+  MLIRContext *ctx;
+};
 
 static Type convertScalarArgType(Type type, bool isSizeLike, OpBuilder &builder) {
   if (isSizeLike && isScalarI32(type))
@@ -257,21 +304,6 @@ static Type convertScalarArgType(Type type, bool isSizeLike, OpBuilder &builder)
   if (isScalarI32(type) || isScalarF32(type))
     return type;
   return {};
-}
-
-static Type elementTypeForName(StringRef elem, OpBuilder &builder) {
-  if (elem == "f32")
-    return builder.getF32Type();
-  if (elem == "i32")
-    return builder.getI32Type();
-  return {};
-}
-
-static Type vectorTypeForElementName(StringRef elem, OpBuilder &builder) {
-  Type elementType = elementTypeForName(elem, builder);
-  if (!elementType)
-    return {};
-  return VectorType::get({16}, elementType);
 }
 
 static FailureOr<Attribute> retargetDenseAttr(DenseElementsAttr dense,
@@ -507,7 +539,7 @@ struct TTIRArgInfo {
   Type valueType;
   bool isPointer = false;
   bool isSizeLike = false;
-  std::string pointerElement;
+  TTIRScalarElementKind pointerElement = TTIRScalarElementKind::Unsupported;
   bool loaded = false;
   bool stored = false;
 };
@@ -516,7 +548,7 @@ struct PointerExpr {
   BlockArgument sourcePointerArg;
   Value valueMemref;
   Value offsetValue;
-  std::string element;
+  TTIRScalarElementKind element = TTIRScalarElementKind::Unsupported;
   bool hasCanonicalOffset = false;
 };
 
@@ -530,7 +562,8 @@ struct CommonPlan {
 
 class FunctionPlanner {
 public:
-  explicit FunctionPlanner(Operation *funcOp) : funcOp(funcOp) {}
+  explicit FunctionPlanner(Operation *funcOp)
+      : funcOp(funcOp), typeAdapter(funcOp->getContext()) {}
 
   LogicalResult analyze() {
     if (!hasName(funcOp, kTTFuncOpName))
@@ -644,13 +677,17 @@ private:
       info.sourceArg = arg;
       info.sourceType = arg.getType();
       info.valueName = inferSourceArgName(arg, index);
-      if (auto elem = getSupportedPointerElement(arg.getType())) {
+      if (auto pointer = typeAdapter.classifyPointerType(arg.getType())) {
+        if (pointer->isTensorPointer)
+          return emitStagedDiagnostic(funcOp, "block pointer or tensor pointer argument");
+        if (!pointer->isSupportedPhase75Element)
+          return emitStagedDiagnostic(funcOp, "unsupported pointer argument element type");
         info.isPointer = true;
-        info.pointerElement = *elem;
+        info.pointerElement = pointer->pointeeKind;
       } else if (isScalarI32(arg.getType()) || isScalarF32(arg.getType())) {
         info.isSizeLike = isLikelySizeArgName(info.valueName);
       } else {
-        if (containsTritonPointerType(arg.getType()))
+        if (typeAdapter.classifyTensorPointerElement(arg.getType()))
           return emitStagedDiagnostic(funcOp, "unsupported pointer argument element type");
         return emitStagedDiagnostic(funcOp, "unsupported TTIR function argument type");
       }
@@ -871,6 +908,7 @@ private:
   }
 
   Operation *funcOp;
+  TTIRTypeAdapter typeAdapter;
   SmallVector<TTIRArgInfo, 8> args;
   DenseMap<BlockArgument, unsigned> argIndex;
   CommonPlan common;
@@ -882,7 +920,8 @@ private:
 class FunctionLowerer {
 public:
   FunctionLowerer(ModuleOp module, FunctionPlanner &planner)
-      : module(module), planner(planner), ctx(module.getContext()), builder(ctx) {}
+      : module(module), planner(planner), ctx(module.getContext()), builder(ctx),
+        typeAdapter(ctx) {}
 
   LogicalResult lower() {
     if (failed(createValueFunction()))
@@ -924,7 +963,7 @@ private:
     SmallVector<Type, 8> argTypes;
     for (const TTIRArgInfo &arg : planner.getArgs()) {
       if (arg.isPointer) {
-        Type elemType = elementTypeForName(arg.pointerElement, builder);
+        Type elemType = typeAdapter.getValueElementType(arg.pointerElement, builder);
         if (!elemType)
           return sourceFunc->emitOpError("unsupported pointer element type");
         auto memorySpace = mlir::vc4value::GlobalMemorySpaceAttr::get(ctx);
@@ -1079,7 +1118,8 @@ private:
       }
     }
 
-    Type resultType = convertTensorElementToVector(op->getResult(0).getType(), ctx);
+    Type resultType =
+        typeAdapter.convertTensorToValueVector(op->getResult(0).getType(), builder);
     if (!resultType)
       return emitStagedDiagnostic(op, "tt.splat result type");
     Value scalar = lookup(src);
@@ -1116,7 +1156,8 @@ private:
     if (!ptr->hasCanonicalOffset)
       return emitStagedDiagnostic(op, "tt.load pointer without canonical addptr offset");
 
-    Type resultType = convertTensorElementToVector(op->getResult(0).getType(), ctx);
+    Type resultType =
+        typeAdapter.convertTensorToValueVector(op->getResult(0).getType(), builder);
     auto vectorType = llvm::dyn_cast_or_null<VectorType>(resultType);
     if (!vectorType)
       return emitStagedDiagnostic(op, "tt.load result type");
@@ -1220,7 +1261,7 @@ private:
     if (type.isIndex() || type.isInteger(1) || type.isSignlessInteger(32) ||
         type.isF32())
       return type;
-    if (auto vector = convertTensorElementToVector(type, ctx))
+    if (auto vector = typeAdapter.convertTensorToValueVector(type, builder))
       return vector;
     return {};
   }
@@ -1241,6 +1282,7 @@ private:
   FunctionPlanner &planner;
   MLIRContext *ctx;
   OpBuilder builder;
+  TTIRTypeAdapter typeAdapter;
   func::FuncOp valueFunc;
   DenseMap<Value, Value> valueMap;
   DenseMap<Value, PointerExpr> pointerValues;

@@ -8,5 +8,6 @@ add_mlir_library(TritonToVC4Value
 
   LINK_LIBS PUBLIC
     VC4ValueDialect
+    VC4TritonFrontendDeps
     ${VC4_MLIR_LINK_LIBS}
 )

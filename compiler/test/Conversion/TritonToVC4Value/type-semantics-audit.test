@@ -1,0 +1,7 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/audit_ttir_type_semantics.py" | FileCheck %s
+
+# CHECK: TTIR_TYPE_SEMANTICS_AUDIT=PASS
+# CHECK: POINTER_TYPE_CLASSIFICATION_TYPED=YES
+# CHECK: PRINTED_TYPE_SEMANTIC_MATCHING=NO
+# CHECK: READY_FOR_TRITON=NO
+

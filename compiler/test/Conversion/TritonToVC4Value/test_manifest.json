@@ -45,6 +45,13 @@
       "cpp_importer_only": true
     },
     {
+      "test": "ttir-pointer-types-staged-reject.test",
+      "input": "generated f16 probe plus compiler/test/Conversion/TritonToVC4Value/Inputs/block-pointer-staged.ttir.mlir and Inputs/rank2-pointer-tensor-staged.ttir.mlir",
+      "input_kind": "parser-valid staged TTIR pointer type probes",
+      "feature_claim": "unsupported pointer element, block pointer, and rank-2 pointer tensor forms remain staged/rejected through typed classification",
+      "cpp_importer_only": true
+    },
+    {
       "test": "backend-dialects-rejected.test",
       "input": "compiler/test/TritonFrontend/Inputs/cpp-ttg-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvgpu-backend-reject.mlir; compiler/test/TritonFrontend/Inputs/cpp-nvvm-backend-reject.mlir",
       "input_kind": "parser-negative backend dialect IR",
@@ -56,6 +63,13 @@
       "input": "this conversion suite",
       "input_kind": "static audit",
       "feature_claim": "accepted conversion tests use vc4-triton-opt and not Python semantic lowering",
+      "cpp_importer_only": true
+    },
+    {
+      "test": "type-semantics-audit.test",
+      "input": "compiler/lib/Conversion/TritonToVC4Value/TritonToVC4Value.cpp",
+      "input_kind": "static source audit",
+      "feature_claim": "semantic pointer type classification uses typed Triton APIs and not printed !tt.ptr matching",
       "cpp_importer_only": true
     }
   ],
