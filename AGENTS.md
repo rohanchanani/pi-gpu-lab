@@ -811,6 +811,8 @@ If something is ambiguous:
 
 The project succeeds by being honest, hardware-proven, and incremental.
 
+## Long-term engineering contract for Phase 8 and later frontend/value work
+
 This addendum applies to all future VC4 compiler work. It is intentionally strict because the compiler is now moving from smoke-proven vertical slices into reusable infrastructure.
 
 ### A. No temporary architecture
