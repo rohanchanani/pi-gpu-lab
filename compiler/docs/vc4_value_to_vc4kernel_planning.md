@@ -436,3 +436,39 @@ Future implementation hooks:
 
 Each phase must preserve the value-surface boundary, the locked VC4Kernel
 surface, and the SSAVC4 lower-half boundary.
+
+## 22. Phase 6 TTIR-to-value planning handoff
+
+Phase 6 pins real TTIR source to Triton 3.7.0. The compiler support matrix for
+Triton is based on emitted TTIR snapshots, not on Python-level metaprogramming.
+The Triton Python examples under `examples/triton/phase6/kernels/` are demo
+source provenance; the generated `.ttir.mlir` files are the source of truth for
+future importer support.
+
+The Phase 7 elementwise candidate TTIR forms map conceptually into the existing
+value-layer planning boundary:
+
+- `tt.func` / `tt.return` -> `func.func` / return boundary plus value kernel
+  ABI metadata;
+- axis-0 `tt.get_program_id` -> `vc4value.program_id`;
+- `tt.make_range` / arange -> lane range, `vector.step`, splat, and offset
+  arithmetic;
+- `tt.splat` -> `vector.splat`;
+- tensor `arith` ops -> value `arith` and vector elementwise operations;
+- masked `tt.load` with zero `other` -> contiguous/tail
+  `vector.transfer_read` planning;
+- masked `tt.store` -> contiguous/tail `vector.transfer_write` planning.
+
+Future staged TTIR forms remain outside Phase 7 V1 lowering:
+
+- `tl.sum` / reductions -> later `vector.reduction` planning;
+- `tl.exp` and other math -> later explicit math/SFU policy;
+- `tl.dot` -> later `vector.contract` planning;
+- block pointers and tensor descriptors -> later memory descriptor planning;
+- atomics, cache/eviction modifiers, and volatile -> initial rejects or future
+  profile work until semantics are specified.
+
+The path remains TTIR -> standard value layer -> VC4Kernel -> SSAVC4 ->
+scheduled VC4. Phase 6 does not implement TTIR-to-value semantic lowering, and
+`READY_FOR_TRITON=NO` remains true until later phases add and prove the importer
+and hardware path.

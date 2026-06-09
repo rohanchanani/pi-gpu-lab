@@ -149,3 +149,36 @@ move to `supported_emulated`, `supported_composite`,
 `supported_with_policy_caveat`, or `supportable_later`, depending on the proof.
 If a temporary reject becomes permanent, the proof template in Section 3 must
 be completed before the classification changes.
+
+## 10. Phase 6 TTIR frontend reject boundary
+
+Phase 6 pins real frontend TTIR to Triton 3.7.0 and inventories emitted TTIR
+snapshots. The emitted TTIR is the source of truth for compiler support and
+reject classification. Triton Python examples are source provenance and demos;
+they are not a substitute for generated TTIR.
+
+For Phase 7, these elementwise TTIR forms are candidates for initial semantic
+TTIR-to-value lowering:
+
+- `tt.func`, `tt.return`;
+- axis-0 `tt.get_program_id`;
+- `tt.make_range` / arange-derived lane ranges;
+- `tt.splat`;
+- tensor `arith` operations;
+- masked `tt.load` with `other=0` or `other=0.0`;
+- masked `tt.store`.
+
+The following remain staged, future-profile, or initial deterministic rejects
+until later phases add exact policy, emulation, or hardware proof:
+
+- `tl.sum` / `tt.reduce`;
+- `tl.exp` / math operations requiring explicit approximate/exact policy;
+- `tl.dot` / `vector.contract`;
+- block pointers and tensor descriptors;
+- atomics;
+- cache and eviction modifiers;
+- volatile memory.
+
+These staged forms are not permanent rejects merely because Phase 6 and Phase 7
+do not lower them. Permanent rejects still require the proof template above.
+`READY_FOR_TRITON=NO` remains true because full Triton support is not enabled.

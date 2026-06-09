@@ -315,3 +315,36 @@ It must not depend on decorative source names, fixture paths, public names, or
 status strings. Once upper-stack hardware fixtures exist, they must inherit the
 mixed fixture saw/no claim discipline from the locked VC4Kernel acceptance
 contract.
+
+## 21. Phase 6 real TTIR frontend lock notes
+
+Phase 6 pins the frontend source of truth to real Triton 3.7.0 TTIR. The
+checked Python source corpus under `examples/triton/phase6/kernels/` is source
+provenance and demo material. The compiler support matrix is based on emitted
+TTIR snapshots under `examples/triton/phase6/generated/`, plus parse inventory
+from Triton's MLIR parser.
+
+The Phase 7 elementwise candidate forms observed in the required corpus are:
+
+- `tt.func` and `tt.return`;
+- axis-0 `tt.get_program_id`;
+- `tt.make_range` as the emitted arange/lane-range form;
+- `tt.splat`;
+- tensor `arith` integer and floating-point ops, comparisons, and select;
+- masked `tt.load` tensor-of-pointer forms with `other=0` or `other=0.0`;
+- masked `tt.store` tensor-of-pointer forms.
+
+Future staged forms observed or reserved by Phase 6 are:
+
+- `tl.sum` / `tt.reduce` and `tt.reduce.return`;
+- `tl.exp` / `math.exp` and other math policy forms;
+- `tl.dot` / `tt.dot` as a future `vector.contract` source;
+- block pointers and tensor descriptors;
+- atomics;
+- cache and eviction modifiers;
+- volatile memory behavior.
+
+`READY_FOR_TRITON=NO` remains true after Phase 6. Phase 6 proves frontend setup,
+real TTIR generation, parse inventory, corpus snapshots, and an importer
+skeleton only. Full Triton support requires later semantic TTIR-to-value
+lowering and hardware proof.
