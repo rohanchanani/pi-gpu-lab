@@ -1,0 +1,34 @@
+{
+  "attrs": {},
+  "constants": {
+    "BLOCK_SIZE": 16
+  },
+  "generated": true,
+  "hints": {},
+  "kernel_name": "softmax_row_kernel",
+  "num_stages": 3,
+  "num_warps": 1,
+  "output_ttir": "examples/triton/phase6/generated/future/softmax_row.ttir.mlir",
+  "parse_checked": true,
+  "parse_summary": ".vc4_auto/vector_triton_phase6c_real_ttir_corpus/future_softmax_row_parse_final.json",
+  "signature": {
+    "BLOCK_SIZE": "constexpr",
+    "n_cols": "i32",
+    "out_ptr": "*fp32",
+    "row_stride": "i32",
+    "x_ptr": "*fp32"
+  },
+  "signature_entries": [
+    "*fp32",
+    "*fp32",
+    "i32",
+    "i32",
+    "16"
+  ],
+  "source": "/Users/rohanchanani/Downloads/pi-gpu-lab/examples/triton/phase6/kernels/future/softmax_row.py",
+  "source_sha256": "3bfc36ef2b5624cbc3f8e03afc2403402bead90dbe4b57f4252a8c4c9b32589a",
+  "target": "cuda:80:32",
+  "tool_schema_version": 1,
+  "triton_file": "/Users/rohanchanani/Downloads/pi-gpu-lab/.vc4_auto/triton_v3_7_0_src/python/triton/__init__.py",
+  "triton_version": "3.7.0"
+}

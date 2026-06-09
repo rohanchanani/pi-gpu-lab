@@ -1,0 +1,37 @@
+{
+  "attrs": {},
+  "constants": {
+    "BLOCK_SIZE": 16
+  },
+  "hints": {},
+  "kernel_name": "i32_add_select_b16_kernel",
+  "num_stages": 3,
+  "num_warps": 1,
+  "output_ttir": "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir",
+  "signature": {
+    "BLOCK_SIZE": "constexpr",
+    "alt_ptr": "*i32",
+    "bias": "i32",
+    "n_elements": "i32",
+    "out_ptr": "*i32",
+    "threshold": "i32",
+    "x_ptr": "*i32",
+    "y_ptr": "*i32"
+  },
+  "signature_entries": [
+    "*i32",
+    "*i32",
+    "*i32",
+    "*i32",
+    "i32",
+    "i32",
+    "i32",
+    "16"
+  ],
+  "source": "/Users/rohanchanani/Downloads/pi-gpu-lab/examples/triton/phase6/kernels/i32_add_select_b16.py",
+  "source_sha256": "65778a25c114a0fe1c59a53653531db1efc822d22676afdbd46faa4d7fd936e3",
+  "target": "cuda:80:32",
+  "tool_schema_version": 1,
+  "triton_file": "/Users/rohanchanani/Downloads/pi-gpu-lab/.vc4_auto/triton_v3_7_0_src/python/triton/__init__.py",
+  "triton_version": "3.7.0"
+}

@@ -30,7 +30,7 @@ if not str(version).startswith("3.7."):
 print("TRITON_VERSION=" + str(version))
 PY
 
-example=compiler/examples/triton/vector_add.py
+example=examples/triton/phase6/kernels/vector_add_b16.py
 if [[ ! -f "$example" ]]; then
   if [[ "$allow_missing_examples" -eq 1 ]]; then
     echo "Phase 6c Triton examples are not present; skipping frontend smoke by request."
@@ -44,7 +44,7 @@ fi
 out_dir=.vc4_auto/triton_frontend_smoke
 mkdir -p "$out_dir"
 "$PY" tools/vc4_emit_ttir.py "$example" \
-  --kernel-name vector_add_kernel \
+  --kernel-name vector_add_b16_kernel \
   --signature '*fp32,*fp32,*fp32,i32,16' \
   --target cuda:80:32 \
   --num-warps 1 \
@@ -54,4 +54,3 @@ mkdir -p "$out_dir"
 "$PY" tools/vc4_parse_ttir.py "$out_dir/vector_add.ttir.mlir" \
   --target cuda:80:32 \
   --summary-json "$out_dir/vector_add.summary.json"
-

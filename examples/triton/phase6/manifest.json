@@ -1,0 +1,168 @@
+{
+  "phase": "VC4 Vector/Triton Phase 6c",
+  "triton_pinned_version": "3.7.0",
+  "ready_for_triton": "NO",
+  "kernels": [
+    {
+      "name": "vector_add_b16",
+      "source": "examples/triton/phase6/kernels/vector_add_b16.py",
+      "ttir": "examples/triton/phase6/generated/vector_add_b16.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/vector_add_b16.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": true,
+      "future_headline": false,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "arith.addf",
+        "tt.store"
+      ],
+      "staged_features": [
+        "program_id",
+        "block_arange",
+        "masked_f32_load",
+        "f32_add",
+        "masked_store"
+      ],
+      "source_reference": "https://triton-lang.org/main/getting-started/tutorials/01-vector-add.html"
+    },
+    {
+      "name": "saxpy_select_b16",
+      "source": "examples/triton/phase6/kernels/saxpy_select_b16.py",
+      "ttir": "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/saxpy_select_b16.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": true,
+      "future_headline": false,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "arith.mulf",
+        "arith.addf",
+        "arith.cmpf",
+        "arith.select",
+        "tt.store"
+      ],
+      "staged_features": [
+        "program_id",
+        "block_arange",
+        "masked_f32_load",
+        "f32_mul_add",
+        "f32_compare",
+        "select",
+        "masked_store"
+      ],
+      "source_reference": "https://triton-lang.org/main/python-api/generated/triton.language.load.html"
+    },
+    {
+      "name": "i32_add_select_b16",
+      "source": "examples/triton/phase6/kernels/i32_add_select_b16.py",
+      "ttir": "examples/triton/phase6/generated/i32_add_select_b16.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/i32_add_select_b16.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": true,
+      "future_headline": false,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "arith.addi",
+        "arith.subi",
+        "arith.cmpi",
+        "arith.select",
+        "tt.store"
+      ],
+      "staged_features": [
+        "program_id",
+        "block_arange",
+        "masked_i32_load",
+        "i32_add_sub",
+        "i32_compare",
+        "select",
+        "masked_store"
+      ],
+      "source_reference": "https://triton-lang.org/main/python-api/generated/triton.language.store.html"
+    },
+    {
+      "name": "softmax_row",
+      "source": "examples/triton/phase6/kernels/future/softmax_row.py",
+      "ttir": "examples/triton/phase6/generated/future/softmax_row.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/future/softmax_row.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": false,
+      "future_headline": true,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "tt.reduce",
+        "math.exp",
+        "arith.divf",
+        "tt.store"
+      ],
+      "staged_features": [
+        "row_reduction",
+        "approximate_exp_policy",
+        "masked_row_memory",
+        "softmax_inventory"
+      ],
+      "source_reference": "https://triton-lang.org/main/getting-started/tutorials/02-fused-softmax.html"
+    },
+    {
+      "name": "matmul_dot",
+      "source": "examples/triton/phase6/kernels/future/matmul_dot.py",
+      "ttir": "examples/triton/phase6/generated/future/matmul_dot.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/future/matmul_dot.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": false,
+      "future_headline": true,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "tt.dot",
+        "tt.store"
+      ],
+      "staged_features": [
+        "rank2_block_tensors",
+        "dot_inventory",
+        "vector_contract_planning",
+        "masked_2d_memory"
+      ],
+      "source_reference": "https://triton-lang.org/main/getting-started/tutorials/03-matrix-multiplication.html"
+    },
+    {
+      "name": "layer_norm_forward",
+      "source": "examples/triton/phase6/kernels/future/layer_norm_forward.py",
+      "ttir": "examples/triton/phase6/generated/future/layer_norm_forward.ttir.mlir",
+      "metadata": "examples/triton/phase6/metadata/future/layer_norm_forward.json",
+      "status": "generated_ttir_parse_checked",
+      "phase7_candidate": false,
+      "future_headline": true,
+      "required_ops": [
+        "tt.func",
+        "tt.get_program_id",
+        "tt.make_range",
+        "tt.load",
+        "tt.reduce",
+        "math.sqrt",
+        "arith.divf",
+        "tt.store"
+      ],
+      "staged_features": [
+        "row_reduction",
+        "sqrt_or_recipsqrt_policy",
+        "masked_row_memory",
+        "layernorm_inventory"
+      ],
+      "source_reference": "https://triton-lang.org/main/getting-started/tutorials/05-layer-norm.html"
+    }
+  ]
+}

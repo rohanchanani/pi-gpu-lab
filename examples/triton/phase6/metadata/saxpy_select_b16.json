@@ -1,0 +1,35 @@
+{
+  "attrs": {},
+  "constants": {
+    "BLOCK_SIZE": 16
+  },
+  "hints": {},
+  "kernel_name": "saxpy_select_b16_kernel",
+  "num_stages": 3,
+  "num_warps": 1,
+  "output_ttir": "examples/triton/phase6/generated/saxpy_select_b16.ttir.mlir",
+  "signature": {
+    "BLOCK_SIZE": "constexpr",
+    "a": "fp32",
+    "n_elements": "i32",
+    "out_ptr": "*fp32",
+    "threshold": "fp32",
+    "x_ptr": "*fp32",
+    "y_ptr": "*fp32"
+  },
+  "signature_entries": [
+    "*fp32",
+    "*fp32",
+    "*fp32",
+    "fp32",
+    "fp32",
+    "i32",
+    "16"
+  ],
+  "source": "/Users/rohanchanani/Downloads/pi-gpu-lab/examples/triton/phase6/kernels/saxpy_select_b16.py",
+  "source_sha256": "e4d16e109e66d55bef51751a0b584889fd01dd260b1f270994610fffd62a5db3",
+  "target": "cuda:80:32",
+  "tool_schema_version": 1,
+  "triton_file": "/Users/rohanchanani/Downloads/pi-gpu-lab/.vc4_auto/triton_v3_7_0_src/python/triton/__init__.py",
+  "triton_version": "3.7.0"
+}
