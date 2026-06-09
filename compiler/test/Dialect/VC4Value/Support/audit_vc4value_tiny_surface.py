@@ -26,6 +26,19 @@ FORBIDDEN_TOKENS = {
     "semaphore",
     "qpu",
 }
+FORBIDDEN_OP_SPELLINGS = [
+    "vc4value.load",
+    "vc4value.store",
+    "vc4value.tile",
+    "vc4value.vpm",
+    "vc4value.tmu",
+    "vc4value.vdr",
+    "vc4value.vdw",
+    "vc4value.fragment",
+    "vc4value.lane_id",
+    "vc4value.barrier",
+    "vc4value.semaphore",
+]
 REQUIRED_FEATURES = {
     "vc4value.program_id": {
         "status": "accepted_static_syntax",
@@ -164,20 +177,40 @@ def require_no_lower_half_headers(repo_root: Path) -> None:
                         fail(f"lower-half include {pattern} in {rel}:{line_no}")
 
 
-def require_no_conversion_mentions(repo_root: Path) -> None:
-    conversion_root = repo_root / "compiler/lib/Conversion"
-    if not conversion_root.exists():
-        return
-    phase5_lowering_root = conversion_root / "VC4ValueToVC4Kernel"
-    for path in conversion_root.rglob("*"):
-        if not path.is_file():
+def is_audit_context_allowed(path: Path, repo_root: Path) -> bool:
+    allowed_roots = [
+        repo_root / "compiler/docs",
+        repo_root / "compiler/test",
+    ]
+    return any(root in path.parents or path == root for root in allowed_roots)
+
+
+def require_no_forbidden_accepted_op_spellings(repo_root: Path) -> None:
+    """Reject implementation-side accepted uses of forbidden vc4value ops.
+
+    Docs, negative tests, and audit support files intentionally mention these
+    spellings to prove they stay rejected. Conversion and tool sources may
+    mention VC4Value generically, but they must not introduce concrete forbidden
+    vc4value operation spellings as accepted implementation surface.
+    """
+    scan_roots = [
+        repo_root / "compiler/include/vc4",
+        repo_root / "compiler/lib",
+        repo_root / "compiler/tools",
+    ]
+    for root in scan_roots:
+        if not root.exists():
             continue
-        if phase5_lowering_root in path.parents:
-            continue
-        text = path.read_text(errors="ignore")
-        if "VC4Value" in text or "vc4value" in text:
-            rel = path.relative_to(repo_root)
-            fail(f"conversion file mentions VC4Value in Phase 2: {rel}")
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            if is_audit_context_allowed(path, repo_root):
+                continue
+            text = path.read_text(errors="ignore")
+            for spelling in FORBIDDEN_OP_SPELLINGS:
+                if spelling in text:
+                    rel = path.relative_to(repo_root)
+                    fail(f"forbidden vc4value op spelling {spelling!r} in implementation file: {rel}")
 
 
 def main() -> int:
@@ -196,9 +229,12 @@ def main() -> int:
     require_ops(repo_root)
     require_no_unknown_ops(repo_root)
     require_no_lower_half_headers(repo_root)
-    require_no_conversion_mentions(repo_root)
+    require_no_forbidden_accepted_op_spellings(repo_root)
 
-    print("PASS VC4Value tiny surface audit: mode=phase2-lock ops=2 unknown_ops_allowed=0")
+    print(
+        "PASS VC4Value tiny surface audit: mode=phase2-lock "
+        "ops=2 unknown_ops_allowed=0 conversion_refs_allowed=1"
+    )
     return 0
 
 

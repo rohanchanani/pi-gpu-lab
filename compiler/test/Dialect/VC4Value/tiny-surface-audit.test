@@ -3,4 +3,27 @@
 // RUN:   --matrix %vc4_repo_root/compiler/docs/vc4value_support_matrix.json \
 // RUN:   --mode phase2-lock | FileCheck %s
 
-// CHECK: PASS VC4Value tiny surface audit: mode=phase2-lock ops=2 unknown_ops_allowed=0
+// CHECK: PASS VC4Value tiny surface audit: mode=phase2-lock ops=2 unknown_ops_allowed=0 conversion_refs_allowed=1
+
+// RUN: rm -rf %t.tiny-audit
+// RUN: mkdir -p %t.tiny-audit/compiler/include/vc4/Dialect/VC4Value/IR
+// RUN: mkdir -p %t.tiny-audit/compiler/lib/Dialect/VC4Value/IR
+// RUN: mkdir -p %t.tiny-audit/compiler/lib/Conversion/TritonToVC4Value
+// RUN: printf 'def VC4Value_ProgramIdOp : VC4Value_PureOp<"program_id"> {}\n' > %t.tiny-audit/compiler/include/vc4/Dialect/VC4Value/IR/VC4ValueOps.td
+// RUN: printf 'def VC4Value_NumProgramsOp : VC4Value_PureOp<"num_programs"> {}\n' >> %t.tiny-audit/compiler/include/vc4/Dialect/VC4Value/IR/VC4ValueOps.td
+// RUN: printf '// no unknown ops\n' > %t.tiny-audit/compiler/lib/Dialect/VC4Value/IR/VC4ValueDialect.cpp
+// RUN: printf 'add_mlir_conversion_library(VCTritonToVC4Value)\n' > %t.tiny-audit/compiler/lib/Conversion/TritonToVC4Value/CMakeLists.txt
+// RUN: python3 %vc4_repo_root/compiler/test/Dialect/VC4Value/Support/audit_vc4value_tiny_surface.py \
+// RUN:   --repo-root %t.tiny-audit \
+// RUN:   --matrix %vc4_repo_root/compiler/docs/vc4value_support_matrix.json \
+// RUN:   --mode phase2-lock | FileCheck %s --check-prefix=ALLOW-CONVERSION
+
+// ALLOW-CONVERSION: PASS VC4Value tiny surface audit: mode=phase2-lock ops=2 unknown_ops_allowed=0 conversion_refs_allowed=1
+
+// RUN: printf 'def VC4Value_LoadOp : VC4Value_PureOp<"load"> {}\n' >> %t.tiny-audit/compiler/include/vc4/Dialect/VC4Value/IR/VC4ValueOps.td
+// RUN: not python3 %vc4_repo_root/compiler/test/Dialect/VC4Value/Support/audit_vc4value_tiny_surface.py \
+// RUN:   --repo-root %t.tiny-audit \
+// RUN:   --matrix %vc4_repo_root/compiler/docs/vc4value_support_matrix.json \
+// RUN:   --mode phase2-lock 2>&1 | FileCheck %s --check-prefix=FORBIDDEN-OP
+
+// FORBIDDEN-OP: FAIL VC4Value tiny surface audit: VC4Value op mnemonics must be exactly
