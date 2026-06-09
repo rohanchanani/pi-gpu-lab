@@ -175,11 +175,11 @@ void notmain(void) {
     int elapsed = timer_get_usec() - start;
     const char *status = (total_mismatches == 0 && sentinel_mismatches == 0 &&
                           launch_failures == 0 && output_hash != 0u) ? "PASS" : "FAIL";
-    printk("VC4_TEST_RESULT name=triton_vector_add_tail_vc4triton status=%s cases=%d elements_checked=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d output_hash=%u saw_ttir_import=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
+    printk("VC4_TEST_RESULT name=triton_vector_add_tail_vc4triton status=%s cases=%d elements_checked=%d total_mismatches=%d sentinel_mismatches=%d launch_failures=%d active_qpus=%d lanes=%d max_n=%d max_coverage_n=%d buffer_n=%d output_hash=%u saw_cpp_ttir_importer=%d runtime_allocations=%d runtime_launches=%d elapsed_usec=%d\n",
            status, (int)(sizeof(n_cases) / sizeof(n_cases[0])), elements_checked,
            total_mismatches, sentinel_mismatches, launch_failures, ACTIVE_QPUS,
            LANES, MAX_N, MAX_COVERAGE_N, BUFFER_N, output_hash,
-           VC4_CASE_SAW_TTIR_IMPORT, 3,
+           VC4_CASE_SAW_CPP_TTIR_IMPORTER, 3,
            (int)(sizeof(n_cases) / sizeof(n_cases[0])), elapsed);
 
     vc4Free(program, x_dev);

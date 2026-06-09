@@ -337,6 +337,10 @@ check_generated_bundle() {
   require_file "$GENERATED_DIR/kernel_launch.c"
   require_file "$GENERATED_DIR/kernel_launch.h"
   require_file "$GENERATED_DIR/input.ttir.mlir"
+  require_file "$GENERATED_DIR/input.vc4value.mlir"
+  require_file "$GENERATED_DIR/input.vc4kernel.mlir"
+  require_file "$GENERATED_DIR/input.ssavc4.mlir"
+  require_file "$GENERATED_DIR/input.vc4.mlir"
   require_file "$GENERATED_DIR/lowered.value.mlir"
   require_file "$GENERATED_DIR/verified.vc4kernel.mlir"
   require_file "$GENERATED_DIR/lowered.ssavc4.mlir"
@@ -345,7 +349,7 @@ check_generated_bundle() {
 }
 
 run_vc4_codegen() {
-  local vc4_opt vc4_codegen vc4_triton_opt lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
+  local vc4_opt vc4_codegen vc4_triton_opt lowered_dir lowered_tmp_dir input_ttir input_value verified_vc4kernel lowered_ssavc4 scheduled_vc4 stable_ttir stable_value stable_vc4kernel stable_ssavc4 stable_vc4 stable_legacy_value stable_legacy_vc4kernel stable_legacy_ssavc4 stable_legacy_vc4 value_verified input_count input_path input_base per_input_ttir per_input_value
   vc4_opt="$(find_tool vc4-opt)"
   vc4_codegen="$(find_tool vc4-codegen)"
   vc4_triton_opt="$(find_tool vc4-triton-opt)"
@@ -361,10 +365,14 @@ run_vc4_codegen() {
   lowered_ssavc4="$lowered_tmp_dir/lowered.ssavc4.mlir"
   scheduled_vc4="$lowered_tmp_dir/scheduled.vc4.mlir"
   stable_ttir="$lowered_dir/${TEST_NAME}.input.ttir.mlir"
-  stable_value="$lowered_dir/${TEST_NAME}.lowered.value.mlir"
-  stable_vc4kernel="$lowered_dir/${TEST_NAME}.verified.vc4kernel.mlir"
-  stable_ssavc4="$lowered_dir/${TEST_NAME}.lowered.ssavc4.mlir"
-  stable_vc4="$lowered_dir/${TEST_NAME}.scheduled.vc4.mlir"
+  stable_value="$lowered_dir/${TEST_NAME}.input.vc4value.mlir"
+  stable_vc4kernel="$lowered_dir/${TEST_NAME}.input.vc4kernel.mlir"
+  stable_ssavc4="$lowered_dir/${TEST_NAME}.input.ssavc4.mlir"
+  stable_vc4="$lowered_dir/${TEST_NAME}.input.vc4.mlir"
+  stable_legacy_value="$lowered_dir/${TEST_NAME}.lowered.value.mlir"
+  stable_legacy_vc4kernel="$lowered_dir/${TEST_NAME}.verified.vc4kernel.mlir"
+  stable_legacy_ssavc4="$lowered_dir/${TEST_NAME}.lowered.ssavc4.mlir"
+  stable_legacy_vc4="$lowered_dir/${TEST_NAME}.scheduled.vc4.mlir"
 
   input_count="$(ttir_input_count)"
   [[ "$input_count" -gt 0 ]] || fail "no TTIR inputs found for $TEST_NAME"
@@ -438,7 +446,15 @@ run_vc4_codegen() {
   cp "$verified_vc4kernel" "$stable_vc4kernel"
   cp "$lowered_ssavc4" "$stable_ssavc4"
   cp "$scheduled_vc4" "$stable_vc4"
+  cp "$input_value" "$stable_legacy_value"
+  cp "$verified_vc4kernel" "$stable_legacy_vc4kernel"
+  cp "$lowered_ssavc4" "$stable_legacy_ssavc4"
+  cp "$scheduled_vc4" "$stable_legacy_vc4"
   cp "$input_ttir" "$GENERATED_DIR/input.ttir.mlir"
+  cp "$input_value" "$GENERATED_DIR/input.vc4value.mlir"
+  cp "$verified_vc4kernel" "$GENERATED_DIR/input.vc4kernel.mlir"
+  cp "$lowered_ssavc4" "$GENERATED_DIR/input.ssavc4.mlir"
+  cp "$scheduled_vc4" "$GENERATED_DIR/input.vc4.mlir"
   cp "$input_value" "$GENERATED_DIR/lowered.value.mlir"
   cp "$verified_vc4kernel" "$GENERATED_DIR/verified.vc4kernel.mlir"
   cp "$lowered_ssavc4" "$GENERATED_DIR/lowered.ssavc4.mlir"
@@ -594,6 +610,7 @@ lines = [
     "#ifndef VC4_CASE_CONFIG_H",
     "#define VC4_CASE_CONFIG_H",
     "",
+    "#define VC4_CASE_SAW_CPP_TTIR_IMPORTER 1",
     "#define VC4_CASE_SAW_TTIR_IMPORT 1",
 ]
 

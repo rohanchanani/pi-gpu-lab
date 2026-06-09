@@ -3,6 +3,10 @@
 # RUN: rm -rf %t
 # RUN: VC4_TRITON_OPT="%vc4_triton_opt" VC4_OPT="%vc4_opt" VC4_CODEGEN="%vc4_codegen" VC4_CODEGEN_STATE_ROOT=%t/state "%vc4_repo_root/compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh" "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/triton_vector_add_tail_vc4triton" generate
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.ttir.mlir
+# RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.vc4value.mlir
+# RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.vc4kernel.mlir
+# RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.ssavc4.mlir
+# RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/input.vc4.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.value.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/verified.vc4kernel.mlir
 # RUN: test -f %t/state/candidates/triton_vector_add_tail_vc4triton/lowered.ssavc4.mlir
