@@ -777,9 +777,11 @@ mixed acceptance.
 
 The central value mask classifier accepts full, empty, and lane-zero clamped
 tail masks for memory transfers. Compute masks remain compute-only. Sparse or
-unknown transfer masks remain staged/rejected. The central memory legality
-classifier accepts only rank-1 identity global i32/f32 `vector<16>` transfers
-with zero load padding and inactive-zero/inactive-preserve policies.
+unknown transfer masks remain staged/rejected. For the Phase 10 executable
+memory-transfer subset, the central memory legality classifier accepts rank-1
+identity global i32/f32 `vector<16>` transfers with zero load padding and
+inactive-zero/inactive-preserve policies. This is not the global value-layer
+type or shape limit.
 
 PHASE10_RESULT=LOCKED
 FEATURE=VALUE_AND_TTIR_MASK_CLASSIFIER_MEMORY_LEGALITY
