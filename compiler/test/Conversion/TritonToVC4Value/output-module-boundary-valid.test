@@ -9,7 +9,6 @@
 # VALUE: func.func @vector_add_b16_kernel
 # VALUE-SAME: vc4value.kernel
 # VALUE: vc4value.program_id
-# VALUE: vector.step
 # VALUE: vector.transfer_read
 # VALUE: vector.transfer_write
 # VALUE: return

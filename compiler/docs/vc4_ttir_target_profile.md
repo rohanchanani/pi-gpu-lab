@@ -203,6 +203,45 @@ Even after Phase 7h:
 READY_FOR_TRITON=NO
 ```
 
+### Phase 8.5R3 controlled control-flow importer subset
+
+```text
+PHASE85_TTIR_REGION_LOWERING_FRAMEWORK=YES
+PHASE85_CONTROLLED_TTIR_CF_STATIC_PIPELINE=PASS
+VECTOR_INDEX_CAST_IMPORTER_BOILERPLATE_REMOVED=YES
+ARITH_SITOFP_STAGED_BY_BODY_FEATURE=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE85R4_STATIC_AUDITS_CONTRACT_LOCK=YES
+READY_FOR_TRITON=NO
+```
+
+Phase 8.5R3 adds structural TTIR region lowering for the source-controlled
+Phase 8.5 control-flow snapshots:
+
+```text
+examples/triton/phase8_5_control_flow/generated/
+```
+
+The accepted forms are scalar/coherent TTIR control flow: `scf.for`, `scf.if`,
+and `scf.while` inside real emitted `tt.func` bodies. The importer lowers these
+regions into the standard value surface using scoped SSA mappings for region
+block arguments and loop-carried values.
+
+`tt.get_num_programs x` is accepted for the controlled persistent-loop skeleton
+and lowers through `vc4value.num_programs`. Program-id axes 1/2 and
+num-programs axes 1/2 remain staged until the value grid-rank contract expands.
+
+`tt.make_range 0..16` is consumed structurally for canonical contiguous
+pointer/tail-mask expressions instead of emitting a dead common-prefix
+`vector<16xindex>` to `vector<16xi32>` cast. Data uses of `tt.make_range` are
+handled separately from the transfer path.
+
+This subset intentionally does not add numeric-cast support. `arith.sitofp`
+is staged by body feature and is not accepted merely because it appears inside
+control flow. Dot, reduce, gather/scatter, block pointers, tensor descriptors,
+atomics, subword forms, SFU/math expansion, TTGIR, TritonGPU, NVGPU, NVVM, GPU,
+and lower-half dialects remain outside this control-flow feature band.
+
 ## 6. Launch and program IDs
 
 TTIR launch identity maps through value-layer launch plumbing:
@@ -221,7 +260,15 @@ value path and ABI model are stable.
 
 ## 7. Arange, offsets, and block sizes
 
-Arange-like TTIR forms lower conceptually through the value lane model:
+Arange-like TTIR forms lower conceptually through the value lane model. In the
+Phase 8.5R3 accepted contiguous transfer path, `tt.make_range 0..16` is
+recognized structurally as the lane component of pointer and mask expressions,
+and the importer emits the scalar transfer base plus value transfer operations
+without dead vector index-cast boilerplate. Future true data uses may materialize
+a dense lane vector or be staged by exact diagnostic, depending on the feature
+contract.
+
+The earlier conceptual lane model remains:
 
 ```text
 vector.step -> vector<16xindex> lane range

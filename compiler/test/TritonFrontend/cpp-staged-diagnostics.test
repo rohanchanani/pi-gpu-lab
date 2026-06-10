@@ -37,11 +37,11 @@
 # AXIS: READY_FOR_TRITON remains NO
 
 # REDUCE: tt.reduce
-# REDUCE: staged TTIR target-profile feature
+# REDUCE: staged by body feature, not unsupported control flow
 # REDUCE: READY_FOR_TRITON remains NO
 
 # DOT: tt.dot / contract
-# DOT: staged TTIR target-profile feature
+# DOT: staged by body feature, not unsupported control flow
 # DOT: READY_FOR_TRITON remains NO
 
 # RANK2: rank-2/shape-changing TTIR tensor form

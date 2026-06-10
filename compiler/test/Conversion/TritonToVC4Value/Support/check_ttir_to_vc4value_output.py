@@ -26,7 +26,6 @@ COMMON_REQUIRED = (
     "vc4value.kernel",
     "vc4value.program_id",
     "axis = 0",
-    "vector.step",
     "vector.create_mask",
     "vector.transfer_read",
     "vector.transfer_write",

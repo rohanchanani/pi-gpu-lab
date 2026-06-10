@@ -3,6 +3,5 @@
 # RUN: not %vc4_triton_opt "%vc4_repo_root/examples/triton/phase6/generated/future/matmul_dot.ttir.mlir" --convert-triton-to-vc4-value -o %t.mlir 2>&1 | FileCheck %s
 
 # CHECK: tt.dot / contract
-# CHECK: is not Phase 7.5 C++ TTIR-to-VC4Value lowerable
-# CHECK: staged TTIR target-profile feature
+# CHECK: staged by body feature, not unsupported control flow
 # CHECK: READY_FOR_TRITON remains NO

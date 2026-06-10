@@ -5,7 +5,7 @@ import lit.formats
 
 config.name = "Triton to VC4Value conversion"
 config.test_format = lit.formats.ShTest(True)
-config.suffixes = [".test"]
+config.suffixes = [".test", ".mlir"]
 config.excludes = ["Inputs", "Support", "Output", "CMakeLists.txt", "lit.cfg.py"]
 config.test_source_root = os.path.dirname(__file__)
 

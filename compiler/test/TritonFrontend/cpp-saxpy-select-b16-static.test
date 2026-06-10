@@ -15,7 +15,6 @@
 # VALUE-SAME: vc4value.kernel
 # VALUE: vc4value.program_id
 # VALUE-SAME: axis = 0
-# VALUE: vector.step
 # VALUE: vector.create_mask
 # VALUE: vector.transfer_read
 # VALUE: vector.transfer_read

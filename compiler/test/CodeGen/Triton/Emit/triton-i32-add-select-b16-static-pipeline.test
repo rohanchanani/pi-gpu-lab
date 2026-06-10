@@ -16,7 +16,6 @@
 # VALUE: memref<?xi32, #vc4value.global>
 # VALUE: vc4value.kernel
 # VALUE: vc4value.program_id
-# VALUE: vector.step
 # VALUE: vector.create_mask
 # VALUE: vector.transfer_read
 # VALUE: vector.transfer_read

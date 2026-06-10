@@ -10,6 +10,5 @@
 # RUN: test ! -s %t/supported_plus_dot.value.mlir
 
 # ERR: tt.dot / contract
-# ERR: is not Phase 7.5 C++ TTIR-to-VC4Value lowerable
-# ERR: staged TTIR target-profile feature
+# ERR: staged by body feature, not unsupported control flow
 # ERR: READY_FOR_TRITON remains NO

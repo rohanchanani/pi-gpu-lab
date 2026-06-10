@@ -287,7 +287,7 @@ import sys
 path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8", errors="replace")
 for required in ("func.func", "vc4value.kernel", "vc4value.program_id",
-                 "vector.step", "vector.create_mask",
+                 "vector.create_mask",
                  "vector.transfer_read", "vector.transfer_write"):
     if required not in text:
         raise SystemExit(f"{path}: lowered value file missing {required}")

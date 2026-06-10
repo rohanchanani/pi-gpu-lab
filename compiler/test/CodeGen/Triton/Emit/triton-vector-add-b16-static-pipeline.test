@@ -15,7 +15,6 @@
 # VALUE: func.func @vector_add_b16_kernel
 # VALUE: vc4value.kernel
 # VALUE: vc4value.program_id
-# VALUE: vector.step
 # VALUE: vector.create_mask
 # VALUE: vector.transfer_read
 # VALUE: arith.addf

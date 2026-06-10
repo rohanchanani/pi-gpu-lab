@@ -51,7 +51,7 @@ def forbid_op_token(text: str, token: str, label: str) -> None:
 def audit_value(path: Path) -> None:
     text = read_text(path)
     for needle in ("func.func", "vc4value.kernel", "vc4value.program_id",
-                   "vector.step", "vector.create_mask",
+                   "vector.create_mask",
                    "vector.transfer_read", "vector.transfer_write", "memref<"):
         require(text, needle, str(path))
     forbid(

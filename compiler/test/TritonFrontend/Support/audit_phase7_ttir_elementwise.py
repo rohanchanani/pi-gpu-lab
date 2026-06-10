@@ -21,7 +21,6 @@ VALUE_REQUIRED = [
     "func.func",
     "vc4value.kernel",
     "vc4value.program_id",
-    "vector.step",
     "vector.create_mask",
     "vector.transfer_read",
     "vector.transfer_write",
