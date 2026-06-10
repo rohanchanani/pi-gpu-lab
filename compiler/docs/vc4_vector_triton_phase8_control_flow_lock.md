@@ -45,6 +45,11 @@ PHASE8R_NESTED_STRUCTURED_CF_STATIC=PASS
 PHASE8R_TL_RANGE_STYLE_LOOP_STATIC=PASS
 PHASE8R_PERSISTENT_LOOP_SKELETON_STATIC=PASS
 READY_FOR_PHASE8RD_SWITCH_MULTI_EXIT_PROBE=YES
+PHASE8R_CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
+PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
+PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON
+READY_FOR_PHASE8RE_LOWER_HALF_CF_COMPLETION=NOT_NEEDED
+READY_FOR_PHASE8RF_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -80,11 +85,12 @@ body feature, not by control flow.
 
 `scf.parallel`, `scf.forall`, and `scf.reduce` are not simple scalar
 control-flow support. They remain staged/rejected for parallel and reduction
-phases. `cf.switch` and `scf.index_switch` are staged with proof because Phase
-8Ra did not find them critical for sane Triton control-flow import; revisit
-only with a structural upstream conversion or reliable scalar branch-chain
-lowering. Irreducible CFG is probe/classify only, not required for sane Triton
-Phase 8.5 support.
+phases. Phase 8Rd locks `cf.switch` support by expanding scalar switches to a
+deterministic `cf.cond_br` chain before verified VC4Kernel reaches the lower
+half. `scf.index_switch` is supported when upstream `--convert-scf-to-cf`
+canonicalizes it to `cf.switch`; raw `scf.index_switch` remains staged at the
+value-surface boundary. Irreducible CFG is probe/classify only, not required
+for sane Triton Phase 8.5 support.
 
 ## Executable Pipeline
 
@@ -126,6 +132,41 @@ READY_FOR_TRITON=NO
 
 This is static proof only. Phase 8Rc did not add TTIR control-flow import and
 did not run hardware.
+
+## Phase 8Rd Switch, Multi-Exit, And Irreducible CFG Policy
+
+Phase 8Rd resolved the remaining scalar CFG edge cases before Phase 8.5.
+
+```text
+PHASE8R_CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
+PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
+PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON
+READY_FOR_PHASE8RE_LOWER_HALF_CF_COMPLETION=NOT_NEEDED
+READY_FOR_PHASE8RF_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+```
+
+`cf.switch` is value-surface-admissible only for scalar i32 flags. The
+value-to-VC4Kernel path lowers it to explicit scalar comparisons and
+`cf.cond_br`/`cf.br`, so verified VC4Kernel still presents only the branch
+forms already accepted by the lower half. `scf.index_switch` is supported
+through upstream `--convert-scf-to-cf`, which emits `cf.switch` in this LLVM
+version; raw `scf.index_switch` remains a staged raw-SCF form.
+
+Multi-exit reducible loops, including early exits, two scalar exits joining at
+a merge block, and a loop-carried `vector<16xf32>` accumulator with early
+scalar exit, pass the static `value -> vc4kernel -> ssavc4 -> scheduled vc4`
+pipeline.
+
+The raw irreducible CFG probe reaches SSAVC4 and is blocked in scheduled VC4
+lowering with the exact diagnostic:
+
+```text
+SSAVC4 block-argument lowering supports only natural loops with conservative loop-carried data values
+```
+
+This is a lower-half natural-loop limitation, not a hardware-impossible claim.
+Irreducible CFG is not required for sane Triton Phase 8.5 control-flow import.
 
 ## Runner Policy
 

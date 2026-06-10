@@ -292,6 +292,9 @@ NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW
 TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
 PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW
 VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS
+PHASE8R_CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED
+PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED
+PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON
 IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON
 READY_FOR_TRITON=NO
 
@@ -300,6 +303,13 @@ divergence is not accepted as branch CFG; masks/selects carry lane-varying
 dataflow. Value-level `scf.while`, nested structured control flow,
 tl.range-style loop skeletons, and persistent-loop skeletons are the relevant
 support targets before TTIR import.
+
+Phase 8Rd additionally locks scalar `cf.switch` by lowering it to explicit
+scalar branch chains, supports `scf.index_switch` when upstream SCF-to-CF emits
+that `cf.switch`, and proves multi-exit reducible loops statically through
+scheduled VC4. Irreducible CFG is probed and currently limited by lower-half
+natural-loop block-argument lowering; it is not required for sane Triton Phase
+8.5 control-flow import and is not classified as hardware-impossible.
 
 Required Phase 8.5 classifications:
 
@@ -316,6 +326,10 @@ Required Phase 8.5 classifications:
   `lowerable_if_matches_value_cf_subset`; lower only if they structurally match
   the Phase 8 value-cf subset, otherwise stage with the first unsupported
   boundary named.
+- TTIR scalar switch/index-switch forms:
+  `lowerable_if_canonicalized_to_scalar_cf_switch_or_branch_chain`; raw forms
+  must enter through upstream canonicalization or the value `cf.switch`
+  scalar-chain policy.
 - TTIR vector or per-lane branch conditions:
   deterministic reject as control flow. VC4 has one program counter per QPU
   program; per-lane divergence must be represented as masks/selects, not

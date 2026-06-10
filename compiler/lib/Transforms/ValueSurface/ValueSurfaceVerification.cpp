@@ -69,7 +69,7 @@ static bool isAllowedSCFOp(StringRef name) {
 }
 
 static bool isAllowedCFOp(StringRef name) {
-  return name == "cf.br" || name == "cf.cond_br";
+  return name == "cf.br" || name == "cf.cond_br" || name == "cf.switch";
 }
 
 static bool isMemRefValueSurfaceCFGType(Type type) {
@@ -721,6 +721,34 @@ static void checkCFOp(Operation *op, bool &sawError) {
             << "memref successor operands are not in the Phase 8 "
             << "VC4 value control-flow subset";
         sawError = true;
+      }
+    }
+    return;
+  }
+
+  if (auto switchOp = dyn_cast<cf::SwitchOp>(op)) {
+    if (!switchOp.getFlag().getType().isSignlessInteger(32)) {
+      op->emitError()
+          << "cf.switch flag must be scalar i32 in the Phase 8R "
+          << "VC4 value control-flow subset";
+      sawError = true;
+    }
+    for (Value operand : switchOp.getDefaultOperands()) {
+      if (isMemRefValueSurfaceCFGType(operand.getType())) {
+        op->emitError()
+            << "memref successor operands are not in the Phase 8 "
+            << "VC4 value control-flow subset";
+        sawError = true;
+      }
+    }
+    for (OperandRange operands : switchOp.getCaseOperands()) {
+      for (Value operand : operands) {
+        if (isMemRefValueSurfaceCFGType(operand.getType())) {
+          op->emitError()
+              << "memref successor operands are not in the Phase 8 "
+              << "VC4 value control-flow subset";
+          sawError = true;
+        }
       }
     }
   }

@@ -235,18 +235,21 @@
         "nested structured control flow",
         "cf.br",
         "cf.cond_br",
+        "cf.switch",
         "value block arguments",
+        "multi-exit reducible loop",
         "tl.range-style loop skeleton",
         "persistent-loop skeleton"
       ],
       "required_vc4kernel_contract": [
         "VC4Kernel verified output contains no raw scf/vector/memref/func/vc4value/producer ops",
-        "VC4Kernel may contain only accepted cf.br and scalar-i1 cf.cond_br forms at the CFG boundary"
+        "VC4Kernel may contain only accepted cf.br and scalar-i1 cf.cond_br forms at the CFG boundary",
+        "cf.switch is expanded to scalar branch chains before lower-half conversion"
       ],
-      "diagnostic_policy": "diagnose lower-half dialect control in value input, vector branch conditions rejected as CFG, memref block arguments, memref successor operands, cf.switch/scf.index_switch staged with proof, scf.parallel/scf.forall/scf.reduce staged, and raw scf at the verified VC4Kernel boundary",
-      "verification": "dialect-family check admits restricted scf/cf; Phase 8 verifier checks scalar-i1 cf.cond_br conditions, accepts scf.while as surface-admissible before scf-to-cf, and rejects memref CFG block/successor operands",
-      "summary": "Phase 8 is a value-layer control-flow phase: cf.br and scalar-i1 cf.cond_br are accepted_executable_phase8_pending_hardware, while scf.if/scf.for/scf.while and nested structured CF are surface_admissible_canonicalization_required through upstream scf-to-cf before value-to-VC4Kernel lowering.",
-      "notes": "PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE. SCF_WHILE_VALUE_TARGET=SUPPORT_NOW. NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW. TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW. PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW. VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS. IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON. Executable value-to-VC4Kernel lowering consumes cf, not raw scf. Upstream scf-to-cf canonicalization is the preferred boundary. QPU control flow is scalar/coherent; vector branch conditions are rejected as CFG and use masks/selects. The tl.range-style loop skeleton and persistent-loop skeleton are value-level targets. irreducible CFG is probe/classify only. TTIR control flow is staged_future_ttir_import and not Phase 8. READY_FOR_TRITON remains NO.",
+      "diagnostic_policy": "diagnose lower-half dialect control in value input, vector branch conditions rejected as CFG, memref block arguments, memref successor operands, raw scf.index_switch before upstream canonicalization, scf.parallel/scf.forall/scf.reduce staged, and raw scf at the verified VC4Kernel boundary",
+      "verification": "dialect-family check admits restricted scf/cf; Phase 8 verifier checks scalar-i1 cf.cond_br conditions and scalar-i32 cf.switch flags, accepts scf.while as surface-admissible before scf-to-cf, and rejects memref CFG block/successor operands",
+      "summary": "Phase 8 is a value-layer control-flow phase: cf.br, scalar-i1 cf.cond_br, scalar-i32 cf.switch, block arguments, nested structured CF after upstream scf-to-cf, and multi-exit reducible loops are accepted executable static forms before hardware isolation.",
+      "notes": "PHASE8R_CF_COMPLETENESS_SCOPE=ACTIVE. SCF_WHILE_VALUE_TARGET=SUPPORT_NOW. NESTED_STRUCTURED_CF_VALUE_TARGET=SUPPORT_NOW. TL_RANGE_STYLE_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW. PERSISTENT_LOOP_SKELETON_VALUE_TARGET=SUPPORT_NOW. PHASE8R_CF_SWITCH_INDEX_SWITCH_POLICY=LOCKED. PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED. VECTOR_BRANCH_CONDITION_POLICY=DETERMINISTIC_REJECT_AS_CFG_USE_MASKS. PHASE8R_IRREDUCIBLE_CFG_POLICY=PROBED_NOT_REQUIRED_FOR_TRITON. IRREDUCIBLE_CFG_POLICY=PROBE_NOT_REQUIRED_FOR_SANE_TRITON. Executable value-to-VC4Kernel lowering consumes cf, not raw scf. Upstream scf-to-cf canonicalization is the preferred boundary. QPU control flow is scalar/coherent; vector branch conditions are rejected as CFG and use masks/selects. The tl.range-style loop skeleton and persistent-loop skeleton are value-level targets. irreducible CFG is probe/classify only. TTIR control flow is staged_future_ttir_import and not Phase 8. READY_FOR_TRITON remains NO.",
       "phase8_control_flow_behavior": {
         "cf.br": "accepted_executable_phase8_pending_hardware",
         "cf.cond_br": "accepted_executable_phase8_pending_hardware",
@@ -268,8 +271,9 @@
         "ttir_control_flow": "staged_future_ttir_import",
         "vector_valued_branch_conditions": "deterministic_reject_as_cfg_use_masks",
         "memref_block_args": "deterministic_reject_until_proven",
-        "cf.switch": "staged_with_proof_phase8r",
-        "scf.index_switch": "staged_with_proof_phase8r",
+        "cf.switch": "lowerable_phase8rd_scalar_chain",
+        "scf.index_switch": "canonicalization_required_phase8rd_to_cf_switch",
+        "multi_exit_reducible_loops": "lowerable_phase8rd_static",
         "scf.parallel": "staged_reject_parallel_semantics",
         "scf.forall": "staged_reject_parallel_semantics",
         "scf.reduce": "staged_reject_reduction_semantics",

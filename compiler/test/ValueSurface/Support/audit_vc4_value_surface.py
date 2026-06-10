@@ -345,8 +345,9 @@ def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
         "ttir_control_flow": "staged_future_ttir_import",
         "vector_valued_branch_conditions": "deterministic_reject_as_cfg_use_masks",
         "memref_block_args": "deterministic_reject_until_proven",
-        "cf.switch": "staged_with_proof_phase8r",
-        "scf.index_switch": "staged_with_proof_phase8r",
+        "cf.switch": "lowerable_phase8rd_scalar_chain",
+        "scf.index_switch": "canonicalization_required_phase8rd_to_cf_switch",
+        "multi_exit_reducible_loops": "lowerable_phase8rd_static",
         "scf.parallel": "staged_reject_parallel_semantics",
         "scf.forall": "staged_reject_parallel_semantics",
         "scf.reduce": "staged_reject_reduction_semantics",
@@ -375,6 +376,7 @@ def scan_phase8_cf_policy(repo_root: pathlib.Path) -> list[str]:
         "scf.reduce",
         "cf.switch",
         "scf.index_switch",
+        "PHASE8R_MULTI_EXIT_REDUCIBLE_LOOP_POLICY=LOCKED",
         "verified VC4Kernel contains no raw scf",
     ]:
         if phrase not in lock_text:

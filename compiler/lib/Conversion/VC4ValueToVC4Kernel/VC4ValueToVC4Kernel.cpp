@@ -655,6 +655,8 @@ private:
       return lowerBranch(branch);
     if (auto condBranch = llvm::dyn_cast<cf::CondBranchOp>(op))
       return lowerCondBranch(condBranch);
+    if (auto switchOp = llvm::dyn_cast<cf::SwitchOp>(op))
+      return lowerSwitch(switchOp);
     if (op->getName().getDialectNamespace() == "scf")
       return emitRawSCFDiagnostic(op);
     return emitPhase5Diagnostic(op, Twine("terminator '") +
@@ -744,6 +746,84 @@ private:
 
     builder.create<cf::CondBranchOp>(branch.getLoc(), condition, trueTarget,
                                      trueOperands, falseTarget, falseOperands);
+    return success();
+  }
+
+  LogicalResult lowerSwitch(cf::SwitchOp switchOp) {
+    Value flag = lookupValue(switchOp.getOperation(), switchOp.getFlag());
+    if (!flag)
+      return failure();
+    if (!flag.getType().isSignlessInteger(32))
+      return switchOp.emitOpError()
+             << "flag must lower to scalar i32 for Phase 8R cf.switch "
+                "control flow; READY_FOR_TRITON remains NO";
+
+    Block *defaultTarget = lookupTargetBlock(switchOp.getOperation(),
+                                             switchOp.getDefaultDestination());
+    if (!defaultTarget)
+      return failure();
+    SmallVector<Value, 4> defaultOperands;
+    if (failed(lowerSuccessorOperands(switchOp.getOperation(),
+                                      switchOp.getDefaultOperands(),
+                                      switchOp.getDefaultDestination(),
+                                      defaultOperands)))
+      return failure();
+
+    DenseIntElementsAttr caseValuesAttr = switchOp.getCaseValuesAttr();
+    if (!caseValuesAttr || caseValuesAttr.empty()) {
+      builder.create<cf::BranchOp>(switchOp.getLoc(), defaultTarget,
+                                   defaultOperands);
+      return success();
+    }
+
+    SmallVector<APInt, 4> caseValues;
+    for (APInt value : caseValuesAttr.getValues<APInt>())
+      caseValues.push_back(value);
+
+    SmallVector<Block *, 4> caseTargets;
+    SmallVector<SmallVector<Value, 4>, 4> caseOperands;
+    for (auto [index, destination] :
+         llvm::enumerate(switchOp.getCaseDestinations())) {
+      caseTargets.push_back(lookupTargetBlock(switchOp.getOperation(),
+                                              destination));
+      if (!caseTargets.back())
+        return failure();
+      SmallVector<Value, 4> operands;
+      if (failed(lowerSuccessorOperands(switchOp.getOperation(),
+                                        switchOp.getCaseOperands(index),
+                                        destination, operands)))
+        return failure();
+      caseOperands.push_back(std::move(operands));
+    }
+
+    if (caseValues.size() != caseTargets.size())
+      return switchOp.emitOpError()
+             << "case value count does not match destination count; not Phase "
+                "8R lowerable. READY_FOR_TRITON remains NO";
+
+    Region *targetRegion = builder.getInsertionBlock()->getParent();
+    for (auto [index, value] : llvm::enumerate(caseValues)) {
+      Value constant =
+          createI32Constant(builder, switchOp.getLoc(), value.getSExtValue());
+      Value match = builder.create<arith::CmpIOp>(
+          switchOp.getLoc(), arith::CmpIPredicate::eq, flag, constant);
+
+      bool lastCase = index + 1 == caseValues.size();
+      Block *falseTarget = defaultTarget;
+      ValueRange falseOperands = defaultOperands;
+      if (!lastCase) {
+        Block *testBlock = builder.getInsertionBlock();
+        falseTarget = builder.createBlock(targetRegion, targetRegion->end());
+        falseOperands = ValueRange();
+        builder.setInsertionPointToEnd(testBlock);
+      }
+
+      builder.create<cf::CondBranchOp>(switchOp.getLoc(), match,
+                                       caseTargets[index], caseOperands[index],
+                                       falseTarget, falseOperands);
+      if (!lastCase)
+        builder.setInsertionPointToEnd(falseTarget);
+    }
     return success();
   }
 

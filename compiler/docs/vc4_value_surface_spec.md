@@ -448,10 +448,15 @@ full value-to-hardware path. Value block arguments are staged by type:
 `vector<16xi32>`, and `vector<16xf32>` are the Phase 8 V1 candidate set;
 memref block arguments are rejected until a later ABI and lowering proof exists.
 
-The following remain rejected or staged in Phase 8:
+The following are resolved or remain rejected/staged in Phase 8R:
 
 - vector-valued branch conditions, as branch CFG; use masks/selects;
-- `cf.switch` and `scf.index_switch`, staged with proof;
+- scalar-i32 `cf.switch`, accepted through Phase 8Rd scalar branch-chain
+  lowering before the lower half;
+- `scf.index_switch`, accepted only after upstream `--convert-scf-to-cf`
+  canonicalizes it to `cf.switch`; raw `scf.index_switch` remains staged;
+- multi-exit reducible loops, accepted statically when they use lowerable
+  scalar/vector block-argument types;
 - irreducible CFG, probe/classify only and not required for sane Triton;
 - `scf.parallel`, `scf.forall`, and `scf.reduce`, staged/rejected for parallel
   or reduction semantics rather than simple scalar control flow;
