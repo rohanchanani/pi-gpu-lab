@@ -1,0 +1,30 @@
+{
+  "name": "flash_attention_fwd32_d1_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 10,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "seq_n": 32,
+    "d_qk": 1,
+    "d_v": 1,
+    "online_tiles": 2,
+    "saw_flash_online_softmax": 1,
+    "saw_sfu_exp": 1,
+    "saw_sfu_recip": 1,
+    "saw_fmax_reduce": 1,
+    "saw_sum_reduce": 1,
+    "saw_tmu_qkv": 1,
+    "saw_vdw_preserve": 1,
+    "no_attention_matrix": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 10
+  },
+  "float_max": {
+    "max_abs_diff": 0.01,
+    "max_rel_diff": 0.01
+  }
+}

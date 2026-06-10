@@ -1,0 +1,24 @@
+{
+  "name": "fused_conv2d_3x3_maxpool_vc4kernel",
+  "status": "PASS",
+  "required": {
+    "cases": 3,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "timeouts": 0,
+    "saw_assignment_part2_nchw": 1,
+    "saw_valid_conv3x3_stride1": 1,
+    "saw_bias": 1,
+    "saw_pool_size_1": 1,
+    "saw_pool_size_2": 1,
+    "saw_fused_maxpool": 1,
+    "saw_input_channel_loop": 1,
+    "saw_output_channel_grid": 1,
+    "saw_tmu_input_weight_bias": 1,
+    "saw_vdw_preserve": 1,
+    "no_intermediate_conv_buffer": 1,
+    "runtime_allocations": 4,
+    "runtime_launches": 3
+  }
+}
