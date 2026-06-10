@@ -1,0 +1,88 @@
+{
+  "generator": "tools/vc4_emit_ttir.py",
+  "generator_uses_real_triton_frontend": true,
+  "generator_wrapper_used": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "phase": "Phase 8.5R2",
+  "python_semantic_importer_used": false,
+  "ready_for_triton": "NO",
+  "snapshots": [
+    {
+      "expected_body_feature_classification": "lowerable_control_flow_body",
+      "expected_ttir_control_flow_classification": "SCF_IF",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/ttir_cf_scalar_if_b16.py --kernel-name ttir_cf_scalar_if_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/ttir_cf_scalar_if_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/ttir_cf_scalar_if_b16.json",
+      "kernel_name": "ttir_cf_scalar_if_b16_kernel",
+      "name": "ttir_cf_scalar_if_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,*fp32,i32,i32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/ttir_cf_scalar_if_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/ttir_cf_scalar_if_b16.ttir.mlir"
+    },
+    {
+      "expected_body_feature_classification": "lowerable_control_flow_body",
+      "expected_ttir_control_flow_classification": "SCF_FOR",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/ttir_cf_tl_range_loop_b16.py --kernel-name ttir_cf_tl_range_loop_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/ttir_cf_tl_range_loop_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/ttir_cf_tl_range_loop_b16.json",
+      "kernel_name": "ttir_cf_tl_range_loop_b16_kernel",
+      "name": "ttir_cf_tl_range_loop_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/ttir_cf_tl_range_loop_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/ttir_cf_tl_range_loop_b16.ttir.mlir"
+    },
+    {
+      "expected_body_feature_classification": "lowerable_control_flow_body",
+      "expected_ttir_control_flow_classification": "SCF_WHILE",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/ttir_cf_while_loop_b16.py --kernel-name ttir_cf_while_loop_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/ttir_cf_while_loop_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/ttir_cf_while_loop_b16.json",
+      "kernel_name": "ttir_cf_while_loop_b16_kernel",
+      "name": "ttir_cf_while_loop_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/ttir_cf_while_loop_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/ttir_cf_while_loop_b16.ttir.mlir"
+    },
+    {
+      "expected_body_feature_classification": "lowerable_control_flow_body",
+      "expected_ttir_control_flow_classification": "SCF_WHILE",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/ttir_cf_persistent_loop_b16.py --kernel-name ttir_cf_persistent_loop_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/ttir_cf_persistent_loop_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/ttir_cf_persistent_loop_b16.json",
+      "kernel_name": "ttir_cf_persistent_loop_b16_kernel",
+      "name": "ttir_cf_persistent_loop_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/ttir_cf_persistent_loop_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/ttir_cf_persistent_loop_b16.ttir.mlir"
+    },
+    {
+      "expected_body_feature_classification": "lowerable_control_flow_body",
+      "expected_ttir_control_flow_classification": "SCF_CF",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/mixed_ttir_cf_loop_if_tail_b16.py --kernel-name mixed_ttir_cf_loop_if_tail_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,fp32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/mixed_ttir_cf_loop_if_tail_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/mixed_ttir_cf_loop_if_tail_b16.json",
+      "kernel_name": "mixed_ttir_cf_loop_if_tail_b16_kernel",
+      "name": "mixed_ttir_cf_loop_if_tail_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,fp32,fp32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/mixed_ttir_cf_loop_if_tail_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/mixed_ttir_cf_loop_if_tail_b16.ttir.mlir"
+    },
+    {
+      "expected_body_feature_classification": "static_import_regression_body",
+      "expected_ttir_control_flow_classification": "UNROLLED_OR_SPECIALIZED",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase8_5_control_flow/sources/ttir_cf_static_range_unrolled_b16.py --kernel-name ttir_cf_static_range_unrolled_b16_kernel --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase8_5_control_flow/generated/ttir_cf_static_range_unrolled_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase85r2_controlled_snapshots/metadata/ttir_cf_static_range_unrolled_b16.json",
+      "kernel_name": "ttir_cf_static_range_unrolled_b16_kernel",
+      "name": "ttir_cf_static_range_unrolled_b16",
+      "no_arith_sitofp": true,
+      "no_unrelated_staged_body_features": true,
+      "signature": "*fp32,*fp32,i32,16",
+      "source": "examples/triton/phase8_5_control_flow/sources/ttir_cf_static_range_unrolled_b16.py",
+      "triton_version": "3.7.0",
+      "ttir": "examples/triton/phase8_5_control_flow/generated/ttir_cf_static_range_unrolled_b16.ttir.mlir"
+    }
+  ]
+}

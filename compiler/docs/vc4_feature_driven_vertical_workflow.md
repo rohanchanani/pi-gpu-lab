@@ -908,7 +908,8 @@ If any of these are not true, the phase is not locked.
 
 ## 22. Relationship to `READY_FOR_TRITON`
 
-Feature phases may prove real Triton/TTIR kernels on hardware without setting global `READY_FOR_TRITON=YES`.
+Feature phases may prove real Triton/TTIR kernels on hardware without setting
+the global Triton-ready flag to YES.
 
 Use:
 

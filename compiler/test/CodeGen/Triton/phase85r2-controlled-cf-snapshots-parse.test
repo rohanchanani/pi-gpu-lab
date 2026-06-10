@@ -1,0 +1,59 @@
+# REQUIRES: vc4-triton-cpp-frontend
+# RUN: mkdir -p %t
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/ttir_cf_scalar_if_b16.ttir.mlir" -o %t/scalar_if.mlir
+# RUN: FileCheck %s --check-prefix=SCALAR-IF --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/scalar_if.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/ttir_cf_tl_range_loop_b16.ttir.mlir" -o %t/tl_range.mlir
+# RUN: FileCheck %s --check-prefix=TL-RANGE --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/tl_range.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/ttir_cf_while_loop_b16.ttir.mlir" -o %t/while.mlir
+# RUN: FileCheck %s --check-prefix=WHILE --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/while.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/ttir_cf_persistent_loop_b16.ttir.mlir" -o %t/persistent.mlir
+# RUN: FileCheck %s --check-prefix=PERSISTENT --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/persistent.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/mixed_ttir_cf_loop_if_tail_b16.ttir.mlir" -o %t/mixed.mlir
+# RUN: FileCheck %s --check-prefix=MIXED --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/mixed.mlir
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase8_5_control_flow/generated/ttir_cf_static_range_unrolled_b16.ttir.mlir" -o %t/static_range.mlir
+# RUN: FileCheck %s --check-prefix=STATIC --implicit-check-not='arith.sitofp' --implicit-check-not='tt.dot' --implicit-check-not='tt.reduce' --implicit-check-not='tt.make_block_ptr' --implicit-check-not='tt.advance' --implicit-check-not='ttg.' --implicit-check-not='triton_gpu.' --implicit-check-not='nvgpu.' --implicit-check-not='nvvm.' --input-file=%t/static_range.mlir
+
+# SCALAR-IF: tt.func public @ttir_cf_scalar_if_b16_kernel
+# SCALAR-IF: tt.load
+# SCALAR-IF: tt.load
+# SCALAR-IF: scf.if
+# SCALAR-IF: scf.yield
+# SCALAR-IF: tt.store
+
+# TL-RANGE: tt.func public @ttir_cf_tl_range_loop_b16_kernel
+# TL-RANGE: tt.load
+# TL-RANGE: scf.for
+# TL-RANGE: scf.yield
+# TL-RANGE: tt.store
+
+# WHILE: tt.func public @ttir_cf_while_loop_b16_kernel
+# WHILE: tt.load
+# WHILE: scf.while
+# WHILE: scf.condition
+# WHILE: scf.yield
+# WHILE: tt.store
+
+# PERSISTENT: tt.func public @ttir_cf_persistent_loop_b16_kernel
+# PERSISTENT: tt.get_num_programs
+# PERSISTENT: scf.while
+# PERSISTENT: scf.condition
+# PERSISTENT: tt.load
+# PERSISTENT: tt.store
+# PERSISTENT: scf.yield
+
+# MIXED: tt.func public @mixed_ttir_cf_loop_if_tail_b16_kernel
+# MIXED: tt.load
+# MIXED: tt.load
+# MIXED: scf.while
+# MIXED: scf.condition
+# MIXED: scf.yield
+# MIXED: scf.if
+# MIXED: scf.yield
+# MIXED: tt.store
+
+# STATIC: tt.func public @ttir_cf_static_range_unrolled_b16_kernel
+# STATIC: tt.load
+# STATIC-NOT: scf.for
+# STATIC-NOT: scf.if
+# STATIC-NOT: scf.while
+# STATIC: tt.store
