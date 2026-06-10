@@ -1,0 +1,21 @@
+{
+  "name": "value_rank2_row_slice_copy_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 6,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_cols": 33,
+    "output_hash_nonzero": 1,
+    "saw_value_rank2_row_slice_identity": 1,
+    "saw_value_shape_args": 1,
+    "saw_row_major_index": 1,
+    "saw_value_tail_mask": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 6
+  }
+}

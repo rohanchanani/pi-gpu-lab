@@ -1,0 +1,5 @@
+# RUN: python3 %S/Support/audit_phase11_strided_ranked_isolation_claims.py --repo-root %vc4_repo_root --claims compiler/test/CodeGen/VC4Value/Hardware/Run/phase11_strided_ranked_isolation_claims.json | FileCheck %s
+
+Phase 11 strided/ranked memory isolation claim audit.
+
+# CHECK: PASS Phase 11 strided/ranked isolation claim audit

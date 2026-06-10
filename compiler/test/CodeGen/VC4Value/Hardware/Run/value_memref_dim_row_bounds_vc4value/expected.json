@@ -1,0 +1,22 @@
+{
+  "name": "value_memref_dim_row_bounds_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 7,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_cols": 33,
+    "output_hash_nonzero": 1,
+    "saw_value_memref_dim_metadata": 1,
+    "saw_value_shape_args": 1,
+    "saw_no_hidden_descriptor": 1,
+    "saw_row_bounds": 1,
+    "saw_value_tail_mask": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 7
+  }
+}

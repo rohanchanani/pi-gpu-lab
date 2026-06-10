@@ -1,0 +1,21 @@
+{
+  "name": "value_strided_rank1_row_copy_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 24,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_ncols": 33,
+    "output_hash_nonzero": 1,
+    "saw_value_rank1_flattened_stride": 1,
+    "saw_value_row_stride": 1,
+    "saw_row_padding_sentinels": 1,
+    "saw_value_tail_mask": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 24
+  }
+}

@@ -4,6 +4,11 @@ VALUE_RANK2_ROW_SLICE_TO_VC4KERNEL_STATIC=PASS
 VALUE_MEMREF_DIM_METADATA_LOWERING=PASS
 VALUE_STRIDED_RANKED_ADDRESS_PLANNER=YES
 VALUE_STRIDED_RANKED_MEMORY_STATIC=PASS
+VALUE_STRIDED_RANKED_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_RANK1_FLATTENED_STRIDE_HARDWARE=PASS
+VALUE_RANK2_IDENTITY_ROW_SLICE_HARDWARE=PASS
+VALUE_RANK2_STRIDED_ROW_SLICE_HARDWARE=PASS
+VALUE_MEMREF_DIM_METADATA_HARDWARE=PASS
 REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
 REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -15,6 +20,7 @@ GATHER_LANE_STRIDE_STAGED=YES
 HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
+READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
 READY_FOR_PHASE11_3_VALUE_SURFACE_CONTRACT=YES
@@ -77,5 +83,11 @@ base indices centrally, reuses the Phase 10 full/empty/tail mask classifier,
 and rejects gather-like lane-varying stride, non-unit inner stride, column
 slices, hidden descriptor metadata, and rank-2 tile/vector forms. Hardware
 proof is intentionally deferred to Phase 11.5.
+
+Phase 11.5 proves the value subset on VC4 hardware with targeted isolation
+fixtures for rank-1 flattened row stride, rank-2 identity row slices, rank-2
+strided row slices, `memref.dim` metadata row bounds, and repeated empty/non-
+empty ranked launches. The fixtures use active_qpus=12, strict CPU oracles,
+row-padding sentinels, output hashes, and checked `saw_*` claims.
 
 `READY_FOR_TRITON=NO` remains locked.

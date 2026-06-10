@@ -890,3 +890,24 @@ column/vertical slices, non-unit inner stride, nonzero layout offsets, hidden
 memref descriptors, rank-2 vector/tile transfers, block pointers, reductions,
 dot/GEMV/GEMM, f16/subword storage lowering, numeric casts, and sparse/unknown
 transfer masks beyond the Phase 10 full/empty/tail mask set.
+
+## 30. Phase 11.5 value ranked/strided hardware isolation lock
+
+VALUE_STRIDED_RANKED_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_RANK1_FLATTENED_STRIDE_HARDWARE=PASS
+VALUE_RANK2_IDENTITY_ROW_SLICE_HARDWARE=PASS
+VALUE_RANK2_STRIDED_ROW_SLICE_HARDWARE=PASS
+VALUE_MEMREF_DIM_METADATA_HARDWARE=PASS
+READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+
+Phase 11.5 proves the Phase 11 value memory skeletons on hardware through
+targeted isolation fixtures. The hardware runs cover rank-1 flattened
+`row * lda + col` address expressions, rank-2 identity row-slice indexing,
+rank-2 `strided<[?, 1], offset: 0>` row-slice indexing with explicit
+`stride_args`, `memref.dim` lowering to scalar shape args, empty ranked
+launches, repeated invocations, Phase 10 tail masks, and row-padding sentinels.
+
+The claim audit keeps gather/lane-varying stride, non-unit inner stride,
+column-slice maps, and hidden memref descriptor ABI paths staged or rejected.
+No Triton readiness is implied.

@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase11_strided_ranked_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_strided_rank1_row_copy_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_strided_rank1_row_copy_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_strided_rank1_row_copy_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_strided_rank1_row_copy_vc4value/candidate/value_strided_rank1_row_copy_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_rank1_flattened_stride", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_rank1_flattened_stride", "input_marker": "%idx = arith.addi %row_base, %col", "oracle_marker": "r * lda + c"},
+        {"claim": "saw_value_row_stride", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_row_stride", "input_marker": "%row_base = arith.muli %row, %lda", "oracle_marker": "lda_for"},
+        {"claim": "saw_row_padding_sentinels", "kind": "CHECKED_OUTPUT", "expected_field": "saw_row_padding_sentinels", "input_marker": "vector.transfer_write %values, %out[%idx], %mask", "oracle_marker": "verify_sentinels"},
+        {"claim": "saw_phase10_tail_masks", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_tail_mask", "input_marker": "vector.create_mask %remaining", "oracle_marker": "col_cases"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_rank2_row_slice_copy_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_copy_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_copy_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_copy_vc4value/candidate/value_rank2_row_slice_copy_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_rank2_row_slice_identity", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_rank2_row_slice_identity", "input_marker": "memref<?x?xi32, #vc4value.global>", "oracle_marker": "r * cols + c"},
+        {"claim": "saw_value_shape_args", "kind": "CHECKED_AUDIT", "expected_field": "saw_value_shape_args", "input_marker": "vc4value.shape_args = [\"rows\", \"cols\"]", "oracle_marker": "uint32_t rows = cases[case_id].rows"},
+        {"claim": "saw_phase10_tail_masks", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_tail_mask", "input_marker": "vector.create_mask %remaining", "oracle_marker": "cols"}
+      ]
+    },
+    {
+      "name": "value_rank2_row_slice_strided_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_strided_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_strided_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_rank2_row_slice_strided_vc4value/candidate/value_rank2_row_slice_strided_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_rank2_row_slice_strided", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_rank2_row_slice_strided", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "r * lda + c"},
+        {"claim": "saw_value_stride_args", "kind": "CHECKED_AUDIT", "expected_field": "saw_value_stride_args", "input_marker": "vc4value.stride_args = [\"row_stride\"]", "oracle_marker": "lda"},
+        {"claim": "saw_row_padding_sentinels", "kind": "CHECKED_OUTPUT", "expected_field": "saw_row_padding_sentinels", "input_marker": "vector.transfer_write %values, %out[%row, %col], %mask", "oracle_marker": "verify_sentinels"},
+        {"claim": "saw_phase10_tail_masks", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_tail_mask", "input_marker": "vector.create_mask %remaining", "oracle_marker": "cols"}
+      ]
+    },
+    {
+      "name": "value_memref_dim_row_bounds_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_memref_dim_row_bounds_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_memref_dim_row_bounds_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_memref_dim_row_bounds_vc4value/candidate/value_memref_dim_row_bounds_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_value_memref_dim_metadata", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_memref_dim_metadata", "input_marker": "memref.dim %in", "oracle_marker": "grid_rows"},
+        {"claim": "saw_value_shape_args", "kind": "CHECKED_AUDIT", "expected_field": "saw_value_shape_args", "input_marker": "vc4value.shape_args = [\"rows\", \"cols\"]", "oracle_marker": "rows + EXTRA_ROWS"},
+        {"claim": "saw_no_hidden_descriptor", "kind": "PHASE_GUARD", "expected_field": "saw_no_hidden_descriptor", "forbidden_input_markers": ["memref.extract_strided_metadata", "memref.reinterpret_cast"], "static_reject_tests": ["invalid-hidden-memref-descriptor-dim.mlir"]},
+        {"claim": "saw_phase10_tail_masks", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_tail_mask", "input_marker": "vector.create_mask %remaining", "oracle_marker": "cols"}
+      ]
+    },
+    {
+      "name": "value_ranked_memory_repeat_empty_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_ranked_memory_repeat_empty_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_ranked_memory_repeat_empty_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_ranked_memory_repeat_empty_vc4value/candidate/value_ranked_memory_repeat_empty_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "saw_repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "memref.dim %out", "oracle_marker": "cases[]"},
+        {"claim": "saw_empty_rows_cols", "kind": "CHECKED_OUTPUT", "expected_field": "saw_empty_rows_cols", "input_marker": "cf.cond_br %inside", "oracle_marker": "{0u, 0u"},
+        {"claim": "saw_row_padding_sentinels", "kind": "CHECKED_OUTPUT", "expected_field": "saw_row_padding_sentinels", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "verify_sentinels"},
+        {"claim": "gather_lane_stride_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-rank2-nonunit-inner-stride.mlir", "invalid-rank2-column-slice-transfer-map.mlir", "invalid-rank2-transposed-transfer-map.mlir"]}
+      ]
+    }
+  ]
+}
