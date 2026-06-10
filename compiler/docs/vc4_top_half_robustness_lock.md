@@ -13,6 +13,14 @@ PRODUCER_BACKEND_LOWER_DIALECT_OUTPUT_REJECTS=PASS
 TOP_HALF_FRONTEND_ROBUSTNESS_AUDIT_SCRIPT=YES
 NO_STRINGLY_SEMANTIC_CLASSIFICATION=YES
 READY_FOR_TOP_HALF4_STATIC_PIPELINE_AUDITS=YES
+TOP_HALF_STATIC_ROBUSTNESS_LOCK=YES
+CONTROLLED_TTIR_STATIC_PIPELINE=PASS
+ELEMENTWISE_TTIR_STATIC_PIPELINE=PASS
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+STAGED_FEATURE_AUDIT=PASS
+NO_TTIR_TOOLCHAIN_REBUILD=YES
+NO_TTIR_REGEN_IN_TOP_HALF_HARDENING=YES
+READY_FOR_TOP_HALF5_HARDWARE_MIXED_FINAL=YES
 READY_FOR_TRITON=NO
 
 # VC4 Top-Half Robustness Lock
@@ -51,3 +59,26 @@ Triton pointer types. The frontend robustness audit locks out regex, printed
 IR/type semantics, fixture/path/name special cases, operation unlink/remove
 workarounds, direct lower-half emission, and broad successful lowering paths
 without accounting.
+
+## TopHalf4 Static Robustness Lock
+
+TopHalf4 locks the static top-half state before hardware/mixed regression. The
+accepted Phase 8.5 controlled TTIR snapshots and the existing Phase 7/7.5
+elementwise TTIR snapshots lower through:
+
+```text
+TTIR -> VC4Value -> value verifier -> scf-to-cf -> VC4Kernel -> SSAVC4 -> scheduled VC4
+```
+
+Each stage is boundary-scanned: value output has no TTIR/backend/lower-half ops
+or unrealized casts, VC4Kernel has no producer ops, SSAVC4 has no producer or
+VC4Kernel ops, and scheduled VC4 has no producer, VC4Kernel, or SSAVC4 ops.
+
+The frontend robustness audits pass for no silent TTIR op drops, exact staging
+of required unsupported operations, whitelisted dead-proof ops, metadata-only
+source names, removed argument-name rewrites, disambiguated metadata names,
+structural shape-arg derivation, no stringly semantic classification, and the
+hardened output boundary.
+
+No TTIR was regenerated, no Triton or LLVM toolchain was created/installed/built,
+and no hardware was run in this static lock. `READY_FOR_TRITON=NO` remains true.
