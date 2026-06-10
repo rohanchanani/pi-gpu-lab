@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate the VC4Value Phase 5 mixed acceptance manifest."""
+"""Validate the VC4Value mixed acceptance manifest."""
 
 import argparse
 import json
@@ -47,6 +47,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_cf_saxpy_loop_select_tail_vc4value",
     "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
     "mixed_value_cf_completeness_loop_branch_tail_vc4value",
+    "mixed_value_multi_axis_cf_tail_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -72,6 +73,10 @@ REQUIRED_FEATURES = {
     "value_vector_loop_carried",
     "value_multi_exit_reducible_cf",
     "value_scf_to_cf_boundary",
+    "value_multi_axis_launch_identity",
+    "value_program_id_axis1",
+    "value_program_id_axis2",
+    "value_num_programs_axis1",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -184,6 +189,10 @@ def validate_fixture(repo_root, fixture):
         "value_vector_loop_carried": "vector<16x",
         "value_multi_exit_reducible_cf": "^exit_early",
         "value_scf_to_cf_boundary": "scf.",
+        "value_multi_axis_launch_identity": "vc4value.program_id {axis = 2",
+        "value_program_id_axis1": "vc4value.program_id {axis = 1",
+        "value_program_id_axis2": "vc4value.program_id {axis = 2",
+        "value_num_programs_axis1": "vc4value.num_programs {axis = 1",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -205,7 +214,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase8_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase9_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -277,7 +286,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode != "phase5":
+    if args.mode not in ("phase5", "phase9"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

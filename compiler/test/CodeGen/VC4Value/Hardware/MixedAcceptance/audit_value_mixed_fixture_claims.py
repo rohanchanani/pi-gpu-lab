@@ -58,10 +58,16 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     claim_names = {claim["claim"] for claim in fixture_claims["claims"]}
 
     if "saw_value_mixed_elementwise" in claim_names:
-        for marker in ("arith.mulf", "arith.addf", "arith.cmpf", "arith.select", "vector.transfer_write"):
+        for marker in ("arith.mulf", "arith.addf", "arith.select", "vector.transfer_write"):
             require_marker(mlir, marker, "saw_value_mixed_elementwise input")
-        for marker in ("tmp > THRESHOLD", "fallback_values[index]", "total_mismatches"):
-            require_marker(harness, marker, "saw_value_mixed_elementwise harness")
+        if "arith.cmpf" not in mlir and "arith.cmpi" not in mlir:
+            fail("saw_value_mixed_elementwise input lacks a checked compare/select predicate")
+        if "tmp > THRESHOLD" in harness:
+            for marker in ("fallback_values[index]", "total_mismatches"):
+                require_marker(harness, marker, "saw_value_mixed_elementwise harness")
+        else:
+            for marker in ("expected_f_values[index]", "expected_i_values[index]", "total_mismatches"):
+                require_marker(harness, marker, "saw_value_mixed_elementwise harness")
 
     if "saw_value_tail_mask" in claim_names:
         require_marker(mlir, "vector.create_mask", "saw_value_tail_mask input")
@@ -115,6 +121,40 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(mlir, "cf.cond_br", "saw_value_cf_cond_br input")
         if "flag_cases" not in harness and "use_select" not in harness and "use_i32_path" not in harness:
             fail("saw_value_cf_cond_br harness missing runtime branch flag")
+
+    if "saw_value_scf_cf" in claim_names:
+        for marker in ("cf.br ^loop", "cf.cond_br", "arith.cmpi ult"):
+            require_marker(mlir, marker, "saw_value_scf_cf input")
+        for marker in ("trip_cases", "flag_cases", "use_i32_path"):
+            require_marker(harness, marker, "saw_value_scf_cf harness")
+
+    if "saw_value_multi_axis_launch" in claim_names:
+        for marker in (
+            "vc4value.grid_rank = 3",
+            "vc4value.program_id {axis = 0",
+            "vc4value.program_id {axis = 1",
+            "vc4value.program_id {axis = 2",
+            "vc4value.num_programs {axis = 0",
+            "vc4value.num_programs {axis = 1",
+            "vc4value.num_programs {axis = 2",
+            "%block_id = arith.addi %row_base, %pid0",
+        ):
+            require_marker(mlir, marker, "saw_value_multi_axis_launch input")
+        for marker in ("{3u, 2u, 2u", "{4u, 3u, 2u", "active_qpus=%d"):
+            require_marker(harness, marker, "saw_value_multi_axis_launch harness")
+
+    if "saw_value_program_id_axis1" in claim_names:
+        require_marker(mlir, "vc4value.program_id {axis = 1", "saw_value_program_id_axis1 input")
+        require_marker(harness, "(block_id / grid->x) % grid->y", "saw_value_program_id_axis1 harness")
+
+    if "saw_value_program_id_axis2" in claim_names:
+        require_marker(mlir, "vc4value.program_id {axis = 2", "saw_value_program_id_axis2 input")
+        require_marker(harness, "block_id / (grid->x * grid->y)", "saw_value_program_id_axis2 harness")
+
+    if "saw_value_num_programs_axis1" in claim_names:
+        require_marker(mlir, "vc4value.num_programs {axis = 1", "saw_value_num_programs_axis1 input")
+        require_marker(mlir, "%plane_base = arith.muli %pid2, %num1", "saw_value_num_programs_axis1 input")
+        require_marker(harness, "grid->y", "saw_value_num_programs_axis1 harness")
 
     if "saw_value_vector_block_arg" in claim_names:
         require_marker(mlir, "vector<16x", "saw_value_vector_block_arg input")

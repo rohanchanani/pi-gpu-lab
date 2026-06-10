@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase8_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase9_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -300,6 +300,100 @@
           "claim_kind": "CHECKED_OUTPUT",
           "evidence": {
             "checked_output": "masked transfer_write is checked by sentinels outside active n; expected.json requires sentinel_mismatches=0."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_multi_axis_cf_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_multi_axis_cf_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_multi_axis_cf_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_multi_axis_cf_tail_vc4value/candidate/mixed_value_multi_axis_cf_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_mixed_elementwise",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir combines f32 arith.mulf/addf with arith.select and transfer writes; the harness checks path-specific f32 and i32 outputs against a CPU oracle for every active element."
+          }
+        },
+        {
+          "claim": "saw_value_scf_cf",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.br/cf.cond_br loop and branch blocks with a vector block argument; the harness varies trip_cases and flag_cases so CFG paths affect checked output."
+          }
+        },
+        {
+          "claim": "saw_value_multi_axis_launch",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir computes flattened block_id from program_id axes 0/1/2 and num_programs axes 0/1/2; the harness runs 3D grids up to 4x3x2 with active_qpus=12 and checks outputs indexed by those coordinates."
+          }
+        },
+        {
+          "claim": "saw_value_program_id_axis1",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses program_id axis 1 in the flattened index; the CPU oracle derives pid1 from (block_id / grid.x) % grid.y for checked values."
+          }
+        },
+        {
+          "claim": "saw_value_program_id_axis2",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses program_id axis 2 in the flattened index; the CPU oracle derives pid2 from block_id / (grid.x * grid.y) for checked values."
+          }
+        },
+        {
+          "claim": "saw_value_num_programs_axis1",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir multiplies pid2 by num_programs axis 1 when forming block_id; the oracle checks data generated from grid.y-dependent coordinates."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask and masked transfer_write; expected.json requires sentinel_mismatches=0 across n values including tails and full grids."
+          }
+        },
+        {
+          "claim": "saw_value_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads xi, xf, and yf with vector.transfer_read; the CPU oracle depends on all loaded buffers."
+          }
+        },
+        {
+          "claim": "saw_value_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked f32 and i32 transfer_write operations are checked by sentinels outside active n; expected.json requires sentinel_mismatches=0."
+          }
+        },
+        {
+          "claim": "saw_value_mixed_i32_f32",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir combines i32 and f32 transfer reads and writes; checked outputs depend on both i32 predicate/select and f32 arithmetic paths."
+          }
+        },
+        {
+          "claim": "saw_value_i32_cmp",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "i32_path uses arith.cmpi sgt over vector<16xi32>; the harness oracle uses xi > THRESHOLD_I for every active element when the i32 path is selected."
+          }
+        },
+        {
+          "claim": "saw_value_f32_alu",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "both branch paths use f32 arith.mulf/addf; the harness checks factor * xf + yf or factor * yf + xf for each active element."
           }
         }
       ]

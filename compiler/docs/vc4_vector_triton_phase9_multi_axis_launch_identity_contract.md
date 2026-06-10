@@ -21,6 +21,10 @@ VALUE_MULTI_AXIS_NUM_PROGRAMS_HARDWARE=PASS
 VALUE_MULTI_AXIS_TAIL_CF_HARDWARE=PASS
 VALUE_MULTI_AXIS_ACTIVE_QPUS_12_COVERAGE=YES
 VALUE_MULTI_AXIS_CLAIM_AUDIT=PASS
+VALUE_MULTI_AXIS_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+VALUE_MULTI_AXIS_MIXED_CLAIM_AUDIT=PASS
+READY_FOR_PHASE9_7_TTIR_IMPORTER_MULTI_AXIS_STATIC=YES
 READY_FOR_PHASE9_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE9_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
@@ -165,3 +169,34 @@ nonzero output hash. The fixtures preserve the Phase 9 boundary: flattened
 rank-1 memory only, canonical tail masks only where applicable, no TTIR
 regeneration, no Triton importer changes, no mask classifier, and no rank-2
 memory implementation.
+
+## Phase 9.6 Value Mixed Acceptance Lock
+
+Phase 9.6 extends the cumulative value-layer mixed hardware suite with
+multi-axis launch identity:
+
+```text
+VALUE_MULTI_AXIS_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+VALUE_MULTI_AXIS_MIXED_CLAIM_AUDIT=PASS
+READY_FOR_PHASE9_7_TTIR_IMPORTER_MULTI_AXIS_STATIC=YES
+READY_FOR_TRITON=NO
+```
+
+The mixed suite now includes `mixed_value_multi_axis_cf_tail_vc4value`, a
+source-controlled value fixture that combines `grid_rank = 3`, `program_id`
+axes 0/1/2, `num_programs` axes 0/1/2, flattened rank-1 memory, `vector.step`,
+canonical tail masks, TMU transfer reads, VDW inactive-lane preserve writes,
+i32 compare/select, f32 arithmetic, and scalar CFG.
+
+The full value mixed acceptance manifest passed on hardware with all fixtures
+reporting `status=PASS`, `total_mismatches=0`, `sentinel_mismatches=0`, and
+`launch_failures=0`. The new Phase 9 mixed fixture includes request counts 12,
+18, and 24 and requires `active_qpus=12`.
+
+The mixed claim audit is structural and output-backed: claims are tied to
+value input operations, checked harness oracle logic, expected result fields,
+and phase guards. The fixture is not an isolation fixture and does not broaden
+Phase 9 scope. It does not regenerate TTIR, touch the TTIR importer, implement
+mask classifier behavior, implement rank-2 memory, or mark global Triton
+readiness.
