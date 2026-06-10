@@ -1,9 +1,16 @@
 PHASE11_CONTROLLED_TRITON_STRIDED_MEMORY_FIXTURES=YES
+PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
 REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
 REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
+RANK2_ROW_SLICE_IDENTITY_SURFACE=ACCEPTED
+RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
+MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
+HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
+GATHER_LANE_STRIDE_STAGED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
+READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
 READY_FOR_PHASE11_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
 
@@ -50,5 +57,11 @@ Current value-import smoke records `EXPECTED_PENDING_IMPORTER_REPAIR`: the
 existing importer still rejects multiple distinct pointer offset expressions
 before Phase 11 implementation work. That is the expected boundary for this
 fixture-design phase.
+
+Phase 11.3 locks the value-surface counterpart: rank-1 flattened scalar
+strided address skeletons, rank-2 identity row-slice transfers, rank-2
+`strided<[?, 1], offset: 0>` row-slice transfers with explicit shape/stride
+scalar metadata, and `memref.dim` metadata lowering to scalar shape args.
+Lane-varying stride/gather and column-slice forms remain staged.
 
 `READY_FOR_TRITON=NO` remains locked.

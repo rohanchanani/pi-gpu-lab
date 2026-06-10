@@ -59,6 +59,10 @@ static bool isForbiddenMemRefSideEffectOp(StringRef name) {
          name == "memref.dma_start" || name == "memref.dma_wait";
 }
 
+static bool isForbiddenHiddenMemRefDescriptorOp(StringRef name) {
+  return name == "memref.extract_strided_metadata";
+}
+
 static bool isForbiddenSparseStoreVectorOp(StringRef name) {
   return name == "vector.scatter" || name == "vector.compressstore";
 }
@@ -540,6 +544,27 @@ static void checkPublicKernelArgumentSchema(func::FuncOp func, bool &sawError) {
       emitArgError(func, i)
           << "public memref layout offset must be static 0";
       sawError = true;
+    } else if (memRefType.getRank() == 2 &&
+               !memRefType.getLayout().isIdentity()) {
+      if (strides.size() != 2) {
+        emitArgError(func, i)
+            << "rank-2 strided row-slice layout must have exactly two "
+            << "strides";
+        sawError = true;
+      } else {
+        if (!ShapedType::isDynamic(strides[0])) {
+          emitArgError(func, i)
+              << "rank-2 strided row-slice layout must use a dynamic outer "
+              << "row stride named by vc4value.stride_args";
+          sawError = true;
+        }
+        if (ShapedType::isDynamic(strides[1]) || strides[1] != 1) {
+          emitArgError(func, i)
+              << "rank-2 strided row-slice layout must have static inner "
+              << "stride 1";
+          sawError = true;
+        }
+      }
     }
 
     Attribute shapeAttr = func.getArgAttr(i, "vc4value.shape_args");
@@ -902,6 +927,14 @@ struct VerifyValueSurfacePass
             << "direct memref side-effect operation is not legal in the "
             << "VC4 value surface; use structured vector transfer/planning "
             << "forms";
+        sawError = true;
+      }
+
+      if (isForbiddenHiddenMemRefDescriptorOp(opName)) {
+        op->emitError()
+            << "hidden memref descriptor extraction is not legal in the "
+            << "VC4 value surface; use explicit vc4value.shape_args and "
+            << "vc4value.stride_args scalar metadata";
         sawError = true;
       }
 

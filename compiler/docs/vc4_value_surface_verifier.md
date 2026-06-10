@@ -368,3 +368,30 @@ VC4_VALUE_SURFACE_SUPPORT_MATRIX_SEEDED=YES
 READY_FOR_PHASE3C_VALUE_SURFACE_PASS=YES
 READY_FOR_VALUE_TO_VC4KERNEL_LOWERING=NO
 READY_FOR_TRITON=NO
+
+## 19. Phase 11 strided/ranked memory verifier delta
+
+PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+RANK2_ROW_SLICE_IDENTITY_SURFACE=ACCEPTED
+RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
+MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
+HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
+GATHER_LANE_STRIDE_STAGED=YES
+READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
+READY_FOR_TRITON=NO
+
+The Phase 11 value surface admits only the strided/ranked memory skeletons that
+preserve contiguous vector lanes:
+
+- rank-1 flattened scalar strided address arithmetic feeding rank-1 identity
+  vector transfers;
+- rank-2 identity row-slice transfers with scalar `[row, col]` indices;
+- rank-2 explicit `strided<[?, 1], offset: 0>` row-slice transfers with
+  `shape_args` for dynamic dimensions and one `stride_args` entry for the outer
+  row stride;
+- `memref.dim` metadata that resolves to public scalar extent arguments.
+
+The verifier rejects hidden descriptor extraction through
+`memref.extract_strided_metadata` and rejects rank-2 explicit strided layouts
+whose inner stride is dynamic or not static 1. Executable lowering remains a
+later phase; these checks are surface/ABI contract enforcement only.

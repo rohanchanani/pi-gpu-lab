@@ -805,3 +805,51 @@ LAYERED_REGRESSION_POLICY_APPLIED=YES
 NO_TEMPORARY_MASK_MEMORY_WORKAROUNDS=YES
 READY_FOR_PHASE11_STRIDED_RANKED_MEMORY_SKELETONS=YES
 READY_FOR_TRITON=NO
+
+## 28. Phase 11.3 value strided/ranked memory contract
+
+PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+RANK2_ROW_SLICE_IDENTITY_SURFACE=ACCEPTED
+RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
+MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
+HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
+GATHER_LANE_STRIDE_STAGED=YES
+READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 11 extends the planned value memory contract beyond the locked Phase 10
+rank-1 identity executable subset. This section is a planning contract only;
+main executable lowering is intentionally not implemented in Phase 11.3.
+
+Accepted Phase 11 value forms:
+
+- `RANK1_FLATTENED_SCALAR_STRIDED_ADDRESS`: rank-1 global i32/f32 memref,
+  scalar address expression `row * stride + col_block * 16`, rank-1 identity
+  transfer, contiguous vector lanes, and Phase 10 full/empty/tail masks.
+- `RANK2_ROW_SLICE_IDENTITY`: rank-2 identity global i32/f32 memref with
+  `shape_args` for dynamic dimensions, scalar `[row, col]` transfer indices,
+  and `vector<16xT>` mapped to the innermost dimension.
+- `RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC`: rank-2 global i32/f32 memref with
+  `strided<[?, 1], offset: 0>`, `shape_args` for dynamic dimensions, one
+  `stride_args` entry naming the dynamic outer row stride, static inner stride
+  1, and static offset 0.
+- `MEMREF_DIM_METADATA_LOWERING`: `memref.dim` on public global memref dynamic
+  dimensions resolves to explicit scalar extent args, never hidden memref
+  descriptors.
+
+Planned Phase 11.4 static coverage:
+
+- rank-1 flattened stride address lowers;
+- rank-2 identity row-slice transfer lowers;
+- rank-2 strided outer row-slice transfer lowers;
+- `memref.dim` maps to shape args;
+- nonunit inner stride rejects;
+- lane-varying stride/gather rejects;
+- column-slice rejects;
+- hidden descriptor extraction rejects.
+
+Staged forms remain non-unit inner stride, lane-varying stride/gather, scatter,
+column/vertical slice, rank greater than 2, rank-2 vector tiles, block pointers,
+boundary-check and padding-option semantics, reductions, dot, f16/subword
+storage lowering, numeric casts, SFU/math expansion, hidden descriptors, and
+sparse/unknown transfer masks outside the Phase 10 accepted set.

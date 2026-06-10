@@ -308,7 +308,44 @@ rank-1 contiguous kernels first. Phase 4 makes the public ABI ready for that
 future package, but Phase 4 does not implement lowering and valid value ABI IR
 is not assumed to be hardware-executable.
 
-## 15. Readiness lines
+## 15. Phase 11 strided/ranked memory ABI delta
+
+PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+RANK2_ROW_SLICE_IDENTITY_SURFACE=ACCEPTED
+RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
+MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
+HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
+GATHER_LANE_STRIDE_STAGED=YES
+READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 11 narrows the rank-2 executable-planning contract without changing the
+bare-pointer public ABI. Accepted Phase 11 value forms are:
+
+- `RANK1_FLATTENED_SCALAR_STRIDED_ADDRESS`: public
+  `memref<?xT, #vc4value.global>` with `T = i32/f32`; scalar index arithmetic
+  may compute `row * stride + col_block * 16`, but the transfer itself remains
+  rank-1 identity and contiguous along vector lanes.
+- `RANK2_ROW_SLICE_IDENTITY`: public
+  `memref<?x?xT, #vc4value.global>` with `T = i32/f32`; `shape_args` names both
+  dynamic dimensions, row-slice transfers use scalar indices `[row, col]`, and
+  `vector<16xT>` maps to the innermost dimension.
+- `RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC`: public
+  `memref<?x?xT, strided<[?, 1], offset: 0>, #vc4value.global>` with
+  `T = i32/f32`; `shape_args` names dynamic dimensions and `stride_args` names
+  the dynamic outer row stride. The inner stride is statically 1 and the offset
+  is statically 0.
+- `MEMREF_DIM_METADATA_LOWERING`: `memref.dim` on public `#vc4value.global`
+  dynamic dimensions maps to explicit scalar extent arguments. It does not
+  authorize hidden descriptor loads.
+
+Non-unit inner stride, lane-varying stride/gather, column/vertical slices,
+rank greater than 2, vector rank greater than 1 for a transfer result, f16/i8/i16
+storage lowering, block pointers, boundary checks, padding options, hidden
+descriptors, and sparse/unknown transfer masks outside the Phase 10 accepted
+mask set remain staged.
+
+## 16. Readiness lines
 
 The intended final Phase 4 lock lines are:
 
