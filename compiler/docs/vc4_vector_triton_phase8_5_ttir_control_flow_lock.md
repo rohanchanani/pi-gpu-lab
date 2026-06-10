@@ -1,3 +1,4 @@
+PHASE85_RESULT=LOCKED
 PHASE85_STATIC_TTIR_CONTROL_FLOW_LOCK=YES
 TTIR_CONTROL_FLOW_FEATURE_DRIVEN_FIXTURES=YES
 REAL_TRITON_CF_SOURCES=YES
@@ -6,7 +7,11 @@ TTIR_REGION_LOWERING_FRAMEWORK=YES
 TTIR_CF_STATIC_PIPELINE=PASS
 ARITH_SITOFP_STAGED_BY_BODY_FEATURE=YES
 VECTOR_INDEX_CAST_IMPORTER_BOILERPLATE_REMOVED=YES
+NO_NUMERIC_CAST_SCOPE_CREEP=YES
 FRONTEND_ROBUSTNESS_AUDIT=PASS
+PHASE85_NO_TRITON_TOOLCHAIN_REBUILD=YES
+PHASE85_NO_LLVM_SOURCE_BUILD=YES
+PHASE85_NO_PIP_INSTALL_AFTER_R2=YES
 NO_TTIR_TOOLCHAIN_REBUILD=YES
 READY_FOR_PHASE85R5_HARDWARE_ISOLATION=YES
 TTIR_CF_ISOLATION_HARDWARE=PASS
@@ -19,14 +24,17 @@ TTIR_CF_MIXED_ACCEPTANCE=PASS
 TTIR_MIXED_REGRESSION=PASS
 LAYERED_REGRESSION_POLICY_APPLIED=YES
 PHASE85_NO_TTIR_REGEN_IN_HARDWARE_PHASES=YES
+NO_TEMPORARY_TTIR_CF_WORKAROUNDS=YES
+READY_FOR_PHASE9_MASK_CLASSIFIER_AND_TTIR_MASK_MEMORY_BRIDGE=YES
 READY_FOR_PHASE85R7_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
 
-# VC4 Vector/Triton Phase 8.5 TTIR Control-Flow Static Lock
+# VC4 Vector/Triton Phase 8.5 TTIR Control-Flow Final Lock
 
-Phase 8.5R4 locks the static TTIR control-flow contract before hardware. The
-accepted feature is real Triton-emitted scalar/coherent TTIR control flow using
-only already-supported body features.
+Phase 8.5 locks real Triton-emitted scalar/coherent TTIR control flow using
+only already-supported body features. It is a feature-driven bridge from real
+TTIR snapshots to the value layer and then through the normal lower stack to
+hardware.
 
 ## Fixture Contract
 
@@ -48,7 +56,7 @@ Generic Phase85A1 probes remain inventory-only evidence. They are not the
 acceptance fixture set, especially where they contain staged body features such
 as `arith.sitofp`.
 
-## Accepted Static Forms
+## Accepted Subset
 
 The controlled fixtures cover:
 
@@ -66,6 +74,18 @@ unrolled TTIR and is not a runtime control-flow hardware fixture.
 Accepted fixture bodies exclude `arith.sitofp`, fptosi, dot, reduce, gather,
 scatter, block pointers, tensor descriptors, atomics, subword features, SFU or
 math-expansion features, TTGIR, TritonGPU, NVGPU, NVVM, and GPU backend IR.
+
+## Staged Forms
+
+The following remain staged outside the Phase 8.5 control-flow feature:
+
+- numeric casts such as `arith.sitofp` and `fptosi`;
+- dot, reductions, gather/scatter, block pointers, tensor descriptors, atomics,
+  subword features, SFU/math expansion, TTGIR, NVGPU, NVVM, and GPU backend IR;
+- vector branch conditions as CFG conditions; masks/selects are the accepted
+  vector-control idiom;
+- generic data use of `tt.make_range` beyond the accepted pointer/tail-mask
+  pattern.
 
 ## Importer Contract
 
@@ -153,3 +173,45 @@ TTIR feature set so far:
 The full TTIR mixed suite passed on real VC4 hardware. Layered regression policy
 classified the lowest touched semantic layer as `TTIR_IMPORTER`, so value and
 VC4Kernel mixed suites were not required for R6.
+
+## Final R7 Acceptance
+
+Phase 8.5R7 reran the full TTIR mixed hardware suite at final lock:
+
+```text
+mixed_ttir_saxpy_cmp_select_tail_vc4triton: PASS output_hash=2630878009
+mixed_ttir_i32_f32_dual_kernel_tail_vc4triton: PASS output_hash=2088937103
+mixed_ttir_cf_loop_if_tail_vc4triton: PASS output_hash=3100593526
+```
+
+All final mixed hardware fixtures reported `active_qpus=12`, zero result
+mismatches, zero sentinel mismatches, zero launch failures, and nonzero locked
+output hashes.
+
+Final audits passed:
+
+- report reconciliation for R0-R6, including the historical R1 generator
+  readiness line that was resolved before R2;
+- TTIR snapshot provenance;
+- frontend robustness;
+- TTIR mixed claim audit;
+- no TTIR toolchain rebuild, no LLVM source build, no pip install after R2, and
+  no TTIR regeneration in hardware phases;
+- no Python semantic importer accepted path;
+- no direct TTIR-to-VC4Kernel/lower-half path;
+- no `arith.sitofp` support claim;
+- no generic downstream vector index-cast support claim.
+
+## Phase 9 Assumptions
+
+Phase 9 may assume that Phase 8.5 control-flow TTIR support is locked for the
+accepted scalar/coherent subset, and may build the mask classifier and TTIR
+mask/memory bridge on top of:
+
+- source-controlled real Triton sources and real TTIR snapshots;
+- the structural TTIR-to-value importer;
+- value-layer SCF/CF lowering before VC4Kernel planning;
+- no hidden TTIR regeneration requirement for hardware phases;
+- `arith.sitofp` and unrelated numeric casts remaining staged;
+- vector index-cast common-prefix boilerplate remaining an importer concern,
+  not a downstream value feature.
