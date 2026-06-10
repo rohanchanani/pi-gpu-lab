@@ -1,0 +1,4 @@
+# RUN: python3 %S/Support/audit_phase12_reduction_isolation_claims.py --repo-root %vc4_repo_root --claims compiler/test/CodeGen/VC4Value/Hardware/Run/phase12_reduction_isolation_claims.json | FileCheck %s
+
+# CHECK: PASS Phase 12 reduction isolation claim audit:
+# CHECK-SAME: fixtures=4

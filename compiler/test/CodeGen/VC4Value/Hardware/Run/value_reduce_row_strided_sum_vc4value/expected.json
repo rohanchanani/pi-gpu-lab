@@ -1,0 +1,24 @@
+{
+  "name": "value_reduce_row_strided_sum_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 6,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_rows": 7,
+    "max_cols": 16,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 6,
+    "saw_value_row_strided_reduction": 1,
+    "saw_value_reduction_f32_finite_add": 1,
+    "saw_f32_finite_tree_policy": 1,
+    "saw_row_padding_sentinels": 1
+  },
+  "float_max": {
+    "max_abs_diff": 0.001
+  }
+}

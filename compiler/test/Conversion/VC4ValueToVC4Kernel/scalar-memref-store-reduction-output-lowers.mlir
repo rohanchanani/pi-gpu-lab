@@ -11,8 +11,9 @@ func.func @scalar_memref_store_reduction_output_lowers(
 
 // CHECK-LABEL: vc4kernel.kernel @scalar_memref_store_reduction_output_lowers
 // CHECK: %[[SPLAT:.*]] = vc4kernel.splat
-// CHECK: %[[LANE0:.*]] = vc4kernel.pred.tail
-// CHECK: vc4kernel.vdw_store_fragment {{.*}}, {{.*}}, %[[SPLAT]], %[[LANE0]]
+// CHECK: %[[LANE_PRED:.*]] = vc4kernel.pred.tail
+// CHECK-SAME: %c0_i32{{.*}}, %c1_i32
+// CHECK: vc4kernel.vdw_store_fragment {{.*}}, {{.*}}, %[[SPLAT]], %[[LANE_PRED]]
 // CHECK-SAME: inactive_store = #vc4kernel.inactive_store<preserve>
 // CHECK-NOT: vector.
 // CHECK-NOT: memref.

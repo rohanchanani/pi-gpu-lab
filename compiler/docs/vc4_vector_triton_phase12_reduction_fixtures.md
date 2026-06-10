@@ -101,9 +101,26 @@ locked.
 
 Phase 12.4 statically lowers the accepted value reduction subset to VC4Kernel:
 i32 add reductions and finite-tree f32 add reductions lower to the locked
-`vc4kernel.fragment_reduce` op, and scalar reduction-output stores lower to
-lane-zero VDW inactive-preserve stores. Non-add reductions, rank>1 reductions,
-dot, GEMV, and GEMM remain staged. Hardware proof is intentionally deferred to
-Phase 12.5.
+`vc4kernel.fragment_reduce` op, and scalar reduction-output stores lower to a
+scalar-indexed VDW inactive-preserve store with a lane-zero tail predicate.
+Non-add reductions, rank>1 reductions, dot, GEMV, and GEMM remain staged.
+Hardware proof is intentionally deferred to Phase 12.5.
 
 `READY_FOR_TRITON=NO` remains locked.
+
+## Phase 12.5 Value Hardware Isolation
+
+VALUE_REDUCTION_HARDWARE_ISOLATION=PASS
+VALUE_REDUCTION_I32_ADD_HARDWARE=PASS
+VALUE_REDUCTION_F32_FINITE_ADD_HARDWARE=PASS
+VALUE_SCALAR_REDUCTION_STORE_HARDWARE=PASS
+VALUE_ROW_STRIDED_REDUCTION_HARDWARE=PASS
+READY_FOR_PHASE12_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+
+Phase 12.5 proves the accepted value reduction subset on hardware with
+targeted isolation fixtures at `active_qpus=12`. The fixtures cover i32 add
+reductions with inactive-zero tail loads, finite-tree f32 add reductions with
+finite inputs, scalar reduction-output stores under control-flow guards, and
+Phase 11 row-strided row-slice reductions. CPU oracles, sentinels, expected
+JSON checks, and saw-claim audits remain strict.

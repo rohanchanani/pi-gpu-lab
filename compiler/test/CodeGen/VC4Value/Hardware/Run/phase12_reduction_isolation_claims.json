@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase12_reduction_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_reduce_sum_i32_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_reduce_sum_i32_tail_vc4value",
+      "claims": [
+        {"claim": "i32_add_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_reduction_i32_add", "input_marker": "vector.reduction <add>, %v : vector<16xi32> into i32", "oracle_marker": "expected_sum"},
+        {"claim": "tail_inactive_zero_input", "kind": "CHECKED_OUTPUT", "expected_field": "saw_tail_inactive_zero_input", "input_marker": "vector.transfer_read %in[%base], %zero, %mask", "oracle_marker": "if (i < n)"},
+        {"claim": "scalar_reduction_output_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_reduction_store", "input_marker": "memref.store %sum, %out[%pid]", "oracle_marker": "verify_sentinels"},
+        {"claim": "non_add_reductions_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-reduction-nonadd.mlir"]},
+        {"claim": "dot_gemv_not_claimed", "kind": "PHASE_GUARD", "forbidden_input_markers": ["vector.contract", "linalg.", "dot", "gemv"], "static_reject_tests": ["invalid-phase5-vector-contract-staged.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_reduce_sum_f32_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_reduce_sum_f32_tail_vc4value",
+      "claims": [
+        {"claim": "f32_finite_tree_add_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_reduction_f32_finite_add", "input_marker": "vc4value.reduction_policy = \"finite_tree\"", "oracle_marker": "F32_TOLERANCE"},
+        {"claim": "f32_finite_policy_tolerance", "kind": "CHECKED_OUTPUT", "expected_field": "saw_f32_finite_tree_policy", "input_marker": "vc4value.fp_domain = \"finite\"", "oracle_marker": "max_abs_diff"},
+        {"claim": "tail_inactive_zero_input", "kind": "CHECKED_OUTPUT", "expected_field": "saw_tail_inactive_zero_input", "input_marker": "vector.transfer_read %in[%base], %zero, %mask", "oracle_marker": "if (i < n)"},
+        {"claim": "no_nan_inf_inputs", "kind": "CHECKED_AUDIT", "expected_field": "saw_no_nan_inf_inputs", "forbidden_input_markers": ["nan", "inf"], "oracle_marker": "saw_no_nan_inf_inputs=1"},
+        {"claim": "f32_missing_policy_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-reduction-f32-missing-finite-policy.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_reduce_scalar_store_guard_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_reduce_scalar_store_guard_vc4value",
+      "claims": [
+        {"claim": "scalar_store_guard", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_store_guard", "input_marker": "cf.cond_br %active", "oracle_marker": "blocks == 0u"},
+        {"claim": "scalar_reduction_output_store", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_scalar_reduction_store", "input_marker": "memref.store %value, %out[%pid]", "oracle_marker": "verify_sentinels"},
+        {"claim": "repeat_invocation", "kind": "CHECKED_OUTPUT", "expected_field": "saw_repeat_invocation", "input_marker": "cf.br ^exit", "oracle_marker": "cases[]"},
+        {"claim": "n0_sentinel_preserve", "kind": "CHECKED_OUTPUT", "expected_field": "saw_n0_sentinel_preserve", "input_marker": "arith.cmpi ult, %pid, %blocks", "oracle_marker": "saw_n0_sentinel_preserve"},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    },
+    {
+      "name": "value_reduce_row_strided_sum_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_reduce_row_strided_sum_vc4value",
+      "claims": [
+        {"claim": "row_strided_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_row_strided_reduction", "input_marker": "strided<[?, 1], offset: 0>", "oracle_marker": "r * lda + c"},
+        {"claim": "f32_finite_tree_add_reduction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_reduction_f32_finite_add", "input_marker": "vector.reduction <add>, %v : vector<16xf32> into f32", "oracle_marker": "expected_sum"},
+        {"claim": "f32_finite_policy_tolerance", "kind": "CHECKED_OUTPUT", "expected_field": "saw_f32_finite_tree_policy", "input_marker": "vc4value.reduction_policy = \"finite_tree\"", "oracle_marker": "F32_TOLERANCE"},
+        {"claim": "row_padding_sentinels", "kind": "CHECKED_OUTPUT", "expected_field": "saw_row_padding_sentinels", "input_marker": "vc4value.stride_args = [\"row_stride\"]", "oracle_marker": "input padding changed"},
+        {"claim": "rank_gt_1_reduction_static_reject", "kind": "PHASE_GUARD", "static_reject_tests": ["invalid-reduction-rank2.mlir", "invalid-vector-multi-reduction.mlir"]},
+        {"claim": "no_after_boot_timeout", "kind": "PHASE_GUARD", "expected_zero_fields": ["launch_failures", "total_mismatches", "sentinel_mismatches"]}
+      ]
+    }
+  ]
+}

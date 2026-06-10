@@ -487,7 +487,8 @@ subset:
   `#vc4kernel.fp_reduce_policy<finite_tree>` only when the explicit finite
   policy is present.
 - scalar `memref.store` of `i32`/`f32` reduction-output values lowers through
-  a `vc4kernel.splat`, a lane-zero `vc4kernel.pred.tail`, and
+  a `vc4kernel.splat` or reduction fragment, a scalar-indexed VDW byte offset,
+  a lane-zero `vc4kernel.pred.tail`, and
   `vc4kernel.vdw_store_fragment` with inactive-preserve policy.
 - row-strided reduction inputs reuse the Phase 11 central address planner.
 
@@ -1045,3 +1046,20 @@ non-unit inner stride, hidden memref descriptors, rank-2 vector/tile transfer
 forms, block pointers, reductions, dot/GEMV/GEMM, numeric casts, subword/f16
 storage expansion, SFU/math expansion, and sparse/unknown memory masks outside
 the Phase 10 accepted set.
+
+## 33. Phase 12.5 value reduction hardware isolation lock
+
+VALUE_REDUCTION_HARDWARE_ISOLATION=PASS
+VALUE_REDUCTION_I32_ADD_HARDWARE=PASS
+VALUE_REDUCTION_F32_FINITE_ADD_HARDWARE=PASS
+VALUE_SCALAR_REDUCTION_STORE_HARDWARE=PASS
+VALUE_ROW_STRIDED_REDUCTION_HARDWARE=PASS
+READY_FOR_PHASE12_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+
+Phase 12.5 proves value-layer reductions on hardware with targeted isolation
+fixtures. The accepted executable subset remains `vector.reduction <add>` over
+`vector<16xi32>`, finite-tree `vector<16xf32>` add reductions, inactive-zero
+tail inputs from Phase 10 loads, scalar rank-1 reduction-output stores, and
+Phase 11 row-strided row-slice inputs. Non-add reductions, rank>1 reductions,
+dot/GEMV/GEMM, scans, atomics, and default/exact f32 reductions remain staged.

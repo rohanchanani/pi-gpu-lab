@@ -15,8 +15,9 @@ func.func @reduction_i32_add_lowers(
 // CHECK-LABEL: vc4kernel.kernel @reduction_i32_add_lowers
 // CHECK: %[[LOAD:.*]] = vc4kernel.tmu_load_fragment
 // CHECK: %[[RED:.*]] = vc4kernel.fragment_reduce %[[LOAD]], {{.*}} {kind = #vc4kernel.reduce<add>}
-// CHECK: %[[LANE0:.*]] = vc4kernel.pred.tail
-// CHECK: vc4kernel.vdw_store_fragment {{.*}}, {{.*}}, %[[RED]], %[[LANE0]]
+// CHECK: %[[LANE_PRED:.*]] = vc4kernel.pred.tail
+// CHECK-SAME: %c0_i32{{.*}}, %c1_i32
+// CHECK: vc4kernel.vdw_store_fragment {{.*}}, {{.*}}, %[[RED]], %[[LANE_PRED]]
 // CHECK-SAME: inactive_store = #vc4kernel.inactive_store<preserve>
 // CHECK-NOT: func.func
 // CHECK-NOT: vc4value.

@@ -1,0 +1,20 @@
+{
+  "name": "value_reduce_scalar_store_guard_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 6,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_blocks": 33,
+    "output_hash_nonzero": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 6,
+    "saw_value_scalar_store_guard": 1,
+    "saw_value_scalar_reduction_store": 1,
+    "saw_repeat_invocation": 1,
+    "saw_n0_sentinel_preserve": 1
+  }
+}

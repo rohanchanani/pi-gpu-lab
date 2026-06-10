@@ -2070,9 +2070,9 @@ private:
       return failure();
     Value zero = createI32Constant(builder, store.getLoc(), 0);
     Value one = createI32Constant(builder, store.getLoc(), 1);
-    Value laneZero = createPredTail(builder, store.getLoc(), zero, one);
+    Value oneLane = createPredTail(builder, store.getLoc(), zero, one);
     createOp(builder, store.getLoc(), kVDWStoreFragmentOpName,
-             {basePointer, *byteOffsets, *storeFragment, laneZero},
+             {basePointer, *byteOffsets, *storeFragment, oneLane},
              {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                      ctx, mlir::vc4kernel::MemoryPath::vdw_global_store)),
               builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(
