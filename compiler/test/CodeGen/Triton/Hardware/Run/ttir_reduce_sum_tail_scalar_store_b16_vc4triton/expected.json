@@ -1,0 +1,31 @@
+{
+  "name": "ttir_reduce_sum_tail_scalar_store_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "cases": 11,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "wave_boundary_n": 192,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_reduction": 1,
+    "saw_value_reduction": 1,
+    "saw_ttir_reduce_f32_finite_add": 1,
+    "saw_ttir_scalar_reduction_store": 1,
+    "saw_f32_finite_tree_policy": 1,
+    "saw_tail_inactive_zero_input": 1,
+    "saw_repeat_invocation": 1,
+    "saw_n0_sentinel_preserve": 1,
+    "saw_no_dot_gemv": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 11
+  },
+  "float_max": {
+    "max_abs_diff": 0.001
+  }
+}

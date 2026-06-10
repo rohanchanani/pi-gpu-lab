@@ -1,0 +1,5 @@
+# RUN: python3 "%vc4_repo_root/compiler/test/CodeGen/Triton/Hardware/Run/audit_phase12_reduction_isolation_claims.py" "%vc4_repo_root" | FileCheck %s
+
+# CHECK: TTIR_REDUCTION_CLAIM_AUDIT=PASS
+# CHECK: fixtures=4
+# CHECK: static_negative=3

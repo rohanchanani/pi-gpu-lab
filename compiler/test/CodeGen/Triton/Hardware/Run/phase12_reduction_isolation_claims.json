@@ -1,0 +1,101 @@
+{
+  "phase": "Phase12.8",
+  "fixtures": [
+    {
+      "name": "ttir_reduce_sum_i32_b16_vc4triton",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_i32_b16.py",
+      "snapshot": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_i32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.addi", "tt.make_range", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_reduce_i32_add", "saw_ttir_scalar_reduction_store", "saw_tail_inactive_zero_input"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "i32_tl_sum_add_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_reduction_output_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_dot_gemv", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_reduce_sum_f32_b16_vc4triton",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_f32_b16.py",
+      "snapshot": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.addf", "tt.make_range", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_reduce_f32_finite_add", "saw_ttir_scalar_reduction_store", "saw_f32_finite_tree_policy", "saw_tail_inactive_zero_input", "saw_no_nan_inf_inputs"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tl_sum_add_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tree_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_reduction_output_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "finite_inputs_only", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_dot_gemv", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_reduce_sum_tail_scalar_store_b16_vc4triton",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_tail_scalar_store_b16.py",
+      "snapshot": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_tail_scalar_store_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.addf", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_reduce_f32_finite_add", "saw_ttir_scalar_reduction_store", "saw_f32_finite_tree_policy", "saw_tail_inactive_zero_input", "saw_repeat_invocation", "saw_n0_sentinel_preserve"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tl_sum_add_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tree_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_reduction_output_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_store_guard", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "phase10_inactive_zero_tail_input", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_dot_gemv", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_reduce_row_strided_sum_f32_b16_vc4triton",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_row_strided_sum_f32_b16.py",
+      "snapshot": "examples/triton/phase12_reductions/generated/ttir_reduce_row_strided_sum_f32_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "tt.reduce", "arith.addf", "arith.muli", "tt.get_program_id x"],
+      "expected_result_fields": ["saw_ttir_reduce_f32_finite_add", "saw_ttir_scalar_reduction_store", "saw_ttir_row_strided_reduction", "saw_f32_finite_tree_policy", "saw_row_padding_sentinels"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tl_sum_add_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "f32_finite_tree_policy", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "scalar_reduction_output_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_strided_reduction", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "row_padding_sentinels", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_dot_gemv", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "name": "non_add_reduce",
+      "path": "compiler/test/Conversion/TritonToVC4Value/Reductions/invalid-ttir-reduce-max-nonadd.mlir",
+      "diagnostic": "non-add tt.reduce is staged"
+    },
+    {
+      "name": "rank_gt_1_reduce",
+      "path": "compiler/test/Conversion/TritonToVC4Value/Reductions/invalid-ttir-reduce-rank2-axis.mlir",
+      "diagnostic": "rank>1 tt.reduce is staged"
+    },
+    {
+      "name": "dot_still_staged",
+      "path": "compiler/test/Conversion/TritonToVC4Value/Reductions/invalid-ttir-dot-still-staged.mlir",
+      "diagnostic": "tt.dot / contract"
+    }
+  ]
+}

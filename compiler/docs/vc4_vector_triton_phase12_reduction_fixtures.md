@@ -164,3 +164,24 @@ text are not semantic.
 Non-add reducers and rank>1 reducers remain staged with exact diagnostics.
 Dot, GEMV, GEMM, scans, atomics, custom reductions, and generalized math remain
 outside Phase 12. `READY_FOR_TRITON=NO` remains locked.
+
+## Phase 12.8 TTIR Hardware Isolation
+
+TTIR_REDUCTION_HARDWARE_ISOLATION=PASS
+TTIR_REDUCTION_I32_ADD_HARDWARE=PASS
+TTIR_REDUCTION_F32_FINITE_ADD_HARDWARE=PASS
+TTIR_SCALAR_REDUCTION_STORE_HARDWARE=PASS
+TTIR_ROW_STRIDED_REDUCTION_HARDWARE=PASS
+READY_FOR_PHASE12_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO
+
+Phase 12.8 proves the accepted controlled TTIR reduction snapshots on hardware
+through the C++ TTIR importer and the standard value-to-VC4Kernel path. The
+hardware fixtures use source-controlled real TTIR snapshots, strict CPU
+oracles, sentinels, output hashes, `active_qpus=12`, and expected JSON checks.
+The covered executable forms are i32 `tl.sum`/`tt.reduce` add, finite-tree f32
+`tl.sum`/`tt.reduce` add, scalar reduction-output stores including a guarded
+store for empty/repeated launches, and Phase 11 row-strided f32 row reductions.
+Non-add and rank>1 reductions remain static negative fixtures only. Dot, GEMV,
+GEMM, and generalized math remain staged, and `READY_FOR_TRITON=NO` remains
+locked.

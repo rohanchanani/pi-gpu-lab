@@ -290,10 +290,11 @@ path = Path(sys.argv[1])
 text = path.read_text(encoding="utf-8", errors="replace")
 ttir_text = "\n".join(Path(arg).read_text(encoding="utf-8", errors="replace")
                       for arg in sys.argv[2:])
-for required in ("func.func", "vc4value.kernel", "vc4value.program_id",
-                 "vector.transfer_write"):
+for required in ("func.func", "vc4value.kernel", "vc4value.program_id"):
     if required not in text:
         raise SystemExit(f"{path}: lowered value file missing {required}")
+if "vector.transfer_write" not in text and "memref.store" not in text:
+    raise SystemExit(f"{path}: lowered value file missing value-layer output store")
 if re.search(r'(?<![A-Za-z0-9_])"?tt\.load\b', ttir_text) and "vector.transfer_read" not in text:
     raise SystemExit(f"{path}: lowered value file missing vector.transfer_read for TTIR tt.load")
 def has_masked_ttir_transfer(module_text):
