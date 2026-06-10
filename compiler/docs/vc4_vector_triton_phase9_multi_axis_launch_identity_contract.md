@@ -14,6 +14,14 @@ VC4VALUE_NUM_PROGRAMS_AXES_0_1_2_TO_VC4KERNEL=YES
 GRID_XYZ_REQUEST_INFO_STATIC_AUDIT=PASS
 NO_MASK_CLASSIFIER_SCOPE_CREEP=YES
 NO_RANK2_MEMORY_SCOPE_CREEP=YES
+VALUE_MULTI_AXIS_HARDWARE_ISOLATION=PASS
+VALUE_MULTI_AXIS_PID2D_HARDWARE=PASS
+VALUE_MULTI_AXIS_PID3D_HARDWARE=PASS
+VALUE_MULTI_AXIS_NUM_PROGRAMS_HARDWARE=PASS
+VALUE_MULTI_AXIS_TAIL_CF_HARDWARE=PASS
+VALUE_MULTI_AXIS_ACTIVE_QPUS_12_COVERAGE=YES
+VALUE_MULTI_AXIS_CLAIM_AUDIT=PASS
+READY_FOR_PHASE9_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE9_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
 
@@ -124,3 +132,36 @@ This static lock does not broaden memory or mask legality. The value-to-VC4Kerne
 path still accepts only flattened rank-1 global memrefs and the canonical
 linearized `vector.create_mask` tail form; rank-2 memory and noncanonical masks
 remain staged for later phases.
+
+## Phase 9.5 Hardware Isolation Lock
+
+Phase 9.5 proves value-layer multi-axis launch identity on real VC4 hardware:
+
+```text
+VALUE_MULTI_AXIS_HARDWARE_ISOLATION=PASS
+VALUE_MULTI_AXIS_PID2D_HARDWARE=PASS
+VALUE_MULTI_AXIS_PID3D_HARDWARE=PASS
+VALUE_MULTI_AXIS_NUM_PROGRAMS_HARDWARE=PASS
+VALUE_MULTI_AXIS_TAIL_CF_HARDWARE=PASS
+VALUE_MULTI_AXIS_ACTIVE_QPUS_12_COVERAGE=YES
+VALUE_MULTI_AXIS_CLAIM_AUDIT=PASS
+READY_FOR_PHASE9_6_VALUE_MIXED_ACCEPTANCE=YES
+READY_FOR_TRITON=NO
+```
+
+The isolation fixtures cover:
+
+- `grid_rank = 2` with `program_id(0)`, `program_id(1)`, and
+  `num_programs(0)`;
+- `grid_rank = 3` with `program_id(0/1/2)` and `num_programs(0/1)`;
+- `num_programs(0/1/2)` returning `grid.x/y/z` for every request;
+- multi-axis launch identity combined with canonical tail masks and scalar
+  control-flow branching.
+
+Every accepted hardware fixture includes a case whose logical request count is
+at least 12 and the checked result line requires `active_qpus=12`, `lanes=16`,
+zero output mismatches, zero sentinel mismatches, zero launch failures, and a
+nonzero output hash. The fixtures preserve the Phase 9 boundary: flattened
+rank-1 memory only, canonical tail masks only where applicable, no TTIR
+regeneration, no Triton importer changes, no mask classifier, and no rank-2
+memory implementation.

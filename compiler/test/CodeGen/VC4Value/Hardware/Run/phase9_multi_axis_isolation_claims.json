@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "suite_name": "vc4value_phase9_multi_axis_isolation_claims",
+  "fixtures": [
+    {
+      "name": "value_multi_axis_pid2d_i32_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid2d_i32_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid2d_i32_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid2d_i32_vc4value/candidate/value_multi_axis_pid2d_i32_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "program_id_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis0", "input_marker": "vc4value.program_id {axis = 0", "oracle_marker": "pid0 * 100u"},
+        {"claim": "program_id_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis1", "input_marker": "vc4value.program_id {axis = 1", "oracle_marker": "pid1 * 1000u"},
+        {"claim": "num_programs_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis0", "input_marker": "vc4value.num_programs {axis = 0", "oracle_marker": "pid1 * grid_x + pid0"},
+        {"claim": "grid_rank_2", "kind": "CHECKED_AUDIT", "input_marker": "vc4value.grid_rank = 2"},
+        {"claim": "flattened_2d_index", "kind": "CHECKED_OUTPUT", "input_marker": "%block_id = arith.addi %row_base, %pid0", "oracle_marker": "block_id * LANES + lane"},
+        {"claim": "no_mask_rank2_scope_creep", "kind": "PHASE_GUARD", "forbidden_input_markers": ["memref<?x?x", "memref<4x16x", "vector.create_mask", "tt.", "ttg."]}
+      ]
+    },
+    {
+      "name": "value_multi_axis_pid3d_i32_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid3d_i32_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid3d_i32_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_pid3d_i32_vc4value/candidate/value_multi_axis_pid3d_i32_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "program_id_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis0", "input_marker": "vc4value.program_id {axis = 0", "oracle_marker": "pid0 * 100u"},
+        {"claim": "program_id_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis1", "input_marker": "vc4value.program_id {axis = 1", "oracle_marker": "pid1 * 1000u"},
+        {"claim": "program_id_axis2", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis2", "input_marker": "vc4value.program_id {axis = 2", "oracle_marker": "pid2 * 10000u"},
+        {"claim": "num_programs_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis0", "input_marker": "vc4value.num_programs {axis = 0", "oracle_marker": "* grid_x + pid0"},
+        {"claim": "num_programs_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis1", "input_marker": "vc4value.num_programs {axis = 1", "oracle_marker": "pid2 * grid_y + pid1"},
+        {"claim": "grid_rank_3", "kind": "CHECKED_AUDIT", "input_marker": "vc4value.grid_rank = 3"},
+        {"claim": "flattened_3d_index", "kind": "CHECKED_OUTPUT", "input_marker": "%block_id = arith.addi %row_base, %pid0", "oracle_marker": "(pid2 * grid_y + pid1) * grid_x + pid0"},
+        {"claim": "no_mask_rank2_scope_creep", "kind": "PHASE_GUARD", "forbidden_input_markers": ["memref<?x?x", "memref<4x16x", "vector.create_mask", "tt.", "ttg."]}
+      ]
+    },
+    {
+      "name": "value_multi_axis_num_programs_axes_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_num_programs_axes_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_num_programs_axes_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_num_programs_axes_vc4value/candidate/value_multi_axis_num_programs_axes_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "program_id_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis0", "input_marker": "vc4value.program_id {axis = 0", "oracle_marker": "grid_x * grid_y * grid_z"},
+        {"claim": "program_id_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis1", "input_marker": "vc4value.program_id {axis = 1", "oracle_marker": "grid_x * grid_y * grid_z"},
+        {"claim": "program_id_axis2", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis2", "input_marker": "vc4value.program_id {axis = 2", "oracle_marker": "grid_x * grid_y * grid_z"},
+        {"claim": "num_programs_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis0", "input_marker": "vc4value.num_programs {axis = 0", "oracle_marker": "grid_x * 10000u"},
+        {"claim": "num_programs_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis1", "input_marker": "vc4value.num_programs {axis = 1", "oracle_marker": "grid_y * 100u"},
+        {"claim": "num_programs_axis2", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis2", "input_marker": "vc4value.num_programs {axis = 2", "oracle_marker": "+ grid_z + lane"},
+        {"claim": "grid_rank_3", "kind": "CHECKED_AUDIT", "input_marker": "vc4value.grid_rank = 3"},
+        {"claim": "flattened_3d_index", "kind": "CHECKED_OUTPUT", "input_marker": "%block_id = arith.addi %row_base, %pid0", "oracle_marker": "grid_x * grid_y * grid_z * LANES"},
+        {"claim": "no_mask_rank2_scope_creep", "kind": "PHASE_GUARD", "forbidden_input_markers": ["memref<?x?x", "memref<4x16x", "vector.create_mask", "tt.", "ttg."]}
+      ]
+    },
+    {
+      "name": "value_multi_axis_tail_cf_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_tail_cf_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_tail_cf_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/value_multi_axis_tail_cf_vc4value/candidate/value_multi_axis_tail_cf_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {"claim": "program_id_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis0", "input_marker": "vc4value.program_id {axis = 0", "oracle_marker": "pid0 * 100u"},
+        {"claim": "program_id_axis1", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_program_id_axis1", "input_marker": "vc4value.program_id {axis = 1", "oracle_marker": "pid1 * 1000u"},
+        {"claim": "num_programs_axis0", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_num_programs_axis0", "input_marker": "vc4value.num_programs {axis = 0", "oracle_marker": "block_id % GRID_X"},
+        {"claim": "grid_rank_2", "kind": "CHECKED_AUDIT", "input_marker": "vc4value.grid_rank = 2"},
+        {"claim": "flattened_2d_index", "kind": "CHECKED_OUTPUT", "input_marker": "%block_id = arith.addi %row_base, %pid0", "oracle_marker": "block_id = i / LANES"},
+        {"claim": "tail_interaction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_tail_mask", "input_marker": "vector.create_mask", "oracle_marker": "active_elements"},
+        {"claim": "control_flow_interaction", "kind": "CHECKED_OUTPUT", "expected_field": "saw_value_cf_cond_br", "input_marker": "cf.cond_br", "oracle_marker": "verify_sentinels"},
+        {"claim": "no_mask_rank2_scope_creep", "kind": "PHASE_GUARD", "forbidden_input_markers": ["memref<?x?x", "memref<4x16x", "arith.sitofp", "tt.", "ttg."]}
+      ]
+    }
+  ]
+}
