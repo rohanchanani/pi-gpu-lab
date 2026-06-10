@@ -739,3 +739,35 @@ The importer does not infer rank or layout from source names, kernel names,
 fixture paths, public argument names, or status strings. Lane-varying
 stride/gather, column/vertical slices, block pointers, rank-2 tensor forms,
 nonzero load `other`, and sparse or unknown memory masks remain staged.
+
+## 25. Phase 11 final strided memory TTIR profile lock
+
+PHASE11_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_STRIDED_RANKED_MEMORY_SKELETONS
+TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_ROW_STRIDED_POINTER_LOWERING=YES
+TTIR_STRIDED_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_STRIDED_MEMORY_MIXED_ACCEPTANCE=PASS
+TTIR_LANE_VARYING_STRIDE_GATHER_REJECTS=PASS
+TTIR_COLUMN_SLICE_REJECTS=PASS
+TTIR_RANK_INFERENCE_FROM_NAMES=NO
+GATHER_LANE_STRIDE_STAGED=YES
+COLUMN_SLICE_STAGED=YES
+HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_STRIDED_MEMORY_WORKAROUNDS=YES
+READY_FOR_PHASE12_REDUCTIONS=YES
+READY_FOR_TRITON=NO
+
+The final Phase 11 TTIR profile accepts controlled real Triton row-strided
+memory snapshots with scalar `row * stride + col_block * 16` address bases plus
+one contiguous `tt.make_range(0, 16)` lane vector. The final mixed fixture
+combines row-strided memory with elementwise compute, scalar control flow,
+multi-axis launch identity, and Phase 10 full/empty/tail masks on hardware.
+
+This profile does not claim gather, column-slice, rank-2 tile, block-pointer,
+reduction, dot, GEMV, or GEMM support. It also does not introduce hidden memref
+descriptor ABI behavior or broad Triton readiness.

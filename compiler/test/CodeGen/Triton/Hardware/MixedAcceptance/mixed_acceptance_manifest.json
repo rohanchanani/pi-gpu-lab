@@ -370,6 +370,104 @@
         "f32_cmp_select",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
+      "dialect": "ttir",
+      "path": "compiler/test/CodeGen/Triton/Hardware/Run/mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
+      "runner_kind": "ttir_candidate",
+      "status": "implemented",
+      "real_world_role": "real Phase 11 TTIR mixed kernel combining f32 elementwise select, scalar control flow, 2D multi-axis launch identity, Phase 10 tail masks, and row-strided pointer memory",
+      "feature_tags": [
+        "real_ttir_input",
+        "real_ttir_snapshot",
+        "cpp_ttir_importer",
+        "value_surface_verification",
+        "value_to_vc4kernel",
+        "value_scf_cf",
+        "program_id_axis0",
+        "arange_make_range_16",
+        "masked_load_other_zero",
+        "masked_store_tail",
+        "tmu_load",
+        "vdw_preserve_store",
+        "tail_mask_clamp_overlaunch",
+        "ttir_elementwise",
+        "ttir_control_flow",
+        "ttir_multi_axis",
+        "ttir_program_id_axis1",
+        "ttir_mask_tail",
+        "ttir_mask_full",
+        "ttir_mask_empty",
+        "ttir_compute_mask_select",
+        "ttir_row_strided_memory",
+        "value_mask_classifier",
+        "value_strided_address",
+        "no_sparse_memory_mask",
+        "no_gather_lane_stride",
+        "no_hidden_memref_descriptor",
+        "f32_alu",
+        "f32_cmp_select",
+        "active_qpus_12",
+        "sentinel_preserve",
+        "row_padding_sentinels",
+        "nonzero_output_hash"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash_nonzero",
+        "saw_real_ttir_input",
+        "saw_real_ttir_snapshot",
+        "saw_cpp_ttir_importer",
+        "saw_value_surface_verification",
+        "saw_value_to_vc4kernel",
+        "saw_value_scf_cf",
+        "saw_program_id_axis0",
+        "saw_arange_make_range_16",
+        "saw_masked_load_other_zero",
+        "saw_masked_store_tail",
+        "saw_tmu_load",
+        "saw_vdw_preserve_store",
+        "saw_tail_mask_clamp_overlaunch",
+        "saw_ttir_elementwise",
+        "saw_ttir_control_flow",
+        "saw_ttir_multi_axis",
+        "saw_ttir_mask_tail",
+        "saw_ttir_mask_full",
+        "saw_ttir_mask_empty",
+        "saw_ttir_compute_mask_select",
+        "saw_ttir_row_strided_memory",
+        "saw_value_mask_classifier",
+        "saw_value_strided_address",
+        "saw_no_sparse_memory_mask",
+        "saw_no_gather_lane_stride",
+        "saw_no_hidden_memref_descriptor",
+        "saw_ttir_program_id_axis1",
+        "saw_select_x_arm",
+        "saw_select_y_arm",
+        "saw_scf_if_true",
+        "saw_scf_if_false",
+        "saw_row_padding_sentinels",
+        "saw_nonzero_output_hash"
+      ],
+      "expected_cases_summary": "8 mixed rows/ncols/stride/threshold/bias/flag cases over 2D row/column-block grids; active_qpus=12; empty/full/tail masks, row padding sentinels, scalar if, and strided X/Y/output buffers checked",
+      "triage_feature_bands": [
+        "ttir_import",
+        "ttir_control_flow",
+        "ttir_multi_axis_launch",
+        "phase10_mask_memory",
+        "phase11_strided_memory",
+        "f32_tmu",
+        "f32_cmp_select",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -379,7 +477,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -389,7 +488,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -399,7 +499,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -409,7 +510,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -419,7 +521,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -429,7 +532,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -439,7 +543,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -449,7 +554,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -459,7 +565,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -469,7 +576,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -479,7 +587,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -489,7 +598,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -498,7 +608,8 @@
       "verification_kind": "checked_output",
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -524,7 +635,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -534,7 +646,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -544,7 +657,8 @@
       "covered_by": [
         "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
         "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -552,7 +666,8 @@
       "id": "real_ttir_snapshot",
       "verification_kind": "snapshot_provenance_audit",
       "covered_by": [
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -560,7 +675,8 @@
       "id": "value_scf_cf",
       "verification_kind": "runner_and_checked_output",
       "covered_by": [
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -568,7 +684,8 @@
       "id": "ttir_elementwise",
       "verification_kind": "ttir_and_checked_output",
       "covered_by": [
-        "mixed_ttir_cf_loop_if_tail_vc4triton"
+        "mixed_ttir_cf_loop_if_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -616,7 +733,8 @@
       "id": "ttir_program_id_axis1",
       "verification_kind": "ttir_audit_and_checked_output",
       "covered_by": [
-        "mixed_ttir_multi_axis_cf_tail_vc4triton"
+        "mixed_ttir_multi_axis_cf_tail_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -648,7 +766,8 @@
       "id": "ttir_mask_tail",
       "verification_kind": "ttir_and_checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -656,7 +775,8 @@
       "id": "ttir_mask_full",
       "verification_kind": "checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -664,7 +784,8 @@
       "id": "ttir_mask_empty",
       "verification_kind": "checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -672,7 +793,8 @@
       "id": "ttir_compute_mask_select",
       "verification_kind": "ttir_and_checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -680,7 +802,8 @@
       "id": "value_mask_classifier",
       "verification_kind": "checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     },
@@ -688,7 +811,64 @@
       "id": "no_sparse_memory_mask",
       "verification_kind": "audit_and_checked_output",
       "covered_by": [
-        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton"
+        "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_control_flow",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_multi_axis",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "ttir_row_strided_memory",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_strided_address",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_gather_lane_stride",
+      "verification_kind": "audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "no_hidden_memref_descriptor",
+      "verification_kind": "audit_and_checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
+      ],
+      "required": true
+    },
+    {
+      "id": "row_padding_sentinels",
+      "verification_kind": "checked_output",
+      "covered_by": [
+        "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton"
       ],
       "required": true
     }

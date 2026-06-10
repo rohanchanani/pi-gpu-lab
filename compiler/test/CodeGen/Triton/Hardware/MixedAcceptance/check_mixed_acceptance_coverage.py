@@ -38,6 +38,7 @@ REQUIRED_FIXTURES = {
     "mixed_ttir_cf_loop_if_tail_vc4triton",
     "mixed_ttir_multi_axis_cf_tail_vc4triton",
     "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+    "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
 }
 
 REQUIRED_FEATURES = {
@@ -68,8 +69,15 @@ REQUIRED_FEATURES = {
     "ttir_mask_full",
     "ttir_mask_empty",
     "ttir_compute_mask_select",
+    "ttir_control_flow",
+    "ttir_multi_axis",
+    "ttir_row_strided_memory",
     "value_mask_classifier",
+    "value_strided_address",
     "no_sparse_memory_mask",
+    "no_gather_lane_stride",
+    "no_hidden_memref_descriptor",
+    "row_padding_sentinels",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -229,14 +237,24 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims ttir_num_programs_axis1 but TTIR lacks tt.get_num_programs y")
     if "ttir_num_programs_axis0" in tags and "tt.get_num_programs x" not in ttir_text:
         fail(f"{name} claims ttir_num_programs_axis0 but TTIR lacks tt.get_num_programs x")
+    if "ttir_multi_axis" in tags and ("tt.get_program_id x" not in ttir_text or "tt.get_program_id y" not in ttir_text):
+        fail(f"{name} claims ttir_multi_axis but TTIR lacks program_id x/y")
     if "ttir_mask_tail" in tags and "arith.cmpi slt" not in ttir_text:
         fail(f"{name} claims ttir_mask_tail but TTIR lacks canonical slt tail mask")
     if "ttir_compute_mask_select" in tags and ("arith.cmpf" not in ttir_text or "arith.select" not in ttir_text):
         fail(f"{name} claims ttir_compute_mask_select but TTIR lacks cmpf/select")
+    if "ttir_row_strided_memory" in tags and ("tt.get_program_id y" not in ttir_text or not re.search(r"arith\.muli %[A-Za-z0-9_]+, %ld[oxy]", ttir_text)):
+        fail(f"{name} claims ttir_row_strided_memory but TTIR lacks row*stride pointer arithmetic")
     if "value_mask_classifier" in tags and "saw_value_mask_classifier" not in (repo_root / fixture["path"] / "expected.json").read_text():
         fail(f"{name} claims value_mask_classifier but expected.json lacks saw_value_mask_classifier")
+    if "value_strided_address" in tags and "saw_value_strided_address" not in (repo_root / fixture["path"] / "expected.json").read_text():
+        fail(f"{name} claims value_strided_address but expected.json lacks saw_value_strided_address")
     if "no_sparse_memory_mask" in tags and "sparse" in ttir_text.lower():
         fail(f"{name} claims no_sparse_memory_mask but TTIR contains sparse marker")
+    if "no_gather_lane_stride" in tags and re.search(r"arith\.muli %lanes, %", ttir_text):
+        fail(f"{name} claims no_gather_lane_stride but TTIR contains lane-varying stride")
+    if "no_hidden_memref_descriptor" in tags and "descriptor" in ttir_text.lower():
+        fail(f"{name} claims no_hidden_memref_descriptor but TTIR contains descriptor marker")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

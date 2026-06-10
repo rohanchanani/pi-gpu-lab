@@ -1,5 +1,8 @@
 PHASE11_CONTROLLED_TRITON_STRIDED_MEMORY_FIXTURES=YES
+PHASE11_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_STRIDED_RANKED_MEMORY_SKELETONS
 PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
 VALUE_RANK2_ROW_SLICE_TO_VC4KERNEL_STATIC=PASS
 VALUE_MEMREF_DIM_METADATA_LOWERING=PASS
 VALUE_STRIDED_RANKED_ADDRESS_PLANNER=YES
@@ -13,6 +16,7 @@ VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
 TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
 TTIR_STRIDED_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_STRIDED_MEMORY_MIXED_ACCEPTANCE=PASS
 TTIR_ROW_STRIDED_COPY_HARDWARE=PASS
 TTIR_ROW_STRIDED_ADD_HARDWARE=PASS
 TTIR_ROW_STRIDED_INOUT_TAIL_HARDWARE=PASS
@@ -30,7 +34,11 @@ RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
 MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
 HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
 GATHER_LANE_STRIDE_STAGED=YES
+COLUMN_SLICE_STAGED=YES
 HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_STRIDED_MEMORY_WORKAROUNDS=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
 READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
@@ -40,6 +48,7 @@ READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
 READY_FOR_PHASE11_3_VALUE_SURFACE_CONTRACT=YES
+READY_FOR_PHASE12_REDUCTIONS=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 11 Strided/Ranked Memory Fixtures
@@ -130,5 +139,15 @@ and checked `saw_*` fields for real TTIR snapshots, the C++ importer,
 row-strided scalar pointer expressions, Phase 10 tail masks, and no
 gather/lane-stride support. The staged gather and column-slice fixtures remain
 static negative coverage, not hardware acceptance.
+
+Phase 11.9 final-locks the feature with the TTIR mixed hardware fixture
+`mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton`. The fixture combines
+real TTIR provenance, the C++ importer path, Phase 7 elementwise compute, Phase
+8.5 control flow, Phase 9 multi-axis launch identity, Phase 10 full/empty/tail
+masks and compute-mask selects, and Phase 11 row-strided memory. The layered
+final regression ran both the full VC4Value mixed suite and the full TTIR mixed
+suite on hardware. The final audits confirm structural pointer classification,
+snapshot provenance, checked claims, staged gather/column-slice forms, no hidden
+memref descriptor support, and no temporary strided-memory workarounds.
 
 `READY_FOR_TRITON=NO` remains locked.

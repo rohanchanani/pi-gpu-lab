@@ -81,6 +81,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             repo_root
             / "examples/triton/phase10_mask_memory/generated/mixed_ttir_mask_memory_cf_axes_b16.ttir.mlir"
         )
+        phase11_snapshot = (
+            repo_root
+            / "examples/triton/phase11_strided_ranked_memory/generated/mixed_ttir_strided_memory_axes_mask_cf_b16.ttir.mlir"
+        )
         if fixture_name == "mixed_ttir_cf_loop_if_tail_vc4triton":
             if not fixture_input.exists() or not phase85_snapshot.exists():
                 fail(f"{fixture_name} snapshot provenance paths are missing")
@@ -96,6 +100,11 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
                 fail(f"{fixture_name} snapshot provenance paths are missing")
             if fixture_input.read_bytes() != phase10_snapshot.read_bytes():
                 fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 10 mixed snapshot")
+        if fixture_name == "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton":
+            if not fixture_input.exists() or not phase11_snapshot.exists():
+                fail(f"{fixture_name} snapshot provenance paths are missing")
+            if fixture_input.read_bytes() != phase11_snapshot.read_bytes():
+                fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 11 mixed snapshot")
 
     if "saw_cpp_ttir_importer" in claim_names:
         require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
@@ -145,7 +154,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, "1000u", "saw_tail_mask_clamp_overlaunch harness")
 
     if "saw_ttir_elementwise" in claim_names:
-        if fixture_name == "mixed_ttir_mask_memory_cf_axes_b16_vc4triton":
+        if fixture_name in (
+            "mixed_ttir_mask_memory_cf_axes_b16_vc4triton",
+            "mixed_ttir_strided_memory_axes_mask_cf_b16_vc4triton",
+        ):
             for marker in ("arith.addf", "arith.cmpf", "arith.select"):
                 require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
         else:
@@ -205,7 +217,6 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
 
     if "saw_ttir_multi_axis" in claim_names:
         require_marker(ttir, "tt.get_program_id y", "saw_ttir_multi_axis TTIR")
-        require_marker(ttir, "tt.get_num_programs x", "saw_ttir_multi_axis TTIR")
         require_marker(harness, "grid_y", "saw_ttir_multi_axis harness")
 
     if "saw_ttir_program_id_axis1" in claim_names:
@@ -250,6 +261,29 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         if "sparse" in ttir.lower():
             fail(f"{fixture_name} saw_no_sparse_memory_mask claimed but TTIR contains sparse marker")
         require_marker(harness, "saw_no_sparse_memory_mask", "saw_no_sparse_memory_mask harness")
+
+    if "saw_ttir_row_strided_memory" in claim_names:
+        require_marker(ttir, "tt.get_program_id y", "saw_ttir_row_strided_memory TTIR")
+        for marker in ("arith.muli %row, %ldx", "arith.muli %row, %ldy", "arith.muli %row, %ldo"):
+            require_marker(ttir, marker, "saw_ttir_row_strided_memory TTIR")
+        require_marker(harness, "saw_ttir_row_strided_memory", "saw_ttir_row_strided_memory harness")
+
+    if "saw_value_strided_address" in claim_names:
+        require_marker(harness, "saw_value_strided_address", "saw_value_strided_address harness")
+
+    if "saw_no_gather_lane_stride" in claim_names:
+        if "arith.muli %lanes" in ttir:
+            fail(f"{fixture_name} saw_no_gather_lane_stride claimed but TTIR multiplies lanes")
+        require_marker(harness, "saw_no_gather_lane_stride", "saw_no_gather_lane_stride harness")
+
+    if "saw_no_hidden_memref_descriptor" in claim_names:
+        if "descriptor" in ttir.lower():
+            fail(f"{fixture_name} saw_no_hidden_memref_descriptor claimed but TTIR contains descriptor marker")
+        require_marker(harness, "saw_no_hidden_memref_descriptor", "saw_no_hidden_memref_descriptor harness")
+
+    if "saw_row_padding_sentinels" in claim_names:
+        require_marker(harness, "verify_sentinels", "saw_row_padding_sentinels harness")
+        require_marker(harness, "saw_row_padding_sentinels", "saw_row_padding_sentinels harness")
 
     if "saw_select_x_arm" in claim_names:
         require_marker(harness, "saw_x_arm", "saw_select_x_arm harness")

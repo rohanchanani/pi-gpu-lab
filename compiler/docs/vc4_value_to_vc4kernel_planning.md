@@ -929,3 +929,42 @@ writes, repeated empty/non-empty launches, and row-padding sentinels.
 The full VC4Value mixed regression suite passes on hardware with active_qpus=12
 where applicable. Gather/lane-varying stride and hidden memref descriptor
 support remain explicitly unclaimed and staged.
+
+## 32. Phase 11 final strided/ranked memory lock
+
+PHASE11_RESULT=LOCKED
+FEATURE=VALUE_AND_TTIR_STRIDED_RANKED_MEMORY_SKELETONS
+VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+VALUE_STRIDED_RANKED_ADDRESS_PLANNER=YES
+VALUE_RANK2_ROW_SLICE_TO_VC4KERNEL_STATIC=PASS
+VALUE_MEMREF_DIM_METADATA_LOWERING=PASS
+VALUE_STRIDED_RANKED_MEMORY_HARDWARE_ISOLATION=PASS
+VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
+REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
+REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
+TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_STRIDED_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_STRIDED_MEMORY_MIXED_ACCEPTANCE=PASS
+GATHER_LANE_STRIDE_STAGED=YES
+COLUMN_SLICE_STAGED=YES
+HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+NO_TEMPORARY_STRIDED_MEMORY_WORKAROUNDS=YES
+READY_FOR_PHASE12_REDUCTIONS=YES
+READY_FOR_TRITON=NO
+
+Phase 11 final-locks the strided/ranked memory skeleton feature through the
+standard value path and the real TTIR bridge. Value lowering now uses the
+central address planner for rank-1 flattened scalar strided addresses, rank-2
+identity row slices, rank-2 strided-outer row slices, and metadata-only
+`memref.dim` shape lowering. The TTIR bridge lowers controlled real
+row-strided pointer snapshots into flattened rank-1 value memrefs and then
+through the same value planner.
+
+Still-staged forms remain gather/lane-varying stride, column/vertical slices,
+non-unit inner stride, hidden memref descriptors, rank-2 vector/tile transfer
+forms, block pointers, reductions, dot/GEMV/GEMM, numeric casts, subword/f16
+storage expansion, SFU/math expansion, and sparse/unknown memory masks outside
+the Phase 10 accepted set.
