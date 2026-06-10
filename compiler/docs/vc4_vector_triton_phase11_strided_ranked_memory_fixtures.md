@@ -9,6 +9,8 @@ VALUE_RANK1_FLATTENED_STRIDE_HARDWARE=PASS
 VALUE_RANK2_IDENTITY_ROW_SLICE_HARDWARE=PASS
 VALUE_RANK2_STRIDED_ROW_SLICE_HARDWARE=PASS
 VALUE_MEMREF_DIM_METADATA_HARDWARE=PASS
+VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
 REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
 REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -20,6 +22,7 @@ GATHER_LANE_STRIDE_STAGED=YES
 HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
+READY_FOR_PHASE11_7_TTIR_IMPORTER_STRIDED_MEMORY_STATIC=YES
 READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
@@ -89,5 +92,13 @@ fixtures for rank-1 flattened row stride, rank-2 identity row slices, rank-2
 strided row slices, `memref.dim` metadata row bounds, and repeated empty/non-
 empty ranked launches. The fixtures use active_qpus=12, strict CPU oracles,
 row-padding sentinels, output hashes, and checked `saw_*` claims.
+
+Phase 11.6 adds the cumulative VC4Value mixed acceptance fixture
+`mixed_value_strided_ranked_memory_axis_mask_cf_vc4value`. It combines
+multi-axis launch, control flow, Phase 10 tail masks and compute-mask selects,
+rank-1 flattened row stride, rank-2 strided row slices, `stride_args`,
+`memref.dim` shape metadata, inactive-zero reads, inactive-preserve writes,
+repeated empty/non-empty launches, and row-padding sentinels. The full current
+VC4Value mixed suite passes on hardware with active_qpus=12 where applicable.
 
 `READY_FOR_TRITON=NO` remains locked.

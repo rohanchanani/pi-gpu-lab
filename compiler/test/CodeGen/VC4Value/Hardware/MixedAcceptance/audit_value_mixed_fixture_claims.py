@@ -153,8 +153,16 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             "%block_id = arith.addi %row_base, %pid0",
         ):
             require_marker(mlir, marker, "saw_value_multi_axis input")
-        for marker in ("grid_x", "grid_y", "block_id / cfg->grid_x", "active_qpus=%d"):
-            require_marker(harness, marker, "saw_value_multi_axis harness")
+        has_phase10_grid_oracle = all(
+            marker in harness
+            for marker in ("grid_x", "grid_y", "block_id / cfg->grid_x", "active_qpus=%d")
+        )
+        has_phase11_grid_oracle = all(
+            marker in harness
+            for marker in ("col_blocks(cfg->cols)", "cfg->rows + EXTRA_ROWS", "active_qpus=%d")
+        )
+        if not has_phase10_grid_oracle and not has_phase11_grid_oracle:
+            fail("saw_value_multi_axis harness missing checked grid coordinate oracle")
 
     if "saw_value_program_id_axis1" in claim_names:
         require_marker(mlir, "vc4value.program_id {axis = 1", "saw_value_program_id_axis1 input")
@@ -225,8 +233,13 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_value_control_flow" in claim_names:
         for marker in ("cf.br ^loop", "cf.cond_br", "arith.cmpi ult"):
             require_marker(mlir, marker, "saw_value_control_flow input")
-        for marker in ("trip", "use_i32_path", "MIXED_VALUE_MASK_MEMORY_AXIS_CF_CASE"):
+        for marker in ("trip", "use_i32_path"):
             require_marker(harness, marker, "saw_value_control_flow harness")
+        if (
+            "MIXED_VALUE_MASK_MEMORY_AXIS_CF_CASE" not in harness
+            and "MIXED_VALUE_STRIDED_RANKED_AXIS_MASK_CF_CASE" not in harness
+        ):
+            fail("saw_value_control_flow harness missing mixed case result marker")
 
     if "saw_value_mask_full" in claim_names:
         for marker in ("vector.transfer_read %xi[%base], %zero_i32 :", "vector.transfer_write %full_biased"):
@@ -249,8 +262,10 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_value_compute_mask_select" in claim_names:
         for marker in ("arith.cmpi sgt", "arith.cmpf olt", "arith.select"):
             require_marker(mlir, marker, "saw_value_compute_mask_select input")
-        for marker in ("cfg->use_i32_path", "cond ? candidate", "expected_tail_f"):
+        for marker in ("cfg->use_i32_path", "cond ? candidate"):
             require_marker(harness, marker, "saw_value_compute_mask_select harness")
+        if "expected_tail_f" not in harness and "expected_rank_out_f" not in harness:
+            fail("saw_value_compute_mask_select harness missing checked f32 oracle array")
 
     if "saw_value_load_inactive_zero" in claim_names:
         for marker in ("vector.transfer_read %xi[%base], %zero_i32, %mask", "vector.transfer_write %tail_xi, %policy_out_i[%base]"):
@@ -278,6 +293,50 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         for marker in forbidden_transfer_masks:
             if marker in mlir:
                 fail(f"saw_no_sparse_memory_mask input uses sparse transfer mask {marker}")
+
+    if "saw_value_rank1_flattened_stride" in claim_names:
+        for marker in (
+            "memref<?xi32, #vc4value.global>",
+            "%row_base_idx = arith.muli %pid1, %row_stride",
+            "%flat_idx = arith.addi %row_base_idx, %col",
+            "vector.transfer_read %flat_i[%flat_idx]",
+        ):
+            require_marker(mlir, marker, "saw_value_rank1_flattened_stride input")
+        for marker in ("r * cfg->lda + c", "flat_i_value", "verify_policy_results"):
+            require_marker(harness, marker, "saw_value_rank1_flattened_stride harness")
+
+    if "saw_value_rank2_row_slice" in claim_names:
+        for marker in (
+            "memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>",
+            "vector.transfer_read %rank_i[%pid1, %col]",
+            "vector.transfer_write %store_i, %rank_out_i[%pid1, %col]",
+        ):
+            require_marker(mlir, marker, "saw_value_rank2_row_slice input")
+        for marker in ("rank_i_value", "rank_out_i", "verify_tail_results"):
+            require_marker(harness, marker, "saw_value_rank2_row_slice harness")
+
+    if "saw_value_stride_args" in claim_names:
+        require_marker(mlir, "vc4value.stride_args = [\"row_stride\"]", "saw_value_stride_args input")
+        for marker in ("cfg->lda", "MAX_LDA"):
+            require_marker(harness, marker, "saw_value_stride_args harness")
+
+    if "saw_value_memref_dim_metadata" in claim_names:
+        for marker in ("memref.dim %rank_i", "cf.cond_br %inside"):
+            require_marker(mlir, marker, "saw_value_memref_dim_metadata input")
+        for marker in ("rows + EXTRA_ROWS", "grid"):
+            require_marker(harness, marker, "saw_value_memref_dim_metadata harness")
+
+    if "saw_no_gather_lane_stride" in claim_names:
+        for marker in ("vector.gather", "vector.scatter", "strided<[?, ?]", "offs * stride"):
+            if marker in mlir:
+                fail(f"saw_no_gather_lane_stride input uses forbidden marker {marker}")
+        require_marker(mlir, "strided<[?, 1], offset: 0>", "saw_no_gather_lane_stride input")
+
+    if "saw_no_hidden_memref_descriptor" in claim_names:
+        for marker in ("memref.extract_strided_metadata", "memref.reinterpret_cast"):
+            if marker in mlir:
+                fail(f"saw_no_hidden_memref_descriptor input uses forbidden marker {marker}")
+        require_marker(mlir, "vc4value.shape_args", "saw_no_hidden_memref_descriptor input")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

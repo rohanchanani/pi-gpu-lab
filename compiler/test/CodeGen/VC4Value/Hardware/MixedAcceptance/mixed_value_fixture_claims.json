@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "suite_name": "vc4value_phase5_phase10_mixed_acceptance_claims",
+  "suite_name": "vc4value_phase5_phase11_mixed_acceptance_claims",
   "fixtures": [
     {
       "name": "mixed_value_saxpy_select_tail_vc4value",
@@ -467,6 +467,93 @@
           "claim_kind": "CHECKED_AUDIT",
           "evidence": {
             "checked_audit": "input.mlir uses only no-mask, vector.create_mask %remaining, and vector.create_mask %c0_index on transfer ops; compute masks from arith.cmpi/cmpf feed arith.select only, and Phase 10 static invalid tests cover sparse transfer-mask rejection."
+          }
+        }
+      ]
+    },
+    {
+      "name": "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_strided_ranked_memory_axis_mask_cf_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_strided_ranked_memory_axis_mask_cf_vc4value/candidate/mixed_value_strided_ranked_memory_axis_mask_cf_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_multi_axis",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses grid_rank=2, program_id axes 0/1, and num_programs axis 0 to form block_id and row-window coordinates; the harness runs 2D row/column grids and checks row/column-indexed outputs."
+          }
+        },
+        {
+          "claim": "saw_value_control_flow",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses cf.br/cf.cond_br for a counted loop and runtime i32/f32 branch; the harness varies trip and use_i32_path so both paths affect checked rank outputs."
+          }
+        },
+        {
+          "claim": "saw_value_mask_tail",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask %remaining for row tails; expected.json requires sentinel_mismatches=0 and the harness checks row padding after masked rank stores."
+          }
+        },
+        {
+          "claim": "saw_value_compute_mask_select",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses i32 and f32 compute masks through arith.select, not transfer masks; the harness checks both selected arms through i32 and f32 branch cases."
+          }
+        },
+        {
+          "claim": "saw_value_rank1_flattened_stride",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir computes flat_idx = row * row_stride + col for rank-1 policy reads; the harness oracle indexes flat_i and flat_policy_out with r * lda + c."
+          }
+        },
+        {
+          "claim": "saw_value_rank2_row_slice",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir reads and writes rank-2 strided row slices at [pid1, col]; the harness checks rank_out_i/rank_out_f against a row/column CPU oracle."
+          }
+        },
+        {
+          "claim": "saw_value_stride_args",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "input.mlir uses vc4value.stride_args = [\"row_stride\"] on the rank-2 strided memrefs, and the harness varies lda across cases."
+          }
+        },
+        {
+          "claim": "saw_value_memref_dim_metadata",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses memref.dim on rank_i for row and column bounds; the harness launches rows + EXTRA_ROWS and verifies extra rows remain untouched."
+          }
+        },
+        {
+          "claim": "saw_no_gather_lane_stride",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-rank2-nonunit-inner-stride.mlir",
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-rank2-column-slice-transfer-map.mlir",
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-rank2-transposed-transfer-map.mlir"
+            ]
+          }
+        },
+        {
+          "claim": "saw_no_hidden_memref_descriptor",
+          "claim_kind": "PHASE_GUARD",
+          "evidence": {
+            "guard_fixtures": [
+              "compiler/test/Conversion/VC4ValueToVC4Kernel/invalid-hidden-memref-descriptor-dim.mlir",
+              "compiler/test/ValueSurface/invalid-value-surface-hidden-memref-descriptor.mlir"
+            ]
           }
         }
       ]

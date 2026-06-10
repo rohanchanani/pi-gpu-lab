@@ -49,6 +49,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_cf_completeness_loop_branch_tail_vc4value",
     "mixed_value_multi_axis_cf_tail_vc4value",
     "mixed_value_mask_memory_axis_cf_vc4value",
+    "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -85,6 +86,12 @@ REQUIRED_FEATURES = {
     "value_transfer_read_inactive_zero",
     "value_transfer_write_inactive_preserve",
     "value_no_sparse_memory_mask",
+    "value_rank1_flattened_stride",
+    "value_rank2_row_slice_strided",
+    "value_stride_args_metadata",
+    "value_memref_dim_metadata",
+    "value_no_gather_lane_stride",
+    "value_no_hidden_memref_descriptor",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -206,6 +213,10 @@ def validate_fixture(repo_root, fixture):
         "value_compute_mask_select": "arith.select",
         "value_transfer_read_inactive_zero": "vector.transfer_read",
         "value_transfer_write_inactive_preserve": "vector.transfer_write",
+        "value_rank1_flattened_stride": "%flat_idx = arith.addi %row_base_idx, %col",
+        "value_rank2_row_slice_strided": "strided<[?, 1], offset: 0>",
+        "value_stride_args_metadata": "vc4value.stride_args",
+        "value_memref_dim_metadata": "memref.dim",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:
@@ -228,8 +239,16 @@ def validate_fixture(repo_root, fixture):
         fail(f"{name} uses f32 cmp/select without finite domain policy")
     if "value_i32_transfer_read" in tags and "memref<?xi32" not in mlir:
         fail(f"{name} claims i32 transfer read but input has no i32 global memref")
-    if "value_f32_transfer_read" in tags and "memref<?xf32" not in mlir:
+    if "value_f32_transfer_read" in tags and "memref<?xf32" not in mlir and "memref<?x?xf32" not in mlir:
         fail(f"{name} claims f32 transfer read but input has no f32 global memref")
+    if "value_no_gather_lane_stride" in tags:
+        for marker in ("vector.gather", "vector.scatter", "strided<[?, ?]", "offs * stride"):
+            if marker in mlir:
+                fail(f"{name} claims no gather/lane stride but input uses {marker}")
+    if "value_no_hidden_memref_descriptor" in tags:
+        for marker in ("memref.extract_strided_metadata", "memref.reinterpret_cast"):
+            if marker in mlir:
+                fail(f"{name} claims no hidden memref descriptor but input uses {marker}")
     if "value_no_sparse_memory_mask" in tags:
         if "vector.create_mask" not in mlir:
             fail(f"{name} claims no sparse memory mask but input lacks canonical mask construction")
@@ -253,7 +272,7 @@ def validate_manifest(repo_root, manifest):
             f"missing={sorted(TOP_LEVEL_FIELDS - set(manifest))} "
             f"extra={sorted(set(manifest) - TOP_LEVEL_FIELDS)}"
         )
-    if manifest.get("suite_name") != "vc4value_phase5_phase10_mixed_acceptance":
+    if manifest.get("suite_name") != "vc4value_phase5_phase11_mixed_acceptance":
         fail("unexpected suite_name")
 
     fixtures = manifest["fixtures"]
@@ -325,7 +344,7 @@ def main():
     parser.add_argument("--repo-root", required=True, type=Path)
     parser.add_argument("--mode", default="phase5")
     args = parser.parse_args()
-    if args.mode not in ("phase5", "phase9", "phase10"):
+    if args.mode not in ("phase5", "phase9", "phase10", "phase11"):
         fail(f"unsupported mode {args.mode!r}")
     validate_manifest(args.repo_root.resolve(), load_json(args.manifest))
 

@@ -911,3 +911,21 @@ launches, repeated invocations, Phase 10 tail masks, and row-padding sentinels.
 The claim audit keeps gather/lane-varying stride, non-unit inner stride,
 column-slice maps, and hidden memref descriptor ABI paths staged or rejected.
 No Triton readiness is implied.
+
+## 31. Phase 11.6 value mixed acceptance lock
+
+VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
+VALUE_MIXED_REGRESSION=PASS
+READY_FOR_PHASE11_7_TTIR_IMPORTER_STRIDED_MEMORY_STATIC=YES
+READY_FOR_TRITON=NO
+
+Phase 11.6 extends the cumulative VC4Value mixed hardware suite with
+`mixed_value_strided_ranked_memory_axis_mask_cf_vc4value`. The fixture combines
+rank-1 flattened row stride, rank-2 strided row-slice memory, shape and stride
+metadata, `memref.dim`, Phase 9 multi-axis launch, Phase 8 control flow, Phase
+10 tail masks and compute-mask selects, inactive-zero reads, inactive-preserve
+writes, repeated empty/non-empty launches, and row-padding sentinels.
+
+The full VC4Value mixed regression suite passes on hardware with active_qpus=12
+where applicable. Gather/lane-varying stride and hidden memref descriptor
+support remain explicitly unclaimed and staged.
