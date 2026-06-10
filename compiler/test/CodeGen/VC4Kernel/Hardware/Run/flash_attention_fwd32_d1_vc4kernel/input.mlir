@@ -24,8 +24,7 @@ module {
     %full = vc4kernel.pred.full : !vc4kernel.pred<16>
     %one_lane = vc4kernel.pred.tail %c0, %c1 : i32, i32 -> !vc4kernel.pred<16>
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
-    %tile1_byte_base = arith.constant 64 : i32
-    %tile1_base_v = vc4kernel.splat %tile1_byte_base : i32 -> vector<16xi32>
+    %tile1_base_v = vc4kernel.fragment_const {value = dense<64> : vector<16xi32>} : vector<16xi32>
     %tile1_offsets = vc4kernel.fragment_alu.add %tile1_base_v, %lane_bytes {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %safe0 = arith.constant 0 : i32
 

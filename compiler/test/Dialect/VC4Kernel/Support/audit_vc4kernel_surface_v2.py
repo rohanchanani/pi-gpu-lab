@@ -1464,8 +1464,10 @@ def audit_forbidden_tile_dsl(repo_root):
             scanned += 1
             text = read_text(path)
             for op_name in FORBIDDEN_TILE_DSL_OPS:
-                spellings = [f"vc4kernel.{op_name}", op_name]
-                if not any(spelling in text for spelling in spellings):
+                op_token = re.compile(
+                    rf"(?<![A-Za-z0-9_])(?:vc4kernel\.)?{re.escape(op_name)}(?![A-Za-z0-9_])"
+                )
+                if not op_token.search(text):
                     continue
                 if is_support_audit_text(path):
                     support_mentions += 1
@@ -1493,11 +1495,16 @@ def audit_fixture_purity(repo_root):
     bad = []
     producer_hits = Counter()
     for path in inputs:
-        text = read_text(path)
+        text = "\n".join(
+            line.split("//", 1)[0] for line in read_text(path).splitlines()
+        )
         if "vc4kernel.kernel" not in text:
             bad.append(f"{rel(path, repo_root)}: missing vc4kernel.kernel")
         for prefix in PRODUCER_OR_LOWER_HALF_OP_PREFIXES:
-            if prefix in text:
+            op_token = re.compile(
+                rf"(?<![A-Za-z0-9_])\"?{re.escape(prefix)}[A-Za-z0-9_]+"
+            )
+            if op_token.search(text):
                 producer_hits[prefix] += 1
                 bad.append(f"{rel(path, repo_root)}: contains {prefix}")
     if bad:
@@ -2513,6 +2520,7 @@ def audit_p6_memory_policy_lock(repo_root, matrix):
             files_scanned += 1
             negative = is_negative_test(path)
             text = read_text(path)
+            code_text = "\n".join(line.split("//", 1)[0] for line in text.splitlines())
             if (
                 "compiler_spill_vdw_vdr" in text
                 or "compiler_spill_coherent" in text
@@ -2521,10 +2529,13 @@ def audit_p6_memory_policy_lock(repo_root, matrix):
             if "compiler/test/CodeGen/VC4Kernel/Hardware/Run" in str(
                 rel(path, repo_root)
             ):
-                if "ssavc4." in text or "vc4.qpu." in text or "vc4.module" in text:
+                if "ssavc4." in code_text or "vc4.qpu." in code_text or "vc4.module" in code_text:
                     source_lower_half_hits.append(path)
                 for prefix in producer_prefixes:
-                    if prefix in text:
+                    op_token = re.compile(
+                        rf"(?<![A-Za-z0-9_])\"?{re.escape(prefix)}[A-Za-z0-9_]+"
+                    )
+                    if op_token.search(code_text):
                         producer_hits.append((path, prefix))
             for line in text.splitlines():
                 stripped = line.strip()
@@ -3891,11 +3902,12 @@ def audit_p11_dynamic_rotate_shuffle_lock(repo_root, matrix):
     for path in sorted(vc4kernel_run_root.glob("*/input.mlir")):
         text = read_text(path)
         for line_number, line in enumerate(text.splitlines(), start=1):
-            if "vector." in line:
+            code_line = line.split("//", 1)[0]
+            if re.search(r"(?<![A-Za-z0-9_])\"?vector\.[A-Za-z0-9_]+", code_line):
                 vector_dialect_hits.append((path, line_number))
-            if "vc4kernel.fragment_rotate" in line:
-                dynamic_rotate_ops += 1 if "," in line and " i32 -> " in line else 0
-                if "vector<16xi32>, vector<16xi32>" in line or "vector<16xf32>, vector<16xf32>" in line:
+            if "vc4kernel.fragment_rotate" in code_line:
+                dynamic_rotate_ops += 1 if "," in code_line and " i32 -> " in code_line else 0
+                if "vector<16xi32>, vector<16xi32>" in code_line or "vector<16xf32>, vector<16xf32>" in code_line:
                     vector_amount_hits.append((path, line_number))
     if vector_dialect_hits:
         details = "; ".join(

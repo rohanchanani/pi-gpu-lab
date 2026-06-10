@@ -65,11 +65,7 @@ module {
 
     %bias_byte = arith.shli %oc, %c2 : i32
     %bias_off = vc4kernel.splat %bias_byte : i32 -> vector<16xi32>
-    %bias_v = vc4kernel.tmu_load_fragment %bias, %bias_off, %full, %safe0
-        {inactive_load = #vc4kernel.inactive_load<zero>,
-         memory_path = #vc4kernel.memory_path<tmu_global_read>,
-         coherency = #vc4kernel.coherency<readonly_tmu>}
-        : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
+    %bias_v = vc4kernel.tmu_load_fragment %bias, %bias_off, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
 
     %is_pool2 = arith.cmpi eq, %pool_size, %c2 : i32
     %pool_positions = arith.select %is_pool2, %c4, %c1 : i32
@@ -126,11 +122,7 @@ module {
         {opcode = #vc4kernel.mul_alu_opcode<mul24>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
     %input_off = vc4kernel.fragment_alu.add %input_base_v, %x_bytes
         {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    %x_v = vc4kernel.tmu_load_fragment %input, %input_off, %tail, %safe0
-        {inactive_load = #vc4kernel.inactive_load<zero>,
-         memory_path = #vc4kernel.memory_path<tmu_global_read>,
-         coherency = #vc4kernel.coherency<readonly_tmu>}
-        : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
+    %x_v = vc4kernel.tmu_load_fragment %input, %input_off, %tail, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
 
     %oc_ic = arith.muli %oc, %in_channels : i32
     %w_channel = arith.addi %oc_ic, %ic : i32
@@ -140,11 +132,7 @@ module {
     %w_index = arith.addi %w_channel_base, %tap_index : i32
     %w_byte = arith.shli %w_index, %c2 : i32
     %w_off = vc4kernel.splat %w_byte : i32 -> vector<16xi32>
-    %w_v = vc4kernel.tmu_load_fragment %weights, %w_off, %full, %safe0
-        {inactive_load = #vc4kernel.inactive_load<zero>,
-         memory_path = #vc4kernel.memory_path<tmu_global_read>,
-         coherency = #vc4kernel.coherency<readonly_tmu>}
-        : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
+    %w_v = vc4kernel.tmu_load_fragment %weights, %w_off, %full, %safe0 {inactive_load = #vc4kernel.inactive_load<zero>, memory_path = #vc4kernel.memory_path<tmu_global_read>, coherency = #vc4kernel.coherency<readonly_tmu>} : i32, vector<16xi32>, !vc4kernel.pred<16>, i32 -> vector<16xf32>
 
     %prod = vc4kernel.fragment_alu.mul %x_v, %w_v
         {opcode = #vc4kernel.mul_alu_opcode<fmul>} : (vector<16xf32>, vector<16xf32>) -> vector<16xf32>
@@ -177,11 +165,7 @@ module {
     %lane_bytes = vc4kernel.fragment_const {value = dense<[0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60]> : vector<16xi32>} : vector<16xi32>
     %out_offsets = vc4kernel.fragment_alu.add %out_base_v, %lane_bytes
         {opcode = #vc4kernel.add_alu_opcode<add>} : (vector<16xi32>, vector<16xi32>) -> vector<16xi32>
-    vc4kernel.vdw_store_fragment %out, %out_offsets, %result, %tail
-        {memory_path = #vc4kernel.memory_path<vdw_global_store>,
-         coherency = #vc4kernel.coherency<dma_ordered>,
-         inactive_store = #vc4kernel.inactive_store<preserve>}
-        : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
+    vc4kernel.vdw_store_fragment %out, %out_offsets, %result, %tail {memory_path = #vc4kernel.memory_path<vdw_global_store>, coherency = #vc4kernel.coherency<dma_ordered>, inactive_store = #vc4kernel.inactive_store<preserve>} : i32, vector<16xi32>, vector<16xf32>, !vc4kernel.pred<16>
     vc4kernel.return
   }
 }
