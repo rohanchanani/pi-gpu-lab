@@ -4,6 +4,7 @@
 // RUN: vc4-opt %t.lowered.mlir --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o /dev/null
 // RUN: vc4-codegen %t.lowered.mlir --emit-bundle %t.bundle
 // RUN: test -f %t.bundle/kernels/spill_pressure_independent.qasm
+// RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/spill_pressure_independent.qasm
 // RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
@@ -11,12 +12,21 @@
 // LOWERED-SAME: spill_frame_bytes = {{[1-9][0-9]*}} : i32
 // LOWERED-SAME: spill_frame_base
 // LOWERED-SAME: uses_vdr = true
+// LOWERED-SAME: uses_vdw = true
 // LOWERED-SAME: uses_vpm_qpu_read = true
+// LOWERED-SAME: uses_vpm_qpu_write = true
 // LOWERED: vc4.qpu.vpmvcd_addr
 // LOWERED: vc4.qpu.vpmvcd_setup
 // LOWERED: vc4.qpu.vpm
 // LOWERED-NOT: sig = #vc4.qpu_signal<ldtmu0>
-// SOURCE: uniformWords[2] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// QASM: mov ra28, unif
+// QASM-NOT: mov vpm
+// QASM: mov ra27, unif
+// QASM-NOT: mov vpm
+// QASM: mov vpm
+// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_VPM_ROWS_PER_BLOCK + KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_0_WARPS_PER_BLOCK * KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_WARP; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[2] = (uint32_t)ctx->out; /* arg out */
 // SOURCE-LABEL: int spill_pressure_independent_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out)
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}
 // MANIFEST: "spill_frame_base"

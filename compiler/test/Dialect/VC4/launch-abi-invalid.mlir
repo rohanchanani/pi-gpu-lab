@@ -26,7 +26,7 @@ vc4.module @duplicate_uniform_indices {
 }
 
 vc4.module @builtin_register_materialization {
-  // expected-error@+1 {{"vc4.launch_abi" builtin entry requires materialization = "uniform_suffix"}}
+  // expected-error@+1 {{"vc4.launch_abi" builtin entry requires materialization = "uniform_prefix" or "uniform_suffix"}}
   vc4.func private @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "total_requests", kind = #vc4.builtin_kind<total_requests>, materialization = "register"}]}}
 }
 
@@ -46,7 +46,7 @@ vc4.module @lane_name_as_arg {
 }
 
 vc4.module @bad_builtin_materialization_with_uniform_index {
-  // expected-error@+1 {{"vc4.launch_abi" builtin entry requires materialization = "uniform_suffix"}}
+  // expected-error@+1 {{"vc4.launch_abi" builtin entry requires materialization = "uniform_prefix" or "uniform_suffix"}}
   vc4.func private @bad() attributes {domain = #vc4.execution_domain<qpu>, form = #vc4.function_form<scheduled>, kernel, threading = #vc4.threading_mode<single>, "vc4.launch_abi" = {public_name = "launch", tail_policy = "exact_multiple", uniform_words_per_qpu = 1 : i32, args = [{name = "n", kind = "scalar", direction = "by_value", type = "u32", uniform_index = 0 : i32}], builtins = [{name = "logical_request", kind = #vc4.builtin_kind<logical_request>, materialization = "register", uniform_index = 1 : i32}]}}
 }
 

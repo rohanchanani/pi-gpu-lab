@@ -517,6 +517,11 @@ struct EdgeCopyAllocation {
   EdgeCopyEndpoint destination;
 };
 
+enum class BlockArgumentHomeReason {
+  LoopCarried,
+  MultiPredecessorMerge,
+};
+
 struct PerTemplateAllocation {
   DenseMap<Value, int64_t> operandRegisters;
   std::optional<int64_t> resultRegister;
@@ -955,9 +960,50 @@ private:
           loopRegisterHomeBlocks[entry.first] = true;
     }
 
+    DenseMap<Value, BlockArgumentHomeReason> blockArgumentRegisterHomeReasons;
+    DenseMap<Value, unsigned> blockArgumentIncomingEdgeCounts;
+    for (const InstructionTemplate &templ : templates) {
+      if (templ.kind != InstructionTemplate::Kind::EdgeCopy || !templ.result)
+        continue;
+      if (!llvm::isa<BlockArgument>(*templ.result))
+        continue;
+      ++blockArgumentIncomingEdgeCounts[*templ.result];
+    }
+    auto addBlockArgumentRegisterHomeReason =
+        [&](Value value, BlockArgumentHomeReason reason) {
+          auto it = blockArgumentRegisterHomeReasons.find(value);
+          if (it == blockArgumentRegisterHomeReasons.end()) {
+            blockArgumentRegisterHomeReasons[value] = reason;
+            return;
+          }
+          if (it->second == BlockArgumentHomeReason::LoopCarried)
+            return;
+          if (reason == BlockArgumentHomeReason::LoopCarried)
+            it->second = reason;
+        };
+    for (const InstructionTemplate &templ : templates) {
+      if (templ.kind != InstructionTemplate::Kind::EdgeCopy || !templ.result)
+        continue;
+      auto blockArg = llvm::dyn_cast<BlockArgument>(*templ.result);
+      if (!blockArg)
+        continue;
+      if (loopRegisterHomeBlocks[blockArg.getOwner()]) {
+        addBlockArgumentRegisterHomeReason(
+            *templ.result, BlockArgumentHomeReason::LoopCarried);
+        continue;
+      }
+      auto predIt = predecessors.find(blockArg.getOwner());
+      unsigned predecessorCount =
+          predIt == predecessors.end() ? 0 : predIt->second.size();
+      unsigned incomingEdgeCount = blockArgumentIncomingEdgeCounts[*templ.result];
+      if (predecessorCount > 1 || incomingEdgeCount > 1)
+        addBlockArgumentRegisterHomeReason(
+            *templ.result, BlockArgumentHomeReason::MultiPredecessorMerge);
+    }
+
     DenseMap<Value, int64_t> blockArgumentRegisterHomes;
     int64_t nextHomeReg = 0;
-    auto reserveNextLoopCarriedHomeReg = [&]() -> std::optional<int64_t> {
+    auto reserveNextBlockArgumentHomeReg = [&]() -> std::optional<int64_t> {
       while (nextHomeReg < 32 && isReservedInSpillMode(nextHomeReg))
         ++nextHomeReg;
       if (nextHomeReg >= 32)
@@ -968,15 +1014,24 @@ private:
       if (templ.kind != InstructionTemplate::Kind::EdgeCopy || !templ.result)
         continue;
       auto blockArg = llvm::dyn_cast<BlockArgument>(*templ.result);
-      if (!blockArg || !loopRegisterHomeBlocks[blockArg.getOwner()])
+      if (!blockArg)
         continue;
       if (blockArgumentRegisterHomes.count(*templ.result))
         continue;
-      std::optional<int64_t> reg = reserveNextLoopCarriedHomeReg();
+      auto reasonIt = blockArgumentRegisterHomeReasons.find(*templ.result);
+      if (reasonIt == blockArgumentRegisterHomeReasons.end())
+        continue;
+      std::optional<int64_t> reg = reserveNextBlockArgumentHomeReg();
       if (!reg)
         return diagnosticAnchor->emitError()
-               << "SSAVC4 block-argument lowering could not reserve register "
-                  "homes for loop-carried spilled block arguments";
+               << (reasonIt->second ==
+                           BlockArgumentHomeReason::MultiPredecessorMerge
+                       ? "SSAVC4 block-argument lowering could not reserve "
+                         "register homes for multi-predecessor merge block "
+                         "arguments under spill pressure"
+                       : "SSAVC4 block-argument lowering could not reserve "
+                         "register homes for loop-carried spilled block "
+                         "arguments");
       blockArgumentRegisterHomes[*templ.result] = *reg;
       reservedRegisterHomes.push_back(*reg);
     }
@@ -990,6 +1045,10 @@ private:
         continue;
       if (blockArgumentRegisterHomes.count(*templ.result))
         continue;
+      if (blockArgumentRegisterHomeReasons.count(*templ.result))
+        return diagnosticAnchor->emitError()
+               << "SSAVC4 spill-mode phi lowering requires register homes for "
+                  "multi-predecessor merge block arguments";
       blockArgumentHomeSlots.try_emplace(*templ.result,
                                          getOrCreateSpillSlot(*templ.result));
     }
@@ -8031,18 +8090,6 @@ countTemplateSlotsByEmission(const InstructionTemplate &templ,
   return countScheduledVC4Slots(scratch);
 }
 
-static unsigned getSourceUniformWordsPerQPU(Operation *sourceFunc) {
-  auto launchABI = llvm::dyn_cast_or_null<DictionaryAttr>(
-      sourceFunc->getAttr("vc4.launch_abi"));
-  if (!launchABI)
-    return 0;
-  auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
-      launchABI.get("uniform_words_per_qpu"));
-  if (!attr || attr.getInt() < 0)
-    return 0;
-  return static_cast<unsigned>(attr.getInt());
-}
-
 static void emitUniformReadToReg(OpBuilder &builder, Location loc,
                                  int64_t destinationReg) {
   createScheduledBundle(
@@ -8274,26 +8321,14 @@ emitScheduledFunctionBody(Operation *sourceFunc, OpBuilder &builder,
                           const SpillAwareAllocator &allocator,
                           const LayoutSummary &layout) {
   bool emittedThreadEnd = false;
-  bool emittedSpillBaseUniform = !allocator.hasSpills();
-  unsigned consumedPublicUniforms = 0;
-  unsigned sourceUniformWords = getSourceUniformWordsPerQPU(sourceFunc);
+  if (allocator.hasSpills()) {
+    Location loc = scheduled.empty() ? sourceFunc->getLoc()
+                                     : scheduled.front().templ.source->getLoc();
+    emitUniformReadToReg(builder, loc, SpillAwareAllocator::spillBaseReg());
+    emitUniformReadToReg(builder, loc, SpillAwareAllocator::spillRowReg());
+  }
   for (const ScheduledTemplate &scheduledTemplate : scheduled) {
     const InstructionTemplate &templ = scheduledTemplate.templ;
-    if (templ.kind == InstructionTemplate::Kind::UniformRead)
-      ++consumedPublicUniforms;
-    if (!emittedSpillBaseUniform &&
-        templ.kind != InstructionTemplate::Kind::UniformRead) {
-      while (consumedPublicUniforms < sourceUniformWords) {
-        emitUniformReadToReg(builder, templ.source->getLoc(),
-                             SpillAwareAllocator::spillOffsetReg());
-        ++consumedPublicUniforms;
-      }
-      emitUniformReadToReg(builder, templ.source->getLoc(),
-                           SpillAwareAllocator::spillBaseReg());
-      emitUniformReadToReg(builder, templ.source->getLoc(),
-                           SpillAwareAllocator::spillRowReg());
-      emittedSpillBaseUniform = true;
-    }
     for (const SpillAction &action : allocator.getPreActions(templ))
       emitSpillAction(builder, templ.source->getLoc(), action);
 
@@ -8356,8 +8391,41 @@ static Operation *createVC4FuncShell(Operation *sourceFunc,
   return vc4Func;
 }
 
-static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
-                                                  DictionaryAttr launchABI) {
+static DictionaryAttr shiftUniformIndex(OpBuilder &builder,
+                                        DictionaryAttr dict, int64_t delta) {
+  SmallVector<NamedAttribute, 8> attrs;
+  StringAttr uniformIndexName = builder.getStringAttr("uniform_index");
+  for (NamedAttribute attr : dict) {
+    if (attr.getName() == uniformIndexName) {
+      auto indexAttr = llvm::dyn_cast<IntegerAttr>(attr.getValue());
+      if (indexAttr) {
+        attrs.push_back(builder.getNamedAttr(
+            "uniform_index",
+            builder.getI32IntegerAttr(indexAttr.getInt() + delta)));
+        continue;
+      }
+    }
+    attrs.push_back(attr);
+  }
+  return builder.getDictionaryAttr(attrs);
+}
+
+static ArrayAttr shiftUniformIndexArray(OpBuilder &builder, Attribute array,
+                                        int64_t delta) {
+  SmallVector<Attribute, 8> shifted;
+  if (auto arrayAttr = llvm::dyn_cast_or_null<ArrayAttr>(array)) {
+    for (Attribute entry : arrayAttr) {
+      if (auto dict = llvm::dyn_cast<DictionaryAttr>(entry))
+        shifted.push_back(shiftUniformIndex(builder, dict, delta));
+      else
+        shifted.push_back(entry);
+    }
+  }
+  return builder.getArrayAttr(shifted);
+}
+
+static DictionaryAttr prependSpillResourceBuiltins(OpBuilder &builder,
+                                                   DictionaryAttr launchABI) {
   MLIRContext *ctx = builder.getContext();
   int64_t oldUniformWords = 0;
   if (auto attr = llvm::dyn_cast_or_null<IntegerAttr>(
@@ -8365,19 +8433,14 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
     oldUniformWords = attr.getInt();
 
   SmallVector<Attribute, 8> builtins;
-  if (auto existing =
-          llvm::dyn_cast_or_null<ArrayAttr>(launchABI.get("builtins"))) {
-    builtins.append(existing.begin(), existing.end());
-  }
   builtins.push_back(builder.getDictionaryAttr({
       builder.getNamedAttr("name", builder.getStringAttr("spill_frame_base")),
       builder.getNamedAttr("kind",
                            mlir::vc4::BuiltinKindAttr::get(
                                ctx, mlir::vc4::BuiltinKind::spill_frame_base)),
       builder.getNamedAttr("materialization",
-                           builder.getStringAttr("uniform_suffix")),
-      builder.getNamedAttr("uniform_index",
-                           builder.getI32IntegerAttr(oldUniformWords)),
+                           builder.getStringAttr("uniform_prefix")),
+      builder.getNamedAttr("uniform_index", builder.getI32IntegerAttr(0)),
   }));
   builtins.push_back(builder.getDictionaryAttr({
       builder.getNamedAttr("name", builder.getStringAttr("spill_vpm_row")),
@@ -8385,10 +8448,18 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
                            mlir::vc4::BuiltinKindAttr::get(
                                ctx, mlir::vc4::BuiltinKind::spill_vpm_row)),
       builder.getNamedAttr("materialization",
-                           builder.getStringAttr("uniform_suffix")),
-      builder.getNamedAttr("uniform_index",
-                           builder.getI32IntegerAttr(oldUniformWords + 1)),
+                           builder.getStringAttr("uniform_prefix")),
+      builder.getNamedAttr("uniform_index", builder.getI32IntegerAttr(1)),
   }));
+  if (auto existing =
+          llvm::dyn_cast_or_null<ArrayAttr>(launchABI.get("builtins"))) {
+    for (Attribute builtin : existing) {
+      if (auto dict = llvm::dyn_cast<DictionaryAttr>(builtin))
+        builtins.push_back(shiftUniformIndex(builder, dict, 2));
+      else
+        builtins.push_back(builtin);
+    }
+  }
 
   SmallVector<NamedAttribute, 8> attrs;
   for (NamedAttribute attr : launchABI)
@@ -8407,6 +8478,7 @@ static DictionaryAttr appendSpillFrameBaseBuiltin(OpBuilder &builder,
 
   replaceAttr("uniform_words_per_qpu",
               builder.getI32IntegerAttr(oldUniformWords + 2));
+  replaceAttr("args", shiftUniformIndexArray(builder, launchABI.get("args"), 2));
   replaceAttr("builtins", builder.getArrayAttr(builtins));
   return builder.getDictionaryAttr(attrs);
 }
@@ -8458,7 +8530,9 @@ static DictionaryAttr attachSpillVPMRows(Operation *func, OpBuilder &builder,
 
   replaceAttr("uses_vpm", builder.getBoolAttr(true));
   replaceAttr("uses_vpm_qpu_read", builder.getBoolAttr(true));
+  replaceAttr("uses_vpm_qpu_write", builder.getBoolAttr(true));
   replaceAttr("uses_vdr", builder.getBoolAttr(true));
+  replaceAttr("uses_vdw", builder.getBoolAttr(true));
   replaceAttr("requires_vpm_base_row_builtin",
               builder.getBoolAttr(totalRows > 0));
   return builder.getDictionaryAttr(attrs);
@@ -8478,7 +8552,7 @@ static void attachSpillFrameMetadata(Operation *vc4Func, OpBuilder &builder,
       vc4Func->getAttr("vc4.launch_abi"));
   if (launchABI)
     vc4Func->setAttr("vc4.launch_abi",
-                     appendSpillFrameBaseBuiltin(builder, launchABI));
+                     prependSpillResourceBuiltins(builder, launchABI));
 
   auto resource =
       llvm::dyn_cast_or_null<DictionaryAttr>(vc4Func->getAttr("vc4.resource"));

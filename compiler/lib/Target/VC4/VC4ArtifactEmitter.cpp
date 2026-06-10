@@ -447,15 +447,21 @@ static LogicalResult parseLaunchABIBuiltin(mlir::vc4::FuncOp func,
   parsed.name = nameAttr.getValue().str();
   parsed.kind = getBuiltinKindName(kindAttr.getValue());
   parsed.materialization = materializationAttr.getValue().str();
-  if (parsed.materialization != "uniform_suffix") {
+  if (parsed.materialization != "uniform_suffix" &&
+      parsed.materialization != "uniform_prefix") {
     return emitLaunchABIModelError(
         func, llvm::Twine("builtin '") + parsed.name +
-                  "' requires materialization = \"uniform_suffix\"");
+                  "' requires materialization = \"uniform_prefix\" or "
+                  "\"uniform_suffix\"");
   }
   parsed.uniformIndex =
       getDictionaryIntegerAttrValue(builtinDict, "uniform_index");
   launchABI.builtins.push_back(std::move(parsed));
   return success();
+}
+
+static bool isUniformPackedBuiltinMaterialization(llvm::StringRef value) {
+  return value == "uniform_prefix" || value == "uniform_suffix";
 }
 
 static std::string canonicalizeKernelPublicName(llvm::StringRef rawName) {
@@ -589,7 +595,7 @@ validateLaunchABIUniformPacking(mlir::vc4::FuncOp func,
   }
 
   for (const LaunchABIBuiltinModel &builtin : launchABI.builtins) {
-    if (builtin.materialization != "uniform_suffix") {
+    if (!isUniformPackedBuiltinMaterialization(builtin.materialization)) {
       if (builtin.uniformIndex) {
         return emitLaunchABIModelError(
             func, llvm::Twine("non-uniform builtin '") + builtin.name +
@@ -600,7 +606,7 @@ validateLaunchABIUniformPacking(mlir::vc4::FuncOp func,
 
     if (!builtin.uniformIndex) {
       return emitLaunchABIModelError(
-          func, llvm::Twine("uniform_suffix builtin '") + builtin.name +
+          func, llvm::Twine("uniform-packed builtin '") + builtin.name +
                     "' requires a uniform_index for launcher packing");
     }
 
@@ -2987,7 +2993,8 @@ static const LaunchABIBuiltinModel *
 findLaunchABIBuiltinForUniformIndex(const LaunchABIModel &launchABI,
                                     int64_t uniformIndex) {
   for (const LaunchABIBuiltinModel &builtin : launchABI.builtins) {
-    if (builtin.materialization == "uniform_suffix" && builtin.uniformIndex &&
+    if (isUniformPackedBuiltinMaterialization(builtin.materialization) &&
+        builtin.uniformIndex &&
         *builtin.uniformIndex == uniformIndex)
       return &builtin;
   }

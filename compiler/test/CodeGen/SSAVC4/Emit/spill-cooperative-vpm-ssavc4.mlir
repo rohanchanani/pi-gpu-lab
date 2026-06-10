@@ -17,8 +17,9 @@
 // SOURCE: #define KERNEL_0_SPILL_VPM_ROWS_PER_BLOCK 4u
 // SOURCE: #define KERNEL_0_TOTAL_VPM_ROWS_PER_BLOCK 20u
 // SOURCE: spill_vpm_row=vpm_base_row+16+logical_warp_id
-// SOURCE: uniformWords[5] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
-// SOURCE: uniformWords[6] = requestInfo->vpm_base_row + KERNEL_0_USER_VPM_ROWS_PER_BLOCK + KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_0_WARPS_PER_BLOCK * KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_WARP + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[0] = requestInfo->spill_frame_base; /* builtin spill_frame_base */
+// SOURCE: uniformWords[1] = requestInfo->vpm_base_row + KERNEL_0_USER_VPM_ROWS_PER_BLOCK + KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_BLOCK + KERNEL_0_WARPS_PER_BLOCK * KERNEL_0_COMPILER_VPM_STAGING_ROWS_PER_WARP + requestInfo->logical_warp_id; /* builtin spill_vpm_row */
+// SOURCE: uniformWords[2] = (uint32_t)ctx->out; /* arg out */
 // SOURCE-NOT: __vc4_spill_arg
 // SOURCE: int spill_cooperative_vpm_launch(struct vc4_program *program, vc4_dim3 grid, vc4_dim3 block, vc4_deviceptr_t out
 // MANIFEST: "spill_frame_bytes": {{[1-9][0-9]*}}

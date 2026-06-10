@@ -244,6 +244,41 @@ launch failures:
 
 READY_FOR_TRITON remains NO.
 
+## SSAVC4ToVC4 Spill Prologue Repair Before Phase 8.5
+
+The Phase 8R mixed control-flow timeout was root-caused to lower-half hidden
+compiler spill materialization, not to an infinite value-layer CFG. Spilled
+scheduled VC4 kernels could emit spill actions before the hidden spill resource
+uniforms had been read, leaving `spill_frame_base` and `spill_vpm_row`
+uninitialized for early VPM/VDW/VDR spill traffic.
+
+The repair makes compiler spill resources real uniform-prefix prologue entries
+for spilled kernels. `spill_frame_base` is uniform index 0 and `spill_vpm_row`
+is uniform index 1; public uniforms and ordinary builtins shift only for
+spilled kernels, and no-spill kernel ABI/order is unchanged. The scheduled body
+now reads those two uniforms before emitting any scheduled template or spill
+pre-action. Hidden compiler spill metadata also records VPM QPU write and VDW
+use precisely. The prior multi-predecessor merge block-argument spill repair is
+preserved.
+
+```text
+ROOT_CAUSE=SPILL_ACTIONS_EMITTED_BEFORE_HIDDEN_SPILL_UNIFORMS
+FIX=SPILL_RESOURCE_UNIFORMS_ARE_UNIFORM_PREFIX_PROLOGUE
+SPILL_UNIFORM_PREFIX_PROLOGUE=YES
+SPILL_ACTION_BEFORE_HIDDEN_SPILL_UNIFORMS=NO
+HIDDEN_SPILL_RESOURCE_METADATA_EXACT=YES
+HIDDEN_SPILL_RESOURCE_METADATA_MARKS_VPM_QPU_WRITE=YES
+HIDDEN_SPILL_RESOURCE_METADATA_MARKS_VDW=YES
+ORIGINAL_PHASE8R_CONTROL_FLOW_TIMEOUT_RERUN=PASS
+TWO_QPU_N0_LAUNCH0_POISON_REPRO=PASS
+REPEAT_INVOCATION_PROBES=PASS
+SSAVC4_MULTI_EXIT_MERGE_BLOCK_ARG_SPILL_HARDWARE=PASS
+FIXTURE_WEAKENING_REJECTED=YES
+LAYERED_MIXED_REGRESSION=PASS
+READY_TO_RESUME_PHASE8R_OR_PHASE85=YES
+READY_FOR_TRITON=NO
+```
+
 ## Phase 8Rg Mixed Acceptance
 
 Phase 8Rg added a cumulative VC4Value mixed acceptance fixture:

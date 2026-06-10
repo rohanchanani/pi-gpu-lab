@@ -201,9 +201,11 @@ static LogicalResult verifyLaunchAbiBuiltin(mlir::vc4::FuncOp op,
   auto materializationAttr =
       dyn_cast_or_null<StringAttr>(builtin.get("materialization"));
   if (!materializationAttr ||
-      materializationAttr.getValue() != "uniform_suffix") {
-    return emitLaunchAbiError(
-        op, "builtin entry requires materialization = \"uniform_suffix\"");
+      (materializationAttr.getValue() != "uniform_suffix" &&
+       materializationAttr.getValue() != "uniform_prefix")) {
+    return emitLaunchAbiError(op,
+                              "builtin entry requires materialization = "
+                              "\"uniform_prefix\" or \"uniform_suffix\"");
   }
 
   if (isLaneIdentityLaunchABIName(

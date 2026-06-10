@@ -7,11 +7,17 @@
 // RUN: test -f %t.bundle/kernel_launch.h
 // RUN: test -f %t.bundle/manifest.json
 // RUN: FileCheck %s --check-prefix=QASM --input-file=%t.bundle/kernels/minimal_thrend_ssavc4.qasm
+// RUN: FileCheck %s --check-prefix=SOURCE --input-file=%t.bundle/kernel_launch.c
 // RUN: FileCheck %s --check-prefix=MANIFEST --input-file=%t.bundle/manifest.json
 
 // QASM: thrend
 // QASM-NEXT: nop
 // QASM-NEXT: nop
+
+// SOURCE: uniformWords[0] = requestInfo->logical_request; /* builtin logical_request */
+// SOURCE: uniformWords[1] = requestInfo->total_requests; /* builtin total_requests */
+// SOURCE-NOT: spill_frame_base
+// SOURCE-NOT: spill_vpm_row
 
 // MANIFEST: "schema_version": 2
 // MANIFEST: "public_name": "minimal_thrend_ssavc4"

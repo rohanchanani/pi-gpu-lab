@@ -1,0 +1,21 @@
+{
+  "name": "ssavc4_multi_exit_merge_block_arg_spill_vc4",
+  "status": "PASS",
+  "required": {
+    "cases": 12,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 192,
+    "output_hash": 1475407527,
+    "saw_ssavc4_multi_exit_merge": 1,
+    "saw_ssavc4_merge_block_arg": 1,
+    "saw_ssavc4_spill_mode": 1,
+    "saw_ssavc4_edge_copy": 1,
+    "saw_ssavc4_final_merge_store": 1,
+    "runtime_allocations": 1,
+    "runtime_launches": 12
+  }
+}
