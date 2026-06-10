@@ -13,11 +13,12 @@
 // crisp boundary between:
 //
 //   * the broad value-surface contract, which is allowed to contain staged
-//     fixed vectors, rank-2 shapes, subword storage, reductions, contracts,
-//     scf/cf, and future TTIR-importable patterns; and
+//     fixed vectors, subword storage, reductions, contracts, scf/cf, and future
+//     TTIR-importable patterns; and
 //   * the executable subset, which is vector<16> i32/f32 elementwise code over
-//     rank-1 contiguous #vc4value.global memrefs plus Phase 8 V1 cf control
-//     flow plus multi-axis program_id/num_programs identity.
+//     rank-1 contiguous/scalar-computed #vc4value.global memrefs plus Phase 11
+//     rank-2 row-slice memory skeletons, Phase 8 V1 cf control flow, and
+//     multi-axis program_id/num_programs identity.
 //
 // Staged value-surface features are not rejected by the value-surface verifier;
 // they are rejected here with precise diagnostics until the corresponding
@@ -77,6 +78,8 @@ constexpr llvm::StringLiteral kDirectionAttr("vc4value.direction");
 constexpr llvm::StringLiteral kScalarRoleAttr("vc4value.scalar_role");
 constexpr llvm::StringLiteral kFPDomainAttr("vc4value.fp_domain");
 constexpr llvm::StringLiteral kI32MulPolicyAttr("vc4value.i32_mul_policy");
+constexpr llvm::StringLiteral kShapeArgsAttr("vc4value.shape_args");
+constexpr llvm::StringLiteral kStrideArgsAttr("vc4value.stride_args");
 
 constexpr llvm::StringLiteral kVC4KernelOpName("vc4kernel.kernel");
 constexpr llvm::StringLiteral kReturnOpName("vc4kernel.return");
@@ -159,6 +162,60 @@ static bool isRank1IdentityGlobalMemref(Type type) {
   return memrefType.getLayout().isIdentity();
 }
 
+static bool hasGlobalMemorySpace(MemRefType type) {
+  return llvm::isa_and_nonnull<mlir::vc4value::GlobalMemorySpaceAttr>(
+      type.getMemorySpace());
+}
+
+static bool isI32OrF32(Type type) {
+  return type.isSignlessInteger(32) || type.isF32();
+}
+
+static bool getStridesAndOffset(MemRefType type,
+                                SmallVectorImpl<int64_t> &strides,
+                                int64_t &offset) {
+  MemRefLayoutAttrInterface layout = type.getLayout();
+  if (!layout || layout.isIdentity()) {
+    strides.clear();
+    offset = 0;
+    return true;
+  }
+  return succeeded(layout.getStridesAndOffset(type.getShape(), strides, offset));
+}
+
+static bool isRank2IdentityGlobalMemref(Type type) {
+  auto memrefType = llvm::dyn_cast<MemRefType>(type);
+  if (!memrefType || memrefType.getRank() != 2)
+    return false;
+  if (!hasGlobalMemorySpace(memrefType) || !isI32OrF32(memrefType.getElementType()))
+    return false;
+  return memrefType.getLayout().isIdentity() &&
+         ShapedType::isDynamic(memrefType.getDimSize(0)) &&
+         ShapedType::isDynamic(memrefType.getDimSize(1));
+}
+
+static bool isRank2StridedOuterDynamicGlobalMemref(Type type) {
+  auto memrefType = llvm::dyn_cast<MemRefType>(type);
+  if (!memrefType || memrefType.getRank() != 2)
+    return false;
+  if (!hasGlobalMemorySpace(memrefType) || !isI32OrF32(memrefType.getElementType()))
+    return false;
+  if (!ShapedType::isDynamic(memrefType.getDimSize(0)) ||
+      !ShapedType::isDynamic(memrefType.getDimSize(1)))
+    return false;
+  SmallVector<int64_t, 2> strides;
+  int64_t offset = 0;
+  if (!getStridesAndOffset(memrefType, strides, offset))
+    return false;
+  return strides.size() == 2 && ShapedType::isDynamic(strides[0]) &&
+         !ShapedType::isDynamic(strides[1]) && strides[1] == 1 && offset == 0;
+}
+
+static bool isPhase11LowerableGlobalMemref(Type type) {
+  return isRank1IdentityGlobalMemref(type) || isRank2IdentityGlobalMemref(type) ||
+         isRank2StridedOuterDynamicGlobalMemref(type);
+}
+
 static bool isRank1IdentityTransferMap(Operation *op) {
   auto read = llvm::dyn_cast<vector::TransferReadOp>(op);
   if (!read)
@@ -168,6 +225,19 @@ static bool isRank1IdentityTransferMap(Operation *op) {
          map.getNumResults() == 1 && map.isMinorIdentity();
 }
 
+static bool isRank2InnermostRowSliceTransferMap(AffineMap map) {
+  return map.getNumDims() == 2 && map.getNumSymbols() == 0 &&
+         map.getNumResults() == 1 && map.isMinorIdentity();
+}
+
+static bool isRank2InnermostRowSliceTransferMap(Operation *op) {
+  if (auto read = llvm::dyn_cast<vector::TransferReadOp>(op))
+    return isRank2InnermostRowSliceTransferMap(read.getPermutationMap());
+  if (auto write = llvm::dyn_cast<vector::TransferWriteOp>(op))
+    return isRank2InnermostRowSliceTransferMap(write.getPermutationMap());
+  return false;
+}
+
 static bool isRank1IdentityTransferWriteMap(Operation *op) {
   auto write = llvm::dyn_cast<vector::TransferWriteOp>(op);
   if (!write)
@@ -175,6 +245,48 @@ static bool isRank1IdentityTransferWriteMap(Operation *op) {
   AffineMap map = write.getPermutationMap();
   return map.getNumDims() == 1 && map.getNumSymbols() == 0 &&
          map.getNumResults() == 1 && map.isMinorIdentity();
+}
+
+static bool isArrayOfStringAttr(Attribute attr) {
+  auto arrayAttr = llvm::dyn_cast_or_null<ArrayAttr>(attr);
+  return arrayAttr && llvm::all_of(arrayAttr, [](Attribute element) {
+           return llvm::isa<StringAttr>(element);
+         });
+}
+
+static SmallVector<StringRef> getStringArrayValues(Attribute attr) {
+  SmallVector<StringRef> values;
+  auto arrayAttr = llvm::dyn_cast_or_null<ArrayAttr>(attr);
+  if (!arrayAttr)
+    return values;
+  values.reserve(arrayAttr.size());
+  for (Attribute element : arrayAttr)
+    values.push_back(llvm::cast<StringAttr>(element).getValue());
+  return values;
+}
+
+static std::optional<unsigned> getPublicMemRefArgIndex(func::FuncOp func,
+                                                       Value value) {
+  auto blockArg = llvm::dyn_cast<BlockArgument>(value);
+  if (!blockArg || blockArg.getOwner() != &func.getBody().front())
+    return std::nullopt;
+  unsigned argIndex = blockArg.getArgNumber();
+  if (argIndex >= func.getNumArguments() ||
+      !llvm::isa<MemRefType>(func.getArgument(argIndex).getType()))
+    return std::nullopt;
+  return argIndex;
+}
+
+static std::optional<unsigned> getDynamicDimOrdinal(MemRefType type,
+                                                    unsigned dim) {
+  if (dim >= static_cast<unsigned>(type.getRank()) ||
+      !ShapedType::isDynamic(type.getDimSize(dim)))
+    return std::nullopt;
+  unsigned ordinal = 0;
+  for (unsigned i = 0; i < dim; ++i)
+    if (ShapedType::isDynamic(type.getDimSize(i)))
+      ++ordinal;
+  return ordinal;
 }
 
 static StringRef getElementTypeName(Type type) {
@@ -384,17 +496,32 @@ struct ClassifiedMemoryMask {
   Value predicate;
 };
 
+struct MemoryAddressPlan {
+  enum class Kind {
+    Rank1ContiguousOrScalarComputed,
+    Rank2RowSliceIdentity,
+    Rank2RowSliceStridedOuterDynamic,
+    Staged
+  };
+
+  Kind kind = Kind::Staged;
+  Value basePointer;
+  Value elementBaseIndex;
+  int64_t elementBytes = 4;
+  ClassifiedMemoryMask mask;
+  Operation *source = nullptr;
+  StringRef reason;
+};
+
 enum class TransferAccessKind { Read, Write };
 
 struct ClassifiedMemoryTransfer {
   TransferAccessKind access = TransferAccessKind::Read;
   Value memref;
-  Value baseIndex;
   Value vectorValue;
   Value padding;
   Type vectorType;
-  int64_t elemBytes = 4;
-  ClassifiedMemoryMask mask;
+  MemoryAddressPlan addressPlan;
   std::string acceptedPath;
   std::string stagedReason;
 };
@@ -530,20 +657,22 @@ private:
   FailureOr<Type> lowerPublicArgType(BlockArgument arg) {
     Type type = arg.getType();
     if (auto memrefType = llvm::dyn_cast<MemRefType>(type)) {
-      if (!isRank1IdentityGlobalMemref(type)) {
+      if (!isPhase11LowerableGlobalMemref(type)) {
         InFlightDiagnostic diag =
             arg.getOwner()->getParentOp()->emitOpError();
-        bool rank1IdentityGlobal =
-            memrefType.getRank() == 1 && memrefType.getLayout().isIdentity() &&
-            llvm::isa_and_nonnull<mlir::vc4value::GlobalMemorySpaceAttr>(
-                memrefType.getMemorySpace());
-        if (rank1IdentityGlobal)
+        bool supportedGlobalElement =
+            hasGlobalMemorySpace(memrefType) &&
+            isI32OrF32(memrefType.getElementType());
+        if (!supportedGlobalElement)
           diag << "unsupported transfer element type; ";
         else
-          diag << "ranked or strided memory beyond Phase 10; ";
+          diag << "ranked or strided memory beyond Phase 10 unless covered by "
+               << "Phase 11 row-slice skeletons; ";
         diag << "expected rank-1 contiguous i32/f32 #vc4value.global memref "
-             << "for Phase 5 argument " << arg.getArgNumber()
-             << "; not Phase 5 lowerable; staged value-surface feature. "
+             << "or rank-2 row-slice i32/f32 #vc4value.global memref "
+             << "for Phase 11 argument " << arg.getArgNumber()
+             << "; not Phase 5 lowerable unless accepted by the Phase 11 "
+             << "row-slice contract; staged value-surface feature. "
              << "READY_FOR_TRITON remains NO";
         return failure();
       }
@@ -899,6 +1028,8 @@ private:
       return lowerSelect(select);
     if (name == "arith.index_cast")
       return lowerIndexCast(op);
+    if (auto dim = llvm::dyn_cast<memref::DimOp>(op))
+      return lowerMemRefDim(dim);
 
     if (op->getName().getDialectNamespace() == "scf")
       return emitRawSCFDiagnostic(op);
@@ -1345,6 +1476,54 @@ private:
     return success();
   }
 
+  LogicalResult lowerMemRefDim(memref::DimOp dimOp) {
+    Value source = dimOp.getSource();
+    auto memrefType = llvm::dyn_cast<MemRefType>(source.getType());
+    if (!memrefType || !hasGlobalMemorySpace(memrefType)) {
+      return dimOp.emitOpError()
+             << "memref.dim hidden descriptor ABI is rejected; source must be "
+             << "a public #vc4value.global memref argument. READY_FOR_TRITON "
+             << "remains NO";
+    }
+    std::optional<unsigned> argIndex = getPublicMemRefArgIndex(func, source);
+    if (!argIndex) {
+      return dimOp.emitOpError()
+             << "memref.dim hidden descriptor ABI is rejected; source must be "
+             << "a public #vc4value.global memref argument. READY_FOR_TRITON "
+             << "remains NO";
+    }
+
+    std::optional<int64_t> maybeDim = getIntegerConstant(dimOp.getIndex());
+    if (!maybeDim) {
+      return dimOp.emitOpError()
+             << "memref.dim hidden descriptor ABI is rejected; dimension index "
+             << "must be constant for metadata lowering. READY_FOR_TRITON "
+             << "remains NO";
+    }
+    int64_t dim = *maybeDim;
+    if (dim < 0 || dim >= memrefType.getRank()) {
+      return dimOp.emitOpError()
+             << "memref.dim hidden descriptor ABI is rejected; dimension index "
+             << "is out of range. READY_FOR_TRITON remains NO";
+    }
+
+    std::optional<unsigned> ordinal =
+        getDynamicDimOrdinal(memrefType, static_cast<unsigned>(dim));
+    if (!ordinal) {
+      state.values[dimOp.getResult()] =
+          createI32Constant(builder, dimOp.getLoc(), memrefType.getDimSize(dim));
+      return success();
+    }
+
+    FailureOr<Value> extent = lookupShapeArgForDim(
+        dimOp.getOperation(), source, static_cast<unsigned>(dim),
+        "memref.dim requires explicit vc4value.shape_args metadata");
+    if (failed(extent))
+      return failure();
+    state.values[dimOp.getResult()] = *extent;
+    return success();
+  }
+
   ClassifiedMemoryMask classifyTransferMask(Operation *op,
                                             std::optional<Value> maskValue) {
     if (!maskValue)
@@ -1361,6 +1540,75 @@ private:
     return mask;
   }
 
+  FailureOr<Value> lookupScalarArgByName(Operation *op, StringRef argName) {
+    Block &entry = func.getBody().front();
+    for (BlockArgument arg : entry.getArguments()) {
+      unsigned index = arg.getArgNumber();
+      StringAttr name = func.getArgAttrOfType<StringAttr>(index, kArgNameAttr);
+      if (!name || name.getValue() != argName)
+        continue;
+    if (!isScalarI32OrIndex(arg.getType()))
+      return op->emitOpError()
+             << "metadata scalar argument '" << argName
+             << "' must be index or i32 for Phase 11 memory lowering. "
+             << "READY_FOR_TRITON remains NO";
+      Value lowered = lookupValue(op, arg);
+      if (!lowered)
+        return failure();
+      return lowered;
+    }
+    return op->emitOpError()
+           << "metadata scalar argument '" << argName
+           << "' was not found for Phase 11 memory lowering. "
+           << "READY_FOR_TRITON remains NO";
+  }
+
+  FailureOr<Value> lookupShapeArgForDim(Operation *op, Value memref,
+                                        unsigned dim, StringRef diagnostic) {
+    auto memrefType = llvm::cast<MemRefType>(memref.getType());
+    std::optional<unsigned> argIndex = getPublicMemRefArgIndex(func, memref);
+    if (!argIndex)
+      return op->emitOpError()
+             << "hidden memref descriptor ABI is rejected; Phase 11 memory "
+             << "lowering requires public #vc4value.global memref arguments. "
+             << "READY_FOR_TRITON remains NO";
+    std::optional<unsigned> ordinal = getDynamicDimOrdinal(memrefType, dim);
+    if (!ordinal) {
+      int64_t staticDim = memrefType.getDimSize(dim);
+      return createI32Constant(builder, op->getLoc(), staticDim);
+    }
+    Attribute attr = func.getArgAttr(*argIndex, kShapeArgsAttr);
+    if (!isArrayOfStringAttr(attr))
+      return op->emitOpError()
+             << diagnostic << ". READY_FOR_TRITON remains NO";
+    SmallVector<StringRef> names = getStringArrayValues(attr);
+    if (*ordinal >= names.size() || names[*ordinal].empty())
+      return op->emitOpError()
+             << diagnostic << ". READY_FOR_TRITON remains NO";
+    return lookupScalarArgByName(op, names[*ordinal]);
+  }
+
+  FailureOr<Value> lookupOuterStrideArg(Operation *op, Value memref) {
+    std::optional<unsigned> argIndex = getPublicMemRefArgIndex(func, memref);
+    if (!argIndex)
+      return op->emitOpError()
+             << "hidden memref descriptor ABI is rejected; Phase 11 memory "
+             << "lowering requires public #vc4value.global memref arguments. "
+             << "READY_FOR_TRITON remains NO";
+    Attribute attr = func.getArgAttr(*argIndex, kStrideArgsAttr);
+    if (!isArrayOfStringAttr(attr))
+      return op->emitOpError()
+             << "rank-2 strided row-slice requires explicit "
+             << "vc4value.stride_args metadata. READY_FOR_TRITON remains NO";
+    SmallVector<StringRef> names = getStringArrayValues(attr);
+    if (names.size() != 1 || names.front().empty())
+      return op->emitOpError()
+             << "rank-2 strided row-slice requires exactly one outer "
+             << "vc4value.stride_args metadata entry. READY_FOR_TRITON "
+             << "remains NO";
+    return lookupScalarArgByName(op, names.front());
+  }
+
   LogicalResult diagnoseTransferMemref(Operation *op, Value memref,
                                        StringRef accessName) {
     auto memrefType = llvm::dyn_cast<MemRefType>(memref.getType());
@@ -1371,22 +1619,20 @@ private:
                   " memref outside rank-1 contiguous i32/f32 #vc4value.global");
     }
 
-    bool hasGlobalSpace =
-        llvm::isa_and_nonnull<mlir::vc4value::GlobalMemorySpaceAttr>(
-            memrefType.getMemorySpace());
-    if (memrefType.getRank() != 1 || !hasGlobalSpace ||
-        !memrefType.getLayout().isIdentity()) {
+    if (!isPhase11LowerableGlobalMemref(memref.getType())) {
       return emitStagedDiagnostic(
-          op, Twine("ranked or strided memory beyond Phase 10; ") +
+          op, Twine("memory form outside Phase 11 row-slice skeletons; ") +
                   accessName +
-                  " memref outside rank-1 contiguous i32/f32 #vc4value.global");
+                  " memref outside rank-1 contiguous or rank-2 row-slice "
+                  "i32/f32 #vc4value.global");
     }
 
     Type elementType = memrefType.getElementType();
-    if (!elementType.isSignlessInteger(32) && !elementType.isF32()) {
+    if (!isI32OrF32(elementType)) {
       return emitStagedDiagnostic(
           op, Twine("unsupported transfer element type; ") + accessName +
-                  " memref outside rank-1 contiguous i32/f32 #vc4value.global");
+                  " memref outside rank-1 contiguous or rank-2 row-slice "
+                  "i32/f32 #vc4value.global");
     }
     return success();
   }
@@ -1418,34 +1664,118 @@ private:
     return success();
   }
 
+  FailureOr<MemoryAddressPlan>
+  buildMemoryAddressPlan(Operation *op, Value memref, ValueRange indices,
+                         const ClassifiedMemoryMask &mask) {
+    MemoryAddressPlan plan;
+    plan.source = op;
+    plan.mask = mask;
+    plan.reason = "staged memory form";
+
+    auto memrefType = llvm::dyn_cast<MemRefType>(memref.getType());
+    if (!memrefType)
+      return emitStagedDiagnostic(op, "transfer memref must be ranked");
+
+    Value basePointer = lookupValue(op, memref);
+    if (!basePointer)
+      return failure();
+    plan.basePointer = basePointer;
+
+    if (indices.size() != static_cast<size_t>(memrefType.getRank()))
+      return emitStagedDiagnostic(op, "transfer rank/index count mismatch");
+    for (Value index : indices) {
+      if (!isScalarI32OrIndex(index.getType()))
+        return emitStagedDiagnostic(op, "transfer base index must be scalar");
+    }
+
+    if (memrefType.getRank() == 1) {
+      bool identityMap = llvm::isa<vector::TransferReadOp>(op)
+                             ? isRank1IdentityTransferMap(op)
+                             : isRank1IdentityTransferWriteMap(op);
+      if (!identityMap) {
+        StringRef accessName = llvm::isa<vector::TransferReadOp>(op)
+                                   ? "transfer_read"
+                                   : "transfer_write";
+        return emitStagedDiagnostic(
+            op, Twine(accessName) +
+                    " permutation map beyond rank-1 identity");
+      }
+      Value loweredIndex = lookupValue(op, indices.front());
+      if (!loweredIndex)
+        return failure();
+      plan.kind = MemoryAddressPlan::Kind::Rank1ContiguousOrScalarComputed;
+      plan.elementBaseIndex = loweredIndex;
+      plan.reason = "rank-1 scalar-computed contiguous lane transfer";
+      return plan;
+    }
+
+    if (memrefType.getRank() != 2)
+      return emitStagedDiagnostic(op, "memref rank greater than 2");
+
+    if (!isRank2InnermostRowSliceTransferMap(op)) {
+      return emitStagedDiagnostic(
+          op,
+          "rank-2 row-slice transfer map must project the innermost dimension "
+          "to vector lanes; column slices, transposes, and gather-like maps are "
+          "staged");
+    }
+
+    Value row = lookupValue(op, indices[0]);
+    Value col = lookupValue(op, indices[1]);
+    if (!row || !col)
+      return failure();
+
+    Value stride;
+    if (isRank2IdentityGlobalMemref(memref.getType())) {
+      FailureOr<Value> cols = lookupShapeArgForDim(
+          op, memref, 1,
+          "rank-2 row-slice requires explicit vc4value.shape_args metadata");
+      if (failed(cols))
+        return failure();
+      stride = *cols;
+      plan.kind = MemoryAddressPlan::Kind::Rank2RowSliceIdentity;
+      plan.reason = "rank-2 identity row-major row-slice transfer";
+    } else if (isRank2StridedOuterDynamicGlobalMemref(memref.getType())) {
+      FailureOr<Value> outerStride = lookupOuterStrideArg(op, memref);
+      if (failed(outerStride))
+        return failure();
+      stride = *outerStride;
+      plan.kind = MemoryAddressPlan::Kind::Rank2RowSliceStridedOuterDynamic;
+      plan.reason = "rank-2 dynamic outer stride row-slice transfer";
+    } else {
+      return emitStagedDiagnostic(
+          op, "rank-2 memory layout outside identity or dynamic-outer-strided "
+              "row-slice skeleton");
+    }
+
+    Value rowBase = builder.create<arith::MulIOp>(op->getLoc(), row, stride);
+    plan.elementBaseIndex =
+        builder.create<arith::AddIOp>(op->getLoc(), rowBase, col);
+    return plan;
+  }
+
   FailureOr<ClassifiedMemoryTransfer>
   classifyTransferRead(Operation *op) {
     ClassifiedMemoryTransfer transfer;
     transfer.access = TransferAccessKind::Read;
 
+    auto read = llvm::dyn_cast<vector::TransferReadOp>(op);
+    if (!read)
+      return emitPhase5Diagnostic(op, "transfer_read op kind");
     if (op->getNumResults() != 1)
       return emitPhase5Diagnostic(op, "transfer_read result count");
     transfer.vectorType = op->getResult(0).getType();
     if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_read")))
       return failure();
 
-    Value memref = op->getOperand(0);
+    Value memref = read.getBase();
     if (failed(diagnoseTransferMemref(op, memref, "transfer_read")))
       return failure();
     if (failed(checkTransferElementMatch(op, memref, transfer.vectorType)))
       return failure();
-    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
-      return emitStagedDiagnostic(op, "transfer_read rank or mask form");
-    if (!isRank1IdentityTransferMap(op)) {
-      return emitStagedDiagnostic(
-          op, "transfer_read permutation map beyond rank-1 identity");
-    }
 
     transfer.memref = memref;
-    transfer.baseIndex = op->getOperand(1);
-    transfer.padding = op->getOperand(2);
-    if (!isScalarI32OrIndex(transfer.baseIndex.getType()))
-      return emitStagedDiagnostic(op, "transfer base index must be scalar");
+    transfer.padding = read.getPadding();
     if (!isZeroConstant(transfer.padding)) {
       return emitPhase5Diagnostic(
           op, "transfer_read nonzero padding value; transfer_read padding must "
@@ -1453,13 +1783,18 @@ private:
     }
 
     std::optional<Value> maskValue;
-    if (op->getNumOperands() == 4)
-      maskValue = op->getOperand(3);
-    transfer.mask = classifyTransferMask(op, maskValue);
-    if (transfer.mask.kind == MemoryMaskKind::SparseOrUnknown)
+    if (read.getMask())
+      maskValue = read.getMask();
+    ClassifiedMemoryMask mask = classifyTransferMask(op, maskValue);
+    if (mask.kind == MemoryMaskKind::SparseOrUnknown)
       return emitStagedDiagnostic(op, "sparse or unknown transfer_read mask");
-    if (transfer.mask.kind == MemoryMaskKind::Unsupported)
+    if (mask.kind == MemoryMaskKind::Unsupported)
       return emitStagedDiagnostic(op, "unsupported transfer_read mask");
+    FailureOr<MemoryAddressPlan> plan =
+        buildMemoryAddressPlan(op, memref, read.getIndices(), mask);
+    if (failed(plan))
+      return failure();
+    transfer.addressPlan = *plan;
     transfer.acceptedPath = "tmu safe-offset inactive-zero";
     return transfer;
   }
@@ -1469,55 +1804,51 @@ private:
     ClassifiedMemoryTransfer transfer;
     transfer.access = TransferAccessKind::Write;
 
-    if (op->getNumOperands() != 3 && op->getNumOperands() != 4)
-      return emitStagedDiagnostic(op, "transfer_write rank or mask form");
-    transfer.vectorValue = op->getOperand(0);
+    auto write = llvm::dyn_cast<vector::TransferWriteOp>(op);
+    if (!write)
+      return emitPhase5Diagnostic(op, "transfer_write op kind");
+    transfer.vectorValue = write.getVector();
     transfer.vectorType = transfer.vectorValue.getType();
     if (failed(diagnoseVectorType(op, transfer.vectorType, "transfer_write")))
       return failure();
 
-    Value memref = op->getOperand(1);
+    Value memref = write.getBase();
     if (failed(diagnoseTransferMemref(op, memref, "transfer_write")))
       return failure();
     if (failed(checkTransferElementMatch(op, memref, transfer.vectorType)))
       return failure();
-    if (!isRank1IdentityTransferWriteMap(op)) {
-      return emitStagedDiagnostic(
-          op, "transfer_write permutation map beyond rank-1 identity");
-    }
 
     transfer.memref = memref;
-    transfer.baseIndex = op->getOperand(2);
-    if (!isScalarI32OrIndex(transfer.baseIndex.getType()))
-      return emitStagedDiagnostic(op, "transfer base index must be scalar");
 
     std::optional<Value> maskValue;
-    if (op->getNumOperands() == 4)
-      maskValue = op->getOperand(3);
-    transfer.mask = classifyTransferMask(op, maskValue);
-    if (transfer.mask.kind == MemoryMaskKind::SparseOrUnknown)
+    if (write.getMask())
+      maskValue = write.getMask();
+    ClassifiedMemoryMask mask = classifyTransferMask(op, maskValue);
+    if (mask.kind == MemoryMaskKind::SparseOrUnknown)
       return emitStagedDiagnostic(op, "sparse or unknown transfer_write mask");
-    if (transfer.mask.kind == MemoryMaskKind::Unsupported)
+    if (mask.kind == MemoryMaskKind::Unsupported)
       return emitStagedDiagnostic(op, "unsupported transfer_write mask");
+    FailureOr<MemoryAddressPlan> plan =
+        buildMemoryAddressPlan(op, memref, write.getIndices(), mask);
+    if (failed(plan))
+      return failure();
+    transfer.addressPlan = *plan;
     transfer.acceptedPath = "vdw preserve inactive-store";
     return transfer;
   }
 
-  FailureOr<Value> createByteOffsets(Operation *op, Value elemIndex,
+  FailureOr<Value> createByteOffsets(Operation *op, Value loweredElemIndex,
                                      int64_t elemBytes,
                                      std::optional<Value> maskPred) {
-    Value index = lookupValue(op, elemIndex);
-    if (!index)
-      return failure();
-    if (!index.getType().isSignlessInteger(32))
+    if (!loweredElemIndex.getType().isSignlessInteger(32))
       return op->emitOpError("transfer index must lower to scalar i32");
 
-    Value byteBase = index;
+    Value byteBase = loweredElemIndex;
     if (elemBytes != 1) {
       int64_t shift = elemBytes == 2 ? 1 : elemBytes == 4 ? 2 : -1;
       if (shift < 0)
         return op->emitOpError("unsupported element byte width");
-      byteBase = builder.create<arith::ShLIOp>(op->getLoc(), index,
+      byteBase = builder.create<arith::ShLIOp>(op->getLoc(), loweredElemIndex,
                                                createI32Constant(builder, op->getLoc(), shift));
     }
     Value baseVec = createSplat(builder, op->getLoc(), byteBase, getVector16I32(ctx));
@@ -1538,21 +1869,19 @@ private:
     if (failed(legality))
       return failure();
 
-    Value base = lookupValue(op, legality->memref);
-    if (!base)
-      return failure();
-    int64_t elemBytes = 4;
+    const MemoryAddressPlan &plan = legality->addressPlan;
     std::optional<Value> offsetMask;
-    if (legality->mask.kind != MemoryMaskKind::Full)
-      offsetMask = legality->mask.predicate;
+    if (plan.mask.kind != MemoryMaskKind::Full)
+      offsetMask = plan.mask.predicate;
     FailureOr<Value> byteOffsets =
-        createByteOffsets(op, legality->baseIndex, elemBytes, offsetMask);
+        createByteOffsets(op, plan.elementBaseIndex, plan.elementBytes,
+                          offsetMask);
     if (failed(byteOffsets))
       return failure();
     Value safeOffset = createI32Constant(builder, op->getLoc(), 0);
     Value result = createOpWithResult(
         builder, op->getLoc(), kTMULoadFragmentOpName,
-        {base, *byteOffsets, legality->mask.predicate, safeOffset},
+        {plan.basePointer, *byteOffsets, plan.mask.predicate, safeOffset},
         {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                 ctx, mlir::vc4kernel::MemoryPath::tmu_global_read)),
          builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(
@@ -1570,18 +1899,18 @@ private:
       return failure();
 
     Value value = lookupValue(op, legality->vectorValue);
-    Value base = lookupValue(op, legality->memref);
-    if (!value || !base)
+    if (!value)
       return failure();
-    int64_t elemBytes = 4;
+    const MemoryAddressPlan &plan = legality->addressPlan;
     // Do not poison store offsets.  Inactive preservation is the VDW policy;
     // sparse/unknown masks must be rejected before reaching this path.
     FailureOr<Value> byteOffsets =
-        createByteOffsets(op, legality->baseIndex, elemBytes, std::nullopt);
+        createByteOffsets(op, plan.elementBaseIndex, plan.elementBytes,
+                          std::nullopt);
     if (failed(byteOffsets))
       return failure();
     createOp(builder, op->getLoc(), kVDWStoreFragmentOpName,
-             {base, *byteOffsets, value, legality->mask.predicate},
+             {plan.basePointer, *byteOffsets, value, plan.mask.predicate},
              {builder.getNamedAttr("memory_path", mlir::vc4kernel::MemoryPathAttr::get(
                                                      ctx, mlir::vc4kernel::MemoryPath::vdw_global_store)),
               builder.getNamedAttr("coherency", mlir::vc4kernel::CoherencyAttr::get(

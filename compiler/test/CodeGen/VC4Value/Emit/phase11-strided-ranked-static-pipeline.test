@@ -1,0 +1,176 @@
+// RUN: rm -rf %t && mkdir -p %t
+// RUN: vc4-opt %s --vc4-verify-value-surface --convert-vc4-value-to-vc4kernel -o %t/phase11.vc4kernel.mlir
+// RUN: vc4-opt %t/phase11.vc4kernel.mlir --verify-vc4kernel -o %t/phase11.reverified.vc4kernel.mlir
+// RUN: FileCheck %s --check-prefix=VC4KERNEL --input-file=%t/phase11.vc4kernel.mlir
+// RUN: vc4-opt %t/phase11.vc4kernel.mlir --verify-vc4kernel --convert-vc4kernel-to-ssavc4 -o %t/phase11.ssavc4.mlir
+// RUN: FileCheck %s --check-prefix=SSAVC4 --input-file=%t/phase11.ssavc4.mlir
+// RUN: vc4-opt %t/phase11.ssavc4.mlir --convert-ssavc4-to-vc4 --vc4-verify-emit-contract --vc4-verify-scheduled-hardware-rules --vc4-verify-scheduled-adjacent-hazards --vc4-verify-scheduled-io-spacing --vc4-verify-scheduled-peripheral-accesses -o %t/phase11.vc4.mlir
+// RUN: FileCheck %s --check-prefix=VC4 --input-file=%t/phase11.vc4.mlir
+// RUN: vc4-codegen %t/phase11.vc4.mlir --emit-bundle %t/phase11.bundle
+// RUN: test -f %t/phase11.bundle/kernel_launch.c
+// RUN: test -f %t/phase11.bundle/kernel_launch.h
+// RUN: test -f %t/phase11.bundle/manifest.json
+// RUN: test -f %t/phase11.bundle/kernels/value_strided_rank1_row_copy_vc4value.qasm
+// RUN: test -f %t/phase11.bundle/kernels/value_rank2_row_slice_copy_vc4value.qasm
+// RUN: test -f %t/phase11.bundle/kernels/value_rank2_row_slice_add_tail_vc4value.qasm
+// RUN: test -f %t/phase11.bundle/kernels/value_memref_dim_row_bounds_vc4value.qasm
+// RUN: test -f %t/phase11.bundle/kernels/mixed_value_strided_ranked_memory_axis_mask_cf_vc4value.qasm
+// RUN: FileCheck %s --check-prefix=BUNDLE --input-file=%t/phase11.bundle/manifest.json
+
+func.func @value_strided_rank1_row_copy_vc4value(
+    %in: memref<?xi32, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["total"]},
+    %out: memref<?xi32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["total"]},
+    %total: index {vc4value.arg_name = "total", vc4value.scalar_role = "extent"},
+    %lda: index {vc4value.arg_name = "lda", vc4value.scalar_role = "stride"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32} {
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %row_base = arith.muli %row, %lda : index
+  %idx = arith.addi %row_base, %col : index
+  %remaining = arith.subi %total, %idx : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0 : i32
+  %v = vector.transfer_read %in[%idx], %zero, %mask {in_bounds = [true]} : memref<?xi32, #vc4value.global>, vector<16xi32>
+  vector.transfer_write %v, %out[%idx], %mask {in_bounds = [true]} : vector<16xi32>, memref<?xi32, #vc4value.global>
+  return
+}
+
+func.func @value_rank2_row_slice_copy_vc4value(
+    %in: memref<?x?xf32, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"]},
+    %out: memref<?x?xf32, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows", "cols"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32} {
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %remaining = arith.subi %cols, %col : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %v = vector.transfer_read %in[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xf32, #vc4value.global>, vector<16xf32>
+  vector.transfer_write %v, %out[%row, %col], %mask {in_bounds = [true]} : vector<16xf32>, memref<?x?xf32, #vc4value.global>
+  return
+}
+
+func.func @value_rank2_row_slice_add_tail_vc4value(
+    %a: memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "a", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %b: memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "b", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %out: memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"},
+    %row_stride: index {vc4value.arg_name = "row_stride", vc4value.scalar_role = "stride"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32} {
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %remaining = arith.subi %cols, %col : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0 : i32
+  %av = vector.transfer_read %a[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xi32>
+  %bv = vector.transfer_read %b[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xi32>
+  %sum = arith.addi %av, %bv : vector<16xi32>
+  vector.transfer_write %sum, %out[%row, %col], %mask {in_bounds = [true]} : vector<16xi32>, memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>
+  return
+}
+
+func.func @value_memref_dim_row_bounds_vc4value(
+    %in: memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "in", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %out: memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"},
+    %row_stride: index {vc4value.arg_name = "row_stride", vc4value.scalar_role = "stride"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32} {
+  %c0 = arith.constant 0 : index
+  %c1 = arith.constant 1 : index
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %dim_rows = memref.dim %in, %c0 : memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>
+  %dim_cols = memref.dim %in, %c1 : memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>
+  %inside = arith.cmpi ult, %row, %dim_rows : index
+  cf.cond_br %inside, ^copy, ^done
+^copy:
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %remaining = arith.subi %dim_cols, %col : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0 : i32
+  %v = vector.transfer_read %in[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xi32>
+  vector.transfer_write %v, %out[%row, %col], %mask {in_bounds = [true]} : vector<16xi32>, memref<?x?xi32, strided<[?, 1], offset: 0>, #vc4value.global>
+  cf.br ^done
+^done:
+  return
+}
+
+func.func @mixed_value_strided_ranked_memory_axis_mask_cf_vc4value(
+    %x: memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "x", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %y: memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "y", vc4value.direction = "in", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %out: memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global> {vc4value.arg_name = "out", vc4value.direction = "out", vc4value.shape_args = ["rows", "cols"], vc4value.stride_args = ["row_stride"]},
+    %rows: index {vc4value.arg_name = "rows", vc4value.scalar_role = "extent"},
+    %cols: index {vc4value.arg_name = "cols", vc4value.scalar_role = "extent"},
+    %row_stride: index {vc4value.arg_name = "row_stride", vc4value.scalar_role = "stride"},
+    %take_y: i32 {vc4value.arg_name = "take_y", vc4value.scalar_role = "value"})
+    attributes {vc4value.kernel, vc4value.grid_rank = 2 : i32, vc4value.fp_domain = "finite"} {
+  %pid_col = vc4value.program_id {axis = 0 : i32} : index
+  %row = vc4value.program_id {axis = 1 : i32} : index
+  %c16 = arith.constant 16 : index
+  %col = arith.muli %pid_col, %c16 : index
+  %remaining = arith.subi %cols, %col : index
+  %mask = vector.create_mask %remaining : vector<16xi1>
+  %zero = arith.constant 0.000000e+00 : f32
+  %zero_i32 = arith.constant 0 : i32
+  %use_y_flag = arith.cmpi ne, %take_y, %zero_i32 : i32
+  %xv = vector.transfer_read %x[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xf32>
+  cf.cond_br %use_y_flag, ^use_y, ^store_x
+^use_y:
+  %yv = vector.transfer_read %y[%row, %col], %zero, %mask {in_bounds = [true]} : memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>, vector<16xf32>
+  %sum = arith.addf %xv, %yv : vector<16xf32>
+  vector.transfer_write %sum, %out[%row, %col], %mask {in_bounds = [true]} : vector<16xf32>, memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>
+  cf.br ^done
+^store_x:
+  vector.transfer_write %xv, %out[%row, %col], %mask {in_bounds = [true]} : vector<16xf32>, memref<?x?xf32, strided<[?, 1], offset: 0>, #vc4value.global>
+  cf.br ^done
+^done:
+  return
+}
+
+// VC4KERNEL-LABEL: vc4kernel.kernel @value_strided_rank1_row_copy_vc4value
+// VC4KERNEL-LABEL: vc4kernel.kernel @value_rank2_row_slice_copy_vc4value
+// VC4KERNEL-LABEL: vc4kernel.kernel @value_rank2_row_slice_add_tail_vc4value
+// VC4KERNEL: vc4kernel.fragment_alu.add
+// VC4KERNEL-LABEL: vc4kernel.kernel @value_memref_dim_row_bounds_vc4value
+// VC4KERNEL-NOT: memref.dim
+// VC4KERNEL-LABEL: vc4kernel.kernel @mixed_value_strided_ranked_memory_axis_mask_cf_vc4value
+// VC4KERNEL: vc4kernel.tmu_load_fragment
+// VC4KERNEL: vc4kernel.vdw_store_fragment
+// VC4KERNEL-NOT: func.func
+// VC4KERNEL-NOT: vc4value.
+// VC4KERNEL-NOT: vector.
+// VC4KERNEL-NOT: memref.
+
+// SSAVC4-LABEL: ssavc4.func @value_strided_rank1_row_copy_vc4value
+// SSAVC4-LABEL: ssavc4.func @value_rank2_row_slice_copy_vc4value
+// SSAVC4-LABEL: ssavc4.func @value_rank2_row_slice_add_tail_vc4value
+// SSAVC4-LABEL: ssavc4.func @value_memref_dim_row_bounds_vc4value
+// SSAVC4-LABEL: ssavc4.func @mixed_value_strided_ranked_memory_axis_mask_cf_vc4value
+// SSAVC4: ssavc4.tmu.request
+// SSAVC4: ssavc4.vdw.store
+// SSAVC4-NOT: vc4kernel.
+// SSAVC4-NOT: func.func
+// SSAVC4-NOT: vc4value.
+// SSAVC4-NOT: vector.
+// SSAVC4-NOT: memref.
+
+// VC4: vc4.module
+// VC4: vc4.qpu.
+// VC4-NOT: ssavc4.
+// VC4-NOT: vc4kernel.
+
+// BUNDLE: "public_name": "value_strided_rank1_row_copy_vc4value"
+// BUNDLE: "public_name": "value_rank2_row_slice_copy_vc4value"
+// BUNDLE: "public_name": "value_rank2_row_slice_add_tail_vc4value"
+// BUNDLE: "public_name": "value_memref_dim_row_bounds_vc4value"
+// BUNDLE: "public_name": "mixed_value_strided_ranked_memory_axis_mask_cf_vc4value"

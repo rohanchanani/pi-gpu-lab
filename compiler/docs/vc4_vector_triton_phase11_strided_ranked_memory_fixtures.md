@@ -1,5 +1,9 @@
 PHASE11_CONTROLLED_TRITON_STRIDED_MEMORY_FIXTURES=YES
 PHASE11_VALUE_STRIDED_RANKED_MEMORY_CONTRACT=LOCKED
+VALUE_RANK2_ROW_SLICE_TO_VC4KERNEL_STATIC=PASS
+VALUE_MEMREF_DIM_METADATA_LOWERING=PASS
+VALUE_STRIDED_RANKED_ADDRESS_PLANNER=YES
+VALUE_STRIDED_RANKED_MEMORY_STATIC=PASS
 REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
 REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -8,8 +12,10 @@ RANK2_ROW_SLICE_STRIDED_OUTER_DYNAMIC_SURFACE=ACCEPTED
 MEMREF_DIM_METADATA_TO_SCALAR_ARG_CONTRACT=LOCKED
 HIDDEN_MEMREF_DESCRIPTOR_ALLOWED=NO
 GATHER_LANE_STRIDE_STAGED=YES
+HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
+READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE11_4_VALUE_RANKED_STRIDED_STATIC=YES
 READY_FOR_PHASE11_3_VALUE_SURFACE_CONTRACT=YES
 READY_FOR_TRITON=NO
@@ -63,5 +69,13 @@ strided address skeletons, rank-2 identity row-slice transfers, rank-2
 `strided<[?, 1], offset: 0>` row-slice transfers with explicit shape/stride
 scalar metadata, and `memref.dim` metadata lowering to scalar shape args.
 Lane-varying stride/gather and column-slice forms remain staged.
+
+Phase 11.4 statically lowers the value subset through VC4Kernel, SSAVC4,
+scheduled VC4, and bundle emission for non-hardware candidates. The value
+address planner computes rank-1 flattened and rank-2 row-slice scalar element
+base indices centrally, reuses the Phase 10 full/empty/tail mask classifier,
+and rejects gather-like lane-varying stride, non-unit inner stride, column
+slices, hidden descriptor metadata, and rank-2 tile/vector forms. Hardware
+proof is intentionally deferred to Phase 11.5.
 
 `READY_FOR_TRITON=NO` remains locked.

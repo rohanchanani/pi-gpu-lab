@@ -853,3 +853,40 @@ column/vertical slice, rank greater than 2, rank-2 vector tiles, block pointers,
 boundary-check and padding-option semantics, reductions, dot, f16/subword
 storage lowering, numeric casts, SFU/math expansion, hidden descriptors, and
 sparse/unknown transfer masks outside the Phase 10 accepted set.
+
+## 29. Phase 11.4 value ranked/strided static lowering lock
+
+VALUE_RANK2_ROW_SLICE_TO_VC4KERNEL_STATIC=PASS
+VALUE_MEMREF_DIM_METADATA_LOWERING=PASS
+VALUE_STRIDED_RANKED_ADDRESS_PLANNER=YES
+GATHER_LANE_STRIDE_STAGED=YES
+HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
+VALUE_STRIDED_RANKED_MEMORY_STATIC=PASS
+READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 11.4 implements the static value-to-VC4Kernel executable subset for the
+Phase 11 memory skeletons. `vector.transfer_read` and `vector.transfer_write`
+now flow through a central `MemoryAddressPlan` helper that reuses the Phase 10
+mask classifier and then computes one scalar element base index before the
+existing byte-offset, TMU inactive-zero load, and VDW inactive-preserve store
+paths.
+
+Accepted static-lowering forms are:
+
+- rank-1 flattened scalar-computed addresses, including `row * stride + col`
+  expressions already present in value IR, with contiguous rank-1 transfer
+  lanes;
+- rank-2 identity row slices over `memref<?x?xT, #vc4value.global>` for
+  `T=i32/f32`, where the row stride is the dim-1 extent named by
+  `vc4value.shape_args`;
+- rank-2 `strided<[?, 1], offset: 0>` row slices, where the outer row stride is
+  the scalar named by `vc4value.stride_args`;
+- metadata-only `memref.dim` on public global memref dynamic dimensions,
+  resolved to explicit scalar extent arguments without descriptor loads.
+
+Still-staged or rejected forms include lane-varying stride/gather, scatter,
+column/vertical slices, non-unit inner stride, nonzero layout offsets, hidden
+memref descriptors, rank-2 vector/tile transfers, block pointers, reductions,
+dot/GEMV/GEMM, f16/subword storage lowering, numeric casts, and sparse/unknown
+transfer masks beyond the Phase 10 full/empty/tail mask set.
