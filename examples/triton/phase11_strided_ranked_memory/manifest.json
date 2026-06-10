@@ -1,0 +1,114 @@
+{
+  "phase": "phase11_strided_ranked_memory",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "python_semantic_importer_used": false,
+  "ready_for_triton": "NO",
+  "triton_version": "3.7.0",
+  "snapshots": [
+    {
+      "name": "ttir_strided_row_copy_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_copy_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_copy_b16.ttir.mlir",
+      "kernel_name": "ttir_strided_row_copy_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_copy_b16.py --kernel-name ttir_strided_row_copy_b16_kernel --signature '*fp32,*fp32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_copy_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/ttir_strided_row_copy_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_program_id_axis0",
+        "saw_program_id_axis1",
+        "saw_scalar_row_stride_plus_contiguous_arange",
+        "saw_canonical_col_lt_ncols_tail_mask",
+        "saw_masked_load_other_zero",
+        "saw_tail_masked_store"
+      ]
+    },
+    {
+      "name": "ttir_strided_row_add_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_add_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_add_b16.ttir.mlir",
+      "kernel_name": "ttir_strided_row_add_b16_kernel",
+      "signature": "*fp32,*fp32,*fp32,i32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_add_b16.py --kernel-name ttir_strided_row_add_b16_kernel --signature '*fp32,*fp32,*fp32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_add_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/ttir_strided_row_add_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_program_id_axis0",
+        "saw_program_id_axis1",
+        "saw_multi_buffer_scalar_row_stride_plus_contiguous_arange",
+        "saw_canonical_col_lt_ncols_tail_mask",
+        "saw_addf_body"
+      ]
+    },
+    {
+      "name": "ttir_strided_row_inout_tail_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_inout_tail_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_inout_tail_b16.ttir.mlir",
+      "kernel_name": "ttir_strided_row_inout_tail_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,i32,fp32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/ttir_strided_row_inout_tail_b16.py --kernel-name ttir_strided_row_inout_tail_b16_kernel --signature '*fp32,*fp32,i32,i32,i32,fp32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/ttir_strided_row_inout_tail_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/ttir_strided_row_inout_tail_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_program_id_axis0",
+        "saw_program_id_axis1",
+        "saw_scalar_row_stride_plus_contiguous_arange",
+        "saw_inout_row_slice_tail_mask",
+        "saw_mulf_addf_body"
+      ]
+    },
+    {
+      "name": "mixed_ttir_strided_memory_axes_mask_cf_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/mixed_ttir_strided_memory_axes_mask_cf_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/mixed_ttir_strided_memory_axes_mask_cf_b16.ttir.mlir",
+      "kernel_name": "mixed_ttir_strided_memory_axes_mask_cf_b16_kernel",
+      "signature": "*fp32,*fp32,*fp32,fp32,fp32,i32,i32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/mixed_ttir_strided_memory_axes_mask_cf_b16.py --kernel-name mixed_ttir_strided_memory_axes_mask_cf_b16_kernel --signature '*fp32,*fp32,*fp32,fp32,fp32,i32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/mixed_ttir_strided_memory_axes_mask_cf_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/mixed_ttir_strided_memory_axes_mask_cf_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_program_id_axis0",
+        "saw_program_id_axis1",
+        "saw_multi_buffer_scalar_row_stride_plus_contiguous_arange",
+        "saw_canonical_col_lt_ncols_tail_mask",
+        "saw_tl_where_compute_select_mask",
+        "saw_scf_if"
+      ]
+    },
+    {
+      "name": "ttir_lane_varying_stride_gather_reject_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_lane_varying_stride_gather_reject_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/ttir_lane_varying_stride_gather_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_lane_varying_stride_gather_reject_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/ttir_lane_varying_stride_gather_reject_b16.py --kernel-name ttir_lane_varying_stride_gather_reject_b16_kernel --signature '*fp32,*fp32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/ttir_lane_varying_stride_gather_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/ttir_lane_varying_stride_gather_reject_b16.json",
+      "expected_classification": "STAGED_LANE_VARYING_STRIDE_GATHER",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_lane_varying_stride_offsets",
+        "saw_gather_nonunit_inner_stride_staged"
+      ]
+    },
+    {
+      "name": "ttir_column_slice_reject_b16",
+      "source": "examples/triton/phase11_strided_ranked_memory/sources/ttir_column_slice_reject_b16.py",
+      "generated_ttir": "examples/triton/phase11_strided_ranked_memory/generated/ttir_column_slice_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_column_slice_reject_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase11_strided_ranked_memory/sources/ttir_column_slice_reject_b16.py --kernel-name ttir_column_slice_reject_b16_kernel --signature '*fp32,*fp32,i32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase11_strided_ranked_memory/generated/ttir_column_slice_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase11_2_controlled_fixtures/metadata/ttir_column_slice_reject_b16.json",
+      "expected_classification": "STAGED_COLUMN_SLICE_NONCONTIGUOUS",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_lane_varying_outer_stride",
+        "saw_column_slice_noncontiguous_staged"
+      ]
+    }
+  ]
+}
