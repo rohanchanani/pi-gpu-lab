@@ -35,13 +35,16 @@ FEATURE_FIELDS = {"id", "verification_kind", "covered_by", "required"}
 REQUIRED_FIXTURES = {
     "mixed_ttir_saxpy_cmp_select_tail_vc4triton",
     "mixed_ttir_i32_f32_dual_kernel_tail_vc4triton",
+    "mixed_ttir_cf_loop_if_tail_vc4triton",
 }
 
 REQUIRED_FEATURES = {
     "real_ttir_input",
+    "real_ttir_snapshot",
     "cpp_ttir_importer",
     "value_surface_verification",
     "value_to_vc4kernel",
+    "value_scf_cf",
     "program_id_axis0",
     "arange_make_range_16",
     "masked_load_other_zero",
@@ -49,6 +52,11 @@ REQUIRED_FEATURES = {
     "tmu_load",
     "vdw_preserve_store",
     "tail_mask_clamp_overlaunch",
+    "ttir_elementwise",
+    "ttir_tail_mask",
+    "ttir_scf_if",
+    "ttir_scf_for_or_while",
+    "ttir_cf_control_flow",
     "f32_alu",
     "f32_cmp_select",
     "i32_alu",
@@ -190,6 +198,12 @@ def validate_fixture(repo_root, fixture, lock_mode):
         fail(f"{name} claims f32_cmp_select but TTIR lacks cmpf/select")
     if "i32_cmp_select" in tags and ("arith.cmpi" not in ttir_text or "arith.select" not in ttir_text):
         fail(f"{name} claims i32_cmp_select but TTIR lacks cmpi/select")
+    if "ttir_scf_if" in tags and "scf.if" not in ttir_text:
+        fail(f"{name} claims ttir_scf_if but TTIR lacks scf.if")
+    if "ttir_scf_for_or_while" in tags and "scf.for" not in ttir_text and "scf.while" not in ttir_text:
+        fail(f"{name} claims ttir_scf_for_or_while but TTIR lacks scf.for/scf.while")
+    if "ttir_cf_control_flow" in tags and ("scf.if" not in ttir_text or ("scf.for" not in ttir_text and "scf.while" not in ttir_text)):
+        fail(f"{name} claims ttir_cf_control_flow but TTIR lacks mixed control-flow forms")
 
 
 def validate_manifest(repo_root, manifest, lock_mode):

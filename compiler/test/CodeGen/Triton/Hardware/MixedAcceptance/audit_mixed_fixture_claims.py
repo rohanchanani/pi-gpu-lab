@@ -67,12 +67,29 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
         require_marker(ttir, "tt.func", "saw_real_ttir_input TTIR")
         require_marker(ttir, "tt.return", "saw_real_ttir_input TTIR")
 
+    if "saw_real_ttir_snapshot" in claim_names:
+        fixture_input = fixture_dir / "input.ttir.mlir"
+        phase85_snapshot = (
+            repo_root
+            / "examples/triton/phase8_5_control_flow/generated/mixed_ttir_cf_loop_if_tail_b16.ttir.mlir"
+        )
+        if fixture_name == "mixed_ttir_cf_loop_if_tail_vc4triton":
+            if not fixture_input.exists() or not phase85_snapshot.exists():
+                fail(f"{fixture_name} snapshot provenance paths are missing")
+            if fixture_input.read_bytes() != phase85_snapshot.read_bytes():
+                fail(f"{fixture_name} input.ttir.mlir does not match the source-controlled Phase 8.5 mixed snapshot")
+
     if "saw_cpp_ttir_importer" in claim_names:
         require_marker(harness, "VC4_CASE_SAW_CPP_TTIR_IMPORTER", "saw_cpp_ttir_importer harness")
 
     if "saw_value_surface_verification" in claim_names or "saw_value_to_vc4kernel" in claim_names:
         if "runner_audit" not in json.dumps(fixture_claims["claims"]).lower():
             fail(f"{fixture_name} value/vc4kernel claims must cite runner_audit evidence")
+
+    if "saw_value_scf_cf" in claim_names:
+        require_marker(harness, "saw_value_scf_cf", "saw_value_scf_cf harness")
+        if "--convert-scf-to-cf" not in (repo_root / "compiler/test/CodeGen/Triton/Support/run_ttir_candidate_codegen_test.sh").read_text():
+            fail(f"{fixture_name} saw_value_scf_cf requires runner --convert-scf-to-cf")
 
     if "saw_program_id_axis0" in claim_names:
         require_marker(ttir, "tt.get_program_id", "saw_program_id_axis0 TTIR")
@@ -102,6 +119,33 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
     if "saw_tail_mask_clamp_overlaunch" in claim_names:
         require_marker(harness, "rounded_waves", "saw_tail_mask_clamp_overlaunch harness")
         require_marker(harness, "1000u", "saw_tail_mask_clamp_overlaunch harness")
+
+    if "saw_ttir_elementwise" in claim_names:
+        for marker in ("arith.addf", "arith.subf", "arith.mulf", "arith.cmpf", "arith.select"):
+            require_marker(ttir, marker, "saw_ttir_elementwise TTIR")
+        require_marker(harness, "verify_results", "saw_ttir_elementwise harness")
+
+    if "saw_ttir_tail_mask" in claim_names:
+        require_marker(ttir, "arith.cmpi slt", "saw_ttir_tail_mask TTIR")
+        require_marker(ttir, "tt.load", "saw_ttir_tail_mask TTIR")
+        require_marker(ttir, "tt.store", "saw_ttir_tail_mask TTIR")
+        require_marker(harness, "verify_sentinels", "saw_ttir_tail_mask harness")
+
+    if "saw_ttir_scf_if" in claim_names:
+        require_marker(ttir, "scf.if", "saw_ttir_scf_if TTIR")
+        require_marker(harness, "flag", "saw_ttir_scf_if harness")
+
+    if "saw_ttir_scf_for_or_while" in claim_names:
+        if "scf.for" not in ttir and "scf.while" not in ttir:
+            fail(f"{fixture_name} saw_ttir_scf_for_or_while requires scf.for or scf.while")
+        require_marker(harness, "trip_count", "saw_ttir_scf_for_or_while harness")
+
+    if "saw_ttir_cf_control_flow" in claim_names:
+        require_marker(ttir, "scf.if", "saw_ttir_cf_control_flow TTIR")
+        if "scf.for" not in ttir and "scf.while" not in ttir:
+            fail(f"{fixture_name} saw_ttir_cf_control_flow requires loop control flow")
+        require_marker(harness, "trip_count", "saw_ttir_cf_control_flow harness")
+        require_marker(harness, "flag", "saw_ttir_cf_control_flow harness")
 
     if "saw_f32_alu" in claim_names:
         if "arith.addf" not in ttir and "arith.mulf" not in ttir:

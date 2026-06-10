@@ -15,6 +15,11 @@ TTIR_CF_TL_RANGE_HARDWARE=PASS
 TTIR_CF_WHILE_HARDWARE=PASS
 TTIR_CF_PERSISTENT_LOOP_HARDWARE=PASS
 READY_FOR_PHASE85R6_MIXED_ACCEPTANCE=YES
+TTIR_CF_MIXED_ACCEPTANCE=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+PHASE85_NO_TTIR_REGEN_IN_HARDWARE_PHASES=YES
+READY_FOR_PHASE85R7_FINAL_LOCK=YES
 READY_FOR_TRITON=NO
 
 # VC4 Vector/Triton Phase 8.5 TTIR Control-Flow Static Lock
@@ -127,3 +132,24 @@ value-to-VC4Kernel lowering, and the fixture-specific control-flow form.
 The R5 claim audit checks exact snapshot provenance, expected TTIR control-flow
 operations, no accepted-path `arith.sitofp`, and required hardware result
 fields.
+
+## Mixed Acceptance Lock
+
+Phase 8.5R6 adds `mixed_ttir_cf_loop_if_tail_vc4triton` to the TTIR mixed
+acceptance suite. The fixture consumes the source-controlled
+`mixed_ttir_cf_loop_if_tail_b16.ttir.mlir` snapshot and combines the supported
+TTIR feature set so far:
+
+- C++ TTIR importer path;
+- axis-0 `tt.get_program_id`;
+- `tt.make_range` 0..16 / `BLOCK_SIZE=16`;
+- tail mask with masked `tt.load` / `tt.store`;
+- f32 add/sub/mul/cmp/select;
+- scalar `scf.if`;
+- scalar coherent `scf.while`;
+- strict CPU oracle, guard sentinels, and locked nonzero output hash;
+- `active_qpus=12`.
+
+The full TTIR mixed suite passed on real VC4 hardware. Layered regression policy
+classified the lowest touched semantic layer as `TTIR_IMPORTER`, so value and
+VC4Kernel mixed suites were not required for R6.
