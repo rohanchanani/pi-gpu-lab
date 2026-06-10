@@ -180,3 +180,23 @@ TTIR_NONZERO_LOAD_OTHER_REJECTS=PASS
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_PHASE10_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_TRITON=NO
+
+## Phase 10.8 TTIR Hardware Isolation
+
+Phase 10.8 proves the accepted controlled real TTIR mask/memory snapshots on
+real VC4 hardware through the C++ TTIR importer and the already-proven value
+mask classifier. The sparse-store-mask and nonzero-load-other fixtures remain
+static negative coverage only.
+
+The hardware fixtures cover canonical tail masks, full/no-mask transfers,
+compute-mask select with tail memory masks, and repeated empty-mask launches.
+All full fixtures use `active_qpus=12`, strict CPU oracles, sentinel checks,
+and nonzero output hashes.
+
+TTIR_MASK_MEMORY_HARDWARE_ISOLATION=PASS
+TTIR_TAIL_MASK_HARDWARE=PASS
+TTIR_FULL_NO_MASK_HARDWARE=PASS
+TTIR_COMPUTE_MASK_SELECT_HARDWARE=PASS
+TTIR_EMPTY_MASK_REPEAT_HARDWARE=PASS
+READY_FOR_PHASE10_9_TTIR_MIXED_FINAL_LOCK=YES
+READY_FOR_TRITON=NO

@@ -1,0 +1,5 @@
+# RUN: python3 %S/Hardware/Run/audit_phase10_mask_memory_isolation_claims.py %S/../../../.. | FileCheck %s
+
+# CHECK: TTIR_MASK_MEMORY_CLAIM_AUDIT=PASS
+# CHECK: fixtures=4
+# CHECK: static_negative=2

@@ -291,11 +291,22 @@ text = path.read_text(encoding="utf-8", errors="replace")
 ttir_text = "\n".join(Path(arg).read_text(encoding="utf-8", errors="replace")
                       for arg in sys.argv[2:])
 for required in ("func.func", "vc4value.kernel", "vc4value.program_id",
-                 "vector.create_mask", "vector.transfer_write"):
+                 "vector.transfer_write"):
     if required not in text:
         raise SystemExit(f"{path}: lowered value file missing {required}")
 if re.search(r'(?<![A-Za-z0-9_])"?tt\.load\b', ttir_text) and "vector.transfer_read" not in text:
     raise SystemExit(f"{path}: lowered value file missing vector.transfer_read for TTIR tt.load")
+def has_masked_ttir_transfer(module_text):
+    for line in module_text.splitlines():
+        if not re.search(r'(?<![A-Za-z0-9_])"?tt\.(load|store)\b', line):
+            continue
+        operands = line.split(":", 1)[0]
+        if operands.count(",") >= 2:
+            return True
+    return False
+
+if has_masked_ttir_transfer(ttir_text) and "vector.create_mask" not in text:
+    raise SystemExit(f"{path}: lowered value file missing vector.create_mask for masked TTIR transfer")
 for dialect in ("tt", "ttg", "gpu", "nvgpu", "nvvm", "rocdl", "llvm",
                 "vc4kernel", "ssavc4"):
     if re.search(rf'(?<![A-Za-z0-9_])"?{re.escape(dialect)}\.', text):

@@ -1,0 +1,91 @@
+{
+  "phase": "Phase10.8",
+  "fixtures": [
+    {
+      "name": "ttir_mask_tail_load_store_b16_vc4triton",
+      "source": "examples/triton/phase10_mask_memory/sources/ttir_mask_tail_load_store_b16.py",
+      "snapshot": "examples/triton/phase10_mask_memory/generated/ttir_mask_tail_load_store_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_tail_mask", "saw_value_load_inactive_zero", "saw_value_store_inactive_preserve"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "canonical_tail_mask", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_mask_classifier", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_zero_load", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_preserve_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_mask_full_no_mask_b16_vc4triton",
+      "source": "examples/triton/phase10_mask_memory/sources/ttir_mask_full_no_mask_b16.py",
+      "snapshot": "examples/triton/phase10_mask_memory/generated/ttir_mask_full_no_mask_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store"],
+      "forbidden_ops": ["arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_full_no_mask", "saw_value_store_inactive_preserve"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "full_no_mask_transfer", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_mask_classifier", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_preserve_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_mask_compute_select_tail_b16_vc4triton",
+      "source": "examples/triton/phase10_mask_memory/sources/ttir_mask_compute_select_tail_b16.py",
+      "snapshot": "examples/triton/phase10_mask_memory/generated/ttir_mask_compute_select_tail_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.cmpi slt", "arith.cmpf", "arith.select"],
+      "expected_result_fields": ["saw_ttir_compute_mask_select", "saw_ttir_memory_tail_mask", "saw_select_x_arm", "saw_select_y_arm", "saw_value_load_inactive_zero", "saw_value_store_inactive_preserve"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "compute_mask_select", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "canonical_tail_memory_mask", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "value_mask_classifier", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_zero_load", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_preserve_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    },
+    {
+      "name": "ttir_mask_empty_repeat_vc4triton",
+      "source": "examples/triton/phase10_mask_memory/sources/ttir_mask_tail_load_store_b16.py",
+      "snapshot": "examples/triton/phase10_mask_memory/generated/ttir_mask_tail_load_store_b16.ttir.mlir",
+      "expected_ops": ["tt.load", "tt.store", "arith.cmpi slt"],
+      "expected_result_fields": ["saw_ttir_empty_mask", "saw_repeat_invocation", "saw_value_load_inactive_zero", "saw_value_store_inactive_preserve"],
+      "claims": [
+        {"claim": "source_controlled_real_triton_source", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "source_controlled_real_ttir_snapshot", "claim_kind": "CHECKED_AUDIT"},
+        {"claim": "cpp_ttir_importer_path", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "empty_tail_mask", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "repeat_invocation", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "value_mask_classifier", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_zero_load", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "inactive_preserve_store", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "hardware_output_oracle", "claim_kind": "CHECKED_OUTPUT"},
+        {"claim": "no_ttir_regeneration", "claim_kind": "PHASE_GUARD"}
+      ]
+    }
+  ],
+  "static_negative_coverage": [
+    {
+      "name": "sparse_store_mask",
+      "path": "compiler/test/Conversion/TritonToVC4Value/MaskMemory/invalid-ttir-sparse-store-mask.mlir",
+      "diagnostic": "sparse or unknown tt.store memory mask"
+    },
+    {
+      "name": "nonzero_load_other",
+      "path": "compiler/test/Conversion/TritonToVC4Value/MaskMemory/invalid-ttir-nonzero-load-other.mlir",
+      "diagnostic": "tt.load nonzero other value"
+    }
+  ]
+}

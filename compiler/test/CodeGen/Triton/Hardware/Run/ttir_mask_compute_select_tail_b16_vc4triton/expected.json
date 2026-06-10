@@ -1,0 +1,22 @@
+{
+  "name": "ttir_mask_compute_select_tail_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_mask_memory": 1,
+    "saw_value_mask_classifier": 1,
+    "saw_ttir_compute_mask_select": 1,
+    "saw_ttir_memory_tail_mask": 1,
+    "saw_value_load_inactive_zero": 1,
+    "saw_value_store_inactive_preserve": 1,
+    "saw_select_x_arm": 1,
+    "saw_select_y_arm": 1
+  }
+}

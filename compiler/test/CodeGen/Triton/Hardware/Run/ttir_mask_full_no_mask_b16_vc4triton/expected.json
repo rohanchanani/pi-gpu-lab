@@ -1,0 +1,18 @@
+{
+  "name": "ttir_mask_full_no_mask_b16_vc4triton",
+  "status": "PASS",
+  "required": {
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "output_hash_nonzero": 1,
+    "saw_real_ttir_snapshot": 1,
+    "saw_cpp_ttir_importer": 1,
+    "saw_ttir_mask_memory": 1,
+    "saw_value_mask_classifier": 1,
+    "saw_ttir_full_no_mask": 1,
+    "saw_value_store_inactive_preserve": 1
+  }
+}
