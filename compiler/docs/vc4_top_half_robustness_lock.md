@@ -1,3 +1,4 @@
+TOP_HALF_ROBUSTNESS_RESULT=LOCKED
 NO_SILENT_TTIR_OP_DROPS=YES
 REQUIRED_UNSUPPORTED_OPS_STAGE_EXACTLY=YES
 DEAD_PROOF_OPS_WHITELISTED_AND_AUDITED=YES
@@ -21,6 +22,10 @@ STAGED_FEATURE_AUDIT=PASS
 NO_TTIR_TOOLCHAIN_REBUILD=YES
 NO_TTIR_REGEN_IN_TOP_HALF_HARDENING=YES
 READY_FOR_TOP_HALF5_HARDWARE_MIXED_FINAL=YES
+TTIR_ISOLATION_REGRESSION=PASS
+TTIR_MIXED_REGRESSION=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+READY_FOR_FEATURE_LADDER_PHASE9=YES
 READY_FOR_TRITON=NO
 
 # VC4 Top-Half Robustness Lock
@@ -82,3 +87,26 @@ hardened output boundary.
 
 No TTIR was regenerated, no Triton or LLVM toolchain was created/installed/built,
 and no hardware was run in this static lock. `READY_FOR_TRITON=NO` remains true.
+
+## TopHalf5 Hardware/Mixed Final Lock
+
+TopHalf5 applies the layered regression policy after the TopHalf2-4 hardening
+commits. The lowest touched implementation layer is the TTIR importer, so the
+required hardware/mixed scope is TTIR isolation plus TTIR mixed regression.
+Value, VC4Kernel, SSAVC4, scheduled VC4, artifact, and runtime mixed suites are
+not required by layer policy for this package.
+
+The source-controlled Phase 7/7.5 TTIR elementwise isolation fixtures and Phase
+8.5 controlled TTIR control-flow isolation fixtures passed on hardware with
+`active_qpus=12`, zero mismatches, zero sentinel mismatches, and zero launch
+failures. The full TTIR mixed acceptance suite also passed on hardware with the
+same invariants.
+
+The final audits pass for no silent TTIR op drops, exact staging of required
+unsupported operations, whitelisted dead-proof ops, metadata-only source names,
+removed argument-name rewrites, disambiguated metadata names, structural
+shape-arg derivation, no stringly semantic classification, output-boundary
+hardening, TTIR mixed claims, and no toolchain/generator drift.
+
+No TTIR was regenerated, no Triton or LLVM toolchain was created/installed/built,
+and `READY_FOR_TRITON=NO` remains true.
