@@ -24,6 +24,13 @@ VALUE_MULTI_AXIS_CLAIM_AUDIT=PASS
 VALUE_MULTI_AXIS_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
 VALUE_MULTI_AXIS_MIXED_CLAIM_AUDIT=PASS
+TTIR_MULTI_AXIS_IMPORTER_STATIC=PASS
+TTIR_PROGRAM_ID_AXES_0_1_2_TO_VALUE=YES
+TTIR_NUM_PROGRAMS_AXES_0_1_2_TO_VALUE=YES
+TTIR_MULTI_AXIS_LINEARIZED_TAIL_TO_VALUE=YES
+NO_STRINGLY_AXIS_CLASSIFICATION=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE9_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE9_7_TTIR_IMPORTER_MULTI_AXIS_STATIC=YES
 READY_FOR_PHASE9_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE9_5_VALUE_HARDWARE_ISOLATION=YES
@@ -200,3 +207,41 @@ and phase guards. The fixture is not an isolation fixture and does not broaden
 Phase 9 scope. It does not regenerate TTIR, touch the TTIR importer, implement
 mask classifier behavior, implement rank-2 memory, or mark global Triton
 readiness.
+
+## Phase 9.7 TTIR Importer Static Lock
+
+Phase 9.7 extends the C++ TTIR importer to lower controlled multi-axis launch
+identity snapshots into the already hardware-proven value forms:
+
+```text
+TTIR_MULTI_AXIS_IMPORTER_STATIC=PASS
+TTIR_PROGRAM_ID_AXES_0_1_2_TO_VALUE=YES
+TTIR_NUM_PROGRAMS_AXES_0_1_2_TO_VALUE=YES
+TTIR_MULTI_AXIS_LINEARIZED_TAIL_TO_VALUE=YES
+NO_STRINGLY_AXIS_CLASSIFICATION=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE9_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+```
+
+The importer classifies `tt.get_program_id` and `tt.get_num_programs` axes
+through typed Triton op APIs and `ProgramIDDimAttr`, not printed IR text,
+source names, fixture names, file paths, or substring matching. The emitted
+value function infers `vc4value.grid_rank` from the maximum used accepted axis
+plus one, with accepted axes limited to 0, 1, and 2.
+
+The accepted Phase 9 TTIR memory/mask extension is only the canonical
+linearized tail form:
+
+```text
+block_id = pid1 * num_programs0 + pid0
+block_id = (pid2 * num_programs1 + pid1) * num_programs0 + pid0
+idx = block_id * 16 + lane
+mask = idx < n
+```
+
+The importer lowers this to flattened rank-1 value transfers with scalar
+`base = block_id * 16` and `vector.create_mask(n - base)`. This is not a
+general mask classifier. Noncanonical masks, sparse masks, rank-2 memory,
+block pointers, dot, reduce, gather/scatter, `arith.sitofp`, and
+`arith.fptosi` remain staged or rejected according to the target profile.

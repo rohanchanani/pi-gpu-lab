@@ -141,6 +141,45 @@ Triton support complete:
 READY_FOR_TRITON=NO
 ```
 
+### Phase 9.7 multi-axis launch identity static subset
+
+Phase 9.7 extends the optional C++ importer for the controlled Phase 9 real
+Triton 3.7.0 TTIR snapshots:
+
+```text
+examples/triton/phase9_multi_axis_launch/generated/
+```
+
+The accepted static TTIR forms are:
+
+- `tt.get_program_id` axes x/y/z to `vc4value.program_id` axes 0/1/2;
+- `tt.get_num_programs` axes x/y/z to `vc4value.num_programs` axes 0/1/2;
+- `vc4value.grid_rank` inferred as maximum used accepted axis plus one;
+- canonical 2D/3D linearized launch identity feeding flattened rank-1
+  transfers;
+- canonical tail mask `idx < n` lowered to `vector.create_mask(n - base)`.
+
+```text
+TTIR_MULTI_AXIS_IMPORTER_STATIC=PASS
+TTIR_PROGRAM_ID_AXES_0_1_2_TO_VALUE=YES
+TTIR_NUM_PROGRAMS_AXES_0_1_2_TO_VALUE=YES
+TTIR_MULTI_AXIS_LINEARIZED_TAIL_TO_VALUE=YES
+NO_STRINGLY_AXIS_CLASSIFICATION=YES
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE9_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+```
+
+The importer classifies axes through typed Triton op attributes and SSA
+use-def structure. It does not parse raw TTIR text and does not use fixture
+names, source names, public names, file paths, or generated paths as semantic
+signals.
+
+This is not Phase 10 mask or memory legality. Noncanonical masks, sparse
+masks, rank-2 memory, block pointers, gather/scatter, dot, reduce,
+`arith.sitofp`, and `arith.fptosi` remain staged or rejected. Global
+`READY_FOR_TRITON` remains `NO`.
+
 ### Phase 7h hardware-proven elementwise V1 subset
 
 Phase 7 originally hardware-proved the first real TTIR executable path for the

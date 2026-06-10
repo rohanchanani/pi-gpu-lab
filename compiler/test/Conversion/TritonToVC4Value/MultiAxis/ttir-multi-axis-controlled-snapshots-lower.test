@@ -1,0 +1,100 @@
+# REQUIRES: vc4-has-triton-cpp-frontend
+
+# RUN: rm -rf %t && mkdir -p %t
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid2d_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/pid2d.value.mlir
+# RUN: FileCheck %s --check-prefix=PID2D --input-file=%t/pid2d.value.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_pid3d_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/pid3d.value.mlir
+# RUN: FileCheck %s --check-prefix=PID3D --input-file=%t/pid3d.value.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_num_programs_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/num_programs.value.mlir
+# RUN: FileCheck %s --check-prefix=NUMPROGRAMS --input-file=%t/num_programs.value.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase9_multi_axis_launch/generated/ttir_multi_axis_cf_tail_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/cf_tail.value.mlir
+# RUN: FileCheck %s --check-prefix=CFTAIL --input-file=%t/cf_tail.value.mlir
+
+# RUN: %vc4_triton_opt "%vc4_repo_root/examples/triton/phase9_multi_axis_launch/generated/mixed_ttir_multi_axis_cf_tail_b16.ttir.mlir" --convert-triton-to-vc4-value -o %t/mixed.value.mlir
+# RUN: FileCheck %s --check-prefix=MIXED --input-file=%t/mixed.value.mlir
+
+# PID2D-LABEL: func.func @ttir_multi_axis_pid2d_b16_kernel
+# PID2D-SAME: vc4value.grid_rank = 2
+# PID2D: vc4value.program_id
+# PID2D-SAME: axis = 0
+# PID2D: vc4value.program_id
+# PID2D-SAME: axis = 1
+# PID2D: vc4value.num_programs
+# PID2D-SAME: axis = 0
+# PID2D: vector.create_mask
+# PID2D: vector.transfer_write
+# PID2D-NOT: tt.
+# PID2D-NOT: ttg.
+# PID2D-NOT: vc4kernel
+# PID2D-NOT: vector<16xindex>
+
+# PID3D-LABEL: func.func @ttir_multi_axis_pid3d_b16_kernel
+# PID3D-SAME: vc4value.grid_rank = 3
+# PID3D: vc4value.program_id
+# PID3D-SAME: axis = 0
+# PID3D: vc4value.program_id
+# PID3D-SAME: axis = 1
+# PID3D: vc4value.program_id
+# PID3D-SAME: axis = 2
+# PID3D: vc4value.num_programs
+# PID3D-SAME: axis = 0
+# PID3D: vc4value.num_programs
+# PID3D-SAME: axis = 1
+# PID3D: vector.create_mask
+# PID3D: vector.transfer_write
+# PID3D-NOT: tt.
+# PID3D-NOT: ttg.
+# PID3D-NOT: vc4kernel
+# PID3D-NOT: vector<16xindex>
+
+# NUMPROGRAMS-LABEL: func.func @ttir_multi_axis_num_programs_b16_kernel
+# NUMPROGRAMS-SAME: vc4value.grid_rank = 3
+# NUMPROGRAMS: vc4value.num_programs
+# NUMPROGRAMS-SAME: axis = 0
+# NUMPROGRAMS: vc4value.num_programs
+# NUMPROGRAMS-SAME: axis = 1
+# NUMPROGRAMS: vc4value.num_programs
+# NUMPROGRAMS-SAME: axis = 2
+# NUMPROGRAMS: vector.create_mask
+# NUMPROGRAMS: vector.transfer_write
+# NUMPROGRAMS-NOT: tt.
+# NUMPROGRAMS-NOT: ttg.
+# NUMPROGRAMS-NOT: vc4kernel
+# NUMPROGRAMS-NOT: vector<16xindex>
+
+# CFTAIL-LABEL: func.func @ttir_multi_axis_cf_tail_b16_kernel
+# CFTAIL-SAME: vc4value.grid_rank = 2
+# CFTAIL: vc4value.program_id {{.*}}axis = 1
+# CFTAIL: vc4value.num_programs {{.*}}axis = 0
+# CFTAIL: vector.transfer_read
+# CFTAIL: scf.if
+# CFTAIL: vector.create_mask
+# CFTAIL: vector.transfer_write
+# CFTAIL-NOT: tt.
+# CFTAIL-NOT: ttg.
+# CFTAIL-NOT: vc4kernel
+# CFTAIL-NOT: vector<16xindex>
+
+# MIXED-LABEL: func.func @mixed_ttir_multi_axis_cf_tail_b16_kernel
+# MIXED-SAME: vc4value.grid_rank = 3
+# MIXED: vc4value.program_id {{.*}}axis = 2
+# MIXED: vc4value.num_programs {{.*}}axis = 1
+# MIXED: vector.transfer_read
+# MIXED: scf.while
+# MIXED: scf.if
+# MIXED: arith.cmpf
+# MIXED: arith.select
+# MIXED: vector.create_mask
+# MIXED: vector.transfer_write
+# MIXED-NOT: tt.
+# MIXED-NOT: ttg.
+# MIXED-NOT: vc4kernel
+# MIXED-NOT: ssavc4
+# MIXED-NOT: vc4.qpu
+# MIXED-NOT: arith.sitofp
+# MIXED-NOT: arith.fptosi
+# MIXED-NOT: vector<16xindex>

@@ -2,14 +2,26 @@
 
 # RUN: rm -rf %t && mkdir -p %t
 # RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis-y --out %t/axis_y.ttir.mlir
-# RUN: not %vc4_triton_opt %t/axis_y.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_y.value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS1
+# RUN: %vc4_triton_opt %t/axis_y.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_y.value.mlir
+# RUN: FileCheck %s --check-prefix=AXIS1 --input-file=%t/axis_y.value.mlir
 # RUN: python3 "%vc4_repo_root/compiler/test/Conversion/TritonToVC4Value/Support/make_staged_ttir.py" --base "%vc4_repo_root/examples/triton/phase6/generated/vector_add_b16.ttir.mlir" --kind axis-z --out %t/axis_z.ttir.mlir
-# RUN: not %vc4_triton_opt %t/axis_z.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_z.value.mlir 2>&1 | FileCheck %s --check-prefix=AXIS2
+# RUN: %vc4_triton_opt %t/axis_z.ttir.mlir --convert-triton-to-vc4-value -o %t/axis_z.value.mlir
+# RUN: FileCheck %s --check-prefix=AXIS2 --input-file=%t/axis_z.value.mlir
 
-# AXIS1: program_id axis 1/2 is staged until value grid-rank >1 lowering
-# AXIS1: staged TTIR target-profile feature
-# AXIS1: READY_FOR_TRITON remains NO
+# AXIS1-LABEL: func.func @vector_add_b16_kernel
+# AXIS1-SAME: vc4value.grid_rank = 2
+# AXIS1: vc4value.program_id
+# AXIS1-SAME: axis = 1
+# AXIS1: vector.create_mask
+# AXIS1: vector.transfer_write
+# AXIS1-NOT: tt.
+# AXIS1-NOT: vc4kernel
 
-# AXIS2: program_id axis 1/2 is staged until value grid-rank >1 lowering
-# AXIS2: staged TTIR target-profile feature
-# AXIS2: READY_FOR_TRITON remains NO
+# AXIS2-LABEL: func.func @vector_add_b16_kernel
+# AXIS2-SAME: vc4value.grid_rank = 3
+# AXIS2: vc4value.program_id
+# AXIS2-SAME: axis = 2
+# AXIS2: vector.create_mask
+# AXIS2: vector.transfer_write
+# AXIS2-NOT: tt.
+# AXIS2-NOT: vc4kernel

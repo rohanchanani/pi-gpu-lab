@@ -603,6 +603,14 @@ static Value createVC4ValueProgramId(OpBuilder &builder, Location loc,
       builder.getIndexType());
 }
 
+static Value createVC4ValueNumPrograms(OpBuilder &builder, Location loc,
+                                       int64_t axis) {
+  return createGenericOpWithResult(
+      builder, loc, kVC4ValueNumProgramsOpName, {},
+      {builder.getNamedAttr("axis", builder.getI32IntegerAttr(axis))},
+      builder.getIndexType());
+}
+
 static Value createVectorStep(OpBuilder &builder, Location loc) {
   return createGenericOpWithResult(
       builder, loc, "vector.step", {}, {},
@@ -674,11 +682,13 @@ struct PointerExpr {
 };
 
 struct CommonPlan {
-  Operation *programId = nullptr;
+  SmallVector<Operation *, 3> programIds;
   Operation *makeRange = nullptr;
   Value offsetValue;
   Value tailMaskValue;
   BlockArgument sizeArg;
+  DenseMap<Operation *, int64_t> launchIdentityAxes;
+  int64_t gridRank = 1;
 };
 
 class FunctionPlanner {
@@ -720,11 +730,23 @@ public:
   Block &getEntryBlock() const { return funcOp->getRegion(0).front(); }
   ArrayRef<TTIRArgInfo> getArgs() const { return args; }
   const CommonPlan &getCommonPlan() const { return common; }
+  int64_t getGridRank() const { return common.gridRank; }
   StringRef getTailBoundArgName() const {
     auto it = argIndex.find(common.sizeArg);
     if (it == argIndex.end())
       return {};
     return args[it->second].valueName;
+  }
+
+  std::optional<int64_t> getLaunchIdentityAxis(Operation *op) const {
+    auto it = common.launchIdentityAxes.find(op);
+    if (it == common.launchIdentityAxes.end())
+      return std::nullopt;
+    return it->second;
+  }
+
+  bool isLaunchIdentityOp(Operation *op) const {
+    return common.launchIdentityAxes.contains(op);
   }
 
   TTIRArgInfo *lookupArg(BlockArgument arg) {
@@ -751,7 +773,8 @@ public:
   }
 
   bool isCanonicalInfrastructure(Operation *op) const {
-    if (op == common.programId || op == common.makeRange)
+    if ((isLaunchIdentityOp(op) && hasName(op, kTTGetProgramIdOpName)) ||
+        op == common.makeRange)
       return true;
     if (op->getNumResults() == 0)
       return false;
@@ -908,16 +931,9 @@ private:
         sawFailure = true;
         return WalkResult::interrupt();
       }
-      if (hasName(op, kTTGetNumProgramsOpName)) {
-        FailureOr<TTIRProgramAxis> axis = attrAdapter.classifyProgramAxis(op);
-        if (failed(axis)) {
-          sawFailure = true;
-          return WalkResult::interrupt();
-        }
-        if (*axis != TTIRProgramAxis::X) {
-          (void)emitStagedDiagnostic(
-              op,
-              "num_programs axis 1/2 is staged until value grid-rank >1 lowering");
+      if (hasName(op, kTTGetProgramIdOpName) ||
+          hasName(op, kTTGetNumProgramsOpName)) {
+        if (failed(attrAdapter.classifyProgramAxis(op))) {
           sawFailure = true;
           return WalkResult::interrupt();
         }
@@ -960,17 +976,35 @@ private:
         addptrs.push_back(op);
     });
 
-    if (programIds.size() != 1)
-      return emitStagedDiagnostic(funcOp, "TTIR functions with other than one program_id");
-    FailureOr<TTIRProgramAxis> axis =
-        attrAdapter.classifyProgramAxis(programIds.front());
-    if (failed(axis))
-      return failure();
-    if (*axis != TTIRProgramAxis::X)
-      return emitStagedDiagnostic(
-          programIds.front(),
-          "program_id axis 1/2 is staged until value grid-rank >1 lowering");
-    common.programId = programIds.front();
+    if (programIds.empty() || programIds.size() > 3)
+      return emitStagedDiagnostic(funcOp,
+                                  "TTIR functions without 1..3 program_id ops");
+    DenseSet<int64_t> seenProgramIdAxes;
+    for (Operation *programId : programIds) {
+      FailureOr<TTIRProgramAxis> axis = attrAdapter.classifyProgramAxis(programId);
+      if (failed(axis))
+        return failure();
+      int64_t axisValue = static_cast<int64_t>(*axis);
+      if (axisValue < 0 || axisValue > 2)
+        return emitStagedDiagnostic(programId, "program_id axis outside 0..2");
+      if (!seenProgramIdAxes.insert(axisValue).second)
+        return emitStagedDiagnostic(programId, "duplicate program_id axis");
+      common.programIds.push_back(programId);
+      common.launchIdentityAxes[programId] = axisValue;
+      common.gridRank = std::max(common.gridRank, axisValue + 1);
+    }
+
+    funcOp->walk([&](Operation *op) {
+      if (!hasName(op, kTTGetNumProgramsOpName))
+        return WalkResult::advance();
+      FailureOr<TTIRProgramAxis> axis = attrAdapter.classifyProgramAxis(op);
+      if (failed(axis))
+        return WalkResult::interrupt();
+      int64_t axisValue = static_cast<int64_t>(*axis);
+      common.launchIdentityAxes[op] = axisValue;
+      common.gridRank = std::max(common.gridRank, axisValue + 1);
+      return WalkResult::advance();
+    });
 
     if (ranges.size() != 1)
       return emitStagedDiagnostic(funcOp, "tt.make_range other than 0..16");
@@ -1041,20 +1075,18 @@ private:
     if (!hasName(mul, "arith.muli") || mul->getNumOperands() != 2)
       return emitStagedDiagnostic(splat, "pointer offset base not formed by pid * 16");
 
-    Value scalarBase = mul->getOperand(0) == common.programId->getResult(0)
-                           ? mul->getOperand(0)
-                           : mul->getOperand(1) == common.programId->getResult(0)
-                                 ? mul->getOperand(1)
-                                 : Value();
-    if (!scalarBase) {
-      if (llvm::isa<BlockArgument>(mul->getOperand(0)))
-        scalarBase = mul->getOperand(0);
-      else if (llvm::isa<BlockArgument>(mul->getOperand(1)))
-        scalarBase = mul->getOperand(1);
-      else
-        return emitStagedDiagnostic(
-            mul, "pointer offset base missing program_id or scalar loop iv");
-    }
+    Value scalarBase;
+    bool baseFromLaunchIdentity = false;
+    if (isCanonicalOffsetScalarBase(mul->getOperand(0), baseFromLaunchIdentity))
+      scalarBase = mul->getOperand(0);
+    else if (isCanonicalOffsetScalarBase(mul->getOperand(1), baseFromLaunchIdentity))
+      scalarBase = mul->getOperand(1);
+    else
+      return emitStagedDiagnostic(
+          mul, "pointer offset base missing launch identity or scalar loop iv");
+    if (!baseFromLaunchIdentity && !llvm::isa<BlockArgument>(scalarBase))
+      return emitStagedDiagnostic(
+          mul, "pointer offset base missing launch identity or scalar loop iv");
 
     Value factor = mul->getOperand(0) == scalarBase
                        ? mul->getOperand(1)
@@ -1071,6 +1103,53 @@ private:
       }
     }
     return emitStagedDiagnostic(mul, "pointer offset base factor other than 16");
+  }
+
+  bool isCanonicalOffsetScalarBase(Value value, bool &sawLaunchIdentity) const {
+    DenseSet<Value> visiting;
+    return isCanonicalOffsetScalarBase(value, sawLaunchIdentity, visiting);
+  }
+
+  bool isCanonicalOffsetScalarBase(Value value, bool &sawLaunchIdentity,
+                                   DenseSet<Value> &visiting) const {
+    if (!value)
+      return false;
+    if (llvm::isa<BlockArgument>(value))
+      return true;
+    if (!visiting.insert(value).second)
+      return false;
+    Operation *def = value.getDefiningOp();
+    if (!def) {
+      visiting.erase(value);
+      return false;
+    }
+    if (hasName(def, kTTGetProgramIdOpName)) {
+      sawLaunchIdentity = true;
+      visiting.erase(value);
+      return true;
+    }
+    if (hasName(def, kTTGetNumProgramsOpName)) {
+      visiting.erase(value);
+      return true;
+    }
+    if (auto constant = llvm::dyn_cast<arith::ConstantOp>(def)) {
+      bool ok = llvm::isa<IntegerAttr>(constant.getValue());
+      visiting.erase(value);
+      return ok;
+    }
+    if (hasName(def, "arith.addi") || hasName(def, "arith.subi") ||
+        hasName(def, "arith.muli")) {
+      for (Value operand : def->getOperands()) {
+        if (!isCanonicalOffsetScalarBase(operand, sawLaunchIdentity, visiting)) {
+          visiting.erase(value);
+          return false;
+        }
+      }
+      visiting.erase(value);
+      return true;
+    }
+    visiting.erase(value);
+    return false;
   }
 
   LogicalResult verifyCanonicalTailMask(Value mask, Value offset) {
@@ -1171,7 +1250,8 @@ private:
 
     // Pointer, mask, and offset infrastructure are planned separately.
     if (hasName(def, kTTAddPtrOpName) || hasName(def, kTTMakeRangeOpName) ||
-        hasName(def, kTTGetProgramIdOpName))
+        hasName(def, kTTGetProgramIdOpName) ||
+        hasName(def, kTTGetNumProgramsOpName))
       return;
     if (def->getNumResults() == 1 &&
         (def->getResult(0) == common.offsetValue ||
@@ -1282,7 +1362,8 @@ private:
     valueFunc = builder.create<func::FuncOp>(
         sourceFunc->getLoc(), name, FunctionType::get(ctx, argTypes, {}));
     valueFunc->setAttr(kVC4ValueKernelAttr, builder.getUnitAttr());
-    valueFunc->setAttr(kVC4ValueGridRankAttr, builder.getI32IntegerAttr(1));
+    valueFunc->setAttr(kVC4ValueGridRankAttr,
+                       builder.getI32IntegerAttr(planner.getGridRank()));
     if (functionNeedsFiniteFPDomain())
       valueFunc->setAttr(kVC4ValueFPDomainAttr, builder.getStringAttr("finite"));
 
@@ -1337,13 +1418,16 @@ private:
     if (!n)
       return emitInternalError(planner.getFuncOp(), "tail size argument not mapped");
 
-    Location loc = common.programId ? common.programId->getLoc()
-                                    : planner.getFuncOp()->getLoc();
-    Value pidIndex = createVC4ValueProgramId(builder, loc, 0);
-    Value pidI32 =
-        builder.create<arith::IndexCastOp>(loc, builder.getI32Type(), pidIndex);
-
-    bindValue(common.programId->getResult(0), pidI32);
+    for (Operation *programId : common.programIds) {
+      std::optional<int64_t> axis = planner.getLaunchIdentityAxis(programId);
+      if (!axis)
+        return emitInternalError(programId, "program_id axis missing from plan");
+      Location loc = programId->getLoc();
+      Value pidIndex = createVC4ValueProgramId(builder, loc, *axis);
+      Value pidI32 =
+          builder.create<arith::IndexCastOp>(loc, builder.getI32Type(), pidIndex);
+      bindValue(programId->getResult(0), pidI32);
+    }
     return success();
   }
 
@@ -1448,7 +1532,7 @@ private:
       return finishLowering(op, LoweringOutcome::LoweredZeroResult);
     }
 
-    if (op == planner.getCommonPlan().programId)
+    if (planner.isLaunchIdentityOp(op) && hasName(op, kTTGetProgramIdOpName))
       return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     if (op == planner.getCommonPlan().makeRange) {
       if (!planner.isRequiredDataValue(op->getResult(0)))
@@ -1546,13 +1630,11 @@ private:
     FailureOr<TTIRProgramAxis> axis = TTIRAttrAdapter().classifyProgramAxis(op);
     if (failed(axis))
       return failure();
-    if (*axis != TTIRProgramAxis::X)
-      return emitStagedDiagnostic(
-          op, "num_programs axis 1/2 is staged until value grid-rank >1 lowering");
-    Value numProgramsIndex = createGenericOpWithResult(
-        builder, op->getLoc(), kVC4ValueNumProgramsOpName, {},
-        {builder.getNamedAttr("axis", builder.getI32IntegerAttr(0))},
-        builder.getIndexType());
+    int64_t axisValue = static_cast<int64_t>(*axis);
+    if (axisValue < 0 || axisValue > 2)
+      return emitStagedDiagnostic(op, "num_programs axis outside 0..2");
+    Value numProgramsIndex =
+        createVC4ValueNumPrograms(builder, op->getLoc(), axisValue);
     bindValue(op->getResult(0), builder.create<arith::IndexCastOp>(
                                       op->getLoc(), builder.getI32Type(),
                                       numProgramsIndex));
