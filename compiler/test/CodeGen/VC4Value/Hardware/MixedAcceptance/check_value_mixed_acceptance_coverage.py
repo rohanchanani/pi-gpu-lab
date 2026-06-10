@@ -46,6 +46,7 @@ REQUIRED_FIXTURES = {
     "mixed_value_i32_f32_dual_path_tail_vc4value",
     "mixed_value_cf_saxpy_loop_select_tail_vc4value",
     "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+    "mixed_value_cf_completeness_loop_branch_tail_vc4value",
 }
 
 REQUIRED_FEATURES = {
@@ -64,6 +65,13 @@ REQUIRED_FEATURES = {
     "value_cf_loop",
     "value_cf_cond_br",
     "value_vector_block_arg",
+    "value_scf_while",
+    "value_nested_structured_cf",
+    "value_tl_range_style_loop",
+    "value_persistent_loop_skeleton",
+    "value_vector_loop_carried",
+    "value_multi_exit_reducible_cf",
+    "value_scf_to_cf_boundary",
 }
 
 FORBIDDEN_INPUT_MARKERS = (
@@ -160,6 +168,7 @@ def validate_fixture(repo_root, fixture):
         "value_f32_transfer_read": "vector.transfer_read",
         "value_i32_transfer_read": "vector.transfer_read",
         "value_f32_transfer_write": "vector.transfer_write",
+        "value_i32_transfer_write": "vector.transfer_write",
         "value_f32_alu": "arith.mulf",
         "value_i32_cmp": "arith.cmpi",
         "value_f32_finite_cmp_select": "arith.cmpf",
@@ -167,7 +176,14 @@ def validate_fixture(repo_root, fixture):
         "value_vdw_inactive_preserve": "vector.transfer_write",
         "value_cf_loop": "cf.br",
         "value_cf_cond_br": "cf.cond_br",
-        "value_vector_block_arg": "vector<16xf32>",
+        "value_vector_block_arg": "vector<16x",
+        "value_scf_while": "scf.while",
+        "value_nested_structured_cf": "scf.if",
+        "value_tl_range_style_loop": "scf.for",
+        "value_persistent_loop_skeleton": "iter_args",
+        "value_vector_loop_carried": "vector<16x",
+        "value_multi_exit_reducible_cf": "^exit_early",
+        "value_scf_to_cf_boundary": "scf.",
     }
     for tag, marker in pattern_requirements.items():
         if tag in tags and marker not in mlir:

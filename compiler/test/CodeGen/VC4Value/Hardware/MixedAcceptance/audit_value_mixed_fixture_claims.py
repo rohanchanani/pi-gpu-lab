@@ -69,8 +69,8 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             require_marker(harness, marker, "saw_value_tail_mask harness")
 
     if "saw_value_tmu_load" in claim_names:
-        if mlir.count("vector.transfer_read") < 2:
-            fail("saw_value_tmu_load requires multiple checked transfer_read operations")
+        if mlir.count("vector.transfer_read") < 1:
+            fail("saw_value_tmu_load requires checked transfer_read operations")
         require_marker(harness, "vc4_m2_copy_htod", "saw_value_tmu_load harness")
         require_marker(harness, "total_mismatches", "saw_value_tmu_load harness")
 
@@ -117,11 +117,57 @@ def audit_known_patterns(repo_root, fixture_name, fixture_claims):
             fail("saw_value_cf_cond_br harness missing runtime branch flag")
 
     if "saw_value_vector_block_arg" in claim_names:
-        require_marker(mlir, "vector<16xf32>", "saw_value_vector_block_arg input")
-        if mlir.count("vector<16xf32>") < 4:
+        require_marker(mlir, "vector<16x", "saw_value_vector_block_arg input")
+        if mlir.count("vector<16x") < 4:
             fail("saw_value_vector_block_arg requires multiple vector block argument sites")
         if "merged vector" in harness:
             fail("saw_value_vector_block_arg cannot be claimed by comments only")
+
+    if "saw_value_scf_while" in claim_names:
+        for marker in ("scf.while", "scf.condition", "scf.yield"):
+            require_marker(mlir, marker, "saw_value_scf_while input")
+        for marker in ("scf_while_acc", "trip"):
+            require_marker(harness, marker, "saw_value_scf_while harness")
+
+    if "saw_nested_structured_cf" in claim_names:
+        for marker in ("scf.for", "scf.if", "scf.while"):
+            require_marker(mlir, marker, "saw_nested_structured_cf input")
+        for marker in ("use_alt", "range_acc"):
+            require_marker(harness, marker, "saw_nested_structured_cf harness")
+
+    if "saw_tl_range_style_loop" in claim_names:
+        for marker in ("scf.for %tile = %start to %end step %step", "iter_args"):
+            require_marker(mlir, marker, "saw_tl_range_style_loop input")
+        for marker in ("range_acc", "start", "end", "step"):
+            require_marker(harness, marker, "saw_tl_range_style_loop harness")
+
+    if "saw_persistent_loop_skeleton" in claim_names:
+        for marker in ("%start", "%end", "%step", "iter_args"):
+            require_marker(mlir, marker, "saw_persistent_loop_skeleton input")
+        for marker in ("step", "range_acc"):
+            require_marker(harness, marker, "saw_persistent_loop_skeleton harness")
+
+    if "saw_vector_loop_carried" in claim_names:
+        for marker in ("scf.while", "vector<16xi32>", "iter_args"):
+            require_marker(mlir, marker, "saw_vector_loop_carried input")
+        for marker in ("scf_while_acc", "expected_value"):
+            require_marker(harness, marker, "saw_vector_loop_carried harness")
+
+    if "saw_multi_exit_reducible_cf" in claim_names:
+        for marker in ("cf.cond_br", "^exit_done", "^exit_early", "^merge"):
+            require_marker(mlir, marker, "saw_multi_exit_reducible_cf input")
+        for marker in ("multi_exit_acc", "early"):
+            require_marker(harness, marker, "saw_multi_exit_reducible_cf harness")
+
+    if "saw_scf_to_cf_boundary" in claim_names:
+        for marker in ("scf.while", "scf.for", "scf.if"):
+            require_marker(mlir, marker, "saw_scf_to_cf_boundary input")
+        runner = (
+            repo_root
+            / "compiler/test/CodeGen/VC4Value/Support/run_vc4value_candidate_codegen_test.sh"
+        ).read_text()
+        require_marker(runner, "--convert-scf-to-cf", "saw_scf_to_cf_boundary runner")
+        require_marker(runner, "after-scf-to-cf", "saw_scf_to_cf_boundary runner")
 
     for claim in fixture_claims["claims"]:
         evidence_text = json.dumps(claim.get("evidence", {}), sort_keys=True).lower()

@@ -223,6 +223,86 @@
           }
         }
       ]
+    },
+    {
+      "name": "mixed_value_cf_completeness_loop_branch_tail_vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_completeness_loop_branch_tail_vc4value",
+      "source_paths": [
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_completeness_loop_branch_tail_vc4value/input.mlir",
+        "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_completeness_loop_branch_tail_vc4value/candidate/mixed_value_cf_completeness_loop_branch_tail_vc4value_candidate_harness.c"
+      ],
+      "claims": [
+        {
+          "claim": "saw_value_scf_while",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir contains scf.while with vector<16xi32> carried state; expected.json requires saw_value_scf_while=1 and the harness varies trip counts while checking output against scf_while_acc."
+          }
+        },
+        {
+          "claim": "saw_nested_structured_cf",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir nests scf.if inside a scf.for range-style loop and also carries a vector through scf.while; the harness varies use_alt/start/end/step so the nested branch affects checked output."
+          }
+        },
+        {
+          "claim": "saw_tl_range_style_loop",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses scf.for %tile = %start to %end step %step; the harness varies start/end/step and checks range_acc contribution in every active element."
+          }
+        },
+        {
+          "claim": "saw_persistent_loop_skeleton",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "the tl.range-style loop uses dynamic start/end/step and loop-carried scalar state, including stride values greater than one; the CPU oracle checks the persistent-style stepped accumulation."
+          }
+        },
+        {
+          "claim": "saw_vector_loop_carried",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir carries vector<16xi32> through scf.while and nested scf.for iter_args; the output depends on the loop-carried vector accumulator."
+          }
+        },
+        {
+          "claim": "saw_value_tail_mask",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir uses vector.create_mask and masked transfer_write; expected.json requires sentinel_mismatches=0 across tail-heavy n cases."
+          }
+        },
+        {
+          "claim": "saw_multi_exit_reducible_cf",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir contains reducible cf loop exits ^exit_done and ^exit_early merging at ^merge; the harness varies trip/early and checks multi_exit_acc path differences."
+          }
+        },
+        {
+          "claim": "saw_scf_to_cf_boundary",
+          "claim_kind": "CHECKED_AUDIT",
+          "evidence": {
+            "checked_audit": "the VC4Value hardware runner explicitly runs --convert-scf-to-cf for inputs containing scf.* and preserves after-scf-to-cf artifacts; input.mlir contains scf.while/scf.for/scf.if."
+          }
+        },
+        {
+          "claim": "saw_value_tmu_load",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "input.mlir has a checked vector.transfer_read for x; the CPU oracle depends on the loaded buffer for each active element."
+          }
+        },
+        {
+          "claim": "saw_value_vdw_preserve",
+          "claim_kind": "CHECKED_OUTPUT",
+          "evidence": {
+            "checked_output": "masked transfer_write is checked by sentinels outside active n; expected.json requires sentinel_mismatches=0."
+          }
+        }
+      ]
     }
   ]
 }

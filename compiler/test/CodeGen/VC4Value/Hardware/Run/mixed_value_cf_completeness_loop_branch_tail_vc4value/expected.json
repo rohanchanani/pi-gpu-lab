@@ -1,0 +1,29 @@
+{
+  "name": "mixed_value_cf_completeness_loop_branch_tail_vc4value",
+  "status": "PASS",
+  "required": {
+    "cases": 8,
+    "elements_checked": 1221,
+    "total_mismatches": 0,
+    "sentinel_mismatches": 0,
+    "launch_failures": 0,
+    "active_qpus": 12,
+    "lanes": 16,
+    "max_n": 1000,
+    "max_coverage_n": 1152,
+    "buffer_n": 1216,
+    "output_hash": 376567259,
+    "saw_value_scf_while": 1,
+    "saw_nested_structured_cf": 1,
+    "saw_tl_range_style_loop": 1,
+    "saw_persistent_loop_skeleton": 1,
+    "saw_vector_loop_carried": 1,
+    "saw_value_tail_mask": 1,
+    "saw_multi_exit_reducible_cf": 1,
+    "saw_scf_to_cf_boundary": 1,
+    "saw_value_tmu_load": 1,
+    "saw_value_vdw_preserve": 1,
+    "runtime_allocations": 2,
+    "runtime_launches": 8
+  }
+}

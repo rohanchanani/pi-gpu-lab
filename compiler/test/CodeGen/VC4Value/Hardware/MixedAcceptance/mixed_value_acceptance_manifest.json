@@ -177,6 +177,65 @@
         "f32_tmu_alu",
         "tail_store_preserve"
       ]
+    },
+    {
+      "name": "mixed_value_cf_completeness_loop_branch_tail_vc4value",
+      "dialect": "vc4value",
+      "path": "compiler/test/CodeGen/VC4Value/Hardware/Run/mixed_value_cf_completeness_loop_branch_tail_vc4value",
+      "runner_kind": "vc4value_candidate",
+      "status": "implemented",
+      "real_world_role": "cumulative Phase 8R control-flow completeness fixture combining memory, tail mask, nested structured control flow, scf.while, tl.range-style stepping, vector loop-carried state, and multi-exit reducible scalar CFG",
+      "feature_tags": [
+        "value_launch_identity",
+        "value_vector_step_lane",
+        "value_i32_transfer_read",
+        "value_i32_transfer_write",
+        "value_i32_cmp",
+        "value_tail_masks",
+        "value_vdw_inactive_preserve",
+        "value_cf_loop",
+        "value_cf_cond_br",
+        "value_vector_block_arg",
+        "value_scf_while",
+        "value_nested_structured_cf",
+        "value_tl_range_style_loop",
+        "value_persistent_loop_skeleton",
+        "value_vector_loop_carried",
+        "value_multi_exit_reducible_cf",
+        "value_scf_to_cf_boundary",
+        "value_no_producer_dialect_in_verified_vc4kernel"
+      ],
+      "required_result_fields": [
+        "status",
+        "cases",
+        "elements_checked",
+        "total_mismatches",
+        "sentinel_mismatches",
+        "launch_failures",
+        "active_qpus",
+        "lanes",
+        "output_hash",
+        "saw_value_scf_while",
+        "saw_nested_structured_cf",
+        "saw_tl_range_style_loop",
+        "saw_persistent_loop_skeleton",
+        "saw_vector_loop_carried",
+        "saw_value_tail_mask",
+        "saw_multi_exit_reducible_cf",
+        "saw_scf_to_cf_boundary",
+        "saw_value_tmu_load",
+        "saw_value_vdw_preserve"
+      ],
+      "expected_cases_summary": "8 dynamic cases spanning n 0, 1, 2, 3, 5, 17, 193, and 1000 with varied start/end/step/trip/early/use_alt; active_qpus=12; nested and multi-exit paths checked with sentinels",
+      "triage_feature_bands": [
+        "value_cf_completeness",
+        "scf_while",
+        "nested_structured_cf",
+        "tl_range_persistent_loop_skeleton",
+        "multi_exit_reducible_cf",
+        "i32_tmu",
+        "tail_store_preserve"
+      ]
     }
   ],
   "required_features": [
@@ -187,7 +246,8 @@
         "mixed_value_saxpy_select_tail_vc4value",
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -198,7 +258,8 @@
         "mixed_value_saxpy_select_tail_vc4value",
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -218,7 +279,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -235,12 +297,10 @@
     },
     {
       "id": "value_i32_transfer_write",
-      "verification_kind": "hardware_isolation_backstop",
-      "covered_by": [],
-      "covered_by_isolation": [
-        "value_i32_add_select_tail_vc4value"
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
-      "mixed_status": "staged_mixed_addition",
       "required": true
     },
     {
@@ -259,7 +319,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_i32_f32_dual_path_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -279,7 +340,8 @@
         "mixed_value_saxpy_select_tail_vc4value",
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -290,7 +352,8 @@
         "mixed_value_saxpy_select_tail_vc4value",
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -301,7 +364,8 @@
         "mixed_value_saxpy_select_tail_vc4value",
         "mixed_value_i32_f32_dual_path_tail_vc4value",
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -310,7 +374,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -319,7 +384,8 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     },
@@ -328,7 +394,64 @@
       "verification_kind": "hardware_checked_output",
       "covered_by": [
         "mixed_value_cf_saxpy_loop_select_tail_vc4value",
-        "mixed_value_cf_i32_f32_dual_path_tail_vc4value"
+        "mixed_value_cf_i32_f32_dual_path_tail_vc4value",
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_scf_while",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_nested_structured_cf",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_tl_range_style_loop",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_persistent_loop_skeleton",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_vector_loop_carried",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_multi_exit_reducible_cf",
+      "verification_kind": "hardware_checked_output",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
+      ],
+      "required": true
+    },
+    {
+      "id": "value_scf_to_cf_boundary",
+      "verification_kind": "runner_audit",
+      "covered_by": [
+        "mixed_value_cf_completeness_loop_branch_tail_vc4value"
       ],
       "required": true
     }

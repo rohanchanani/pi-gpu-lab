@@ -56,6 +56,12 @@ PHASE8R_TL_RANGE_STYLE_LOOP_HARDWARE=PASS
 PHASE8R_PERSISTENT_LOOP_SKELETON_HARDWARE=PASS
 PHASE8R_MULTI_EXIT_REDUCIBLE_CF_HARDWARE=PASS
 READY_FOR_PHASE8RG_MIXED_ACCEPTANCE=YES
+PHASE8R_VALUE_CF_COMPLETENESS_MIXED_ACCEPTANCE=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+PHASE8RG_VALUE_MIXED_REGRESSION=PASS
+PHASE8RG_TTIR_CPP_IMPORTER_MIXED_REGRESSION=PASS
+PHASE8RG_VC4KERNEL_MIXED_REGRESSION=NOT_REQUIRED_BY_LAYER_POLICY
+READY_FOR_PHASE8RH_FINAL_LOCK=YES
 READY_FOR_PHASE9_MASK_CLASSIFIER_AND_RICHER_MEMORY_LEGALITY=NO_PENDING_PHASE8_5_TTIR_CONTROL_FLOW_BRIDGE
 READY_FOR_TRITON=NO
 
@@ -237,6 +243,35 @@ launch failures:
 - `value_cf_loop_vector_carry_tail_vc4value`
 
 READY_FOR_TRITON remains NO.
+
+## Phase 8Rg Mixed Acceptance
+
+Phase 8Rg added a cumulative VC4Value mixed acceptance fixture:
+
+- `mixed_value_cf_completeness_loop_branch_tail_vc4value`
+
+The fixture combines `program_id`, `vector.step`, TMU-backed
+`vector.transfer_read`, tail-masked `vector.transfer_write`, scalar branch
+control, nested `scf.for`/`scf.if`, `scf.while` with vector loop-carried state,
+a tl.range/persistent-style stepped loop skeleton, and multi-exit reducible
+`cf` merging. It is not an isolation fixture.
+
+The full VC4Value mixed acceptance manifest passed on real VC4 hardware with
+`active_qpus=12`, `lanes=16`, nonzero output hashes, zero mismatches, zero
+sentinel mismatches, and zero launch failures. The TTIR C++ importer mixed
+hardware regression also passed. Phase 8R touched the value surface and
+VC4Value-to-VC4Kernel path only, so VC4Kernel mixed regression was not required
+by the layered regression policy for Phase 8Rg.
+
+```text
+PHASE8R_VALUE_CF_COMPLETENESS_MIXED_ACCEPTANCE=PASS
+LAYERED_REGRESSION_POLICY_APPLIED=YES
+VALUE_MIXED_REGRESSION=PASS
+TTIR_CPP_IMPORTER_MIXED_REGRESSION=PASS
+VC4KERNEL_MIXED_REGRESSION=NOT_REQUIRED_BY_LAYER_POLICY
+READY_FOR_PHASE8RH_FINAL_LOCK=YES
+READY_FOR_TRITON=NO
+```
 
 ## Active Next Step
 
