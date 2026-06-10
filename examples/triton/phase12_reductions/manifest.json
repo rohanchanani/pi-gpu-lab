@@ -1,0 +1,146 @@
+{
+  "phase": "phase12_reductions",
+  "generator": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh",
+  "generator_uses_real_triton_frontend": true,
+  "python_semantic_importer_used": false,
+  "ready_for_triton": "NO",
+  "triton_version": "3.7.0",
+  "snapshots": [
+    {
+      "name": "ttir_reduce_sum_f32_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_f32_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_sum_f32_b16_kernel",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_sum_f32_b16.py --kernel-name ttir_reduce_sum_f32_b16_kernel --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_sum_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_sum_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "f32_reduction_policy": "finite_tree_only_not_exact_ieee",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tl_sum",
+        "saw_tt_reduce_axis0",
+        "saw_f32_add_combiner",
+        "saw_vector16_to_scalar_reduction",
+        "saw_tail_masked_load_other_zero",
+        "saw_scalar_reduction_store"
+      ]
+    },
+    {
+      "name": "ttir_reduce_sum_i32_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_i32_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_i32_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_sum_i32_b16_kernel",
+      "signature": "*i32,*i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_sum_i32_b16.py --kernel-name ttir_reduce_sum_i32_b16_kernel --signature '*i32,*i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_sum_i32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_sum_i32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tl_sum",
+        "saw_tt_reduce_axis0",
+        "saw_i32_add_combiner",
+        "saw_vector16_to_scalar_reduction",
+        "saw_tail_masked_load_other_zero",
+        "saw_scalar_reduction_store"
+      ]
+    },
+    {
+      "name": "ttir_reduce_sum_tail_scalar_store_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_sum_tail_scalar_store_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_sum_tail_scalar_store_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_sum_tail_scalar_store_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_sum_tail_scalar_store_b16.py --kernel-name ttir_reduce_sum_tail_scalar_store_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_sum_tail_scalar_store_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_sum_tail_scalar_store_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "f32_reduction_policy": "finite_tree_only_not_exact_ieee",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tl_sum",
+        "saw_tt_reduce_axis0",
+        "saw_f32_add_combiner",
+        "saw_tail_masked_load_other_zero",
+        "saw_scalar_i1_store_mask",
+        "saw_scalar_reduction_store"
+      ]
+    },
+    {
+      "name": "ttir_reduce_row_strided_sum_f32_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_row_strided_sum_f32_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_row_strided_sum_f32_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_row_strided_sum_f32_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_row_strided_sum_f32_b16.py --kernel-name ttir_reduce_row_strided_sum_f32_b16_kernel --signature '*fp32,*fp32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_row_strided_sum_f32_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_row_strided_sum_f32_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "f32_reduction_policy": "finite_tree_only_not_exact_ieee",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_scalar_row_stride_plus_contiguous_arange",
+        "saw_tl_sum",
+        "saw_tt_reduce_axis0",
+        "saw_f32_add_combiner",
+        "saw_tail_masked_load_other_zero",
+        "saw_scalar_reduction_store"
+      ]
+    },
+    {
+      "name": "mixed_ttir_reduction_axes_mask_cf_strided_b16",
+      "source": "examples/triton/phase12_reductions/sources/mixed_ttir_reduction_axes_mask_cf_strided_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/mixed_ttir_reduction_axes_mask_cf_strided_b16.ttir.mlir",
+      "kernel_name": "mixed_ttir_reduction_axes_mask_cf_strided_b16_kernel",
+      "signature": "*fp32,*fp32,i32,i32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/mixed_ttir_reduction_axes_mask_cf_strided_b16.py --kernel-name mixed_ttir_reduction_axes_mask_cf_strided_b16_kernel --signature '*fp32,*fp32,i32,i32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/mixed_ttir_reduction_axes_mask_cf_strided_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/mixed_ttir_reduction_axes_mask_cf_strided_b16.json",
+      "expected_classification": "ACCEPTED_LOWERABLE",
+      "f32_reduction_policy": "finite_tree_only_not_exact_ieee",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_program_id_axis0",
+        "saw_program_id_axis1",
+        "saw_num_programs_axis0",
+        "saw_scalar_row_stride_plus_contiguous_arange",
+        "saw_tail_masked_load_other_zero",
+        "saw_tl_sum",
+        "saw_tt_reduce_axis0",
+        "saw_f32_add_combiner",
+        "saw_scf_if",
+        "saw_scalar_reduction_store"
+      ]
+    },
+    {
+      "name": "ttir_reduce_max_reject_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_max_reject_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_max_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_max_reject_b16_kernel",
+      "signature": "*fp32,*fp32,i32,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_max_reject_b16.py --kernel-name ttir_reduce_max_reject_b16_kernel --signature '*fp32,*fp32,i32,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_max_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_max_reject_b16.json",
+      "expected_classification": "STAGED_NON_ADD_REDUCTION",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_tt_reduce_axis0",
+        "saw_maxnumf_combiner",
+        "saw_non_add_reduction_staged"
+      ]
+    },
+    {
+      "name": "ttir_reduce_rank2_axis_reject_b16",
+      "source": "examples/triton/phase12_reductions/sources/ttir_reduce_rank2_axis_reject_b16.py",
+      "generated_ttir": "examples/triton/phase12_reductions/generated/ttir_reduce_rank2_axis_reject_b16.ttir.mlir",
+      "kernel_name": "ttir_reduce_rank2_axis_reject_b16_kernel",
+      "signature": "*fp32,*fp32,i32,16,16",
+      "generator_command": ".vc4_auto/vector_triton_phase85r15_generator_restore/run_vc4_emit_ttir.sh examples/triton/phase12_reductions/sources/ttir_reduce_rank2_axis_reject_b16.py --kernel-name ttir_reduce_rank2_axis_reject_b16_kernel --signature '*fp32,*fp32,i32,16,16' --target cuda:80:32 --num-warps 1 --num-stages 3 --required-triton-major-minor 3.7 --out examples/triton/phase12_reductions/generated/ttir_reduce_rank2_axis_reject_b16.ttir.mlir --metadata-out .vc4_auto/vector_triton_phase12_2_controlled_fixtures/metadata/ttir_reduce_rank2_axis_reject_b16.json",
+      "expected_classification": "STAGED_RANK_GT_1_REDUCTION",
+      "expected_feature_claims": [
+        "saw_real_triton_source",
+        "saw_real_ttir_snapshot",
+        "saw_rank2_tensor_input",
+        "saw_tt_reduce_axis1",
+        "saw_vector_reduction_result",
+        "saw_rank_gt_1_reduction_staged"
+      ]
+    }
+  ]
+}
