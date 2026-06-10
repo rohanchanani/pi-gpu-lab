@@ -54,7 +54,7 @@
 # STORE-NOMASK: vector.transfer_write
 # STORE-NOMASK-NOT: tt.store
 
-# STORE-SPARSE: multiple distinct pointer offset expressions
+# STORE-SPARSE: sparse or unknown tt.store memory mask
 # STORE-SPARSE: staged TTIR target-profile feature
 # STORE-SPARSE: READY_FOR_TRITON remains NO
 

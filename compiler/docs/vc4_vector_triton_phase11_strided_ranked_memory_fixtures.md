@@ -11,6 +11,12 @@ VALUE_RANK2_STRIDED_ROW_SLICE_HARDWARE=PASS
 VALUE_MEMREF_DIM_METADATA_HARDWARE=PASS
 VALUE_STRIDED_RANKED_MEMORY_MIXED_ACCEPTANCE=PASS
 VALUE_MIXED_REGRESSION=PASS
+TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_ROW_STRIDED_POINTER_LOWERING=YES
+TTIR_LANE_VARYING_STRIDE_GATHER_REJECTS=PASS
+TTIR_COLUMN_SLICE_REJECTS=PASS
+TTIR_RANK_INFERENCE_FROM_NAMES=NO
+FRONTEND_ROBUSTNESS_AUDIT=PASS
 REAL_TRITON_STRIDED_MEMORY_SOURCES=YES
 REAL_TTIR_STRIDED_MEMORY_SNAPSHOTS=YES
 ACCEPTED_FIXTURES_EXCLUDE_UNRELATED_STAGED_FEATURES=YES
@@ -22,6 +28,7 @@ GATHER_LANE_STRIDE_STAGED=YES
 HIDDEN_MEMREF_DESCRIPTOR_REJECTED=YES
 LANE_VARYING_STRIDE_GATHER_FIXTURE_STAGED=YES
 COLUMN_SLICE_FIXTURE_STAGED=YES
+READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
 READY_FOR_PHASE11_7_TTIR_IMPORTER_STRIDED_MEMORY_STATIC=YES
 READY_FOR_PHASE11_6_VALUE_MIXED_ACCEPTANCE=YES
 READY_FOR_PHASE11_5_VALUE_HARDWARE_ISOLATION=YES
@@ -68,11 +75,6 @@ proof scaffolding such as `arith.extsi`, `arith.cmpi`, and `arith.andi` remains
 normal emitted TTIR provenance from prior phases and is not a new source
 feature.
 
-Current value-import smoke records `EXPECTED_PENDING_IMPORTER_REPAIR`: the
-existing importer still rejects multiple distinct pointer offset expressions
-before Phase 11 implementation work. That is the expected boundary for this
-fixture-design phase.
-
 Phase 11.3 locks the value-surface counterpart: rank-1 flattened scalar
 strided address skeletons, rank-2 identity row-slice transfers, rank-2
 `strided<[?, 1], offset: 0>` row-slice transfers with explicit shape/stride
@@ -100,5 +102,14 @@ rank-1 flattened row stride, rank-2 strided row slices, `stride_args`,
 `memref.dim` shape metadata, inactive-zero reads, inactive-preserve writes,
 repeated empty/non-empty launches, and row-padding sentinels. The full current
 VC4Value mixed suite passes on hardware with active_qpus=12 where applicable.
+
+Phase 11.7 statically lowers the accepted controlled TTIR snapshots through
+the C++ importer into flattened rank-1 value memrefs with scalar row-strided
+transfer indices. Pointer classification is structural over SSA/use-defs:
+accepted offsets are scalar base terms plus one contiguous `tt.make_range(0,
+16)`, and no memref rank is inferred from source, kernel, fixture, path, or
+public argument names. Lane-varying stride/gather, column/vertical slices,
+block pointers, and rank-2 tensor forms remain staged with exact diagnostics.
+The accepted snapshots pass the full static pipeline through scheduled VC4.
 
 `READY_FOR_TRITON=NO` remains locked.

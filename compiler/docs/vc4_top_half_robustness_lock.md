@@ -121,3 +121,21 @@ semantic classification, and no direct lower-half output.
 
 FRONTEND_ROBUSTNESS_AUDIT=PASS
 READY_FOR_TRITON=NO
+
+## Phase 11.7 Strided-Memory Importer Audit Extension
+
+The Phase 11.7 importer audit locks structural row-strided pointer
+classification for controlled TTIR memory. The accepted classifier is based on
+SSA/use-def structure over `tt.addptr`, `tt.splat`, `tt.make_range`, and
+`arith` producers; it does not parse printed TTIR, use regexes, special-case
+fixture/kernel/path/source names, infer rank from public names, or emit
+lower-half IR directly.
+
+TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_ROW_STRIDED_POINTER_LOWERING=YES
+TTIR_LANE_VARYING_STRIDE_GATHER_REJECTS=PASS
+TTIR_COLUMN_SLICE_REJECTS=PASS
+TTIR_RANK_INFERENCE_FROM_NAMES=NO
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO

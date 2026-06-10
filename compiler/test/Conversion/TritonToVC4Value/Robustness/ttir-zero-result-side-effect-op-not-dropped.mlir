@@ -2,7 +2,7 @@
 
 // RUN: not %vc4_triton_opt %s --convert-triton-to-vc4-value -o - 2>&1 | FileCheck %s
 
-// CHECK: tt.store pointer without canonical addptr offset
+// CHECK: non-canonical pointer offset
 // CHECK: READY_FOR_TRITON remains NO
 
 module {

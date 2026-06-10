@@ -690,7 +690,6 @@ struct PointerExpr {
 struct CommonPlan {
   SmallVector<Operation *, 3> programIds;
   Operation *makeRange = nullptr;
-  Value offsetValue;
   Value tailMaskValue;
   BlockArgument sizeArg;
   DenseMap<Operation *, int64_t> launchIdentityAxes;
@@ -766,9 +765,14 @@ public:
     return value.getDefiningOp();
   }
 
-  bool isCanonicalOffsetValue(Value value) const { return value == common.offsetValue; }
   bool isTailMaskValue(Value value) const { return value == common.tailMaskValue; }
   bool isRequiredDataValue(Value value) const { return requiredDataValues.contains(value); }
+  const SmallVector<Value, 4> *lookupContiguousOffsetScalarTerms(Value value) const {
+    auto it = contiguousOffsetScalarTerms.find(value);
+    if (it == contiguousOffsetScalarTerms.end())
+      return nullptr;
+    return &it->second;
+  }
   bool hasRequiredResult(Operation *op) const {
     if (!op)
       return false;
@@ -787,9 +791,8 @@ public:
     for (Value result : op->getResults()) {
       if (requiredDataValues.contains(result))
         return false;
-      if (result == common.offsetValue || result == common.tailMaskValue)
-        return true;
-      if (canonicalInfrastructureValues.contains(result))
+      if (result == common.tailMaskValue ||
+          canonicalInfrastructureValues.contains(result))
         return true;
     }
     return false;
@@ -809,7 +812,7 @@ public:
       FailureOr<PointerExpr> base = classifyPointer(def->getOperand(0));
       if (failed(base))
         return failure();
-      if (def->getOperand(1) != common.offsetValue)
+      if (!contiguousOffsetScalarTerms.contains(def->getOperand(1)))
         return emitStagedDiagnostic(def, "non-canonical pointer offset");
       PointerExpr expr = *base;
       expr.offsetValue = def->getOperand(1);
@@ -1026,20 +1029,12 @@ private:
     if (addptrs.empty())
       return emitStagedDiagnostic(funcOp, "TTIR elementwise V1 without addptr");
 
-    Value offset;
     for (Operation *addptr : addptrs) {
       if (addptr->getNumOperands() != 2)
         return emitStagedDiagnostic(addptr, "tt.addptr without pointer and offset operands");
-      if (!offset)
-        offset = addptr->getOperand(1);
-      else if (offset != addptr->getOperand(1))
-        return emitStagedDiagnostic(addptr, "multiple distinct pointer offset expressions");
+      if (failed(verifyContiguousOffset(addptr->getOperand(1))))
+        return failure();
     }
-    if (!offset)
-      return emitInternalError(funcOp, "missing offset after addptr scan");
-    if (failed(verifyCanonicalOffset(offset)))
-      return failure();
-    common.offsetValue = offset;
 
     Value mask;
     SmallVector<Operation *, 8> memoryOps;
@@ -1060,7 +1055,14 @@ private:
         if (!isZeroLikeConstant(memoryOp->getOperand(2).getDefiningOp()))
           return emitStagedDiagnostic(memoryOp, "tt.load nonzero other value");
         Value candidateMask = memoryOp->getOperand(1);
-        if (!matchesCanonicalTailMask(candidateMask, offset))
+        if (!matchesCanonicalTailMask(candidateMask))
+          return emitStagedDiagnostic(memoryOp,
+                                      "sparse or unknown tt.load memory mask");
+        FailureOr<PointerExpr> ptr = classifyPointer(memoryOp->getOperand(0));
+        if (failed(ptr))
+          return failure();
+        if (!tailMaskCompatibleWithPointerOffset(candidateMask,
+                                                 ptr->offsetValue))
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.load memory mask");
         if (!mask)
@@ -1075,7 +1077,14 @@ private:
           return emitStagedDiagnostic(memoryOp,
                                       "tt.store without pointer, value, mask");
         Value candidateMask = memoryOp->getOperand(2);
-        if (!matchesCanonicalTailMask(candidateMask, offset))
+        if (!matchesCanonicalTailMask(candidateMask))
+          return emitStagedDiagnostic(memoryOp,
+                                      "sparse or unknown tt.store memory mask");
+        FailureOr<PointerExpr> ptr = classifyPointer(memoryOp->getOperand(0));
+        if (failed(ptr))
+          return failure();
+        if (!tailMaskCompatibleWithPointerOffset(candidateMask,
+                                                 ptr->offsetValue))
           return emitStagedDiagnostic(memoryOp,
                                       "sparse or unknown tt.store memory mask");
         if (!mask)
@@ -1086,76 +1095,110 @@ private:
       }
     }
     if (mask) {
-      if (failed(recordCanonicalTailMask(mask, offset)))
+      if (failed(recordCanonicalTailMask(mask)))
         return failure();
       common.tailMaskValue = mask;
     }
     return success();
   }
 
-  LogicalResult verifyCanonicalOffset(Value offset) {
-    Operation *add = offset.getDefiningOp();
-    if (!hasName(add, "arith.addi") || add->getNumOperands() != 2)
-      return emitStagedDiagnostic(add ? add : funcOp,
-                                  "pointer offset not formed by arith.addi");
+  LogicalResult verifyContiguousOffset(Value offset) {
+    if (contiguousOffsetScalarTerms.contains(offset))
+      return success();
+    SmallVector<Value, 4> scalarTerms;
+    bool sawRange = false;
+    DenseSet<Value> visiting;
+    if (failed(collectContiguousOffsetTerms(offset, scalarTerms, sawRange,
+                                            visiting)))
+      return failure();
+    if (!sawRange)
+      return emitStagedDiagnostic(offset.getDefiningOp() ? offset.getDefiningOp()
+                                                         : funcOp,
+                                  "pointer offset missing tt.make_range lanes");
+    for (Value term : scalarTerms)
+      markRequiredValue(term);
+    contiguousOffsetScalarTerms[offset] = std::move(scalarTerms);
+    canonicalInfrastructureValues.insert(offset);
+    return success();
+  }
 
-    Value rangeResult = common.makeRange->getResult(0);
-    Value other;
-    if (add->getOperand(0) == rangeResult)
-      other = add->getOperand(1);
-    else if (add->getOperand(1) == rangeResult)
-      other = add->getOperand(0);
-    else
-      return emitStagedDiagnostic(add, "pointer offset missing tt.make_range lanes");
+  LogicalResult collectContiguousOffsetTerms(
+      Value value, SmallVectorImpl<Value> &scalarTerms, bool &sawRange,
+      DenseSet<Value> &visiting) {
+    if (!value)
+      return emitStagedDiagnostic(funcOp, "non-canonical pointer offset");
+    if (value == common.makeRange->getResult(0)) {
+      sawRange = true;
+      canonicalInfrastructureValues.insert(value);
+      return success();
+    }
+    if (auto cached = lookupContiguousOffsetScalarTerms(value)) {
+      scalarTerms.append(cached->begin(), cached->end());
+      sawRange = true;
+      return success();
+    }
+    if (!visiting.insert(value).second)
+      return emitStagedDiagnostic(value.getDefiningOp() ? value.getDefiningOp()
+                                                        : funcOp,
+                                  "cyclic pointer offset expression");
+    Operation *def = value.getDefiningOp();
+    if (!def) {
+      visiting.erase(value);
+      return emitStagedDiagnostic(funcOp, "pointer offset missing tt.make_range lanes");
+    }
 
-    Operation *splat = other.getDefiningOp();
-    if (!hasName(splat, kTTSplatOpName) || splat->getNumOperands() != 1)
-      return emitStagedDiagnostic(add, "pointer offset base not formed by tt.splat");
+    if (hasName(def, kTTSplatOpName) && def->getNumOperands() == 1) {
+      Value scalar = def->getOperand(0);
+      if (!isScalarI32(scalar.getType()) && !scalar.getType().isIndex()) {
+        visiting.erase(value);
+        return emitStagedDiagnostic(def, "pointer scalar base is not i32/index");
+      }
+      scalarTerms.push_back(scalar);
+      canonicalInfrastructureValues.insert(value);
+      visiting.erase(value);
+      return success();
+    }
 
-    Operation *mul = splat->getOperand(0).getDefiningOp();
-    if (!hasName(mul, "arith.muli") || mul->getNumOperands() != 2)
-      return emitStagedDiagnostic(splat, "pointer offset base not formed by pid * 16");
+    if (hasName(def, "arith.addi") && def->getNumOperands() == 2) {
+      if (failed(collectContiguousOffsetTerms(def->getOperand(0), scalarTerms,
+                                              sawRange, visiting)) ||
+          failed(collectContiguousOffsetTerms(def->getOperand(1), scalarTerms,
+                                              sawRange, visiting))) {
+        visiting.erase(value);
+        return failure();
+      }
+      canonicalInfrastructureValues.insert(value);
+      visiting.erase(value);
+      return success();
+    }
 
-    Value scalarBase;
-    bool baseFromLaunchIdentity = false;
-    if (isCanonicalOffsetScalarBase(mul->getOperand(0), baseFromLaunchIdentity))
-      scalarBase = mul->getOperand(0);
-    else if (isCanonicalOffsetScalarBase(mul->getOperand(1), baseFromLaunchIdentity))
-      scalarBase = mul->getOperand(1);
-    else
-      return emitStagedDiagnostic(
-          mul, "pointer offset base missing launch identity or scalar loop iv");
-    if (!baseFromLaunchIdentity && !llvm::isa<BlockArgument>(scalarBase))
-      return emitStagedDiagnostic(
-          mul, "pointer offset base missing launch identity or scalar loop iv");
-
-    Value factor = mul->getOperand(0) == scalarBase
-                       ? mul->getOperand(1)
-                       : mul->getOperand(0);
-    if (auto cst = factor.getDefiningOp<arith::ConstantOp>()) {
-      if (auto integer = llvm::dyn_cast<IntegerAttr>(cst.getValue())) {
-        if (integer.getInt() == 16) {
-          canonicalInfrastructureValues.insert(factor);
-          canonicalInfrastructureValues.insert(other);
-          canonicalInfrastructureValues.insert(offset);
-          markRequiredValue(splat->getOperand(0));
-          return success();
-        }
+    if (hasName(def, "arith.muli") && def->getNumOperands() == 2) {
+      bool lhsLane = valueDependsOnMakeRange(def->getOperand(0));
+      bool rhsLane = valueDependsOnMakeRange(def->getOperand(1));
+      if (lhsLane || rhsLane) {
+        Value laneOperand = lhsLane ? def->getOperand(0) : def->getOperand(1);
+        visiting.erase(value);
+        if (laneOperand == common.makeRange->getResult(0))
+          return emitStagedDiagnostic(
+              def, "lane-varying stride/gather pointer expression staged");
+        return emitStagedDiagnostic(
+            def, "non-contiguous column slice pointer expression staged");
       }
     }
-    return emitStagedDiagnostic(mul, "pointer offset base factor other than 16");
+
+    visiting.erase(value);
+    return emitStagedDiagnostic(def, "non-canonical pointer offset");
   }
 
-  bool isCanonicalOffsetScalarBase(Value value, bool &sawLaunchIdentity) const {
+  bool valueDependsOnMakeRange(Value value) const {
     DenseSet<Value> visiting;
-    return isCanonicalOffsetScalarBase(value, sawLaunchIdentity, visiting);
+    return valueDependsOnMakeRange(value, visiting);
   }
 
-  bool isCanonicalOffsetScalarBase(Value value, bool &sawLaunchIdentity,
-                                   DenseSet<Value> &visiting) const {
+  bool valueDependsOnMakeRange(Value value, DenseSet<Value> &visiting) const {
     if (!value)
       return false;
-    if (llvm::isa<BlockArgument>(value))
+    if (value == common.makeRange->getResult(0))
       return true;
     if (!visiting.insert(value).second)
       return false;
@@ -1164,44 +1207,27 @@ private:
       visiting.erase(value);
       return false;
     }
-    if (hasName(def, kTTGetProgramIdOpName)) {
-      sawLaunchIdentity = true;
-      visiting.erase(value);
-      return true;
-    }
-    if (hasName(def, kTTGetNumProgramsOpName)) {
-      visiting.erase(value);
-      return true;
-    }
-    if (auto constant = llvm::dyn_cast<arith::ConstantOp>(def)) {
-      bool ok = llvm::isa<IntegerAttr>(constant.getValue());
-      visiting.erase(value);
-      return ok;
-    }
-    if (hasName(def, "arith.addi") || hasName(def, "arith.subi") ||
-        hasName(def, "arith.muli")) {
-      for (Value operand : def->getOperands()) {
-        if (!isCanonicalOffsetScalarBase(operand, sawLaunchIdentity, visiting)) {
-          visiting.erase(value);
-          return false;
-        }
+    for (Value operand : def->getOperands())
+      if (valueDependsOnMakeRange(operand, visiting)) {
+        visiting.erase(value);
+        return true;
       }
-      visiting.erase(value);
-      return true;
-    }
     visiting.erase(value);
     return false;
   }
 
-  std::optional<BlockArgument> matchCanonicalTailMask(Value mask,
-                                                     Value offset) const {
+  std::optional<BlockArgument> matchCanonicalTailMask(Value mask) {
     Operation *cmp = mask.getDefiningOp();
     auto cmpi = llvm::dyn_cast_or_null<arith::CmpIOp>(cmp);
     if (!cmpi)
       return std::nullopt;
     if (cmpi.getPredicate() != arith::CmpIPredicate::slt)
       return std::nullopt;
-    if (cmpi.getOperand(0) != offset)
+    if (failed(verifyContiguousOffset(cmpi.getOperand(0))))
+      return std::nullopt;
+    const SmallVector<Value, 4> *maskTerms =
+        lookupContiguousOffsetScalarTerms(cmpi.getOperand(0));
+    if (!maskTerms || maskTerms->empty())
       return std::nullopt;
 
     Operation *rhsSplat = cmpi.getOperand(1).getDefiningOp();
@@ -1218,13 +1244,37 @@ private:
     return sizeArg;
   }
 
-  bool matchesCanonicalTailMask(Value mask, Value offset) const {
-    return matchCanonicalTailMask(mask, offset).has_value();
+  bool matchesCanonicalTailMask(Value mask) {
+    return matchCanonicalTailMask(mask).has_value();
   }
 
-  LogicalResult recordCanonicalTailMask(Value mask, Value offset) {
+  bool tailMaskCompatibleWithPointerOffset(Value mask, Value pointerOffset) {
+    Operation *cmp = mask.getDefiningOp();
+    auto cmpi = llvm::dyn_cast_or_null<arith::CmpIOp>(cmp);
+    if (!cmpi)
+      return false;
+    Value maskOffset = cmpi.getOperand(0);
+    if (failed(verifyContiguousOffset(maskOffset)) ||
+        failed(verifyContiguousOffset(pointerOffset)))
+      return false;
+    const SmallVector<Value, 4> *maskTerms =
+        lookupContiguousOffsetScalarTerms(maskOffset);
+    const SmallVector<Value, 4> *pointerTerms =
+        lookupContiguousOffsetScalarTerms(pointerOffset);
+    if (!maskTerms || !pointerTerms)
+      return false;
+    DenseSet<Value> pointerTermSet;
+    for (Value term : *pointerTerms)
+      pointerTermSet.insert(term);
+    for (Value term : *maskTerms)
+      if (!pointerTermSet.contains(term))
+        return false;
+    return true;
+  }
+
+  LogicalResult recordCanonicalTailMask(Value mask) {
     std::optional<BlockArgument> matchedSizeArg =
-        matchCanonicalTailMask(mask, offset);
+        matchCanonicalTailMask(mask);
     if (!matchedSizeArg)
       return emitStagedDiagnostic(mask.getDefiningOp() ? mask.getDefiningOp()
                                                        : funcOp,
@@ -1317,7 +1367,7 @@ private:
         hasName(def, kTTGetNumProgramsOpName))
       return;
     if (def->getNumResults() == 1 &&
-        (def->getResult(0) == common.offsetValue ||
+        (canonicalInfrastructureValues.contains(def->getResult(0)) ||
          def->getResult(0) == common.tailMaskValue))
       return;
 
@@ -1369,6 +1419,7 @@ private:
   DenseMap<BlockArgument, unsigned> argIndex;
   CommonPlan common;
   mutable DenseMap<Value, PointerExpr> pointerExprs;
+  DenseMap<Value, SmallVector<Value, 4>> contiguousOffsetScalarTerms;
   DenseSet<Value> canonicalInfrastructureValues;
   DenseSet<Value> requiredDataValues;
 };
@@ -2064,35 +2115,32 @@ private:
   }
 
   FailureOr<Value> ensureTransferIndex(Value offset, Operation *user) {
-    Operation *add = offset.getDefiningOp();
-    if (!hasName(add, "arith.addi") || add->getNumOperands() != 2)
-      return emitStagedDiagnostic(user, "pointer offset not formed by arith.addi");
+    const SmallVector<Value, 4> *terms =
+        planner.lookupContiguousOffsetScalarTerms(offset);
+    if (!terms)
+      return emitStagedDiagnostic(user, "non-canonical pointer offset");
 
-    Value rangeResult = planner.getCommonPlan().makeRange->getResult(0);
-    Value other;
-    if (add->getOperand(0) == rangeResult)
-      other = add->getOperand(1);
-    else if (add->getOperand(1) == rangeResult)
-      other = add->getOperand(0);
-    else
-      return emitStagedDiagnostic(user, "pointer offset missing tt.make_range lanes");
+    Value transferIndex;
+    for (Value term : *terms) {
+      Value mapped = lookup(term);
+      if (!mapped)
+        return emitStagedDiagnostic(user, "pointer scalar base not available");
+      if (mapped.getType().isSignlessInteger(32))
+        mapped = builder.create<arith::IndexCastOp>(
+            user->getLoc(), builder.getIndexType(), mapped);
+      else if (!mapped.getType().isIndex())
+        return emitStagedDiagnostic(user,
+                                    "pointer scalar base is not i32/index");
+      transferIndex = transferIndex
+                          ? builder.create<arith::AddIOp>(user->getLoc(),
+                                                          transferIndex, mapped)
+                                .getResult()
+                          : mapped;
+    }
 
-    Operation *splat = other.getDefiningOp();
-    if (!hasName(splat, kTTSplatOpName) || splat->getNumOperands() != 1)
-      return emitStagedDiagnostic(user,
-                                  "pointer offset base not formed by tt.splat");
-
-    Value scalarBase = lookup(splat->getOperand(0));
-    if (!scalarBase)
-      return emitStagedDiagnostic(user, "pointer scalar base not available");
-    if (scalarBase.getType().isIndex())
-      return scalarBase;
-    if (!scalarBase.getType().isSignlessInteger(32))
-      return emitStagedDiagnostic(user, "pointer scalar base is not i32/index");
-    return builder.create<arith::IndexCastOp>(user->getLoc(),
-                                              builder.getIndexType(),
-                                              scalarBase)
-        .getResult();
+    if (!transferIndex)
+      transferIndex = builder.create<arith::ConstantIndexOp>(user->getLoc(), 0);
+    return transferIndex;
   }
 
   FailureOr<Value> ensureTailMask(Value mask, Operation *user,

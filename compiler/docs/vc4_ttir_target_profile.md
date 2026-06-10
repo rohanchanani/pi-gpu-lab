@@ -715,3 +715,27 @@ LAYERED_REGRESSION_POLICY_APPLIED=YES
 NO_TEMPORARY_MASK_MEMORY_WORKAROUNDS=YES
 READY_FOR_PHASE11_STRIDED_RANKED_MEMORY_SKELETONS=YES
 READY_FOR_TRITON=NO
+
+## 24. Phase 11.7 strided memory TTIR importer profile
+
+TTIR_STRIDED_MEMORY_IMPORTER_STATIC=PASS
+TTIR_ROW_STRIDED_POINTER_LOWERING=YES
+TTIR_LANE_VARYING_STRIDE_GATHER_REJECTS=PASS
+TTIR_COLUMN_SLICE_REJECTS=PASS
+TTIR_RANK_INFERENCE_FROM_NAMES=NO
+FRONTEND_ROBUSTNESS_AUDIT=PASS
+READY_FOR_PHASE11_8_TTIR_HARDWARE_ISOLATION=YES
+READY_FOR_TRITON=NO
+
+Phase 11.7 accepts the controlled real Triton row-strided memory snapshots in
+the C++ importer. TTIR pointer arguments remain flattened rank-1 value memrefs;
+the importer lowers structurally recognized pointer offsets of the form scalar
+row/column base terms plus one contiguous `tt.make_range(0, 16)` lane vector to
+value-layer transfer indices. Canonical tail masks continue to use the
+contiguous column/block offset, while row-base terms are part of the memory
+address only.
+
+The importer does not infer rank or layout from source names, kernel names,
+fixture paths, public argument names, or status strings. Lane-varying
+stride/gather, column/vertical slices, block pointers, rank-2 tensor forms,
+nonzero load `other`, and sparse or unknown memory masks remain staged.
