@@ -150,6 +150,14 @@ static LogicalResult emitInternalError(Operation *op, const Twine &detail) {
                          << detail;
 }
 
+enum class LoweringOutcome {
+  LoweredWithResultsBound,
+  LoweredZeroResult,
+  IgnoredDeadProofOp,
+  StagedUnsupported,
+  InternalError
+};
+
 static bool isTritonDialectOp(Operation *op) {
   return op && op->getName().getDialectNamespace() == "tt";
 }
@@ -226,6 +234,14 @@ static bool isTensor16F32(Type type) {
   auto shaped = llvm::dyn_cast<RankedTensorType>(type);
   return shaped && shaped.getRank() == 1 && shaped.getDimSize(0) == 16 &&
          shaped.getElementType().isF32();
+}
+
+static bool isOrContainsI64(Type type) {
+  if (type.isSignlessInteger(64))
+    return true;
+  if (auto shaped = llvm::dyn_cast<ShapedType>(type))
+    return shaped.getElementType().isSignlessInteger(64);
+  return false;
 }
 
 static bool containsRankGreaterThanOneTensor(Type type) {
@@ -414,20 +430,55 @@ static std::string inferSourceArgName(BlockArgument arg, unsigned index) {
   for (StringRef name : names) {
     if (name.empty())
       continue;
-    std::string cleaned = name.str();
-    if (llvm::StringRef(cleaned).ends_with("_ptr"))
-      cleaned.resize(cleaned.size() - 4);
-    if (cleaned == "n_elements")
-      cleaned = "n";
+    std::string cleaned = sanitizeSymbolName(name);
     if (!cleaned.empty())
-      return sanitizeSymbolName(cleaned);
+      return cleaned;
   }
   return ("arg" + Twine(index)).str();
+}
+
+static std::string makeUniqueMetadataName(StringRef base,
+                                          std::set<std::string> &usedNames) {
+  std::string sanitized = sanitizeSymbolName(base);
+  if (usedNames.insert(sanitized).second)
+    return sanitized;
+  for (unsigned suffix = 1;; ++suffix) {
+    std::string candidate = (Twine(sanitized) + "_" + Twine(suffix)).str();
+    if (usedNames.insert(candidate).second)
+      return candidate;
+  }
 }
 
 static bool hasAnyName(Operation *op, ArrayRef<StringRef> names) {
   StringRef name = op->getName().getStringRef();
   return llvm::is_contained(names, name);
+}
+
+static bool isDeadProofWhitelistOp(Operation *op) {
+  if (!op || op->getNumRegions() != 0 || op->getNumSuccessors() != 0 ||
+      op->getNumResults() == 0)
+    return false;
+  if (hasName(op, "arith.extsi") || hasName(op, "arith.andi") ||
+      hasName(op, "arith.trunci") || hasName(op, "arith.index_cast"))
+    return true;
+  if (hasName(op, "ub.poison"))
+    return true;
+  if (hasName(op, "arith.constant")) {
+    for (Type type : op->getResultTypes())
+      if (isOrContainsI64(type))
+        return true;
+    return false;
+  }
+  if (hasName(op, "arith.addi") || hasName(op, "arith.subi") ||
+      hasName(op, "arith.muli") || hasName(op, "arith.cmpi")) {
+    for (Type type : op->getOperandTypes())
+      if (isOrContainsI64(type))
+        return true;
+    for (Type type : op->getResultTypes())
+      if (isOrContainsI64(type))
+        return true;
+  }
+  return false;
 }
 
 enum class TTIRProgramAxis { X = 0, Y = 1, Z = 2 };
@@ -686,6 +737,14 @@ public:
   bool isCanonicalOffsetValue(Value value) const { return value == common.offsetValue; }
   bool isTailMaskValue(Value value) const { return value == common.tailMaskValue; }
   bool isRequiredDataValue(Value value) const { return requiredDataValues.contains(value); }
+  bool hasRequiredResult(Operation *op) const {
+    if (!op)
+      return false;
+    for (Value result : op->getResults())
+      if (requiredDataValues.contains(result))
+        return true;
+    return false;
+  }
 
   bool isCanonicalInfrastructure(Operation *op) const {
     if (op == common.programId || op == common.makeRange)
@@ -742,14 +801,22 @@ public:
     return emitStagedDiagnostic(def, "unsupported pointer expression");
   }
 
+  bool canIgnoreAsDeadProofOp(Operation *op) const {
+    DenseSet<Operation *> visiting;
+    DenseMap<Operation *, bool> memo;
+    return canIgnoreAsDeadProofOp(op, visiting, memo);
+  }
+
 private:
   LogicalResult collectArgs(Block &entry) {
     args.reserve(entry.getNumArguments());
+    std::set<std::string> usedArgNames;
     for (auto [index, arg] : llvm::enumerate(entry.getArguments())) {
       TTIRArgInfo info;
       info.sourceArg = arg;
       info.sourceType = arg.getType();
-      info.valueName = inferSourceArgName(arg, index);
+      info.valueName =
+          makeUniqueMetadataName(inferSourceArgName(arg, index), usedArgNames);
       if (auto pointer = typeAdapter.classifyPointerType(arg.getType())) {
         if (pointer->isTensorPointer)
           return emitStagedDiagnostic(funcOp, "block pointer or tensor pointer argument");
@@ -769,6 +836,32 @@ private:
       args.push_back(info);
     }
     return success();
+  }
+
+  bool canIgnoreAsDeadProofOp(Operation *op, DenseSet<Operation *> &visiting,
+                              DenseMap<Operation *, bool> &memo) const {
+    if (!isDeadProofWhitelistOp(op))
+      return false;
+    if (hasRequiredResult(op))
+      return false;
+    if (auto found = memo.find(op); found != memo.end())
+      return found->second;
+    if (!visiting.insert(op).second)
+      return false;
+
+    for (Value result : op->getResults()) {
+      for (Operation *user : result.getUsers()) {
+        if (!canIgnoreAsDeadProofOp(user, visiting, memo)) {
+          visiting.erase(op);
+          memo[op] = false;
+          return false;
+        }
+      }
+    }
+
+    visiting.erase(op);
+    memo[op] = true;
+    return true;
   }
 
   LogicalResult scanOps(Block &entry) {
@@ -1191,6 +1284,8 @@ private:
 
     Block *entry = valueFunc.addEntryBlock();
     for (auto [index, arg] : llvm::enumerate(planner.getArgs())) {
+      // Argument names are metadata only. Semantic roles are derived from TTIR
+      // SSA/use-def structure, not source names.
       valueFunc.setArgAttr(index, kVC4ValueArgNameAttr,
                            builder.getStringAttr(arg.valueName));
       if (arg.isPointer) {
@@ -1304,32 +1399,79 @@ private:
     pointerScopes.pop_back();
   }
 
+  bool isResultAccounted(Value result) const {
+    return valueMap.contains(result) || pointerValues.contains(result) ||
+           planner.isCanonicalInfrastructure(result.getDefiningOp());
+  }
+
+  LogicalResult finishLowering(Operation *op, LoweringOutcome outcome) {
+    loweringOutcomes[op] = outcome;
+    switch (outcome) {
+    case LoweringOutcome::LoweredWithResultsBound:
+      for (Value result : op->getResults()) {
+        if (!isResultAccounted(result))
+          return emitInternalError(
+              op, Twine("result of ") + op->getName().getStringRef() +
+                      " was not mapped by successful lowering");
+      }
+      return success();
+    case LoweringOutcome::LoweredZeroResult:
+      if (op->getNumResults() != 0)
+        return emitInternalError(
+            op, Twine("result-producing ") + op->getName().getStringRef() +
+                    " reported zero-result lowering");
+      return success();
+    case LoweringOutcome::IgnoredDeadProofOp:
+      if (!planner.canIgnoreAsDeadProofOp(op))
+        return emitInternalError(
+            op, Twine("ignored-dead proof failed for ") +
+                    op->getName().getStringRef());
+      return success();
+    case LoweringOutcome::StagedUnsupported:
+      return emitStagedDiagnostic(op, op->getName().getStringRef());
+    case LoweringOutcome::InternalError:
+      return emitInternalError(op, op->getName().getStringRef());
+    }
+    return emitInternalError(op, "unknown lowering outcome");
+  }
+
   LogicalResult lowerOperation(Operation *op) {
     if (isForbiddenProducerOrBackendDialect(op))
       return emitPermanentReject(op, "backend/non-TTIR dialect operation");
 
     if (hasName(op, kTTReturnOpName)) {
       builder.create<func::ReturnOp>(op->getLoc());
-      return success();
+      return finishLowering(op, LoweringOutcome::LoweredZeroResult);
     }
 
     if (op == planner.getCommonPlan().programId)
-      return success();
+      return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     if (op == planner.getCommonPlan().makeRange) {
       if (!planner.isRequiredDataValue(op->getResult(0)))
-        return success();
+        return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
       return lowerTTMakeRange(op);
     }
 
     if (planner.isCanonicalInfrastructure(op))
-      return success();
+      return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
 
-    if (op->getNumResults() > 0 && op->getNumRegions() == 0) {
-      bool anyRequired = false;
-      for (Value result : op->getResults())
-        anyRequired |= planner.isRequiredDataValue(result);
-      if (!anyRequired && !hasName(op, kTTLoadOpName))
-        return success();
+    if (isDeadProofWhitelistOp(op)) {
+      if (planner.hasRequiredResult(op)) {
+        if (hasName(op, "arith.extsi"))
+          return emitStagedBodyFeatureDiagnostic(
+              op, "arith.extsi required use staged");
+        if (hasName(op, "arith.andi"))
+          return emitStagedBodyFeatureDiagnostic(
+              op, "arith.andi required use staged");
+      }
+      if (planner.canIgnoreAsDeadProofOp(op))
+        return finishLowering(op, LoweringOutcome::IgnoredDeadProofOp);
+      if (hasName(op, "arith.extsi"))
+        return emitStagedBodyFeatureDiagnostic(
+            op, "arith.extsi required use staged");
+      if (hasName(op, "arith.andi"))
+        return emitStagedBodyFeatureDiagnostic(
+            op, "arith.andi required use staged");
     }
 
     if (hasName(op, kTTSplatOpName))
@@ -1352,15 +1494,6 @@ private:
       return lowerSCF(op);
     if (dialect == "cf")
       return lowerCF(op);
-
-    // Pure TTIR arithmetic proof ops that were not part of the canonical value
-    // dataflow can be ignored if all their results have no users that require a
-    // lowered value.  They are range/overflow guards emitted by Triton before
-    // the canonical offset.  If a later op asks for their value, lookup() will
-    // fail there with a precise diagnostic.
-    if (hasName(op, "arith.extsi") || hasName(op, "arith.andi") ||
-        hasName(op, "arith.constant"))
-      return success();
 
     if (hasName(op, kTTDotOpName))
       return emitStagedBodyFeatureDiagnostic(op, "tt.dot / contract");
@@ -1400,7 +1533,7 @@ private:
     auto attr = DenseIntElementsAttr::get(vectorType, values);
     bindValue(op->getResult(0),
               builder.create<arith::ConstantOp>(op->getLoc(), vectorType, attr));
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTGetNumPrograms(Operation *op) {
@@ -1419,7 +1552,7 @@ private:
     bindValue(op->getResult(0), builder.create<arith::IndexCastOp>(
                                       op->getLoc(), builder.getI32Type(),
                                       numProgramsIndex));
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTSplat(Operation *op) {
@@ -1432,7 +1565,7 @@ private:
       if (sourceArg && sourceArg->isPointer) {
         PointerExpr ptr = pointerValues[blockArg];
         bindPointer(op->getResult(0), ptr);
-        return success();
+        return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
       }
     }
 
@@ -1445,7 +1578,7 @@ private:
       return emitStagedDiagnostic(op, "tt.splat source not available in value IR");
     bindValue(op->getResult(0),
               createVectorBroadcast(builder, op->getLoc(), scalar, resultType));
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTAddPtr(Operation *op) {
@@ -1455,12 +1588,12 @@ private:
     PointerExpr lowered = *ptr;
     lowered.valueMemref = pointerValues[ptr->sourcePointerArg].valueMemref;
     bindPointer(op->getResult(0), lowered);
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTLoad(Operation *op) {
     if (op->getNumResults() == 1 && !planner.isRequiredDataValue(op->getResult(0)))
-      return success();
+      return emitStagedDiagnostic(op, "dead tt.load outside ignored-dead proof whitelist");
     if (op->getNumOperands() != 3 || op->getNumResults() != 1)
       return emitStagedDiagnostic(op, "tt.load without pointer, mask, other=0");
     Operation *other = op->getOperand(2).getDefiningOp();
@@ -1489,7 +1622,7 @@ private:
     bindValue(op->getResult(0),
               createVectorTransferRead(builder, op->getLoc(), memref,
                                        *transferIndex, pad, *mask, vectorType));
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerTTStore(Operation *op) {
@@ -1512,7 +1645,7 @@ private:
       return failure();
     createVectorTransferWrite(builder, op->getLoc(), value, memref,
                               *transferIndex, *mask);
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredZeroResult);
   }
 
   LogicalResult lowerArith(Operation *op) {
@@ -1530,16 +1663,20 @@ private:
       if (!resultType || resultType != mapped.getType())
         return emitStagedDiagnostic(op, "arith.bitcast changing value type");
       bindValue(op->getResult(0), mapped);
-      return success();
+      return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
     }
     if (hasName(op, "arith.extsi"))
-      return success();
+      return emitStagedBodyFeatureDiagnostic(op,
+                                             "arith.extsi required use staged");
     if (hasName(op, "arith.andi"))
-      return success();
+      return emitStagedBodyFeatureDiagnostic(op,
+                                             "arith.andi required use staged");
     if (hasName(op, "arith.cmpi") &&
         op->getResult(0) == planner.getCommonPlan().tailMaskValue) {
       FailureOr<Value> mask = ensureTailMask(op->getResult(0), op);
-      return failed(mask) ? failure() : success();
+      return failed(mask) ? failure()
+                          : finishLowering(
+                                op, LoweringOutcome::LoweredWithResultsBound);
     }
 
     static constexpr StringRef supportedArithOps[] = {
@@ -1574,7 +1711,7 @@ private:
     Operation *created = builder.create(state);
     for (auto [oldResult, newResult] : llvm::zip(op->getResults(), created->getResults()))
       bindValue(oldResult, newResult);
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerArithConstant(arith::ConstantOp op) {
@@ -1582,7 +1719,7 @@ private:
       return emitStagedDiagnostic(op, "multi-result arith.constant");
     Type resultType = convertResultType(op.getType());
     if (!resultType)
-      return success(); // Ignore constants used only by canonical proof ops.
+      return emitStagedDiagnostic(op, "arith.constant result type");
 
     Attribute attr = op.getValue();
     if (auto dense = llvm::dyn_cast<DenseElementsAttr>(attr)) {
@@ -1600,7 +1737,8 @@ private:
     bindValue(op.getResult(),
               builder.create<arith::ConstantOp>(op.getLoc(), resultType,
                                                 typedAttr));
-    return success();
+    return finishLowering(op.getOperation(),
+                          LoweringOutcome::LoweredWithResultsBound);
   }
 
   Type convertResultType(Type type) {
@@ -1709,7 +1847,9 @@ private:
       if (failed(lowerRegion(sourceRegion, destRegion)))
         return failure();
     builder.setInsertionPointAfter(created);
-    return success();
+    return finishLowering(op, op->getNumResults() == 0
+                                  ? LoweringOutcome::LoweredZeroResult
+                                  : LoweringOutcome::LoweredWithResultsBound);
   }
 
   LogicalResult lowerGenericTerminator(Operation *op) {
@@ -1725,7 +1865,7 @@ private:
     if (failed(copyValueSafeAttrs(op, state)))
       return failure();
     builder.create(state);
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredZeroResult);
   }
 
   LogicalResult lowerCF(Operation *op) {
@@ -1758,7 +1898,7 @@ private:
     if (failed(copyValueSafeAttrs(op, state)))
       return failure();
     builder.create(state);
-    return success();
+    return finishLowering(op, LoweringOutcome::LoweredZeroResult);
   }
 
   FailureOr<Value> ensureTransferIndex(Value offset, Operation *user) {
@@ -1844,6 +1984,7 @@ private:
   SmallVector<SmallVector<ScopedPointerBinding, 16>, 4> pointerScopes;
   DenseMap<Block *, Block *> blockMap;
   DenseMap<Value, PointerExpr> pointerValues;
+  DenseMap<Operation *, LoweringOutcome> loweringOutcomes;
 };
 
 class TTIRToValueModuleBuilder {

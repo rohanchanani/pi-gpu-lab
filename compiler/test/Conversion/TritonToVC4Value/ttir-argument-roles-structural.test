@@ -17,5 +17,5 @@
 
 # COMPUTE: func.func @i32_add_select_b16_kernel(
 # COMPUTE-SAME: %{{[^:]+}}: i32 {vc4value.arg_name = "n"}
-# COMPUTE-SAME: %{{[^:]+}}: index {vc4value.arg_name = "n"}
+# COMPUTE-SAME: %{{[^:]+}}: index {vc4value.arg_name = "n_elements"}
 # COMPUTE: vector.broadcast %{{[^ ]+}} : i32 to vector<16xi32>
